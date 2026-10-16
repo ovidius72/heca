@@ -3,7 +3,7 @@ use super::{DockFocus, dock_focus_outcome};
 /// **`FocusDock` only focuses.** Asking to focus the dock that already has the keyboard does
 /// nothing — it does not hand it back.
 ///
-/// The toggle lived inside `FocusDock` until F003/P082/T444, so *everything* that asked to focus
+/// When the toggle lived inside `FocusDock`, *everything* that asked to focus
 /// a dock inherited it: a click inside a focused dock released it, and so did an RPC
 /// `focus-dock` and the command palette. `aim_keyboard_at_click` carried an `if` to work around
 /// it, which is a rule in a call site rather than in the model.

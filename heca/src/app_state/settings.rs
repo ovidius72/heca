@@ -27,7 +27,7 @@ pub struct WindowSettings {
     pub search_history: bool,
     /// Append the program name (small, dimmed) next to a renamed pane's custom name.
     pub pane_renamed_add_process_name: bool,
-    /// Show each pane's working directory as its own row in the sidebar pane card.
+    /// Show each pane's folder on its card in the exposé (`[appearance.expose] show_cwd`).
     pub expose_show_cwd: bool,
     /// Whether the wheel scrolls a terminal's history (unless the program in it took the mouse).
     /// Does not affect `mouse_enabled`, which is the chrome's.
@@ -58,7 +58,7 @@ impl WindowSettings {
             search_case: settings.search_case,
             search_history: settings.search_history,
             pane_renamed_add_process_name: settings.pane_renamed_add_process_name,
-            expose_show_cwd: crate::chrome::expose_show_cwd(&app_config.config),
+            expose_show_cwd: expose_show_cwd(&app_config.config),
             terminal_mouse_enabled: settings.terminal_mouse,
             terminal_wheel_scroll_lines: settings.terminal_wheel_scroll_lines,
             terminal_font_zoom_step: settings.terminal_font_zoom_step,
@@ -66,5 +66,62 @@ impl WindowSettings {
             interactive_move_modifier: settings.interactive_move_modifier,
             confirm: app_config.config.confirm.clone(),
         }
+    }
+}
+
+/// **Whether the exposé shows each pane's folder** — `[appearance.expose] show_cwd`.
+///
+/// The old `[settings] pane_show_cwd` is still read and mapped onto it, so no config breaks, and a
+/// user who still has it is told **once** to move it (one input, one output). It once switched the
+/// sidebar's folder line too; that line is now decided by `[appearance.sidebar] pane_lines` alone.
+fn expose_show_cwd(config: &heca_config::loader::Config) -> bool {
+    if config.settings.pane_show_cwd.is_some()
+        && crate::announced::first_time("setting:pane_show_cwd")
+    {
+        crate::chrome::warn_author(
+            "[heca] `[settings] pane_show_cwd` is now `[appearance.expose] show_cwd` (it only \
+             shows folders in the exposé; the sidebar's folder line is `[appearance.sidebar] \
+             pane_lines`) — it still works, please move it"
+                .to_string(),
+        );
+    }
+    show_cwd_setting(config)
+}
+
+/// The setting's value: the new key when it is written, else the old one, else on. Pure — the
+/// notice is separate.
+fn show_cwd_setting(config: &heca_config::loader::Config) -> bool {
+    config
+        .appearance
+        .expose
+        .show_cwd
+        .or(config.settings.pane_show_cwd)
+        .unwrap_or(true)
+}
+
+#[cfg(test)]
+mod show_cwd_tests {
+    use super::show_cwd_setting;
+
+    /// **One input, one output**: `[appearance.expose] show_cwd` decides whenever it is written;
+    /// the old `[settings] pane_show_cwd` is honoured only while the new key is absent, so no
+    /// config breaks; neither written means on.
+    #[test]
+    fn the_new_key_decides_and_the_old_one_still_works() {
+        let mut c = heca_config::loader::Config::default();
+        assert!(show_cwd_setting(&c), "on by default");
+        c.settings.pane_show_cwd = Some(false);
+        assert!(
+            !show_cwd_setting(&c),
+            "the old key is read while the new one is absent"
+        );
+        c.appearance.expose.show_cwd = Some(true);
+        assert!(
+            show_cwd_setting(&c),
+            "a written new key wins over the old one"
+        );
+        c.appearance.expose.show_cwd = Some(false);
+        c.settings.pane_show_cwd = Some(true);
+        assert!(!show_cwd_setting(&c));
     }
 }

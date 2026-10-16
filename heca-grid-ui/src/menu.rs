@@ -150,7 +150,7 @@ pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) 
 /// and focus second — and a caller passes what it knows rather than writing the fallback again.
 ///
 /// It was two exported functions with three identical lines each, and the host wrote the "try both,
-/// in this order" rule beside them. Two spellings of one question, in two places (F004/P084/T399).
+/// in this order" rule beside them. Two spellings of one question, in two places.
 pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
     let path = cursor
         .and_then(|key| key_path(root, key))

@@ -1,8 +1,8 @@
-//! **`pro.action("start_worker")`** — an action that belongs to no dock. *Server side.*
+//! **`demo.action("start_worker")`** — an action that belongs to no dock. *Server side.*
 //!
 //! ```ignore
-//! let pro = heca::extension("pro");
-//! pro.action("start_worker")
+//! let demo = heca::extension("demo");
+//! demo.action("start_worker")
 //!     .label("Start worker")
 //!     .icon(Glyph::Play)
 //!     .run(|cx, args| {
@@ -11,7 +11,7 @@
 //!     });
 //! ```
 //!
-//! Its name is `pro.start_worker`: the extension, then the short name. See [`extension`].
+//! Its name is `demo.start_worker`: the extension, then the short name. See [`extension`](mod@super::extension).
 //!
 //! Only what *nothing else can do*. The test a dock's declared actions already use decides it:
 //! remove the thing that owns it — does the action still make sense? An action tied to one row of
@@ -27,7 +27,7 @@
 //! policy-routed and confirm-gated.
 //!
 //! **Words are an English fallback.** `.label(..)` and `.description(..)` are the text shown until
-//! the app-wide text system (T519) lands; then a plugin's strings come from the language files
+//! the app-wide text system lands; then a plugin's strings come from the language files
 //! under its own namespace, and these are what is shown when a translation is missing.
 
 use std::rc::Rc;
@@ -158,8 +158,8 @@ mod tests {
         super::super::extension::reset();
     }
 
-    fn pro() -> super::super::Extension {
-        super::super::extension("pro")
+    fn demo() -> super::super::Extension {
+        super::super::extension("demo")
     }
 
     fn registered() -> (ActionRegistry, ActionCatalog, Conflicts) {
@@ -175,32 +175,32 @@ mod tests {
     #[test]
     fn an_added_action_is_in_the_catalog_with_what_its_author_said() {
         reset();
-        let pro = pro();
-        pro.action("start")
+        let demo = demo();
+        demo.action("start")
             .label("Start agent")
             .icon(Glyph::Play)
             .destructive()
             .run(|_, _| Handled::Yes);
-        pro.action("list").run(|_, _| Handled::Yes);
+        demo.action("list").run(|_, _| Handled::Yes);
 
         let (_, catalog, conflicts) = registered();
-        let start = catalog.find("pro.start").expect("in the catalog");
+        let start = catalog.find("demo.start").expect("in the catalog");
         assert_eq!(start.label, "Start agent");
         assert_eq!(start.icon, Some(Glyph::Play));
         assert_eq!(
             start.owner, None,
             "an added action belongs to the app, not a dock"
         );
-        assert!(catalog.destructive("pro.start"));
-        let go_ahead = catalog.confirm_spec("pro.start").expect("asks first");
+        assert!(catalog.destructive("demo.start"));
+        let go_ahead = catalog.confirm_spec("demo.start").expect("asks first");
         assert!(
             go_ahead.buttons.iter().any(|b| b.label == "Start agent"),
             "the go-ahead button is worded with the label, whichever order they were said in"
         );
-        let list = catalog.find("pro.list").expect("in the catalog");
-        assert_eq!(list.label, "pro.list", "no label said ⇒ the id");
+        let list = catalog.find("demo.list").expect("in the catalog");
+        assert_eq!(list.label, "demo.list", "no label said ⇒ the id");
         assert!(
-            !catalog.destructive("pro.list"),
+            !catalog.destructive("demo.list"),
             "danger only when it says so"
         );
         assert_eq!(list.policy, ActionPolicy::AlwaysAllowed);
@@ -214,12 +214,12 @@ mod tests {
         let store = SharedChromeState::new(240.0, 240.0);
         let out = run_once(
             &|cx, args| {
-                assert_eq!(args.action, "pro.start");
+                assert_eq!(args.action, "demo.start");
                 cx.dispatch("focus_pane", PropMap::new());
                 Handled::Yes
             },
             store,
-            &Intent::new("pro.start"),
+            &Intent::new("demo.start"),
         );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].action, "focus_pane");
@@ -229,12 +229,12 @@ mod tests {
     #[test]
     fn an_action_added_twice_keeps_the_last_and_is_reported() {
         reset();
-        let pro = pro();
-        pro.action("start").label("First").run(|_, _| Handled::Yes);
-        pro.action("start").label("Second").run(|_, _| Handled::Yes);
+        let demo = demo();
+        demo.action("start").label("First").run(|_, _| Handled::Yes);
+        demo.action("start").label("Second").run(|_, _| Handled::Yes);
         let (_, catalog, conflicts) = registered();
         assert_eq!(
-            catalog.find("pro.start").expect("registered").label,
+            catalog.find("demo.start").expect("registered").label,
             "Second"
         );
         assert_eq!(conflicts.actions.len(), 1);
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn an_action_whose_owner_is_not_a_declared_extension_is_refused() {
         reset();
-        let _pro = pro();
+        let _demo = demo();
         ActionMeta::new("other.start").run(|_, _| Handled::Yes);
         ActionMeta::new("start").run(|_, _| Handled::Yes);
         assert!(QUEUE.with(|q| q.peek(<[_]>::is_empty)));
@@ -256,7 +256,7 @@ mod tests {
     fn an_action_added_after_the_app_started_is_dropped() {
         reset();
         let _ = registered();
-        pro().action("too_late").run(|_, _| Handled::Yes);
+        demo().action("too_late").run(|_, _| Handled::Yes);
         assert!(QUEUE.with(|q| q.peek(<[_]>::is_empty)));
     }
 }

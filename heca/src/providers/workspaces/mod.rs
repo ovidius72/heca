@@ -39,7 +39,7 @@ use crate::chrome::{
 use crate::chrome::{Intent, PropMap, PropValue};
 // The menu-entry vocabulary, shared with the host's own pane menu.
 use crate::chrome::DropdownItem;
-use crate::chrome::context_menu::{item, item_running, usize_arg};
+use crate::chrome::surfaces::context_menu::item_running;
 use crate::providers::{ChromeCtx, Provider, ProviderCx};
 use heca_core::layout::PaneId;
 use heca_grid_ui::Handled;
@@ -152,30 +152,21 @@ impl Provider for WorkspacesContainerProvider {
         actions::declared()
     }
 
-    /// The host moved this placement's cursor — reconcile the tree's positional index with it.
-    ///
-    /// Resolved by **matching this component's own keys against its own rows**, rather than parsing
-    /// the key back into a selection. Parsing would have to guess: a tiled pane and a floating one
-    /// are both `pane:<id>`, and only the row knows which it is.
-    fn cursor_moved(&self, key: &str, cx: &mut ProviderCx<'_>) {
-        let state = cx.state();
-        let ws = state.workspaces();
-        // Read, then drop the borrow: `tree_mut` below takes the same `RefCell`.
-        let selection = {
-            let tree = ws.tree();
-            tree.flat_items
-                .iter()
-                .map(|row| row.selection())
-                .find(|sel| selection_key(*sel) == key)
-        };
-        let Some(selection) = selection else {
-            return;
-        };
-        ws.tree_mut().apply_nav_selection(Some(selection));
-        ws.set_nav_selection(Some(selection));
-    }
-
+    /// Every action runs against **this placement's** cursor: the list is pointed at the row the
+    /// placement selected before the verb runs, and the row it ends on is written back after one
+    /// that acted. The verbs themselves never load or publish a cursor, so none can forget to.
     fn perform(&self, action: &str, args: &Intent, cx: &mut ProviderCx<'_>) -> Handled {
+        self.load_cursor(cx);
+        let handled = self.run(action, args, cx);
+        if handled == Handled::Yes {
+            self.publish_cursor(cx);
+        }
+        handled
+    }
+}
+
+impl WorkspacesContainerProvider {
+    fn run(&self, action: &str, args: &Intent, cx: &mut ProviderCx<'_>) -> Handled {
         match action {
             CURSOR_UP => self.step_cursor(cx, Step::Up),
             CURSOR_DOWN => self.step_cursor(cx, Step::Down),
@@ -188,7 +179,7 @@ impl Provider for WorkspacesContainerProvider {
                 // like any other. A bad or stale key leaves the cursor alone rather than failing —
                 // the row it named is simply not there any more.
                 if let Some(PropValue::Text(key)) = args.args.get("key") {
-                    self.cursor_moved(key, cx);
+                    cx.state().workspaces().tree_mut().point_at(Some(key));
                 }
                 // **A hint leaves you ON that row, in the dock** — so it has to *take* the keyboard,
                 // not merely refrain from releasing it. Written as one rule for every caller: from

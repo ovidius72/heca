@@ -45,7 +45,7 @@ enum Step<C> {
 /// It owns the two rules every such walk must follow, so they are written once: a subtree that is
 /// [`skip`]ped (hidden, or laid out at nothing) is not visited, and **every** match is visited, not
 /// the first — one thing may be shown in more than one place, and `||` or `.any()` would stop at
-/// the first and leave the other dark (the sidebar pane listed on both sides, 2026-08-17). Whatever
+/// the first and leave the other dark (the sidebar pane listed on both sides). Whatever
 /// a caller needs carried down from its ancestors (the nearest declaration, the clip) travels as
 /// `ctx`.
 fn walk<'a, C: Clone>(
@@ -79,7 +79,7 @@ fn walk<'a, C: Clone>(
 /// to a frame-final band ordered by nesting depth, so a cap written into the base draws *under*
 /// every overlay, and one written at depth 1 draws under anything nested deeper. Both look exactly
 /// like "the picker does nothing", and no test can see either. That is what made the exposé's
-/// letters invisible while every other part of the picker was correct (F003/P082/T427).
+/// letters invisible while every other part of the picker was correct.
 ///
 /// Returns `false` when the path no longer leads to a widget that declared a hint — a tree rebuilt
 /// under the letters, which is not an error.
@@ -177,7 +177,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             // nearest target ENCLOSING the row — so a row past the sidebar's fold would otherwise
             // hand its letter up to the workspace header, which is a wrong letter rather than no
             // letter. The named thing is not visible in this tree, so this tree is not one of the
-            // places that can show it (F003/P082/T438).
+            // places that can show it.
             if label.is_some() && unseen(node, clip) {
                 return Step::Stop(false);
             }
@@ -242,7 +242,7 @@ fn governs_foreign_identity(node: &dyn Component, owner: Option<&str>) -> bool {
 /// something that is somebody else.**
 ///
 /// Split in two passes so a **declaration wins over mere actionability**, which is the precedence
-/// T441 settled: a declared hint shadows something merely actionable beneath it, but never another
+/// rule: a declared hint shadows something merely actionable beneath it, but never another
 /// declaration. One pass could not express it — the first target found won, whatever it was.
 ///
 /// The case that forced it: heca's sidebar pane row carries the identity and is *actionable*
@@ -300,7 +300,7 @@ pub fn clear_hints(root: &dyn Component) {
     }
 }
 
-/// **Change what a named node says, without rebuilding anything** (F003/P097/T500).
+/// **Change what a named node says, without rebuilding anything**.
 ///
 /// The text is a signal, so this is a write to reactive state: the tree keeps its identity, its
 /// layout and every widget inside it. That matters because a rebuild is not free and not invisible
@@ -339,7 +339,7 @@ pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
     })
 }
 
-/// **Light the named node, and darken every other one it knows about** (F003/P097/T501).
+/// **Light the named node, and darken every other one it knows about**.
 ///
 /// A container that moves a cursor over its children says which one it is on by that child's own
 /// key — the same addressing [`offer_hint_by_key`] and [`set_text_by_key`] use, and for the same

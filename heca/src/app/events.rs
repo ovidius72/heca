@@ -39,8 +39,8 @@ pub enum AppEvent {
     /// that holds the policy needing state (`terminal_host::on_terminal_input`). Not an action: a
     /// wheel turn is not something a user means to do.
     TerminalInput {
-        terminal: crate::chrome::terminal::TerminalId,
-        input: crate::chrome::terminal::TerminalInput,
+        terminal: crate::chrome::panes::terminal::TerminalId,
+        input: crate::chrome::panes::terminal::TerminalInput,
     },
 }
 
@@ -361,11 +361,11 @@ pub(crate) fn handle_window_event(
 /// which AGENTS.md § Keybinding Style states as *a key acts on the surface in front of you*.
 ///
 /// **A dock is deliberately not included.** A focused container answers keys through the actions it
-/// declared (F003/P085/T352-T355): the key resolves in its own `[[keys.surface]]` map and arrives
+/// declared: the key resolves in its own `[[keys.surface]]` map and arrives
 /// as the intent it meant. Offering it the raw key here as well would be a second door onto one
 /// input, and the two cannot stay identical — the thing ⭐⭐ RULE ZERO forbids.
 ///
-/// This replaces `top_modal(state).is_some()` (F003/P097/T495). The difference is not the answer
+/// This replaces `top_modal(state).is_some()`. The difference is not the answer
 /// but *what is asked*: the old form went on to name a node for the key to be delivered into, and
 /// a host that names the target is a second opinion about what is in front. Now the key goes to
 /// the tree and the tree delivers it to whatever holds focus — so a dialog's field, its buttons,
@@ -399,7 +399,7 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
     };
     // No modifiers attached: the framework fills in what is held down, from the
     // `ModifiersChanged` this same loop broadcasts. Attaching them here is the second source of
-    // truth that let a drop disagree with its own outline (F003/P097/T496).
+    // truth that let a drop disagree with its own outline.
     let mut raw = RawPointer::new(
         RawPointerKind::Wheel,
         Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64),
@@ -411,7 +411,7 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
 }
 
 /// **Re-check the pointer where it last was**, as if it had moved there — for when the layers
-/// change under a pointer that is not moving (F004/P084/T529).
+/// change under a pointer that is not moving.
 ///
 /// Only the case that is unambiguous: a surface now covers the point, so every tree behind it is told
 /// the pointer is not on it (a tooltip under an overlay goes away). When a surface *closes* nothing is

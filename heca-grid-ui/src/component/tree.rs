@@ -57,7 +57,7 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
 /// skipped (their bounds are stale).
 pub fn overlay_occluded_at(root: &dyn Component, pos: Point) -> bool {
     let b = root.base();
-    if !b.visible.get_untracked() || b.style.layout.hidden {
+    if !root.is_shown() {
         return false;
     }
     if root.overlay_occludes(pos) {
@@ -156,7 +156,7 @@ pub fn needs_layout(root: &dyn Component) -> bool {
 /// calls [`Component::on_layout`] post-order once bounds are natural again).
 /// **This is the element's own displacement** — CSS `transform` on a box the layout already
 /// placed. A host placing a retained tree at an absolute point is the same operation from the other
-/// end, which is why the app kept a private copy of this until F003/P082/T474.
+/// end, so the app uses this rather than a copy of its own.
 pub fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
     c.base_mut().bounds.loc.x += dx;
     c.base_mut().bounds.loc.y += dy;
@@ -204,7 +204,6 @@ pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
     // **Whether it may be squeezed is the content's answer too.** Everything gives way by default,
     // so a wrapper around something that refuses — a `StatusDot`, whose circle has no narrower
     // version — gave way in its place, and the dot was drawn as a 3px sliver inside a box that had
-    // shrunk around it. The wrapper has no opinion of its own; it *is* the widget inside it
-    // (F003/P096/T483).
+    // shrunk around it. The wrapper has no opinion of its own; it *is* the widget inside it.
     base.style.layout.flex_shrink = base.style.layout.flex_shrink.or(child.flex_shrink);
 }

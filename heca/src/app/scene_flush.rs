@@ -23,10 +23,10 @@ pub(super) struct ChromePassOpts {
 /// What flushing scenes leaves for the end of the frame.
 #[derive(Default)]
 pub(super) struct Flushed {
-    /// The scenes' overlay segments, flushed once above every surface by [`flush_overlay_band`].
+    /// The scenes' overlay segments, flushed once above every surface.
     pub(super) overlays: Vec<heca_grid_ui::Scene>,
     /// The terminal surfaces reached, and where.
-    pub(super) drawn: crate::chrome::terminal::Drawn,
+    pub(super) drawn: crate::chrome::panes::terminal::Drawn,
 }
 
 /// What does a piece of host work when the flush reaches it — draws a terminal surface, or blurs

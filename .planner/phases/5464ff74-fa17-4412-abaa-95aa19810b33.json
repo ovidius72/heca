@@ -1683,6 +1683,90 @@
           "number": 11,
           "title": "state fix: one resize helper for both sidebars (new test); config defaults read from config, not copied; planner ids and stale doc refs stripped",
           "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-012-state-fix-antonio-yes-pane-live-info-moves-to-its-own-paneruntimestore-on-the-shared-state-read-by-sidebar-rows-palette-expos-host-api",
+          "number": 12,
+          "title": "state fix (Antonio yes): pane live info moves to its own PaneRuntimeStore on the shared state; read by sidebar rows, palette, exposé, host API",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-013-state-fix-antonio-yes-expos-show-cwd-mirror-deleted-the-expos-reads-the-app-setting-directly",
+          "number": 13,
+          "title": "state fix (Antonio yes): exposé show_cwd mirror deleted; the exposé reads the app setting directly",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-014-decision-pending-workspaces-cursor-kept-three-times-per-placement-row-key-typed-nav-selection-list-position-keep-only-the-row-key",
+          "number": 14,
+          "title": "Decision pending: workspaces cursor kept three times (per-placement row key, typed nav_selection, list position) — keep only the row key",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-015-found-in-check-palette-expos-named-a-renamed-pane-without-its-program-palette-icon-always-terminal-palette-skipped-floats-workspace-panes-in-core-replaces-5-hand-loops-paneinfoview-label-expose-show-cwd-written-key-wins",
+          "number": 15,
+          "title": "Found in check: palette/exposé named a renamed pane without its program, palette icon always terminal, palette skipped floats; Workspace::panes() in core replaces 5 hand loops; PaneInfoView::label(); expose show_cwd written key wins",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-016-found-in-check-enter-in-a-dock-acted-on-the-last-focused-row-and-a-picked-dock-never-gave-its-terminal-the-keyboard-focus-scope-hands-it-to-the-first-control-the-keyboard-follows-a-moved-dock-cursor-focus-key-in-scope",
+          "number": 16,
+          "title": "Found in check: Enter in a dock acted on the last-focused row, and a picked dock never gave its terminal the keyboard — focus_scope hands it to the first control; the keyboard follows a moved dock cursor (focus_key_in_scope)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-017-private-doc-links-all-broken-ones-fixed-across-the-workspace-about-120-incl-redundant-targets-agents-gate-is-cargo-doc-document-private-items",
+          "number": 17,
+          "title": "Private doc links: all broken ones fixed across the workspace (about 120 incl. redundant targets); AGENTS gate is cargo doc --document-private-items",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-018-sync-with-origin-main-pr-291-split-palette-rs-command-palette-rs-reapply-the-palette-pane-row-fixes-to-the-new-files",
+          "number": 18,
+          "title": "Sync with origin/main (PR #291 split palette.rs / command_palette.rs — reapply the palette pane-row fixes to the new files)",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-019-expose-mod-rs-split-into-wiring-tests-show-cwd-setting-moves-to-app-settings-hand-made-share-helper-replaced-by-the-library-s-flex",
+          "number": 19,
+          "title": "expose/mod.rs: split into wiring + tests; show_cwd setting moves to app settings; hand-made share helper replaced by the library's flex",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-020-context-menu-rs-split-into-registry-open-entries-pane-menu-tests-by-subject-duplicate-item-arg-helpers-removed",
+          "number": 20,
+          "title": "context_menu.rs: split into registry, open, entries, pane_menu + tests by subject; duplicate item/arg helpers removed",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-021-chrome-host-rs-split-into-mounted-tests-docks-get-their-start-hook-when-placed-new-test-dead-context-path-cursor-moved-hooks-deleted-no-expect-no-debug-stop",
+          "number": 21,
+          "title": "chrome/host.rs: split into mounted + tests; docks get their start hook when placed (new test); dead context_path/cursor_moved hooks deleted; no expect, no debug stop",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-022-rules-sweep-one-way-to-build-the-dock-context-9-hand-copies-planner-ids-out-of-all-code-comments-one-shared-way-to-turn-menu-args-into-an-action-expose-tests-under-400",
+          "number": 22,
+          "title": "Rules sweep: one way to build the dock context (9 hand copies); planner ids out of all code comments; one shared way to turn menu args into an action; expose tests under 400",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-023-chrome-grouped-by-job-docks-input-panes-surfaces-window-state-hint-no-loose-files-every-multi-file-module-is-a-folder-with-mod-rs-36-name-rs-beside-name-pairs-fixed-workspace-wide-agents-md-docs-hook-and-guards-updated",
+          "number": 23,
+          "title": "chrome/ grouped by job: docks/, input/, panes/, surfaces/, window/, state/ (+ hint/); no loose files; every multi-file module is a folder with mod.rs (36 name.rs-beside-name/ pairs fixed workspace-wide); AGENTS.md, docs, hook and guards updated",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-024-heca-view-realize-src-lib-rs-6099-lib-394-style-kinds-463-one-function-widgets-intents-props-vocab-tests-in-19-files-by-subject-96-tests-before-and-after-expos-tests-tests-folder",
+          "number": 24,
+          "title": "heca-view-realize/src/lib.rs 6099 → lib 394 + style, kinds (463, one function), widgets, intents, props, vocab + tests/ in 19 files by subject (96 tests before and after); exposé tests → tests/ folder",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-025-review-with-antonio-dead-code-deletions-reverted-described-layer-path-notification-store-functions-dock-action-retire-file-wide-allows-duplicate-sidebar-active-visited-field-deleted-the-live-highlights-read-the-one-record-intent-args-documented-in-widgets-md-plus-two-wrong-json-examples-fixed-realize-split-uses-named-imports-the-three-source-reading-guards-find-code-by-what-it-is-shared-helper-and-the-size-guard-no-longer-skips-code-after-a-test-file-line-historical-docs-restored-comment-rewordings-reviewed",
+          "number": 25,
+          "title": "Review with Antonio: dead-code deletions REVERTED (described-layer path, notification store functions, dock action retire, file-wide allows); duplicate sidebar active/visited field deleted (the live highlights read the one record); Intent::args documented in widgets.md (plus two wrong JSON examples fixed); realize split uses named imports; the three source-reading guards find code by what it is (shared helper), and the size guard no longer skips code after a test-file line; historical docs restored; comment rewordings reviewed",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -1703,7 +1787,7 @@
       "startedAt": "2026-10-15T09:11:19.538Z",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-10-15T12:45:26.308Z",
+      "updatedAt": "2026-10-16T08:07:10.224Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
@@ -3524,7 +3608,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-15T12:45:26.308Z",
+  "updatedAt": "2026-10-16T08:07:10.224Z",
   "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
   "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
   "handoffAudit": {

@@ -30,7 +30,7 @@ impl ChromeSelection {
 /// independent, so it travels with the container if it moves between regions.
 #[derive(Clone, Debug)]
 pub struct WorkspacesContainerState {
-    pub(super) events: ChromeEventBus,
+    events: ChromeEventBus,
     /// **The workspaces component's own model** — its rows, its cursor, its collapse state.
     ///
     /// It lives here rather than on `AppState` because it belongs to the component, not to the
@@ -52,24 +52,13 @@ pub struct WorkspacesContainerState {
     /// reactively (+ `PendingPickChanged`) so components/plugins can render their own UI
     /// for the pending action. `None` when idle.
     pub(crate) pending_pick: Signal<Option<PendingPick>>,
-    /// Per-pane reactive mirror of canonical runtime metadata.
-    pub(crate) panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
 
-    /// The workspaces cursor selection, projected from the component's own model
-    /// (`tree().current_item()`). `None` = nothing selected. Drives
-    /// the expanded sidebar's nav-cursor highlight, kept **distinct** from
-    /// `active_pane` (the real session focus).
-    pub(crate) nav_selection: Signal<Option<SidebarSelection>>,
     /// Whether a renamed pane's sidebar card shows a small dimmed `(process)` suffix
     /// after its name. Mirrors `[settings] pane_renamed_add_process_name`; projected
     /// from `AppState` in `sync_chrome_state`, read by `pane_card` at tree-build time.
     /// Carried here (rather than threaded through every card signature) so the flag
     /// reaches the card via the `ws_state` it already receives.
     pub(crate) pane_renamed_add_process_name: Signal<bool>,
-    /// Whether the exposé shows each pane's folder. Mirrors `[appearance.expose] show_cwd`;
-    /// projected in `sync_chrome_state`, read by the exposé. (The sidebar's folder line is decided by
-    /// `[appearance.sidebar] pane_lines` alone.)
-    pub(crate) expose_show_cwd: Signal<bool>,
     /// The program catalog (`[program]`) — icons and display names for running processes.
     ///
     /// **This component's, not every component's**: the context every component receives stays
@@ -82,18 +71,18 @@ pub struct WorkspacesContainerState {
     /// The lines shown under a pane's name, in order — `[appearance.sidebar] pane_lines` resolved by
     /// name; mirrored in `sync_chrome_state`, read when a row is built. A change rebuilds the rows
     /// (`chrome_signature` hashes the names), so it is not a per-frame signal.
-    pub(crate) pane_lines: Signal<crate::chrome::pane_items::PaneLineSet>,
+    pub(crate) pane_lines: Signal<crate::chrome::panes::pane_items::PaneLineSet>,
 }
 
 impl WorkspacesContainerState {
     /// The lines to build under each pane's name. See [`pane_lines`](Self::pane_lines) field.
-    pub(crate) fn pane_lines(&self) -> crate::chrome::pane_items::PaneLineSet {
+    pub(crate) fn pane_lines(&self) -> crate::chrome::panes::pane_items::PaneLineSet {
         use heca_grid_ui::reactive::SignalGet as _;
         self.pane_lines.get_untracked()
     }
 
     /// Mirror the lines that show. Written only when they differ, so an unchanged reload costs nothing.
-    pub(crate) fn set_pane_lines(&self, lines: crate::chrome::pane_items::PaneLineSet) {
+    pub(crate) fn set_pane_lines(&self, lines: crate::chrome::panes::pane_items::PaneLineSet) {
         use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _};
         if self.pane_lines.get_untracked() != lines {
             self.pane_lines.set(lines);
@@ -122,14 +111,9 @@ impl WorkspacesContainerState {
             collapsed_ws: signal(HashSet::new()),
             selection: ChromeSelection::new(),
             pending_pick: signal(None),
-            panes: signal(HashMap::new()),
-            nav_selection: signal(None),
             // The config's own defaults until `sync_chrome_state` mirrors the loaded values.
             pane_renamed_add_process_name: signal(
                 heca_config::settings::SettingsConfig::default().pane_renamed_add_process_name,
-            ),
-            expose_show_cwd: signal(
-                heca_config::appearance::ExposeAppearance::default().show_cwd,
             ),
             // The embedded defaults until `sync_chrome_state` mirrors the loaded config.
             programs: signal(std::rc::Rc::new(
@@ -168,10 +152,6 @@ impl WorkspacesContainerState {
             self.selection.previous_panes.set(panes);
         }
     }
-    /// The current sidebar-nav cursor selection (`None` when not navigating).
-    pub fn nav_selection(&self) -> Option<SidebarSelection> {
-        self.nav_selection.get()
-    }
     /// Whether renamed panes show the `(process)` suffix in their sidebar card. Read
     /// untracked — consumed by `pane_card` while building the retained tree, not inside
     /// a reactive paint closure.
@@ -188,11 +168,6 @@ impl WorkspacesContainerState {
     /// consumed while building the retained tree, not inside a reactive paint closure.
     pub fn programs(&self) -> std::rc::Rc<heca_config::programs::ProgramsConfig> {
         self.programs.get_untracked()
-    }
-    /// Whether the exposé shows each pane's folder. Read untracked — consumed by the exposé while it
-    /// is built.
-    pub fn expose_show_cwd(&self) -> bool {
-        self.expose_show_cwd.get_untracked()
     }
     /// Is workspace `ws_idx` collapsed? (Borrows — no clone.)
     pub fn is_ws_collapsed(&self, ws_idx: usize) -> bool {
@@ -215,16 +190,6 @@ impl WorkspacesContainerState {
         self.selection.active_pane.set(pane);
         self.events.emit(ChromeEvent::PaneActiveChanged { pane });
     }
-    /// Set (or clear, with `None`) the sidebar-nav cursor selection. Emits
-    /// [`ChromeEvent::SidebarSelectionChanged`]. Cleared on leaving nav mode.
-    pub fn set_nav_selection(&self, selection: Option<SidebarSelection>) {
-        if self.nav_selection.get_untracked() == selection {
-            return;
-        }
-        self.nav_selection.set(selection);
-        self.events
-            .emit(ChromeEvent::SidebarSelectionChanged { selection });
-    }
     /// Project the `[settings] pane_renamed_add_process_name` flag into the store.
     /// Idempotent (no-op when unchanged). A pure display-config flag read at card build,
     /// so it emits no `ChromeEvent` — a config reload rebuilds the sidebar anyway.
@@ -233,15 +198,6 @@ impl WorkspacesContainerState {
             return;
         }
         self.pane_renamed_add_process_name.set(on);
-    }
-    /// Project the `[appearance.expose] show_cwd` flag into the store. Idempotent; emits no
-    /// `ChromeEvent` (pure display-config flag read at card build — a reload rebuilds the
-    /// sidebar anyway).
-    pub fn set_expose_show_cwd(&self, on: bool) {
-        if self.expose_show_cwd.get_untracked() == on {
-            return;
-        }
-        self.expose_show_cwd.set(on);
     }
     /// Mirror the program catalog into the store. Called from `sync_chrome_state`, so a config
     /// reload reaches the component; guarded on the `Rc` identity, which is what changes when a

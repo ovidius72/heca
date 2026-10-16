@@ -180,7 +180,7 @@ stayed modal, and swallowed `ctrl+h/j/k/l` for ever after** (Antonio, driving, 2
 
 Tests must run the real order — snapshot, tick the **tree**, reconcile. A test that calls a registry
 tick alone cannot see this, because it never runs the walk doing the second advance. See the `frame`
-helper in `heca/src/chrome/layers/tests.rs`.
+helper in `heca/src/chrome/surfaces/layers/tests.rs`.
 
 ### 0.8 The target model — four passes, one tree
 
@@ -628,7 +628,7 @@ and hintable for free** — the plugin never touches that machinery.
 The plugin plan already ratifies two contracts this section must **build on, not duplicate**:
 
 - **`ViewNode`** (§2.6.2) — the serializable declarative widget tree. Implemented in
-  `heca/src/chrome/view.rs` (plugin-task-ui-1). It is the `LayerContent::View(...)` above and
+  `heca-view/src/node.rs`. It is the `LayerContent::View(...)` above and
   the body of a modal. `realize(&ViewNode) -> Box<dyn Component>` (plugin-task-ui-3) turns it
   into a retained tree; **actionable nodes (an `on_press` intent) get a KeyHint target for
   free**, which is exactly how an overlay's buttons become hintable.

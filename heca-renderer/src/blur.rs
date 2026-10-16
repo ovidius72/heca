@@ -2,9 +2,8 @@
 //!
 //! Given **any** source texture view, [`Blur::process`] produces a blurred copy
 //! via N compounding passes through internal ping-pong targets, and returns the
-//! blurred view. It is **content-agnostic and host/compositor-owned** (see
-//! `pluggable-chrome-plugin-plan.md` Phase 7.5 — blur is a compositor concern, not
-//! terminal-owned): the intended app use is to frost chrome over the scene, and a
+//! blurred view. It is **content-agnostic and host/compositor-owned** (blur
+//! is a compositor concern, not terminal-owned): the intended app use is to frost chrome over the scene, and a
 //! terminal/pane host can reuse it on its own offscreen content.
 //!
 //! **Why Kawase, not a separable Gaussian:** a single 9-tap separable Gaussian

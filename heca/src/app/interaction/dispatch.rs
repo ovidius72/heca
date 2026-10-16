@@ -48,7 +48,7 @@ pub(super) fn resolve_overlay_control(
     };
     let result = match result {
         // Marshal the modal body's named value fields (input/toggle/checkbox) into the result
-        // `data` before the overlay is popped (plugin-task-ui-4).
+        // `data` before the overlay is popped.
         Some(id) => crate::chrome::ModalResult::Action {
             id,
             data: crate::chrome::collect_overlay_form(state, overlay),

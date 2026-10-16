@@ -5,7 +5,7 @@
 //! handler that a key, a click, an RPC call or a plugin reaches builds one and hands it to
 //! [`ServerState::execute`](super::ServerState::execute); nothing else reaches the state it changes.
 //! Data, so the same command can cross a socket when a window and the server stop sharing a
-//! process (F012/P099).
+//! process.
 
 use std::time::Duration;
 

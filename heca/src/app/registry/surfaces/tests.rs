@@ -132,7 +132,7 @@ fn global_focus_goes_to_the_global_map_not_the_containers_own_layer() {
     assert_eq!(
         flat.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("d")),
         // **`ToggleDock`, not `FocusDock`** — `global_focus` is press-again-to-leave, and that
-        // toggle belongs to the binding rather than to the verb (F003/P082/T444). `FocusDock`
+        // toggle belongs to the binding rather than to the verb. `FocusDock`
         // only focuses, so a click, an RPC call and the palette cannot release a dock by asking
         // to focus it.
         Some(&WmAction::ToggleDock {

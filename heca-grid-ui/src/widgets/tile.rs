@@ -28,7 +28,7 @@
 //! ```
 //!
 //! Why this is a widget: the app's sidebar row and the showcase's demo of it were two hand-written
-//! copies of this arrangement, and only one of them got fixed (F003/P082/T491). The showcase could
+//! copies of this arrangement, and only one of them got fixed. The showcase could
 //! not use the app's, because it cannot reach app code — so the arrangement belongs here, where both
 //! can (AGENTS.md § 0b: if it can be built inside grid-ui, it belongs in grid-ui).
 

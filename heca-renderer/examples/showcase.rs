@@ -212,7 +212,7 @@ fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
 /// Pure data. No builder, no closure: the `Row`'s click carries an `Intent`, which is exactly what
 /// a plugin would ship over the boundary.
 fn described_tree() -> ViewNode {
-    // Written through the typed builders (F003/P011/T006) rather than as a bag of properties. The
+    // Written through the typed builders rather than as a bag of properties. The
     // difference is what does not compile: `Label::new(..).title(..)` is an error because a label
     // has no title, and `Separator::new().orientation(..)` will not take a misspelt word.
     //
@@ -228,13 +228,13 @@ fn described_tree() -> ViewNode {
                 // crossing the hover pill's edge, and it reads as the badge overflowing.
                 .padding(6.0)
                 .on_press(Intent::new("showcase.select").arg("id", PropValue::Text("nginx".into())))
-                // **A tooltip is a declaration, not a box around the row** (F003/P097/T501). It is
+                // **A tooltip is a declaration, not a box around the row**. It is
                 // universal like `.key(..)`, so a described node says it exactly as its native twin
                 // below does — hover either and the same bubble appears, on the same side, after
                 // the same rest. There is no `WidgetKind::Tooltip` to construct and anchor.
                 .tooltip("Running · 3 days")
                 .tooltip_side(heca_view::ViewTooltipSide::Bottom)
-                // **Where the letter goes is a declaration too** (F003/P097/T501). A wide list row
+                // **Where the letter goes is a declaration too**. A wide list row
                 // wants its cap on the right, where it does not sit on the row's own label — and
                 // until now saying so meant wrapping the row in a `KeyHint`, which a description
                 // cannot do. Press `prefix+/` and compare it with the native twin.
@@ -244,7 +244,7 @@ fn described_tree() -> ViewNode {
         )
         .child(build::Separator::new())
         .child(build::Label::new("colour by token name").color("danger"))
-        // **The two ways of not showing something** (F003/P097/T501). Neither needs a wrapper on
+        // **The two ways of not showing something**. Neither needs a wrapper on
         // either authoring path any more. The first keeps its box — the gap below the rule is it —
         // and the second is gone from the layout, so nothing marks where it was.
         .child(build::Label::new("ink hidden, box kept").visible(false))
@@ -265,7 +265,7 @@ fn described_tree() -> ViewNode {
                 )
                 .child(build::Label::new("K")),
         )
-        // **The pane header's own action row, described** (F003/P097/T501). It shows icons, says
+        // **The pane header's own action row, described**. It shows icons, says
         // its words on hover, and collapses whatever does not fit into a ⋮ that runs the same
         // actions — none of which is written here. A plugin could only hand-build this before, and
         // would have got the collapse and the overflow menu approximately right.
@@ -335,7 +335,7 @@ fn native_twin(theme: &Theme) -> Panel {
 
 /// A described tree beside its hand-built twin. They should be indistinguishable.
 ///
-/// This section is the point of F003/P017/T009: `realize` lives in `heca-view-realize`, **below**
+/// This section exists because `realize` lives in `heca-view-realize`, **below**
 /// this example, so a `ViewNode` can be rendered here at all. While it sat inside the `heca` binary
 /// the showcase could not call it, the only described tree in the whole app was one modal body, and
 /// every widget added to the vocabulary had to be taken on trust from a test.
@@ -361,8 +361,7 @@ fn described_vs_native(theme: &Theme) -> Flex {
 /// Handles the host keeps after building the UI, to drive chrome interactions
 /// from the keymap (the same signals an RPC layer would write).
 struct BuiltUi {
-    /// The page tree: a whole-window two-axis `ScrollRegion` (T009 — replaces the
-    /// old manual `offset_tree` page scroll) whose single child is the demo column.
+    /// The page tree: a whole-window two-axis `ScrollRegion` whose single child is the demo column.
     ui: ScrollRegion,
     /// The overlay layer ABOVE the page scroll: viewport-anchored widgets (Dialog /
     /// CommandPalette / ContextMenu / ToastStack) live here so they center/anchor on
@@ -599,7 +598,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
         .on_action(|id, key| println!("[showcase] toast {id} action {key}"));
 
-    // An **animated surface** (F003/P082/T459): the same `Overlay` every layer is, declaring how
+    // An **animated surface**: the same `Overlay` every layer is, declaring how
     // it arrives and leaves in one builder — which is the whole capability. Opening zooms it in
     // and dissolving rides the shrink on the way out, the exposé's own gesture; the surface stays
     // on screen, inert, until that gesture has played out. Click the scrim to dismiss it.
@@ -625,7 +624,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         )
         .on_outside_click(move || dismiss_it.set(false));
 
-    // Dialog (T009 / BUG B): the widget is hosted in the OVERLAY layer above the
+    // Dialog: the widget is hosted in the OVERLAY layer above the
     // page scroll — never in-flow inside scrolled content, where taffy would center
     // it in its slot and put it off-screen once the page scrolls. The page keeps
     // only the trigger button; both sides share `dialog_open`.
@@ -637,7 +636,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // form fields (Input + Select + Checkbox), proving the body is arbitrary composed
         // content. In `heca` any named value node in a `ViewNode` body
         // (Input/Toggle/Checkbox/Select) marshals its value into `ModalResult::Action.data`
-        // (see docs/widgets.md §Dialog). The Select is an OVERLAY-IN-OVERLAY (T009 step 4):
+        // (see docs/widgets.md §Dialog). The Select is an OVERLAY-IN-OVERLAY:
         // its open list must composite ABOVE the dialog's action buttons (a deeper scene
         // segment) and capture hover/wheel/keys over them — not show through or fall through.
         // SIZED panel + SCROLLABLE body: `panel_size` bounds the panel, which is what
@@ -1318,7 +1317,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             }
             grid.child(row)
         })
-        // Nerd Font keyboard glyphs (F003/P085/T358 · P029/T090): the SECOND icon set, iterated
+        // Nerd Font keyboard glyphs: the SECOND icon set, iterated
         // from `NfGlyph::ALL`. Phosphor above has no keyboard glyphs at all and the UI face has no
         // ⌃ ⌥ ⌘ ⎋, so a keycap draws from here.
         //
@@ -1773,7 +1772,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     list
                 }),
         )
-        // ScrollRegion two-axis + scrollable surface (plugin-task-ui-7 Part 1):
+        // ScrollRegion two-axis + scrollable surface:
         // .both() enables horizontal + vertical scrolling; .background()/.border()
         // (StyleExt) make it a framed scrollable *surface*. Each row is explicitly
         // wider than the 240px viewport (→ horizontal overflow + bottom scrollbar),
@@ -1851,7 +1850,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
 
             // A pane "card": a `Tile` — status pip, icon, title, then a git line under it — inside
             // a `Row` that owns the selection, the click and the drag. **The same `Tile` the app's
-            // sidebar mounts**, so this demo cannot drift from the real row (F003/P082/T491). It
+            // sidebar mounts**, so this demo cannot drift from the real row. It
             // used to be a ninety-line hand-built copy that kept two defects the app had fixed:
             // two stacked title labels toggled by visibility, and the pip pinned in a 12px slot.
             //
@@ -2006,7 +2005,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .dock(explorer)
                 .dock(source_control);
 
-            // PANES: Phase 7 sidebar-style pane cards. Row 1 is a centered inline
+            // PANES: sidebar-style pane cards. Row 1 is a centered inline
             // `status dot + icon + name`; row 2 is a flat git metadata line that
             // hides outside repos.
             // The dock is a DnD drop target (universal `DragExt`) — its cards drop here.
@@ -2246,7 +2245,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // itself lives in the overlay layer; this caption just documents the key.
         .child(caption("CommandPalette — press Ctrl+K"));
 
-    // Root (T009): the whole page inside a two-axis scroll viewport — this replaces
+    // Root: the whole page inside a two-axis scroll viewport — this replaces
     // the old manual `offset_tree` shift and adds horizontal page scroll (BUG C).
     // `align(Start)` keeps the page at its NATURAL width (the region measures
     // horizontal overflow from its direct child); when the window is wider than the
@@ -2851,9 +2850,8 @@ impl GpuState {
 
         if self.layout_dirty {
             // The root ScrollRegion IS the window; the page inside it lays out at
-            // natural size and the region scrolls/clips it (T009 — replaces the old
-            // manual `offset_tree` shift; the scroll offset survives relayout, the
-            // region re-clamps + re-applies it in `on_layout`).
+            // natural size and the region scrolls/clips it (the scroll offset
+            // survives relayout; the region re-clamps + re-applies it in `on_layout`).
             self.ui.base_mut().style.layout.width = Length::Px(w);
             self.ui.base_mut().style.layout.height = Length::Px(h);
             // Pass 1 — page at NATURAL width, so content wider than the window makes
@@ -3141,8 +3139,8 @@ impl ApplicationHandler for App {
                     // Dialog/palette may scroll its own body), then the page tree — an
                     // open Select dropdown takes it via the page's overlay scan, an
                     // embedded ScrollRegion under the cursor consumes it, and otherwise
-                    // the ROOT ScrollRegion scrolls the whole page (T009 — the manual
-                    // `scroll_y` fallback is gone; the page is a real scroll viewport).
+                    // the ROOT ScrollRegion scrolls the whole page (a real scroll
+                    // viewport).
                     let mut raw = state.raw(RawPointerKind::Wheel, PointerButton::Left);
                     raw.delta_x = dx;
                     raw.delta_y = dy;
@@ -3172,7 +3170,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 // **Committed text goes in as text.** A field types from `Event::TextInput` and
-                // from nothing else (F004/P084/T394) — the character the platform actually produced,
+                // from nothing else — the character the platform actually produced,
                 // case and shifted symbols intact — while the key beside it is what a shortcut
                 // reads. This host was never taught to send it, so the palette and every `Input`
                 // here were unreachable from the keyboard while the identical widgets typed fine in
@@ -3243,7 +3241,7 @@ impl ApplicationHandler for App {
                         // it in and × dismisses (removes the id). Each push rotates the severity
                         // AND the action's button variant, because **the developer raising a
                         // notification chooses how its action reads** — the stack builds what the
-                        // spec says and picks no face of its own (F003/P096/T486).
+                        // spec says and picks no face of its own.
                         GridKey::Char('t') if !heca_grid_ui::holds_keyboard(&state.ui) => {
                             state.toasts.update(|v| {
                                 let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
@@ -3333,7 +3331,7 @@ fn main() {
 mod sweeps {
     use super::*;
 
-    /// **The catalog stays inside its window, at every width** (F003/P082/T438).
+    /// **The catalog stays inside its window, at every width**.
     ///
     /// The same invariant `heca-view-realize` asks of every `WidgetKind`, asked here of the real
     /// thing: the showcase is every widget in a **real composition**, with real text, which is
@@ -3344,7 +3342,7 @@ mod sweeps {
     /// hint keycap), so asserting there would forbid the feature. Both that and the clip
     /// arithmetic come from `Scene::draws_outside` — this sweep and the per-kind one each had
     /// their own copy, and both read a clip lying outside the clip already open as "no clip",
-    /// which is what produced the five phantom escapes it was ignored for (F003/P082/T481).
+    /// which is what produced the five phantom escapes it was ignored for.
     #[test]
     fn the_catalog_paints_nothing_outside_the_window_it_is_given() {
         let mut escapes: Vec<String> = Vec::new();

@@ -160,11 +160,11 @@ pub struct Keymaps {
     /// `selection` / `focus` layers.
     pub modes: HashMap<String, KeymapRegistry>,
     /// One per component or narrowed placement — `[[keys.component]]`, consulted only while that
-    /// component holds chrome focus (F003/P086/T362).
+    /// component holds chrome focus.
     pub components: HashMap<String, KeymapRegistry>,
     /// Mode name → (trigger combo, sticky). A mode entered by focus rather than a key has none.
     pub triggers: HashMap<String, (KeyCombo, bool)>,
-    /// **What key runs this action**, reversed out of the maps above (F003/P086/T366).
+    /// **What key runs this action**, reversed out of the maps above.
     pub by_action: BindingIndex,
 }
 
@@ -177,7 +177,7 @@ pub struct BoundKey {
     pub key: String,
 }
 
-/// Action id → every key bound to it, across **every** layer (F003/P086/T366).
+/// Action id → every key bound to it, across **every** layer.
 ///
 /// **Why this and not the config file.** Reading `[keys]` answers for the flat map alone: it cannot
 /// see a `[[keys.mode]]` binding, cannot see a `[[keys.component]]` one, and can never see a key a
@@ -202,7 +202,7 @@ pub fn index_binding(index: &mut BindingIndex, action: &str, layer: &str, key: &
 
 /// What a key is bound to — a built-in action, or a **name-keyed** one resolved at press time.
 ///
-/// **The constraint that shapes this** (plugin-04 G3): config is loaded *before* providers and
+/// **The constraint that shapes this**: config is loaded *before* providers and
 /// plugins register their actions. So a binding to `plugin.docker.restart` is **not resolvable at
 /// load** — the action does not exist yet. An unknown name at load is therefore **not a config
 /// error**; it becomes a [`Dynamic`](ActionRef::Dynamic) reference that resolves when the key is
@@ -245,7 +245,6 @@ impl KeymapRegistry {
     }
 
     /// Rebind an existing key to a new key within the same mode.
-    // Transitional: will be used for config reload / RPC in Phase 5.
     #[cfg_attr(
         not(test),
         expect(
@@ -294,7 +293,6 @@ impl KeymapRegistry {
     }
 
     /// Check whether a mode exists (has any bindings).
-    // Transitional: will be used for config reload / RPC in Phase 5.
     #[expect(
         dead_code,
         reason = "used by tests and reserved for config reload and RPC workflows"

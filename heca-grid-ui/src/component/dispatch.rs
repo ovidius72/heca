@@ -151,7 +151,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
             return Handled::Yes;
         }
     } else if matches!(ev, Event::Hint(_)) {
-        // **A pick acts on the widget it named, and on nothing else** (F003/P082/T432). This is the
+        // **A pick acts on the widget it named, and on nothing else**. This is the
         // target phase, and it is the only place a widget's own declaration runs — what continues
         // up the chain is the *event*, which is the delegation seam.
         //
@@ -169,7 +169,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
     node.on_event(ev)
 }
 
-/// **Do to `node` what picking it means**, in two cases and in this order (F003/P082/T441):
+/// **Do to `node` what picking it means**, in two cases and in this order:
 ///
 /// 1. it **declared** what a pick does ([`Base::hint`]) — run that. The override, for a region that
 ///    answers a pick differently from a click: heca's sidebar row activates the pane and leaves on

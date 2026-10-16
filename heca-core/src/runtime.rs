@@ -10,8 +10,8 @@ use std::path::PathBuf;
 ///
 /// There is **no `Exit` variant**: a pane whose terminal (shell) has died is
 /// closed, so it has no status left to display. The exit *code* is carried by the
-/// `pane.exited{code}` event + `PaneRuntime::exit_code` (for Phase 6 close-policy
-/// on direct-spawn panes), not by a status. See `pane-runtime-state-plan.md` §0.6.
+/// `pane.exited{code}` event + `PaneRuntime::exit_code` (for the close-policy on
+/// direct-spawn panes), not by a status.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ProcessStatus {
     #[default]

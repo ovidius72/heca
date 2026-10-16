@@ -81,8 +81,27 @@ impl PaneRuntimeSignals {
     }
 }
 
-impl WorkspacesContainerState {
-    pub(crate) fn with_pane_runtime<R>(
+/// **Every pane's live facts, for every component** — the sidebar rows, the exposé, the command
+/// palette and a plugin all read the same store. Held by [`SharedChromeState`] rather than by one
+/// component, so no component has to reach into another to learn what a pane is running.
+///
+/// `Clone` is a shallow alias: clones share the same signals.
+#[derive(Clone, Debug)]
+pub struct PaneRuntimeStore {
+    events: ChromeEventBus,
+    panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
+}
+
+impl PaneRuntimeStore {
+    pub(super) fn new(events: ChromeEventBus) -> Self {
+        Self {
+            events,
+            panes: signal(HashMap::new()),
+        }
+    }
+
+    /// Look at one pane's signals, if the store has met it.
+    pub(crate) fn with<R>(
         &self,
         pane: PaneId,
         f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R,
@@ -101,8 +120,8 @@ impl WorkspacesContainerState {
     /// caller does not get is a subscription that can never form, so a row built in the same frame
     /// its pane appeared would be deaf for the life of the tree — the same "read once at build time
     /// and frozen" failure as a line that was never attached. The mirror fills the entry in on its
-    /// next pass, and `retain_panes` prunes it when the pane goes.
-    pub(crate) fn pane_runtime_signals(&self, pane: PaneId) -> PaneRuntimeSignals {
+    /// next pass, and `retain` prunes it when the pane goes.
+    pub(crate) fn signals(&self, pane: PaneId) -> PaneRuntimeSignals {
         if let Some(existing) = self.panes.with(|panes| panes.get(&pane).copied()) {
             return existing;
         }
@@ -116,14 +135,14 @@ impl WorkspacesContainerState {
     /// Snapshot a pane's reactive runtime into a plain [`PaneRuntime`] (the public
     /// read selector behind the host API's `app.state.pane_runtime`). `None` if the
     /// pane has no mirrored runtime.
-    pub fn pane_runtime(&self, pane: PaneId) -> Option<PaneRuntime> {
-        self.with_pane_runtime(pane, |runtime| runtime.map(PaneRuntimeSignals::current))
+    pub fn runtime(&self, pane: PaneId) -> Option<PaneRuntime> {
+        self.with(pane, |runtime| runtime.map(PaneRuntimeSignals::current))
     }
 
     /// A pane's user-set custom name (from rename), mirrored into the store; `None`
     /// while it tracks the process name or the pane has no mirrored entry.
-    pub fn pane_custom_name(&self, pane: PaneId) -> Option<String> {
-        self.with_pane_runtime(pane, |runtime| {
+    pub fn custom_name(&self, pane: PaneId) -> Option<String> {
+        self.with(pane, |runtime| {
             runtime.and_then(|r| r.custom_name.get_untracked())
         })
     }
@@ -131,7 +150,7 @@ impl WorkspacesContainerState {
     /// Terminal viewport state for a pane. `None` if the pane has no mirrored entry
     /// (e.g. non-terminal panes or freshly created panes not yet synced).
     pub fn terminal_viewport(&self, pane: PaneId) -> Option<crate::host::TerminalViewport> {
-        self.with_pane_runtime(pane, |runtime| {
+        self.with(pane, |runtime| {
             runtime.map(|r| crate::host::TerminalViewport {
                 viewport_offset: r.viewport_offset.get_untracked(),
                 at_bottom: r.at_bottom.get_untracked(),
@@ -146,13 +165,13 @@ impl WorkspacesContainerState {
     ///
     /// The handles are copied out before any `.set()`, so an effect a set wakes can read the pane
     /// map without finding it borrowed.
-    pub(crate) fn set_pane_runtime(
+    pub(crate) fn set_runtime(
         &self,
         pane: PaneId,
         runtime: &PaneRuntime,
         custom_name: Option<&str>,
     ) -> bool {
-        let sigs = self.pane_runtime_signals(pane);
+        let sigs = self.signals(pane);
         let cur = sigs.current();
         let mut changed = false;
         if cur.program != runtime.program {
@@ -202,14 +221,14 @@ impl WorkspacesContainerState {
     ///
     /// Idempotent: emits `TerminalViewportChanged` only when a value actually
     /// changes. Returns `true` if any field changed, `false` for a no-op.
-    pub(crate) fn set_pane_viewport(
+    pub(crate) fn set_viewport(
         &self,
         pane: PaneId,
         viewport_offset: usize,
         at_bottom: bool,
         scrollback_rows: usize,
     ) -> bool {
-        let sigs = self.pane_runtime_signals(pane);
+        let sigs = self.signals(pane);
         let mut changed = false;
         if sigs.viewport_offset.get_untracked() != viewport_offset {
             sigs.viewport_offset.set(viewport_offset);
@@ -234,7 +253,7 @@ impl WorkspacesContainerState {
         changed
     }
 
-    pub(crate) fn retain_panes(&self, keep: &HashSet<PaneId>) {
+    pub(crate) fn retain(&self, keep: &HashSet<PaneId>) {
         self.panes
             .update(|panes| panes.retain(|pane, _| keep.contains(pane)));
     }

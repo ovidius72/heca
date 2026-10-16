@@ -15,7 +15,7 @@ use winit::event_loop::EventLoopProxy;
 
 use crate::app::backend_store::{Program, SpawnError, TerminalSpec};
 use crate::app::events::AppEvent;
-use crate::chrome::terminal::Grid;
+use crate::chrome::panes::terminal::Grid;
 use heca_config::theme::AppConfig;
 use heca_core::layout::Size;
 

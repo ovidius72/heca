@@ -1,4 +1,4 @@
-<!-- agent-plan-managed-skill sha256:8c1a0b4100bfd4b6a0d7eaa3011cb9c6f90a2a162d7d94e0a82e9a3db9193256 -->
+<!-- agent-plan-managed-skill sha256:7ab07d0b0cc661e64f8cb5d930b79b607ccf371b5bc12ee17a4d0f8d4215139f -->
 ---
 name: agent-plan
 summary: Cross-harness operating guide for Agent Plan projects.
@@ -78,6 +78,9 @@ A decision has exactly one owner: the project when it is project-wide, a feature
 - A completed or archived owner still shows its Accepted Decisions on read; completion never hides them. A decision recorded against a task that is later deleted is deleted with it — record project/feature/phase-durable decisions on an owner that will outlive the task.
 
 ## Task execution
+
+- Task start claims ownership atomically; `started: true` for already-active work applies only to the owning caller. Another caller receives `TASK_OWNED_BY_ANOTHER_SESSION`.
+- A stdio MCP restart creates a fresh caller. After explicitly confirming the old caller has stopped, use `planner-session-recover` (`task`, `confirmed=true`) or Pi `session_recover` (`taskId`, `confirmed=true`) with its old active task or a pending return task. This transfers the complete owned work, return stack and focus without changing task statuses/checkpoints. Registered live processes and callers already owning work are refused; older sessions without process records rely on that explicit confirmation. Then reread context and start normally. Never invent client-side owner-ID mappings or recover another live caller.
 
 - Create rich feature, phase, and task descriptions with current state, concrete goals, relevant systems, file/symbol references, behaviors to preserve, and edge cases.
 - Use one task with checklist items for implementation steps. Do not create child tasks merely to scatter the same execution context.
@@ -212,6 +215,8 @@ Pause, switch, deviation, requirement, and decision operations are available thr
 
 ## MCP tool inventory
 
+- Session recovery: `planner-session-recover`.
+
 The MCP adapter publishes these tools:
 
 - Core: `planner-version`, `planner-init`, `planner-show`, `planner-description-freshness`, `planner-repair`, `planner-cleanup-orphan-phases`, `planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`, `planner-load`, `planner-disable`, `planner-web`.
@@ -223,6 +228,8 @@ The MCP adapter publishes these tools:
 - Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
 
 ## Pi tool inventory
+
+- Session recovery: `session_recover`.
 
 The Pi adapter registers these tools:
 

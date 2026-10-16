@@ -44,7 +44,7 @@ pub struct AppState {
     pub image_renderer: ImageRenderer,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
-    pub terminal_layers: HashMap<crate::chrome::terminal::TerminalId, RetainedTerminalLayer>,
+    pub terminal_layers: HashMap<crate::chrome::panes::terminal::TerminalId, RetainedTerminalLayer>,
     pub terminal_layer_scratch: RetainedTerminalScratch,
     /// In-app frosted-blur primitive (shared, compositor-owned).
     /// Produces a blurred copy of the scene texture once per frame, then many
@@ -76,7 +76,7 @@ pub struct AppState {
     /// order and recalled by its history keys.
     ///
     /// **Host-owned**, because the palette is rebuilt from scratch every time it opens (see
-    /// `chrome::palette::open_command_palette`) and a memory that died with the widget would
+    /// `chrome::surfaces::palette::open_command_palette`) and a memory that died with the widget would
     /// remember nothing.
     pub search_store: std::rc::Rc<std::cell::RefCell<heca_grid_ui::search::SearchStore>>,
     /// The store revision last written to disk, so a save happens exactly when something new was
@@ -98,7 +98,7 @@ pub struct AppState {
     /// App-wide font-zoom **offset in points**, applied on top of BOTH the
     /// configured chrome/UI font (`font_config.size.ui`) and the terminal font
     /// (`font_config.size.terminal`), so the whole app scales together. Driven by
-    /// the app-wide zoom action (the `app-03` base) and `Ctrl`/`Meta`+wheel over
+    /// the app-wide zoom action and `Ctrl`/`Meta`+wheel over
     /// chrome. `0.0` = no zoom. Reset returns it to `0.0`; a config reload leaves
     /// it intact.
     pub app_font_zoom: f32,
@@ -144,8 +144,10 @@ pub struct AppState {
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
     /// The terminal each pane shows, by pane — the client's view of a running terminal process:
     /// what a window draws, and how much room it was given. Client state, like the retained trees.
-    pub(crate) terminals:
-        HashMap<crate::chrome::terminal::TerminalId, crate::chrome::terminal::Terminal>,
+    pub(crate) terminals: HashMap<
+        crate::chrome::panes::terminal::TerminalId,
+        crate::chrome::panes::terminal::Terminal,
+    >,
     /// The CPU cost of a frame, averaged and printed when `HECA_FRAME_TIMES` is set.
     pub(crate) frame_times: crate::app::frame_times::FrameTimes,
     /// The buttons whose press a terminal's program has heard and whose release it has not — so a
@@ -169,7 +171,7 @@ pub struct AppState {
     /// Host-owned overlay stack: pending modal completions + action metadata keyed by
     /// [`OverlayId`](crate::chrome::OverlayId). The overlays' *visual* trees live in
     /// [`layers`](AppState::layers) (Modal band); this holds only the result callbacks the
-    /// overlay-control actions (`SubmitOverlay`/`CloseOverlay`) resolve. See `chrome::overlay`
+    /// overlay-control actions (`SubmitOverlay`/`CloseOverlay`) resolve. See `chrome::surfaces::overlay`
     /// and `pluggable-chrome-plugin-plan.md` §2.7.1/§2.7.2.
     pub overlays: crate::chrome::OverlayHost,
     /// Display shortcuts for every bound action, keyed by config name, resolved from
@@ -185,15 +187,14 @@ pub struct AppState {
     /// Context-menu registry: the content-pane built-in seeded
     /// at startup; plugins attach via `Contribution::ContextMenu` (context-menu-5). Both the
     /// mouse right-click and the keyboard `OpenContextMenu` resolve through it via
-    /// `chrome::context_menu::open_context_menu_for`.
+    /// `chrome::surfaces::context_menu::open_context_menu_for`.
     pub context_menu_registry: crate::chrome::ContextMenuRegistry,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.
     pub chrome_state: crate::chrome::SharedChromeState,
     /// Host runtime for pluggable chrome regions (contract §3.1.1): owns container
-    /// placement/ordering per region and host-level moves. plugin-02 wires it
-    /// empty; first-party providers register in plugin-03.
+    /// placement/ordering per region and host-level moves.
     pub chrome_host: crate::chrome::ChromeHost,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
@@ -216,7 +217,7 @@ pub struct AppState {
     /// never a per-widget timer the host would have to keep in step.
     pub widget_frame_due: Option<std::time::Instant>,
     // (The right-click context menu + the destructive-confirm prompt are now host-owned overlay
-    // layers in `chrome::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.)
+    // layers in `chrome::surfaces::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.)
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
@@ -330,26 +331,5 @@ pub struct AppState {
 impl AppState {
     pub fn mark_full_redraw(&mut self) {
         self.needs_redraw = true;
-    }
-
-    /// Whether a container's cursor should be shown — **its keyboard focus**, which an overlay
-    /// does not take away.
-    ///
-    /// The row stays highlighted for the duration of a menu opened on it, instead of losing the
-    /// highlight the moment the overlay appears. It used to ask whether the app was in a mode; a
-    /// container holding the keyboard is the thing that was always meant.
-    pub fn container_cursor_visible(&self) -> bool {
-        crate::app::tree_focus::focused_dock(self).is_some()
-    }
-
-    /// A first-party [`host`](crate::host) API handle (`app.on` / `app.state`) over
-    /// the shared chrome store. The seam first-party providers (and the future WASM
-    /// bridge) use to observe events + read state without touching internal signals.
-    #[allow(
-        dead_code,
-        reason = "host API seam — first-party providers land in a later phase"
-    )]
-    pub fn host(&self) -> crate::host::App {
-        crate::host::App::new(&self.chrome_state)
     }
 }

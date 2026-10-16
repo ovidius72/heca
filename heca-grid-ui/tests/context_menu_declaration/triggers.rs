@@ -107,7 +107,7 @@ fn an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick() {
 
 /// **`on_hint` is one line on the wrapper you were already using**, and the framework does the rest: it finds the widgets
 /// that declared one, and running a pick runs the closure the author wrote — no id, no registry,
-/// no host type at the call site (F004/P084/T399).
+/// no host type at the call site.
 #[test]
 fn a_hint_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
     let picked = Rc::new(RefCell::new(Vec::<&'static str>::new()));

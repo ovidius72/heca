@@ -416,7 +416,7 @@ mod actionable_tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    /// **Being pickable is not opt-in** (F003/P082/T441). A button gets a letter for having a click
+    /// **Being pickable is not opt-in**. A button gets a letter for having a click
     /// handler, and nothing else. Before this, a widget had to be wrapped in a `KeyHint` and given
     /// an `on_hint`, which is why `prefix+/` showed a curated handful and felt not worth having.
     #[test]
@@ -451,7 +451,7 @@ mod actionable_tests {
     }
 }
 
-/// **The pick is an event, and it behaves like one** (F003/P082/T432).
+/// **The pick is an event, and it behaves like one**.
 #[cfg(test)]
 mod pick_delivery_tests {
     use crate::builders::{EventExt, HintExt, IdentityExt, Parent};
@@ -647,7 +647,7 @@ mod offer_tests {
     }
 }
 
-/// **A letter goes only where it can be seen** (F003/P082/T438).
+/// **A letter goes only where it can be seen**.
 ///
 /// The picker was the one tree walk that never asked `Component::clips_children`. Paint honours it,
 /// input honours it (`pointer::hit_test`), and the picker handed letters to rows scrolled past a
@@ -803,7 +803,7 @@ mod clipped_away {
 }
 
 /// **Whose targets are whose** — the grouping a host with layered surfaces needs, so no host
-/// writes it twice (F003/P097/T499).
+/// writes it twice.
 #[cfg(test)]
 mod by_surface {
     use crate::builders::Parent as _;
@@ -828,7 +828,7 @@ mod by_surface {
         root
     }
 
-    /// **A widget is collected once, under the surface that owns it** (F003/P097/T499).
+    /// **A widget is collected once, under the surface that owns it**.
     ///
     /// The host used to collect the whole tree and then each seated surface again, so a widget
     /// inside one carried two candidates — each drawing its own letter. Grouping is what removes
@@ -928,7 +928,7 @@ mod by_surface {
         );
     }
 
-    /// **The line a plugin author writes** (⭐⭐ RULE ZERO, F003/P097/T499).
+    /// **The line a plugin author writes** (⭐⭐ RULE ZERO).
     ///
     /// A surface says what it obscures with one builder each, on its own widget — no registry, no
     /// id, no host-private type — and a host reads both back off the tree it already walks. While
@@ -992,7 +992,7 @@ mod by_surface {
         );
     }
 
-    /// **A named node's words can be rewritten without rebuilding anything** (F003/P097/T500).
+    /// **A named node's words can be rewritten without rebuilding anything**.
     ///
     /// This is what lets a host change what a retained tree *says* while keeping the tree: its
     /// identity, its layout and every widget in it survive, because the text is a signal.
@@ -1032,7 +1032,7 @@ mod by_surface {
     }
 }
 
-/// **A target you cannot see gets no letter** (F003/P082/T478) — the second half of the visibility
+/// **A target you cannot see gets no letter** — the second half of the visibility
 /// rule, beside the clip. A widget squeezed to nothing draws nothing, so there is nothing to aim at.
 #[cfg(test)]
 mod visibility {
@@ -1232,7 +1232,7 @@ mod scoped_pickers {
     /// ⚠️ Both buttons declare `on_hint` rather than relying on being actionable, because the two
     /// walks do not agree on what a target is: the global one takes anything actionable, a
     /// surface-owned picker takes only explicit declarations. That difference is older than scopes
-    /// and is not this task's to change — but with scopes in place the restriction is redundant,
+    /// and is not changed here — but with scopes in place the restriction is redundant,
     /// and a surface's picker silently ignoring an ordinary button is worth closing.
     fn card_and_close() -> Flex {
         Flex::column()
@@ -1404,5 +1404,46 @@ mod keyed_walk_tests {
         assert!(!selected.get_untracked());
 
         assert!(!offer_hint_by_key(&root, "target", Some("a".to_string())));
+    }
+}
+
+#[cfg(test)]
+mod a_pick_is_a_press {
+    use crate::builders::{IdentityExt, Parent};
+    use crate::hint::*;
+    use crate::widgets::{Button, Flex, FocusScope, Input};
+
+    fn holder(root: &dyn crate::component::Component) -> Option<Vec<usize>> {
+        crate::keyboard_owner(root).map(|owner| owner.path)
+    }
+
+    /// **Anything that holds the keyboard is lettered, and picking it gives it the keyboard** — a
+    /// text field, a terminal, whatever is made next — exactly as a press on it would.
+    #[test]
+    fn a_text_field_is_lettered_and_picking_it_gives_it_the_keyboard() {
+        let mut root = Flex::column().child(Input::new());
+        let hints = collect_hints(&root);
+        assert_eq!(hints.len(), 1, "the field has a letter");
+        assert!(fire_hint(&mut root, &hints[0].0));
+        assert_eq!(
+            holder(&root),
+            Some(vec![0]),
+            "and holds the keyboard after the pick"
+        );
+    }
+
+    /// **Inside a region that keeps the keyboard, a pick leaves it with the region** — picking a
+    /// sidebar row moves its cursor; the keys that follow still go to the sidebar.
+    #[test]
+    fn picking_a_row_in_a_region_that_keeps_the_keyboard_gives_it_to_the_region() {
+        let mut root = Flex::row().child(
+            FocusScope::new(Flex::column().child(Button::new("row").on_click(|| {})))
+                .keeps_keyboard(true)
+                .scope_key("rows"),
+        );
+        let hints = collect_hints(&root);
+        assert_eq!(hints.len(), 1);
+        assert!(fire_hint(&mut root, &hints[0].0));
+        assert_eq!(holder(&root), Some(vec![0]));
     }
 }

@@ -127,10 +127,10 @@ fn the_side_is_reported_to_a_caller_that_asks() {
 #[test]
 fn a_name_keyed_action_has_no_side_of_its_own() {
     let mut catalog = crate::actions::ActionCatalog::with_builtins();
-    let _ = catalog.insert_dynamic(crate::actions::ActionMeta::new("pro.start"));
-    let info = catalog.describe("pro.start").expect("it was added");
+    let _ = catalog.insert_dynamic(crate::actions::ActionMeta::new("demo.start"));
+    let info = catalog.describe("demo.start").expect("it was added");
     assert_eq!(info.side, None);
-    assert_eq!(crate::actions::catalog::builtin_side("pro.start"), None);
+    assert_eq!(crate::actions::catalog::builtin_side("demo.start"), None);
     assert_eq!(
         crate::actions::catalog::builtin_side("close"),
         Some(Side::Server)

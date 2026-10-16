@@ -16,7 +16,7 @@ use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, TooltipSide, Visibility};
 
 use super::pane_row::{META_INDENT, set_if_changed};
-use crate::chrome::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLine};
+use crate::chrome::panes::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLine};
 
 /// heca's own two lines, in the order the row has always shown them.
 pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
@@ -125,7 +125,7 @@ fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
         set_if_changed(visible, git.is_some());
         let branch = git
             .as_ref()
-            .map(crate::chrome::pane_header::git_branch)
+            .map(crate::chrome::panes::pane_header::git_branch)
             .unwrap_or_default();
         set_if_changed(branch_shown, branch.clone());
         set_if_changed(branch_full, branch);
@@ -133,19 +133,20 @@ fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
             (
                 added_visible,
                 added_text,
-                git.as_ref().and_then(crate::chrome::pane_header::git_added),
+                git.as_ref()
+                    .and_then(crate::chrome::panes::pane_header::git_added),
             ),
             (
                 modified_visible,
                 modified_text,
                 git.as_ref()
-                    .and_then(crate::chrome::pane_header::git_modified),
+                    .and_then(crate::chrome::panes::pane_header::git_modified),
             ),
             (
                 deleted_visible,
                 deleted_text,
                 git.as_ref()
-                    .and_then(crate::chrome::pane_header::git_deleted),
+                    .and_then(crate::chrome::panes::pane_header::git_deleted),
             ),
         ] {
             set_if_changed(visible, value.is_some());
@@ -192,7 +193,7 @@ pub(crate) fn text_line(produce: Rc<ProduceLine>) -> Rc<BuildLine> {
 mod tests {
     use super::*;
     use crate::chrome::PaneFacts;
-    use crate::chrome::pane_items::{PaneLine, PaneRowLines};
+    use crate::chrome::panes::pane_items::{PaneLine, PaneRowLines};
     use heca_config::programs::ProgramsConfig;
     use heca_core::layout::PaneId;
     use heca_grid_ui::reactive::{SignalGet, SignalUpdate};

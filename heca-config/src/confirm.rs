@@ -24,7 +24,7 @@ pub struct ConfirmConfig {
 /// the current one being set as well.
 const RENAMED: &[(&str, &str)] = &[
     // A pane is *closed*, not deleted — the word its action id, its binding name and its label
-    // already used. The dialog and this toggle were the two that disagreed (F003/P086/T370).
+    // already used. The dialog and this toggle were the two that disagreed.
     ("delete_pane", "close"),
 ];
 
@@ -55,7 +55,7 @@ mod tests {
         assert!(!c.enabled("close", false));
     }
 
-    /// A rename must not switch a prompt the user turned off back on (F003/P086/T370).
+    /// A rename must not switch a prompt the user turned off back on.
     #[test]
     fn a_retired_toggle_name_still_disables_its_prompt() {
         let c: ConfirmConfig = toml::from_str("delete_pane = false\n").expect("parse [confirm]");

@@ -179,7 +179,7 @@ pub enum FrameStyle {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Small controls (inputs, selects, checkboxes, chips) round at this fraction of
-/// the base [`Theme::radius`], so one global radius scales every widget together.
+/// the base [`Theme::border_radius`], so one global radius scales every widget together.
 const CONTROL_RADIUS_FRAC: f32 = 0.5;
 /// How far the derived focus-outline color is shifted from a tone toward the theme's
 /// `foreground` when `focus_ring` is unset. Because `foreground` is light on dark themes and dark
@@ -980,7 +980,7 @@ mod tests {
     fn glow_level_strength_scales() {
         // GlowLevel is the sole owner of glow strength. The curve started as the
         // former Intensity::glow_scale() values; `Thin` was since raised 0.5 → 0.75
-        // (T011) because at 0.5× strength on a 0.5× radius the faint rest glows read
+        // because at 0.5× strength on a 0.5× radius the faint rest glows read
         // as None. `Thin` stays "thin" via its 0.5× *radius*, not a faded alpha.
         assert!((GlowLevel::None.strength_scale()).abs() < f32::EPSILON);
         assert!((GlowLevel::Thin.strength_scale() - 0.75).abs() < f32::EPSILON);

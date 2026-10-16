@@ -34,7 +34,7 @@ pub struct StatusDot {
     base: Base,
     /// What it is showing. A **signal**, so a host that keeps its tree between frames changes the
     /// state in place — the sidebar shows one dot per pane and rewrites its status, rather than
-    /// building one dot per state and toggling four of them (F003/P096/T483).
+    /// building one dot per state and toggling four of them.
     status: Signal<DotStatus>,
 }
 
@@ -49,7 +49,7 @@ impl StatusDot {
         // card carrying a design width — and wrong for a pip: squeezing one axis of a circle does
         // not make it smaller, it flattens it, and a tight sidebar row left this drawn as a 3px
         // sliver instead of a dot. It is already the smallest thing on any row it appears in, so
-        // there is nothing to win by taking space from it (F003/P096/T483).
+        // there is nothing to win by taking space from it.
         base.style.layout.flex_shrink = Some(0.0);
         Self {
             base,

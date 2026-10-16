@@ -1,8 +1,8 @@
-//! One **column** of the workspaces dock (F006/P032/T429).
+//! One **column** of the workspaces dock.
 //!
 //! It owns the panes' vertical stacking and the column's own identity — its marker bar, its menu,
 //! its drag id, its pick letter. It owns **nothing** about its own width, and nothing about what a
-//! pane row looks like: that is [`PaneRow`](super::pane_row::PaneRow), which it composes.
+//! pane row looks like: that is [`PaneRow`], which it composes.
 //!
 //! The grip gutter is the only surface a child card does not cover, so innermost-first hit-testing
 //! routes a grip press to the column and a card press to the pane for free — no geometry here.
@@ -49,7 +49,7 @@ impl ColumnGroup<'_> {
             .gap(Spacing::Xs)
             .key(column_key(column.col_id))
             .context_menu({
-                let menu = crate::chrome::context_menu::menu_from_items(
+                let menu = crate::chrome::surfaces::context_menu::menu_from_items(
                     "Column",
                     "What you can do with this column",
                     MENU_COLUMN,
@@ -113,7 +113,7 @@ mod tests {
     use super::*;
     use heca_core::layout::PaneId;
 
-    /// **The sidebar's column is a pick target** (F003/P082/T474).
+    /// **The sidebar's column is a pick target**.
     ///
     /// It carried its key, a colour and a placement — and no declaration, so it was not a target at
     /// all. A letter offered by `col:<id>` could not land on it and climbed to the nearest thing

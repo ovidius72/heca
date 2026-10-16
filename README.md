@@ -1163,7 +1163,8 @@ its reserved space) disappears entirely.
 
 When a pane is **renamed** (given a custom name), its **sidebar card** shows the custom
 name followed by the process name in a small dimmed label — e.g. `MyPane (nvim)` — so the
-sidebar keeps surfacing what's actually running. The process label is not part of the name
+sidebar keeps surfacing what's actually running. The command palette and the exposé name the
+pane the same way. The process label is not part of the name
 (it's never edited by rename); toggle it with `[settings] pane_renamed_add_process_name`
 (default `true`). In the pane **info bar**, the `app_name` segment always shows the program
 name regardless of a rename; add the `pane_name` segment to show the custom name there.
@@ -1212,7 +1213,7 @@ With `border_style = "bordered"`, the frame is drawn at `border_width` in
 Default: `["location", "app_name"]`.
 
 A program built on heca can add its own chips, named `<extension>.<short>` (for example
-`pro.status`); they follow the same rule as the buttons below — shown after the defaults while this
+`demo.status`); they follow the same rule as the buttons below — shown after the defaults while this
 list is still the default, only if you list them once you write your own, and reported once when one
 you have not listed is available. A name nothing provides is reported and skipped.
 
@@ -1232,7 +1233,7 @@ already movable by mouse-dragging, but they remain valid config values). Each
 button's tooltip shows the **real configured keybinding** for that action.
 
 A program built on heca can add its own buttons, named `<extension>.<short>` (for example
-`pro.show_notes`). They show after the defaults while this list is still the default; once you write
+`demo.show_notes`). They show after the defaults while this list is still the default; once you write
 your own list, only the names you list show, and heca tells you once when a button you have not
 listed is available. A name nothing provides is reported and skipped, with the nearest real one.
 
@@ -1242,9 +1243,9 @@ only inside a repository. **A fresh install shows the folder line under each pan
 sidebar.** Which lines show is decided by this list alone. A program built
 on heca can add its own, named `<extension>.<short>`; the same rules apply as for buttons and chips.
 
-**The exposé's folders** are `[appearance.expose] show_cwd = true` (off by default). It replaces
-`[settings] pane_show_cwd`, which is still read and mapped onto it, with a one-time notice to move
-it; it no longer affects the sidebar.
+**The exposé's folders** are `[appearance.expose] show_cwd` (on by default; `false` hides them). It replaces
+`[settings] pane_show_cwd`, which is still read while the new key is not written (once it is, it
+decides), with a one-time notice to move it; it no longer affects the sidebar.
 
 ---
 
@@ -1355,7 +1356,7 @@ pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
 }
 ```
 
-**5. Register the handler** in `build_registry()` — `heca/src/app/registry/actions.rs`:
+**5. Register the handler** in `build_registry()` — `heca/src/app/registry/actions/mod.rs`:
 
 ```rust
 registry.register(WmActionKind::MyCustomAction, handle_my_custom_action);

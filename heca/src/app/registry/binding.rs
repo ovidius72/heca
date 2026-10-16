@@ -11,7 +11,7 @@ use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry, WrittenKe
 /// What a binding was written as: which action, in which layer, under which key.
 ///
 /// Carried together because the same three facts answer two questions — where to send the user when
-/// two bindings collide, and what key an action answers to ([`BindingIndex`], F003/P086/T366).
+/// two bindings collide, and what key an action answers to ([`BindingIndex`]).
 pub(super) struct Written<'a> {
     /// The action id the binding resolves to, after any component qualification.
     pub(super) action: &'a str,
@@ -67,7 +67,7 @@ pub(super) fn bind_flat(
     );
 }
 
-/// Retire a combo from a layer, and from the index with it (F003/P086/T366).
+/// Retire a combo from a layer, and from the index with it.
 ///
 /// An `unbind` that left the index alone would have `--keys-show` and every tooltip reporting a key
 /// that no longer does anything — the exact drift the index exists to end. Matched on the parsed
@@ -97,7 +97,7 @@ mod tests {
     use crate::keymap::BindingIndex;
 
     /// The index is what `--keys-show` and every tooltip read, so it must carry the **qualified** id
-    /// and the layer — and an `unbind` must take its entry out with it (F003/P086/T366).
+    /// and the layer — and an `unbind` must take its entry out with it.
     #[test]
     fn the_index_records_the_qualified_id_and_forgets_what_is_unbound() {
         let mut layer = layer_of(
@@ -113,8 +113,7 @@ mod tests {
         assert_eq!(up.len(), 1);
         assert_eq!(up[0].key, "k");
         // Reported under the general spelling whichever way the entry was written: the label names
-        // where a *surface's* keys live, and `[[keys.component]]` is now one way to spell that
-        // (F003/P082/T416).
+        // where a *surface's* keys live, and `[[keys.component]]` is now one way to spell that.
         assert_eq!(up[0].layer, "[[keys.surface]] workspaces");
         assert!(
             !index.contains_key("workspaces.cursor_down"),

@@ -3,7 +3,7 @@
 
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 
 pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) -> bool {
     let Some(terminal) = state.keyboard_terminal() else {

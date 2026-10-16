@@ -23,9 +23,9 @@ mod workspace;
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,
-    /// **Where it runs** — see [`Side`]. Required, like `args`: a struct literal has to fill every
-    /// field, so an action cannot be added without saying which side of the server/client split
-    /// it is on.
+    /// **Where it runs** — see [`Side`](crate::actions::catalog::Side). Required, like `args`: a struct
+    /// literal has to fill every field, so an action cannot be added without saying which side of the
+    /// server/client split it is on.
     pub side: super::Side,
     /// Human-readable label for the command palette.
     pub label: &'static str,

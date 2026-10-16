@@ -2,7 +2,7 @@ use crate::{Intent, PropMap, PropValue, ViewAlign, ViewEvent, ViewJustify, ViewN
 
 /// The properties every kind shares — arrangement (`Layout`) and appearance (`Visual`).
 ///
-/// One trait rather than a copy per builder: since F003/P017/T007 both halves are merged
+/// One trait rather than a copy per builder: both halves are merged
 /// generically by name for every kind, so there is nothing kind-specific to say about them.
 ///
 /// # What is deliberately absent
@@ -414,8 +414,8 @@ pub trait Style: Sized {
     /// ```
     ///
     /// Universal, like [`key`](Style::key), because `on_action` is on every widget natively — this
-    /// is what lets a described **surface** own a verb instead of borrowing one the app compiled in
-    /// (F003/P082/T436). Whichever node on screen declares the name is the one that runs it, so a
+    /// is what lets a described **surface** own a verb instead of borrowing one the app compiled in.
+    /// Whichever node on screen declares the name is the one that runs it, so a
     /// verb whose surface is not up resolves to nothing, exactly as an unmounted provider's does.
     ///
     /// ⚠️ `Toast` has an inherent `on_action` of its own — the **event** its action button fires,

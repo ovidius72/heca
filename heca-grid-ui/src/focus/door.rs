@@ -3,7 +3,7 @@
 //! `focused` is the browser's `document.activeElement` — the widget the keyboard is aimed at, and
 //! at most **one** per tree. Everything that moves focus goes through here: Tab, a press, a surface
 //! opening, a host asking for a named control. A widget cannot blur *another* widget (it holds no
-//! tree), so a request made here is **claimed**, and [`settle`](super::settle) — run by the router
+//! tree), so a request made here is **claimed**, and [`settle`](fn@super::settle) — run by the router
 //! before any key or press is delivered, and once a frame by the host — makes it true: the previous
 //! holder lets go, and the claimant is the only one left.
 
@@ -16,7 +16,7 @@ thread_local! {
     static NEXT_ID: Cell<u64> = const { Cell::new(1) };
 }
 
-/// What a widget has asked of the next [`settle`](super::settle).
+/// What a widget has asked of the next [`settle`](fn@super::settle).
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 pub(super) enum Claim {
     /// Nothing.

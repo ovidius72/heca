@@ -368,7 +368,7 @@ impl Select {
         // the trigger so the control shows real content — an icon, a badge, whatever the option
         // composes — but it is not something you can pick: the trigger is the control. Left
         // hittable it hovered on its own, and its pill stops at the chevron gutter, so the text lit
-        // up and the caret beside it did not (F003/P096/T483).
+        // up and the caret beside it did not.
         let echo = !self.open;
         for child in self.base.children.iter_mut() {
             child.base_mut().pointer_transparent = echo;
@@ -604,7 +604,7 @@ impl Component for Select {
         // Trigger box: border firms muted → accent when focused/open. Radius +
         // border width come from the theme so global settings scale them. A faint
         // theme rest glow (`interaction.control_rest_glow`) gives the trigger the
-        // shared neon identity at rest; `glow_size` scales it (T011).
+        // shared neon identity at rest; `glow_size` scales it.
         let p = if active { 1.0 } else { 0.0 };
         let rest_border = ia.control_rest_border as f32;
         let border_a = rest_border + (255.0 - rest_border) * p;
@@ -623,7 +623,7 @@ impl Component for Select {
         // option's text and the chevron together — in the same interaction token an `Item` and a
         // `Choice` use, so a control and a list row read as the same family. It used to be the
         // echoed option that hovered, and its pill stops at the chevron gutter, which is why the
-        // caret stayed dark while the text lit up (F003/P096/T483).
+        // caret stayed dark while the text lit up.
         if !disabled && !self.open && self.base.hovered() {
             cx.rect(
                 b,

@@ -1,13 +1,13 @@
-//! **`pro.layer("planner")`** — an overlay that belongs to no dock. *Client side.*
+//! **`demo.layer("planner")`** — an overlay that belongs to no dock. *Client side.*
 //!
 //! ```ignore
-//! let pro = heca::extension("pro");
-//! pro.layer("planner").view(|cx| {
+//! let demo = heca::extension("demo");
+//! demo.layer("planner").view(|cx| {
 //!     Overlay::new().panel(PlannerDetail::new(cx.state())).default_open(false)
 //! });
 //! ```
 //!
-//! What it gives back is a name, `pro.planner`: `toggle_layer name=pro.planner` opens it from a key binding, a
+//! What it gives back is a name, `demo.planner`: `toggle_layer name=demo.planner` opens it from a key binding, a
 //! menu entry, the palette and RPC alike, because the layer is registered under that name like the
 //! exposé is. There is nothing else to remember — no id, no registry.
 //!
@@ -136,12 +136,12 @@ mod tests {
     fn a_layer_is_queued_under_its_extensions_name() {
         super::super::extension::reset();
         QUEUE.with(StartupQueue::reset);
-        let pro = super::super::extension("pro");
-        pro.layer("planner")
+        let demo = super::super::extension("demo");
+        demo.layer("planner")
             .view(|_| unreachable!("only built when shown"));
-        pro.layer("a.b").view(|_| unreachable!("refused"));
+        demo.layer("a.b").view(|_| unreachable!("refused"));
         let names: Vec<String> =
             QUEUE.with(|q| q.peek(|items| items.iter().map(|(n, _)| n.clone()).collect()));
-        assert_eq!(names, ["pro.planner"]);
+        assert_eq!(names, ["demo.planner"]);
     }
 }

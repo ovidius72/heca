@@ -9,7 +9,7 @@ impl<'a> PaintCx<'a> {
     ///
     /// This widget says where; the host owns the texture and does the drawing. `id` is opaque here:
     /// nothing about textures, formats or devices crosses into this library. See
-    /// [`HostDraw`](crate::scene::HostDraw).
+    /// [`HostDraw`].
     pub fn surface(&mut self, rect: Rectangle, id: u64) {
         if self.culled(rect) {
             return;

@@ -14,8 +14,7 @@
 //! The line becomes an [`Intent`](crate::chrome::Intent) — exactly what a plugin, a key binding or
 //! a menu entry hands the dispatcher — so the RPC reaches every action the moment it is
 //! registered, and nothing here has to be written for a new one. It used to keep its own list of
-//! 94 hand-written commands, each with its own spelling and argument parsing, beside the catalog
-//! (F003/P082/T509).
+//! 94 hand-written commands, each with its own spelling and argument parsing, beside the catalog.
 
 /// Errors from reading or running an RPC line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,13 +33,12 @@ pub enum RpcError {
     NotInitialized,
     /// The action exists but its [`ActionPolicy`](crate::app::interaction::ActionPolicy) does not
     /// permit it in the current domain — a `TiledOnly` call while a float owns the screen, a
-    /// component's cursor verb while its dock is not being driven (F003/P086/T372).
+    /// component's cursor verb while its dock is not being driven.
     Blocked(String),
     /// Declared, but nothing here can run it: its component is not mounted, or it belongs to a
     /// plugin across a boundary that does not exist yet. **Not** silent success.
     NotRunnable(String),
-    /// Called without the arguments it declares as required — `describe-action <name>` lists them
-    /// (F003/P085/T358).
+    /// Called without the arguments it declares as required — `describe-action <name>` lists them.
     MissingArgs(String),
 }
 
@@ -82,7 +80,7 @@ impl std::error::Error for RpcError {}
 /// This is a separate path from [`parse_rpc`] because a query returns **data**, not an action to
 /// run. Two commands:
 ///   list-actions            → JSON array of every action's metadata (built-in AND plugin)
-///   describe-action <name>  → JSON of one action, or an error if the name is unknown
+///   `describe-action <name>`  → JSON of one action, or an error if the name is unknown
 pub fn introspect(
     catalog: &crate::actions::ActionCatalog,
     input: &str,
@@ -122,7 +120,7 @@ pub struct RpcCall {
     pub positional: Vec<String>,
     /// `key=value` arguments, in the order written.
     pub named: Vec<(String, String)>,
-    /// `--dock <id>`: **which placement** the call is aimed at (F003/P085/T358). Not an argument —
+    /// `--dock <id>`: **which placement** the call is aimed at. Not an argument —
     /// it never reaches the action. Without it the host resolves the owner itself (`owning_mount`).
     pub dock: Option<String>,
 }
@@ -176,10 +174,12 @@ impl RpcCall {
             });
         }
         let names = meta.args.iter().map(|a| a.name.clone());
-        let mut intent = crate::chrome::Intent::new(&self.action);
-        for (key, value) in names.zip(self.positional).chain(self.named) {
-            intent = intent.arg(key, crate::chrome::PropValue::Text(value));
-        }
+        let intent = crate::chrome::Intent::new(&self.action).args(
+            names
+                .zip(self.positional)
+                .chain(self.named)
+                .map(|(key, value)| (key, crate::chrome::PropValue::Text(value))),
+        );
         Ok((intent, self.dock))
     }
 }

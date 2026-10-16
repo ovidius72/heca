@@ -11,7 +11,7 @@ use crate::app::terminal_render::{
     terminal_font_families_from,
 };
 use crate::app_state::AppState;
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 
 /// **Paint the window**: the workspace, the chrome and every surface, in one walk into one scene.
 ///
@@ -57,8 +57,8 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
     let mut scene = crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &theme);
     // **A drag draws itself.** The insertion line, the swap outline and the picture of the
     // thing under the pointer are painted by the widgets the drag passes through, inside
-    // `paint_child` — so nothing opts in, and a plugin's own row gets the same feedback
-    // (F003/P097/T496). The host pass that drew this for the left sidebar alone is gone.
+    // `paint_child` — so nothing opts in, and a plugin's own row gets the same feedback.
+    // The host pass that drew this for the left sidebar alone is gone.
     // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks, painted
     // into the chrome scene so they sit above pane content. terminal-task-18.
     crate::chrome::paint_link_hints(state, &mut scene, w, h, &theme);
@@ -66,7 +66,7 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
     crate::chrome::paint_bell_flash(state, &mut scene, v.pane_area, w, h, &theme);
 
     // The trees just built may have declared terminals: one more frame starts and draws them.
-    if crate::chrome::terminal::declared_waiting() {
+    if crate::chrome::panes::terminal::declared_waiting() {
         state.mark_full_redraw();
     }
     scene
@@ -130,7 +130,7 @@ pub(in crate::app) fn sync_terminal_layers(
 ) {
     // The chip and the scrollbar are children of each terminal and were painted before this
     // frame's snapshots were read: a change shows on the next frame, so ask for one.
-    if crate::chrome::terminal::show_viewports(
+    if crate::chrome::panes::terminal::show_viewports(
         state,
         terminals
             .all()

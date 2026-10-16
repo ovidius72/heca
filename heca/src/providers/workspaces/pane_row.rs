@@ -1,4 +1,4 @@
-//! One **pane row** — the smallest piece of the workspaces dock (F006/P032/T429).
+//! One **pane row** — the smallest piece of the workspaces dock.
 //!
 //! It owns what a pane row *is*: its name and the program under it, its four states, its status
 //! dots, its cwd and git lines, its menu, its drag identity and what `prefix+/` does to it. It owns
@@ -11,7 +11,7 @@
 //! two different update paths. Everything that changes **with focus** must be a signal the host
 //! flips in place, because `chrome_signature` deliberately excludes focus — the tree does not
 //! rebuild when focus moves, so a bool read at build time freezes for the session. That single
-//! mistake produced three bugs in one day (F003/P082/T426), none of which any test could see.
+//! mistake produced three bugs in one day, none of which any test could see.
 //!
 //! So: the initial value goes to the widget, and the widget's signal goes to
 //! [`ChromeSignals`](crate::chrome::ChromeSignals) in the same breath, a line apart. Adding a fifth
@@ -19,7 +19,7 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_PANE, PaneEntry, pane_key, pane_row_items, pane_row_press, row_hint};
-use crate::chrome::pane_items::LineCx;
+use crate::chrome::panes::pane_items::LineCx;
 use crate::chrome::{ChromeDragItem, PaneFacts, alpha_u8, pane_info_view};
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{
@@ -67,7 +67,7 @@ impl PaneRow<'_> {
         // Read off this row's own projection rather than back through the store: the projection
         // was built from it, and the menu is about the row being drawn.
         let has_custom_name = pane.custom_name.is_some();
-        let runtime = ws_state.pane_runtime(pane_id);
+        let runtime = seams.panes.runtime(pane_id);
         let info = pane_info_view(
             seams.programs,
             &pane.name,
@@ -87,7 +87,7 @@ impl PaneRow<'_> {
         reg.drag
             .register(pane_key(pane_id), ChromeDragItem::Pane(pane_id));
         // This row kind's declared click, by name — so a menu entry, a keybinding or RPC can fire the
-        // same one (F003/P086/T365). A **pick** is declared separately, on the wrapper below: it is a
+        // same one. A **pick** is declared separately, on the wrapper below: it is a
         // different gesture and this row answers it differently.
         let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
         let icon_widget = Icon::new(info.icon).color(theme.colors.foreground);
@@ -98,7 +98,7 @@ impl PaneRow<'_> {
         //
         // It used to be built twice, once accent and once foreground, stacked in a column with one
         // hidden — so the visible name sat at the top of that stack when selected and the bottom
-        // when not, and never shared a line with the `(program)` suffix beside it (F003/P082/T480).
+        // when not, and never shared a line with the `(program)` suffix beside it.
         // And it cuts rather than spilling when the sidebar is narrow (`components::PaneName`).
         let name = crate::components::PaneName {
             text: &info.title,
@@ -111,20 +111,15 @@ impl PaneRow<'_> {
         let title_label = name.widget;
         let title_signal = name.text;
         // **One pip that changes what it says**, not one pip per state hidden behind the others.
-        // The row is retained, so the host rewrites the status signal when a process changes
-        // (F003/P096/T483).
-        let status_dot = StatusDot::new(dot_status(info.status));
+        // The row is retained, so the host rewrites the status signal when a process changes.
+        let status_dot = StatusDot::new(dot_status(info.status.clone()));
         let status_signal = status_dot.status_signal();
         // A renamed pane surfaces its running program as a dimmed `(process)` suffix after
         // the name (config-gated). Appended to the shared title area so it renders the same
         // in both the git and no-git card layouts. Like the title, it is **signal-driven**
         // (text + visibility updated in `sync_chrome_signals`) so renaming toggles it live —
         // a rename updates signals, it does not rebuild the sidebar card tree.
-        let process_hint_text = info
-            .process_hint
-            .as_ref()
-            .map(|program| format!("({program})"))
-            .unwrap_or_default();
+        let process_hint_text = info.process_hint_text();
         // `foreground` (not `muted`) so it's readable on every theme; it still reads as
         // secondary next to the accent + bold name (regular weight, smaller scale).
         // Smaller than the name it follows, and `foreground` — NOT `muted`, which is unreadable
@@ -143,7 +138,7 @@ impl PaneRow<'_> {
         // any a program built on heca adds) are named items built from it; the user's
         // `[appearance.sidebar] pane_lines` decides which show and in what order.
         let facts: Rc<dyn Fn() -> PaneFacts> = {
-            let runtime_signals = ws_state.pane_runtime_signals(pane_id);
+            let runtime_signals = seams.panes.signals(pane_id);
             let programs = seams.programs.clone();
             let fallback_name = pane.name.clone();
             Rc::new(move || {
@@ -162,7 +157,7 @@ impl PaneRow<'_> {
         // **The card's arrangement is the library's `Tile`** — pip, icon, the name with its dimmed
         // `(program)` suffix, then the folder and git lines under it. This file keeps only what a
         // pane row *means*: its signals, its click, its menu, its drag, its pick. The showcase
-        // mounts the same `Tile`, so the two can no longer drift apart (F003/P082/T491).
+        // mounts the same `Tile`, so the two can no longer drift apart.
         //
         // **Every line is attached, always** — each is a `Visibility` that decides for itself, so a
         // directory the shell reports after the row is on screen can still appear: the sidebar tree
@@ -189,9 +184,9 @@ impl PaneRow<'_> {
             // and the selected panel says which row is current. Two lines said it twice.
             .active(active)
             .nav_selected(false)
-            // The row's ONE identity: the cursor and (later) drag read this single declaration
-            // (F003/P085/T354). **The right-click no longer does** — the menu is declared below, on
-            // this widget, so a row that forgets `key` still opens its menu (F004/P084/T395).
+            // The row's ONE identity: the cursor and (later) drag read this single declaration.
+            // **The right-click no longer does** — the menu is declared below, on
+            // this widget, so a row that forgets `key` still opens its menu.
             .key(pane_key(pane_id))
             // **What a CLICK does to this row: put the container's cursor on it.** Declared
             // here, where the row already knows which row it is, instead of being recovered
@@ -229,7 +224,7 @@ impl PaneRow<'_> {
             // drawing it. Built at trigger time, so "Use process name" appears exactly when there is a
             // custom name to clear.
             .context_menu({
-                let ctx_menu = crate::chrome::context_menu::menu_from_items(
+                let ctx_menu = crate::chrome::surfaces::context_menu::menu_from_items(
                     "Pane",
                     "What you can do with this pane",
                     MENU_PANE,
@@ -277,7 +272,7 @@ impl PaneRow<'_> {
             process_hint_visible,
             status: status_signal,
         };
-        let runtime_signals = ws_state.pane_runtime_signals(pane_id);
+        let runtime_signals = seams.panes.signals(pane_id);
         let programs = seams.programs.clone();
         let fallback_name = pane.name.clone();
         let add_process_name = ws_state.pane_renamed_add_process_name_signal();
@@ -329,16 +324,10 @@ impl PaneFace {
     ///
     /// Every write is change-guarded: a signal set to what it already holds would mark the tree
     /// dirty and cost a repaint for nothing, every time anything about any pane moved.
-    fn show(&self, view: &crate::chrome::pane_header::PaneInfoView) {
+    fn show(&self, view: &crate::chrome::panes::pane_header::PaneInfoView) {
         set_if_changed(self.icon, view.icon);
         set_if_changed(self.title, view.title.clone());
-        set_if_changed(
-            self.process_hint,
-            view.process_hint
-                .as_deref()
-                .map(|program| format!("({program})"))
-                .unwrap_or_default(),
-        );
+        set_if_changed(self.process_hint, view.process_hint_text());
         set_if_changed(self.process_hint_visible, view.process_hint.is_some());
         set_if_changed(self.status, dot_status(view.status.clone()));
     }
@@ -374,7 +363,7 @@ mod tests {
     use heca_core::layout::PaneId;
     use heca_grid_ui::widgets::Flex;
 
-    /// **The bug class this whole split exists for** (F003/P082/T426, three rounds).
+    /// **The bug class this whole split exists for**.
     ///
     /// A row's states change with focus, and `chrome_signature` deliberately excludes focus — so
     /// the tree does **not** rebuild when focus moves. A state published as a plain bool at build
@@ -432,11 +421,9 @@ mod tests {
         let mut fx = Fixture::default();
         // The shell has not reported a directory yet — the state that decided, wrongly, whether
         // the line existed at all.
-        fx.store.workspaces.set_pane_runtime(
-            PaneId(7),
-            &heca_core::runtime::PaneRuntime::default(),
-            None,
-        );
+        fx.store
+            .panes
+            .set_runtime(PaneId(7), &heca_core::runtime::PaneRuntime::default(), None);
         let pane = testing::pane(PaneId(7), "seven");
         let row = {
             let (seams, mut reg) = fx.split("left");
@@ -467,9 +454,7 @@ mod tests {
     /// Tell the store what the pane's shell just reported — the one write the app makes, and
     /// the only thing a row should need in order to change what it shows.
     fn pane_reports(fx: &Fixture, pane_id: PaneId, runtime: heca_core::runtime::PaneRuntime) {
-        fx.store
-            .workspaces
-            .set_pane_runtime(pane_id, &runtime, None);
+        fx.store.panes.set_runtime(pane_id, &runtime, None);
     }
 
     /// Lay the row out in a sidebar-sized box and return every run of text it actually drew.

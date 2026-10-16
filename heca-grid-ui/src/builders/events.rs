@@ -40,7 +40,7 @@ pub trait EventExt: Component + Sized {
         kind: crate::event::EventKind,
         f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
     ) -> Self {
-        // **Wiring an action is what makes a widget pickable** (F003/P082/T441). Set here, in the one
+        // **Wiring an action is what makes a widget pickable**. Set here, in the one
         // place every generic listener goes through, rather than repeated in `on_click`,
         // `on_double_click`, `on_key_down` and `on_key_up` — a rule in four call sites is a rule in
         // the wrong place.

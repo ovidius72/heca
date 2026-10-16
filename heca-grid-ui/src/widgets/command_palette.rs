@@ -365,7 +365,7 @@ impl CommandPalette {
 
     /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
     /// rows it shows**, and nothing else — the text stays at reading size at every size, which is why
-    /// this is its own property rather than [`LayoutExt::size`](crate::builders::LayoutExt::size),
+    /// this is its own property rather than [`LayoutExt::size`],
     /// whose font scaling would cascade through the whole panel.
     ///
     /// Whatever the variant, the panel never exceeds `PANEL_VIEWPORT_FRAC` of the window, so a
@@ -944,6 +944,11 @@ impl Component for CommandPalette {
 
     fn overlay_active(&self) -> bool {
         self.is_open()
+    }
+
+    /// On screen only while open: closed, its rows are still children, and gone to every walk.
+    fn is_shown(&self) -> bool {
+        self.base.visible.get_untracked() && !self.base.style.layout.hidden && self.is_open()
     }
 
     /// An open palette grabs input for the whole viewport (typing, nav, outside

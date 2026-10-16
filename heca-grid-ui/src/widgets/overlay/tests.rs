@@ -22,7 +22,7 @@ fn open_overlay() -> Overlay {
 /// The whole point of the animation living here: `set_open(false)` begins the exit rather than
 /// taking the surface away, and the two halves part company — it keeps *painting* while it
 /// leaves, and stops *taking input* the moment it is dismissed. Counting a dissolving map as
-/// coverage refused every act on the pane it exists to let you choose (F003/P082).
+/// coverage refused every act on the pane it exists to let you choose.
 #[test]
 fn a_dismissed_overlay_paints_until_its_exit_has_played_out_and_holds_no_input() {
     let mut o = open_overlay();
@@ -80,7 +80,7 @@ fn an_overlay_with_no_animation_is_gone_the_moment_it_is_closed() {
 
 /// **Saying "open" to an open surface is not an arrival.** A host re-states the truth on every
 /// rebuild — the exposé is re-registered whenever the session changes underneath it — and
-/// replaying the arrival there zoomed the map open on every keystroke (F003/P082, 2026-08-11).
+/// replaying the arrival there zoomed the map open on every keystroke.
 #[test]
 fn re_stating_open_does_not_replay_the_arrival() {
     let mut o = open_overlay().animation(Animation::Zoom.from(0.5));
@@ -414,7 +414,7 @@ fn a_frosted_overlays_backdrop_fades_with_it() {
     );
 }
 
-// ── The keyboard an overlay holds (F003/P097/T502) ──────────────────────────────────────────
+// ── The keyboard an overlay holds ──────────────────────────────────────────
 //
 // An open overlay binds its own focus to being open, so the keys have always arrived here — and
 // were dropped, because this widget answered pointer events and nothing else. Every surface built
@@ -492,7 +492,7 @@ fn a_surface_places_the_keyboard_on_the_control_it_named() {
     assert!(!delete.base().focused.get_untracked(), "and only that one");
 }
 
-// ── Showing a surface: three doors, one thing (F003/P097/T502) ──────────────────────────────
+// ── Showing a surface: three doors, one thing ──────────────────────────────
 
 /// **A handle shows and closes it from anywhere** — the door a click handler needs.
 ///
@@ -712,4 +712,32 @@ fn closing_cuts_or_plays_out_without_the_caller_knowing_which() {
         plays.presence().is_some_and(|p| p.is_leaving()),
         "a declared gesture is still playing, so it is still on screen and still inert",
     );
+}
+
+/// **A closed surface is gone to every walk** — not lettered, not under the pointer — whether it
+/// was never opened or was opened and closed. It keeps its box for the next showing, so being laid
+/// out is not being shown: a closed map of the panes, built at startup, was lettered over the whole
+/// window and hid every other letter behind it.
+#[test]
+fn a_closed_overlay_is_not_lettered_or_hit() {
+    let panel = || Flex::column().child(crate::widgets::Button::new("go").on_click(|| {}));
+    let at = Point::new(400.0, 300.0);
+    let laid_out = |mut o: Overlay| {
+        crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
+        o
+    };
+
+    let never_opened = laid_out(Overlay::new().panel(panel()));
+    assert!(crate::hint::collect_hints(&never_opened).is_empty());
+    assert_eq!(crate::pointer::hit_test(&never_opened, at), None);
+
+    let mut closed = laid_out(Overlay::new().panel(panel()).default_open(true));
+    assert_eq!(
+        crate::hint::collect_hints(&closed).len(),
+        1,
+        "open, its button is lettered"
+    );
+    closed.close();
+    assert!(crate::hint::collect_hints(&closed).is_empty());
+    assert_eq!(crate::pointer::hit_test(&closed, at), None);
 }

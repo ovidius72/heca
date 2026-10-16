@@ -63,10 +63,6 @@ fn moving_the_cursor_publishes_it_for_this_mount() {
     p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
 
     assert!(cx.selected().is_some(), "the mount's cursor names a row");
-    assert!(
-        store.workspaces.nav_selection().is_some(),
-        "and the domain-typed selection beside it still agrees",
-    );
     assert_eq!(
         ProviderCx::new("workspaces.right", store).selected(),
         None,
@@ -85,8 +81,7 @@ fn activating_a_row_asks_the_host_rather_than_acting() {
     p.perform(ACTIVATE_SELECTED, &Intent::new(ACTIVATE_SELECTED), &mut cx);
     let asked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
     assert!(
-        asked.contains(&"focus_pane".to_string())
-            || asked.contains(&"focus_workspace".to_string())
+        asked.contains(&"focus_pane".to_string()) || asked.contains(&"focus_workspace".to_string())
     );
 
     let mut cx = ProviderCx::new("workspaces", store);
@@ -98,37 +93,23 @@ fn activating_a_row_asks_the_host_rather_than_acting() {
     );
 }
 
-/// **The cursor and the click are the same thing**: a click moves the tree's
-/// own cursor, so the next `j` continues from the clicked row rather than from wherever the
-/// cursor was before.
-///
-/// The resolution matches this component's own keys against its own rows — never parses one —
-/// so an unknown key is a no-op rather than a guess.
+/// **The cursor and the click are the same thing**: a click writes the placement's cursor key —
+/// the one record — so the next `k` continues from the clicked row rather than from wherever the
+/// list stood before.
 #[test]
 fn a_click_moves_the_cursor_so_stepping_continues_from_it() {
     let store = store_with_tree();
     let p = WorkspacesContainerProvider::new("workspaces");
     let mut cx = ProviderCx::new("workspaces", store.clone());
 
-    // The fixture's rows are the workspace and its one pane; aim at the pane.
-    let pane_key = pane_key(PaneId(1));
-    p.cursor_moved(&pane_key, &mut cx);
-
-    assert!(
-        matches!(
-            store.workspaces.tree().current_item(),
-            Some(WorkspaceRow::Pane { pane_id: PaneId(1) }),
-        ),
-        "the tree's own cursor moved, not just the highlight",
-    );
-    assert_eq!(
-        store.workspaces.nav_selection(),
-        Some(crate::chrome::SidebarSelection::Pane { pane_id: PaneId(1) }),
-        "and the selection that survives a rebuild agrees",
-    );
-
-    // Stepping now continues from the clicked row.
+    // The fixture's rows are the workspace and its one pane; the click lands on the pane.
+    cx.set_selected(Some(pane_key(PaneId(1))));
     p.perform(CURSOR_UP, &Intent::new(CURSOR_UP), &mut cx);
+
+    assert_eq!(
+        cx.selected().as_deref(),
+        Some(super::selection_key(store.workspaces.tree().selection().expect("a row")).as_str()),
+    );
     assert!(
         matches!(
             store.workspaces.tree().current_item(),
@@ -138,16 +119,44 @@ fn a_click_moves_the_cursor_so_stepping_continues_from_it() {
     );
 }
 
+/// **Each placement acts on its own cursor.** Another placement of the same component leaving the
+/// list on a different row does not change what this one acts on: its key is loaded first.
 #[test]
-fn a_key_this_component_did_not_write_leaves_the_cursor_alone() {
+fn a_placement_acts_on_its_own_row_not_where_another_left_the_list() {
     let store = store_with_tree();
     let p = WorkspacesContainerProvider::new("workspaces");
-    let mut cx = ProviderCx::new("workspaces", store.clone());
-    let before = store.workspaces.tree().cursor;
 
-    p.cursor_moved("docker:container:abc", &mut cx);
+    // The right-hand placement was last on the pane, so that is where the shared list stands.
+    let mut right = ProviderCx::new("workspaces.right", store.clone());
+    right.set_selected(Some(pane_key(PaneId(1))));
+    p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut right);
 
-    assert_eq!(store.workspaces.tree().cursor, before, "no guess, no move");
+    // The left one is on the workspace row; activating it must act on that row.
+    let workspace_key = super::selection_key(store.workspaces.tree().flat_items[0].selection());
+    let mut left = ProviderCx::new("workspaces", store.clone());
+    left.set_selected(Some(workspace_key.clone()));
+    p.perform(
+        ACTIVATE_SELECTED,
+        &Intent::new(ACTIVATE_SELECTED),
+        &mut left,
+    );
+
+    let asked: Vec<String> = left.drain().into_iter().map(|i| i.action).collect();
+    assert_eq!(
+        asked,
+        ["focus_workspace"],
+        "the left placement's own row, not the pane"
+    );
+    assert_eq!(
+        left.selected(),
+        Some(workspace_key),
+        "and its cursor stays where it was"
+    );
+    assert_eq!(
+        right.selected(),
+        Some(pane_key(PaneId(1))),
+        "the right one is untouched"
+    );
 }
 
 /// The `Space` regression, pinned at the only level a unit test can reach.
@@ -237,8 +246,7 @@ fn a_hint_can_be_aimed_at_a_row_by_key_and_moves_the_cursor_there() {
     );
     let fired: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
     assert!(
-        fired.contains(&"focus_pane".to_string())
-            && !fired.contains(&"unfocus_dock".to_string()),
+        fired.contains(&"focus_pane".to_string()) && !fired.contains(&"unfocus_dock".to_string()),
         "…and it hints it: the pane comes forward, the dock keeps the keyboard: {fired:?}",
     );
 }
@@ -278,7 +286,6 @@ fn an_aimed_hint_with_a_stale_key_leaves_the_cursor_where_it_was() {
 }
 
 // ── This component's row menus ──
-
 
 /// **A row's menu is built from this component's own model**, at the row: the pane's column
 /// (absent for a floating pane, which is in none) and whether the workspace has a name to
@@ -362,5 +369,21 @@ fn an_action_this_component_does_not_own_declines() {
             &mut cx,
         ),
         Handled::No,
+    );
+}
+
+/// **A plugin reads the selection worked out from the cursor key** of the placement holding the
+/// keyboard — nothing stores it twice — and gets `None` when no placement holds it.
+#[test]
+fn the_sidebar_selection_a_plugin_reads_comes_from_the_focused_placements_key() {
+    let store = store_with_tree();
+    let view = || crate::host::StateView::over(&store).sidebar_selection();
+    store.set_container_cursor("workspaces", Some(pane_key(PaneId(1))));
+    assert_eq!(view(), None, "no placement holds the keyboard");
+
+    store.announce_focused_container(Some("workspaces".to_string()));
+    assert_eq!(
+        view(),
+        Some(crate::chrome::SidebarSelection::Pane { pane_id: PaneId(1) }),
     );
 }

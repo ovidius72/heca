@@ -2,7 +2,7 @@ mod common;
 
 use heca_grid_ui::{LayoutEngine, Size, Theme};
 
-// --- A container tints the controls inside it (F003/P096/T484) ---------------
+// --- A container tints the controls inside it ---------------
 
 /// Paint `w` inside a container that published `tone`, and report the hues it drew its chrome in.
 fn chrome_hues(

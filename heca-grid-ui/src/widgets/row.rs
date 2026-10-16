@@ -425,7 +425,7 @@ impl Component for Row {
         // itself, and since a colour is fixed at build time that means building the content TWICE
         // — one copy per state — and showing one. heca's sidebar pane row did precisely that, and
         // the two copies had to be stacked, so the name and the `(program)` suffix beside it never
-        // shared a line (F003/P082/T480). A control owns its content's state colour; a caller that
+        // shared a line. A control owns its content's state colour; a caller that
         // wants its own says so with `.color(..)`, which still wins.
         let content_color = if active { accent } else { foreground };
         cx.with_content_color(content_color, |cx| {

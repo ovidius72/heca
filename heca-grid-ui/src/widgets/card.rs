@@ -1,6 +1,6 @@
 //! [`Card`] — a surface preset: a padded column with a title header, ready for
 //! body content via `.child(...)`. Demonstrates composing a reusable component
-//! from [`Surface`](super::Surface) conventions + [`Label`](super::Label).
+//! from [`Surface`](super::Surface) conventions + [`Label`].
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;

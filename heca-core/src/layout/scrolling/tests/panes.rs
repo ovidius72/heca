@@ -20,7 +20,7 @@ fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
 }
 
 
-/// **A boundary moves space between its own two panes, and nothing else** (F004/P084/T413).
+/// **A boundary moves space between its own two panes, and nothing else**.
 ///
 /// It used to pin one pane and let `Column::pane_heights` redistribute the remainder over every
 /// pane still auto-sized. With two panes the only auto pane *was* the neighbour, so it looked
@@ -93,7 +93,7 @@ fn a_boundary_drag_stops_when_its_neighbour_hits_the_floor() {
 }
 
 
-/// **The divider goes the way the key says, whichever pane is active** (F004/P084/T414).
+/// **The divider goes the way the key says, whichever pane is active**.
 ///
 /// `j` is directional; "grow the active pane" is not. They disagree for the last pane, which
 /// has no boundary beneath it and so grows *upwards* — which is why `prefix+r` felt inverted on
@@ -129,7 +129,7 @@ fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
             before[boundary + 1],
             after[boundary + 1],
         );
-        // The third pane is not on this boundary (T413's rule still holds).
+        // The third pane is not on this boundary.
         let untouched = if boundary == 0 { 2 } else { 0 };
         assert!(
             (after[untouched] - before[untouched]).abs() < 0.5,

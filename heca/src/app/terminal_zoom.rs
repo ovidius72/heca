@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use crate::app::terminal_metrics::{TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN};
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 
 /// Every terminal's font offset and the cell size it was measured to. A terminal absent here
 /// follows the app's size.

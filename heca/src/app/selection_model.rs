@@ -5,7 +5,7 @@
 //! surfaces. This module defines the shared state and terminology; it does not
 //! implement paste, bracketed-paste, or `OSC 52` — those belong to later tasks.
 //!
-//! The model covers the shared concepts from [`terminal-implementation.md`]:
+//! The model covers the shared concepts of the terminal implementation:
 //! - selection owner
 //! - selection source
 //! - selection phase/state
@@ -17,7 +17,7 @@
 //! cell coordinates, wide-char filler handling, row-trailing whitespace trimming)
 //! but does not own clipboard I/O.
 
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 
 /// **The terminal that owns the active selection** — any terminal, whoever owns it: a pane's, or
 /// one an extension placed in a dock or an overlay. A pane is asked for its terminal's id, so there

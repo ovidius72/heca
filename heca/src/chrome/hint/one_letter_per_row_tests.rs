@@ -11,7 +11,6 @@ use heca_grid_ui::reactive::SignalGet;
 use heca_grid_ui::widgets::Flex;
 use heca_grid_ui::{Component, LayoutEngine, Rectangle, Size};
 
-use crate::app_state::SidebarItemState;
 use crate::chrome::{ChromeHost, ChromeIntentEmitter, SharedChromeState};
 use crate::providers::workspaces::{
     ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceTree, pane_key,
@@ -28,7 +27,6 @@ fn eight_panes() -> WorkspaceTree {
         name: "Workspace 1".into(),
         custom_name: None,
         collapsed: false,
-        state: SidebarItemState::Active,
         columns: (1..=8u64)
             .map(|n| ColumnEntry {
                 col_idx: n as usize - 1,
@@ -38,11 +36,6 @@ fn eight_panes() -> WorkspaceTree {
                     pane_id: PaneId(n),
                     name: "zsh".into(),
                     custom_name: None,
-                    state: if n == 5 {
-                        SidebarItemState::Active
-                    } else {
-                        SidebarItemState::None
-                    },
                 }],
             })
             .collect(),
@@ -97,8 +90,8 @@ fn pick_in_two_docks(lower_dock_scrolled: f32) {
         |_, _| {},
     );
     let catalog = crate::actions::ActionCatalog::with_builtins();
-    let ctx = ChromeCtx::for_build(crate::host::App::new(&chrome), &theme, &emit, &catalog);
-    let body = crate::chrome::scene::build_region_content(
+    let ctx = ChromeCtx::for_build(&chrome, &theme, &emit, &catalog);
+    let body = crate::chrome::window::scene::build_region_content(
         &host,
         crate::chrome::RegionId::LeftSidebar,
         &ctx,

@@ -85,7 +85,7 @@ impl Scene {
     /// intersection, and treating that as "no clip at all" reports every draw inside it as an
     /// escape. It is the opposite — nothing inside such a clip reaches the screen at all. That
     /// alone accounted for five phantom escapes in the catalog sweep, which is why it was
-    /// committed `#[ignore]`d (F003/P082/T481).
+    /// committed `#[ignore]`d.
     ///
     /// **Base layer only, by design.** The overlay band exists precisely for what must leave its
     /// box — a dropdown opened inside a scroll region, a hint keycap on a half-visible row — so

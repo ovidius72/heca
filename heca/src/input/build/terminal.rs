@@ -54,7 +54,7 @@ pub(super) fn build_terminal(
             url: get_string(args, "url")?,
         }),
 
-        // ── Chrome container placement (plugin-04/T1) ──
+        // ── Chrome container placement ──
         // These carry DOTTED, namespaced ids — unlike every other built-in, whose config name is
         // snake_case. That asymmetry is deliberate: the dotted namespace is the id scheme plugins
         // use (`plugin.docker.restart`), and chrome placement is the first host capability a plugin

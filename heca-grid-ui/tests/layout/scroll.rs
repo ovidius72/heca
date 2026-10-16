@@ -1,6 +1,6 @@
 use super::*;
 
-/// Whole-page scroll premise (T009): a root `ScrollRegion` sized to the viewport,
+/// Whole-page scroll premise: a root `ScrollRegion` sized to the viewport,
 /// holding a natural-width page column (`align(Start)`, width `Auto`), must report
 /// horizontal overflow measured from that DIRECT child when a grandchild row is
 /// wider than the viewport — with `flex_shrink: 0` the column adopts its widest

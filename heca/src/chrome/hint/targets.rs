@@ -18,7 +18,7 @@ use heca_grid_ui::Component;
 pub(crate) fn active_hint_targets(
     state: &crate::app_state::AppState,
 ) -> Vec<(HintTarget, Rectangle)> {
-    // **A letter that would do nothing is worse than no letter** (F003/P082/T432). Candidacy is
+    // **A letter that would do nothing is worse than no letter**. Candidacy is
     // read off the tree; whether the act it names is permitted *right now* is the app's judgement,
     // and it is asked here — once, for every surface, with no special case per widget.
     //
@@ -31,7 +31,9 @@ pub(crate) fn active_hint_targets(
     //
     // A pick is a **keyboard** gesture: it lands on nothing, so where the keyboard is *is* its
     // context — the same reasoning `chrome/pane/mod.rs` and RPC already apply.
-    let offered: Vec<(HintTarget, Rectangle)> = visible_hint_targets(state)
+    let visible = visible_hint_targets(state);
+    let seen = visible.len();
+    let offered: Vec<(HintTarget, Rectangle)> = visible
         .into_iter()
         .filter(|(target, _)| {
             let Some(root) = hint_surface_root(state, &target.surface) else {
@@ -40,7 +42,7 @@ pub(crate) fn active_hint_targets(
             candidate_allowed(state, target, root)
         })
         .collect();
-    log_offered(state, &offered);
+    log_offered(state, seen, &offered);
     offered
 }
 
@@ -54,11 +56,22 @@ pub(crate) fn active_hint_targets(
 /// Debug builds only, and only while something is picking — the common case is nothing, and this
 /// runs every time the letters are worked out.
 #[cfg(debug_assertions)]
-fn log_offered(state: &crate::app_state::AppState, offered: &[(HintTarget, Rectangle)]) {
-    if offered.is_empty() || std::env::var_os("HECA_LOG_HINTS").is_none() {
+fn log_offered(
+    state: &crate::app_state::AppState,
+    seen: usize,
+    offered: &[(HintTarget, Rectangle)],
+) {
+    if std::env::var_os("HECA_LOG_HINTS").is_none() {
         return;
     }
-    eprintln!("[hints] {} target(s) offered a letter:", offered.len());
+    // **Nothing offered says why**: no target on screen at all, or targets the policy refused.
+    eprintln!(
+        "[hints] {} target(s) offered a letter, of {seen} on screen ({} refused by policy); \
+         keyboard is with {:?}:",
+        offered.len(),
+        seen - offered.len(),
+        crate::app::input::focused_surface(state),
+    );
     for (target, rect) in offered {
         let (name, declared) = match hint_surface_root(state, &target.surface) {
             Some(root) => (
@@ -86,7 +99,7 @@ fn log_offered(state: &crate::app_state::AppState, offered: &[(HintTarget, Recta
 }
 
 #[cfg(not(debug_assertions))]
-fn log_offered(_: &crate::app_state::AppState, _: &[(HintTarget, Rectangle)]) {}
+fn log_offered(_: &crate::app_state::AppState, _: usize, _: &[(HintTarget, Rectangle)]) {}
 
 /// The node a path names, for the log above.
 #[cfg(debug_assertions)]
@@ -101,8 +114,7 @@ fn node_at<'a>(
     Some(node)
 }
 
-/// **Is this candidate worth a letter?** — judged by *what it says it does*, and by nothing else
-/// (F003/P082/T432).
+/// **Is this candidate worth a letter?** — judged by *what it says it does*, and by nothing else.
 ///
 /// One question, asked of every candidate on every surface: the declaration carries an
 /// [`Intent`](heca_view::Intent), the app asks its own policy about it, and a refused act is not
@@ -138,7 +150,7 @@ fn candidate_allowed(
 ///
 /// Read from the surface itself, never chosen here. A judgement about a gesture is only worth
 /// anything if it is the judgement the gesture will actually get, and the source decides the
-/// [`Domain`](crate::app::interaction::Domain): a keyboard-driven source with a dock focused
+/// `Domain`: a keyboard-driven source with a dock focused
 /// resolves to `Container`, which permits acts that `Floating` refuses. Asking as `Keyboard` while
 /// the chrome tree dispatches as `MouseLeftSidebar` is exactly how the picker came to offer letters
 /// that execution then refused.
@@ -216,7 +228,7 @@ fn layer_occluders(lock: bool, bounds: Rectangle) -> Vec<Rectangle> {
 ///
 /// Split from [`active_hint_targets`] so occlusion is still decided in exactly one place while the
 /// two questions stay separate: *can you see it* is geometry, *would it do anything* is policy.
-/// [`visible_pane_targets`] wants the first alone — a pane-select mode letters a pane for reasons of
+/// The visible-pane picker wants the first alone — a pane-select mode letters a pane for reasons of
 /// its own, and answering it with the `prefix+/` picker's policy would be one surface's judgement
 /// applied to another's.
 fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, Rectangle)> {
@@ -234,10 +246,6 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
     // step by hand — which is what the registry's own `z_path` sort had become, and it could not
     // see a surface that never registered.
     //
-    // 1. The chrome and every surface seated beside it — the exposé, a context menu, a confirm
-    //    dialog, the toast stack, a plugin's panel. The first **modal** one is the active context
-    //    and `resolve_hint_layers` stops there, which is what suppresses everything beneath an
-    //    exposé.
     // 1. The page and every surface seated above it — the exposé, a context menu, a confirm
     //    dialog, the toast stack, a plugin's panel. The **library** groups the targets and orders
     //    them front → back (`collect_hints_by_surface`), so nothing here walks the tree, assumes
@@ -247,12 +255,9 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
     // The panes are judged by their own frames below, so the window's walk leaves the workspace to
     // them: a pane's targets would otherwise be collected twice, once at their path from the root
     // and once at their path from the pane.
-    let workspace_at = state
-        .window_root
-        .base()
-        .children
-        .iter()
-        .position(|c| c.base().key.as_deref() == Some(crate::chrome::workspace::WORKSPACE_KEY));
+    let workspace_at = state.window_root.base().children.iter().position(|c| {
+        c.base().key.as_deref() == Some(crate::chrome::panes::workspace::WORKSPACE_KEY)
+    });
     for group in heca_grid_ui::collect_hints_by_surface(&state.window_root) {
         let targets: Vec<(HintTarget, Rectangle)> = group
             .targets
@@ -347,7 +352,7 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
     resolve_hint_layers(layers, viewport)
 }
 
-/// **What can show a letter right now**, resolved once (F003/P082/T438, F003/P097/T499).
+/// **What can show a letter right now**, resolved once.
 ///
 /// A pane scrolled behind a sidebar is still a pane, and a pick mode reading the SESSION happily
 /// letters it — so its keycap draws on top of the sidebar covering it. `prefix+/` never had this
@@ -380,7 +385,7 @@ pub(super) struct VisibleViews {
     ///
     /// **Surfaces, not pane ids.** It answered `HashSet<PaneId>` and the caller then had to decide
     /// what that meant for a pane's *header*, which is a different view over the same pane — so the
-    /// header was left ungated and kept a letter its pane had lost (F003/P082/T438).
+    /// header was left ungated and kept a letter its pane had lost.
     pub(super) surfaces: std::collections::HashSet<HintSurface>,
     /// Which **targets** survived — what the universal picker's path-addressed offer asks.
     pub(super) targets: std::collections::HashSet<HintTarget>,
@@ -406,7 +411,7 @@ mod tests {
         Rectangle::new(Point::new(0.0, 0.0), Size::new(1412.0, 800.0))
     }
 
-    /// **An ambient overlay hides nothing** (F009 toast stack, found 2026-08-27).
+    /// **An ambient overlay hides nothing**.
     ///
     /// A toast stack sizes itself to the whole viewport because that is how it *positions* its
     /// cards — top-right, bottom-left. It covers a corner and declares `lock: false`.

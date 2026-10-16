@@ -60,7 +60,7 @@ fn panes_fill_the_column_they_are_given() {
 /// started moving the *top* one too: the untouched panes were being forced above the room left
 /// to them, the heights summed past the column, and the proportional scale that keeps the column
 /// full then shrank every pane — including the two the drag had just pinned.
-/// **A column is never narrower than its floor, whatever the window did** (F003/P082/T478).
+/// **A column is never narrower than its floor, whatever the window did**.
 ///
 /// `MIN_COLUMN_WIDTH` used to be enforced only by the resize handlers, which stop *you* dragging
 /// a column to nothing and stopped nothing else. Two sidebars in a narrow window squeezed the

@@ -193,7 +193,7 @@ fn test_all_names_unique() {
     assert_eq!(names.len(), original_len, "all action names must be unique");
 }
 
-// ── plugin-04 / T3: the one runtime registry ──
+// ── the one runtime registry ──
 
 /// The built-in metadata after seeding is IDENTICAL to the [`builtins`] descriptors it came
 /// from — the owned-`String` ripple must not have changed a single value (the non-regression

@@ -1,9 +1,9 @@
 //! Making the keyboard's owner true: **one holder per tree**.
 //!
-//! A widget asks for focus ([`Base::focus`], a followed signal turning true) but cannot take it from
-//! the previous holder — it holds no tree. [`settle`] does, and it runs wherever a tree is handed an
-//! event that depends on the answer (a key, a press) and once a frame from the host, so the answer
-//! is never stale where anyone looks.
+//! A widget asks for focus ([`Base::focus`](crate::component::Base::focus), a followed signal turning true)
+//! but cannot take it from the previous holder — it holds no tree. [`settle`] does, and it runs wherever a
+//! tree is handed an event that depends on the answer (a key, a press) and once a frame from the host, so the
+//! answer is never stale where anyone looks.
 //!
 //! The rules, the browser's:
 //!
@@ -33,8 +33,7 @@ fn gather(node: &dyn Component, path: &mut Vec<usize>, shown: bool, out: &mut Ve
     let base = node.base();
     base.sync_focus_follow();
     // The root is the tree itself: whether *it* is shown is the host's question, not the tree's.
-    let shown =
-        shown && (path.is_empty() || (base.visible.get_untracked() && !base.style.layout.hidden));
+    let shown = shown && (path.is_empty() || node.is_shown());
     let flagged = base.focused.get_untracked();
     let (claim, released) = (base.focus_door.claim.get(), base.focus_door.released.get());
     if flagged || claim != Claim::None || released {
@@ -67,8 +66,7 @@ fn find_focusable(root: &dyn Component, scope: &[usize], id: u64) -> Option<Vec<
         id: u64,
     ) -> Option<Vec<usize>> {
         let base = node.base();
-        let shown =
-            path.len() == scope_len || (base.visible.get_untracked() && !base.style.layout.hidden);
+        let shown = path.len() == scope_len || node.is_shown();
         if !shown {
             return None;
         }
@@ -238,7 +236,7 @@ pub(crate) fn settle(root: &mut dyn Component) {
 pub(crate) fn holder_path(node: &dyn Component) -> Option<Vec<usize>> {
     node.base().sync_focus_follow();
     for (i, child) in node.base().children.iter().enumerate().rev() {
-        if !child.base().visible.get_untracked() || child.base().style.layout.hidden {
+        if !child.is_shown() {
             continue;
         }
         if let Some(mut sub) = holder_path(child.as_ref()) {
@@ -255,6 +253,8 @@ pub(crate) fn holder_path(node: &dyn Component) -> Option<Vec<usize>> {
 /// - the target is the deepest widget on `hit` that is [`focusable`](Component::focusable); a
 ///   `Button` that composes an icon and a label is the target when the label is what was hit;
 /// - a press on **nothing focusable changes nothing**: the keyboard stays where it was;
+/// - a press inside a region that [keeps the keyboard](crate::component::Base::keeps_keyboard)
+///   gives it to that region, not to the control inside;
 /// - a press **inside the widget that already holds the keyboard** (or on it) changes nothing;
 /// - otherwise the previous holder lets go and the target is focused, without a ring — it was the
 ///   mouse.
@@ -270,6 +270,12 @@ pub(crate) fn focus_on_press(root: &mut dyn Component, hit: &[usize]) {
     else {
         return;
     };
+    // A region that keeps the keyboard takes it in place of the control inside it.
+    let target = (0..target.len())
+        .rev()
+        .map(|depth| &target[..depth])
+        .find(|path| at(root, path).base().keeps_keyboard)
+        .unwrap_or(target);
     let holder = holder_path(root);
     if holder.as_deref().is_some_and(|h| h.starts_with(target)) {
         return;

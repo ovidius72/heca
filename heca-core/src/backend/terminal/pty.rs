@@ -366,7 +366,7 @@ fn shell_kind(shell: &str) -> Option<ShellKind> {
 /// on the child's process group, and dragging a pane divider with the mouse resizes on **every
 /// frame** — hundreds of times a second. One interrupted read in that storm was enough to take the
 /// pane down, which is why the keyboard resize (a handful of calls) never did it and the mouse did
-/// it "after a few attempts" (F004/P084/T409).
+/// it "after a few attempts".
 ///
 /// `Interrupted` and `WouldBlock` are retried; everything else is treated as fatal, as before.
 fn read_ends_the_reader(err: &std::io::Error) -> bool {
@@ -415,7 +415,7 @@ fn resolve_shell(shell: Option<String>, fallback: &str) -> String {
 mod tests {
     use super::read_ends_the_reader;
 
-    /// **An interrupted read must not end the reader thread** (F004/P084/T409).
+    /// **An interrupted read must not end the reader thread**.
     ///
     /// The thread owns the only cloned read handle on the PTY master. When it returns, that handle
     /// drops, the kernel hangs up the terminal and the child's process group gets `SIGHUP` — so

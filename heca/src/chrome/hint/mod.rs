@@ -1,4 +1,4 @@
-//! **Who is lettering what** — the host's whole half of every keycap on screen (F003/P082/T427).
+//! **Who is lettering what** — the host's whole half of every keycap on screen.
 //!
 //! # The rule: whoever offers a letter owns it until they withdraw it
 //!

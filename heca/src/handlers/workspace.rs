@@ -8,8 +8,8 @@ use crate::input::WmAction;
 
 /// Delete the "current" column (and all its panes) — the **focused pane's** column.
 ///
-/// The container's own `workspaces.delete_selected_column` handles the cursor's column
-/// (F003/P085/T356); this is the plain global binding, and it no longer branches on a mode that
+/// The container's own `workspaces.delete_selected_column` handles the cursor's column;
+/// this is the plain global binding, and it no longer branches on a mode that
 /// does not exist.
 pub fn handle_delete_current_column(state: &mut AppState, _action: &WmAction) {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {

@@ -222,7 +222,7 @@ impl Component for Checkbox {
         // Box: dark fill, border firms muted → accent. Radius + border width from
         // the theme so the global settings scale this proportionally. A faint theme
         // rest glow (`interaction.control_rest_glow`) on the BOX (not the label)
-        // gives it the shared neon identity at rest; `glow_size` scales it (T011).
+        // gives it the shared neon identity at rest; `glow_size` scales it.
         let rest_border = ia.control_rest_border as f32;
         let border_a = rest_border + (255.0 - rest_border) * p;
         let border = Border {

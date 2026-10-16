@@ -187,7 +187,7 @@ pub(crate) async fn init_state(
         let _ = redraw_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
     });
 
-    // **The host's one job in a declared context menu** (F004/P084/T395): put it on screen. The
+    // **The host's one job in a declared context menu**: put it on screen. The
     // widget built it and the framework anchored it; only the host can reach a layer. Queued
     // rather than mounted here because this closure has no `&mut AppState` — the event loop drains
     // it before the next frame.
@@ -362,8 +362,7 @@ pub(crate) async fn init_state(
         app_state::RetainedTerminalScratch::new(&device, config.format, 1, 1);
 
     // Region visibility/width lives in chrome_state (was SidebarState). Build it
-    // first so the ChromeHost can share its event bus. plugin-02: the host is
-    // wired but empty — first-party providers register in plugin-03.
+    // first so the ChromeHost can share its event bus.
     // Whether each region is shown is ONE state, `chrome_state.is_visible(region)`. `[settings]
     // show_*` is only where it starts; the toggles flip it and a config reload sets it back.
     let chrome_state = crate::chrome::SharedChromeState::new(
@@ -382,8 +381,8 @@ pub(crate) async fn init_state(
     use crate::chrome::regions;
     use crate::providers::WorkspacesContainerProvider as Workspaces;
     regions("sidebar.left").append(Workspaces::new("workspaces"));
-    // A **second placement** of the same container, in the right sidebar (F003/P085/T359, user
-    // 2026-07-30). Not scaffolding: with one dock on screen none of this phase is observable — not
+    // A **second placement** of the same container, in the right sidebar. Not
+    // scaffolding: with one dock on screen none of this phase is observable — not
     // a letter per dock, not focus moving between them, not "the focused one answers and every
     // other declines", not two cursors, not two scroll positions. And a terminal has no horizontal
     // scroll at all, so the horizontal keys have nothing to act on without it.
@@ -400,7 +399,7 @@ pub(crate) async fn init_state(
     // Everything named above is queued — which is the point: a plugin adding a container at load
     // time writes the same call and does not have to find the host. This applies it, once; a
     // `regions(..)` call after this is refused out loud.
-    chrome_host.mount_pending();
+    chrome_host.mount_pending(&crate::providers::ChromeCtx::new(&chrome_state));
 
     // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
     // unknown-version file is simply an empty store, so a first run and a broken file behave
@@ -424,7 +423,7 @@ pub(crate) async fn init_state(
     };
 
     // What every window shares and none needs a window for. `[settings.notification_system]`
-    // config (F009/T186/T187/T191); the history depth of 50 is still a placeholder pending its own
+    // config; the history depth of 50 is still a placeholder pending its own
     // knob.
     let mut server = crate::server::ServerState::new(
         BackendStore::new(),
@@ -498,7 +497,7 @@ pub(crate) async fn init_state(
         pane_lines: crate::chrome::PaneRowLines::from_startup(),
         overlays: crate::chrome::OverlayHost::default(),
         // Filled in `resumed`, from the built keymaps, once every layer — including the
-        // components' and any plugin's — has actually bound (F003/P086/T366).
+        // components' and any plugin's — has actually bound.
         action_shortcuts: crate::chrome::ActionShortcuts::default(),
         action_catalog: crate::actions::ActionCatalog::with_builtins(),
         context_menu_registry: crate::chrome::ContextMenuRegistry::with_builtins(),
@@ -538,12 +537,12 @@ pub(crate) async fn init_state(
                 .max(1),
         ),
     });
-    // Mount the toast stack — F009/T203. After the state literal (needs `notifications` /
+    // Mount the toast stack. After the state literal (needs `notifications` /
     // `notification_pick_open` to already exist) and before providers register their own
     // actions/layers, so a producer that raises a notification on its very first frame has
     // somewhere for it to land.
     crate::chrome::mount_notification_stack(&mut state);
-    // Install the raise sink — F009/T493. `Notification::send` posts through this; the app
+    // Install the raise sink. `Notification::send` posts through this; the app
     // reads it here, posting `AppEvent::RaiseNotification` so the host (not the caller) stamps
     // the time when the event loop actually processes it.
     {
@@ -555,7 +554,7 @@ pub(crate) async fn init_state(
     }
     // Register the exposé under `heca.expose`, hidden, so `toggle_layer` has something to reach
     // from the very first frame. Re-registering is the rebuild path when the session's shape
-    // changes; see `chrome::expose::register`.
+    // changes; see `chrome::surfaces::expose::register`.
     crate::chrome::register_expose(&mut state);
     state
 }

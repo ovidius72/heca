@@ -168,7 +168,7 @@ pub fn default_pane_title_segments() -> Vec<String> {
 /// `move_left` / `move_right` remain valid names for users who want them.
 ///
 /// A button is **named**, not typed: this list holds names, and which names exist is answered in the
-/// app, where a program built on heca can add its own (`pro.show_notes`). The same spellings the
+/// app, where a program built on heca can add its own (`demo.show_notes`). The same spellings the
 /// closed list used, so every existing config keeps working.
 pub fn default_pane_title_actions() -> Vec<String> {
     vec!["split".to_string(), "close".to_string()]
@@ -395,7 +395,7 @@ pub struct PaneAppearance {
     pub title_segments: Vec<String>,
     /// Info-bar action buttons (right), by **name**, in order. Empty hides the right side. The names
     /// heca ships are `split`, `move_left`, `move_right`, `close`, `zoom` and `float`; a program
-    /// built on heca adds its own (`pro.show_notes`). A name nothing provides is reported and skipped.
+    /// built on heca adds its own (`demo.show_notes`). A name nothing provides is reported and skipped.
     #[serde(default = "default_pane_title_actions")]
     pub title_actions: Vec<String>,
 }
@@ -474,7 +474,7 @@ impl Default for SidebarAppearance {
 /// and change counts, only inside a repository).
 ///
 /// A line is **named**, not typed: which names exist is answered in the app, where a program built
-/// on heca can add its own (`pro.status`).
+/// on heca can add its own (`demo.status`).
 pub fn default_sidebar_pane_lines() -> Vec<String> {
     vec!["cwd".to_string(), "git".to_string()]
 }
@@ -639,10 +639,10 @@ pub struct AppearanceConfig {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExposeAppearance {
     /// Show each pane's working directory (folder icon + home-relative path) on its card in the
-    /// exposé. Off by default. It used to be `[settings] pane_show_cwd`, which is still read and
-    /// mapped onto this one.
+    /// exposé. On by default. It used to be `[settings] pane_show_cwd`, which is still read when
+    /// this one is not written; once it is written, this one decides.
     #[serde(default)]
-    pub show_cwd: bool,
+    pub show_cwd: Option<bool>,
 }
 
 impl AppearanceConfig {
@@ -1104,15 +1104,15 @@ mod tests {
     #[test]
     fn a_pane_button_can_be_any_name() {
         let cfg: AppearanceConfig =
-            toml::from_str("[pane]\ntitle_actions = [\"split\", \"pro.show_notes\"]").unwrap();
-        assert_eq!(cfg.pane.title_actions, vec!["split", "pro.show_notes"]);
+            toml::from_str("[pane]\ntitle_actions = [\"split\", \"demo.show_notes\"]").unwrap();
+        assert_eq!(cfg.pane.title_actions, vec!["split", "demo.show_notes"]);
     }
 
     #[test]
     fn the_expose_show_cwd_key_parses_and_defaults_off() {
-        assert!(!AppearanceConfig::default().expose.show_cwd);
+        assert_eq!(AppearanceConfig::default().expose.show_cwd, None);
         let cfg: AppearanceConfig = toml::from_str("[expose]\nshow_cwd = true").unwrap();
-        assert!(cfg.expose.show_cwd);
+        assert_eq!(cfg.expose.show_cwd, Some(true));
     }
 
     #[test]

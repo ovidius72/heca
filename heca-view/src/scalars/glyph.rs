@@ -70,7 +70,7 @@ named_set! {
 
 value_set! {
     /// The **keyboard** glyphs, from the embedded Nerd Font — a separate vocabulary from
-    /// [`ViewGlyph`] because it is a separate font (F003/P097/T501).
+    /// [`ViewGlyph`] because it is a separate font.
     ///
     /// These are the keys a shortcut is written with: ⇧ ⌃ ⌥ ⌘, Enter, Escape, Tab, Space, Backspace and
     /// the four arrows. A description names one and the host resolves it against the font, exactly as

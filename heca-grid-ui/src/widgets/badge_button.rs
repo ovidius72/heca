@@ -1,6 +1,6 @@
 //! [`BadgeButton`] — a clickable badge/chip.
 //!
-//! A small pill-shaped button that reuses the visual language of [`Badge`] but is
+//! A small pill-shaped button that reuses the visual language of [`Badge`](crate::widgets::Badge) but is
 //! interactive like a button: hover tint, press flash, keyboard focus ring, and
 //! `Enter`/`Space` activation.
 

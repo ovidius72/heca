@@ -1,4 +1,4 @@
-//! One **workspace** of the dock (F006/P032/T429).
+//! One **workspace** of the dock.
 //!
 //! It owns the frame: the header and its count badge, the collapse toggle, the workspace's own
 //! states, its menu, its drop target and its pick letter — and the order its children go in,
@@ -94,7 +94,7 @@ impl WorkspaceFrame<'_> {
         // is the reason this phase exists: a menu resolved from a *position* needs a declaration
         // nobody remembers to write, and this one is the declaration itself.
         dock = dock.context_menu({
-            let menu = crate::chrome::context_menu::menu_from_items(
+            let menu = crate::chrome::surfaces::context_menu::menu_from_items(
                 "Workspace",
                 "What you can do with this workspace",
                 MENU_WORKSPACE,

@@ -14,7 +14,6 @@
 //! enough, with no name to invent.
 
 use crate::component::Component;
-use crate::reactive::SignalGet;
 use heca_core::layout::{Point, Rectangle};
 
 /// **What a drop does** — the drag API's own answer, so nobody works it out twice.
@@ -135,7 +134,7 @@ fn side_for(bounds: Rectangle, point: Point, onto: bool) -> DropSide {
 /// Should this subtree be considered for hit-testing? Hidden widgets have stale
 /// bounds and never receive input, so they're skipped (matching paint/event).
 fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.layout.hidden
+    !c.is_shown()
 }
 
 /// Find the **topmost, deepest** drop target whose bounds contain `point`.

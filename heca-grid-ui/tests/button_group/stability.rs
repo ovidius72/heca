@@ -93,7 +93,7 @@ fn constructing_a_group_does_not_request_a_frame() {
     );
 }
 
-/// **A group is right on the FIRST frame it is laid out** (F003/P097/T500).
+/// **A group is right on the FIRST frame it is laid out**.
 ///
 /// It decides what fits by reading the room it was given, and that answer only exists once the
 /// layout has run — so the decision lands in `on_layout`, *after* the pass that informed it. Left

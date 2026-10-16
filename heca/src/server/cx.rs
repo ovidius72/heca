@@ -7,7 +7,7 @@ use heca_core::layout::{
 use super::{Change, ServerLayout, Terminals};
 
 /// Plain data about the window that asked — what a server action needs to know that only the
-/// window knows. The server never reads it from a window: with several windows (F012) each request
+/// window knows. The server never reads it from a window: with several windows each request
 /// carries its own, and two windows asking at once are two different askers.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Asker {

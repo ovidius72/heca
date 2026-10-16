@@ -2,7 +2,7 @@ use super::build_selection_overlay;
 use crate::app::selection_model::{
     SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
 };
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 use heca_config::theme::Color;
 use heca_core::backend::TerminalSnapshot;
 

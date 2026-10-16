@@ -334,7 +334,7 @@ fn a_focused_container_still_permits_the_tiled_actions() {
     }
 }
 
-// ── plugin-04 / T3: a name-keyed action is judged by IDENTICAL rules ──
+// ── a name-keyed action is judged by IDENTICAL rules ──
 
 /// A name-keyed (plugin) action's DECLARED policy runs through the very same `policy_allows`
 /// the built-in path reaches — so declaring `TiledOnly` blocks it when a floating pane owns the

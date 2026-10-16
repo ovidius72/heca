@@ -85,7 +85,7 @@ fn key_glyph(token: &str) -> Option<NfGlyph> {
 
 /// One binding as the **caps of its chord** — `"prefix+Shift+e"` → `[λ] [⇧] [e]`.
 ///
-/// This is the display path for a surface that draws chips; [`format_shortcut`] is the one for a
+/// This is the display path for a surface that draws chips; [`format_shortcut_styled`] is the one for a
 /// surface that draws a line of text. Both split the binding the same way, here, so a tooltip and a
 /// keycap can never disagree about what the keys are.
 ///

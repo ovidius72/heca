@@ -435,7 +435,8 @@ impl ButtonGroup {
     /// The group **is** the strip that arranges the buttons — they are its own children.
     ///
     /// Named `strip` rather than `row`: `row` is CSS's `grid-row` on every widget
-    /// ([`LayoutExt::row`]), and a private accessor should not take a word the whole library uses.
+    /// ([`Flex::row`](crate::widgets::Flex::row)), and a private accessor should not take a word the whole
+    /// library uses.
     fn strip(&self) -> &dyn Component {
         self
     }

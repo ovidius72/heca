@@ -82,18 +82,34 @@ fn starts_with_number(after: &str) -> bool {
     after.chars().next().is_some_and(|c| c.is_ascii_digit())
 }
 
-/// Every `file:line` that passes a number to a size builder. A file's tests are the part after its
-/// `#[cfg(test)]`, which this stops at.
+/// The lines of `src` that are the app's code, numbered from 0: everything before its inline test
+/// module.
+///
+/// A `#[cfg(test)]` that opens an inline `mod tests { … }` ends the app's code. One that only names
+/// a separate test file (`#[cfg(test)] mod tests;`) does not — the code below it is still the app's,
+/// and stopping there left everything after it unchecked.
+fn app_lines(src: &str) -> impl Iterator<Item = (usize, &str)> {
+    let lines: Vec<&str> = src.lines().collect();
+    let end = (0..lines.len())
+        .find(|&i| {
+            lines[i].trim_start().starts_with("#[cfg(test)]")
+                && !lines.get(i + 1).is_some_and(|next| {
+                    let next = next.trim();
+                    next.starts_with("mod ") && next.ends_with(';')
+                })
+        })
+        .unwrap_or(lines.len());
+    lines.into_iter().take(end).enumerate()
+}
+
+/// Every `file:line` that passes a number to a size builder.
 fn offenders() -> Vec<String> {
     let mut out = Vec::new();
     for (file, src) in ui_sources() {
         if is_test_file(&file) {
             continue;
         }
-        for (i, line) in src.lines().enumerate() {
-            if line.trim_start().starts_with("#[cfg(test)]") {
-                break;
-            }
+        for (i, line) in app_lines(&src) {
             if line.trim_start().starts_with("//") {
                 continue;
             }
@@ -133,8 +149,10 @@ fn ui_code_names_its_sizes_instead_of_writing_numbers() {
 /// Named numbers that are **not a look** — a limit on an input, say — and so have no theme or
 /// config key to move to. Each says why. A look constant does not belong here: it goes to the
 /// theme or the config, with today's value as its default.
-const NOT_A_LOOK: &[(&str, &str, &str)] = &[(
-    "chrome/terminal/input.rs",
+///
+/// Named by the constant, not by the file it sits in, so moving the file neither breaks this list
+/// nor excuses a different constant that lands in the same file.
+const NOT_A_LOOK: &[(&str, &str)] = &[(
     "MAX_UNITS",
     "a clamp on one wheel event's delta, so a bogus device value cannot fling the scrollback",
 )];
@@ -147,10 +165,7 @@ fn named_numbers() -> Vec<String> {
         if is_test_file(&file) {
             continue;
         }
-        for (i, line) in src.lines().enumerate() {
-            if line.trim_start().starts_with("#[cfg(test)]") {
-                break;
-            }
+        for (i, line) in app_lines(&src) {
             let t = line.trim_start();
             let Some(rest) = t
                 .strip_prefix("const ")
@@ -166,9 +181,7 @@ fn named_numbers() -> Vec<String> {
             let numeric =
                 ty.trim_start().starts_with("f32 =") || ty.trim_start().starts_with("f64 =");
             if numeric
-                && !NOT_A_LOOK
-                    .iter()
-                    .any(|(f, n, _)| *f == file && *n == name.trim())
+                && !NOT_A_LOOK.iter().any(|(n, _)| *n == name.trim())
             {
                 out.push(format!("heca/src/{file}:{}  {}", i + 1, t));
             }
@@ -196,13 +209,15 @@ fn ui_code_has_no_named_look_numbers() {
 #[test]
 fn the_not_a_look_list_names_only_what_still_exists() {
     let sources = ui_sources();
-    for (file, name, _) in NOT_A_LOOK {
-        let present = sources
+    for (name, _) in NOT_A_LOOK {
+        let found = sources
             .iter()
-            .any(|(f, src)| f == file && src.contains(&format!("const {name}: f32")));
+            .filter(|(_, src)| src.contains(&format!("const {name}: f32")))
+            .count();
         assert!(
-            present,
-            "{file} no longer has `const {name}`: remove it from NOT_A_LOOK"
+            found == 1,
+            "`const {name}` is in {found} files, not one: remove it from NOT_A_LOOK if it is gone, \
+             or rename one if two share the name"
         );
     }
 }

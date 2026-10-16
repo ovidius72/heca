@@ -1,34 +1,25 @@
-// Provider foundation (plugin-02): the trait + facade are the seam first-party
-// providers (plugin-03: WorkspacesContainerProvider) and the future WASM bridge
-// implement. No provider is registered in the app yet, so parts read as dead
-// code until plugin-03 — same allow rationale as `host.rs` / `chrome/events.rs`.
-#![allow(dead_code)]
-
 //! Chrome **providers** — the built-in (later WASM-backed) contributors of chrome
 //! content, per contract §3.4.1.
 //!
 //! A provider never mutates app state directly (§2.3): it reads through
-//! [`ChromeCtx`] selectors, reacts to events, and (in later phases) dispatches
-//! actions. It declares placement metadata and builds a
-//! [`Contribution`](crate::chrome::Contribution) model; the
+//! [`ChromeCtx`] selectors, reacts to events, and dispatches actions. It declares placement metadata and builds a
+//! [`Contribution`] model; the
 //! [`ChromeHost`](crate::chrome::ChromeHost) owns mounting, ordering, and moves.
-//!
-//! **plugin-02 scope:** this defines the trait + facade (pulling plugin-03's
-//! `plugin-task-09` trait definition forward, since `ChromeHost::register` needs
-//! it). The first real implementation — `WorkspacesContainerProvider` — and the
-//! app-side registration land in plugin-03.
+
+// The provider trait and facade are the seam first-party providers and the planned plugin bridge
+// implement; parts have no caller in the app yet.
+#![allow(dead_code)]
 
 mod actions;
 pub(crate) mod workspaces;
 
 pub(crate) use actions::{
-    SEAT_ARG, bind_provider_keybindings, emit_queued, move_provider_cursor, owning_mount,
-    register_provider_actions,
+    SEAT_ARG, bind_provider_keybindings, emit_queued, owning_mount, register_provider_actions,
 };
 
 use crate::chrome::{
     ChromeEvent, ChromeIntentEmitter, ChromeSubscription, ContextMenuContribution, Contribution,
-    RegionId, RegionSet,
+    RegionId, RegionSet, SharedChromeState,
 };
 use crate::host::{App, StateView};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -47,17 +38,13 @@ pub trait Provider {
     /// The component **type** — the config namespace (`[keys.docker]`) and the identity its
     /// declared actions belong to.
     ///
-    /// Distinct from [`id`](Provider::id) on purpose (user decision, 2026-07-29): bindings and
+    /// Distinct from [`id`](Provider::id) on purpose: bindings and
     /// declared actions belong to the *type*, so writing them once covers every placement, while
     /// scroll position and chrome focus belong to each *mount*. `Hero::new()` twice is two instances
     /// of one type, not two components.
     ///
-    /// **The cursor is the component's to say.** The host keeps one per mount, which is right for a
-    /// component that navigates each placement independently — but a component whose model has a
-    /// single cursor (the workspaces tree has exactly one) must light the same row in every seating,
-    /// or two views of one thing disagree. The host brings the seatings back into step after each
-    /// provider call (`mirror_cursor_to_siblings`), so this follows the model rather than being
-    /// asserted against it (F003/P086/T365).
+    /// The cursor is not: the host keeps one per mount, so two placements of one component each
+    /// keep their own.
     ///
     /// Defaults to `id()`, which is right for a container that is only ever seated once and keeps
     /// the single-placement case free of ceremony.
@@ -94,7 +81,7 @@ pub trait Provider {
     /// focus (the workspaces tree's cursor, a list's selection), which only the provider knows.
     ///
     /// It is what `sidebar_focus` looks for: with no navigable dock mounted there is nothing to
-    /// navigate, so the action does nothing instead of expanding an empty container (F003/P011/T020).
+    /// navigate, so the action does nothing instead of expanding an empty container.
     /// Default `false` — a container that merely displays and scrolls says nothing.
     fn keyboard_navigable(&self) -> bool {
         false
@@ -117,28 +104,9 @@ pub trait Provider {
         Vec::new()
     }
 
-    /// Which context-menu path describes the row `key` — **the component naming its own row kinds**
-    /// (F003/P086/T365).
-    ///
-    /// The host resolves *which row* was right-clicked (the container under the point, the
-    /// `key` on it) and *when* to open a menu; it cannot know that `pane:7` is a pane and
-    /// `ws:2` a workspace, and must not learn. So it asks the component that wrote the key, gets
-    /// back a path, and looks that path up in the registry exactly as it does for any other. A
-    /// Docker dock answering `"docker.container"` gets a right-click menu with no host code.
-    ///
-    /// Answer by **matching the key against your own rows**, never by parsing it: a tiled pane and
-    /// a floating one are both `pane:<id>`, and only the row knows which it is.
-    ///
-    /// Default `None` — a component whose rows have no menu, which is most of them. The key is one
-    /// this component wrote, so an unrecognised one (a stale cursor, another placement's row) is
-    /// also `None`, and no menu opens rather than a wrong one.
-    fn context_path(&self, _key: &str, _ctx: &ChromeCtx<'_>) -> Option<String> {
-        None
-    }
-
-    /// Subscribe to events / register actions on activation. The returned
-    /// [`ProviderHandles`] are held by the host while the provider is mounted and
-    /// dropped (unsubscribing) on unmount. Default: no subscriptions.
+    /// **Start listening** — run once, when the app seats this dock as it starts. Subscribe to events
+    /// here (`ctx.app().on(..)`); the returned [`ProviderHandles`] are held by the host while the
+    /// dock stays seated and dropped (unsubscribing) when it goes. Default: no subscriptions.
     fn on_activate(&mut self, _ctx: &ChromeCtx<'_>) -> ProviderHandles {
         ProviderHandles::default()
     }
@@ -150,7 +118,7 @@ pub trait Provider {
     /// action that already exists, which it *binds* rather than redeclares — a component's keymap
     /// can name any action id, built-in or its own.
     ///
-    /// **The test for whether an action is yours** (user, 2026-07-29) — mechanical, and the clearest
+    /// **The test for whether an action is yours** — mechanical, and the clearest
     /// statement of the rule:
     ///
     /// > **Remove this component. Does the action still make sense?**
@@ -166,7 +134,7 @@ pub trait Provider {
     /// survives the deletion and is the app's; *"move my cursor to the next workspace row"* does not
     /// and would be this component's. Same words, different owners.
     ///
-    /// **There is no generic verb set** (user decision, 2026-07-29). An inherited
+    /// **There is no generic verb set**. An inherited
     /// up/down/select/toggle vocabulary would be dead weight for a container showing one number, so
     /// an empty list is a real and common answer — hence the default. Conventional ids (`up`,
     /// `down`, `activate`, `remove`, `add`) are encouraged so docks agree in practice, never
@@ -179,18 +147,7 @@ pub trait Provider {
         Vec::new()
     }
 
-    /// The host moved this placement's cursor to `key` — a click, an RPC call, a script.
-    ///
-    /// The key is one **this component wrote** (`IdentityExt::key`), so only it can say which row
-    /// that is; the host deliberately never parses it. Whatever the component keeps of its own — a
-    /// positional index, a domain-typed selection — reconciles here.
-    ///
-    /// Default: nothing, which is right for a component whose only cursor **is** the host's generic
-    /// one. A component that keeps no index of its own needs none of this.
-    fn cursor_moved(&self, _key: &str, _cx: &mut ProviderCx<'_>) {}
-
-    /// Keys this component asks for, as `(action id, combo(s))` — **the plugin path**
-    /// (F003/P086/T366).
+    /// Keys this component asks for, as `(action id, combo(s))` — **the plugin path**.
     ///
     /// **Empty for anything shipped with heca, and that is the point.** A core component writes its
     /// keys in `keybindings.default.toml` under `[[keys.component]]`, where they sit beside every
@@ -207,7 +164,7 @@ pub trait Provider {
 
     /// Run one of this component's declared actions.
     ///
-    /// **One entry point, not one closure per action** (user decision, 2026-07-29), for four
+    /// **One entry point, not one closure per action**, for four
     /// reasons that all point the same way:
     ///
     /// - it is the shape a WASM component is *forced* into — an id plus args crosses a boundary, a
@@ -274,14 +231,14 @@ pub struct ProviderCx<'a> {
     /// The **placement** this call is aimed at — whose cursor and scroll position are the answer.
     mount: &'a str,
     /// An `Rc` alias of the shared chrome store; reads are cheap signal `get`s.
-    store: crate::chrome::SharedChromeState,
+    store: SharedChromeState,
     /// What the component asked the host to do, in order, applied after `perform` returns.
     queued: Vec<crate::chrome::Intent>,
 }
 
 impl<'a> ProviderCx<'a> {
     /// Build a context aimed at `mount`, over an alias of the shared store.
-    pub fn new(mount: &'a str, store: crate::chrome::SharedChromeState) -> Self {
+    pub fn new(mount: &'a str, store: SharedChromeState) -> Self {
         Self {
             mount,
             store,
@@ -299,7 +256,7 @@ impl<'a> ProviderCx<'a> {
         StateView::over(&self.store)
     }
 
-    /// **This placement's** selected row, as the row declared it (`key`, F003/P085/T354).
+    /// **This placement's** selected row, as the row declared it (`key`).
     ///
     /// Per mount, like the scroll offset and the focus beside it: two placements of one container
     /// have two cursors, so "the selection" is only ever a question about *one* seating. `None`
@@ -351,11 +308,11 @@ impl<'a> ProviderCx<'a> {
 /// merely observe ([`ChromeCtx::new`], e.g. at [`Provider::on_activate`]) has none,
 /// because there is no frame in flight to read a theme from.
 ///
-/// **Everything here must be true for ANY component** (F003/P086/T367). The frame's theme and the
+/// **Everything here must be true for ANY component**. The frame's theme and the
 /// intent sink are: every component paints in the current theme and reports what the user did. A
 /// component's *model* is not, and neither is anything derived from one domain — those live on that
-/// component's own state, where only it can see them. This carried the **workspace tree** and the
-/// **program catalog** until 2026-07-30, so a Docker dock, a notes dock and a label showing one
+/// component's own state, where only it can see them. This used to carry the **workspace tree** and
+/// the **program catalog**, so a Docker dock, a notes dock and a label showing one
 /// number were each handed a workspaces model through the one context they all share. A new field
 /// here has to answer the same question first.
 struct RenderInputs<'a> {
@@ -370,11 +327,8 @@ struct RenderInputs<'a> {
     catalog: &'a crate::actions::ActionCatalog,
 }
 
-/// The provider/plugin-facing facade (contract §3.4.1). It *extends* the shipped
-/// read/observe `App` host API (`heca/src/host.rs`) with the write/contribute
-/// halves deferred to §3.5 rows 3–10. plugin-02 wired the read/observe half;
-/// plugin-03 adds the render-pass selectors below; `actions` / `overlay` / `regions`
-/// arrive in plugin-04/05.
+/// The provider/plugin-facing facade: the read/observe host API, plus the frame's read-only
+/// inputs during a render pass.
 ///
 /// Everything reachable here is **read-only**: a provider projects app state into
 /// widgets and reports user actions as
@@ -386,28 +340,28 @@ pub struct ChromeCtx<'a> {
     app: App,
     /// `Some` during a render pass; `None` for an observe-only context.
     render: Option<RenderInputs<'a>>,
-    // actions: ActionDispatch,   // plugin-04/05
-    // overlay: OverlayHandle,    // plugin-05 / Phase 8 (§2.7.1)
-    // regions: RegionHandle,     // plugin-05
 }
 
 impl<'a> ChromeCtx<'a> {
     /// An **observe-only** context over the app's host facade: state selectors and
     /// event subscriptions, no render inputs. Used outside a frame (activation).
-    pub fn new(app: App) -> Self {
-        Self { app, render: None }
+    pub fn new(store: &SharedChromeState) -> Self {
+        Self {
+            app: App::new(store),
+            render: None,
+        }
     }
 
     /// A context for a **render pass**, carrying the frame's read-only inputs so a
     /// container's `build` closure can project them. Built by the chrome render path.
     pub(crate) fn for_build(
-        app: App,
+        store: &SharedChromeState,
         theme: &'a GuiTheme,
         emit: &'a ChromeIntentEmitter,
         catalog: &'a crate::actions::ActionCatalog,
     ) -> Self {
         Self {
-            app,
+            app: App::new(store),
             render: Some(RenderInputs {
                 theme,
                 emit,
@@ -467,7 +421,7 @@ mod tests {
     use super::*;
     use crate::actions::ActionMeta;
     use crate::app::interaction::ActionPolicy;
-    use crate::chrome::{Intent, SharedChromeState};
+    use crate::chrome::Intent;
     use heca_grid_ui::Handled;
 
     /// A dock that declares one action and acts on its own selection — the shape the phase's
@@ -600,7 +554,7 @@ mod tests {
         );
     }
 
-    /// **A component that knows nothing about panes builds with the same context** (F003/P086/T367).
+    /// **A component that knows nothing about panes builds with the same context**.
     ///
     /// `ChromeCtx::for_build` used to carry the workspace tree and the program catalog, so this
     /// dock — which shows one number — was handed another component's model through the contract
@@ -615,7 +569,7 @@ mod tests {
             |_, _| {},
         );
         let catalog = crate::actions::ActionCatalog::with_builtins();
-        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let ctx = ChromeCtx::for_build(&store, &theme, &emit, &catalog);
 
         let Contribution::Container(c) = Quiet.build_contribution(&ctx) else {
             panic!("the quiet dock contributes a container");

@@ -88,10 +88,10 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     crate::app::places::sync(state);
     crate::chrome::seat_workspace(state);
     // A terminal is kept only while something owns it: a pane that is shown, or a named terminal.
-    crate::chrome::terminal::retain_owned(state);
+    crate::chrome::panes::terminal::retain_owned(state);
     // The terminals extensions declared since the last frame are started now, so the scenes
     // painted next already place them.
-    crate::chrome::terminal::start_declared(state);
+    crate::chrome::panes::terminal::start_declared(state);
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;

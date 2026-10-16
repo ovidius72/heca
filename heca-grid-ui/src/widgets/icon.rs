@@ -12,7 +12,7 @@
 //! control — so an icon composed inside a [`Button`](super::Button) tints with that button's
 //! hover/disabled state — falling back to the theme foreground when there is none. The secondary
 //! layer follows the primary at the theme's
-//! [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha) unless set via
+//! [`icon_secondary_alpha`](heca_theme::Theme::icon_secondary_alpha) unless set via
 //! [`secondary_color`](Icon::secondary_color). Only the font *bytes* are static (embedded); the
 //! look is configurable.
 
@@ -105,7 +105,7 @@ impl Glyph {
     /// identity (`Component::text_summary`). Only `Label`, `Badge`, `BadgeButton` and `Tag` supplied
     /// one before, so every icon-only button — a pane-header action, a rail cell, a close button —
     /// resolved to no identity at all, and nothing about it could be remembered: not a hint letter,
-    /// not a cursor position (F003/P082/T444).
+    /// not a cursor position.
     ///
     /// **Exhaustive on purpose.** A new glyph does not compile until it is named here, which is what
     /// keeps this in step with [`Glyph::ALL`]. The host-side name→glyph map was a hand-written

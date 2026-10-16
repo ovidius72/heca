@@ -42,8 +42,8 @@ use surfaces::bind_global_focus;
 /// Build **every** keymap layer, and the reverse index over all of them, from one config.
 ///
 /// The single entry point, so startup and `prefix+Shift+r` cannot build a different set — and so
-/// [`Keymaps::by_action`] is filled by the same pass that binds, and can never describe a layer that
-/// was not built (F003/P086/T366).
+/// [`Keymaps::by_action`](crate::keymap::Keymaps::by_action) is filled by the same pass that binds, and can
+/// never describe a layer that was not built.
 pub fn build_keymaps(
     config: &heca_config::theme::Config,
     conflicts: &mut Conflicts,

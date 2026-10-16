@@ -14,7 +14,7 @@ pub trait Parent: Style {
 }
 
 /// What every builder is, whatever it takes to construct: a [`Style`] over its node, and a way back
-/// into the [`ViewNode`]. Written once, so a builder made by either macro below cannot differ.
+/// into the [`ViewNode`](crate::ViewNode). Written once, so a builder made by either macro below cannot differ.
 macro_rules! builder_impls {
     ($name:ident) => {
         impl Style for $name {

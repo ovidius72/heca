@@ -28,7 +28,7 @@
 //! the host points at its own overlay-close path).
 //!
 //! **Presentation is composed, not owned:** the `Dialog` mounts a base
-//! [`Overlay`](super::Overlay) (blocking layer — scrim, drop shadow, panel fill, bracket
+//! [`Overlay`] (blocking layer — scrim, drop shadow, panel fill, bracket
 //! reticle, viewport centering) and puts its padded `[title, body?, action-row?]` panel inside
 //! it. The `Overlay` owns the layer chrome and geometry; the `Dialog` owns the content and the
 //! behaviour (focus trap, keyboard, dismissal policy) and intercepts events before the
@@ -64,7 +64,7 @@ pub const DIALOG_BTN_GAP: Spacing = Spacing::Sm;
 /// A centered overlay panel over a scrim, holding real child components.
 ///
 /// Structure: the `Dialog` base is a full-viewport passthrough whose single child is a
-/// **blocking [`Overlay`](super::Overlay)** (scrim + chrome + centering), whose single child
+/// **blocking [`Overlay`]** (scrim + chrome + centering), whose single child
 /// is the **panel** — a padded column of `[title, body?, action-row?]`. The action row is a
 /// right-aligned [`Flex`] row of the caller's [`Button`](super::Button)s.
 pub struct Dialog {
@@ -145,7 +145,7 @@ impl Dialog {
     /// ```
     ///
     /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Percent`](Length::Percent)
-    /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
+    /// resolves against the **viewport** (the composed [`Overlay`] fills it).
     #[heca_grid_ui_macros::host_only(
         "takes more than one value, which a single property cannot carry"
     )]
@@ -319,7 +319,7 @@ impl Dialog {
     /// confirming.set(true);   // it appears
     /// ```
     ///
-    /// Delegates to the composed [`Overlay`](super::Overlay), which holds the state.
+    /// Delegates to the composed [`Overlay`], which holds the state.
     #[heca_grid_ui_macros::host_only(
         "a live signal; a description carries a starting value, `open`"
     )]
@@ -356,11 +356,10 @@ impl Dialog {
 
     /// Move keyboard focus to the next focusable descendant (wraps).
     ///
-    /// **Delegated to the composed [`Overlay`](super::Overlay), which owns the keyboard.** This
+    /// **Delegated to the composed [`Overlay`], which owns the keyboard.** This
     /// used to drive a `FocusManager` of the dialog's own — a second position over the same panel,
     /// so Tab (the overlay's) and the arrow keys (this one) each thought the keyboard was
-    /// somewhere else and one of them was always wrong. One manager, one position
-    /// (F003/P097/T502).
+    /// somewhere else and one of them was always wrong. One manager, one position.
     fn focus_next(&mut self) {
         self.base.children[0].advance_focus(true);
     }
@@ -904,7 +903,7 @@ mod tab_repro {
     use crate::component::GridKey;
     use crate::widgets::Button;
 
-    /// **The first Tab moves the keyboard** (F003/P097/T502).
+    /// **The first Tab moves the keyboard**.
     ///
     /// It did not. Opening a dialog quietly focused its first button through a `FocusManager` the
     /// **dialog** owned, while Tab was answered by the one the composed **overlay** owns — two

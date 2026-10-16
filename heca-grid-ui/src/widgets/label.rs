@@ -41,7 +41,7 @@ const STRIKE_OFFSET_RATIO: f32 = 0.06;
 /// And [`None`](Ellipsis::None), which is the *opt-out*: keep the natural width and overflow. It
 /// used to be the default, and nobody chose it — it was what the field held before truncation
 /// existed. The result was that every author who might ever be squeezed had to know to ask for
-/// cutting, and the ones who did not shipped text drawn across its neighbours (F003/P082/T438).
+/// cutting, and the ones who did not shipped text drawn across its neighbours.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, heca_grid_ui_macros::PropName)]
 pub enum Ellipsis {
     /// Keep the head, cut the tail: `Move focus to the col…`. **The default**, because most text is
@@ -150,7 +150,7 @@ impl Label {
     /// word. Both are gone: shrinking is the default now, and the label answers that question
     /// honestly as **one character**. Forcing the floor to zero was the sledgehammer, and it cost a
     /// `Card` its title — a label whose floor is nothing resolves to nothing and draws no text at
-    /// all (F003/P082/T438).
+    /// all.
     ///
     /// The cut uses the **same** monospace cell the measure does ([`MONO_ADVANCE_RATIO`]), so the
     /// text ends exactly where the box does, and it is recomputed from the current bounds at every
@@ -168,7 +168,7 @@ impl Label {
     /// against a box the engine has already decided; a wrapped label's **height is a function of
     /// its resolved width**, which no fixed size can express. So a wrapping label reports no height
     /// of its own and is measured through taffy's measure path instead
-    /// ([`Component::measure_text`](crate::component::Component::measure_text)) — the first widget
+    /// ([`Component::measure_text`]) — the first widget
     /// in this crate to need it.
     ///
     /// Like [`truncate`](Self::truncate) it declares itself shrinkable (`flex_shrink = 1`,
@@ -283,8 +283,8 @@ impl Label {
     ///
     /// The single answer to "what is on screen", so the glyphs, the rects the decorations follow,
     /// and any test all agree. The wrap is recomputed from the current bounds at every paint, using
-    /// the same [`wrap_lines`] the layout measure used to decide the height — two spellings would
-    /// put the text on a different number of lines than the box was sized for.
+    /// the same [`wrap_lines`](crate::font::wrap_lines) the layout measure used to decide the height — two
+    /// spellings would put the text on a different number of lines than the box was sized for.
     fn drawn_lines(&self) -> Vec<String> {
         self.drawn_indexed()
             .into_iter()
@@ -323,7 +323,7 @@ impl Label {
         // **No box yet is not an empty box.** Bounds are zero until the layout pass fills them in,
         // and cutting to a zero-width box draws nothing at all — so a tree painted before it is laid
         // out would come out blank rather than merely mis-sized. Degenerate geometry means "no
-        // answer yet" here exactly as it does in the picker's visibility rules (F003/P082/T438).
+        // answer yet" here exactly as it does in the picker's visibility rules.
         if self.base.bounds.size.w <= 0.0 {
             return vec![whole(&chars)];
         }

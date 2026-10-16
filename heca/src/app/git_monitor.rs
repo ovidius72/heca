@@ -1,7 +1,7 @@
 //! Per-frame git metadata monitor for pane runtime state.
 //!
-//! This complements `process_monitor`: once Phase 2/3 populate canonical
-//! `Pane.runtime.cwd`, this module resolves repo metadata for that cwd,
+//! This complements `process_monitor`: once canonical `Pane.runtime.cwd` is
+//! populated, this module resolves repo metadata for that cwd,
 //! caches it by repo root, and projects it back onto canonical
 //! `Pane.runtime.git` before the chrome store mirrors runtime state.
 
@@ -152,22 +152,9 @@ fn sync_pane_git_from_cwds_impl<P: GitProvider>(
         live_roots: &mut live_roots,
     };
 
-    for ws in &mut session.workspaces {
-        for col in &mut ws.scrolling.columns {
-            for pane in &mut col.panes {
-                live_panes.insert(pane.id);
-                sync_one_pane_git(&mut ctx, pane.id, &pane.runtime.cwd, &mut pane.runtime.git);
-            }
-        }
-        for float in &mut ws.floating_panes {
-            live_panes.insert(float.pane.id);
-            sync_one_pane_git(
-                &mut ctx,
-                float.pane.id,
-                &float.pane.runtime.cwd,
-                &mut float.pane.runtime.git,
-            );
-        }
+    for pane in session.workspaces.iter_mut().flat_map(|ws| ws.panes_mut()) {
+        live_panes.insert(pane.id);
+        sync_one_pane_git(&mut ctx, pane.id, &pane.runtime.cwd, &mut pane.runtime.git);
     }
 
     ctx.cache
@@ -294,7 +281,7 @@ fn sync_one_pane_git<P: GitProvider>(
     }
 
     // The `pane.git.changed` event is emitted by the existing chokepoint one
-    // step later: `sync_pane_runtime_state` calls `set_pane_runtime`, whose git
+    // step later: `sync_pane_runtime_state` calls `PaneRuntimeStore::set_runtime`, whose git
     // change guard emits `ChromeEvent::PaneGitChanged` on real change only.
     *git = ctx.cache.repos.get(&root).map(|entry| entry.info.clone());
 }

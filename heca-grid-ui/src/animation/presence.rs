@@ -19,7 +19,7 @@ use super::{Animate, AnimationFrame};
 ///   whenever what it shows changes underneath it; replaying the arrival there made the exposé zoom
 ///   open on every keystroke.
 /// - **A surface on its way out is not resurrected.** Its exit was already decided; arriving
-///   mid-exit made the map snap back to full opacity and start leaving again (2026-08-19). The
+///   mid-exit made the map snap back to full opacity and start leaving again. The
 ///   exposé hits this on the ordinary path: it dismisses itself and *then* focuses the pane you
 ///   chose, and focusing rebuilds it.
 ///

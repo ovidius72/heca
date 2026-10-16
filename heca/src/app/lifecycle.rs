@@ -197,13 +197,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         .layers
         .retire_finished_exits(&mut state.window_root, &leaving_before);
     // A surface that opened under a pointer that is not moving covers what the pointer was on:
-    // hover is only worked out on a move, so it is prompted here (F004/P084/T529).
+    // hover is only worked out on a move, so it is prompted here.
     if state.layers.visible_set_changed() {
         crate::app::events::recheck_pointer_under_surfaces(state);
     }
 
-    // Auto-dismiss notifications past their deadline — F009/T202. `expire_due` only touches the
-    // store's own `Signal<Vec<ToastSpec>>` (F009/T208); it is not part of `chrome_runtime_changed`,
+    // Auto-dismiss notifications past their deadline. `expire_due` only touches the
+    // store's own `Signal<Vec<ToastSpec>>`; it is not part of `chrome_runtime_changed`,
     // which tracks the chrome_tree's signature, a tree the toast surface is never part of.
     //
     // **The pointer resting on a card holds the whole stack still**, and the time that costs is

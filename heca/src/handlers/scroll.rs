@@ -5,7 +5,7 @@ use crate::app::terminal_host::{
     move_focused_terminal_selection,
 };
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::terminal::Page;
+use crate::chrome::panes::terminal::Page;
 use crate::input::WmAction;
 
 /// How many rows a page of the keyboard's terminal is — the fallback grid's when there is no

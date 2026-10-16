@@ -196,7 +196,7 @@ mod tests {
     /// **A finished leave rests small.** The scale is where the surface *is*, and one that has
     /// zoomed away has not come back — resting at life size snapped the exposé's cards to full for
     /// the last frames of an exit whose dissolve was still running, a flash right before they
-    /// vanished (F003/P082/T327).
+    /// vanished.
     #[test]
     fn a_finished_leave_rests_at_from_not_back_at_life_size() {
         let mut z = Zoom::new().from(0.8).seconds(0.2);

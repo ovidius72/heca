@@ -1,12 +1,12 @@
 //! **What a terminal's input means** — the policy behind the typed messages a terminal sends
-//! (`chrome::terminal::TerminalInput`): buttons and moves, and the window gestures that
+//! (`chrome::panes::terminal::TerminalInput`): buttons and moves, and the window gestures that
 //! may have claimed the same press.
 
 use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionSource};
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::terminal::{Cell, TerminalId};
+use crate::chrome::panes::terminal::{Cell, TerminalId};
 use crate::input::WmAction;
 use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind,
@@ -126,8 +126,8 @@ fn on_release(
 /// so the picture and the program agree on what a row is.
 fn on_resize(
     state: &mut AppState,
-    terminal: crate::chrome::terminal::TerminalId,
-    grid: crate::chrome::terminal::Grid,
+    terminal: crate::chrome::panes::terminal::TerminalId,
+    grid: crate::chrome::panes::terminal::Grid,
 ) {
     if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
         backend.set_cell_size(grid.cell_w, grid.cell_h);
@@ -196,9 +196,9 @@ fn window_gesture_has_it(state: &AppState) -> bool {
 }
 
 /// **The left button came up, anywhere.** (A release outside the window reaches no widget, because
-/// the library drops a capture when the pointer leaves — until P084(F004)/T534 lands, this one
-/// window-level rule ends the drag; then the selection captures the pointer like a scrollbar's
-/// thumb and this goes.) A host selection drag ends where the button does, even
+/// the library drops a capture when the pointer leaves — so this one window-level rule ends the
+/// drag. Once a capture survives the pointer leaving, the selection captures the pointer like a
+/// scrollbar's thumb and this goes.) A host selection drag ends where the button does, even
 /// when the pointer has left the terminal it started in: the selection is confirmed up to the last
 /// cell it reached and copied, as a complete gesture (select, release, copy) — the same as `y` does.
 pub(crate) fn on_left_release(state: &mut AppState, registry: &ActionRegistry) {
@@ -231,10 +231,10 @@ fn backend_button(button: PointerButton) -> Option<BackendMouseButton> {
 pub(crate) fn on_terminal_input(
     state: &mut AppState,
     registry: &ActionRegistry,
-    terminal: crate::chrome::terminal::TerminalId,
-    input: crate::chrome::terminal::TerminalInput,
+    terminal: crate::chrome::panes::terminal::TerminalId,
+    input: crate::chrome::panes::terminal::TerminalInput,
 ) {
-    use crate::chrome::terminal::TerminalInput;
+    use crate::chrome::panes::terminal::TerminalInput;
     // Every terminal's, whoever owns it. Only a pointer move asks whether a pane owns it.
     match input {
         // Its grid and its scrollback.

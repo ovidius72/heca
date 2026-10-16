@@ -29,8 +29,8 @@ reinventing something, and it will be rejected.
      the showcase.
    - **`heca/src/components/`** — app-side compositions shared by a second surface
      (`FolderLine`, `PaneName`). Its `mod.rs` carries the widget-vs-component test.
-   - **`heca/src/chrome/<surface>/`** — components still living beside their only surface
-     (`expose/pane_card.rs`, `providers/workspaces/pane_row.rs`, `pane/shell.rs`). A component is
+   - **`heca/src/chrome/<group>/<surface>/`** — components still living beside their only surface
+     (`surfaces/expose/pane_card.rs`, `providers/workspaces/pane_row.rs`, `panes/pane/shell.rs`). A component is
      born next to its surface and moves up the day a **second** caller wants it.
 
    **Then compose, the way HTML or React is written** — elements nested in elements, each sizing
@@ -69,8 +69,8 @@ reinventing something, and it will be rejected.
 1. **One file, one thing — and the line count is the smoke alarm, not the rule.** A file is what
    someone has to hold in their head to change it safely. **Aim under 400 lines; above 600, stop
    and agree a split** before adding to it. Those numbers come from this codebase, not from taste:
-   components written to § 0b-bis land at 150–450 on their own (`chrome/expose/` is 149 / 282 /
-   327 / 374 / 433, `chrome/pane/` is 39 / 60 / 152 / 200), and every file above 600 here is a file
+   components written to § 0b-bis land at 150–450 on their own (`chrome/surfaces/expose/` is 149 / 282 /
+   327 / 374 / 433, `chrome/panes/pane/` is 39 / 60 / 152 / 200), and every file above 600 here is a file
    doing several jobs — `terminal_render.rs` (1700) interleaves the pane shell with the GPU passes,
    and a chrome file holding host logic and UI composition together is the same defect. Length is
    what makes you look; **the defect is always the second job**, and no line limit catches a
@@ -139,11 +139,18 @@ crate — move it down, don't keep it up here.
 **Where a component lives — beside the surface that uses it**:
 
 ```
-heca/src/chrome/<surface>/          ← the surface's own components, one file each
+heca/src/chrome/<group>/<surface>/  ← the surface's own components, one file each
 ├── mod.rs                            host wiring (the part that needs `AppState`)
 ├── model.rs                          the surface's data, reduced from the session
 └── <thing>_card.rs, <thing>_row.rs   the components
 ```
+
+**`chrome/` is grouped by job, and nothing sits loose in it but `mod.rs`.** A new file goes in the
+group whose job it does: `docks/` (placing and running docks), `input/` (a gesture becoming an
+action), `panes/` (what is drawn for the session), `surfaces/` (what is drawn over the panes),
+`window/` (the window tree, scene and theme), `state/` (the shared chrome state), `hint/` (pick
+letters). A module with more than one file is a folder with a `mod.rs` — never a `name.rs` beside a
+`name/`.
 
 It moves up to **`heca/src/components/`** the day a **second** surface needs it —
 DRY applied when the duplication is real, not when it is predicted. Until something is shared, a
@@ -196,7 +203,7 @@ at every window size. (`grow` alone always fills its container — that is what 
 
 #### How to use one
 
-Import it from its surface's module (`crate::chrome::<surface>`), or from `crate::components` once it
+Import it from its surface's module (`crate::chrome::<group>::<surface>`), or from `crate::components` once it
 is shared. **Never re-compose the same shape inline** in `chrome/`, a provider, the sidebar or a
 plugin — that is how one row shape became unreachable outside the file that drew it. Need a
 variation? Add a builder to the component. Copying it is the bug this rule exists to stop.
@@ -208,14 +215,14 @@ the moment it goes to `heca/src/components/` — not a moment earlier, and never
 
 § 0b says *what* a component is and *where* it lives. This says **how to build one**. It is a
 recipe: follow it in order. The worked example throughout is the **exposé**
-(`heca/src/chrome/expose/`) — the first surface built this way and the one to read
+(`heca/src/chrome/surfaces/expose/`) — the first surface built this way and the one to read
 if a rule below is unclear.
 
 **A surface is a folder, not a function.** One file per component, smallest first, exactly the way a
 React app splits a screen:
 
 ```text
-heca/src/chrome/<surface>/
+heca/src/chrome/<group>/<surface>/
 ├── mod.rs            host wiring — the ONLY file that may touch AppState
 ├── model.rs          the session reduced to plain data
 ├── <leaf>_card.rs    the smallest piece            (expose: pane_card.rs)
@@ -453,7 +460,7 @@ are already 16 and they are being deleted.
 
 ### 2. Behavior/keys → register through the registries. NEVER hardcode
 
-- **Every action goes through `ActionRegistry`** (`heca/src/actions/registry.rs`): `registry.register(...)` +
+- **Every action goes through `ActionRegistry`** (`heca/src/actions/registry/mod.rs`): `registry.register(...)` +
   `registry.execute(...)`. **Registry bypasses are bugs.** No direct state mutation from input code.
 - **Every keybinding goes through `KeymapRegistry`** (`heca/src/keymap.rs`) and is **configurable in
   `config.toml`** — never hardcode a key→behavior mapping in handlers. heca is tmux-like: bindings
@@ -663,7 +670,7 @@ Keyboard Input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry �
          └── NamedKey mapping (Enter, Tab, ArrowLeft, ...)
 ```
 
-### ActionRegistry (`heca/src/actions/registry.rs`)
+### ActionRegistry (`heca/src/actions/registry/mod.rs`)
 
 The central dispatch for all WM actions:
 
@@ -898,8 +905,8 @@ both empty ⇒ no bar and no reserved space. User-facing list of supported value
 lives in `README.md` ("Pane Info Bar"); keep it in sync when you change the enums.
 
 Both are **named, not typed**: `title_segments` (chips) and `title_actions` (buttons) are lists of
-names, and which names exist is a registry in `heca/src/chrome/pane_items/` (F012/T520) — heca's own
-and any a program built on heca adds (`pro.pane_button("show_notes")`, `pro.pane_chip("status", ..)`).
+names, and which names exist is a registry in `heca/src/chrome/panes/pane_items/` (F012/T520) — heca's own
+and any a program built on heca adds (`demo.pane_button("show_notes")`, `demo.pane_chip("status", ..)`).
 An addition is a default: it shows while the list is still heca's own, and once the user writes
 their own list only their list counts (an omitted one is said once). The rules for turning a list of
 names into items are written once, in `pane_items/listing.rs`.
@@ -907,11 +914,11 @@ names into items are written once, in `pane_items/listing.rs`.
 How another crate adds any of this: [`docs/extending-heca.md`](docs/extending-heca.md).
 
 The sidebar's pane row is the third kind: `[appearance.sidebar] pane_lines` (`cwd`, `git`, and any
-`pro.pane_line(..)` adds). A line is a self-contained widget that subscribes to its pane's facts and
+`demo.pane_line(..)` adds). A line is a self-contained widget that subscribes to its pane's facts and
 rewrites itself in place (`heca/src/providers/workspaces/row_lines.rs`); registering one is the same
 `PaneLineDef` heca's own two use.
 
-**To add a new chip:** register it in `builtin_chips()` (`heca/src/chrome/pane_items/chips.rs`) — a
+**To add a new chip:** register it in `builtin_chips()` (`heca/src/chrome/panes/pane_items/chips.rs`) — a
 name, and a function of `PaneFacts` (plain data about the pane; add a named field there if it needs
 one) returning a `PaneChip` or `None`. A chip with no data for a pane must return `None` (no empty
 pill). A chip whose text is a path says `Fit::PathLeft` so it is what gives way when the bar is
@@ -919,13 +926,13 @@ narrow. Then update `README.md` (supported-chips table) + `config.default.toml`.
 
 **To add a new button:**
 
-1. Register it in `builtin_buttons()` (`heca/src/chrome/pane_items/buttons.rs`) → a name, the
+1. Register it in `builtin_buttons()` (`heca/src/chrome/panes/pane_items/buttons.rs`) → a name, the
    action name its tooltip/danger read, its words, the catalog action its icon comes from, and what a
    click sends. Reuse an **existing** `WmAction` (e.g. `Float` → `WmAction::Float`, `zoom` →
    `WmAction::ZoomColumn`); do not invent a parallel code path. The tooltip (and its keybind) is then
    automatic — see **§ Chrome buttons** below. No new keymap entry needed if the action already has
    a binding. (A button for an action a program built on heca declared needs none of this: it is
-   `pro.pane_button("short")`, and the action says everything else.)
+   `demo.pane_button("short")`, and the action says everything else.)
 2. Steps 3–4 below.
 
 3. Per the action checklist, the action must already be reachable from keyboard +
@@ -947,7 +954,7 @@ tip. This is the one pattern; follow it for any new button.
 > layer, surface, overlay/modal, or a button on a new surface.** Never add a bespoke
 > visibility filter — model the surface instead.
 
-**1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/pane_header/shortcuts.rs`):
+**1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/panes/pane_header/shortcuts.rs`):
 
 ```rust
 row = row.child(action_tooltip(button, action_name, label, &state.action_shortcuts));
@@ -1226,7 +1233,7 @@ The two effect tokens are **independent**; do not conflate them:
 
 Both are `[appearance]`-overridable (`AppearanceConfig::effective_glow_size` /
 `effective_intensity`; unset → theme wins, set → overrides) and applied at the
-single choke point `chrome_gui_theme(state)` in `heca/src/chrome/theme.rs`.
+single choke point `chrome_gui_theme(state)` in `heca/src/chrome/window/theme.rs`.
 
 ---
 
@@ -1309,8 +1316,8 @@ remembered. When you touch a capability, check its neighbours for the same shape
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
 
-- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/plugins.md`](docs/plugins.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
-- **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
+- **`ViewNode`** (`heca-view/src/node.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/plugins.md`](docs/plugins.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
+- **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca-view-realize/src/lib.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
 
 **THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
 
@@ -1334,9 +1341,9 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 | Question | Answer — do NOT re-propose |
 | --- | --- |
 | Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / theme wiring). |
-| Can a widget constructor take a `ViewNode` — `Button::new(ViewNode)`? | **NO — impossible.** `ViewNode` lives in the **app** (`heca/src/chrome/view.rs`); the library cannot see it. |
+| Can a widget constructor take a `ViewNode` — `Button::new(ViewNode)`? | **NO — impossible.** `ViewNode` lives in `heca-view`, which `heca-grid-ui` does not depend on; the library cannot see it. |
 | Then move `ViewNode` down into the library? | **NO.** `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native chrome depends on both — `.on_activate(move \|\| …)`, `row.state().set(true)`, `label.text_signal().set(…)` — which update **in place, with no rebuild**. Routing all native UI through `ViewNode` turns every state change into a full rebuild and fights the reactive chrome store. **The library keeps its builder API.** |
-| Is `realize` the only `ViewNode`→widget path? | **YES.** One bridge, app-side (`heca/src/chrome/realize.rs`). |
+| Is `realize` the only `ViewNode`→widget path? | **YES.** One bridge (`heca-view-realize`). |
 | Do widgets hold children, or hand-draw content? | **CHILDREN.** Hand-drawn content is a refactor target (THE RULE above). |
 | What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
 | How does a **realized** subtree enter a widget? | **Through the slot's own builder** — `.child(..)`, `Dialog::body(..)`, `DockFrame::header(..)`. They take `impl IntoComponent`, which covers a widget and a `Box<dyn Component>` alike, and hand an already-boxed subtree through rather than boxing it twice. **The sixteen `*_boxed` twins are DELETED; do not add a seventeenth.** A new slot takes `impl IntoComponent` — that is the whole rule. |
@@ -1413,11 +1420,17 @@ Button::destructive("Delete")
   same door (`focus_scope` / `release_scope`, **host-only**: they take a region name, which a plugin
   never passes — a plugin calls a method on its own widget). The chrome store hears only an
   announcement, once per change (`ContainerFocusChanged`), and the memory of which dock held it
-  last. Never add a flag, signal or store field that says where the keyboard is.
+  last. Never add a flag, signal or store field that says where the keyboard is. **A dock with
+  its own cursor keeps the keyboard itself** (`FocusScope::keeps_keyboard`, set by the host from
+  `Provider::keyboard_navigable`): a press or a pick on a row clicks the row and leaves the keyboard
+  with the dock, so `Enter` acts on the cursor's row through the dock's own bindings — never on the
+  row clicked last. Do not hand the keyboard to a row to make a key act on it.
 - **A press focuses the deepest focusable under it, in every tree, with nothing declared** — the
   browser's rule, done once in the pointer router (`focus::focus_on_press`). A press on nothing
   focusable changes nothing; a press inside the widget that already holds the keyboard changes
-  nothing; otherwise the previous holder lets go. Do not add `focus_at`, a `.focus_on_press()`
+  nothing; a press inside a region that keeps the keyboard gives it to that region; otherwise the
+  previous holder lets go. **A letter pick is a press** (`hint::fire_hint` runs this same rule), so
+  anything that holds the keyboard gets a letter and takes the keyboard when picked. Do not add `focus_at`, a `.focus_on_press()`
   builder or a trapped variant — the copies of this rule that lived in `Overlay` and `Dialog` are
   deleted.
 - **Typed text is `Event::TextInput`, not a key.** A field types from it and from nothing else; a
@@ -1747,7 +1760,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
    index 0, which is how a bare `delete_workspace` used to delete workspace 0.
 3. Add builder support in `build_action()` (`heca/src/input/build.rs`) when the action is parameterized
 4. Create handler in the matching file under `heca/src/handlers/` (the folder's `mod.rs` re-exports it)
-5. Register in `build_registry()` in `heca/src/app/registry/actions.rs`
+5. Register in `build_registry()` in `heca/src/app/registry/actions/mod.rs`
 6. Add default binding in `keybindings.default.toml` (the embedded default keymap). An action with a
    **required argument gets none** — a key cannot supply a pane id.
 7. Add its descriptor to the file for its category under `heca/src/actions/builtins/` (the list order is the palette order)
@@ -1818,8 +1831,9 @@ DRY_RUN=1 ./scripts/lint-changed.sh    # print the crate list, run nothing
 # Full workspace lint -- only before opening a PR, not in the edit loop.
 cargo clippy --workspace --all-targets --all-features
 
-# Docs -- before opening a PR: a broken or private doc link fails the build.
-cargo doc --workspace --no-deps
+# Docs -- before opening a PR: a broken or private doc link fails the build. Private items too,
+# so a link in a private item's comment is checked like any other.
+cargo doc --workspace --no-deps --document-private-items
 
 # Fix auto-fixable issues
 cargo clippy --fix --workspace --all-targets --all-features

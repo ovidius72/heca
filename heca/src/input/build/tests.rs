@@ -117,7 +117,7 @@ fn place_pane_builds_from_its_name_and_args() {
 }
 
 /// `focus_dock` is **one** action with two doors: a bare name for the keybinding (which opens the
-/// pick) and a `dock` argument for a caller that already knows the answer (F003/P011/T020).
+/// pick) and a `dock` argument for a caller that already knows the answer.
 ///
 /// The bare form is only legal because the argument is **optional** — an action with a required
 /// argument must not resolve from its name alone (`every_action_that_needs_a_target_refuses_to_

@@ -103,7 +103,7 @@ fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
 /// **A fixed-size box keeps its shape when the row runs out of room.** Everything gives way by
 /// default, which is right for text and for a card carrying a design width — and wrong for a
 /// circle: a 9px status dot in a tight sidebar row was squeezed to a 3px sliver, because there is
-/// no narrower version of a dot, only a deformed one (F003/P096/T483).
+/// no narrower version of a dot, only a deformed one.
 #[test]
 fn a_dot_stays_round_in_a_row_too_narrow_for_it() {
     use heca_grid_ui::{Component, DotStatus, Flex, Label, LayoutExt, Length, Parent, StatusDot};
@@ -125,7 +125,7 @@ fn a_dot_stays_round_in_a_row_too_narrow_for_it() {
 
 /// **A wrapper gives way exactly as much as what it wraps.** The app shows a pane's status through
 /// a `Visibility`, and the wrapper was squeezed where its content would not be — so the dot inside
-/// it was drawn as a sliver. A wrapper has no opinion of its own (F003/P096/T483).
+/// it was drawn as a sliver. A wrapper has no opinion of its own.
 #[test]
 fn a_wrapped_dot_is_still_round() {
     use heca_grid_ui::{
@@ -147,7 +147,7 @@ fn a_wrapped_dot_is_still_round() {
 /// **A hidden wrapper takes no space.** A sidebar row carries four status dots and shows one; a
 /// wrapper takes its size from what it wraps, so the three hidden ones went on occupying a dot's
 /// width each — four dots in a slot sized for one, and the visible dot drawn over the icon beside
-/// it (F003/P096/T483).
+/// it.
 #[test]
 fn a_hidden_wrapper_leaves_the_slot_to_the_visible_one() {
     use heca_grid_ui::{

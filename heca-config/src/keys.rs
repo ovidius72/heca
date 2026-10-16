@@ -42,8 +42,8 @@ impl BindingValue {
 //  SurfaceKeysConfig
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// One **surface's** binding layer — `[[keys.surface]]`, spelled `[[keys.component]]` before
-/// F003/P082/T416 and still accepted that way.
+/// One **surface's** binding layer — `[[keys.surface]]`, once spelled `[[keys.component]]`
+/// and still accepted that way.
 ///
 /// **A dock and an overlay are the same thing to the keyboard**: something that holds it for a
 /// while and answers keys of its own. The exposé's `x` / `r` / `d` were Rust literals in
@@ -79,7 +79,7 @@ impl BindingValue {
 /// "s" = true
 /// ```
 ///
-/// **Why the name is a field.** F003/P085/T355 shipped `[keys.<kind>]`, where the component's name
+/// **Why the name is a field.** The first form was `[keys.<kind>]`, where the component's name
 /// *was* the table name. Nothing under `[keys]` could then be told apart by name — a table might be
 /// a component or an action binding — so the parser guessed from the value's **shape**. That breaks
 /// the day a component is called `unbind` or `widgets`. An array of tables removes the guess and
@@ -159,7 +159,7 @@ pub struct ModeBindingConfig {
     ///
     /// The **same** [`BindingValue`] every other binding table takes, so one action reached by two
     /// keys is one entry wherever it is written: `keys = ["q", "Ctrl+q"]` here reads exactly as it
-    /// does in `[keys]` or `[[keys.surface]]`. It was a bare `String` until 2026-08-21, which meant
+    /// does in `[keys]` or `[[keys.surface]]`. It used to be a bare `String`, which meant
     /// a mode block needed a whole repeated `[[keys.mode.bindings]]` per key — the same capability
     /// spelled two ways in two tables.
     #[serde(alias = "key")]
@@ -261,11 +261,11 @@ pub struct KeysConfig {
     #[serde(default)]
     pub mode: Vec<KeyModeConfig>,
     /// Per-surface binding layers — `[[keys.surface]]`, consulted only while that surface holds the
-    /// keyboard (F003/P082/T416). An entry names its surface in `name` and may narrow itself to one
+    /// keyboard. An entry names its surface in `name` and may narrow itself to one
     /// placement with `id`.
     #[serde(default)]
     pub surface: Vec<SurfaceKeysConfig>,
-    /// The former spelling of the field above, `[[keys.component]]` (F003/P086/T362) — accepted
+    /// The former spelling of the field above, `[[keys.component]]` — accepted
     /// unchanged so existing configs keep working.
     ///
     /// A separate field rather than a serde `alias`, because an alias makes the two spellings
@@ -315,7 +315,7 @@ mod tests {
     use super::*;
 
     /// `[[keys.component]]` carries the component's name as a **field**, so nothing under `[keys]`
-    /// is interpreted by its table name any more (F003/P086/T362).
+    /// is interpreted by its table name any more.
     #[test]
     fn a_component_layer_names_itself_in_a_field() {
         let src = r#"
@@ -473,7 +473,7 @@ do_thing = "u"
             .expect("the workspaces dock ships its keys here");
         // One spelling per key: `Down` and `ArrowDown` are the same physical key (both parse to
         // `GridKey::ArrowDown`), so binding both bound it twice and every surface that renders the
-        // shortcut drew the same cap twice (2026-07-30).
+        // shortcut drew the same cap twice.
         assert_eq!(ws.bindings["cursor_down"].keys(), vec!["j", "ArrowDown"]);
         assert_eq!(ws.bindings["peek_selected"].keys(), vec!["Space"]);
         assert_eq!(

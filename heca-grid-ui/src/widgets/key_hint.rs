@@ -48,7 +48,7 @@ pub enum HintPlacement {
     ///
     /// This is what the universal picker drew for every large target before the letters became the
     /// widget's own to place, and it is the reason it exists as a variant: the rule was real, it
-    /// just lived in a host paint pass where no call site could ask for it (F003/P082/T427).
+    /// just lived in a host paint pass where no call site could ask for it.
     TopLeft,
 }
 
@@ -56,7 +56,7 @@ pub enum HintPlacement {
 ///
 /// These four knobs were private fields on [`KeyHint`], which is why a letter could only be drawn
 /// by wrapping a widget in one. They live on [`Base`] now, so the framework draws the cap for *any*
-/// widget carrying a letter and a widget places its own (F003/P082/T431).
+/// widget carrying a letter and a widget places its own.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HintStyle {
     /// Where the cap sits over the target.
@@ -270,7 +270,7 @@ impl KeyCap {
 /// the fill the eye sees is the blend. Asking about `tint` alone would answer for a colour that is
 /// never painted.
 ///
-/// **Why not simply [`Theme::on`] every time.** That is the more contrasty answer and it would
+/// **Why not simply [`Theme::on`](heca_theme::Theme::on) every time.** That is the more contrasty answer and it would
 /// change how heca looks: measured on `grid_tron`, the chip lands at luminance 0.24 against a 0.003
 /// background and a 0.82 foreground, so `on` returns the *foreground* and the letters would flip
 /// from dark-on-accent to light-on-accent. The dark glyph is the design; this only steps in when
@@ -354,16 +354,16 @@ fn paint_keycap_content(
 /// A transparent wrapper that carries a hint letter on behalf of a **region** — a group of widgets,
 /// or something that is not a widget you can put a builder on.
 ///
-/// It no longer *draws* the letter: [`paint_child`](crate::component::paint_child) does that for
+/// It no longer *draws* the letter: [`paint_child`] does that for
 /// every widget carrying one, so a widget can be pickable on its own and this is a decorator you
-/// reach for when there is nothing to hang the declaration on (F003/P082/T431).
+/// reach for when there is nothing to hang the declaration on.
 pub struct KeyHint {
     base: Base,
 }
 
 #[heca_grid_ui_macros::props]
 impl KeyHint {
-    // `on_hint` is **not here any more** (F003/P082/T432). It is
+    // `on_hint` is **not here any more**. It is
     // [`HintExt::on_hint`](crate::builders::HintExt::on_hint), on every widget — so a
     // `KeyHint::new(row).on_hint(…)` call still reads exactly the same, and a widget that can carry
     // the declaration itself no longer has to be wrapped to say what a pick does to it.
@@ -417,7 +417,7 @@ impl KeyHint {
     //
     // These are the **wrapper's spelling** of capabilities that live on every widget
     // (`HintExt::hint_placement` and friends): the slot they write, `Base::hint_style`, has
-    // always been universal, and since F003/P097/T501 so has the way to set it. They delegate
+    // always been universal, and so has the way to set it. They delegate
     // rather than repeat the assignment, so there is one writer per field and the two spellings
     // cannot drift — the same arrangement `Tooltip` has with `TooltipExt::tooltip`.
     //
@@ -468,7 +468,7 @@ fn hint_font(font: f32, style: &HintStyle, bounds: Rectangle) -> f32 {
 /// The compact case is the *widget's* business, and that is the point: it used to live in a host
 /// paint pass that measured every target's bounds and chose a placement for it. A host deciding how
 /// a widget it has never seen should look is the same mistake as a host deciding where that widget
-/// paints (F003/P082/T427).
+/// paints.
 fn is_compact(bounds: Rectangle, font: f32) -> bool {
     let max = (font * HINT_COMPACT_MAX_MUL) as f64;
     bounds.size.w > 0.0 && bounds.size.w <= max && bounds.size.h <= max
@@ -579,9 +579,9 @@ fn fit_into_view(
 }
 
 /// **Draw `c`'s hint letter, if it is carrying one.** Called by
-/// [`paint_child`](crate::component::paint_child) for *every* widget, right after the widget has
+/// [`paint_child`] for *every* widget, right after the widget has
 /// painted itself — which is what lets any widget be pickable without being wrapped in a
-/// [`KeyHint`] (F003/P082/T431).
+/// [`KeyHint`].
 ///
 /// The rules that were learned the hard way, and are the reason this is one function rather than
 /// something each widget does:
@@ -600,7 +600,7 @@ fn fit_into_view(
 /// - **The placement says where the cap may live, not the target box.** [`keycap_rect`] returns the
 ///   permitted rect beside the cap, because a compact target's cap is placed *outside* it on
 ///   purpose. Re-deriving that from the bounds is what dragged every icon's caption back on top of
-///   the icon (F003/P082/T479).
+///   the icon.
 /// - **Into the OVERLAY band**, so nothing painted after this widget covers its letter. Drawing it
 ///   inline puts the cap at this widget's position in the paint order and every sibling drawn later
 ///   sits on top: a top-bar button's letter disappeared under the sidebar frame beside it, and a
@@ -654,7 +654,7 @@ impl Component for KeyHint {
 
     /// Just the wrapped, still-interactive child. **The letter is not drawn here** — `paint_child`
     /// draws it for every widget that carries one, this wrapper included, so being pickable stopped
-    /// depending on being wrapped (F003/P082/T431).
+    /// depending on being wrapped.
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
@@ -699,7 +699,7 @@ mod tests {
         );
     }
 
-    /// **A row nine tenths past the fold keeps its letter, inside the dock** (F003/P082/T438).
+    /// **A row nine tenths past the fold keeps its letter, inside the dock**.
     ///
     /// The cap is centred in the row's whole box, which for a row cut to a 25px sliver at the
     /// bottom of a sidebar lands on the dock's frame. It moves up into the sliver instead — and
@@ -732,7 +732,7 @@ mod tests {
         assert_eq!(fit_into_view(cap, row, Some(clip)), None);
     }
 
-    /// **A small icon's caption stays beside it, never on it** (F003/P082/T479).
+    /// **A small icon's caption stays beside it, never on it**.
     ///
     /// A target too small to cover has its letter placed *below* it on purpose, so the icon stays
     /// visible. The clamp used to pull that cap back into the button's own 25px box — dragging the

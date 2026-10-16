@@ -65,17 +65,14 @@ pub(super) fn pane_row_press(pane_id: PaneId) -> Intent {
 /// its nav key instead of the cursor.
 ///
 /// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
-/// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
+/// made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
 /// started activating the pane and leaving the sidebar.
 pub(super) fn row_hint(key: String) -> Intent {
     Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(key))
 }
 
-/// The nav key naming the row a [`SidebarSelection`] points at.
-///
-/// The bridge between the domain-typed selection this container still keeps and the generic cursor
-/// every row's outline now reads. It goes away with the selection itself — until
-/// then it is the single conversion point, so the two cannot drift.
+/// The key naming the row a [`SidebarSelection`](crate::chrome::SidebarSelection) points at — the one
+/// conversion from a row to the cursor key a placement keeps, so a row and its key cannot drift.
 pub(crate) fn selection_key(selection: crate::chrome::SidebarSelection) -> String {
     use crate::chrome::SidebarSelection as S;
     match selection {

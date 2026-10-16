@@ -135,7 +135,7 @@ impl Component for Alert {
 
         // Surface: dark fill tinted by the variant, bordered (theme-width; gone
         // when borders are off). Theme rest glow toned to the variant, so the
-        // alert honors the `glow_size` setting at rest like every surface (T011).
+        // alert honors the `glow_size` setting at rest like every surface.
         let border = cx.border(color);
         let glow = cx.rest_glow(GLOW_RADIUS).map(|g| Glow { color, ..g });
         cx.rect(b, color.with_alpha(tag_fill), border, radius, glow);

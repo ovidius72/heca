@@ -76,7 +76,7 @@
 //!
 //! | Trigger | Target | Anchor |
 //! |---|---|---|
-//! | [`Event::RightClick`](crate::event::Event::RightClick) | the widget under the pointer | the pointer |
+//! | [`Event::RightClick`] | the widget under the pointer | the pointer |
 //! | the host's `open_context_menu` action (`prefix+>`, `Shift+F10`, the Menu key) | the focused widget | under the widget |
 //!
 //! The anchor is read **out of the event**: a pointer event carries a cursor, a keyboard event
@@ -854,6 +854,11 @@ impl Component for ContextMenu {
 
     fn overlay_active(&self) -> bool {
         self.is_open()
+    }
+
+    /// On screen only while open: closed, its rows are still children, and gone to every walk.
+    fn is_shown(&self) -> bool {
+        self.base.visible.get_untracked() && !self.base.style.layout.hidden && self.is_open()
     }
 
     /// Layout just placed the panel wherever its parent put it; move it to the anchor the trigger

@@ -69,7 +69,7 @@ fn enter_pane_rename(state: &mut AppState, pane_id: PaneId) {
     open_rename_dialog(state, RenameTarget::Pane(pane_id), current_name);
 }
 
-/// Rename the **focused** pane — and only ever that (F003/P086/T365, user decision 2026-07-30).
+/// Rename the **focused** pane — and only ever that.
 ///
 /// It used to mean the cursor's row while a dock held the keyboard, by reading a pane id off a
 /// context target the host had stashed — the host resolving a fact about a row only the component

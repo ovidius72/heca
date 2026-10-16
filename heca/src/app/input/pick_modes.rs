@@ -273,7 +273,7 @@ pub(super) fn handle_column_pick_mode(
 ///
 /// It goes back out through the same `focus_dock` action, carrying the picked id — so the letter, an
 /// RPC call and a script all take one path, and the pick is only how a keyboard supplies an argument
-/// it cannot type (F003/P011/T020).
+/// it cannot type.
 pub(super) fn handle_dock_pick_mode(
     registry: &ActionRegistry,
     state: &mut AppState,

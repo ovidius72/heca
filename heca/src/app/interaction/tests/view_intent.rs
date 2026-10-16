@@ -12,7 +12,7 @@ use super::*;
 /// the routing decision. `view_intent_allowed` is the same three steps with an `AppState` to
 /// supply the domain, which a test cannot build (it needs a window), so the pure half is held
 /// here and the pane's half of the declaration is held by
-/// `chrome::pane::shell::tests::the_pane_says_what_picking_it_would_do`.
+/// `chrome::panes::pane::shell::tests::the_pane_says_what_picking_it_would_do`.
 #[test]
 fn a_pick_that_would_be_refused_resolves_to_a_refused_action() {
     let mut session = test_session();

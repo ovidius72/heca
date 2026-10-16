@@ -41,13 +41,13 @@
 //! `hint_placement`, `hint_tone` and `hintable` are on *every* widget
 //! ([`HintExt`](crate::builders::HintExt)); the wrapper is only for a region that is not a
 //! widget you can put a builder on. Wrapping a widget that could declare for itself puts **two**
-//! targets where the author wrote one, and a picker letters both. This example taught the wrapper
-//! shape until 2026-09-15, and heca's own exposé had it — two keycaps on every card.
+//! targets where the author wrote one, and a picker letters both. This example used to teach the
+//! wrapper shape, and heca's own exposé had it — two keycaps on every card.
 //!
 //! # …and the same picker, described
 //!
 //! A plugin has no signal to bind and no closure to hand over, so the declarative spelling is the
-//! whole of whether it can own a picker at all (F003/P082/T436):
+//! whole of whether it can own a picker at all:
 //!
 //! ```json
 //! { "kind": "KeyHintGroup",
@@ -63,8 +63,8 @@ use crate::style::{Direction, Length};
 
 /// **The letters a picker hands out when its caller does not say otherwise**, in order.
 ///
-/// **Home row first** — `asdfghjkl`, then the rest of the alphabet, then the same again shifted
-/// (F003/P082/T443). The letters are spent in the order they are listed, so the targets a picker
+/// **Home row first** — `asdfghjkl`, then the rest of the alphabet, then the same again shifted.
+/// The letters are spent in the order they are listed, so the targets a picker
 /// finds first get the keys your fingers are already resting on.
 ///
 /// Lower case before capitals because they are one keystroke on every layout; the capitals extend
@@ -148,7 +148,7 @@ impl KeyHintGroup {
     /// **The library owns the mechanism; the caller owns the choice.** Which letters, in what order,
     /// and which to keep free is a decision about *an app*, and it was baked into this widget — so
     /// nobody reusing the library could ask for home-row ordering, a different keyboard layout, or a
-    /// letter reserved for something else (F003/P082/T433).
+    /// letter reserved for something else.
     ///
     /// Still exactly one keystroke per pick: a target past the end of the sequence gets no letter
     /// rather than a longer one. See [`DEFAULT_LETTERS`].
@@ -180,7 +180,7 @@ impl KeyHintGroup {
     /// key builder. It *is* `open_when` + `on_action` over the picker's own signal, said once here
     /// rather than at every call site: a caller that assembles those three parts owns the rule that
     /// an open picker holds the keyboard, and there is no signal to assemble from a description at
-    /// all (F003/P082/T436).
+    /// all.
     ///
     /// Reach for [`open_when`](KeyHintGroup::open_when) instead only when the host already has the
     /// state — when something *other* than this verb also opens it.
@@ -230,7 +230,7 @@ impl KeyHintGroup {
     /// **Clipped-away descendants are not targets**, by the same rule the global picker follows: a
     /// row scrolled past a `ScrollRegion`'s fold has real bounds and simply is not drawn, so a
     /// letter there would be spent on something nobody can see and its keycap would land on
-    /// whatever covers it (F003/P082/T438). The rule is `hint::collect`'s, not a copy — this walk
+    /// whatever covers it. The rule is `hint::collect`'s, not a copy — this walk
     /// had its own inlined "skip hidden" test and would have needed a second inlined clip test
     /// beside it.
     fn targets(&self) -> Vec<Vec<usize>> {
@@ -403,13 +403,13 @@ mod tests {
         open.set(true);
         g.tick(0.0);
 
-        // The first three of `DEFAULT_LETTERS`, which is home row first (F003/P082/T443).
+        // The first three of `DEFAULT_LETTERS`, which is home row first.
         assert_eq!(label_of(&g, 0).as_deref(), Some("a"));
         assert_eq!(label_of(&g, 1).as_deref(), Some("s"));
         assert_eq!(label_of(&g, 2).as_deref(), Some("d"));
     }
 
-    /// **The caller's alphabet, in the caller's order** (F003/P082/T433). Which letters to hand out
+    /// **The caller's alphabet, in the caller's order**. Which letters to hand out
     /// is a decision about an app — home row first, a different layout, a letter kept free — and it
     /// was baked into this widget, so nobody reusing the library could make it.
     #[test]
@@ -447,7 +447,7 @@ mod tests {
     }
 
     /// The default is 52 single keystrokes — the cap, stated once so a change to it is deliberate.
-    /// **Home row first**, and every letter used exactly once (F003/P082/T443).
+    /// **Home row first**, and every letter used exactly once.
     #[test]
     fn the_default_alphabet_is_fifty_two_single_keystrokes_home_row_first() {
         assert_eq!(DEFAULT_LETTERS.chars().count(), 52);
@@ -474,7 +474,7 @@ mod tests {
         open.set(true);
         g.tick(0.0);
 
-        // `s` is the second letter of `DEFAULT_LETTERS` — home row first (F003/P082/T443).
+        // `s` is the second letter of `DEFAULT_LETTERS` — home row first.
         let handled = g.on_event_capture(&Event::TextInput("s".to_string()));
 
         assert_eq!(handled, Handled::Yes, "the picker claims the letter");
@@ -534,7 +534,7 @@ mod tests {
         assert_eq!(label_of(&g, 0), None);
     }
 
-    /// **The verb opens it, and the widget owns both halves** (F003/P082/T436).
+    /// **The verb opens it, and the widget owns both halves**.
     ///
     /// This is the whole of what a picker costs its author: one string. The parts it replaces — a
     /// signal, `open_when`, and an `on_action` closure that flips it — are three things a
@@ -587,7 +587,7 @@ mod tests {
         );
     }
 
-    /// **A picker does not letter what its own subtree has scrolled away** (F003/P082/T438).
+    /// **A picker does not letter what its own subtree has scrolled away**.
     ///
     /// The same rule the global picker follows, and the same code — this walk used to carry its own
     /// inlined copy of "skip hidden", which is precisely how it would have ended up with a second

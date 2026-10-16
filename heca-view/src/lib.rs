@@ -1,14 +1,14 @@
-//! `ViewNode` — the declarative, serializable widget-tree model (plugin-task-ui-1).
+//! `ViewNode` — the declarative, serializable widget-tree model.
 //!
 //! This is the **app-wide** UI description: any UI — native chrome, overlays, and plugin
 //! panels — can be expressed as a tree of `ViewNode`s and turned into retained grid-ui
-//! `Component`s by the mapper `realize()` in `heca-view-realize` (plugin-task-ui-3).
+//! `Component`s by the mapper `realize()` in `heca-view-realize`.
 //! It is **generic** (its [`WidgetKind`] covers the whole grid-ui vocabulary) and fully
 //! **serializable** (serde), so the exact same model authored in Rust is what a WASM plugin
 //! ships over the boundary.
 //!
 //! This crate carries **no dependency but serde** — no widget library, no renderer, no taffy.
-//! That is the point of it living apart from the app (F003/P017/T009): a plugin can depend on
+//! That is the point of it living apart from the app: a plugin can depend on
 //! the vocabulary without compiling the thing that draws it.
 //!
 //! Behaviour is expressed **only** through [`Intent`]s (an action id + args), never Rust
@@ -20,7 +20,7 @@
 //! Adding a widget = one [`WidgetKind`] variant + one arm in `realize`. Nothing here holds
 //! layout or paint logic — this is pure description.
 //!
-//! Consumed by `realize` (plugin-task-ui-3), the Modal `body` (ui-4) and plugins. Everything
+//! Consumed by `realize`, the Modal `body` and plugins. Everything
 //! here is `pub`: it is the published vocabulary, so there is nothing to mark dead.
 
 pub mod build;

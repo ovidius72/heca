@@ -16,7 +16,7 @@ jq -n --arg f "$file" '{
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     additionalContext: ("AGENTS.md § 0 PRE-FLIGHT — answer before editing \($f):\n" +
-      "1. WHICH EXISTING WIDGET DOES THIS? Name it. Search all three: docs/widgets.md, heca/src/components/, heca/src/chrome/<surface>/. Do not go by memory, including your own from earlier in this session.\n" +
+      "1. WHICH EXISTING WIDGET DOES THIS? Name it. Search all three: docs/widgets.md, heca/src/components/, heca/src/chrome/<group>/<surface>/. Do not go by memory, including your own from earlier in this session.\n" +
       "2. If none — WHICH PLANNER TASK COVERS IT? Quote the id.\n" +
       "3. If neither — it is a PROPOSAL, not a commit. Say what and why, get the OK.\n" +
       "\n" +

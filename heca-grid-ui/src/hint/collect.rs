@@ -5,13 +5,12 @@
 //! [`super::fire`].
 
 use crate::component::Component;
-use crate::reactive::SignalGet;
 use heca_core::layout::Rectangle;
 
 /// Should this subtree be enumerated? Hidden widgets have stale bounds and never
 /// receive input, so they're skipped (matching paint / event / drag resolution).
 pub(crate) fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.layout.hidden
+    !c.is_shown()
 }
 
 /// **What a picker can still see, walking down** — the clip an ancestor imposes on everything
@@ -69,7 +68,7 @@ pub(crate) fn out_of_view(node: &dyn Component, clip: Option<Rectangle>) -> bool
 /// [`HintPlacement::Center`](crate::widgets::HintPlacement) on a target of zero width puts the
 /// keycap half a cap to the *left* of it — outside a thing with no inside. Several panes squeezed
 /// to nothing by two sidebars in a narrow window stacked their letters in the gutter between them,
-/// looking dragged there (F003/P082/T478). The layout no longer produces that pane, and this is why
+/// looking dragged there. The layout no longer produces that pane, and this is why
 /// no widget of any other shape can produce it again.
 ///
 /// ⚠️ **A box with no geometry AT ALL has not been laid out yet** — no position and no size, which
@@ -100,20 +99,44 @@ pub(crate) fn unseen(node: &dyn Component, clip: Option<Rectangle>) -> bool {
 /// (`on_click`, `on_activate`) mean the same thing, so no set of `EventKind`s names it either.
 /// [`Base::activatable`](crate::component::Base::activatable) is set wherever the action is wired,
 /// which is the only place that knows.
+///
+/// **Or it holds the keyboard, with nothing lettered inside it.** A text field, a checkbox, a
+/// dropdown: picking one is pressing on it, which gives it the keyboard
+/// ([`fire_hint`](crate::hint::fire_hint)). A widget that holds the keyboard for targets inside it —
+/// a grid of cards — is reached through them, so it is not lettered as well. Reading the declared
+/// flag, not [`focusable`](Component::focusable), so a surface that is focusable only while it is
+/// open is not lettered as a whole.
 fn actionable(c: &dyn Component) -> bool {
     c.base().activatable
+        || (c.base().focusable
+            && c.focusable()
+            && !c
+                .base()
+                .children
+                .iter()
+                .any(|child| holds_target(child.as_ref())))
+}
+
+/// Is anything in this shown subtree lettered?
+fn holds_target(c: &dyn Component) -> bool {
+    c.is_shown()
+        && (is_addressable(c)
+            || c.base()
+                .children
+                .iter()
+                .any(|child| holds_target(child.as_ref())))
 }
 
 /// **Does this widget get a letter?**
 ///
 /// Anything you can act on, plus anything that declared what a pick does — minus anything that said
-/// [`hintable(false)`](crate::builders::HintExt::hintable). **Being pickable is not opt-in**
-/// (F003/P082/T441): requiring a declaration is what made the picker show a curated handful and feel
+/// [`hintable(false)`](crate::builders::HintExt::hintable). **Being pickable is not opt-in**:
+/// requiring a declaration is what made the picker show a curated handful and feel
 /// not worth having, and it is the drift this closes — the declarative side has defaulted a pick to
 /// the node's `press` all along (`heca-view-realize`).
 ///
-/// [`Base::hint`] stays meaningful as the **override**: it says a pick does something *other* than
-/// acting on the widget normally.
+/// [`Base::hint`](crate::component::Base::hint) stays meaningful as the **override**: it says a pick does
+/// something *other* than acting on the widget normally.
 pub(crate) fn is_target(c: &dyn Component) -> bool {
     is_target_of(c, None)
 }
@@ -318,15 +341,15 @@ fn node_at<'a>(root: &'a dyn Component, path: &[usize]) -> &'a dyn Component {
 /// purpose: `identity_of` resolves *through wrappers*, so a `KeyHint` around a keyed `Row` — and
 /// every container above it that wraps nothing else — all report the row's name. Answering "the
 /// first node with that name" hands back the outermost one, which is commonly the tree's own root:
-/// the letter is then offered to something that declared no pick, and nothing is lettered at all
-/// (F003/P082/T438). Asking [`collect_hints`] instead can only return a node the picker itself
+/// the letter is then offered to something that declared no pick, and nothing is lettered at all.
+/// Asking [`collect_hints`] instead can only return a node the picker itself
 /// would have chosen, so offering and collecting cannot disagree.
 ///
 /// **Every one of them, not the first.** One thing is commonly shown in several places at once — a
 /// pane listed in the left sidebar *and* the right one is two views of the same pane, and both wear
 /// its letter. Answering with the first match lettered one of them and left the other dark, which
-/// is a bug this codebase has already had once, from an `.any()` in the by-key walk
-/// (F003/P082/T431). A caller that wants one takes the first; a caller handing out a letter takes
+/// is a bug this codebase has already had once, from an `.any()` in the by-key walk.
+/// A caller that wants one takes the first; a caller handing out a letter takes
 /// them all.
 pub fn hint_targets_of(root: &dyn Component, identity: &str) -> Vec<Vec<usize>> {
     collect_hints(root)

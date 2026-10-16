@@ -7,7 +7,7 @@ use super::*;
 /// — right of the current one, not the end of the strip, so you keep your place.
 /// **A new column's width is the layout's to say.** It used to be chosen by each caller: most
 /// said 50%, but taking a pane into an empty workspace said 85% and two fallbacks did too, so
-/// the same act gave a different column depending on how it was reached (F003/P082/T509).
+/// the same act gave a different column depending on how it was reached.
 #[test]
 fn a_new_column_takes_the_layouts_default_width() {
     let options = LayoutOptions {

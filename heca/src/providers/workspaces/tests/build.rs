@@ -56,7 +56,7 @@ fn build_produces_the_real_workspace_tree_and_registers_host_ids() {
     *store.workspaces.tree_mut() = tree();
 
     let catalog = crate::actions::ActionCatalog::with_builtins();
-    let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+    let ctx = ChromeCtx::for_build(&store, &theme, &emit, &catalog);
     let c = container(&p, &ctx);
 
     let mut signals = ChromeSignals::default();
@@ -73,7 +73,7 @@ fn build_produces_the_real_workspace_tree_and_registers_host_ids() {
     assert_eq!(drag.items().len(), 3);
     // Pick targets: the pane card and the workspace dock each declared what `prefix+/` does to
     // it, and the dock's own collapse control earns one for being a control — a thing you can
-    // click is a thing you can aim at, whatever it happens to sit inside (2026-09-04). A column
+    // click is a thing you can aim at, whatever it happens to sit inside. A column
     // has none: it declares nothing and does nothing on its own, only carrying a pick-letter
     // signal stamped when it is a *destination* for a move/swap.
     assert_eq!(heca_grid_ui::collect_hints(body.as_ref()).len(), 3);
@@ -99,7 +99,7 @@ fn every_pick_target_in_the_sidebar_can_be_found_again_by_its_identity() {
     let store = store();
     *store.workspaces.tree_mut() = tree();
     let catalog = crate::actions::ActionCatalog::with_builtins();
-    let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+    let ctx = ChromeCtx::for_build(&store, &theme, &emit, &catalog);
     let c = container(&p, &ctx);
     let mut signals = ChromeSignals::default();
     let mut drag = DragItemRegistry::default();
@@ -139,7 +139,7 @@ fn no_two_pick_targets_in_the_sidebar_share_an_identity() {
     let store = store();
     *store.workspaces.tree_mut() = tree();
     let catalog = crate::actions::ActionCatalog::with_builtins();
-    let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+    let ctx = ChromeCtx::for_build(&store, &theme, &emit, &catalog);
     let c = container(&p, &ctx);
     let mut signals = ChromeSignals::default();
     let mut drag = DragItemRegistry::default();
@@ -211,7 +211,6 @@ fn every_row_of_the_real_sidebar_tree_is_keyed_even_when_two_panes_share_a_name(
         name: format!("ws{ws_idx}"),
         custom_name: None,
         collapsed: false,
-        state: SidebarItemState::None,
         columns: vec![ColumnEntry {
             col_idx: 0,
             col_id: heca_core::layout::ColumnId(0),
@@ -226,7 +225,7 @@ fn every_row_of_the_real_sidebar_tree_is_keyed_even_when_two_panes_share_a_name(
     *store.workspaces.tree_mut() = model;
 
     let catalog = crate::actions::ActionCatalog::with_builtins();
-    let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+    let ctx = ChromeCtx::for_build(&store, &theme, &emit, &catalog);
     let c = container(&p, &ctx);
     let mut signals = ChromeSignals::default();
     let mut drag = DragItemRegistry::default();
@@ -267,7 +266,7 @@ fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
     let store = store();
     *store.workspaces.tree_mut() = tree();
     let catalog = crate::actions::ActionCatalog::with_builtins();
-    let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+    let ctx = ChromeCtx::for_build(&store, &theme, &emit, &catalog);
     let c = container(&p, &ctx);
 
     let mut signals = ChromeSignals::default();
@@ -307,7 +306,7 @@ fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
         "each row aims the picker at its own row, by nav key",
     );
 
-    // **A control inside a row is a thing of its own, and gets its own letter** (2026-09-04).
+    // **A control inside a row is a thing of its own, and gets its own letter**.
     // The picker used to letter only what declared, so a row's own collapse control — a button
     // like any other — was unreachable by `prefix+/` purely because of what it had been put
     // inside. Where a widget sits does not decide what it can do.
@@ -346,7 +345,7 @@ fn a_gesture_names_the_seating_it_was_built_in_so_two_placements_answer_for_them
         let store = store();
         *store.workspaces.tree_mut() = tree();
         let catalog = crate::actions::ActionCatalog::with_builtins();
-        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let ctx = ChromeCtx::for_build(&store, &theme, &emit, &catalog);
         let c = container(&p, &ctx);
         let mut signals = ChromeSignals::default();
         let mut drag = DragItemRegistry::default();
@@ -386,7 +385,7 @@ fn build_outside_a_render_pass_yields_an_empty_body() {
     // still legal (a host may want the metadata) and must not panic.
     let p = WorkspacesContainerProvider::new("workspaces");
     let store = store();
-    let ctx = ChromeCtx::new(crate::host::App::new(&store));
+    let ctx = ChromeCtx::new(&store);
     let c = container(&p, &ctx);
 
     let mut signals = ChromeSignals::default();

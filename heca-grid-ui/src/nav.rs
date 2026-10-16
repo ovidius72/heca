@@ -29,13 +29,12 @@
 //! ```
 
 use crate::component::Component;
-use crate::reactive::SignalGet;
 use heca_core::layout::{Point, Rectangle};
 
 /// Should this subtree be enumerated? Hidden widgets have stale bounds and never receive input, so
 /// they're skipped — the same rule paint, event routing, drag and hint resolution use.
 fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.layout.hidden
+    !c.is_shown()
 }
 
 /// Every navigable row in the tree with its laid-out bounds, in **document order**.
@@ -85,7 +84,7 @@ pub fn key_at(root: &dyn Component, point: Point) -> Option<String> {
         .filter(|_| root.base().bounds.contains(point))
 }
 
-/// **What to call the widget at `path`, whether or not anyone named it** (F003/P082/T444).
+/// **What to call the widget at `path`, whether or not anyone named it**.
 ///
 /// Something has to recognise a widget between one frame and the next — a hint letter that stays
 /// with its target, a cursor that survives a rebuild. A [`key`](crate::builders::IdentityExt::key)
@@ -125,7 +124,7 @@ pub fn identity_of(root: &dyn Component, path: &[usize]) -> Option<String> {
     for (depth, step) in path.iter().enumerate() {
         // **Whatever the ancestor declared itself as** — `key` for a row, `scope_key` for a dock or
         // panel that names a region. Reading only `key` here is what let two docks holding the same
-        // rows produce two sets of identical names (F003/P082).
+        // rows produce two sets of identical names.
         if let Some(k) = node.base().identity() {
             scope.push(k.to_string());
             scope_root = node;
@@ -665,7 +664,7 @@ mod identity_tests {
         );
     }
 
-    /// **A container that names itself with `scope_key` scopes its rows too** (F003/P082).
+    /// **A container that names itself with `scope_key` scopes its rows too**.
     ///
     /// A dock declares itself with `scope_key` rather than `key` — it names a region holding rows,
     /// not a row. Naming read only `key`, so the dock contributed nothing and two docks showing the

@@ -9,7 +9,7 @@ use crate::app_state::AppState;
 use crate::chrome::Intent as ViewIntent;
 use crate::input::WmAction;
 
-/// Resolve and dispatch a declarative [`ViewNode`](crate::chrome::ViewNode) intent.
+/// Resolve and dispatch a declarative [`ViewNode`](heca_view::ViewNode) intent.
 ///
 /// A `view::Intent` carries an action *name* (the same identifier config keys and RPC use)
 /// plus optional args.
@@ -19,8 +19,8 @@ use crate::input::WmAction;
 ///
 /// 1. **Built-in** — [`resolve_action`](crate::input::resolve_action) maps it to a [`WmAction`],
 ///    which goes through [`dispatch_action`] exactly like a keypress. Policy comes from
-///    [`action_policy`]'s exhaustive match.
-/// 2. **Name-keyed** (plugin-04) — an action registered at runtime by a provider/plugin, which has
+///    [`action_policy`](super::policy::action_policy)'s exhaustive match.
+/// 2. **Name-keyed** — an action registered at runtime by a provider/plugin, which has
 ///    no `WmAction` variant because the enum is closed. Policy comes from its **declared**
 ///    `DynActionMeta.policy`, and both paths converge on the same [`policy_allows`], so a plugin
 ///    action is judged by identical rules.
@@ -127,7 +127,7 @@ pub(crate) fn dispatch_view_intent(
     }
     if !registry.execute_dynamic(&intent.action, state, intent) {
         // Declared but host-unrunnable (registered with no handler): its owner lives across the plugin
-        // boundary and forwarding lands with the WASM bridge (plugin-08). Never a crash.
+        // boundary, and forwarding to it is not built yet. Never a crash.
         #[cfg(debug_assertions)]
         eprintln!(
             "[heca] interaction: action '{}' is declared but has no host handler",

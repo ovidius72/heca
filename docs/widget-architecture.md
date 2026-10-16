@@ -210,7 +210,7 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | `ViewNode` / `WidgetKind` / `PropValue` / `Intent` | `heca-view/src/` (`kind.rs`, `node.rs`, `value.rs`, `scalars/`) |
 | The typed SDK a plugin author writes | `heca-view/src/build/` |
 | `realize(&ViewNode, theme, emit, forms) -> Box<dyn Component>` | `heca-view-realize/src/lib.rs` |
-| Overlay: `ModalSpec` → `Dialog` (a realized subtree entering a slot) | `heca/src/chrome/overlay.rs` |
+| Overlay: `ModalSpec` → `Dialog` (a realized subtree entering a slot) | `heca/src/chrome/surfaces/overlay.rs` |
 | The widgets | `heca-grid-ui/src/widgets/` |
 | `Base` / `Component` / `PaintCx` | `heca-grid-ui/src/component/` |
 | Widget catalog (human docs) | `docs/widgets.md` |

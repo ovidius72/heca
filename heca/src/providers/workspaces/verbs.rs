@@ -39,7 +39,6 @@ impl WorkspacesContainerProvider {
                 Step::Down => tree.cursor_down(),
             }
         }
-        self.publish_cursor(cx);
         Handled::Yes
     }
 
@@ -60,7 +59,6 @@ impl WorkspacesContainerProvider {
                 Fold::Toggle => {}
             }
         }
-        self.publish_cursor(cx);
         Handled::Yes
     }
 
@@ -107,7 +105,6 @@ impl WorkspacesContainerProvider {
             // The cursor never lands on a column (`WorkspaceTree::is_navigable`).
             WorkspaceRow::Column { .. } => return Handled::No,
         }
-        self.publish_cursor(cx);
         Handled::Yes
     }
 
@@ -221,15 +218,15 @@ impl WorkspacesContainerProvider {
         Handled::Yes
     }
 
-    /// Publish the cursor into the store: the generic per-mount cursor the row outlines read, and the
-    /// domain-typed `nav_selection` beside it.
+    /// Point the list at the row this placement selected — the one record of where its cursor is.
+    pub(super) fn load_cursor(&self, cx: &ProviderCx<'_>) {
+        let key = cx.selected();
+        cx.state().workspaces().tree_mut().point_at(key.as_deref());
+    }
+
+    /// Write the row the list now stands on back as this placement's selection.
     pub(super) fn publish_cursor(&self, cx: &mut ProviderCx<'_>) {
-        let selection = {
-            let state = cx.state();
-            let selection = state.workspaces().tree().selection();
-            state.workspaces().set_nav_selection(selection);
-            selection
-        };
+        let selection = cx.state().workspaces().tree().selection();
         cx.set_selected(selection.map(selection_key));
     }
 }

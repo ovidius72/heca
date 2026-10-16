@@ -62,7 +62,7 @@ pub trait HintExt: Component + Sized {
     /// **What a pick does to this widget, when that differs from acting on it.**
     ///
     /// Being pickable is **not** what this turns on — anything actionable already wears a letter,
-    /// and picking it does what clicking it does (F003/P082/T441). This is the **override**:
+    /// and picking it does what clicking it does. This is the **override**:
     ///
     /// ```
     /// use heca_grid_ui::prelude::*;

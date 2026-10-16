@@ -1,4 +1,4 @@
-//! `heca --keys-show` — every binding name and the key it resolves to (F003/P086/T366).
+//! `heca --keys-show` — every binding name and the key it resolves to.
 //!
 //! **Why this exists.** Keys used to be discoverable by reading one file. They no longer are: a
 //! component's keys are in its own `[[keys.component]]` entry, a mode's in `[[keys.mode]]`, and a

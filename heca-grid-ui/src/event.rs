@@ -233,7 +233,7 @@ thread_local! {
 /// than one call site, so the ones that forgot sent "nothing held" with no way to tell: a drop
 /// resolved as a plain move however hard Shift was pressed. Meanwhile three widgets each kept a
 /// private copy of the same broadcast, which is the same rule written four times counting the
-/// plugin that comes next (F003/P097/T496).
+/// plugin that comes next.
 pub fn modifiers() -> Modifiers {
     HELD.with(|m| m.get())
 }
@@ -899,7 +899,7 @@ pub enum WidgetIntent {
     /// [`Input`](crate::widgets::Input): select the whole field. `edit_select_all`.
     EditSelectAll,
 
-    // ── Scrolling a scroll area from the keyboard (F003/P011/T012) ──
+    // ── Scrolling a scroll area from the keyboard ──
     //
     // These are **semantic**, not keys: the host says "one page back", the widget decides what a
     // page is and clamps the result, because it is the only thing that knows its viewport and its
@@ -1085,7 +1085,7 @@ pub fn typed_text(key_text: Option<&str>, mods: Modifiers) -> Option<String> {
 
 /// A widget's registered event handlers, keyed by [`EventKind`].
 ///
-/// Lives behind an `Option<Box<…>>` on [`Base`], so a widget that registers none costs one null
+/// Lives behind an `Option<Box<…>>` on [`Base`](crate::component::Base), so a widget that registers none costs one null
 /// pointer. Several handlers may share a kind; they run in registration order, and the first to
 /// call [`EventCx::stop_propagation`] ends the walk (the rest of *this* widget's handlers for that
 /// kind still run — they were registered by the same author, on the same widget).

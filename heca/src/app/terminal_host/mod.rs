@@ -40,7 +40,7 @@ pub(crate) struct TerminalMount {
 
 pub(crate) fn prepare_terminal_mount(
     backends: &mut BackendStore,
-    terminal: crate::chrome::terminal::TerminalId,
+    terminal: crate::chrome::panes::terminal::TerminalId,
     content_rect: Rectangle,
     scale: f32,
 ) -> Option<TerminalMount> {

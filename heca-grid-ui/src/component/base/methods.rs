@@ -90,6 +90,7 @@ impl Base {
             accepts_onto: true,
             key: None,
             scope_key: None,
+            keeps_keyboard: false,
             font: 15.0,
             root_font: 15.0,
             viewport: Size::new(f64::MAX, f64::MAX),

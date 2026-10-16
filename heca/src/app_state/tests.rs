@@ -61,7 +61,7 @@ fn a_mode_that_is_not_a_pick_has_no_count() {
     assert_eq!(InputMode::Normal.pick_candidate_count(), None);
     assert_eq!(
         InputMode::Search {
-            terminal: crate::chrome::terminal::TerminalId(1)
+            terminal: crate::chrome::panes::terminal::TerminalId(1)
         }
         .pick_candidate_count(),
         None
@@ -76,12 +76,6 @@ fn every_pick_says_what_it_offers() {
     assert_eq!(PickKind::MovePaneToColumn.subject(), "column");
     assert_eq!(PickKind::SelectPane.subject(), "pane");
     assert_eq!(PickKind::FocusDock.subject(), "dock");
-}
-
-#[test]
-fn test_sidebar_item_state_eq() {
-    assert_eq!(SidebarItemState::Active, SidebarItemState::Active);
-    assert_ne!(SidebarItemState::Active, SidebarItemState::Visited);
 }
 
 #[test]

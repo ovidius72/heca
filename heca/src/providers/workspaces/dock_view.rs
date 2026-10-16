@@ -2,7 +2,7 @@
 //!
 //! It owns the workspaces' vertical order, this placement's scroll area and keyboard gate, and the
 //! menu a right-click finds when no row claims it. It owns **nothing** about what is inside a
-//! workspace — that is [`WorkspaceFrame`](super::workspace_frame::WorkspaceFrame).
+//! workspace — that is [`WorkspaceFrame`].
 //!
 //! This is the body of the `workspaces` container: what `build_body`, the provider's render seam,
 //! returns. It is reached only through that seam — nothing in `chrome` calls it.
@@ -43,7 +43,7 @@ impl DockView<'_> {
         //
         // The offset is the CONTAINER's, so it survives the tree being rebuilt (a pane's git status
         // changing is enough to do that) and is untouched by the dock list scrolling around it.
-        // Vertical only. A second axis was tried (2026-07-29) and reverted: a `Label` clips rather than
+        // Vertical only. A second axis was tried and reverted: a `Label` clips rather than
         // overflowing, so nothing ever exceeds the width and the horizontal axis had nothing to scroll —
         // while the extra scrollbar sat in front of the rows and took the press that starts a drag.
         // Revisit when label truncation/wrapping is settled (AGENTS.md lists it as open).
@@ -66,7 +66,7 @@ impl DockView<'_> {
             // on the way down and bubbles out to this one. A menu on a row still wins, because bubbling
             // stops at the nearest declaration.
             .context_menu({
-                let menu = crate::chrome::context_menu::menu_from_items(
+                let menu = crate::chrome::surfaces::context_menu::menu_from_items(
                     "Workspaces",
                     "What you can do here",
                     MENU_CONTAINER,
@@ -121,6 +121,7 @@ pub(super) fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetMod
         emit,
         catalog: ctx.action_catalog().expect("a render pass has the catalog"),
         ws_state,
+        panes: state.panes(),
         // Read once here rather than by each row: a workspace, a column and a card all ask the
         // same question of it, and asking the store three hundred times is three hundred chances
         // to ask it differently.

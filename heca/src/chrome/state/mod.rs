@@ -35,16 +35,16 @@ use heca_core::layout::PaneId;
 use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
 
-use super::{ChromeEvent, ChromeEventBus, RegionId, RegionMap, SidebarSelection};
+use super::{ChromeEvent, ChromeEventBus, RegionId, RegionMap};
 
+pub(super) mod events;
 mod pane_runtime;
 mod shell;
 mod workspaces;
 
+pub use pane_runtime::PaneRuntimeStore;
 pub use shell::SharedChromeState;
 pub use workspaces::WorkspacesContainerState;
-
-use pane_runtime::PaneRuntimeSignals;
 
 #[cfg(test)]
 mod tests;

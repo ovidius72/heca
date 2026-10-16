@@ -23,17 +23,13 @@ fn pane_runtime_round_trips_through_signals() {
         kind: ContentKind::Terminal,
     };
 
-    s.workspaces
-        .set_pane_runtime(pane, &runtime, Some("my pane"));
+    s.panes.set_runtime(pane, &runtime, Some("my pane"));
 
     let mirrored = s
-        .workspaces
-        .with_pane_runtime(pane, |runtime| runtime.expect("pane runtime").snapshot());
+        .panes
+        .with(pane, |runtime| runtime.expect("pane runtime").snapshot());
     assert_eq!(mirrored, runtime);
-    assert_eq!(
-        s.workspaces.pane_custom_name(pane),
-        Some("my pane".to_string())
-    );
+    assert_eq!(s.panes.custom_name(pane), Some("my pane".to_string()));
 }
 
 #[test]
@@ -65,8 +61,8 @@ fn pane_runtime_events_emit_only_on_change() {
     ];
     for step in steps {
         step(&mut runtime);
-        s.workspaces.set_pane_runtime(pane, &runtime, None);
-        s.workspaces.set_pane_runtime(pane, &runtime, None);
+        s.panes.set_runtime(pane, &runtime, None);
+        s.panes.set_runtime(pane, &runtime, None);
     }
 
     assert_eq!(
@@ -84,12 +80,12 @@ fn pane_runtime_events_emit_only_on_change() {
 fn terminal_viewport_defaults_are_zeros() {
     let s = state();
     let pane = PaneId(10);
-    // A pane that was never written via set_pane_viewport returns None.
-    assert_eq!(s.workspaces.terminal_viewport(pane), None);
+    // A pane that was never written via set_viewport returns None.
+    assert_eq!(s.panes.terminal_viewport(pane), None);
 
     // After a viewport write, it returns the expected values.
-    s.workspaces.set_pane_viewport(pane, 42, false, 200);
-    let vp = s.workspaces.terminal_viewport(pane).unwrap();
+    s.panes.set_viewport(pane, 42, false, 200);
+    let vp = s.panes.terminal_viewport(pane).unwrap();
     assert_eq!(
         vp,
         crate::host::TerminalViewport {
@@ -111,15 +107,15 @@ fn terminal_viewport_emits_only_on_change() {
     let pane = PaneId(11);
 
     // First write -> terminal.viewport.changed emitted.
-    s.workspaces.set_pane_viewport(pane, 10, false, 50);
+    s.panes.set_viewport(pane, 10, false, 50);
     // Identical write -> no event.
-    s.workspaces.set_pane_viewport(pane, 10, false, 50);
+    s.panes.set_viewport(pane, 10, false, 50);
     // Single field change -> event fired.
-    s.workspaces.set_pane_viewport(pane, 11, false, 50);
+    s.panes.set_viewport(pane, 11, false, 50);
     // All fields changed -> single event.
-    s.workspaces.set_pane_viewport(pane, 0, true, 100);
+    s.panes.set_viewport(pane, 0, true, 100);
     // Back to the last values -> event fired (still a change from current).
-    s.workspaces.set_pane_viewport(pane, 11, false, 50);
+    s.panes.set_viewport(pane, 11, false, 50);
 
     assert_eq!(
         seen.borrow().as_slice(),
@@ -137,9 +133,9 @@ fn terminal_viewport_emits_only_on_change() {
 fn terminal_viewport_does_not_require_runtime_preinit() {
     let s = state();
     let pane = PaneId(12);
-    // set_pane_viewport on a fresh pane without set_pane_runtime should work.
-    s.workspaces.set_pane_viewport(pane, 5, true, 30);
-    let vp = s.workspaces.terminal_viewport(pane).unwrap();
+    // set_viewport on a fresh pane without set_runtime should work.
+    s.panes.set_viewport(pane, 5, true, 30);
+    let vp = s.panes.terminal_viewport(pane).unwrap();
     assert_eq!(vp.viewport_offset, 5);
     assert!(vp.at_bottom);
     assert_eq!(vp.scrollback_rows, 30);

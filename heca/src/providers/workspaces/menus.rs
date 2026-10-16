@@ -22,7 +22,7 @@ pub(crate) const MENU_CONTAINER: &str = "workspaces.container";
 /// Menu items for the container's **empty space**: the verbs that are about the list rather than
 /// about any row in it. Facts-only, so it is unit-testable without a ctx, like its row siblings.
 pub(crate) fn container_items() -> Vec<DropdownItem> {
-    vec![item("create_workspace", "New workspace")]
+    vec![DropdownItem::new("create_workspace", "New workspace")]
 }
 
 /// The row this component's `key` names, or `None` for a key it did not write.
@@ -51,8 +51,8 @@ pub(crate) fn pane_row_items(
             "New pane",
             "add_pane_to_column",
             &[
-                ("ws_idx", usize_arg(ws_idx)),
-                ("col_idx", usize_arg(col_idx)),
+                ("ws_idx", PropValue::from(ws_idx)),
+                ("col_idx", PropValue::from(col_idx)),
             ],
         ));
     }
@@ -90,15 +90,15 @@ pub(crate) fn column_row_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownIte
             "New pane",
             "add_pane_to_column",
             &[
-                ("ws_idx", usize_arg(ws_idx)),
-                ("col_idx", usize_arg(col_idx)),
+                ("ws_idx", PropValue::from(ws_idx)),
+                ("col_idx", PropValue::from(col_idx)),
             ],
         ),
         item_running(
             "split_horizontal",
             "New column",
             "add_column_to_workspace",
-            &[("ws_idx", usize_arg(ws_idx))],
+            &[("ws_idx", PropValue::from(ws_idx))],
         ),
         // NB: no "Rename column" entry — a column's name is not displayed anywhere yet (columns
         // render as a MarkerGroup with no header/label), so renaming would have no visible effect.
@@ -108,8 +108,8 @@ pub(crate) fn column_row_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownIte
             "Delete column",
             "delete_column",
             &[
-                ("ws_idx", usize_arg(ws_idx)),
-                ("col_idx", usize_arg(col_idx)),
+                ("ws_idx", PropValue::from(ws_idx)),
+                ("col_idx", PropValue::from(col_idx)),
             ],
         )
         .danger(true),
@@ -124,14 +124,14 @@ pub(crate) fn workspace_row_items(ws_idx: usize, has_custom_name: bool) -> Vec<D
             "split_horizontal",
             "New column",
             "add_column_to_workspace",
-            &[("ws_idx", usize_arg(ws_idx))],
+            &[("ws_idx", PropValue::from(ws_idx))],
         ),
-        item("create_workspace", "New workspace"),
+        DropdownItem::new("create_workspace", "New workspace"),
         item_running(
             "rename_workspace",
             "Rename workspace",
             "rename_workspace_by_idx",
-            &[("ws_idx", usize_arg(ws_idx))],
+            &[("ws_idx", PropValue::from(ws_idx))],
         ),
     ];
     if has_custom_name {
@@ -139,7 +139,7 @@ pub(crate) fn workspace_row_items(ws_idx: usize, has_custom_name: bool) -> Vec<D
             "reset_workspace_name",
             "Use default name",
             "reset_workspace_name_by_idx",
-            &[("ws_idx", usize_arg(ws_idx))],
+            &[("ws_idx", PropValue::from(ws_idx))],
         ));
     }
     items.push(
@@ -147,7 +147,7 @@ pub(crate) fn workspace_row_items(ws_idx: usize, has_custom_name: bool) -> Vec<D
             "delete_workspace",
             "Delete workspace",
             "delete_workspace",
-            &[("ws_idx", usize_arg(ws_idx))],
+            &[("ws_idx", PropValue::from(ws_idx))],
         )
         .danger(true),
     );

@@ -6,7 +6,7 @@
 //! default: no frame of its own, lighter padding, and a header that reads as a heading rather than
 //! a card title. Give it a fill or a border through [`StyleExt`] when it should stand out.
 //!
-//! The title is a real [`Label`](super::Label) child, like every other piece of widget content
+//! The title is a real [`Label`] child, like every other piece of widget content
 //! (`AGENTS.md`: a widget composes its content and paints only its own chrome). It is created up
 //! front and **hidden until a title is set**, so `title` can be applied before or after children
 //! without inserting into the child list at a surprising position — properties are

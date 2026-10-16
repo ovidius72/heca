@@ -5,7 +5,7 @@
 //! size and the box the terminal will fill, which every request carries. Nothing here reads a
 //! window.
 //!
-//! "Terminal process", never "session": a session is an instance of heca (F012).
+//! "Terminal process", never "session": a session is an instance of heca.
 
 use std::path::{Path, PathBuf};
 

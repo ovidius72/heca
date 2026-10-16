@@ -9,7 +9,7 @@ A variant appears here only when the bare name says everything: a unit variant, 
 fields all have a real default (`move_pane_left`'s `pane_id: None` means "the focused pane";
 `app_font_increase` carries its own step; `scrollback_line_up`'s one notch is the documented
 default). An action that needs a target is built from its declared arguments through
-[`build_action`] instead — see the note at the placeholder arms that used to live here.
+[`build_action`](super::build::build_action) instead — see the note at the placeholder arms that used to live here.
 */
 pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
     match name {
@@ -35,7 +35,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "focus_dock" => Some(WmAction::FocusDock { dock: None }),
         // The same, and back out again if it already has the keyboard — what `global_focus` binds.
         // Separate from `focus_dock` so a click, an RPC call and the palette cannot release a dock
-        // by asking to focus it (F003/P082/T444).
+        // by asking to focus it.
         "toggle_dock" => Some(WmAction::ToggleDock { dock: None }),
         "unfocus_dock" => Some(WmAction::UnfocusDock),
         "collapse_current_workspace" => Some(WmAction::CollapseCurrentWorkspace),
@@ -75,7 +75,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         // (`every_action_that_needs_a_target_refuses_to_default_it` holds the line).
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
-        // Font zoom — global (app-wide terminal) branch, the `app-03` base.
+        // Font zoom — global (app-wide terminal) branch.
         "app_font_increase" => Some(WmAction::AppFontZoom {
             step: FontZoomStep::In,
         }),

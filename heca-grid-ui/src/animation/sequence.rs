@@ -27,7 +27,7 @@ use super::{Animate, AnimationFrame};
 /// So it composes: a sequence can lead another sequence, and everything that asks "is it still
 /// leaving" gets one answer covering every part. That is a **type guarantee** rather than something
 /// each host has to remember — getting it wrong retired the exposé when only its dissolve had
-/// finished, leaving the cards on screen after the map had gone (F003/P082/T327).
+/// finished, leaving the cards on screen after the map had gone.
 pub struct Sequence {
     lead: Box<dyn Animate>,
     follow: Box<dyn Animate>,

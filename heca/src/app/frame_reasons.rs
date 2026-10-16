@@ -4,8 +4,8 @@
 //! `bool`. That reads fine and cannot be examined: when the app spins with nothing happening,
 //! exactly one of the ten is stuck true, and a chain has no way to say which.
 //!
-//! The same defect, one line below, was already fixed for the wake side (F003/P082/T515: "the loop
-//! picks its deadline with a chain, not a list"). This is that treatment applied to the reasons.
+//! The same defect, one line below, was already fixed for the wake side: the loop picks its
+//! deadline from a list, not a chain. This is that treatment applied to the reasons.
 
 /// Every reason the loop has to draw. One field per reason, so which one asked is a value rather
 /// than something to work out by reading.

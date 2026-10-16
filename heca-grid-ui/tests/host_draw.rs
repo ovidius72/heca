@@ -105,8 +105,8 @@ fn a_backdrop_with_no_strength_is_not_recorded_at_all() {
     assert!(host_cmds(&scene).is_empty());
 }
 
-/// **Host work fades with the widget that asked for it** (F003/P082/T459 — a surface owns its
-/// arrival and its exit).
+/// **Host work fades with the widget that asked for it** (a surface owns its arrival and its
+/// exit).
 ///
 /// A surface inside an overlay that is fading in must fade with it, and so must the frost it asked
 /// for — left at full strength the frost holds the whole session out of focus for the length of the

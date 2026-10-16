@@ -137,7 +137,7 @@ pub trait Animate {
     /// until every one of them has finished. Everything that asks "is it still there" reads this,
     /// so a composition answers for all of its parts and no host has to know which effects a
     /// surface chose. Tying a surface's lifetime to one half of its exit is what left the exposé's
-    /// cards on screen after the map itself had gone (F003/P082/T327).
+    /// cards on screen after the map itself had gone.
     fn is_leaving(&self) -> bool;
 
     /// What to draw *this frame* — see [`AnimationFrame`]. At rest, [`AnimationFrame::IDENTITY`].

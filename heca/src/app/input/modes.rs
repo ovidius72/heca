@@ -75,8 +75,7 @@ pub(super) fn handle_prefix_mode(
 
     // The prefix (`normal`) map first, then — when it misses — the focused surface's own layer,
     // before the key is dropped. That fall-through is what lets a component bind `r` without having
-    // to know whether the user reaches it directly or through the prefix (user decision,
-    // 2026-07-29).
+    // to know whether the user reaches it directly or through the prefix.
     let action = keymap
         .resolve(crate::keymap::LEADER_LAYER, &combo)
         .cloned()

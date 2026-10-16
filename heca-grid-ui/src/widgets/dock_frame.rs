@@ -14,24 +14,23 @@
 //! drag-handle grip is **drawn but wired to nothing** (see [`child`](DockFrame::child) seam).
 //!
 //! **Two different drags will use it, and they are not the same feature** — worth knowing before
-//! reading it as one (user, 2026-07-30):
+//! reading it as one:
 //!
 //! - the frame as a **container**: drag the whole dock into another chrome region. The host's
 //!   actions for this already exist (`chrome.container.move_to_region` and friends); only the mouse
-//!   surface is missing — **P079(F004)**, task `J5592` "DockFrame gets the drag handle it was
-//!   specified with".
+//!   surface is missing.
 //! - the frame as a **row inside** a container: reorder it within the list. heca mounts one frameless
-//!   `DockFrame` per workspace row, so this is the drag its grip sits next to — **P030(F006)**
-//!   (app-05, workspace drag-to-reorder), which still needs its own action and drop logic.
+//!   `DockFrame` per workspace row, so this is the drag its grip sits next to (workspace
+//!   drag-to-reorder), which still needs its own action and drop logic.
 //!
 //! Until one of them wires a drag, the grip promises something nothing does. It is left in place
-//! deliberately, as a placeholder for those phases.
+//! deliberately, as a placeholder for those two drags.
 //!
 //! **Rail mode (built).** A Dock hosted in a
 //! [`ChromeRegion`](super::ChromeRegion) can collapse to an **icon rail**. Bind
-//! the region's [`RegionMode`](super::RegionMode) signal with
+//! the region's [`RegionMode`] signal with
 //! [`rail`](DockFrame::rail): while the region is in
-//! [`RegionMode::CollapsedRail`](super::RegionMode::CollapsedRail) the frame
+//! [`RegionMode::CollapsedRail`] the frame
 //! folds its header + body away and shows a single centered [`Icon`] instead.
 //! Reading the mode (never writing it) keeps the chrome plan's *read-via-signals,
 //! write-via-actions* contract — the host's toggle action expands the rail back.
@@ -71,7 +70,7 @@ const BODY_GAP: f32 = 4.0;
 const RAIL_ICON_SIZE: f32 = 22.0;
 
 /// **The frame's parts, named.** Each says which one it is
-/// ([`PlaceExt::area`](crate::builders::PlaceExt::area)) and the frame asks by name through
+/// ([`PlaceExt::area`]) and the frame asks by name through
 /// [`area`](crate::component::area) — never by its position in `children`.
 ///
 /// An index is right only for the arrangement it was written for: insert a part and every index
@@ -226,8 +225,8 @@ impl DockFrame {
         self
     }
 
-    /// Append body content (folds away when collapsed). This is also the seam P079(F004)
-    /// uses to make the frame draggable via the shipped `drag/` framework.
+    /// Append body content (folds away when collapsed). This is also the seam a dock
+    /// drag uses to make the frame draggable via the shipped `drag/` framework.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child(mut self, c: impl crate::builders::IntoComponent) -> Self {
         if let Some(body) = crate::component::area_slot(&mut self.base, BODY_AREA) {
@@ -430,7 +429,7 @@ impl Component for DockFrame {
 
         // Background fill — rounded by theme radius. An explicit `.glow(..)`
         // (StyleExt) wins; otherwise the theme rest glow gives the frame the
-        // shared neon identity at rest, scaled by `glow_size` (T011).
+        // shared neon identity at rest, scaled by `glow_size`.
         if let Some(f) = fill {
             let glow = self
                 .base

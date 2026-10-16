@@ -68,7 +68,7 @@ pub fn resolve_action(
 /// `None` when the name is unknown, or when a required argument is missing or does not parse.
 ///
 /// **Each arm's arguments are declared** in that action's
-/// [`ActionDescriptor::args`](crate::actions::ActionDescriptor::args), which is what lets a caller
+/// `ActionDescriptor::args`, which is what lets a caller
 /// discover them (`describe-action`) and what lets
 /// [`check_args`](crate::args::check_args) say *which* argument was wrong instead of the whole
 /// call quietly evaporating. The list that used to sit here in a doc comment named eleven of the

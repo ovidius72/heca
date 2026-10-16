@@ -13,7 +13,7 @@ use std::collections::HashMap;
 /// through `action_from_name`, a parameterized one through `build_action` (so a malformed `args`
 /// still fails at load, not at press).
 ///
-/// Anything else ⇒ [`ActionRef::Dynamic`] — **not an error** (plugin-04 G3). Config is loaded before
+/// Anything else ⇒ [`ActionRef::Dynamic`] — **not an error**. Config is loaded before
 /// any provider or plugin has registered its actions, so a binding to `plugin.docker.restart` cannot
 /// possibly resolve yet; it resolves at press time through the one dispatch door. A binding to an
 /// action that never turns up no-ops with a debug warning when pressed, which is the price of not
@@ -29,16 +29,14 @@ pub(super) fn action_ref_from_config(name: &str, args: &HashMap<String, String>)
     if let Some(built) = resolve_action(name, args) {
         return ActionRef::Builtin(built);
     }
-    let mut intent = crate::chrome::Intent::new(name);
-    for (k, v) in args {
-        intent
-            .args
-            .insert(k.clone(), crate::chrome::PropValue::Text(v.clone()));
-    }
+    let intent = crate::chrome::Intent::new(name).args(
+        args.iter()
+            .map(|(k, v)| (k.clone(), crate::chrome::PropValue::Text(v.clone()))),
+    );
     ActionRef::Dynamic(intent)
 }
 
-/// The action id a `[[keys.component]]` entry means, and the reference to bind (F003/P086/T362).
+/// The action id a `[[keys.component]]` entry means, and the reference to bind.
 ///
 /// **Binding names are short; the action id is `<component>.<name>`.** A user writes `cursor_up`
 /// under `name = "workspaces"` and means `workspaces.cursor_up` — they should never have to repeat

@@ -81,11 +81,13 @@ fn a_sidebar_resize_is_announced_once_for_that_sidebar() {
     let s = state();
     let seen = Rc::new(RefCell::new(Vec::new()));
     let seen_events = seen.clone();
-    let _sub = s.events().subscribe("chrome.region.size.changed", move |event| {
-        if let ChromeEvent::RegionSizeChanged { region, size } = event {
-            seen_events.borrow_mut().push((*region, *size));
-        }
-    });
+    let _sub = s
+        .events()
+        .subscribe("chrome.region.size.changed", move |event| {
+            if let ChromeEvent::RegionSizeChanged { region, size } = event {
+                seen_events.borrow_mut().push((*region, *size));
+            }
+        });
 
     s.set_left_size(300.0);
     s.set_left_size(300.0);
@@ -94,7 +96,10 @@ fn a_sidebar_resize_is_announced_once_for_that_sidebar() {
     assert_eq!((s.left_size(), s.right_size()), (300.0, 200.0));
     assert_eq!(
         seen.borrow().as_slice(),
-        [(RegionId::LeftSidebar, 300.0), (RegionId::RightSidebar, 200.0)],
+        [
+            (RegionId::LeftSidebar, 300.0),
+            (RegionId::RightSidebar, 200.0)
+        ],
     );
 }
 
@@ -134,6 +139,37 @@ fn every_placement_owns_its_own_scroll_offset() {
         "and a third placement elsewhere is untouched",
     );
     assert_eq!(s.container_scroll("dock.a").get_untracked(), 30.0);
+}
+
+/// **A placement's cursor announces its moves** — once per real change, naming the placement and
+/// the row, and once more when it is cleared. Every writer goes through the one setter, so none has
+/// to remember to announce.
+#[test]
+fn a_cursor_move_is_announced_once_naming_its_placement() {
+    let s = state();
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let seen_events = seen.clone();
+    let _sub = s
+        .events()
+        .subscribe("container.cursor.changed", move |event| {
+            if let ChromeEvent::ContainerCursorChanged { container, key } = event {
+                seen_events
+                    .borrow_mut()
+                    .push((container.clone(), key.clone()));
+            }
+        });
+
+    s.set_container_cursor("workspaces", Some("pane:4".into()));
+    s.set_container_cursor("workspaces", Some("pane:4".into()));
+    s.set_container_cursor("workspaces", None);
+
+    assert_eq!(
+        seen.borrow().as_slice(),
+        [
+            ("workspaces".to_string(), Some("pane:4".to_string())),
+            ("workspaces".to_string(), None),
+        ],
+    );
 }
 
 /// A cursor belongs to a **placement**, like the scroll offset beside it: place a container

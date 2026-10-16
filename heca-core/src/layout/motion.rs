@@ -2,8 +2,9 @@
 //! where it is now.
 //!
 //! A slide is how one window shows a change, not part of the change: two windows on one session
-//! each animate their own copy of a move, so it is held by the window's [`ScrollView`], keyed by
-//! the column or pane that is moving, and the shared content holds none of it.
+//! each animate their own copy of a move, so it is held by the window's
+//! [`ScrollView`](crate::layout::ScrollView), keyed by the column or pane that is moving, and the shared
+//! content holds none of it.
 
 use std::collections::HashMap;
 

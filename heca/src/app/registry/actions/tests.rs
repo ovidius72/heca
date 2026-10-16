@@ -12,7 +12,7 @@ use crate::input::WmAction;
 /// The other direction — a handler with no descriptor — is already held by
 /// `every_wm_action_variant_is_reachable_by_name` in `input.rs`, which walks the variants
 /// rather than the names. Between them the two lists cannot fall out of step, which is the
-/// property F003/P010/T005 exists to guarantee.
+/// property these tests exist to guarantee.
 #[test]
 fn every_catalogued_action_has_a_handler() {
     use crate::actions::builtins;
@@ -83,7 +83,7 @@ fn a_placement_id_is_a_builtin_not_a_dynamic_action() {
 #[test]
 fn chrome_container_placement_actions_have_handlers() {
     // Every WmAction variant must have a registered handler (execute() panics
-    // in debug otherwise) — assert the plugin-02 container actions are wired.
+    // in debug otherwise) — assert the container placement actions are wired.
     let registry = super::build_registry();
     assert!(registry.has_handler(&WmAction::MoveContainerToRegion {
         container_id: String::new(),

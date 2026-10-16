@@ -97,7 +97,7 @@ fn in_a_space_between_row_the_group_sits_at_the_far_end() {
 /// **The buttons of a group visibly do not touch: the container's own `gap` puts air between them.**
 ///
 /// A destructive button's outline sat against its neighbour, and the one pixel that first answered
-/// it did not read by eye (2026-10-02): about three now. The air is the group's `gap` — a step of
+/// it did not read by eye: about three now. The air is the group's `gap` — a step of
 /// the theme's rhythm (`Xs`), so it scales with the font — and not a pixel count written into the
 /// pane header or any other caller.
 #[test]

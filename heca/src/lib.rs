@@ -29,8 +29,8 @@ pub use app::interaction::ActionPolicy;
 pub use args::{ArgKind, ArgSpec};
 // A dock: `regions(..).append(..)`, the `Provider` it takes, what its body is built from, and how
 // its widgets report what the user did (`fires`, `picks`).
-pub use chrome::pane_items::{PANE_ARG, PaneChip, PaneFacts, PaneLine};
-pub use chrome::terminal::Terminal;
+pub use chrome::panes::pane_items::{PANE_ARG, PaneChip, PaneFacts, PaneLine};
+pub use chrome::panes::terminal::Terminal;
 pub use chrome::{
     BuildCx, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
@@ -91,8 +91,10 @@ impl HecaApp {
     /// The reply says what became of it, because a script cannot be told "ok" when nothing ran: an
     /// unknown name, an action the current domain refuses, and one whose component is not mounted
     /// are three different answers.
-    // Transitional: will be used by the RPC server / socket listener in Phase 5.
-    #[expect(dead_code, reason = "Reserved for the Phase 5 RPC server path.")]
+    #[expect(
+        dead_code,
+        reason = "nothing listens on a socket yet; this is the entry a listener calls"
+    )]
     pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<(), rpc::RpcError> {
         use crate::app::interaction::{IntentOutcome, InteractionSource, dispatch_view_intent};
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
@@ -137,10 +139,13 @@ impl HecaApp {
 
     /// Answer an action-metadata **introspection** query (`list-actions` / `describe-action <name>`)
     /// against the runtime catalog, returning JSON. `None` if `cmd` is not an introspection command
-    /// — the RPC server then routes it to [`execute_rpc_command`] to run as an action. A query
-    /// returns data, never a [`WmAction`], which is why it is a separate entry point.
-    // Transitional: consumed by the Phase 5 RPC server alongside `execute_rpc_command`.
-    #[expect(dead_code, reason = "Reserved for the Phase 5 RPC server path.")]
+    /// — the RPC server then routes it to [`execute_rpc_command`](HecaApp::execute_rpc_command) to run as an
+    /// action. A query returns data, never a [`WmAction`](crate::input::WmAction), which is why it is a
+    /// separate entry point.
+    #[expect(
+        dead_code,
+        reason = "nothing listens on a socket yet; this is the entry a listener calls"
+    )]
     pub fn query_rpc_command(&self, cmd: &str) -> Option<Result<String, rpc::RpcError>> {
         let state = self.state.as_ref()?;
         rpc::introspect(&state.action_catalog, cmd)
@@ -222,7 +227,7 @@ impl HecaApp {
             state.appearance = self.app_config.config.appearance.clone();
             state.settings = crate::app_state::WindowSettings::from_config(&self.app_config);
             crate::project_trust::notify_if_untrusted();
-            crate::chrome::pane_items::report_pane_items(state);
+            crate::chrome::panes::pane_items::report_pane_items(state);
             // The layout's own options, by the one mapping startup uses too.
             state
                 .session
@@ -370,7 +375,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             crate::project_trust::notify_if_untrusted();
             // What the pane headers are asked to show, now that every action a button names exists:
             // a name nothing provides, and an added item the user's own list leaves out.
-            crate::chrome::pane_items::report_pane_items(&state);
+            crate::chrome::panes::pane_items::report_pane_items(&state);
             // Then the keys a plugin registered for them. Core components have theirs from the
             // config file already; this is the path for anything that has no entry in it.
             crate::providers::bind_provider_keybindings(

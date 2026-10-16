@@ -75,7 +75,7 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
 
 /// **A stacked card's action is reachable by keyboard** — the whole reason the cards had to be in
 /// the tree. The picker walks the laid-out tree, so a card kept in a private list beside it could
-/// never be lettered, and a notification's action was a mouse-only gesture (F003/P096/T486).
+/// never be lettered, and a notification's action was a mouse-only gesture.
 #[test]
 fn a_stacked_cards_action_is_a_pick_target() {
     use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
@@ -194,7 +194,7 @@ fn a_dismissed_card_asks_for_the_relayout_that_moves_the_others_up() {
 
 /// **A card offers as many actions as its spec lists, and says WHICH was pressed.** One action was
 /// a widget limitation written into the data: a notification that can be retried *and* inspected
-/// needs two, and "which card" alone cannot say what to do (F003/P096/T487).
+/// needs two, and "which card" alone cannot say what to do.
 #[test]
 fn a_spec_with_two_actions_renders_two_and_reports_the_pressed_key() {
     use heca_grid_ui::{ButtonVariant, ToastAction, ToastPosition, ToastSpec, ToastStack};
@@ -286,7 +286,7 @@ fn a_dropped_card_plays_its_exit_before_it_goes() {
 }
 
 /// **A card arrives and leaves on its own** — the library's verbs, not a mechanism of its own, and
-/// a closed one takes no space rather than leaving a hole (F003/P096/T485).
+/// a closed one takes no space rather than leaving a hole.
 #[test]
 fn a_toast_opens_hides_and_takes_no_space_while_closed() {
     use heca_grid_ui::{Component, Flex, LayoutExt, Length, Parent, Toast};

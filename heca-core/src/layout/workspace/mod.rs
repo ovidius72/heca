@@ -100,37 +100,32 @@ impl Workspace {
         found
     }
 
+    /// **Every pane in this workspace** — the columns' panes in order, then the floating ones. A
+    /// caller that lists, syncs or searches panes walks this, so none can forget the floats.
+    pub fn panes(&self) -> impl Iterator<Item = &super::column::Pane> {
+        self.scrolling
+            .columns
+            .iter()
+            .flat_map(|col| col.panes.iter())
+            .chain(self.floating_panes.iter().map(|float| &float.pane))
+    }
+
+    /// [`panes`](Self::panes), for writing.
+    pub fn panes_mut(&mut self) -> impl Iterator<Item = &mut super::column::Pane> {
+        self.scrolling
+            .columns
+            .iter_mut()
+            .flat_map(|col| col.panes.iter_mut())
+            .chain(self.floating_panes.iter_mut().map(|float| &mut float.pane))
+    }
+
     /// Find any pane by ID across both scrolling and floating.
     pub fn find_pane(&self, pane_id: PaneId) -> Option<&super::column::Pane> {
-        // Check floating panes first
-        if let Some(f) = self.floating_panes.iter().find(|f| f.pane.id == pane_id) {
-            return Some(&f.pane);
-        }
-        for col in &self.scrolling.columns {
-            let found = col.panes.iter().find(|p| p.id == pane_id);
-            if found.is_some() {
-                return found;
-            }
-        }
-        None
+        self.panes().find(|pane| pane.id == pane_id)
     }
 
     pub fn find_pane_mut(&mut self, pane_id: PaneId) -> Option<&mut super::column::Pane> {
-        // Check floating panes first
-        if let Some(f) = self
-            .floating_panes
-            .iter_mut()
-            .find(|f| f.pane.id == pane_id)
-        {
-            return Some(&mut f.pane);
-        }
-        // Check scrolling columns
-        for col in &mut self.scrolling.columns {
-            if let Some(pane) = col.panes.iter_mut().find(|p| p.id == pane_id) {
-                return Some(pane);
-            }
-        }
-        None
+        self.panes_mut().find(|pane| pane.id == pane_id)
     }
 }
 

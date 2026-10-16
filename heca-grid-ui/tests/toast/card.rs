@@ -109,7 +109,7 @@ fn toast_action_button_fires_on_action() {
 
 /// **The action button is as wide as what it says.** A column stretches its children across the
 /// full width — right for the title and the body, wrong for a button: it filled the card edge to
-/// edge and read as a banner rather than something to press (F003/P082/T481).
+/// edge and read as a banner rather than something to press.
 #[test]
 fn toast_action_button_hugs_its_label() {
     use heca_grid_ui::{DrawCommand, Toast};
@@ -180,7 +180,7 @@ fn toast_body_click_fires_on_click_only_when_set() {
 
 /// **The body is whatever you composed** — the card gives it the column and the engine lays it out.
 /// It used to be a `String` the card turned into one `Label`, which is why a notification could
-/// never carry a row of stats or a small grid (F003/P096/T483).
+/// never carry a row of stats or a small grid.
 #[test]
 fn toast_body_takes_a_component_and_lays_it_out() {
     use heca_grid_ui::{Component, Flex, Label, LayoutExt, Length, Parent, Toast};

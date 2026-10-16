@@ -6,8 +6,8 @@ use heca_core::layout::{FocusDomain, Layout};
 
 /// **What owns the screen right now** — the axis a policy is judged against.
 ///
-/// The other half of the pair: [`ActionPolicy`] says *what kind of act this is*, `Domain` says
-/// *what the app is currently doing*. Both are needed, and only the policy half was modelled:
+/// The other half of the pair: [`ActionPolicy`](super::policy::ActionPolicy) says *what kind of act this is*,
+/// `Domain` says *what the app is currently doing*. Both are needed, and only the policy half was modelled:
 /// `FocusDomain` is `Tiled | Floating`, read off the session, so the six policy values could only
 /// ever answer "is a pane floating?". A focused container lives in `chrome_state` and an overlay in
 /// `state.layers`, so neither was visible to policy at all — they were handled by ad-hoc checks

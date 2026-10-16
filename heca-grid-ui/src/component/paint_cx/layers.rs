@@ -135,8 +135,7 @@ impl<'a> PaintCx<'a> {
     /// **Why a second channel rather than widening the first**: `Item`, `Row`, `Choice`,
     /// `ContextMenu`, `CommandPalette` and `Select` all publish a content colour today, and every
     /// button composed inside one would have silently restyled. This one starts empty — nothing
-    /// publishes it — so a control looks exactly as it did unless a container asks otherwise
-    /// (F003/P096/T484).
+    /// publishes it — so a control looks exactly as it did unless a container asks otherwise.
     ///
     /// The tone is a **theme token resolved by the publisher at paint**, never a colour stored at
     /// build time, so a theme reload re-tones what is already on screen. Nesting restores the

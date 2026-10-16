@@ -38,7 +38,7 @@ pub(super) struct HintLayer {
 /// The fine rule subsumes every case — off-screen, hidden behind the sidebar, a zoomed/floating
 /// pane drawn over another — and extends to new surfaces for free. The caller must hand `layers`
 /// in true front → back order; there is no sort here, because a second ordering is a second answer
-/// to "what is in front", and the two drifted once already (2026-08-11: input and painting
+/// to "what is in front", and the two drifted once already (input and painting
 /// disagreed about which layer was frontmost).
 pub(super) fn resolve_hint_layers(
     layers: Vec<HintLayer>,
@@ -80,8 +80,8 @@ pub(super) fn resolve_hint_layers(
     kept
 }
 
-/// The coarse half of §3 — the half that was missing, and the whole of F003/P082/T416's picker
-/// defect. Held here rather than in a behaviour test because the rule is a pure function of the
+/// The coarse half of §3 — the half that was missing, and the whole of the picker defect it
+/// caused. Held here rather than in a behaviour test because the rule is a pure function of the
 /// stack, and because the failure it guards was invisible on screen: the letters were painted
 /// *under* the exposé while the targets they named answered normally.
 #[cfg(test)]
@@ -90,8 +90,7 @@ mod hint_visibility {
     use super::*;
     use heca_core::layout::{Point, Size};
 
-    /// **A target whose centre has left the screen is judged where you can still see it**
-    /// (F003/P082/T438).
+    /// **A target whose centre has left the screen is judged where you can still see it**.
     ///
     /// A pane scrolled left until its middle passes the window's edge is still half on screen —
     /// under the sidebar. Its centre is at a negative x, which no occluder starting at x = 0
@@ -174,7 +173,7 @@ mod hint_visibility {
         );
     }
 
-    /// **A tree that has not been laid out yet is not "hidden"** (F003/P082/T438).
+    /// **A tree that has not been laid out yet is not "hidden"**.
     ///
     /// The chrome tree is rebuilt with zero bounds and laid out after; this gate runs every frame.
     /// Judging it in between answered "nothing here is visible", and because an unseen view is
@@ -222,7 +221,7 @@ mod hint_visibility {
         Rectangle::new(Point::new(0.0, 0.0), Size::new(1000.0, 800.0))
     }
 
-    /// **The defect this task exists for.** With the exposé up, `prefix+/` offered the sidebar's
+    /// **The defect this guards.** With the exposé up, `prefix+/` offered the sidebar's
     /// rows — the letters were invisible under the map, so a keystroke drove a surface the user
     /// could not see. A modal layer is the active context: everything beneath it is dormant, and
     /// dormant surfaces are not pickable.

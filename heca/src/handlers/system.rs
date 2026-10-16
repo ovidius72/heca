@@ -14,12 +14,12 @@ pub fn handle_command_palette(state: &mut AppState, action: &WmAction) {
 /// Open the context menu for the active context (keyboard / RPC entry, `prefix+>`).
 ///
 /// A focused container's cursor row wins; otherwise the focused content pane. **Resolved here, at
-/// dispatch time** (F003/P086/T365) — it used to be resolved before the `Prefix` transition and
+/// dispatch time** — it used to be resolved before the `Prefix` transition and
 /// stashed in `pending_context`, because the mode the handler ran in could no longer say a
 /// container had been driving. Chrome focus is not a mode and the transition does not touch it, so
 /// there is nothing left to carry across and the stash is gone.
 pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
-    // **The focused widget's own menu first** (F004/P084/T395). Generalised, not duplicated: this
+    // **The focused widget's own menu first**. Generalised, not duplicated: this
     // action stopped meaning "the focused pane's menu" and started meaning "the focused widget's,
     // bubbling outwards" — so `prefix+>`, `Shift+F10` and the Menu key all reach a pane row, a
     // column, a workspace or a plugin's row through one catalogued action, and the host knows what
@@ -51,7 +51,7 @@ pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
 ///
 /// `dock = Some(id)` focuses that container directly (RPC, a menu entry, a script). A bare
 /// `focus_dock` opens the pick: every dock on screen lights a letter and the next keypress focuses
-/// the one chosen ([`InputMode::DockPick`], resolved in `app/input.rs`).
+/// the one chosen ([`InputMode::DockPick`](crate::app_state::InputMode::DockPick), resolved in `app/input.rs`).
 ///
 /// The pick is uniform — it is offered even when there is only one dock — because "sometimes a letter
 /// appears and sometimes the key acts immediately" is a rule a user has to learn from surprise.
@@ -114,7 +114,7 @@ pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) {
 
 /// Resolve `ToastStack::on_action(id, key)` (relayed as this action by the mount, since a
 /// notification's real Intent cannot be known until the notification exists — see
-/// chrome::notification_layer) into the notification's real `Intent` and fire it through the
+/// chrome::surfaces::notifications) into the notification's real `Intent` and fire it through the
 /// same layer_emitter the mount built, landing on the event loop's next turn.
 pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction) {
     let WmAction::NotificationActionRelay {
@@ -158,7 +158,7 @@ pub(crate) fn font_zoom_delta(state: &AppState, step: FontZoomStep) -> f32 {
     }
 }
 
-/// App-wide terminal font zoom (the `app-03` base) — steps every pane's size.
+/// App-wide terminal font zoom — steps every pane's size.
 pub fn handle_app_font_zoom(state: &mut AppState, action: &WmAction) {
     let WmAction::AppFontZoom { step } = action else {
         return;

@@ -1,7 +1,6 @@
 use super::*;
 use super::dock_view::DockView;
 use crate::chrome::BuildCx;
-use crate::app_state::SidebarItemState;
 use crate::chrome::{
     ChromeEventBus, ChromeHost, ChromeIntentEmitter, ChromeSignals, DragItemRegistry,
     SharedChromeState,
@@ -25,7 +24,6 @@ pub(super) fn tree() -> WorkspaceTree {
         name: "ws1".into(),
         custom_name: None,
         collapsed: false,
-        state: SidebarItemState::Active,
         columns: vec![ColumnEntry {
             col_idx: 0,
             col_id: heca_core::layout::ColumnId(0),
@@ -34,7 +32,6 @@ pub(super) fn tree() -> WorkspaceTree {
                 pane_id: PaneId(1),
                 name: "pane1".into(),
                 custom_name: None,
-                state: SidebarItemState::Active,
             }],
         }],
         floating_panes: Vec::new(),
@@ -66,7 +63,6 @@ pub(super) fn tree_with_a_floating_pane() -> WorkspaceTree {
         pane_id: PaneId(9),
         name: "float".into(),
         custom_name: None,
-        state: SidebarItemState::None,
     });
     tree.sync_flat_items();
     tree
@@ -82,12 +78,10 @@ pub(super) fn store_with_tree() -> SharedChromeState {
 
 // ── What the component declares ──
 
-
-/// A facade over a store — what a menu builder and `context_path` receive.
+/// A facade over a store — what a menu builder receives.
 pub(super) fn ctx_over(store: &SharedChromeState) -> ChromeCtx<'_> {
-    ChromeCtx::new(crate::host::App::new(store))
+    ChromeCtx::new(store)
 }
-
 
 #[test]
 fn provider_metadata_is_self_consistent() {
@@ -109,7 +103,7 @@ fn register_seats_in_the_left_sidebar() {
     let left = host.contributions(RegionId::LeftSidebar);
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].id(), "workspaces");
-    assert_eq!(left[0].title(), "Workspaces");
+    assert_eq!(left[0].provider().title(), "Workspaces");
     assert!(host.contributions(RegionId::RightSidebar).is_empty());
     assert_eq!(host.placement("workspaces"), Some(RegionId::LeftSidebar));
 }
@@ -117,7 +111,7 @@ fn register_seats_in_the_left_sidebar() {
 #[test]
 fn contribution_carries_the_provider_metadata() {
     let p = WorkspacesContainerProvider::new("workspaces");
-    let ctx = ChromeCtx::new(crate::host::App::new(&store()));
+    let ctx = ChromeCtx::new(&store());
     let c = container(&p, &ctx);
     assert_eq!(c.id, "workspaces");
     assert_eq!(c.title, "Workspaces");

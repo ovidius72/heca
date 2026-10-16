@@ -23,5 +23,9 @@ pub fn handle_cursor_to(state: &mut AppState, action: &WmAction) {
     let WmAction::CursorTo { mount, key } = action else {
         return;
     };
-    crate::providers::move_provider_cursor(state, mount, key);
+    // The placement's cursor key is the one record: the rows' outlines draw from it, and the dock
+    // reads it before each action, so the next `j`/`k` continues from here.
+    state
+        .chrome_state
+        .set_container_cursor(mount, Some(key.clone()));
 }

@@ -303,3 +303,22 @@ fn update_working_area_noop_when_size_unchanged() {
         "size must not drift on no-op"
     );
 }
+
+/// **A workspace's pane list holds every pane** — the columns' in order, then the floating ones —
+/// so a list, a sync or a search built on it cannot leave the floats out.
+#[test]
+fn a_workspaces_panes_include_the_floating_ones_after_the_columns() {
+    let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
+    for i in 1..=3u64 {
+        window
+            .m()
+            .add_pane(Pane::new(PaneId(i), format!("p{i}")), None, true);
+    }
+    let rect = Rectangle::new(Point::new(10.0, 20.0), Size::new(300.0, 200.0));
+    assert!(window.ws().float_tiled_pane(PaneId(2), rect).is_some());
+
+    let ws = window.l().active_workspace().expect("a workspace");
+    let ids: Vec<u64> = ws.panes().map(|pane| pane.id.0).collect();
+    assert_eq!(ids, [1, 3, 2]);
+    assert_eq!(ws.find_pane(PaneId(2)).map(|pane| pane.id), Some(PaneId(2)));
+}

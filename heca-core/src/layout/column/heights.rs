@@ -196,7 +196,7 @@ impl Column {
     ///
     /// Same key, same "grow me", opposite edge: on the bottom pane `j`/`k` seem to work, on the
     /// middle and top panes they seem reversed. This is a consequence of [`resize_pane_height`](Self::resize_pane_height)'s
-    /// local transfer (F004/P084/T413), not a regression it introduced: before it, a resize spread
+    /// local transfer, not a regression it introduced: before it, a resize spread
     /// the change over every auto-sized pane, so no single divider visibly moved and the ambiguity
     /// did not read.
     ///

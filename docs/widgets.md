@@ -902,7 +902,7 @@ its letter**, and the keycap is drawn whole rather than cut, so you can still re
 
 | what you write | what happens |
 |---|---|
-| nothing | actionable → gets a letter; picking it does what clicking it does |
+| nothing | actionable, or holds the keyboard (a field, a checkbox, a terminal) → gets a letter; picking it does what pressing it does — it takes the keyboard, then its click runs |
 | `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget — it was a `KeyHint` builder before |
 | `.hintable(false)` | never gets a letter, however actionable it is — **from any picker** |
 | `.hint_scope(["close"])` | gets a letter only from a picker that asked for `"close"`, and **drops out of the ordinary one**. See [Two verbs over one tree](#two-verbs-over-one-tree) |
@@ -4707,6 +4707,16 @@ in a pane's bar, a sidebar row, a plugin's panel or on its own — same button, 
 author never has to know which. Declaring a pick is for saying a pick means something *other* than
 the click, never for winning back a letter.
 
+**Anything that holds the keyboard, too** — an `Input`, a `Checkbox`, a `Select`, a terminal. A pick
+is a press: the picked widget takes the keyboard exactly as a mouse press would give it (or the
+region around it, when that region [keeps the keyboard](#focusscope)), and then its click runs.
+
+**Only what is shown.** Every walk over the tree — letters, the pointer, row navigation, drag
+targets, the keyboard — asks one question, `Component::is_shown`. A surface that keeps its box while
+closed (`Overlay`, `ContextMenu`, `CommandPalette`) answers it from its open state, so a closed one
+is gone to all of them at once. A walk that reads `visible` itself is a second answer; ask
+`is_shown`.
+
 **One letter per thing, not per layer.** The one case needing care is a wrapper: a node that exists
 only to hold one other node. A decorator saying what picking does, around a card that can itself be
 activated, is two nodes and one card. So:
@@ -4920,7 +4930,7 @@ key through `[[keys.surface]]` on the name it declares:
 { "kind": "KeyHintGroup",
   "props": { "opens_on": "mypanel.pick" },
   "children": [
-    { "kind": "Row", "events": { "hint": { "action": "docker.restart", "args": { "id": "web" } } } }
+    { "kind": "Row", "events": { "hint": { "action": "docker.restart", "args": { "id": { "text": "web" } } } } }
   ] }
 ```
 
@@ -4997,7 +5007,11 @@ where keyboard focus lives, so the ring cannot say "the keys come here" while th
 
 How the keyboard gets there is the ordinary way: Tab, a press on something inside, or the host asking
 for the region by name — `heca_grid_ui::focus_scope(root, "name")` (and `release_scope` to take it
-back). Those two take a **name string**, which only the host knows (an action, an RPC line), so they
+back). A region asked for goes back to the control inside that last held the keyboard; one that has
+held nothing yet hands it to **the first control inside that takes the keyboard** — a terminal, an
+input — like a dialog focusing its first field, so whatever the dock holds answers the next key with
+nothing declared. A region built with `.keeps_keyboard(true)` is the exception: it holds the
+keyboard itself, always — see the builder below. Those two take a **name string**, which only the host knows (an action, an RPC line), so they
 are **for the host**; a plugin that wants its own region focused calls a method on the widget it
 built and never passes a name. Keys and intents follow the tree's focus too: an intent **enters the
 focused region** and whatever inside owns the capability (a `ScrollRegion`) answers, so a host
@@ -5017,6 +5031,11 @@ set, focused and unfocused.)
   - `.color(Color)` — outline colour. Default: `effective_focus_ring()` (the `focus_ring` token, or
     the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
     `KeyHint::color` distinguishes kinds of pick target.
+  - `.keeps_keyboard(bool)` — **the region holds the keyboard for everything inside it**, for an
+    area with its own cursor (heca sets it on every dock whose component moves a cursor). A press or
+    a pick on a row inside still clicks the row, but the keyboard goes to the region; taking the
+    keyboard into the region never hands it on. So `Enter` acts on the cursor's row, never on the
+    row clicked last. Default `false`.
 - **Reads (host)**: `contains_keyboard(node)` (is the keyboard inside this subtree),
   `keyboard_area(root)` (the nearest named area around what holds the keyboard — a surface by its
   slot, or a region by its name — which is who answers a key, a menu or an action; it never looks
@@ -5242,7 +5261,7 @@ uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
 resolution seam is app-side.
 
 ```rust
-// heca/src/chrome/pane_header/shortcuts.rs — one call composes label + the live keybind(s):
+// heca/src/chrome/panes/pane_header/shortcuts.rs — one call composes label + the live keybind(s):
 let fire = move || emit(InteractionIntent::ActivateAction(action.clone()));
 let hint = fire.clone();                        // this button's pick IS its click
 let button = IconButton::new(icon).on_click(fire);
@@ -5711,7 +5730,7 @@ let dialog = Dialog::new("Delete pane?")
 
 App/agent code and plugins don't build the `Dialog` widget by hand — they **describe** a modal as
 data and let the host own it. Both submit a `ModalSpec { title, body: ViewNode, actions }` to
-`OverlayHost::open_modal` (`heca/src/chrome/overlay.rs`); the host `realize`s the `ViewNode` body,
+`OverlayHost::open_modal` (`heca/src/chrome/surfaces/overlay.rs`); the host `realize`s the `ViewNode` body,
 injects the action buttons + KeyHint targets, shows it as a `Modal`-band layer, and returns the
 outcome as `ModalResult::Action { id, data }` (or `Dismissed`).
 
@@ -6113,7 +6132,7 @@ toasts.update(|v| v.push(
 
 ## Declarative UI model (`ViewNode`)
 
-`ViewNode` (`heca/src/chrome/view.rs`) is the **serializable UI description** that both native code
+`ViewNode` (`heca-view/src/node.rs`) is the **serializable UI description** that both native code
 and plugins author, and that the host mapper `realize()` turns into a retained tree of the widgets
 above. It's the SwiftUI/Flutter-style layer: you *describe* the UI as data; the host builds it. This
 is how a plugin declares UI (it can't ship Rust widgets), and the ergonomic native path too.
@@ -6489,6 +6508,32 @@ So cast at the call site, where the choice is visible:
 ```rust
 Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64));
 ```
+
+**Several arguments at once — `.args(pairs)`.** When the arguments already arrive as a list — the
+words of an RPC line, the `args` table of a key binding, the entries of a menu row — hand them over
+in one call instead of folding them in a loop. Each pair is exactly one `.arg(..)`, applied in order,
+so a later key replaces an earlier one, and each value is still an explicit `PropValue`:
+
+```rust
+// Native: the pairs come from wherever the caller already holds them.
+let pairs = [("ws_idx", 1), ("col_idx", 2)];
+Intent::new("delete_column").args(pairs.map(|(k, v)| (k, PropValue::Int(v))));
+
+// The same intent, written by hand:
+Intent::new("delete_column")
+    .arg("ws_idx", PropValue::Int(1))
+    .arg("col_idx", PropValue::Int(2));
+```
+
+Declaratively there is nothing to call: an intent is data, and its arguments are its `args` table.
+A plugin or an RPC client writes the same intent as
+
+```json
+{ "action": "delete_column", "args": { "ws_idx": { "int": 1 }, "col_idx": { "int": 2 } } }
+```
+
+— each value tagged with its kind (`int`, `text`, `bool`, …), because a `PropValue` says what it
+is — and `.args(..)` is the native spelling of that table, nothing more.
 
 An intent may carry anything `PropValue` holds — `Bool`, `Int`, `Float`, `Text`, a colour or glyph
 **name**, a `List`, or a `Map` for a named group of values. It may **never** carry a closure or a
@@ -6911,7 +6956,7 @@ ViewNode::new(WidgetKind::Card).prop(
 )
 ```
 
-Held by `heca-grid-ui/src/layout.rs` (`a_fractional_rect_resolves_each_percentage_against_its_own_axis`,
+Held by `heca-grid-ui/src/layout/mod.rs` (`a_fractional_rect_resolves_each_percentage_against_its_own_axis`,
 `a_placed_box_takes_no_space_from_its_siblings`, and the margin-axis guard that explains why)
 and by `heca-view-realize` (`a_description_can_place_a_node_at_a_fractional_rect`).
 

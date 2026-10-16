@@ -1,5 +1,5 @@
 //! Actions — what exists and what it says about itself ([`catalog`]), what runs when one fires
-//! ([`registry`]), and what asks the user first ([`confirm`]). The built-in set is [`builtins`].
+//! ([`registry`]), and what asks the user first ([`confirm`]). The built-in set is [`builtins`](mod@builtins).
 //!
 //! How an action declares its arguments is not action-specific and lives in [`crate::args`].
 

@@ -164,13 +164,13 @@ So there are two levels, and they already exist in the code:
   together, as one picture. Focusing a sidebar does not make it a separate surface — that changes
   who gets keys, not what you are looking at.
 
-This is what `active_hint_targets` (`heca/src/chrome/hint.rs:490`) already does: it walks layers
+This is what `active_hint_targets` (`heca/src/chrome/hint/targets.rs`) already does: it walks layers
 front-to-back, stops at the first modal one, and otherwise falls through to chrome + panes together.
 Its occluder rectangles stay too — inside the main surface, a pane behind the left sidebar should not
 wear a letter that draws underneath it.
 
 ⚠️ **Note the distinction, it has been got wrong once.** `FocusedSurface`
-(`heca/src/app/input.rs:60`) is `Layer | Dock | Panes` and answers *who holds the keyboard*. That is
+(`heca/src/app/input/mod.rs:60`) is `Layer | Dock | Panes` and answers *who holds the keyboard*. That is
 **not** this question. A focused sidebar is its own surface for keys and part of the main surface for
 letters.
 
@@ -406,9 +406,9 @@ Hint must survive `heca-grid-ui` becoming a standalone reusable UI library.
 |---|---|
 | `Base::hint`, `Base::hint_label`, `on_hint`, cap painting | **library** — mechanism, no policy |
 | `KeyHintGroup` — the picker widget | **library** — same category as Menu or Dialog |
-| which letters, in what order, who is excluded | **`chrome/hint.rs`** — this app's judgement |
+| which letters, in what order, who is excluded | **`chrome/hint/`** — this app's judgement |
 
-`chrome/hint.rs` already holds the policy correctly: `wanted`,
+`chrome/hint/` already holds the policy correctly: `wanted`,
 `the_pane_you_are_on_gets_no_letter`, and the withdrawal bookkeeping (whoever offers a letter owns it
 until they withdraw it).
 
@@ -518,7 +518,7 @@ cross the boundary, so the declarative spelling is not a nicety, it is the featu
 ```json
 { "kind": "Row",
   "props":  { "nav_key": "docker:abc" },
-  "events": { "hint": { "action": "docker.restart", "args": { "id": "abc" } } } }
+  "events": { "hint": { "action": "docker.restart", "args": { "id": { "text": "abc" } } } } }
 ```
 
 `realize` wires it to `on_hint` firing the intent — the same two-spellings-one-slot pattern `press`

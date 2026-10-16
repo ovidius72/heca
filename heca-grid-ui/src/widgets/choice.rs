@@ -1,9 +1,9 @@
 //! [`Choice`] — a **selectable container that carries a value and composes arbitrary content**.
 //!
-//! It is the option primitive: one `Choice` = one alternative the user can pick. [`Select`] mounts
-//! them as its dropdown rows and [`Tabs`] as its segments (and, later, `ContextMenu` /
-//! `CommandPalette` as their entries) — so the *look* of an option is written once, here, and its
-//! *content* is whatever the caller composes.
+//! It is the option primitive: one `Choice` = one alternative the user can pick.
+//! [`Select`](crate::widgets::Select) mounts them as its dropdown rows and [`Tabs`](crate::widgets::Tabs) as
+//! its segments (and, later, `ContextMenu` / `CommandPalette` as their entries) — so the *look* of an option
+//! is written once, here, and its *content* is whatever the caller composes.
 //!
 //! # `Choice` vs [`Item`](super::Item)
 //! Both are selectable, both compose their content, both are a single Tab stop. They differ in
@@ -22,7 +22,7 @@
 //! `Choice` paints only its own chrome — the selected pill, the hover tint, the press flash, the
 //! focus ring, all from the [`Theme`](crate::theme::Theme) — and lets the layout engine place its
 //! children, which paint themselves. It publishes its **state color** via
-//! [`PaintCx::with_content_color`], so an unstyled [`Label`](super::Label)/[`Icon`](super::Icon)
+//! [`PaintCx::with_content_color`], so an unstyled [`Label`]/[`Icon`](super::Icon)
 //! inside tints with the selection and hover automatically, while a child with its own color (a
 //! `Badge::danger`) keeps it.
 

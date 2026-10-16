@@ -53,7 +53,7 @@ fn a_fraction_holds_its_share_however_tall_its_content() {
     );
 }
 
-/// T518's first claim: **a grid with no template needs none.** Two children, nothing declared, and
+/// **A grid with no template needs none.** Two children, nothing declared, and
 /// each should get an equal half of the box — the implicit tracks do it, so nothing has to count the
 /// children to write a template for them.
 #[test]
@@ -104,7 +104,7 @@ fn a_grid_with_no_template_splits_its_children_evenly() {
     }
 }
 
-/// T518's second claim: a child that asks for a row the template did not write **still gets one**.
+/// A child that asks for a row the template did not write **still gets one**.
 /// Records what that row is sized as, since the template covers only the rows it names.
 #[test]
 fn a_child_placed_past_the_template_gets_its_own_row() {

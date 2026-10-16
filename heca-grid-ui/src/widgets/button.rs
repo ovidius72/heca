@@ -82,8 +82,8 @@ pub enum ButtonVariant {
     Link,
 }
 
-/// Reference padding (logical px) at [`WidgetSize::Large`]; smaller sizes scale it
-/// down by [`WidgetSize::pad_scale`] (tighter than the font at `Small`). The font
+/// Reference padding (logical px) at [`WidgetSize::Large`](crate::style::WidgetSize::Large); smaller sizes scale it
+/// down by [`WidgetSize::pad_scale`](crate::style::WidgetSize::pad_scale) (tighter than the font at `Small`). The font
 /// scales centrally, so the box stays balanced at every size.
 const BASE_PAD: f32 = 10.0;
 /// Gap between composed content items (icon ↔ label …), as a fraction of the resolved font, so the
@@ -164,7 +164,7 @@ pub struct Button {
     /// of the children, because showing only the icon **removes** the label from the tree — see
     /// [`icon_only`](Self::icon_only).
     label: String,
-    /// Overrides the hue this button reads in. See [`tone`](Self::tone).
+    /// Overrides the hue this button reads in. See [`accent`](crate::builders::ToneExt::accent).
     /// **This button is about something destructive.** Set by the `Destructive` variant, which
     /// carries the whole look — hue and frame together — and a container never strips either.
     /// What it decides beyond the variant's own painting is the hue of the held-on frame, so an
@@ -594,7 +594,7 @@ impl Component for Button {
             // **The hue a container published, if it published one** — a button composed inside a
             // severity-toned card follows the card, the way a `Label`'s ink already follows its
             // content colour. `None` unless a container asked, which is everywhere today, so a
-            // button on its own is the theme accent exactly as before (F003/P096/T484).
+            // button on its own is the theme accent exactly as before.
             let accent = cx.accent();
             let tone = cx.published_accent();
             let t = cx.theme();
@@ -649,7 +649,7 @@ impl Component for Button {
 
         // Faint theme-driven REST glow (`PaintCx::rest_glow`) on the bordered
         // variants, so a control carries the neon identity before any hover/focus and
-        // the `glow_size` setting visibly scales it at rest (T011). The tone follows
+        // the `glow_size` setting visibly scales it at rest. The tone follows
         // the variant (a destructive button halos in `danger`). Ghost/Link are
         // surface-less at rest and Secondary is the deliberately-quiet variant — none
         // of them halo; a disabled control is flat.
@@ -855,7 +855,7 @@ impl Component for Button {
                 self.fire();
                 Handled::Yes
             }
-            // **A focused button answers the activate key** (F003/P097/T502).
+            // **A focused button answers the activate key**.
             //
             // Keys reach the focus owner, so this only ever runs for the button the keyboard is
             // actually on — which is why it needs no focus test of its own.
@@ -932,7 +932,7 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    /// **A focused button answers the activate key** (F003/P097/T502).
+    /// **A focused button answers the activate key**.
     ///
     /// It answered `Event::Click` and nothing else. `Dialog` documented this as the way it works —
     /// "when a button itself is focused, Enter is delivered straight to it (it consumes it)" — and

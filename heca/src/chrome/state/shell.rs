@@ -32,6 +32,8 @@ pub struct SharedChromeState {
     /// The (currently sole) mounted container's state. Becomes a container-id-keyed
     /// registry when a second container (Docker/agents/…) is added.
     pub workspaces: WorkspacesContainerState,
+    /// Every pane's live facts, read by any component.
+    pub panes: PaneRuntimeStore,
     /// Scroll offsets for containers' **own** nested scroll areas, keyed by the **mount id**.
     ///
     /// Per mount, not per container kind: the same container can be seated twice — two of them in
@@ -138,6 +140,11 @@ impl SharedChromeState {
         }
     }
 
+    /// The mount that holds the keyboard now, as last announced — `None` when no dock does.
+    pub fn focused_container(&self) -> Option<String> {
+        self.announced_container.get_untracked()
+    }
+
     /// The mount that held the keyboard most recently, whether or not it still does.
     pub fn last_focused_container(&self) -> Option<String> {
         self.last_focused_container.get()
@@ -166,7 +173,11 @@ impl SharedChromeState {
         if sig.get_untracked() == key {
             return;
         }
-        sig.set(key);
+        sig.set(key.clone());
+        self.events.emit(ChromeEvent::ContainerCursorChanged {
+            container: container.to_string(),
+            key,
+        });
     }
 
     /// Construct the store with the sidebars' widths. Every region starts shown; the app then
@@ -180,7 +191,8 @@ impl SharedChromeState {
             left: RegionState::new(left_width),
             right: RegionState::new(right_width),
             visible: RegionMap::from_fn(|_| signal(true)),
-            workspaces: WorkspacesContainerState::new(events),
+            workspaces: WorkspacesContainerState::new(events.clone()),
+            panes: PaneRuntimeStore::new(events),
             container_scroll: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             announced_container: signal(None),
             dock_focus_request: signal(None),

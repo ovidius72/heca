@@ -139,7 +139,7 @@ fn a_placement_that_leaves_an_axis_auto_keeps_the_widgets_own_size() {
     );
 }
 
-/// **A leading icon never pushes the text out of the row** (F003/P082/T481).
+/// **A leading icon never pushes the text out of the row**.
 ///
 /// The row is willing to shrink and the label is willing to be cut, and it still overflowed:
 /// flexbox floors every item at its own content width, so the icon kept its 40px, the label
