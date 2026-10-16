@@ -1809,6 +1809,60 @@
           "number": 32,
           "title": "Replaces C31 (reverted: moving the letter onto the content split it from the sidebar row and broke \"sidebar letter focuses the pane\"). The pane keeps its letter, shared with its sidebar row; new library setting keyboard_to(area) (PresenceExt): a press or pick on the frame gives the keyboard to the first thing in that part that takes it, and that thing wears no letter of its own unless it declared a pick. Pane hands its keyboard to its content; a dock terminal keeps its letter. Main-area columns take the column-destination scope like their sidebar view. Tests seen red first (library 7, app 5), break-checked.",
           "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-033-event-file-split-move-only-heca-grid-ui-src-event-rs-1138-event-mod-description-exports-handled-the-was-this-mine-answer-keys-keys-modifiers-typed-text-pointer-button-pointer-drag-pick-details-raw-input-kinds-event-eventkind-intent-widgetintent-handlers-eventcx-handleroutcome-handlers-every-crate-event-path-unchanged-same-test-count-clippy-and-docs-clean",
+          "number": 33,
+          "title": "Event file split (move only): heca-grid-ui/src/event.rs (1138) → event/{mod (description + exports), handled (the was-this-mine answer), keys (keys, modifiers, typed text), pointer (button, pointer/drag/pick details, raw input), kinds (Event + EventKind), intent (WidgetIntent), handlers (EventCx, HandlerOutcome, Handlers)}. Every crate::event:: path unchanged; same test count; clippy and docs clean.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-034-event-split-review-each-new-file-against-agents-md-one-job-nothing-hardcoded-docs-and-the-rust-skill-each-fix-found-becomes-its-own-step-with-a-test-seen-red-first",
+          "number": 34,
+          "title": "Event split review: each new file against AGENTS.md (one job, nothing hardcoded, docs) and the Rust skill; each fix found becomes its own step with a test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-035-event-review-fix-1-the-handler-list-s-description-sits-above-a-one-line-helper-type-so-the-list-has-none-move-it-onto-the-list",
+          "number": 35,
+          "title": "Event review fix 1: the handler list's description sits above a one-line helper type, so the list has none — move it onto the list.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-037-event-review-fix-3-which-events-carry-a-pointer-is-written-in-four-lists-position-target-bounds-stamping-payload-and-drag-in-two-derive-position-and-target-bounds-from-the-payload-accessors-stamp-through-one-mutable-accessor-guard-test-that-every-event-answers-the-three-questions-the-same",
+          "number": 36,
+          "title": "Event review fix 3: \"which events carry a pointer\" is written in four lists (position, target bounds, stamping, payload) and drag in two — derive position and target bounds from the payload accessors, stamp through one mutable accessor; guard test that every event answers the three questions the same.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-038-event-review-fix-4-a-handler-asking-which-modifiers-are-held-gets-none-for-events-with-no-pointer-drag-payload-a-key-press-with-shift-although-the-library-tracks-the-held-state-answer-from-it-test-seen-red-first",
+          "number": 37,
+          "title": "Event review fix 4: a handler asking which modifiers are held gets \"none\" for events with no pointer/drag payload (a key press with Shift) although the library tracks the held state — answer from it. Test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-039-event-review-check-5-key-name-lookup-lowercases-a-single-character-a-a-though-its-doc-says-a-character-is-itself-find-who-relies-on-it-and-report-before-changing-anything",
+          "number": 38,
+          "title": "Event review check 5: key-name lookup lowercases a single character (\"A\" → 'a') though its doc says a character is itself — find who relies on it and report before changing anything.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-040-keyboard-to-give-it-its-declarative-viewnode-form-so-a-plugin-s-description-can-say-it-and-document-both-forms-rustdoc-docs-widgets-md-native-and-declarative-examples-per-agents-documentation-is-mandatory-test-seen-red-first",
+          "number": 39,
+          "title": "keyboard_to: give it its declarative (ViewNode) form so a plugin's description can say it, and document both forms (rustdoc + docs/widgets.md native and declarative examples), per AGENTS \"Documentation is MANDATORY\". Test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-040-key-name-lookup-correct-its-description-a-letter-is-read-in-lowercase-shift-is-carried-separately-add-an-example-showing-a-a-behaviour-unchanged-bindings-terminal-keys-rely-on-it",
+          "number": 40,
+          "title": "Key-name lookup: correct its description — a letter is read in lowercase (Shift is carried separately); add an example showing \"A\" → 'a'. Behaviour unchanged (bindings, terminal keys rely on it).",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-041-plugin-kit-setters-for-placing-a-child-in-a-grid-the-named-area-and-column-row-with-spans-under-the-same-names-as-the-native-placement-builders-realize-already-reads-them-a-guard-test-that-every-native-placement-builder-has-a-kit-setter-seen-red-first-docs-both-forms",
+          "number": 41,
+          "title": "Plugin kit: setters for placing a child in a grid — the named area, and column/row with spans — under the same names as the native placement builders; realize already reads them. A guard test that every native placement builder has a kit setter, seen red first; docs both forms.",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -1829,7 +1883,7 @@
       "startedAt": "2026-10-15T09:11:19.538Z",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-10-16T13:28:12.138Z",
+      "updatedAt": "2026-10-16T14:49:03.938Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
@@ -3658,7 +3712,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-16T13:28:12.138Z",
+  "updatedAt": "2026-10-16T14:49:03.938Z",
   "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
   "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
   "handoffAudit": {

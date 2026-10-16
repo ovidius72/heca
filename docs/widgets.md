@@ -2229,11 +2229,13 @@ ViewNode::new(WidgetKind::Grid)
     .child(ViewNode::new(WidgetKind::Icon)
         .prop("icon", PropValue::Glyph("terminal".into()))
         .prop("area", PropValue::Text("dot".into())))
-    // …or an explicit 1-based cell (+ optional col_span / row_span; both default to 1).
+    // …or a CSS line, as native `.column(..)` / `.row(..)` take it (`"2"`, `"1 / -1"`,
+    // `"1 / span 2"`), with optional `column_span` / `row_span`. The SDK's typed form is
+    // `Label::new("nvim").column("2").row("1")`.
     .child(ViewNode::new(WidgetKind::Label)
         .text("nvim")
-        .prop("col", PropValue::Int(2))
-        .prop("row", PropValue::Int(1)));
+        .prop("column", PropValue::Text("2".into()))
+        .prop("row", PropValue::Text("1".into())));
 ```
 
 **Track vocabulary** (parsed by `realize`, case-insensitive, trimmed): `"22px"` (or a bare `22` /
@@ -5026,6 +5028,19 @@ reaches it — unless it declared a pick itself. heca's pane hands its keyboard 
 pane wears one letter and picking it types into the terminal (or editor, or plugin tree) inside; a
 terminal placed in a dock is handed nothing and keeps its own letter.
 
+```rust
+// Native: a frame whose header holds no field, and whose body holds whatever types.
+Grid::new()
+    .template_row("auto 1fr")
+    .template_area(["header", "body"])
+    .keyboard_to("body")
+    .child([header.area("header"), editor.area("body")])
+
+// Declarative — the same setting in a description a plugin or RPC sends. `realize` reads the
+// `keyboard_to` prop (a text: the area name) onto the widget, for every kind.
+heca_view::build::Grid::new().areas(["header", "body"]).keyboard_to("body")
+```
+
 **The pointer is never gated.** Click, drag, hover and wheel reach an unfocused scope exactly as
 before: the mouse carries its own target, so it needs no focus to say where it meant — and a click on
 an unfocused dock is how you focus it. (`tests/pointer_delivery.rs` holds this to the whole pointer
@@ -6419,7 +6434,7 @@ and a bad value costs only itself: the good props on the same node still apply.
 | **`Select`** / **`Tabs`** | `selected` (Int), **+ `Choice` children** (the options) | `change` — carries the chosen **value** |
 | **`ItemGroup`** | `text` (header), `expanded` (Bool), **+ children** (the rows) | `toggle` — carries the new `expanded` |
 | **`MarkerGroup`** | `active` (Bool), `nav_selected` (Bool), **+ children** | — (an indicator) |
-| **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings), `align` + `justify_items`; per-**child**: `area` or `col`/`row`/`col_span`/`row_span`, `align_self` / `justify_self` | — |
+| **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings), `align` + `justify_items`; per-**child**: `area`, `column`/`row` (CSS lines), `column_span`/`row_span`, `align_self` / `justify_self` | — |
 | **`DockFrame`** | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slots**: `header`, else body | `toggle` |
 | **`Item`** | `text` (label); **slots**: `leading`, `trailing` (no default) | `press` |
 | **`Tile`** | no props; **slots**: `status`, `icon`, `title`, `suffix` — any other child is a line (the default slot) | — (put it in a `Row`) |

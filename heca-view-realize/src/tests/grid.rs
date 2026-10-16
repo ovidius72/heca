@@ -62,7 +62,8 @@ fn grid_node_realizes_tracks_areas_and_per_child_placement() {
                 .prop("icon", PropValue::Glyph("terminal".into()))
                 .prop("area", PropValue::Text("icon".into())),
         )
-        // Placed by explicit cell + span.
+        // Placed by explicit cell + span, in the older `col` / `col_span` spelling — still read, so a
+        // tree already sent keeps working.
         .child(
             ViewNode::new(WidgetKind::Label)
                 .text("zsh")
@@ -233,4 +234,48 @@ fn label_text_attributes_are_authorable() {
         .filter(|c| matches!(c, DrawCommand::Rect(_)))
         .count();
     assert_eq!(rules, 1, "the strikethrough, drawn as a rect (not shaped)");
+}
+
+/// **A described child is placed exactly as a native one is** — the same five words
+/// (`area`, `column`, `row`, `column_span`, `row_span`) in the same CSS spellings, applied
+/// through the same builders, so the two authoring paths cannot place a child differently.
+#[test]
+fn a_described_child_is_placed_as_a_native_one_is() {
+    use heca_grid_ui::builders::PlaceExt;
+    let text = |s: &str| PropValue::Text(s.into());
+    let node = ViewNode::new(WidgetKind::Grid)
+        .child(
+            ViewNode::new(WidgetKind::Label)
+                .text("header")
+                .prop("column", text("1 / -1"))
+                .prop("row", text("1")),
+        )
+        .child(
+            ViewNode::new(WidgetKind::Label)
+                .text("wide")
+                .prop("column_span", text("span 2"))
+                .prop("row_span", PropValue::Int(3)),
+        )
+        .child(
+            ViewNode::new(WidgetKind::Label)
+                .text("named")
+                .prop("area", text("body")),
+        );
+    let grid = realize(
+        &node,
+        &Theme::default(),
+        &noop_emitter(),
+        &mut FormBindings::default(),
+    );
+    let placed = |i: usize| {
+        let c = &grid.base().children[i];
+        (c.base().style.layout.grid_cell, c.base().grid_area.clone())
+    };
+    let native = |w: heca_grid_ui::widgets::Label| {
+        (w.base().style.layout.grid_cell, w.base().grid_area.clone())
+    };
+    use heca_grid_ui::widgets::Label;
+    assert_eq!(placed(0), native(Label::new("header").column("1 / -1").row("1")));
+    assert_eq!(placed(1), native(Label::new("wide").column_span("span 2").row_span(3)));
+    assert_eq!(placed(2), native(Label::new("named").area("body")));
 }

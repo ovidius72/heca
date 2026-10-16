@@ -237,6 +237,10 @@ pub fn realize(
     if let Some(PropValue::Bool(hintable)) = node.props.get("hintable") {
         realized.base_mut().hintable = *hintable;
     }
+    // `keyboard_to` too: where a press on this node sends the keyboard is on every `Base`.
+    if let Some(PropValue::Text(area)) = node.props.get("keyboard_to") {
+        realized.base_mut().keyboard_to = Some(area.clone());
+    }
     // **What this node says on hover**, read once here for every kind, exactly like the key above.
     //
     // `TooltipExt::tooltip` is on every widget natively — it stopped being a wrapper you put

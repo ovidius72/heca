@@ -398,6 +398,67 @@ pub trait Style: Sized {
         self.prop("hintable", hintable)
     }
 
+    /// **Pressing this node gives the keyboard to its part placed in `area`** — HTML's
+    /// `<label for>`. The declarative spelling of `PresenceExt::keyboard_to`.
+    ///
+    /// A press or a pick on the node that lands on nothing taking the keyboard gives it to the
+    /// first thing in that part that does, however deep; that thing wears no pick letter of its
+    /// own, because this node's letter already reaches it.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    ///
+    /// // Picking the panel types into its field.
+    /// let panel = Grid::new()
+    ///     .areas(["title", "body"])
+    ///     .keyboard_to("body")
+    ///     .child(Label::new("Search").area("title"))
+    ///     .child(Input::new().area("body"));
+    /// ```
+    fn keyboard_to(self, area: &str) -> Self {
+        self.prop("keyboard_to", area)
+    }
+
+    /// **The named area of its grid this node sits in** — CSS `grid-area`. The declarative
+    /// spelling of `PlaceExt::area`; the name is resolved against whichever grid holds the node.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    ///
+    /// let card = Grid::new()
+    ///     .areas(["icon title", "icon body"])
+    ///     .child(Label::new("$").area("icon"))
+    ///     .child(Label::new("zsh").area("title"));
+    /// ```
+    fn area(self, name: &str) -> Self {
+        self.prop("area", name)
+    }
+
+    /// **Which columns of its grid this node covers** — CSS `grid-column`, in its spellings:
+    /// `"2"`, `"1 / -1"` (the whole width), `"1 / span 2"`. The declarative `PlaceExt::column`.
+    fn column(self, line: &str) -> Self {
+        self.prop("column", line)
+    }
+
+    /// **Which rows of its grid this node covers** — CSS `grid-row`, spelt as
+    /// [`column`](Style::column) is. The declarative `PlaceExt::row`.
+    fn row(self, line: &str) -> Self {
+        self.prop("row", line)
+    }
+
+    /// **How many columns it covers**, leaving where it starts to auto-placement — `"span 2"`,
+    /// `"2"` or `"all"` (every column, however many there are). The declarative
+    /// `PlaceExt::column_span`.
+    fn column_span(self, span: &str) -> Self {
+        self.prop("column_span", span)
+    }
+
+    /// **How many rows it covers** — spelt as [`column_span`](Style::column_span). The declarative
+    /// `PlaceExt::row_span`.
+    fn row_span(self, span: &str) -> Self {
+        self.prop("row_span", span)
+    }
+
     /// **Declare a verb this node answers to**, by name — the declarative
     /// `heca_grid_ui::EventExt::on_action`.
     ///

@@ -38,18 +38,23 @@ fn every_universal_capability_is_reachable_from_the_sdk() {
     // every widget rather than to one, so those traits are the list this guard is about.
     let mut universal: Vec<String> = Vec::new();
     for native in &sources {
+        // **Whatever shape the trait takes.** A blanket impl over every component is the mark, with
+        // or without a body and whatever its type parameter is called: placement (`PlaceExt`) is
+        // written differently from the rest because a boxed subtree must be placeable too, and
+        // reading only one spelling is how all of placement went missing from the SDK unseen.
         let Some(name) = native
             .split("\npub trait ")
             .skip(1)
-            .filter_map(|after| after.split(':').next())
-            .find(|name| {
-                native.contains(&format!("impl<T: Component + Sized> {name} for T {{}}"))
-            })
+            .filter_map(|after| after.split(|c: char| !(c.is_alphanumeric() || c == '_')).next())
+            .find(|name| native.contains(&format!(": Component + Sized> {name} for ")))
         else {
             continue;
         };
-        let head = format!("\npub trait {name}: Component + Sized {{\n");
-        let Some(start) = native.find(&head).map(|at| at + head.len()) else {
+        let head = format!("\npub trait {name}");
+        let Some(start) = native
+            .find(&head)
+            .and_then(|at| native[at..].find("{\n").map(|open| at + open + 2))
+        else {
             continue;
         };
         let body = &native[start..start + native[start..].find("\n}\n").unwrap_or(0)];

@@ -19,15 +19,6 @@ pub(crate) fn text_of(node: &ViewNode) -> String {
         .to_string()
 }
 
-/// An index prop (`"selected"`) as a `usize`. Negative values are ignored (the widget keeps its
-/// default) rather than wrapping — the model is untrusted input.
-pub(crate) fn usize_prop(node: &ViewNode, key: &str) -> Option<usize> {
-    match node.props.get(key)? {
-        PropValue::Int(i) => usize::try_from(*i).ok(),
-        _ => None,
-    }
-}
-
 /// An option's `"value"` prop — what the option *means*, as opposed to what it shows. `Text` or
 /// `Int`; any other type is ignored. Kept as a [`PropValue`] so the type survives the round trip
 /// into the change intent's args.

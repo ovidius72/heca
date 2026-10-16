@@ -97,6 +97,21 @@ fn a_node_can_keep_itself_out_of_the_picker() {
     );
 }
 
+/// `keyboard_to` rides the same generic pass: a described frame hands its keyboard to one of its
+/// parts exactly as a native one does, so a plugin's panel types into its field when picked.
+#[test]
+fn a_node_can_hand_its_keyboard_to_a_part() {
+    let emit: IntentEmitter = Rc::new(|_| {});
+    let node = ViewNode::new(WidgetKind::Grid).prop("keyboard_to", PropValue::Text("body".into()));
+    let w = realize(
+        &node,
+        &Theme::default(),
+        &emit,
+        &mut FormBindings::default(),
+    );
+    assert_eq!(w.base().keyboard_to.as_deref(), Some("body"));
+}
+
 /// **A described `Row` is the interactive widget, not a box.** Click it and its intent fires;
 /// press Enter on it and the same intent fires; it takes one hint target so `prefix+/` reaches
 /// it; and it holds whatever content it was given.

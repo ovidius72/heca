@@ -11,7 +11,7 @@ use heca_view::{PropValue, ViewEvent, ViewNode, WidgetKind};
 use crate::{FormBindings, IntentEmitter, realize};
 use crate::intents::press_intent;
 use crate::props::{
-    glyph_prop, size_prop, text_of, usize_prop, value_prop, value_string, variant_prop,
+    glyph_prop, size_prop, text_of, value_prop, value_string, variant_prop,
 };
 use crate::style::with_props;
 
@@ -313,26 +313,54 @@ pub(crate) fn realize_grid(
     // arrives through the generic layout merge in `realize`, like every other layout property.
     // Both default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell,
     // so a row of mixed-height content needs `align: center` to share a centre line.
-    // **A described child places itself, exactly as a native one does.** `area`, `col`/`row` and
-    // the spans are properties of the CHILD — CSS's `grid-area` and `grid-column`/`grid-row` — so
-    // the grid only holds them. A name is resolved during layout, against whichever template ends
-    // up holding the child.
+    // **A described child places itself, exactly as a native one does.** `area`, `column`/`row`
+    // and the spans are properties of the CHILD — CSS's `grid-area` and `grid-column`/`grid-row` —
+    // so the grid only holds them. A name is resolved during layout, against whichever template
+    // ends up holding the child.
     for child in &node.children {
-        let mut realized = realize(child, theme, emit, forms);
-        if let Some(area) = child.props.get("area").and_then(PropValue::as_text) {
-            realized.base_mut().grid_area = Some(area.to_string());
-        } else if let (Some(col), Some(row)) = (usize_prop(child, "col"), usize_prop(child, "row"))
-        {
-            realized.base_mut().style.layout.grid_cell = Some(heca_grid_ui::style::GridCell {
-                col: col as u16,
-                row: row as u16,
-                col_span: usize_prop(child, "col_span").unwrap_or(1) as u16,
-                row_span: usize_prop(child, "row_span").unwrap_or(1) as u16,
-            });
-        }
+        let realized = placed(realize(child, theme, emit, forms), child);
         grid.base_mut().children.push(realized);
     }
     Box::new(grid)
+}
+
+/// **Where a described child sits in its grid**, said through the native placement builders — one
+/// door, so a described child and a native one cannot be placed differently.
+///
+/// The words and spellings are the native ones: `area` names a template area, `column` / `row` take
+/// a CSS line (`"2"`, `"1 / -1"`, `"1 / span 2"`) or a number, and `column_span` / `row_span` a
+/// count, `"span 2"` or `"all"`. The older `col` / `col_span` spellings are still read, so no
+/// description already sent breaks.
+fn placed(mut child: Box<dyn Component>, node: &ViewNode) -> Box<dyn Component> {
+    use heca_grid_ui::builders::PlaceExt;
+    use heca_grid_ui::style::{GridLine, Span};
+    let line = |key: &str| match node.props.get(key)? {
+        PropValue::Text(s) => Some(GridLine::from(s.as_str())),
+        PropValue::Int(n) => Some(GridLine::from(i32::try_from(*n).ok()?)),
+        _ => None,
+    };
+    let span = |key: &str| match node.props.get(key)? {
+        PropValue::Text(s) => Some(Span::from(s.as_str())),
+        PropValue::Int(n) => Some(Span::from(i32::try_from(*n).ok()?)),
+        _ => None,
+    };
+    if let Some(area) = node.props.get("area").and_then(PropValue::as_text) {
+        child = child.area(area);
+    }
+    // Lines before spans: a line carries a span of its own, and a span said separately refines it.
+    if let Some(at) = line("column").or_else(|| line("col")) {
+        child = child.column(at);
+    }
+    if let Some(at) = line("row") {
+        child = child.row(at);
+    }
+    if let Some(n) = span("column_span").or_else(|| span("col_span")) {
+        child = child.column_span(n);
+    }
+    if let Some(n) = span("row_span") {
+        child = child.row_span(n);
+    }
+    child
 }
 
 /// A [`PropValue::List`] of track strings, parsed to [`Track`]s (`"columns"` / `"rows"`).

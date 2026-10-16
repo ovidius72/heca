@@ -97,6 +97,10 @@ pub trait PresenceExt: Component + Sized {
     ///
     /// A part with nothing that takes the keyboard — a picture — changes nothing, as a press on
     /// it would. See [`Base::keyboard_to`](crate::Base::keyboard_to).
+    ///
+    /// **In a description** it is the `keyboard_to` prop, a text naming the area — the SDK's
+    /// `Style::keyboard_to("body")` — which `realize` writes onto the widget for every kind.
+    #[heca_grid_ui_macros::prop]
     fn keyboard_to(mut self, area: impl Into<String>) -> Self {
         self.base_mut().keyboard_to = Some(area.into());
         self
