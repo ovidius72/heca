@@ -4,6 +4,25 @@
 //! Whoever places it writes no rect, no click handling and no drawing pass; the framework gives it
 //! the box it lives in, and it reports what it learns about that box itself.
 //!
+//! # Where its process comes from
+//!
+//! A terminal shows a **terminal process** — the shell or command running behind it — and every
+//! one is started through **one door**: the store's `ensure`, from a plain description of what to
+//! run and where (`TerminalSpec`). It starts the process, or keeps the one already running.
+//! Nothing else starts one.
+//!
+//! - **A terminal you place** (`Terminal::new("shell")`, `demo.terminal("s")`) asks the door
+//!   itself, from its own settings. The same name is the same process; removing the component never
+//!   ends it.
+//! - **A pane's terminal** is started by the **server** when the pane is made, from the pane's own
+//!   description, and the pane's `Terminal` component then shows it. Deliberately not the
+//!   component: the server holds the panes (F012), so a pane's shell has to run with no window
+//!   drawing it — a pane made by `heca rpc` with no window open, a restored session, an agent in a
+//!   pane on a workspace nobody is looking at.
+//!
+//! Either way it is the same door and the same description, so RPC, plugins and restore start a
+//! terminal the same way.
+//!
 //! This file is the only one in the folder that may touch `AppState` (AGENTS.md § 0b-bis rule 4);
 //! everything below it takes plain data and is testable headless.
 

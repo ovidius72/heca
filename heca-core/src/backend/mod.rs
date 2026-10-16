@@ -180,6 +180,11 @@ pub enum BackendRenderData {
     },
 }
 
+/// **A cell's size before the real font is measured**, `(width, height)` in logical px — a common
+/// monospace face at its usual size. Anything that needs a cell before the renderer has said what
+/// one is starts from this.
+pub const DEFAULT_CELL_SIZE: (f32, f32) = (8.4, 14.0);
+
 /// Trait for pane content backends.
 ///
 /// Each pane (terminal, neovim, browser) implements this trait.
@@ -288,9 +293,9 @@ pub trait PaneBackend: Send {
 
     /// Logical cell size for this backend, used for mouse→SGR coordinate conversion
     /// and terminal rendering. Returns (cell_w, cell_h) in logical pixels.
-    /// Default: (8.4, 14.0) — a reasonable monospace approximation.
+    /// Default: [`DEFAULT_CELL_SIZE`].
     fn cell_size(&self) -> (f32, f32) {
-        (8.4, 14.0)
+        DEFAULT_CELL_SIZE
     }
 
     /// Canonical per-pane runtime metadata (program, status, cwd, exit code, git,

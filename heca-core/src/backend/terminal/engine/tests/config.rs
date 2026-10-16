@@ -1,4 +1,5 @@
 use super::*;
+use crate::backend::DEFAULT_CELL_SIZE;
 
 /// **A new history size reaches a terminal that is already running**: from the next line that
 /// scrolls off, it keeps no more than the new size.
@@ -75,7 +76,7 @@ fn snapshot_preserves_background_colored_blank_cells_after_clear() {
 
     engine.advance_bytes(b"\x1b[48;2;30;30;46m\x1b[2J");
 
-    let snapshot = engine.snapshot((8.4, 14.0));
+    let snapshot = engine.snapshot(DEFAULT_CELL_SIZE);
     let expected_bg = [30.0 / 255.0, 30.0 / 255.0, 46.0 / 255.0, 1.0];
 
     assert!(

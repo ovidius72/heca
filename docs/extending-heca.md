@@ -51,6 +51,15 @@ APIs: [`heca/examples/extend_heca.rs`](../heca/examples/extend_heca.rs).
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
 
+**How a terminal's process starts.** Every terminal process — the shell or command behind a
+terminal — starts through one door, from a plain description of what to run and where; the door
+starts it, or keeps the one already running. A terminal you place (`demo.terminal("s")`) asks the
+door itself from its own settings, and the same name is the same process. A pane's terminal is
+started by the server when the pane is made, from the pane's description, and the pane's terminal
+component shows it: the server holds the panes, so a pane's shell runs with no window drawing it —
+a pane made over RPC with no window open, a restored session, an agent on a workspace nobody is
+looking at.
+
 `PaneFacts` is plain data about one pane (`#[non_exhaustive]`: fields may be added, so read them by
 name). An action changes shared state; a dock, layer or pane decoration is drawn by a window.
 The server/client boundary carries those responsibilities without changing these extension calls.

@@ -21,6 +21,20 @@ pub enum ProcessStatus {
     Error,
 }
 
+impl ProcessStatus {
+    /// **What an exit code says about a program**: `0` is success, anything else an error.
+    ///
+    /// The one reading of an exit code — the shell's report of a finished command, the pane's own
+    /// process ending, and the close policy all ask here rather than each comparing with `0`.
+    pub fn of_exit(code: i32) -> Self {
+        if code == 0 {
+            Self::Success
+        } else {
+            Self::Error
+        }
+    }
+}
+
 /// Source/content type hosted by a pane.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ContentKind {
@@ -45,11 +59,10 @@ impl PaneClosePolicy {
         if !self.close_pane {
             return false;
         }
-        if self.keep_on_error && code.is_some_and(|exit| exit != 0) {
-            return false;
-        }
-        if self.keep_on_success && code == Some(0) {
-            return false;
+        match code.map(ProcessStatus::of_exit) {
+            Some(ProcessStatus::Error) if self.keep_on_error => return false,
+            Some(ProcessStatus::Success) if self.keep_on_success => return false,
+            _ => {}
         }
         true
     }
@@ -77,3 +90,6 @@ pub struct PaneRuntime {
     pub git: Option<GitInfo>,
     pub kind: ContentKind,
 }
+
+#[cfg(test)]
+mod tests;
