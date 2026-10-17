@@ -17,7 +17,7 @@ impl AppState {
         match self.input_mode {
             InputMode::Search { terminal } => return Some(terminal),
             InputMode::Selection => {
-                if let Some(crate::app::selection_model::SelectionOwner(terminal)) =
+                if let Some(crate::app::terminal_host::selection::SelectionOwner(terminal)) =
                     self.selection.owner()
                 {
                     return Some(terminal);

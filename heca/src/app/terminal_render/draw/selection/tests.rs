@@ -1,5 +1,5 @@
 use super::build_selection_overlay;
-use crate::app::selection_model::{
+use crate::app::terminal_host::selection::{
     SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
 };
 use crate::chrome::panes::terminal::TerminalId;
@@ -51,7 +51,7 @@ fn build_selection_overlay_returns_none_when_owner_mismatch() {
     selection.begin(
         SelectionOwner(TerminalId(7)),
         SelectionSource::MouseDrag,
-        SelectionRegion::HostGrid {
+        SelectionRegion {
             anchor_stable_row: 2,
             anchor_col: 3,
             focus_stable_row: 2,
@@ -70,30 +70,12 @@ fn build_selection_overlay_returns_none_when_owner_mismatch() {
 }
 
 #[test]
-fn build_selection_overlay_returns_none_for_backend_native() {
-    let mut selection = SelectionState::new();
-    selection.begin(
-        SelectionOwner(TerminalId(1)),
-        SelectionSource::Rpc,
-        SelectionRegion::BackendNative,
-    );
-    let accent = Color {
-        r: 100,
-        g: 150,
-        b: 200,
-        a: 255,
-    };
-    let snap = selection_snapshot(20, 10, 0);
-    assert!(build_selection_overlay(&selection, TerminalId(1), &snap, &accent).is_none());
-}
-
-#[test]
 fn build_selection_overlay_returns_overlay_for_host_grid_on_owning_pane() {
     let mut selection = SelectionState::new();
     selection.begin(
         SelectionOwner(TerminalId(1)),
         SelectionSource::MouseDrag,
-        SelectionRegion::HostGrid {
+        SelectionRegion {
             anchor_stable_row: 2,
             anchor_col: 3,
             focus_stable_row: 2,
@@ -131,7 +113,7 @@ fn build_selection_overlay_handles_reverse_multiline_selection() {
     selection.begin(
         SelectionOwner(TerminalId(1)),
         SelectionSource::MouseDrag,
-        SelectionRegion::HostGrid {
+        SelectionRegion {
             anchor_stable_row: 8,
             anchor_col: 12,
             focus_stable_row: 8,
@@ -201,7 +183,7 @@ fn build_selection_overlay_active_selection_has_focus_caret() {
     selection.begin(
         SelectionOwner(TerminalId(1)),
         SelectionSource::KeyboardMode,
-        SelectionRegion::HostGrid {
+        SelectionRegion {
             anchor_stable_row: 2,
             anchor_col: 0,
             focus_stable_row: 4,

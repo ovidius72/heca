@@ -9,7 +9,7 @@
 
 use super::selection::ensure_caret_visible;
 use super::tree_answers;
-use crate::app::selection_model::SelectionOwner;
+use crate::app::terminal_host::selection::SelectionOwner;
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::panes::terminal::{Search, TerminalId};
 use heca_grid_ui::WidgetIntent;

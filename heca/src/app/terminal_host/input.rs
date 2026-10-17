@@ -4,7 +4,7 @@
 
 use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionSource, dispatch_action};
-use crate::app::selection_model::{SelectionOwner, SelectionSource};
+use crate::app::terminal_host::selection::{SelectionOwner, SelectionSource};
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::panes::terminal::{Cell, TerminalId};
 use crate::input::WmAction;

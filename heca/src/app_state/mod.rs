@@ -1,7 +1,7 @@
 //! The window's state, and the small types it is built from.
 
 use crate::app::events::AppEvent;
-pub use crate::app::selection_model::SelectionState;
+pub use crate::app::terminal_host::selection::SelectionState;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::theme::Theme;

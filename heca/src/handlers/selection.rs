@@ -1,6 +1,6 @@
 //! Selection mode, copy and paste.
 
-use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
+use crate::app::terminal_host::selection::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app::terminal_host::{
     enter_selection_mode_for_focused_terminal, move_focused_terminal_selection,
 };
@@ -122,17 +122,15 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
             None => return, // No active selection — safe no-op.
         };
         let SelectionOwner(terminal) = active.owner;
-        let (start_stable, end_stable) = match &active.region {
-            SelectionRegion::HostGrid {
-                anchor_stable_row,
-                focus_stable_row,
-                ..
-            } => (
-                (*anchor_stable_row).min(*focus_stable_row),
-                (*anchor_stable_row).max(*focus_stable_row),
-            ),
-            SelectionRegion::BackendNative => return, // Unsupported — safe no-op.
-        };
+        let SelectionRegion {
+            anchor_stable_row,
+            focus_stable_row,
+            ..
+        } = active.region;
+        let (start_stable, end_stable) = (
+            anchor_stable_row.min(focus_stable_row),
+            anchor_stable_row.max(focus_stable_row),
+        );
 
         // Get the terminal snapshot for the owning pane.
         let snapshot = match state
@@ -156,7 +154,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
             .map(|b| b.lines_in_stable_range(start_stable, end_stable, snapshot.cols))
             .unwrap_or_default();
 
-        match crate::app::selection_model::extract_selection_text(
+        match crate::app::terminal_host::selection::extract_selection_text(
             &state.selection,
             &lines,
             start_stable,
@@ -186,17 +184,14 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     // Clear the active selection but stay in selection mode with the caret
     // at the last focus position. This way the user can immediately navigate
     // or start a new selection without the Q5 snap-to-bottom triggering.
-    if let Some(active) = state.selection.active()
-        && let SelectionRegion::HostGrid {
+    if let Some(active) = state.selection.active() {
+        let SelectionRegion {
             focus_stable_row,
             focus_col,
             ..
-        } = &active.region
-    {
+        } = active.region;
         let owner = active.owner;
-        state
-            .selection
-            .set_caret(owner, *focus_stable_row, *focus_col);
+        state.selection.set_caret(owner, focus_stable_row, focus_col);
     } else {
         state.selection.clear();
     }

@@ -1,7 +1,7 @@
 //! Opening a link, and the check on which links may be opened.
 
 use super::pick::begin_pick;
-use crate::app::selection_model::SelectionOwner;
+use crate::app::terminal_host::selection::SelectionOwner;
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 

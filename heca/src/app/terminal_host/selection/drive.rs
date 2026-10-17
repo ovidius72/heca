@@ -1,7 +1,7 @@
 //! **The host's selection model, driven by a terminal's grid** — entering selection mode, moving the
 //! caret, following it with the viewport, and beginning a drag-selection at a cell.
 
-use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
+use super::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::panes::terminal::TerminalId;
 
@@ -22,7 +22,6 @@ pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) ->
     // (re-entering selection mode does not discard an existing selection).
     if let Some(active) = state.selection.active()
         && active.owner == SelectionOwner(terminal)
-        && matches!(active.region, SelectionRegion::HostGrid { .. })
     {
         state.input_mode = InputMode::Selection;
         state.needs_redraw = true;
@@ -93,17 +92,15 @@ pub(crate) fn move_focused_terminal_selection(
     // Handle active selection: update the focus end in stable-row space.
     let (anchor_stable_row, anchor_col, focus_stable_row, focus_col) =
         match state.selection.active() {
-            Some(active) if active.owner == SelectionOwner(terminal) => match active.region {
-                SelectionRegion::HostGrid {
+            Some(active) if active.owner == SelectionOwner(terminal) => {
+                let SelectionRegion {
                     anchor_stable_row,
                     anchor_col,
                     focus_stable_row,
                     focus_col,
-                } => (anchor_stable_row, anchor_col, focus_stable_row, focus_col),
-                SelectionRegion::BackendNative => {
-                    return false;
-                }
-            },
+                } = active.region;
+                (anchor_stable_row, anchor_col, focus_stable_row, focus_col)
+            }
             _ => {
                 let cursor_stable = visible_row_to_stable_row(&snapshot, snapshot.cursor.row);
                 (
@@ -123,7 +120,7 @@ pub(crate) fn move_focused_terminal_selection(
     state.selection.begin(
         SelectionOwner(terminal),
         SelectionSource::KeyboardMode,
-        SelectionRegion::HostGrid {
+        SelectionRegion {
             anchor_stable_row,
             anchor_col,
             focus_stable_row,
@@ -175,7 +172,7 @@ pub(crate) fn ensure_caret_visible(
     // Else: caret is inside the visible range → no scroll needed.
 }
 
-pub(super) fn begin_terminal_selection_at(
+pub(in crate::app::terminal_host) fn begin_terminal_selection_at(
     state: &mut AppState,
     terminal: TerminalId,
     row: usize,
@@ -194,7 +191,7 @@ pub(super) fn begin_terminal_selection_at(
     state.selection.begin(
         SelectionOwner(terminal),
         source,
-        SelectionRegion::HostGrid {
+        SelectionRegion {
             anchor_stable_row: stable_row,
             anchor_col: col,
             focus_stable_row: stable_row,
@@ -206,7 +203,7 @@ pub(super) fn begin_terminal_selection_at(
     state.needs_redraw = true;
 }
 
-pub(super) fn visible_row_to_stable_row(
+pub(in crate::app::terminal_host) fn visible_row_to_stable_row(
     snapshot: &heca_core::backend::TerminalSnapshot,
     row: usize,
 ) -> isize {

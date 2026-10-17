@@ -9,7 +9,7 @@ mod frames;
 mod hyperlinks;
 mod input;
 mod search;
-mod selection;
+pub(crate) mod selection;
 mod typing;
 mod wheel;
 
