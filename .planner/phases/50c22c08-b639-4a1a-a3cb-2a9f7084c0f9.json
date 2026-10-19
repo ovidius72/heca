@@ -10,7 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Drag-to-reorder delle workspace con DnD e action di riordino.",
-  "description": "",
+  "description": "app-05: Workspace drag-to-reorder.\n\n── Findings (verified in code 2026-10-19) ──\nOPEN — none of the 4 tasks done. No MoveWorkspace WmAction, no workspace reorder handler, no draggable workspace rows (handlers/workspace.rs has delete/collapse/expand only). Dock/container reorder DOES exist (chrome.container.move_before/after), but workspaces do not.\nBuild the move as an ACTION first, then the drag is only the mouse surface — the same shape as P079/T333 (dock move). These two should be done together.",
+  "descriptionUpdatedAt": "2026-10-19T16:16:52.190Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -38,6 +39,7 @@
       "title": "MoveWorkspace action and handler",
       "status": "planned",
       "description": "Action/handler per spostare una workspace.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -45,10 +47,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "b9ec89da-9cd9-4b72-8efc-8e89ecb43203",
@@ -60,6 +66,7 @@
       "title": "Make workspace rows draggable",
       "status": "planned",
       "description": "Rendere draggable le righe workspace.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -67,10 +74,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "d8ebde50-62a9-469c-bd13-b94a0eab8fd1",
@@ -82,6 +93,7 @@
       "title": "Add Workspace drag payload",
       "status": "planned",
       "description": "Payload DnD per le workspace.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -89,10 +101,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "eb960be7-92ab-4ed8-80d9-1a8e579ab114",
@@ -104,6 +120,7 @@
       "title": "Workspace drop reorder logic",
       "status": "planned",
       "description": "Logica di reorder delle workspace via drop.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -111,16 +128,23 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.469Z",
+  "updatedAt": "2026-10-19T16:16:52.190Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
 }
