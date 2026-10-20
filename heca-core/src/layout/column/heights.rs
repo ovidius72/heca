@@ -148,41 +148,6 @@ impl Column {
         sizes.into_iter().map(|s| s.h).collect()
     }
 
-    /// Resize the active pane's height by a delta (pixels): **positive grows it**, whichever edge
-    /// has to move to do that. This is the *size* verb — `pane_height_increase` /
-    /// `pane_height_decrease` — and it is deliberately not the one the resize mode uses; see
-    /// [`move_active_pane_boundary`](Self::move_active_pane_boundary).
-    pub fn resize_active_pane_height(&mut self, delta: f64, working_height: f64, gaps: f64) {
-        self.resize_pane_height(self.active_pane_idx, delta, working_height, gaps);
-    }
-
-    /// Move the **boundary the active pane owns** by `delta` logical px **along the axis**, so
-    /// positive is *down the screen*. The direction is the whole point: see
-    /// [`move_pane_boundary`](Self::move_pane_boundary).
-    ///
-    /// A pane has two edges, and this is the one *below* it — except for the last pane, which has
-    /// none and trades with the one above instead. To aim at the other edge deliberately, use
-    /// [`move_active_pane_top_boundary`](Self::move_active_pane_top_boundary).
-    pub fn move_active_pane_boundary(&mut self, delta: f64, working_height: f64, gaps: f64) {
-        self.move_pane_boundary(self.active_pane_idx, delta, working_height, gaps);
-    }
-
-    /// Move the boundary **above** the active pane by `delta` logical px, positive being *down the
-    /// screen* like every other resize verb — so a positive delta here **shrinks** the active pane
-    /// from the top, and a negative one grows it upwards.
-    ///
-    /// The counterpart to [`move_active_pane_boundary`](Self::move_active_pane_boundary), which
-    /// takes the edge below. Which of a pane's two edges moves is the column's own business: a
-    /// caller says *which edge*, never which pane index the divider happens to be named by.
-    ///
-    /// **No-op for the first pane**, which has nothing above it to trade with.
-    pub fn move_active_pane_top_boundary(&mut self, delta: f64, working_height: f64, gaps: f64) {
-        let Some(above) = self.active_pane_idx.checked_sub(1) else {
-            return;
-        };
-        self.move_pane_boundary(above, delta, working_height, gaps);
-    }
-
     /// Move the boundary pane `pane_idx` owns — the one **below** it, or the one **above** when it
     /// is the last pane — by `delta` logical px **along the axis**: positive is **down**.
     ///

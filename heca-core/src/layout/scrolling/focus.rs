@@ -28,9 +28,8 @@ impl ScrollingMut<'_> {
     fn focus_column_beside(&mut self, idx: usize) {
         if self.space.options.column_focus == ColumnFocus::Row
             && let Some(row) = self.reader().row_level_with_active(idx)
-            && let Some(column) = self.space.columns.get_mut(idx)
         {
-            column.active_pane_idx = row;
+            self.focus_pane_in(idx, row);
         }
         self.activate_column(idx);
     }
@@ -44,7 +43,7 @@ impl ScrollingRef<'_> {
     fn row_level_with_active(&self, idx: usize) -> Option<usize> {
         let laid = self.laid_out_columns();
         let here = laid.get(self.view.active_column)?;
-        let active_row = self.space.columns.get(self.view.active_column)?.active_pane_idx;
+        let active_row = self.active_pane_row(self.view.active_column)?;
         let active = here.panes.get(active_row)?;
         let (top, bottom) = (active.slot.loc.y, active.slot.loc.y + active.slot.size.h);
         let mut best: Option<(usize, f64)> = None;

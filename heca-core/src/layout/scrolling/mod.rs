@@ -163,8 +163,26 @@ impl<'a> ScrollingRef<'a> {
         self.space.columns.get(self.view.active_column)
     }
 
+    /// The row of the focused pane in column `col_idx` for this window: the pane the view points at
+    /// by id, or the first when it points at none or at a pane that is gone. `None` for a missing
+    /// or empty column.
+    pub fn active_pane_row(&self, col_idx: usize) -> Option<usize> {
+        let col = self.space.columns.get(col_idx)?;
+        if col.panes.is_empty() {
+            return None;
+        }
+        let row = self
+            .view
+            .focused_pane(col.id)
+            .and_then(|id| col.panes.iter().position(|p| p.id == id))
+            .unwrap_or(0);
+        Some(row)
+    }
+
     pub fn active_pane(&self) -> Option<&'a Pane> {
-        self.active_column().and_then(|c| c.active_pane())
+        let col_idx = self.view.active_column;
+        let row = self.active_pane_row(col_idx)?;
+        self.space.columns.get(col_idx)?.panes.get(row)
     }
 
     /// Get all panes with their render positions.
@@ -284,11 +302,53 @@ impl ScrollingMut<'_> {
     }
 
     pub fn active_pane(&self) -> Option<&Pane> {
-        self.space.columns.get(self.view.active_column)?.active_pane()
+        let col_idx = self.view.active_column;
+        let row = self.reader().active_pane_row(col_idx)?;
+        self.space.columns.get(col_idx)?.panes.get(row)
     }
 
     pub fn active_column_mut(&mut self) -> Option<&mut Column> {
         self.space.columns.get_mut(self.view.active_column)
+    }
+
+    /// Focus the pane at `row` of column `col_idx` for this window — by the pane's id, so it stays
+    /// put when panes are added, removed or reordered around it.
+    pub fn focus_pane_in(&mut self, col_idx: usize, row: usize) {
+        if let Some(col) = self.space.columns.get(col_idx)
+            && let Some(pane) = col.panes.get(row)
+        {
+            let (col_id, pane_id) = (col.id, pane.id);
+            self.view.focus_pane(col_id, pane_id);
+        }
+    }
+
+    /// Move the focus up one pane in the active column. `false` at the top, or with no pane.
+    pub fn focus_up(&mut self) -> bool {
+        let col_idx = self.view.active_column;
+        match self.reader().active_pane_row(col_idx) {
+            Some(row) if row > 0 => {
+                self.focus_pane_in(col_idx, row - 1);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Move the focus down one pane in the active column. `false` at the bottom, or with no pane.
+    pub fn focus_down(&mut self) -> bool {
+        let col_idx = self.view.active_column;
+        let last = self
+            .space
+            .columns
+            .get(col_idx)
+            .map_or(0, |c| c.panes.len().saturating_sub(1));
+        match self.reader().active_pane_row(col_idx) {
+            Some(row) if row < last => {
+                self.focus_pane_in(col_idx, row + 1);
+                true
+            }
+            _ => false,
+        }
     }
 }
 

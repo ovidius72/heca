@@ -21,11 +21,10 @@ fn a_pane_is_taken_from_its_column_or_from_the_floating_layer() {
     assert_eq!(ws.take_pane(PaneId(2)).map(|(p, _)| p.id), Some(PaneId(2)));
     assert!(ws.scrolling.pane_indices(PaneId(2)).is_none());
 
-    let rect = ws.reader().default_float_rect();
-    ws.add_floating_pane(Pane::new(PaneId(9), ""), rect, None);
+    ws.add_floating_pane(Pane::new(PaneId(9), ""), None);
     assert_eq!(ws.take_pane(PaneId(9)).map(|(p, e)| (p.id, e)), Some((PaneId(9), None)), "a float leaves the columns as they are");
     assert!(ws.floating_panes.is_empty());
-    assert_eq!(ws.focus_domain, FocusDomain::Tiled);
+    assert_eq!(ws.focus_domain(), FocusDomain::Tiled);
     assert!(ws.take_pane(PaneId(42)).is_none());
 }
 

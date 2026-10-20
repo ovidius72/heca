@@ -2,7 +2,7 @@
 
 use super::{HEIGHT, columns, float, session};
 use crate::layout::scrolling::{ColumnEffect, PaneEffect, SpaceEffect};
-use crate::layout::{Arranged, FocusDomain, Moved, PaneId};
+use crate::layout::{Arranged, Moved, PaneId};
 
 /// The pane leaves its workspace, which it emptied: the workspace goes, what is left is numbered
 /// as it is now, and only the workspace it landed in has anything to show.
@@ -158,10 +158,9 @@ fn a_floating_pane_is_taken_into_the_tiling_and_leaves_the_others_unfocused() {
         )]
     );
     assert_eq!(columns(&s, 0), [[1, 9]]);
-    let ws = &s.workspaces[0];
-    assert_eq!(ws.floating_panes.len(), 1);
-    assert!(!ws.floating_panes[0].is_active);
-    assert_eq!(ws.focus_domain, FocusDomain::Tiled);
+    // Content: one float remains (pane 8); where a window focuses after the move is the window's
+    // own reconcile, tested in workspace/tests.rs and the reaction tests, not on the viewless session.
+    assert_eq!(s.workspaces[0].floating_panes.len(), 1);
 }
 
 #[test]

@@ -184,7 +184,8 @@ fn resizing_a_pane_to_a_height_sets_it() {
             .workspace(0)
             .map_or(0.0, |ws| ws.scroll().pane_heights(col)[row])
     };
-    let active_row = window.session.workspaces[0].scrolling.columns[col].active_pane_idx;
+    // `run` leaves the asker's focused pane unset, so the server resizes the first pane.
+    let active_row = 0;
     let before = height(&window, active_row);
     let changes = run(
         &mut window,

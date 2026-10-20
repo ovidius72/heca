@@ -19,8 +19,6 @@ pub struct Column {
     pub name: Option<String>,
     /// Panes in this column. Must be non-empty.
     pub panes: Vec<Pane>,
-    /// Currently active pane index.
-    pub active_pane_idx: usize,
     /// Desired width of this column.
     pub width: ColumnWidth,
     /// Previous width saved while this column is zoomed to the viewport.
@@ -39,7 +37,6 @@ impl Column {
             id,
             name: None,
             panes: vec![first_pane],
-            active_pane_idx: 0,
             width,
             zoom_restore_width: None,
             is_full_width: false,
@@ -50,14 +47,6 @@ impl Column {
 
     pub fn is_empty(&self) -> bool {
         self.panes.is_empty()
-    }
-
-    pub fn active_pane(&self) -> Option<&Pane> {
-        self.panes.get(self.active_pane_idx)
-    }
-
-    pub fn active_pane_mut(&mut self) -> Option<&mut Pane> {
-        self.panes.get_mut(self.active_pane_idx)
     }
 
     pub fn sizing_mode(&self) -> SizingMode {
@@ -96,66 +85,14 @@ impl Column {
         }
     }
 
-    /// Activate a pane by index.
-    pub fn activate_pane(&mut self, idx: usize) -> bool {
-        if idx >= self.panes.len() || self.active_pane_idx == idx {
-            return false;
-        }
-        self.active_pane_idx = idx;
-        true
-    }
-
-    /// Focus up (previous pane in column).
-    pub fn focus_up(&mut self) -> bool {
-        self.activate_pane(self.active_pane_idx.saturating_sub(1))
-    }
-
-    /// Focus down (next pane in column).
-    pub fn focus_down(&mut self) -> bool {
-        self.activate_pane((self.active_pane_idx + 1).min(self.panes.len().saturating_sub(1)))
-    }
-
-    /// Move the active pane up within the column.
-    pub fn move_up(&mut self) -> bool {
-        if self.active_pane_idx == 0 {
-            return false;
-        }
-        self.panes
-            .swap(self.active_pane_idx, self.active_pane_idx - 1);
-        self.active_pane_idx -= 1;
-        true
-    }
-
-    /// Move the active pane down within the column.
-    pub fn move_down(&mut self) -> bool {
-        if self.active_pane_idx + 1 >= self.panes.len() {
-            return false;
-        }
-        self.panes
-            .swap(self.active_pane_idx, self.active_pane_idx + 1);
-        self.active_pane_idx += 1;
-        true
-    }
-
     /// Add a pane at a specific position.
     pub fn add_pane_at(&mut self, idx: usize, pane: Pane) {
         self.panes.insert(idx, pane);
-        if idx <= self.active_pane_idx {
-            self.active_pane_idx += 1;
-        }
     }
 
-    /// Remove a pane by index.
+    /// Remove a pane by index. Which pane each window then has focused is the window's own, kept by
+    /// id in its view — there is no shared active index here to renumber.
     pub fn remove_pane(&mut self, idx: usize) -> Option<Pane> {
-        if idx >= self.panes.len() {
-            return None;
-        }
-        let pane = self.panes.remove(idx);
-        if self.active_pane_idx >= self.panes.len() && !self.panes.is_empty() {
-            self.active_pane_idx = self.panes.len() - 1;
-        } else if idx < self.active_pane_idx {
-            self.active_pane_idx -= 1;
-        }
-        Some(pane)
+        (idx < self.panes.len()).then(|| self.panes.remove(idx))
     }
 }

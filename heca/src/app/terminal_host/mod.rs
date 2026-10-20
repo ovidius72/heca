@@ -22,7 +22,6 @@ pub(crate) use selection::{
     move_focused_terminal_selection,
 };
 
-use crate::app::backend_store::BackendStore;
 use crate::app_state::AppState;
 use heca_core::backend::{TerminalDamage, TerminalSnapshot};
 use heca_core::layout::{PaneId, Rectangle};
@@ -36,27 +35,6 @@ pub(crate) struct TerminalMount {
     /// full redraw, so later retained-content work can consume real row damage
     /// without changing the host contract again.
     pub damage: TerminalDamage,
-}
-
-pub(crate) fn prepare_terminal_mount(
-    backends: &mut BackendStore,
-    terminal: crate::chrome::panes::terminal::TerminalId,
-    content_rect: Rectangle,
-    scale: f32,
-) -> Option<TerminalMount> {
-    let backend = backends.get_mut_by_id(terminal)?;
-    // Keep the device scale current so inline images report physical pixels (crisp on HiDPI).
-    // Cheap: the backend ignores an unchanged scale. The *grid* is not set here — the terminal asks
-    // for it when it changes (`TerminalInput::Resize`).
-    backend.set_scale_factor(scale);
-    let snapshot = backend.terminal_snapshot()?;
-    let damage = backend.take_terminal_damage();
-
-    Some(TerminalMount {
-        content_rect,
-        snapshot,
-        damage,
-    })
 }
 
 /// **Did a terminal that holds the keyboard in the window tree take this intent?** Only asked while

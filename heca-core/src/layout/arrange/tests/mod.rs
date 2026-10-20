@@ -1,7 +1,6 @@
 //! The changes to the session, made on the content alone, and what each says it did.
 
 use crate::layout::testing::Windowed;
-use crate::layout::types::{Point, Rectangle, Size};
 use crate::layout::{Pane, PaneId, Session};
 
 mod moves;
@@ -29,6 +28,5 @@ fn columns(session: &Session, ws: usize) -> Vec<Vec<u64>> {
 
 /// Float a pane that never tiled, `id`, in workspace `ws`.
 fn float(session: &mut Session, ws: usize, id: u64) {
-    let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(300.0, 200.0));
-    session.workspaces[ws].add_floating_pane(Pane::new(PaneId(id), "f"), rect, None);
+    session.workspaces[ws].add_floating_pane(Pane::new(PaneId(id), "f"), None);
 }

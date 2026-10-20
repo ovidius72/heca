@@ -401,3 +401,108 @@ fn a_change_to_the_columns_keeps_each_window_on_its_column() {
         );
     }
 }
+
+/// A floating pane spawned as content in workspace 0.
+fn with_a_float(pane: u64) -> Windowed {
+    let mut window = two_workspaces_of_two_columns();
+    window.session.workspaces[0]
+        .add_floating_pane(heca_core::layout::Pane::new(PaneId(pane), "f"), None);
+    window
+}
+
+/// The rect the window draws a float at, and whether it is the window's active float.
+fn float_in(window: &Windowed, pane: u64) -> Option<(heca_core::layout::Rectangle, bool)> {
+    window
+        .l()
+        .workspace(0)
+        .and_then(|ws| {
+            ws.floating()
+                .into_iter()
+                .find(|f| f.pane.id == PaneId(pane))
+                .map(|f| (f.rect, f.active))
+        })
+}
+
+/// The window that floats a pane places it where it drew it and focuses the floats.
+#[test]
+fn the_asking_window_places_and_focuses_a_float() {
+    let mut window = with_a_float(7);
+    let mut tracked = Tracked::default();
+    let rect = heca_core::layout::Rectangle::new(
+        heca_core::layout::Point::new(40.0, 30.0),
+        heca_core::layout::Size::new(200.0, 150.0),
+    );
+    let ask = WmAction::Float;
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::Floated {
+            pane: PaneId(7),
+            workspace: 0,
+            rect,
+        },
+        Some(&ask),
+    );
+    let ws = window.l().active_workspace().expect("a workspace");
+    assert_eq!(ws.focus_domain(), heca_core::layout::FocusDomain::Floating);
+    assert_eq!(ws.active_float(), Some(PaneId(7)));
+    assert_eq!(float_in(&window, 7), Some((rect, true)));
+}
+
+/// A window that only hears a float appeared keeps its own view: it stays on the tiling and draws
+/// the float at its own centred default, not at the asking window's rect.
+#[test]
+fn a_bystanding_window_keeps_its_view_when_a_float_appears() {
+    let mut window = with_a_float(7);
+    let mut tracked = Tracked::default();
+    let rect = heca_core::layout::Rectangle::new(
+        heca_core::layout::Point::new(40.0, 30.0),
+        heca_core::layout::Size::new(200.0, 150.0),
+    );
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::Floated {
+            pane: PaneId(7),
+            workspace: 0,
+            rect,
+        },
+        None,
+    );
+    let ws = window.l().active_workspace().expect("a workspace");
+    assert_eq!(ws.focus_domain(), heca_core::layout::FocusDomain::Tiled);
+    assert_eq!(ws.active_float(), None);
+    let (drawn, active) = float_in(&window, 7).expect("the float is still content");
+    assert_ne!(drawn, rect, "it falls back to its own centred default");
+    assert!(!active);
+}
+
+/// Closing the only float returns the window to the tiling when it reacts to the removal.
+#[test]
+fn closing_the_last_float_returns_the_window_to_the_tiling() {
+    let mut window = with_a_float(7);
+    let mut tracked = Tracked::default();
+    let rect = heca_core::layout::Rectangle::new(
+        heca_core::layout::Point::new(40.0, 30.0),
+        heca_core::layout::Size::new(200.0, 150.0),
+    );
+    let ask = WmAction::Float;
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::Floated {
+            pane: PaneId(7),
+            workspace: 0,
+            rect,
+        },
+        Some(&ask),
+    );
+    // Content loses the float, then the window reacts to the removal.
+    window.session.workspaces[0]
+        .floating_panes
+        .retain(|f| f.pane.id != PaneId(7));
+    react(&mut window, &mut tracked, &Change::PaneRemoved { pane: PaneId(7) }, None);
+    let ws = window.l().active_workspace().expect("a workspace");
+    assert_eq!(ws.focus_domain(), heca_core::layout::FocusDomain::Tiled);
+    assert_eq!(ws.active_float(), None);
+}

@@ -178,8 +178,26 @@ pub(crate) fn window_reacts(
                 }
             }
         }
+        Change::Floated {
+            pane,
+            workspace,
+            rect,
+        } => {
+            // The window that asked places and focuses the float where it drew it; another window
+            // gets only the float content and draws it at its own centred default.
+            if asked.is_some() {
+                show_workspace(layout, tracking.last_visited_ws, workspace);
+                if let Some(mut ws) = layout.workspace_mut(workspace) {
+                    ws.float_in_view(pane, rect);
+                }
+            }
+        }
         Change::NamesChanged => reaction.names_changed = true,
-        Change::PaneRemoved { .. } => {}
+        Change::PaneRemoved { .. } => {
+            // A closed float takes its per-window geometry with it; the window forgets it and
+            // leaves the floating domain in a workspace with no float left.
+            layout.reconcile_floats();
+        }
         Change::PaneMoved {
             pane, workspace, ..
         } => {
@@ -193,6 +211,9 @@ pub(crate) fn window_reacts(
             {
                 ws.activate_pane(pane);
             }
+            // An unfloated or moved-away pane is no longer floating anywhere it used to; forget its
+            // stale per-window geometry.
+            layout.reconcile_floats();
         }
         Change::ColumnMoved { workspace, column } => {
             // A column moved by this window is shown where it landed, and active there.

@@ -45,22 +45,35 @@ pub(super) fn spawn_command(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Cha
     let mut made = Pane::new(pane, command.clone());
     made.close_policy = *close_policy;
     let ws = cx.asker.workspace;
-    let added = match float {
+    match float {
         true => {
-            let rect = cx
-                .layout
-                .workspaces
-                .get(ws)
-                .map(|w| w.float_rect_in(cx.asker.area));
-            rect.and_then(|rect| cx.layout.add_floating(ws, made, rect))
+            // Where the asking window draws it, in that window's area. The content add is viewless;
+            // the window places and focuses it when it reacts to the `Floated` fact.
+            let Some(rect) = cx.layout.workspaces.get(ws).map(|w| w.float_rect_in(cx.asker.area))
+            else {
+                cx.terminals.end([pane]);
+                return Vec::new();
+            };
+            match cx.layout.add_floating(ws, made) {
+                Some(pane) => vec![Change::Floated {
+                    pane,
+                    workspace: ws,
+                    rect,
+                }],
+                None => {
+                    cx.terminals.end([pane]);
+                    Vec::new()
+                }
+            }
         }
-        false => cx.layout.add_column_with(ws, cx.asker.column + 1, made),
-    };
-    let Some(a) = added else {
-        cx.terminals.end([pane]);
-        return Vec::new();
-    };
-    Change::after_adding(a)
+        false => match cx.layout.add_column_with(ws, cx.asker.column + 1, made) {
+            Some(added) => Change::after_adding(added),
+            None => {
+                cx.terminals.end([pane]);
+                Vec::new()
+            }
+        },
+    }
 }
 
 /// Type `text` into a terminal, and press Enter after it unless told not to. Nothing changes that

@@ -1,28 +1,15 @@
 use super::scrolling::ScrollingSpace;
 use super::types::*;
 
-/// Which layout domain has keyboard focus.
-///
-/// When `Floating`, only pane-local actions (close, rename) operate on the
-/// active floating pane. Tiled-layout mutations (resize, zoom, swap, move,
-/// column navigation) are no-op. Navigation between floating panes is
-/// deferred to a future phase.
-///
-/// The floating domain is **modal** — mouse clicks, keyboard shortcuts, and
-/// sidebar selection cannot switch to a tiled pane while a floating pane is
-/// focused. Use `prefix+f` (unfloat), closing the floating pane, or
-/// `prefix+i` (toggle) to return to `Tiled`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FocusDomain {
-    #[default]
-    Tiled,
-    Floating,
-}
-
 /// A workspace contains a scrolling layout and optionally floating panes.
 ///
 /// This is heca's equivalent of NIRI's `Workspace<W>`, which contains
 /// both a `ScrollingSpace` (tiling) and a `FloatingSpace` (floating windows).
+///
+/// It is **shared content** (F012, decision 463ccd07): which panes float is the same in every
+/// window. Where each window draws a float, which float it has active and whether it is focused on
+/// the tiling or the floats are per window and live in its
+/// [`ScrollView`](super::window_view::ScrollView).
 #[derive(Debug, Clone)]
 pub struct Workspace {
     pub id: WorkspaceId,
@@ -31,8 +18,6 @@ pub struct Workspace {
     pub scrolling: ScrollingSpace,
     /// Floating panes (future feature).
     pub floating_panes: Vec<FloatingPane>,
-    /// Which layout domain has keyboard focus.
-    pub focus_domain: FocusDomain,
 }
 
 /// **Where a floating pane came from**, so unfloating can put it back.
@@ -50,13 +35,12 @@ pub struct FloatOrigin {
     pub row: usize,
 }
 
-/// A floating pane with position and size.
+/// A floating pane: the pane and where it floated out of. **Content only** — where a window draws
+/// it, how big and whether it is the window's active float are per window and live in the window's
+/// [`ScrollView`](super::window_view::ScrollView), keyed by [`PaneId`].
 #[derive(Debug, Clone)]
 pub struct FloatingPane {
     pub pane: super::column::Pane,
-    pub position: Point,
-    pub size: Size,
-    pub is_active: bool,
     /// Where it floated out of; `None` for a pane that never tiled (one spawned floating).
     pub origin: Option<FloatOrigin>,
 }
@@ -69,35 +53,11 @@ impl Workspace {
             name: None,
             scrolling,
             floating_panes: Vec::new(),
-            focus_domain: FocusDomain::default(),
         }
     }
 
     pub fn has_panes(&self) -> bool {
         !self.scrolling.is_empty() || !self.floating_panes.is_empty()
-    }
-
-    /// Clear active state from all floating panes.
-    pub fn deactivate_floating_panes(&mut self) {
-        for float in &mut self.floating_panes {
-            float.is_active = false;
-        }
-    }
-
-    /// Activate exactly one floating pane by id.
-    pub fn activate_floating_pane(&mut self, pane_id: PaneId) -> bool {
-        let mut found = false;
-        for float in &mut self.floating_panes {
-            let is_target = float.pane.id == pane_id;
-            float.is_active = is_target;
-            found |= is_target;
-        }
-        self.focus_domain = if found {
-            FocusDomain::Floating
-        } else {
-            FocusDomain::Tiled
-        };
-        found
     }
 
     /// **Every pane in this workspace** — the columns' panes in order, then the floating ones. A
@@ -131,7 +91,7 @@ impl Workspace {
 
 mod handle;
 
-pub use handle::{Detached, WorkspaceMut, WorkspaceRef};
+pub use handle::{Detached, FloatPlacement, WorkspaceMut, WorkspaceRef};
 
 #[cfg(test)]
 mod tests;

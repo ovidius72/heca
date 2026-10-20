@@ -18,10 +18,11 @@ fn columns(w: &Windowed, ws: usize) -> Vec<Vec<u64>> {
         .collect()
 }
 
-/// The pane a change says was made.
+/// The pane a change says was made — tiled ([`Change::PaneAdded`]) or floating
+/// ([`Change::Floated`]).
 fn made(changes: &[Change]) -> Option<PaneId> {
     changes.iter().find_map(|change| match change {
-        Change::PaneAdded { pane, .. } => Some(*pane),
+        Change::PaneAdded { pane, .. } | Change::Floated { pane, .. } => Some(*pane),
         _ => None,
     })
 }

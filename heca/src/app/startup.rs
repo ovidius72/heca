@@ -642,9 +642,9 @@ mod column_focus_tests {
             let mut ws = window.ws();
             ws.scroll_mut()
                 .add_pane_to_column(0, Some(1), Pane::new(PaneId(11), ""), false);
-            ws.scrolling.columns[0].active_pane_idx = 1; // b was the last used on the left
+            ws.scroll_mut().focus_pane_in(0, 1); // b was the last used on the left
             ws.scroll_mut().activate_column(1);
-            ws.scrolling.columns[1].active_pane_idx = 0;
+            ws.scroll_mut().focus_pane_in(1, 0);
             assert!(window.m().focus_left());
             let landed = window
                 .l()

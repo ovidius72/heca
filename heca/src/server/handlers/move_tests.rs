@@ -344,21 +344,19 @@ fn a_pane_with_a_neighbour_goes_into_a_new_column() {
 #[test]
 fn the_active_pane_swaps_within_its_column() {
     let mut w = Windowed::with_shape(&[&[&[1, 2, 3]]]);
-    w.session.workspaces[0].scrolling.columns[0].active_pane_idx = 0;
+    // The asking window has pane 1 (the top one) focused.
     assert!(
-        run(&mut w, WmAction::SwapUp).is_empty(),
+        run_for(&mut w, Some(PaneId(1)), WmAction::SwapUp).is_empty(),
         "already at the top"
     );
-    let changes = run(&mut w, WmAction::SwapDown);
+    let changes = run_for(&mut w, Some(PaneId(1)), WmAction::SwapDown);
     assert!(
         matches!(changes[..], [Change::Arranged { workspace: 0, .. }]),
         "{changes:?}"
     );
-    assert_eq!(columns(&w, 0), [vec![2, 1, 3]]);
-    assert_eq!(
-        w.session.workspaces[0].scrolling.columns[0].active_pane_idx, 1,
-        "it travelled"
-    );
+    assert_eq!(columns(&w, 0), [vec![2, 1, 3]], "pane 1 moved down a row");
+    // The window's focus travels with pane 1 by its id — a per-window property proven in
+    // heca-core's `a_swap_carries_the_window_focus_with_the_pane`; the server only reorders content.
 }
 
 /// Taking a pane puts it at the bottom of the asker's active column and says where it landed.

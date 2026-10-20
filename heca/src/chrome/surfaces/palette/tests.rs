@@ -165,11 +165,10 @@ fn rpc_keeps_the_mode_and_query_on_the_existing_palette_action() {
 /// not only the ones in its columns.
 #[test]
 fn a_floating_pane_has_a_row() {
-    use heca_core::layout::{PaneId, Point, Rectangle, Size};
+    use heca_core::layout::PaneId;
     let mut session = session_with_panes();
-    let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 100.0));
     let editing = &mut session.session.workspaces[0];
-    assert!(editing.float_tiled_pane(PaneId(2), rect).is_some());
+    assert!(editing.float_tiled_pane(PaneId(2)).is_some());
     assert!(
         editing
             .find_pane(PaneId(2))

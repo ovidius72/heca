@@ -201,11 +201,7 @@ mod tests {
                 .workspaces
                 .first_mut()
                 .expect("session should create an initial workspace");
-            ws.add_floating_pane(
-                heca_core::layout::Pane::new(PaneId(20), "git"),
-                Rectangle::new(Point::new(50.0, 50.0), Size::new(400.0, 300.0)),
-                None,
-            );
+            ws.add_floating_pane(heca_core::layout::Pane::new(PaneId(20), "git"), None);
             ws.find_pane_mut(PaneId(10)).expect("tiled pane").runtime = PaneRuntime {
                 program: Some("nvim".into()),
                 status: ProcessStatus::Running,

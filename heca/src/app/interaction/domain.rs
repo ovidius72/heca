@@ -128,7 +128,7 @@ pub(crate) fn session_domain(layout: Layout<'_>) -> Domain {
 pub(crate) fn is_floating_domain(layout: Layout<'_>) -> bool {
     layout
         .active_workspace()
-        .map(|ws| ws.focus_domain == FocusDomain::Floating)
+        .map(|ws| ws.focus_domain() == FocusDomain::Floating)
         .expect("active workspace must exist when checking focus domain")
 }
 
@@ -146,6 +146,6 @@ pub(crate) fn is_floating_domain(layout: Layout<'_>) -> bool {
 pub(crate) fn active_focus_domain(layout: Layout<'_>) -> FocusDomain {
     layout
         .active_workspace()
-        .map(|ws| ws.focus_domain)
+        .map(|ws| ws.focus_domain())
         .expect("active workspace must exist when checking focus domain")
 }

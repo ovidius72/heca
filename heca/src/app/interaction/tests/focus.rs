@@ -15,7 +15,7 @@ fn active_focus_domain_default_is_tiled() {
 #[test]
 fn active_focus_domain_floating_after_set() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
     assert_eq!(active_focus_domain(session.l()), FocusDomain::Floating);
 }
 
@@ -44,7 +44,7 @@ fn can_focus_pane_allows_any_in_tiled_domain() {
 #[test]
 fn can_focus_pane_blocks_non_floating_when_floating() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
     // In a floating domain, pane 1 (in scrolling columns) is NOT the active floating pane.
     // So can_focus_pane should block it from all sources.
     assert!(!can_focus_pane(
@@ -76,12 +76,8 @@ fn can_focus_pane_allows_active_floating_pane() {
         Point::new(0.0, 0.0),
         Size::new(1280.0, 800.0),
     ));
-    ws.add_floating_pane(
-        Pane::new(PaneId(99), "float-99"),
-        Rectangle::new(Point::new(50.0, 50.0), Size::new(800.0, 600.0)),
-        None,
-    );
-    ws.focus_domain = FocusDomain::Floating;
+    ws.add_floating_pane(Pane::new(PaneId(99), "float-99"), None);
+    ws.activate_floating_pane(PaneId(99));
 
     // The active floating pane (ID 99) can be focused from all sources.
     assert!(can_focus_pane(
@@ -112,6 +108,6 @@ fn is_floating_domain_default_is_tiled() {
 #[test]
 fn floating_domain_detected_after_set() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
     assert!(is_floating_domain(session.l()));
 }

@@ -67,7 +67,7 @@ impl ScrollingMut<'_> {
             return;
         };
         if activate {
-            self.space.columns[col_idx].activate_pane(row);
+            self.focus_pane_in(col_idx, row);
         }
         self.show(&[SpaceEffect::Pane(effect)], &before);
         if activate {
@@ -84,7 +84,7 @@ impl ScrollingMut<'_> {
         let before = self.reader().positions();
         let (col, effect) = self.space.take_column(idx)?;
         self.view.react(&*self.space, effect, &before);
-
+        self.prune_column_focus();
         Some(col)
     }
 
@@ -93,7 +93,27 @@ impl ScrollingMut<'_> {
         let before = self.reader().positions();
         let (pane, effect) = self.space.take_pane_from(col_idx, pane_idx)?;
         self.show(&[effect], &before);
+        // If this window had the removed pane focused, land its focus on the one that took its
+        // place (or the new last). A window focused on another pane, or on none, is left as it is.
+        let landing = self.space.columns.get(col_idx).and_then(|col| {
+            let gone = self
+                .view
+                .focused_pane(col.id)
+                .is_some_and(|id| !col.panes.iter().any(|p| p.id == id));
+            gone.then(|| pane_idx.min(col.panes.len().saturating_sub(1)))
+        });
+        if let Some(row) = landing {
+            self.focus_pane_in(col_idx, row);
+        }
+        self.prune_column_focus();
         Some(pane)
+    }
+
+    /// Drop this window's focus memory for columns the content no longer has.
+    fn prune_column_focus(&mut self) {
+        let space = &*self.space;
+        self.view
+            .retain_columns(|id| space.columns.iter().any(|c| c.id == id));
     }
 
     /// Move the active column left.
@@ -129,7 +149,7 @@ impl ScrollingMut<'_> {
 
     fn move_active_pane_along(&mut self, dir: Direction, new_column_id: ColumnId) -> bool {
         let col = self.view.active_column;
-        let Some(row) = self.space.columns.get(col).map(|c| c.active_pane_idx) else {
+        let Some(row) = self.reader().active_pane_row(col) else {
             return false;
         };
         let before = self.reader().positions();
@@ -146,10 +166,10 @@ impl ScrollingMut<'_> {
         let Some((col, row)) = SpaceEffect::landing(effects) else {
             return false;
         };
-        let Some(column) = self.space.columns.get_mut(col) else {
+        if self.space.columns.get(col).is_none() {
             return false;
-        };
-        column.active_pane_idx = row;
+        }
+        self.focus_pane_in(col, row);
         self.show(effects, before);
         self.view.follow(&*self.space, col);
         true

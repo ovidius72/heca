@@ -135,19 +135,17 @@ fn a_pane_extracted_from_a_column_of_one_takes_its_place() {
 }
 
 #[test]
-fn swapping_panes_carries_the_active_one_with_it() {
+fn swapping_panes_reorders_the_column() {
     let mut space = bare(1);
     space.insert_pane(0, None, Pane::new(PaneId(7), ""), HEIGHT);
     space.insert_pane(0, None, Pane::new(PaneId(8), ""), HEIGHT);
-    space.columns[0].active_pane_idx = 0;
 
     let effect = space.swap_panes_in_column(0, 0, 2);
     assert_eq!(effect, Some(PaneEffect::Swapped { col: 0, a: 0, b: 2 }));
     assert_eq!(pane_ids(&space, 0), vec![8, 7, 1]);
-    assert_eq!(space.columns[0].active_pane_idx, 2, "the active pane went with the swap");
 
-    assert!(space.swap_panes_in_column(0, 1, 1).is_none());
-    assert!(space.swap_panes_in_column(0, 0, 3).is_none());
+    assert!(space.swap_panes_in_column(0, 1, 1).is_none(), "same row");
+    assert!(space.swap_panes_in_column(0, 0, 3).is_none(), "out of range");
 }
 
 /// A window shows a swap by sliding each pane from the slot it had: at the start of the slide

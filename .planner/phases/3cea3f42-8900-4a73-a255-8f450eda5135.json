@@ -20,7 +20,24 @@
   "risks": [],
   "openQuestions": [],
   "decisions": [],
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "c3c0993f-ab94-4fc8-87bf-16790678ca06",
+      "title": "Enter inserts a newline in the multi-line field",
+      "decision": "Enter adds a newline. Submission is a separate configurable semantic action.",
+      "rationale": "Antonio approved the recommended behavior on 2026-10-20.",
+      "implementationNotes": "Share Input editing and keymap behavior. Expose submission to native and described callers.",
+      "acceptedAt": "2026-10-20T12:37:39.332Z"
+    },
+    {
+      "id": "ad2e3a81-6e2f-417b-bea6-c710472d60a4",
+      "title": "Reusable vertical resizing",
+      "decision": "Add an optional reusable vertical resize container using Splitter. It respects configured minimum and maximum height and can host Input or other content.",
+      "rationale": "Antonio approved vertical resizing on 2026-10-20 while checking the multi-line field.",
+      "implementationNotes": "Expose native and described forms. Preserve Input shortcuts and automatic sizing until the user drags.",
+      "acceptedAt": "2026-10-20T13:19:53.794Z"
+    }
+  ],
   "completionCriteria": [],
   "taskIds": [
     "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48"
@@ -34,70 +51,113 @@
       "priority": 1,
       "shortName": "add-lines-arrows-a-tree-layout",
       "title": "Add lines/arrows, a tree layout, a multi-line input and a message list to heca-grid-ui",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Execution task for P103. Read the phase description first. Run the pre-flight for each of the four types separately (AGENTS.md § 0): which existing widget, which task, or a proposal.\n\nCurrent: `heca-grid-ui/src/scene.rs:304` `DrawCommand` has no line; the renderer is `heca-renderer`. Input is single-line (`heca-grid-ui/src/widgets/input.rs`). Edge cases: lines crossing clips; tree with one child / many children / nested; multi-line input with IME and selection; message list keeping the bottom in view only while the user is at the bottom.",
       "descriptionUpdatedAt": "2026-09-29T19:22:15.412Z",
-      "notes": "",
-      "statusLog": [],
+      "notes": "Checkout /Users/antonio/projects/heca-p103-widgets; feat/t524-widgets, base 02408449. Pre-flight: Input, Grid/Flex, Label/ScrollRegion and line primitive; approved splits/config and vertical resizing. C1-C7 checked. Antonio accepted the corrected GPU showcase on 2026-10-20: ok. looks good. Peer review pending. Review/logs: target/t524-tools/REVIEW.md. Resize fixes: diagonal grip inside corner; readable Input minimum; child minimum retained; stable top/button gap; keyboard_to content focus. ScrollRegion re-reveals caret when viewport size changes. Native tests, showcase regression, described tests and scoped Clippy pass. Live GPU grow/shrink and scrollbar dragging verified. All changes uncommitted; no PR.",
+      "statusLog": [
+        {
+          "id": "c6af2991-09c5-4f43-b16e-33c7091dd3d1",
+          "date": "2026-10-20T11:13:14.471Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "4b59b345-bda8-488d-a916-a8a89136f74c",
+          "title": "Split oversized widget files and configure Input metrics",
+          "decision": "Split ScrollRegion and the showcase by responsibility. Move Input fixed styling into shared configuration.",
+          "rationale": "Antonio approved on 2026-10-20; AGENTS requires agreeing the splits before extending oversized files.",
+          "implementationNotes": "Keep existing behavior and use shared theme metrics for single- and multi-line Input.",
+          "acceptedAt": "2026-10-20T12:37:39.446Z"
+        }
+      ],
       "checklist": [
         {
           "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-001-line-arrow-drawing-command-renderer-support-theme-driven",
           "number": 1,
           "title": "Line / arrow drawing command + renderer support, theme-driven",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-002-tree-layout-container-using-the-line-command-shares-no-computed-pixels",
           "number": 2,
           "title": "Tree layout container using the line command (shares, no computed pixels)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-003-multi-line-input-grows-to-a-limit-then-scrolls-same-intent-model-as-input",
           "number": 3,
           "title": "Multi-line input (grows to a limit, then scrolls; same intent model as Input)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-004-message-list-with-wrapped-entries-and-stick-to-bottom",
           "number": 4,
           "title": "Message list with wrapped entries and stick-to-bottom",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-005-showcase-entries-for-all-four-driven-by-antonio-in-the-gpu-app",
           "number": 5,
           "title": "Showcase entries for all four, driven by Antonio in the GPU app",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-006-docs-widgets-md-sections",
           "number": 6,
           "title": "docs/widgets.md sections",
-          "checked": false
+          "checked": true
+        },
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-007-reusable-vertical-resize-grip-using-splitter-configured-min-max-height-native-and-described-apis-preserve-editor-input",
+          "number": 7,
+          "title": "Reusable vertical resize grip using Splitter; configured min/max height; native and described APIs; preserve editor input",
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-10-20T11:13:14.471Z",
       "completedAt": "",
       "createdAt": "2026-09-29T19:22:15.360Z",
-      "updatedAt": "2026-09-29T19:22:15.360Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-10-20T15:37:59.334Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:b2c0351c-2f5e-4ca3-8548-c6b5dee5349f",
+          "createdAt": "2026-10-20T11:13:14.377Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:b2c0351c-2f5e-4ca3-8548-c6b5dee5349f"
     }
   ],
   "createdAt": "2026-09-29T19:21:46.992Z",
-  "updatedAt": "2026-09-29T21:33:25.558Z",
+  "updatedAt": "2026-10-20T15:37:59.334Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
-  "sessionInfo": []
+  "statusLog": [
+    {
+      "id": "e664fbb3-5919-40e7-acfa-67300973ea8a",
+      "date": "2026-10-20T11:13:14.512Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b2c0351c-2f5e-4ca3-8548-c6b5dee5349f",
+      "createdAt": "2026-10-20T11:13:14.377Z"
+    }
+  ]
 }

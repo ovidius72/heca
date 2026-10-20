@@ -5,7 +5,10 @@
 //! *what* changed, never what to do about it — the same rule events follow everywhere else.
 
 /// Something that changed in the state every window shares.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// `PartialEq` but not `Eq`: [`Floated`](Self::Floated) carries a [`Rectangle`] of logical pixels
+/// (`f64`), which is `PartialEq` only.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Change {
     /// The notifications on show, or when they expire, are different.
     NotificationsChanged,
@@ -24,6 +27,15 @@ pub(crate) enum Change {
         pane: heca_core::layout::PaneId,
         workspace: usize,
         column: usize,
+    },
+    /// A pane now floats in workspace `workspace`. `rect` is where the window that asked drew it,
+    /// in that window's area; the window places and focuses it, and any other window falls back to
+    /// its own centred default. Floating content is the same in every window; where it is drawn and
+    /// which window has it active are per window (F012, decision 463ccd07).
+    Floated {
+        pane: heca_core::layout::PaneId,
+        workspace: usize,
+        rect: heca_core::layout::Rectangle,
     },
     /// The pane is gone from the layout, and whatever ran in it has ended.
     PaneRemoved { pane: heca_core::layout::PaneId },

@@ -69,16 +69,10 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
         let y = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         frames.push((pane_id, x, y, rect.size.w as f32, rect.size.h as f32));
     }
-    for float in &ws.floating_panes {
-        let x = pane_area.loc.x as f32 + ws_offset.0 + float.position.x as f32;
-        let y = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
-        frames.push((
-            float.pane.id,
-            x,
-            y,
-            float.size.w as f32,
-            float.size.h as f32,
-        ));
+    for f in ws.floating() {
+        let x = pane_area.loc.x as f32 + ws_offset.0 + f.rect.loc.x as f32;
+        let y = pane_area.loc.y as f32 + ws_offset.1 + f.rect.loc.y as f32;
+        frames.push((f.pane.id, x, y, f.rect.size.w as f32, f.rect.size.h as f32));
     }
     frames
 }

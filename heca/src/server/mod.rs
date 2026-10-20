@@ -139,6 +139,33 @@ impl ServerState {
         }
     }
 
+    /// **What a window draws of a terminal**: its snapshot and the rows that changed since this was
+    /// last asked, at the device `scale` the window draws at. The server owns the backend; the
+    /// window reads through this instead of reaching into [`backends`](Self::backends). `None` for a
+    /// terminal that is gone or has no screen yet.
+    ///
+    /// The window's size reaches the process the other way, as a `TerminalInput::Resize` the window
+    /// emits when its box or font changes — so rows×cols are the window's. When several windows show
+    /// one pane at different sizes the process still has one size, chosen by a setting (decision
+    /// 463ccd07); that arbitration lives on the resize event and is added later (P099), so this read
+    /// stays a pure read and takes no grid.
+    pub(crate) fn terminal_view(
+        &mut self,
+        id: crate::chrome::panes::terminal::TerminalId,
+        scale: f32,
+    ) -> Option<(
+        heca_core::backend::TerminalSnapshot,
+        heca_core::backend::TerminalDamage,
+    )> {
+        let backend = self.backends.get_mut_by_id(id)?;
+        // Keep the device scale current so inline images report physical pixels (crisp on HiDPI).
+        // Cheap: the backend ignores an unchanged scale.
+        backend.set_scale_factor(scale);
+        let snapshot = backend.terminal_snapshot()?;
+        let damage = backend.take_terminal_damage();
+        Some((snapshot, damage))
+    }
+
     /// The terminal processes and what starting one takes, for one request.
     pub(crate) fn terminals(&mut self) -> Terminals<'_> {
         Terminals {

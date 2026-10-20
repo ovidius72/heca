@@ -2,7 +2,7 @@
 
 use super::{Arranged, Record, after_taking};
 use crate::layout::scrolling::{PaneEffect, SpaceEffect};
-use crate::layout::{ColumnId, FocusDomain, PaneId, Session};
+use crate::layout::{ColumnId, PaneId, Session};
 
 /// Where a moved pane or column landed, and what the move did to get it there.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,12 +112,9 @@ impl Session {
         let new_column = ColumnId(self.next_id());
         let mut record = Record::default();
         let src = &mut self.workspaces[src_ws];
-        let was_floating = src.scrolling.pane_indices(pane).is_none();
         let (moving, taken) = src.take_pane(pane)?;
-        if was_floating {
-            src.deactivate_floating_panes();
-            src.focus_domain = FocusDomain::Tiled;
-        }
+        // A window that had this float active returns to the tiling when it reacts to the move
+        // (`reconcile_floats` / `activate_pane` at the landing); the content move touches no view.
         record.note(src_id, taken);
         let dst_col = match src_ws == dst_ws {
             true => after_taking(taken, dst_col),

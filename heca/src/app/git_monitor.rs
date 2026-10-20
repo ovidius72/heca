@@ -289,7 +289,7 @@ fn sync_one_pane_git<P: GitProvider>(
 #[cfg(test)]
 mod tests {
     use super::{GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, sync_pane_git_from_cwds_impl};
-    use heca_core::layout::{Pane, PaneId, Point, Rectangle, Session, Size, testing::Windowed};
+    use heca_core::layout::{Pane, PaneId, Session, Size, testing::Windowed};
     use std::cell::Cell;
     use std::collections::HashMap;
     use std::fs;
@@ -423,7 +423,6 @@ mod tests {
                     pane.runtime.cwd = Some(repo_b.clone());
                     pane
                 },
-                Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0)),
                 None,
             );
         }
