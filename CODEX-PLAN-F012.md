@@ -32,7 +32,7 @@ P099 connection over a local socket (detach/attach, several windows, `heca rpc`)
 
 ## Suggested split (so we don't collide — different phases)
 
-- **Other agent → phase P103** (`gridui-06`-style widgets heca-pro needs: lines/arrows, tree layout, multi-line input, message list). It lives entirely in **`heca-grid-ui`** and does **not** depend on the server work (per the feature's phase notes), so it never touches the files below. This is a whole phase of its own — read P103's tasks in the planner and follow the normal widget rules (docs/widgets.md, showcase, both-audiences docs).
+- **Other agent → phase P103 / T524** (the widgets heca-pro needs: lines/arrows, tree layout, multi-line input, message list). It spans **`heca-grid-ui`** (the widgets + the scene command) **and `heca-renderer`** (lines/arrows need a new draw primitive — the drawing layer has none today, `heca-grid-ui/src/scene.rs`), plus the **showcase** and **`docs/widgets.md`**. It does **not** depend on the server work and does **not** touch any P104 file (`heca-core/layout`, `heca-core/backend`, `heca/server`), so the two of us stay out of each other's way. Read P103's tasks in the planner and follow the normal widget rules.
 - **Me → finish phase P104** (T525: **C10** floating + focus-domain, **C5** terminal through the interface, **C7** docs), then start **P099**. These live in `heca-core/src/layout/*`, `heca-core/src/backend/`, and `heca/src/server/` — all outside `heca-grid-ui`.
 - If you'd rather take a different phase, say so in this file before starting.
 
