@@ -4,7 +4,7 @@ Two agents working side by side on F012 (open heca becomes a server + clients, s
 
 ## Where things are now
 
-- **Branch:** `feat/p104-b2-2` (worktree `~/projects/heca-f012`), based on current `main`.
+- **Branch:** `feat/server-client-split` (in `~/projects/heca`), based on current `main`.
 - **Last commit:** `69389672` — T525 **C9** (shown workspace is a `WorkspaceId`, not an index) and **C12** (each column's focused pane moved out of shared `Column` into the window's `ScrollView`, keyed `ColumnId → PaneId`). Both done, all heca-core + heca tests pass, clippy clean.
 - **T468** (the file-split census) is already up as **PR #292** to `main`.
 - `Column` is now pure content — no `active_pane_idx`. Focus lives in `WindowView`/`ScrollView` and is read at render time.
