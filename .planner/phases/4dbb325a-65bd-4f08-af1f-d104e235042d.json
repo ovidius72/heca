@@ -71,25 +71,25 @@
           "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-001-map-every-appstate-field-to-server-or-client-agree-the-interface",
           "number": 1,
           "title": "Map every AppState field to server or client; agree the interface",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-002-server-part-sessions-list-layout-backends-runtime-agent-state-notifications",
           "number": 2,
           "title": "Server part: sessions list, layout, backends, runtime/agent state, notifications",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-003-client-part-window-renderers-retained-chrome-docks-overlays-per-window-view",
           "number": 3,
           "title": "Client part: window, renderers, retained chrome, docks, overlays, per-window view",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-004-sort-every-action-server-changes-state-or-client-window-only",
           "number": 4,
           "title": "Sort every action: server (changes state) or client (window only)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-005-terminal-snapshot-changed-rows-through-the-interface-pixel-cell-sizes-client-side-rows-x-cols-from-the-client",
@@ -101,7 +101,7 @@
           "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-006-standalone-runs-through-the-interface-unchanged-a-windowless-test-drives-the-server-part",
           "number": 6,
           "title": "Standalone runs through the interface unchanged; a windowless test drives the server part",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-007-docs-architecture-section-for-server-client",
@@ -187,7 +187,7 @@
       "startedAt": "2026-10-02T14:23:31.875Z",
       "completedAt": "",
       "createdAt": "2026-09-29T21:32:32.856Z",
-      "updatedAt": "2026-10-15T09:16:38.147Z",
+      "updatedAt": "2026-10-20T07:17:39.314Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:f85e584e-0798-420c-8fa3-616087f1bc6a",
@@ -198,7 +198,7 @@
     }
   ],
   "createdAt": "2026-09-29T21:32:06.456Z",
-  "updatedAt": "2026-10-15T09:16:38.147Z",
+  "updatedAt": "2026-10-20T07:17:39.314Z",
   "handoff": "# Server/client split — B1 and B2.1 merged (PR #284); next B2.2 on feat/p104-b2-2\n\nCreated at: 2026-10-01T08:16:53.848Z\nUpdated at: 2026-10-12T15:09:00.020Z\nReason: B2 commits (a), (b1), (b2.1), the merge of main and the drag drop-area fix landed in main through PR #284; the old handoff described the state before any of it. A cold agent needs the new state and the B2.2 plan.\n\n## Current focus\n- Feature F012, phase P104(F012), task P104(F012)/T525 (in progress).\n- Session heca-f0 owns F012 and reports straight to Antonio. He tests only from `~/projects/heca-check`, which this session points at a commit and builds. Another session worked on settings (T540/T541, PRs #285/#286); check the planner for active work before touching config.\n- Worktree `~/projects/heca-f012`, branch `feat/p104-b2-2`, at origin/main `0c554c02` (after #286), no commits yet, tree clean.\n- Exact resume point: **B2.2**, below. No code exists for it yet.\n\n## Current and partial state\nIn main (PR #284):\n- The server owns ServerState (backends, notifications, git cache, programs). Every layout action runs on the server and reports `Change`s, which are past facts only.\n- Each window has a view per workspace (ScrollView: active column, offset, area, Motion slides). Content stores no pixels.\n- Column ops: view-free on ScrollingSpace (scrolling/effect.rs). Pane ops: insert_pane, take_pane_from, move_pane_between, extract_pane, move_pane_along, swap_panes_in_column (scrolling/pane_effect.rs). They return `SpaceEffect = Column(ColumnEffect) | Pane(PaneEffect)`; `SpaceEffect::landing` gives where a pane landed.\n- Window side: ScrollView::react_to(space, &[SpaceEffect], before), follow(col), activate_column. Focus moves and the column-focus rule are in scrolling/focus.rs.\n- Server side: `Change::Arranged{workspace, effects}`. The window keeps a `Before` (Layout::before, keyed by WorkspaceId) and LayoutMut::show_change. window_reacts follows a PaneMoved through activate_pane, except TakePane with focus_after:false (follows_pane).\n- Content-only on the server: move_pane_left/right, Move, MovePaneToColumn within one workspace, MovePaneToNewColumn, swap_up/down, and all the column ops.\n- Drag drop areas: Place{kind, rect: line, zone}; Place::moved_by shifts both. LandingSlot `.line(EdgeLine)`. Setting `drop_edge_reach` (default 0.25).\n- Fixes in main: a moved-in pane gets room like a new one; pane slides add to a running slide; follow uses activate_column; closing the active column keeps the view in place.\n\n## Preservation constraints\n- Library first: a rule a caller must remember is the bug. Nothing hard-coded: values come from settings (config.default.toml), the theme or layout options. One path per act. No unwrap/expect outside tests. Files under ~400 lines. Comments without names, dates or history.\n- Every test drives the real path and is break-checked (put the bug back, see red). Run cargo scoped (`-p heca-core -p heca`). Run the workspace-wide `cargo test` + `cargo clippy --all-targets -D warnings` before any PR (heca-view-realize checks every exported widget type).\n- Never launch the GUI; Antonio checks by eye from heca-check. Commit only on his word; PRs only with his OK.\n- Standalone heca behaves as before. A Change is a past fact. View decisions happen only in the window (window_reacts / ScrollView).\n- No planner tasks without Antonio's yes; keeping T525's own checklist honest is fine.\n\n## Supporting documents\n- None needed. Older detail: .planner/docs/handoff-p104-2026-10-07T08-31-38-118Z.md (pre-B2 state, superseded) and handoff-p104-2026-10-05T07-57-22-208Z.md (2a rules).\n\n## Blockers and risks\n- Still view-bound and still on ServerLayout: LayoutMut::move_pane_to_workspace, move_column_to_workspace, move_column, swap_columns_between, take_pane_into, place_pane, add_pane_to_column, add_column; swap_panes between columns/workspaces (handle/swap.rs); floating. ServerLayout still exposes workspace_mut.\n- T525 C12: Column.active_pane_idx is shared content but is per-window focus.\n- Unreproduced: a pane pushed off the bottom after resize + swap (test panes_stay_on_screen_after_a_resize_and_a_swap covers it). Chase it only with Antonio's exact steps.\n- Main still has 26 plain-date comments; leave them unless asked.\n\n## How to resume\n1. `cd ~/projects/heca-f012 && git fetch && git status` (feat/p104-b2-2; fast-forward it if main moved and it has no commits). Baseline: `cargo test -p heca-core -p heca` green.\n2. B2.2: give the remaining server handlers content ops that return effects per workspace. Cover moves across workspaces (removal effects in the source, insertion in the destination, WorkspaceRemoved first), take_pane_into (from columns or floats), place_pane (Workspace::move_pane counted as it is now within one workspace), add_pane_to_column / add_column (PaneAdded), and swap_panes between columns/workspaces. Report `Change::Arranged` per workspace touched, plus PaneMoved/ColumnMoved; the window follows through follows_pane / follows_column. Then delete the view-bound LayoutMut versions and remove `workspace_mut` from ServerLayout, so the compiler proves the server never reads a view.\n3. Tests: content ops on a bare ScrollingSpace; server tests via heca/src/server/handlers/testing.rs; the run_and_react path test in move_tests.rs. Break-check each.\n4. Point heca-check at the result, give Antonio check steps, commit on his word.\n5. After B2.2: 2b (terminals behind the server; empties AWAITING_TERMINALS), then C12.",
   "handoffUpdatedAt": "2026-10-12T15:09:00.020Z",
   "handoffAudit": {
