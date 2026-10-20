@@ -6,7 +6,7 @@ use super::*;
 #[test]
 fn floating_domain_blocks_tiled_only() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let actions = [
         WmAction::FocusLeft,
@@ -51,7 +51,7 @@ fn floating_domain_blocks_tiled_only() {
 #[test]
 fn floating_domain_allows_focused_pane_local() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let actions = [
         WmAction::Float,
@@ -79,7 +79,7 @@ fn floating_domain_allows_focused_pane_local() {
 #[test]
 fn floating_domain_blocks_intent_variants() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let intents = [
         InteractionIntent::FocusPane {
@@ -109,7 +109,7 @@ fn floating_domain_blocks_intent_variants() {
 #[test]
 fn floating_blocks_mouse_content_focus_pane() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     // MouseContent FocusPane should be blocked when floating
     // (only the active floating pane could receive focus, and this targets a tiled pane)
@@ -133,7 +133,7 @@ fn floating_blocks_mouse_content_focus_pane() {
 #[test]
 fn floating_blocks_mouse_left_sidebar_actions() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     // Sidebar actions should be blocked when floating.
     let actions = [WmAction::SidebarLeft];
@@ -169,12 +169,8 @@ fn floating_focus_allows_active_floating_pane_via_keyboard() {
         .m()
         .add_pane(Pane::new(PaneId(99), "float-99"), None, true);
     let mut ws = session.ws();
-    ws.add_floating_pane(
-        Pane::new(PaneId(99), "float-99"),
-        Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 100.0)),
-        None,
-    );
-    ws.focus_domain = FocusDomain::Floating;
+    ws.add_floating_pane(Pane::new(PaneId(99), "float-99"), None);
+    ws.activate_floating_pane(PaneId(99));
 
     // FocusPane targeting the active floating pane should be allowed from Keyboard.
     let decision = route_in_domain(
@@ -196,7 +192,7 @@ fn floating_focus_allows_active_floating_pane_via_keyboard() {
 #[test]
 fn floating_focus_blocks_tiled_pane_via_keyboard() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     // FocusPane targeting tiled pane (ID 1) should be blocked.
     let decision = route_in_domain(
@@ -216,7 +212,7 @@ fn floating_focus_blocks_tiled_pane_via_keyboard() {
 #[test]
 fn floating_focus_pane_intent_blocked_via_mouse_content() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let decision = route_in_domain(
         session.l(),
@@ -238,7 +234,7 @@ fn floating_focus_pane_intent_blocked_via_mouse_content() {
 #[test]
 fn floating_blocks_always_allowed_from_keyboard() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let actions = [
         WmAction::CommandPalette {
@@ -276,7 +272,7 @@ fn floating_blocks_always_allowed_from_keyboard() {
 #[test]
 fn floating_allows_global_reload() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let decision = route_in_domain(
         session.l(),
@@ -299,7 +295,7 @@ fn floating_allows_global_reload() {
 #[test]
 fn floating_allows_focused_pane_local_via_keyboard() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let actions = [
         WmAction::Float,
@@ -348,7 +344,7 @@ fn floating_allows_focused_pane_local_via_keyboard() {
 #[test]
 fn floating_allows_focused_pane_local_from_all_sources() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     let sources = [
         InteractionSource::Keyboard,

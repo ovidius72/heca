@@ -16,7 +16,7 @@ use super::*;
 #[test]
 fn a_pick_that_would_be_refused_resolves_to_a_refused_action() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
 
     // What `PaneShell` declares — the same name and argument, built the same way a config
     // binding is.

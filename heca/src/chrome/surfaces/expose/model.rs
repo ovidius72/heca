@@ -175,22 +175,22 @@ pub(crate) fn model(
                     .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
                 active: ws_idx == layout.active_workspace_idx(),
                 floating: ws
-                    .floating_panes
-                    .iter()
+                    .floating()
+                    .into_iter()
                     .map(|f| ExposeFloating {
                         pane_id: f.pane.id,
-                        name: name_of(&f.pane),
+                        name: name_of(f.pane),
                         folder: folders
                             .then_some(f.pane.runtime.cwd.as_deref())
                             .flatten()
                             .map(crate::chrome::home_relative_path),
-                        active: f.is_active,
+                        active: f.active,
                         // Viewport-relative → strip-relative. See the field's own note.
-                        x: f.position.x + view_x,
+                        x: f.rect.loc.x + view_x,
                         // (`view_x` is `view_pos()`, the viewport's own place in the strip.)
-                        y: f.position.y,
-                        w: f.size.w,
-                        h: f.size.h,
+                        y: f.rect.loc.y,
+                        w: f.rect.size.w,
+                        h: f.rect.size.h,
                     })
                     .collect(),
                 columns,
@@ -276,11 +276,10 @@ mod tests {
     fn a_floating_pane_is_offset_by_the_scroll_so_it_lands_where_it_looks() {
         use heca_core::layout::{Point, Rectangle};
         let mut s = session();
-        s.session.workspaces[0].add_floating_pane(
-            Pane::new(PaneId(9), "float"),
-            Rectangle::new(Point::new(40.0, 30.0), Size::new(200.0, 150.0)),
-            None,
-        );
+        // Content add (viewless), then this window places it where it draws it.
+        s.session.workspaces[0].add_floating_pane(Pane::new(PaneId(9), "float"), None);
+        s.ws()
+            .float_in_view(PaneId(9), Rectangle::new(Point::new(40.0, 30.0), Size::new(200.0, 150.0)));
         s.scrolled(0, 120.0, 1);
 
         // **Stand on a later column**, so `column_x(active)` is not zero and reading `view_offset`

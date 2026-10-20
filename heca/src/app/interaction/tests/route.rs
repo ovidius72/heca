@@ -351,7 +351,7 @@ fn a_declared_tiled_only_action_is_blocked_when_floating() {
         None
     ));
     // Floating: blocked.
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
     assert!(!policy_allows(
         session.l(),
         session_domain(session.l()),
@@ -367,7 +367,7 @@ fn a_declared_tiled_only_action_is_blocked_when_floating() {
 #[test]
 fn a_declared_global_action_survives_the_floating_domain() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
     assert!(policy_allows(
         session.l(),
         session_domain(session.l()),
@@ -392,7 +392,7 @@ fn a_declared_global_action_survives_the_floating_domain() {
 #[test]
 fn source_dependent_without_an_action_is_conservatively_blocked_when_floating() {
     let mut session = test_session();
-    session.ws().focus_domain = FocusDomain::Floating;
+    session.ws().set_focus_domain(FocusDomain::Floating);
     assert!(!policy_allows(
         session.l(),
         session_domain(session.l()),

@@ -8,11 +8,22 @@
 
 use std::ops::{Deref, DerefMut};
 
-use super::{FocusDomain, Workspace};
+use super::Workspace;
 use crate::layout::column::Pane;
 use crate::layout::scrolling::{ScrollingMut, ScrollingRef};
 use crate::layout::types::{ColumnId, PaneId, Rectangle};
-use crate::layout::window_view::ScrollView;
+use crate::layout::window_view::{FocusDomain, ScrollView};
+
+/// A floating pane as one window sees it: the shared pane, where this window draws it, and whether
+/// it is this window's active float. The geometry is the window's own (per F012, decision
+/// 463ccd07) — a render or exposé pass asks for it this way so it never reads a window's rect off
+/// the shared content.
+#[derive(Clone, Copy)]
+pub struct FloatPlacement<'a> {
+    pub pane: &'a Pane,
+    pub rect: Rectangle,
+    pub active: bool,
+}
 
 /// A [`Workspace`] with the window's view of it: the reads.
 #[derive(Clone, Copy)]
@@ -97,15 +108,44 @@ impl<'a> WorkspaceRef<'a> {
     /// The pane that has the focus: the active floating pane while floating has it, else the
     /// active pane of the active column.
     pub fn active_pane(&self) -> Option<&'a Pane> {
-        if self.ws.focus_domain == FocusDomain::Floating {
+        if self.view.focus_domain == FocusDomain::Floating {
+            let id = self.view.active_float?;
             self.ws
                 .floating_panes
                 .iter()
-                .find(|p| p.is_active)
-                .map(|p| &p.pane)
+                .find(|f| f.pane.id == id)
+                .map(|f| &f.pane)
         } else {
             self.scroll().active_pane()
         }
+    }
+
+    /// Whether this window is focused on the tiling or on a floating pane in this workspace.
+    pub fn focus_domain(&self) -> FocusDomain {
+        self.view.focus_domain
+    }
+
+    /// The floating pane this window has active, if any.
+    pub fn active_float(&self) -> Option<PaneId> {
+        self.view.active_float
+    }
+
+    /// Every floating pane with where this window draws it and whether it is this window's active
+    /// float. A float this window has not placed falls back to the centred default, so a render or
+    /// exposé pass never has to reach for geometry the shared content does not carry.
+    pub fn floating(&self) -> Vec<FloatPlacement<'a>> {
+        self.ws
+            .floating_panes
+            .iter()
+            .map(|f| FloatPlacement {
+                pane: &f.pane,
+                rect: self
+                    .view
+                    .float_rect(f.pane.id)
+                    .unwrap_or_else(|| self.ws.float_rect_in(self.view.area)),
+                active: self.view.active_float == Some(f.pane.id),
+            })
+            .collect()
     }
 
     /// Where a pane floats when nothing says where: centred, [`float_size`] of the working area.
@@ -167,22 +207,72 @@ impl WorkspaceMut<'_> {
     pub fn update_working_area(&mut self, working_area: Rectangle) {
         let old = self.view.area;
         self.scroll_mut().update_working_area(working_area);
-        // Scale floating panes proportionally so they keep their relative position
-        // + coverage when the working area changes (window resize, chrome toggle).
-        // Without this, a float spawned at 95% keeps its absolute pixel size while
-        // the window grows/shrinks around it — drifting off-screen or looking
-        // stranded. Position is stored relative to the working-area origin (see
-        // `handle_float` + the render path), so a pure scale by the size ratio is
-        // correct (plus an origin shift in case `loc` ever moves).
+        // Scale this window's floating panes proportionally so they keep their relative position
+        // + coverage when the working area changes (window resize, chrome toggle). Without this, a
+        // float spawned at 95% keeps its absolute pixel size while the window grows/shrinks around
+        // it — drifting off-screen or looking stranded. The geometry is this window's own (per
+        // window, decision 463ccd07), so it is the window's view that is rescaled; a float this
+        // window never placed has no stored rect and tracks the area through the centred default.
+        // Position is stored relative to the working-area origin, so a pure scale by the size ratio
+        // is correct (plus an origin shift in case `loc` ever moves).
         let sx = working_area.size.w / old.size.w.max(1.0);
         let sy = working_area.size.h / old.size.h.max(1.0);
         if (sx - 1.0).abs() > 1e-6 || (sy - 1.0).abs() > 1e-6 {
-            for float in &mut self.ws.floating_panes {
-                float.position.x = working_area.loc.x + (float.position.x - old.loc.x) * sx;
-                float.position.y = working_area.loc.y + (float.position.y - old.loc.y) * sy;
-                float.size.w *= sx;
-                float.size.h *= sy;
+            for rect in self.view.floats.values_mut() {
+                rect.loc.x = working_area.loc.x + (rect.loc.x - old.loc.x) * sx;
+                rect.loc.y = working_area.loc.y + (rect.loc.y - old.loc.y) * sy;
+                rect.size.w *= sx;
+                rect.size.h *= sy;
             }
+        }
+    }
+
+    /// Whether this window is focused on the tiling or on a floating pane — see
+    /// [`WorkspaceRef::focus_domain`].
+    pub fn focus_domain(&self) -> FocusDomain {
+        self.view.focus_domain
+    }
+
+    /// Focus the tiling or a floating pane in this workspace for this window.
+    pub fn set_focus_domain(&mut self, domain: FocusDomain) {
+        self.view.focus_domain = domain;
+    }
+
+    /// This window gives up its active floating pane; it keeps looking where it looks.
+    pub fn deactivate_floating_panes(&mut self) {
+        self.view.active_float = None;
+    }
+
+    /// Make `pane` this window's active floating pane and focus the floats, when the workspace has
+    /// it floating; otherwise focus the tiling. `true` when it is floating here.
+    pub fn activate_floating_pane(&mut self, pane: PaneId) -> bool {
+        let found = self.ws.floating_panes.iter().any(|f| f.pane.id == pane);
+        self.view.active_float = found.then_some(pane);
+        self.view.focus_domain = if found {
+            FocusDomain::Floating
+        } else {
+            FocusDomain::Tiled
+        };
+        found
+    }
+
+    /// This window floats `pane` at `rect` and focuses it — the window's reaction to a `Floated`
+    /// fact. The pane is already floating content; this sets only the window's own view of it.
+    pub fn float_in_view(&mut self, pane: PaneId, rect: Rectangle) {
+        self.view.set_float_rect(pane, rect);
+        self.view.active_float = Some(pane);
+        self.view.focus_domain = FocusDomain::Floating;
+    }
+
+    /// Reconcile this window's floating view with the content after a float appeared or went:
+    /// forget the geometry of floats the workspace no longer has, drop the active float if it is
+    /// gone, and return to the tiling only when no float is left — the window stays in the floating
+    /// domain while any float remains, matching the pre-split behaviour.
+    pub fn reconcile_floats(&mut self) {
+        let present: Vec<PaneId> = self.ws.floating_panes.iter().map(|f| f.pane.id).collect();
+        self.view.retain_floats(|id| present.contains(&id));
+        if present.is_empty() {
+            self.view.focus_domain = FocusDomain::Tiled;
         }
     }
 
@@ -218,8 +308,8 @@ impl WorkspaceMut<'_> {
     /// view) or floating. `false` when it is not here.
     pub fn activate_pane(&mut self, pane_id: PaneId) -> bool {
         if let Some((col, row)) = self.scrolling.pane_indices(pane_id) {
-            self.deactivate_floating_panes();
-            self.focus_domain = FocusDomain::Tiled;
+            self.view.active_float = None;
+            self.view.focus_domain = FocusDomain::Tiled;
             let mut scroll = self.scroll_mut();
             scroll.activate_column(col);
             scroll.focus_pane_in(col, row);
@@ -230,7 +320,7 @@ impl WorkspaceMut<'_> {
 
     /// Focus left in the scrolling layout.
     pub fn focus_left(&mut self) -> bool {
-        if self.ws.focus_domain == FocusDomain::Floating {
+        if self.view.focus_domain == FocusDomain::Floating {
             false // TODO: floating focus
         } else {
             self.scroll_mut().focus_left()
@@ -239,7 +329,7 @@ impl WorkspaceMut<'_> {
 
     /// Focus right in the scrolling layout.
     pub fn focus_right(&mut self) -> bool {
-        if self.ws.focus_domain == FocusDomain::Floating {
+        if self.view.focus_domain == FocusDomain::Floating {
             false // TODO: floating focus
         } else {
             self.scroll_mut().focus_right()
@@ -248,7 +338,7 @@ impl WorkspaceMut<'_> {
 
     /// Focus up (previous pane in column, or previous workspace).
     pub fn focus_up(&mut self) -> bool {
-        if self.ws.focus_domain == FocusDomain::Floating {
+        if self.view.focus_domain == FocusDomain::Floating {
             return false; // TODO
         }
         let mut scroll = self.scroll_mut();
@@ -271,7 +361,7 @@ impl WorkspaceMut<'_> {
 
     /// Focus down (next pane in column, or next workspace).
     pub fn focus_down(&mut self) -> bool {
-        if self.ws.focus_domain == FocusDomain::Floating {
+        if self.view.focus_domain == FocusDomain::Floating {
             return false; // TODO
         }
         let mut scroll = self.scroll_mut();

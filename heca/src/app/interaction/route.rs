@@ -160,10 +160,7 @@ pub(super) fn policy_allows(
                 if !floating {
                     return true;
                 }
-                let active_floating = layout
-                    .active_workspace()
-                    .and_then(|ws| ws.content().floating_panes.iter().find(|f| f.is_active))
-                    .map(|f| f.pane.id);
+                let active_floating = layout.active_workspace().and_then(|ws| ws.active_float());
                 return active_floating == Some(*pane_id);
             }
             // Other source-dependent actions: defer to source when floating.

@@ -332,6 +332,18 @@ impl LayoutMut<'_> {
         self.switch_workspace_down()
     }
 
+    /// Reconcile this window's floating view in **every** workspace with the content: a float that
+    /// went (a pane closed, unfloated or moved away) is forgotten, and the window leaves the
+    /// floating domain in a workspace that has no float left. Called after a change that can remove
+    /// a float; idempotent and cheap, so it need not know which workspace held the float.
+    pub fn reconcile_floats(&mut self) {
+        for idx in 0..self.session.workspaces.len() {
+            if let Some(mut ws) = self.workspace_mut(idx) {
+                ws.reconcile_floats();
+            }
+        }
+    }
+
     /// The window was resized (e.g., on window resize): every workspace is laid out in the new
     /// size.
     pub fn update_viewport(&mut self, size: Size) {

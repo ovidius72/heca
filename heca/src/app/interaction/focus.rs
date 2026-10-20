@@ -35,10 +35,7 @@ pub(crate) fn can_focus_pane(
 ) -> bool {
     if is_floating_domain(layout) {
         // In floating domain, only the active floating pane can receive focus.
-        let active_floating = layout
-            .active_workspace()
-            .and_then(|ws| ws.content().floating_panes.iter().find(|f| f.is_active))
-            .map(|f| f.pane.id);
+        let active_floating = layout.active_workspace().and_then(|ws| ws.active_float());
         active_floating == Some(pane_id)
     } else {
         // In tiled domain, any pane can receive focus from any source.

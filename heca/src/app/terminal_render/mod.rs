@@ -49,12 +49,14 @@ impl TerminalRenderState {
         let content_rect = crate::chrome::panes::terminal::room_of(state, id)
             .map(|room| Rectangle::new(heca_core::layout::Point::new(0.0, 0.0), room));
         let mount = content_rect.and_then(|content_rect| {
-            crate::app::terminal_host::prepare_terminal_mount(
-                &mut state.server.backends,
-                id,
+            // Read the terminal through the server interface, not by reaching into its backends:
+            // the server owns the process and hands back the snapshot and the rows that changed.
+            let (snapshot, damage) = state.server.terminal_view(id, state.scale_factor as f32)?;
+            Some(crate::app::terminal_host::TerminalMount {
                 content_rect,
-                state.scale_factor as f32,
-            )
+                snapshot,
+                damage,
+            })
         });
         if let (Some(m), Some(pane)) = (&mount, pane) {
             state.chrome_state.panes.set_viewport(

@@ -1,21 +1,10 @@
 //! Floating a pane and putting it back.
 
 use heca_core::layout::types::{Point, Size};
-use heca_core::layout::{ColumnId, PaneId, Rectangle, SpaceEffect};
+use heca_core::layout::{ColumnId, PaneId, Rectangle};
 
 use crate::input::WmAction;
 use crate::server::{Change, ServerCx};
-
-/// What floating a pane says: what leaving its column did.
-fn floated(workspace: usize, effect: Option<SpaceEffect>) -> Vec<Change> {
-    match effect {
-        Some(effect) => vec![Change::Arranged {
-            workspace,
-            effects: vec![effect],
-        }],
-        None => Vec::new(),
-    }
-}
 
 /// Toggle the asking window's focused pane between floating and tiled.
 ///
@@ -67,13 +56,30 @@ pub(super) fn float_at(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> 
     float_tiled(cx, *pane_id, rect)
 }
 
-/// Float the tiled pane `pane` of the asker's workspace at `rect`.
+/// Float the tiled pane `pane` of the asker's workspace, drawn at `rect` in the asking window.
+///
+/// Two facts: what leaving its column did to the strip (content, shown by every window) and that
+/// it now floats at `rect` (the asking window places and focuses it; another window falls back to
+/// its own centred default).
 fn float_tiled(cx: &mut ServerCx<'_>, pane: PaneId, rect: Rectangle) -> Vec<Change> {
     let workspace = cx.asker.workspace;
-    let effect = cx
+    let Some(effect) = cx
         .layout
         .workspaces
         .get_mut(workspace)
-        .and_then(|ws| ws.float_tiled_pane(pane, rect));
-    floated(workspace, effect)
+        .and_then(|ws| ws.float_tiled_pane(pane))
+    else {
+        return Vec::new();
+    };
+    vec![
+        Change::Arranged {
+            workspace,
+            effects: vec![effect],
+        },
+        Change::Floated {
+            pane,
+            workspace,
+            rect,
+        },
+    ]
 }

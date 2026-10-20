@@ -184,17 +184,26 @@ fn a_window_reads_its_own_focus_through_the_layout() {
 #[test]
 fn resizing_the_window_rescales_the_floating_panes() {
     use crate::layout::types::{Point, Rectangle};
-    use crate::layout::workspace::FloatingPane;
     let mut w = window();
     w.m().add_pane(Pane::new(PaneId(1), ""), None, true);
     let rect = Rectangle::new(Point::new(100.0, 80.0), Size::new(640.0, 400.0));
-    w.ws().add_floating_pane(Pane::new(PaneId(2), ""), rect, None);
+    // Content add, then this window places the float where it draws it.
+    w.ws().add_floating_pane(Pane::new(PaneId(2), ""), None);
+    w.ws().float_in_view(PaneId(2), rect);
 
     w.m().update_viewport(Size::new(2560.0, 1600.0));
 
-    let float: &FloatingPane = &w.session.workspaces[0].floating_panes[0];
-    assert_eq!(float.size, Size::new(1280.0, 800.0), "twice the window, twice the float");
-    assert_eq!(float.position, Point::new(200.0, 160.0));
+    // The geometry is this window's own, so it is the window's view that was rescaled.
+    let drawn = w
+        .ws()
+        .reader()
+        .floating()
+        .into_iter()
+        .find(|p| p.pane.id == PaneId(2))
+        .expect("the float")
+        .rect;
+    assert_eq!(drawn.size, Size::new(1280.0, 800.0), "twice the window, twice the float");
+    assert_eq!(drawn.loc, Point::new(200.0, 160.0));
 }
 
 /// A pane that arrives from another workspace slides in from where this window drew it there.

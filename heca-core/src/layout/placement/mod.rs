@@ -7,7 +7,7 @@
 use super::column::Pane;
 use super::scrolling::SpaceEffect;
 use super::types::*;
-use super::workspace::{FocusDomain, Workspace};
+use super::workspace::Workspace;
 
 impl Workspace {
     /// **The gaps where a new column for this pane would change the strip** — counted with the pane
@@ -58,9 +58,9 @@ impl Workspace {
             .iter()
             .position(|f| f.pane.id == pane_id)?;
         let float = self.floating_panes.remove(idx);
-        if self.floating_panes.is_empty() {
-            self.focus_domain = FocusDomain::Tiled;
-        }
+        // Whether a window leaves the floating domain when this was its active float is the
+        // window's own call, made when it reacts to the change (see `WorkspaceMut::reconcile_floats`
+        // / `activate_pane`). Removing the content touches no window's view.
         Some((float.pane, None))
     }
 
@@ -105,8 +105,8 @@ impl Workspace {
 
     /// Put `pane` at row `row` of column `col` — or, with no row (or no such column), in a new
     /// column `new_column_id` at `col` — making room for it in a window `working_height` tall.
-    /// Indices past the end clamp to it. The pane is in the tiling now, so the floating layer has
-    /// no focus.
+    /// Indices past the end clamp to it. This changes content only; a window that was focused on a
+    /// float returns to the tiling when it reacts to the pane landing (`activate_pane`).
     pub fn place_pane(
         &mut self,
         pane: Pane,
@@ -116,8 +116,6 @@ impl Workspace {
         working_height: f64,
     ) -> Option<SpaceEffect> {
         let columns = self.scrolling.columns.len();
-        self.deactivate_floating_panes();
-        self.focus_domain = FocusDomain::Tiled;
         match row {
             Some(row) if col < columns => self
                 .scrolling

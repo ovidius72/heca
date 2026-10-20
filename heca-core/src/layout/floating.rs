@@ -7,23 +7,18 @@
 use super::column::Pane;
 use super::types::*;
 use super::scrolling::SpaceEffect;
-use super::workspace::{FloatOrigin, FloatingPane, FocusDomain, Workspace};
+use super::workspace::{FloatOrigin, FloatingPane, Workspace};
 
 impl Workspace {
-    /// Put `pane` in front as a floating pane at `rect`, and give floating the focus.
+    /// Add `pane` to the floating panes as **content** — the same in every window. Where a window
+    /// draws it, how big and whether it is that window's active float are per window and set on the
+    /// window's [`ScrollView`](super::window_view::ScrollView) when the window reacts to the
+    /// `Floated` change; this touches none of them.
     ///
     /// `origin` is where it came from, so [`unfloat_pane`](Self::unfloat_pane) can put it back;
     /// `None` for a pane that never tiled (one spawned floating).
-    pub fn add_floating_pane(&mut self, pane: Pane, rect: Rectangle, origin: Option<FloatOrigin>) {
-        self.deactivate_floating_panes();
-        self.floating_panes.push(FloatingPane {
-            pane,
-            position: rect.loc,
-            size: rect.size,
-            is_active: true,
-            origin,
-        });
-        self.focus_domain = FocusDomain::Floating;
+    pub fn add_floating_pane(&mut self, pane: Pane, origin: Option<FloatOrigin>) {
+        self.floating_panes.push(FloatingPane { pane, origin });
     }
 }
 
@@ -35,9 +30,11 @@ impl Workspace {
         area.centred_fraction(self.scrolling.options.float_size)
     }
 
-    /// Take the tiled pane `pane_id` out of its column and float it at `rect`, remembering where it
-    /// was. Says what leaving did to the columns; `None` when it is not tiled here.
-    pub fn float_tiled_pane(&mut self, pane_id: PaneId, rect: Rectangle) -> Option<SpaceEffect> {
+    /// Take the tiled pane `pane_id` out of its column and float it, remembering where it was. Says
+    /// what leaving did to the columns; `None` when it is not tiled here. Where the window draws it
+    /// and that it is now the window's active float are set when the window reacts to the `Floated`
+    /// change, not here.
+    pub fn float_tiled_pane(&mut self, pane_id: PaneId) -> Option<SpaceEffect> {
         let (col, row) = self.scrolling.pane_indices(pane_id)?;
         // Read before the pane leaves: a column that loses its last pane goes with it.
         let origin = FloatOrigin {
@@ -46,7 +43,7 @@ impl Workspace {
             row,
         };
         let (pane, effect) = self.scrolling.take_pane_from(col, row)?;
-        self.add_floating_pane(pane, rect, Some(origin));
+        self.add_floating_pane(pane, Some(origin));
         Some(effect)
     }
 
@@ -121,15 +118,20 @@ mod tests {
         let mut s = session();
         let mut ws = s.ws();
         let rect = Rectangle::new(Point::new(10.0, 20.0), Size::new(300.0, 200.0));
-        assert!(ws.float_tiled_pane(PaneId(2), rect).is_some());
+        // Content: the pane leaves its column and becomes floating.
+        assert!(ws.float_tiled_pane(PaneId(2)).is_some());
         assert!(ws.scrolling.pane_indices(PaneId(2)).is_none());
-        let float = ws
-            .floating_panes
-            .iter()
-            .find(|f| f.pane.id == PaneId(2))
+        // Window: it places and focuses the float (what it does when it reacts to the Floated fact).
+        ws.float_in_view(PaneId(2), rect);
+        let placement = ws
+            .reader()
+            .floating()
+            .into_iter()
+            .find(|p| p.pane.id == PaneId(2))
             .unwrap();
-        assert_eq!((float.position, float.size), (rect.loc, rect.size));
-        assert_eq!(ws.focus_domain, FocusDomain::Floating);
+        assert_eq!((placement.rect.loc, placement.rect.size), (rect.loc, rect.size));
+        assert!(placement.active);
+        assert_eq!(ws.focus_domain(), FocusDomain::Floating);
         assert_eq!(ws.reader().active_pane().map(|p| p.id), Some(PaneId(2)));
     }
 
@@ -149,10 +151,13 @@ mod tests {
         let mut ws = s.ws();
         assert_eq!(order(&ws), vec![1, 2, 3]);
         let rect = ws.reader().default_float_rect();
-        ws.float_tiled_pane(PaneId(2), rect);
+        ws.float_tiled_pane(PaneId(2));
+        ws.float_in_view(PaneId(2), rect);
         // Its column went with it: pane 3 now sits where pane 2's column was.
         assert_eq!(order(&ws), vec![1, 3]);
         assert!(ws.unfloat_pane(PaneId(2), ColumnId(99), HEIGHT).is_some());
+        // The window reconciles: no float is left, so it is back on the tiling.
+        ws.reconcile_floats();
         assert_eq!(
             order(&ws),
             vec![1, 2, 3],
@@ -166,7 +171,7 @@ mod tests {
         );
         assert_eq!(row, 0);
         assert!(ws.floating_panes.is_empty());
-        assert_eq!(ws.focus_domain, FocusDomain::Tiled);
+        assert_eq!(ws.focus_domain(), FocusDomain::Tiled);
     }
 
     #[test]
@@ -177,8 +182,7 @@ mod tests {
         ws.scroll_mut().add_pane_to_column(0, None, Pane::new(PaneId(4), ""), false);
         ws.scroll_mut().add_pane_to_column(0, None, Pane::new(PaneId(5), ""), false);
         let before = ws.scrolling.pane_indices(PaneId(4)).unwrap();
-        let rect = ws.reader().default_float_rect();
-        ws.float_tiled_pane(PaneId(4), rect);
+        ws.float_tiled_pane(PaneId(4));
         assert!(ws.unfloat_pane(PaneId(4), ColumnId(99), HEIGHT).is_some());
         assert_eq!(ws.scrolling.pane_indices(PaneId(4)), Some(before));
     }
@@ -188,8 +192,7 @@ mod tests {
         let mut s = session();
         let mut ws = s.ws();
         let columns = ws.scrolling.columns.len();
-        let rect = ws.reader().default_float_rect();
-        ws.add_floating_pane(Pane::new(PaneId(7), ""), rect, None);
+        ws.add_floating_pane(Pane::new(PaneId(7), ""), None);
         assert!(ws.unfloat_pane(PaneId(7), ColumnId(99), HEIGHT).is_some());
         assert_eq!(ws.scrolling.columns.len(), columns + 1);
         assert!(ws.scrolling.columns.iter().any(|c| c.id == ColumnId(99)));
@@ -199,8 +202,7 @@ mod tests {
     fn only_a_pane_that_is_there_can_float_or_unfloat() {
         let mut s = session();
         let mut ws = s.ws();
-        let rect = ws.reader().default_float_rect();
-        assert!(ws.float_tiled_pane(PaneId(42), rect).is_none());
+        assert!(ws.float_tiled_pane(PaneId(42)).is_none());
         assert!(ws.unfloat_pane(PaneId(1), ColumnId(99), HEIGHT).is_none());
     }
 }
