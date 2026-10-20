@@ -110,9 +110,7 @@ fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
 
         let before: Vec<f64> = space.r().pane_heights(0);
         let (h, gaps) = (space.view.area.size.h, space.options.gaps);
-        let col = &mut space.columns[0];
-        col.active_pane_idx = active;
-        col.move_active_pane_boundary(40.0, h, gaps);
+        space.columns[0].move_pane_boundary(active, 40.0, h, gaps);
         let after: Vec<f64> = space.r().pane_heights(0);
 
         // A boundary moving DOWN grows the pane above it and shrinks the pane below it — the
@@ -152,9 +150,7 @@ fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
 
         let before: Vec<f64> = space.r().pane_heights(0);
         let (h, gaps) = (space.view.area.size.h, space.options.gaps);
-        let col = &mut space.columns[0];
-        col.active_pane_idx = active;
-        col.resize_active_pane_height(40.0, h, gaps);
+        space.columns[0].resize_pane_height(active, 40.0, h, gaps);
 
         let after = space.r().pane_heights(0);
         assert!(
@@ -232,22 +228,22 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
             .collect()
     };
 
-    // The middle pane: moving its BOTTOM edge down trades with the pane below.
-    let col = space.columns[0].active_pane_idx;
-    assert_eq!(col, 2, "the last added pane is active");
-    space.columns[0].activate_pane(1);
+    assert_eq!(space.r().active_pane_row(0), Some(2), "the last added pane is active");
+    space.m().focus_pane_in(0, 1);
 
     let before = heights(&space);
     let h = space.view.area.size.h;
     let gaps = space.options.gaps;
-    space.columns[0].move_active_pane_boundary(40.0, h, gaps);
+    // The middle pane (row 1): moving its BOTTOM edge down trades with the pane below.
+    space.columns[0].move_pane_boundary(1, 40.0, h, gaps);
     let after_bottom = heights(&space);
     assert!(
         (after_bottom[0] - before[0]).abs() < 0.5,
         "the pane ABOVE is untouched by the bottom edge ({before:?} → {after_bottom:?})"
     );
 
-    space.columns[0].move_active_pane_top_boundary(40.0, h, gaps);
+    // Its TOP edge is the boundary above it (row 0), which trades with the pane above.
+    space.columns[0].move_pane_boundary(0, 40.0, h, gaps);
     let after_top = heights(&space);
     assert!(
         (after_top[2] - after_bottom[2]).abs() < 0.5,
@@ -258,11 +254,33 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
         "moving the top edge down grows the pane above it"
     );
 
-    // The first pane has nothing above it.
-    space.columns[0].activate_pane(0);
+    // The first pane has nothing above it: there is no boundary to move.
+    space.m().focus_pane_in(0, 0);
     let pinned = heights(&space);
-    space.columns[0].move_active_pane_top_boundary(40.0, h, gaps);
+    if let Some(above) = space.r().active_pane_row(0).unwrap_or(0).checked_sub(1) {
+        space.columns[0].move_pane_boundary(above, 40.0, h, gaps);
+    }
     assert_eq!(heights(&space), pinned, "no edge above the first pane");
+}
+
+/// A window keeps its focus on a pane by the pane's **id**, so swapping panes in a column carries
+/// the focus with the pane — the per-window replacement for the old shared active index (F012,
+/// decision 463ccd07). An index would now point at the other pane.
+#[test]
+fn a_swap_carries_the_window_focus_with_the_pane() {
+    let mut space = test_scrolling_space();
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(7), "p7".to_string()), false);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(8), "p8".to_string()), false);
+
+    // Focus pane 1 (row 0), then swap it to the bottom (row 2).
+    space.m().focus_pane_in(0, 0);
+    assert_eq!(space.r().active_pane().map(|p| p.id), Some(PaneId(1)));
+    space.swap_panes_in_column(0, 0, 2);
+
+    // Focus is still on pane 1, now at row 2 — it travelled with the pane, not the row.
+    assert_eq!(space.r().active_pane_row(0), Some(2));
+    assert_eq!(space.r().active_pane().map(|p| p.id), Some(PaneId(1)), "focus followed the pane");
 }
 
 

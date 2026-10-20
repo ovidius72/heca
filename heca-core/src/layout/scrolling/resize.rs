@@ -88,8 +88,12 @@ impl ScrollingMut<'_> {
     /// the keyboard form of [`resize_pane_height`](Self::resize_pane_height).
     pub fn resize_active_pane_height(&mut self, delta: f64) {
         let (height, gaps) = (self.view.area.size.h, self.space.options.gaps);
-        if let Some(col) = self.space.columns.get_mut(self.view.active_column) {
-            col.resize_active_pane_height(delta, height, gaps);
+        let col_idx = self.view.active_column;
+        let Some(row) = self.reader().active_pane_row(col_idx) else {
+            return;
+        };
+        if let Some(col) = self.space.columns.get_mut(col_idx) {
+            col.resize_pane_height(row, delta, height, gaps);
         }
     }
 

@@ -41,9 +41,12 @@ fn swap_active_pane(
     step: impl FnOnce(usize, usize) -> Option<usize>,
 ) -> Vec<Change> {
     let (workspace, col) = (cx.asker.workspace, cx.asker.column);
+    let focused = cx.asker.focused_pane;
     let swapped = cx.arrange(workspace, |space, _| {
         let column = space.columns.get(col)?;
-        let row = column.active_pane_idx;
+        let row = focused
+            .and_then(|id| column.panes.iter().position(|p| p.id == id))
+            .unwrap_or(0);
         let other = step(row, column.panes.len())?;
         space
             .swap_panes_in_column(col, row, other)

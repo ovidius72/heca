@@ -98,9 +98,9 @@ fn focused_pane(space: &Seen) -> Option<PaneId> {
 fn column_focus_row_lands_level_and_last_lands_on_the_remembered_pane() {
     for (focus, want) in [(ColumnFocus::Last, PaneId(11)), (ColumnFocus::Row, PaneId(1))] {
         let mut space = two_by_two(focus);
-        space.columns[0].active_pane_idx = 1; // b was the last used
+        space.m().focus_pane_in(0, 1); // b was the last used
         space.view.active_column = 1;
-        space.columns[1].active_pane_idx = 0; // we are on c
+        space.m().focus_pane_in(1, 0); // we are on c
         assert!(space.m().focus_left());
         assert_eq!(focused_pane(&space), Some(want), "{focus:?}");
     }
@@ -112,7 +112,7 @@ fn column_focus_row_lands_level_and_last_lands_on_the_remembered_pane() {
 fn column_focus_row_goes_back_level_and_follows_the_larger_overlap() {
     let mut space = two_by_two(ColumnFocus::Row);
     space.view.active_column = 0;
-    space.columns[0].active_pane_idx = 1; // on b
+    space.m().focus_pane_in(0, 1); // on b
     assert!(space.m().focus_right());
     assert_eq!(focused_pane(&space), Some(PaneId(12)), "b is level with d");
 
@@ -122,7 +122,7 @@ fn column_focus_row_goes_back_level_and_follows_the_larger_overlap() {
     let (h, gaps) = (space.r().area().size.h, space.options.gaps);
     space.columns[0].set_pane_height(0, 100.0, h, gaps);
     space.view.active_column = 1;
-    space.columns[1].active_pane_idx = 0;
+    space.m().focus_pane_in(1, 0);
     assert!(space.m().focus_left());
     assert_eq!(focused_pane(&space), Some(PaneId(11)), "most of its span is level with b");
 }

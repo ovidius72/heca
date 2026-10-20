@@ -46,7 +46,11 @@ fn spot(cx: &ServerCx<'_>, pane: Option<PaneId>) -> Option<(PaneId, usize, usize
         None => {
             let (ws, col) = (cx.asker.workspace, cx.asker.column);
             let column = session.workspaces.get(ws)?.scrolling.columns.get(col)?;
-            let row = column.active_pane_idx;
+            let row = cx
+                .asker
+                .focused_pane
+                .and_then(|id| column.panes.iter().position(|p| p.id == id))
+                .unwrap_or(0);
             column.panes.get(row).map(|p| (p.id, ws, col, row))
         }
     }

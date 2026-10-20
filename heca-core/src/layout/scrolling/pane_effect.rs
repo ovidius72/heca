@@ -153,19 +153,15 @@ impl ScrollingSpace {
         }
     }
 
-    /// Trade the panes at rows `a` and `b` of column `col`; the column's active pane travels with
-    /// the swap when it is one of the two. `None` when either is not there or they are the same.
+    /// Trade the panes at rows `a` and `b` of column `col`. A window's focus is kept on a pane by
+    /// its id, so it travels with the pane across the swap on its own. `None` when either row is not
+    /// there or they are the same.
     pub fn swap_panes_in_column(&mut self, col: usize, a: usize, b: usize) -> Option<PaneEffect> {
         let column = self.columns.get_mut(col)?;
         let len = column.panes.len();
         if a >= len || b >= len || a == b {
             return None;
         }
-        column.active_pane_idx = match column.active_pane_idx {
-            i if i == a => b,
-            i if i == b => a,
-            i => i,
-        };
         column.panes.swap(a, b);
         Some(PaneEffect::Swapped { col, a, b })
     }

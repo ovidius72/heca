@@ -220,10 +220,9 @@ impl WorkspaceMut<'_> {
         if let Some((col, row)) = self.scrolling.pane_indices(pane_id) {
             self.deactivate_floating_panes();
             self.focus_domain = FocusDomain::Tiled;
-            self.scroll_mut().activate_column(col);
-            if let Some(column) = self.scrolling.columns.get_mut(col) {
-                column.activate_pane(row);
-            }
+            let mut scroll = self.scroll_mut();
+            scroll.activate_column(col);
+            scroll.focus_pane_in(col, row);
             return true;
         }
         self.activate_floating_pane(pane_id)
@@ -253,21 +252,19 @@ impl WorkspaceMut<'_> {
             return false; // TODO
         }
         let mut scroll = self.scroll_mut();
-        let Some(col) = scroll.active_column_mut() else {
-            return false;
-        };
-        if col.focus_up() {
+        if scroll.focus_up() {
             return true;
         }
-        // Wrap to previous column's last pane.
-        let col_idx = scroll.reader().active_column_idx();
+        // Wrap to the previous column's last pane.
+        let col_idx = scroll.active_column_idx();
         if col_idx == 0 {
             return false;
         }
-        scroll.activate_column(col_idx - 1);
-        if let Some(new_col) = scroll.active_column_mut() {
-            let last_idx = new_col.panes.len().saturating_sub(1);
-            new_col.activate_pane(last_idx);
+        let prev = col_idx - 1;
+        scroll.activate_column(prev);
+        let last = scroll.columns.get(prev).map(|c| c.panes.len().saturating_sub(1));
+        if let Some(last) = last {
+            scroll.focus_pane_in(prev, last);
         }
         true
     }
@@ -278,21 +275,16 @@ impl WorkspaceMut<'_> {
             return false; // TODO
         }
         let mut scroll = self.scroll_mut();
-        let Some(col) = scroll.active_column_mut() else {
-            return false;
-        };
-        if col.focus_down() {
+        if scroll.focus_down() {
             return true;
         }
-        // Wrap to next column's first pane.
-        let col_idx = scroll.reader().active_column_idx();
+        // Wrap to the next column's first pane.
+        let col_idx = scroll.active_column_idx();
         if col_idx + 1 >= scroll.columns.len() {
             return false;
         }
         scroll.activate_column(col_idx + 1);
-        if let Some(new_col) = scroll.active_column_mut() {
-            new_col.activate_pane(0);
-        }
+        scroll.focus_pane_in(col_idx + 1, 0);
         true
     }
 }

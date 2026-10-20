@@ -142,7 +142,7 @@ impl Windowed {
 
     /// Show workspace `idx` (no animation) — the state of a window that is already there.
     pub fn show(&mut self, idx: usize) {
-        self.view.active_workspace = idx;
+        self.view.active_workspace = self.session.workspaces.get(idx).map(|ws| ws.id);
     }
 
     /// Put workspace `idx` at a given scroll: `offset` from the active column, with column
@@ -156,7 +156,12 @@ impl Windowed {
 
     /// The workspace the window shows, moved by it.
     pub fn ws(&mut self) -> WorkspaceMut<'_> {
-        let ws = &mut self.session.workspaces[self.view.active_workspace];
+        let idx = self
+            .view
+            .active_workspace
+            .and_then(|id| self.session.index_of(id))
+            .unwrap_or(0);
+        let ws = &mut self.session.workspaces[idx];
         let scroll = self.view.scroll_mut(ws.id);
         ws.through_mut(scroll)
     }

@@ -38,7 +38,11 @@ fn resize_active_pane(cx: &mut ServerCx<'_>, delta: f64) -> Vec<Change> {
     cx.change_asker_content(|space, asker| {
         let gaps = space.options.gaps;
         if let Some(column) = space.columns.get_mut(asker.column) {
-            column.resize_active_pane_height(delta, asker.area.size.h, gaps);
+            let row = asker
+                .focused_pane
+                .and_then(|id| column.panes.iter().position(|p| p.id == id))
+                .unwrap_or(0);
+            column.resize_pane_height(row, delta, asker.area.size.h, gaps);
         }
     })
 }
@@ -101,13 +105,20 @@ pub(super) fn resize(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
         ResizeTarget::Pane => cx.change_asker_content(|space, asker| {
             let gaps = space.options.gaps;
             if let Some(col) = space.columns.get_mut(asker.column) {
+                let row = asker
+                    .focused_pane
+                    .and_then(|id| col.panes.iter().position(|p| p.id == id))
+                    .unwrap_or(0);
                 // A boundary and a direction, not "grow me": positive is down, whichever pane is
-                // active. `Auto` is the edge the pane already owned.
+                // active. `Top` aims at the boundary above the active pane; the default is the one
+                // it owns below.
                 match edge {
                     ResizeEdge::Top => {
-                        col.move_active_pane_top_boundary(*amount, asker.area.size.h, gaps)
+                        if let Some(above) = row.checked_sub(1) {
+                            col.move_pane_boundary(above, *amount, asker.area.size.h, gaps);
+                        }
                     }
-                    _ => col.move_active_pane_boundary(*amount, asker.area.size.h, gaps),
+                    _ => col.move_pane_boundary(row, *amount, asker.area.size.h, gaps),
                 }
             }
         }),
@@ -134,7 +145,11 @@ pub(super) fn resize_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change>
         ResizeTarget::Pane => cx.change_asker_content(|space, asker| {
             let gaps = space.options.gaps;
             if let Some(col) = space.columns.get_mut(asker.column) {
-                col.set_pane_height(col.active_pane_idx, *height, asker.area.size.h, gaps);
+                let row = asker
+                    .focused_pane
+                    .and_then(|id| col.panes.iter().position(|p| p.id == id))
+                    .unwrap_or(0);
+                col.set_pane_height(row, *height, asker.area.size.h, gaps);
             }
         }),
     }

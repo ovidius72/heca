@@ -29,10 +29,10 @@ fn test_remove_workspace_active_after_removed() {
     // 3 workspaces; active is 2. Remove ws 0.
     // active workspace (2) > removed (0) → shift down to 1.
     let mut w = session_with_workspaces(3);
-    w.view.active_workspace = 2;
+    w.show(2);
     assert!(remove(&mut w, 0));
     assert_eq!(w.session.workspaces.len(), 2);
-    assert_eq!(w.view.active_workspace, 1);
+    assert_eq!(w.l().active_workspace_idx(), 1);
 }
 
 #[test]
@@ -40,10 +40,10 @@ fn test_remove_workspace_active_is_last() {
     // 3 workspaces; active is 2. Remove ws 2 (last).
     // active workspace (2) >= len (2) after removal → clamp to 1.
     let mut w = session_with_workspaces(3);
-    w.view.active_workspace = 2;
+    w.show(2);
     assert!(remove(&mut w, 2));
     assert_eq!(w.session.workspaces.len(), 2);
-    assert_eq!(w.view.active_workspace, 1);
+    assert_eq!(w.l().active_workspace_idx(), 1);
 }
 
 #[test]
@@ -51,10 +51,10 @@ fn test_remove_workspace_active_before_removed() {
     // 3 workspaces; active is 0. Remove ws 1.
     // active workspace (0) is not > removed (1) and not >= len (2) → unchanged at 0.
     let mut w = session_with_workspaces(3);
-    w.view.active_workspace = 0;
+    w.show(0);
     assert!(remove(&mut w, 1));
     assert_eq!(w.session.workspaces.len(), 2);
-    assert_eq!(w.view.active_workspace, 0);
+    assert_eq!(w.l().active_workspace_idx(), 0);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn test_remove_workspace_can_remove_last_leaving_empty() {
     let mut w = session_with_workspaces(1);
     assert!(remove(&mut w, 0));
     assert_eq!(w.session.workspaces.len(), 0);
-    assert_eq!(w.view.active_workspace, 0);
+    assert_eq!(w.l().active_workspace_idx(), 0);
     assert!(w.l().active_workspace().is_none());
 }
 
@@ -81,10 +81,32 @@ fn test_remove_workspace_active_is_removed() {
     // active workspace (1) is not > removed (1) and not >= len (2)
     // → unchanged at 1, which now points to the former workspace 2.
     let mut w = session_with_workspaces(3);
-    w.view.active_workspace = 1;
+    w.show(1);
     assert!(remove(&mut w, 1));
     assert_eq!(w.session.workspaces.len(), 2);
-    assert_eq!(w.view.active_workspace, 1);
+    assert_eq!(w.l().active_workspace_idx(), 1);
+}
+
+/// The shown workspace is an **id**, read against the current session every time, so it is never
+/// stale: a workspace removed before it leaves this window on the **same** workspace, now one index
+/// lower — with no per-window fix-up needed. A stored index would point at the wrong workspace (or
+/// out of range) until something renumbered it, which is the bug this change removes.
+#[test]
+fn the_shown_workspace_is_never_stale_because_it_is_an_id() {
+    let mut session = Session::new(SessionId(1), LayoutOptions::default());
+    let mut view = WindowView::new(Size::new(1000.0, 800.0), 1.0);
+    session.add_workspace();
+    session.add_workspace(); // three workspaces now
+    let shown = session.workspaces[2].id;
+    session.through_mut(&mut view).switch_to_workspace(2);
+
+    // The session removes workspace 0. This view is told nothing.
+    assert!(session.remove_workspace(0));
+
+    // The id still resolves to the same workspace, now at index 1 — no fix-up ran.
+    let idx = session.through(&view).active_workspace_idx();
+    assert_eq!(idx, 1, "its index shifted down on its own");
+    assert_eq!(session.workspaces[idx].id, shown, "still the same workspace");
 }
 
 /// **Two windows on one session move independently**: the content is

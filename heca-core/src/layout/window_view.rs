@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use super::animation::{Animated, SwipeTracker};
 use super::motion::Motion;
-use super::types::{Point, Rectangle, Size, WorkspaceId};
+use super::types::{ColumnId, PaneId, Point, Rectangle, Size, WorkspaceId};
 use super::view_offset::ViewOffset;
 
 /// Workspace switching state.
@@ -51,6 +51,11 @@ pub struct ScrollView {
     pub(crate) scale: f64,
     /// What is sliding in this workspace on this window's screen.
     pub(crate) motion: Motion,
+    /// **Which pane this window has focused in each column.** By id, not row, so adding, removing
+    /// or reordering panes never renumbers it. A column with no entry — or one whose focused pane
+    /// is gone — falls back to its first pane. The focused pane is per window (F012, decision
+    /// 463ccd07), so it lives here and not in the shared [`Column`](super::column::Column).
+    pub(crate) active_pane: HashMap<ColumnId, PaneId>,
 }
 
 impl ScrollView {
@@ -63,7 +68,24 @@ impl ScrollView {
             area,
             scale,
             motion: Motion::default(),
+            active_pane: HashMap::new(),
         }
+    }
+
+    /// The pane this window has focused in the column `id`, or `None` when it has focused none.
+    /// The caller resolves it against the column's current panes, falling back to the first.
+    pub(crate) fn focused_pane(&self, id: ColumnId) -> Option<PaneId> {
+        self.active_pane.get(&id).copied()
+    }
+
+    /// Focus pane `pane` in column `id` for this window.
+    pub(crate) fn focus_pane(&mut self, id: ColumnId, pane: PaneId) {
+        self.active_pane.insert(id, pane);
+    }
+
+    /// Forget the focus of every column `keep` does not keep — columns the content no longer has.
+    pub(crate) fn retain_columns(&mut self, keep: impl Fn(ColumnId) -> bool) {
+        self.active_pane.retain(|id, _| keep(*id));
     }
 }
 
@@ -71,8 +93,10 @@ impl ScrollView {
 /// size and scale, and a [`ScrollView`] for each workspace it has looked at.
 #[derive(Debug, Clone)]
 pub struct WindowView {
-    /// Index of the shown workspace.
-    pub(crate) active_workspace: usize,
+    /// The shown workspace, by id. `None` until the window is told which to show — it falls back
+    /// to the first. An id, not an index, so a workspace another window removes never leaves this
+    /// one pointing at the wrong workspace.
+    pub(crate) active_workspace: Option<WorkspaceId>,
     /// The animation between two workspaces, if one is running.
     pub(crate) switch: WorkspaceSwitch,
     viewport: Size,
@@ -87,7 +111,7 @@ impl WindowView {
     /// A window of `viewport` size at `scale`, showing the first workspace.
     pub fn new(viewport: Size, scale: f64) -> Self {
         Self {
-            active_workspace: 0,
+            active_workspace: None,
             switch: WorkspaceSwitch::None,
             viewport,
             scale,

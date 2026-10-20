@@ -56,6 +56,14 @@ impl Session {
     }
 }
 
+/// The index of the workspace a view shows, resolved from the id it holds — current even after a
+/// workspace before it was removed. A view not yet pointed at one shows the first.
+fn shown_idx(session: &Session, view: &WindowView) -> usize {
+    view.active_workspace
+        .and_then(|id| session.index_of(id))
+        .unwrap_or(0)
+}
+
 impl<'a> Layout<'a> {
     /// Where everything is in every workspace for this window, to hold against where it is after a
     /// change ([`LayoutMut::show_change`]).
@@ -89,9 +97,10 @@ impl<'a> Layout<'a> {
         self.view.scale()
     }
 
-    /// Index of the workspace the window shows.
+    /// Index of the workspace the window shows — resolved from its id, so it is always current
+    /// even after another window removed a workspace before it. Falls back to the first.
     pub fn active_workspace_idx(&self) -> usize {
-        self.view.active_workspace
+        shown_idx(self.session, self.view)
     }
 
     /// The workspace at `idx`, as the window sees it.
@@ -102,7 +111,7 @@ impl<'a> Layout<'a> {
 
     /// The workspace the window shows.
     pub fn active_workspace(&self) -> Option<WorkspaceRef<'a>> {
-        self.workspace(self.view.active_workspace)
+        self.workspace(self.active_workspace_idx())
     }
 
     /// Every workspace, in order, as the window sees them.
@@ -121,7 +130,7 @@ impl<'a> Layout<'a> {
     pub fn workspace_geometries(&self) -> Vec<(usize, Rectangle)> {
         if self.active_workspace().is_some() {
             vec![(
-                self.view.active_workspace,
+                self.active_workspace_idx(),
                 Rectangle::new(Point::default(), self.view.viewport()),
             )]
         } else {
@@ -182,7 +191,8 @@ impl LayoutMut<'_> {
 
     /// The workspace the window shows, moved by the window.
     pub fn active_workspace_mut(&mut self) -> Option<WorkspaceMut<'_>> {
-        self.workspace_mut(self.view.active_workspace)
+        let idx = shown_idx(self.session, self.view);
+        self.workspace_mut(idx)
     }
 
     /// The next identity from the session's one counter — for the column a move may have to
@@ -202,26 +212,27 @@ impl LayoutMut<'_> {
     /// its place, or the new last one. With no workspace left it shows nothing until one is made.
     pub fn workspace_removed(&mut self, idx: usize) {
         let session = &*self.session;
-        self.view
-            .forget_all_but(|id| session.index_of(id).is_some());
-        let shown = &mut self.view.active_workspace;
-        let remaining = self.session.workspaces.len();
-        if remaining == 0 {
-            *shown = 0;
-        } else if *shown > idx {
-            *shown -= 1;
-        } else if *shown >= remaining {
-            *shown = remaining - 1;
+        self.view.forget_all_but(|id| session.index_of(id).is_some());
+        // The shown workspace is an id: if it still exists, its index shifts by itself and there is
+        // nothing to do. Only when the shown workspace is the one that went does the window move —
+        // to the workspace now in its place, or the last, or nothing when none are left.
+        let shown_gone = self
+            .view
+            .active_workspace
+            .is_some_and(|id| session.index_of(id).is_none());
+        if shown_gone {
+            let len = session.workspaces.len();
+            self.view.active_workspace = (len > 0).then(|| session.workspaces[idx.min(len - 1)].id);
         }
     }
 
     /// Switch to a workspace by index with animation.
     pub fn switch_to_workspace(&mut self, idx: usize) {
-        if idx >= self.session.workspaces.len() || idx == self.view.active_workspace {
+        let from_idx = shown_idx(self.session, self.view);
+        if idx >= self.session.workspaces.len() || idx == from_idx {
             return;
         }
 
-        let from_idx = self.view.active_workspace;
         self.view.switch = WorkspaceSwitch::Animation {
             from_idx,
             to_idx: idx,
@@ -231,21 +242,22 @@ impl LayoutMut<'_> {
                 to: 1.0,
             },
         };
-        self.view.active_workspace = idx;
+        self.view.active_workspace = Some(self.session.workspaces[idx].id);
     }
 
     /// Switch workspace up (to previous workspace).
     pub fn switch_workspace_up(&mut self) -> bool {
-        if self.view.active_workspace == 0 {
+        let cur = shown_idx(self.session, self.view);
+        if cur == 0 {
             return false;
         }
-        self.switch_to_workspace(self.view.active_workspace - 1);
+        self.switch_to_workspace(cur - 1);
         true
     }
 
     /// Switch workspace down (to next workspace).
     pub fn switch_workspace_down(&mut self) -> bool {
-        let next = self.view.active_workspace + 1;
+        let next = shown_idx(self.session, self.view) + 1;
         if next >= self.session.workspaces.len() {
             // Create a new empty workspace if at the end.
             self.session.add_workspace();

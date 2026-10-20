@@ -142,7 +142,7 @@ pub(crate) fn model(
                                     .then_some(pane.runtime.cwd.as_deref())
                                     .flatten()
                                     .map(crate::chrome::home_relative_path),
-                                active: pane_idx == col.active_pane_idx
+                                active: ws.scroll().active_pane_row(col_idx) == Some(pane_idx)
                                     && col_idx == ws.scroll().active_column_idx(),
                                 // The layout's resolved height, which already accounts for
                                 // `height_share`; a column with no room gives equal weights, which
