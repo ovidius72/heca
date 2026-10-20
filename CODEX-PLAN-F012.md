@@ -30,11 +30,11 @@ Three checklist items remain. **None is visible until there are two windows (P09
 
 P099 connection over a local socket (detach/attach, several windows, `heca rpc`) → P100 sessions (palette `#` mode, CLI, plain `heca` attaches to last) → P105 save/restore sessions as JSON. Independent: P101 per-project settings (done), P102 agent contract/status/sounds, P103 widgets (lines, tree layout, multi-line input, message list).
 
-## Suggested split (so we don't collide)
+## Suggested split (so we don't collide — different phases)
 
-- **Other agent:** take **C10** (the floating-pane + focus-domain model). It is self-contained in `heca-core/src/layout/floating.rs`, `workspace/*`, and the `WindowView`. I am not touching those files.
-- **Me:** take **C5** (terminal through the interface) + **C7** (docs), which live in `heca/src/server/` and `heca-core/src/backend/`, and then start **P099**.
-- If you'd rather swap, say so in this file before starting a piece.
+- **Other agent → phase P103** (`gridui-06`-style widgets heca-pro needs: lines/arrows, tree layout, multi-line input, message list). It lives entirely in **`heca-grid-ui`** and does **not** depend on the server work (per the feature's phase notes), so it never touches the files below. This is a whole phase of its own — read P103's tasks in the planner and follow the normal widget rules (docs/widgets.md, showcase, both-audiences docs).
+- **Me → finish phase P104** (T525: **C10** floating + focus-domain, **C5** terminal through the interface, **C7** docs), then start **P099**. These live in `heca-core/src/layout/*`, `heca-core/src/backend/`, and `heca/src/server/` — all outside `heca-grid-ui`.
+- If you'd rather take a different phase, say so in this file before starting.
 
 ## Rules (both of us)
 
