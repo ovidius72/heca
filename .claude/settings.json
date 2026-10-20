@@ -22,6 +22,24 @@
             "statusMessage": "AGENTS.md cargo scope"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/antonio/.local/bin/graphify hook-guard search"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/antonio/.local/bin/graphify hook-guard read"
+          }
+        ]
       }
     ]
   }
