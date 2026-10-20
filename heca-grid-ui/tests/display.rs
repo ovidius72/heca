@@ -159,7 +159,7 @@ fn a_separators_length_and_orientation_can_be_set_in_either_order() {
 /// children it happens on** — which is what a description needs, since properties are applied after
 /// children are attached.
 ///
-/// Before F003/P017/T008 there was no `Panel` widget at all: `WidgetKind::Panel` realized to a bare
+/// There was once no `Panel` widget at all: `WidgetKind::Panel` realized to a bare
 /// `Surface`, so the published examples showed `Panel::new().title("…")` against something with no
 /// title, and no reader could tell.
 #[test]

@@ -26,7 +26,7 @@ pub(crate) fn collect_link_hints(state: &AppState) -> Vec<crate::app_state::Link
 fn label_links(
     terminals: impl IntoIterator<
         Item = (
-            crate::chrome::terminal::TerminalId,
+            crate::chrome::panes::terminal::TerminalId,
             Vec<heca_core::backend::HyperlinkSpan>,
         ),
     >,
@@ -51,7 +51,7 @@ fn label_links(
 
 /// Every terminal the app has a widget for: the panes' in layout order, then the rest by id — so a
 /// letter stays with the same terminal from one frame to the next.
-fn terminals_in_order(state: &AppState) -> Vec<crate::chrome::terminal::TerminalId> {
+fn terminals_in_order(state: &AppState) -> Vec<crate::chrome::panes::terminal::TerminalId> {
     let mut ordered: Vec<_> = laid_out_pane_ids(state)
         .into_iter()
         .filter_map(|pane| state.server.backends.identity_of(pane))
@@ -72,7 +72,7 @@ fn terminals_in_order(state: &AppState) -> Vec<crate::chrome::terminal::Terminal
 /// over a link's first cell.
 pub(crate) fn cell_screen_pos(
     state: &AppState,
-    terminal: crate::chrome::terminal::TerminalId,
+    terminal: crate::chrome::panes::terminal::TerminalId,
     row: usize,
     col: usize,
 ) -> Option<(f32, f32)> {
@@ -82,7 +82,7 @@ pub(crate) fn cell_screen_pos(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chrome::terminal::TerminalId;
+    use crate::chrome::panes::terminal::TerminalId;
     use heca_core::backend::HyperlinkSpan;
 
     fn link(row: usize, uri: &str) -> HyperlinkSpan {

@@ -4,8 +4,7 @@
 //
 // A property that accepts only a fixed set of words gets a type here, so a misspelling cannot
 // compile. Written as free text, `orientation: "vertcal"` is accepted, ignored, and never
-// reported — the same silent failure F003/P010/T006 removed from actions, which was still live in
-// this vocabulary until F003/P011/T019.
+// reported — the same silent failure once removed from actions.
 //
 // **None of these gets a `PropValue` variant, and neither should the next one.** A fixed set
 // travels as its NAME, so `PropValue::Text` already carries every one of them; the type belongs in

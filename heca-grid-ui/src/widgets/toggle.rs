@@ -146,7 +146,7 @@ impl Component for Toggle {
         let border = cx.border(muted.lerp(accent, p).with_alpha(border_a.round() as u8));
         // Rest → on: the theme rest glow (`PaintCx::rest_glow`) carries a faint halo
         // while off, blending into the stronger on-glow as `p` rises — so `glow_size`
-        // visibly scales the control at rest too (T011).
+        // visibly scales the control at rest too.
         let rest_i = cx.rest_glow(GLOW_RADIUS).map_or(0.0, |g| g.intensity);
         let track_i = (GLOW_INTENSITY * p).max(rest_i);
         let track_glow = (!disabled && track_i > 0.0).then_some(Glow {

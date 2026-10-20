@@ -10,7 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "ScrollRegion widget (gridui-task-01, PR #177) shipped — vertical-only, wheel + draggable thumb, focus-gated keyboard scroll, ensure_visible/scroll_to_child API, showcase + docs. Follow-ups tracked as separate tasks (sidebar scroll wiring overlaps plugin-03; pick-a-region mode small/optional; PageUp/PageDown + nested hit-testing deferred; horizontal scroll + scrollbar token cut).",
-  "description": "",
+  "description": "gridui-01: Scroll/list primitive.\n\n── Findings (verified in code 2026-10-19) ──\nScrollRegion core done (T076). T085 (sidebar → ScrollRegion) DONE — providers/workspaces/dock_view.rs mounts it. T086 (pick-mode) optional, not done. T073/T080 deferred, T074/T077 canceled.\nT304 (unify scrollbar) OPEN and confirmed still present: FOUR parallel copies with drifted thumb widths — ScrollBar 3.0, ScrollRegion 5.0, Select 4.0, CommandPalette none; no shared ScrollThumb/Scrollable helper; Select still hand-draws its thumb. NOT a showcase-only concern — these are the app's real widgets (sidebar Select, command palette, sidebar ScrollRegion); the showcase was only the eye-check surface. It is Antonio's own 2026-07-24 \"never reinvent the scrollbar\" rule.",
+  "descriptionUpdatedAt": "2026-10-19T16:17:01.305Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -42,6 +43,7 @@
       "title": "Nested scroll hit-testing for wheel",
       "status": "deferred",
       "description": "Hit-testing innermost scrollable per wheel routing.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.212Z",
       "notes": "",
       "statusLog": [
         {
@@ -58,10 +60,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-08T11:46:53.446Z"
+      "updatedAt": "2026-07-08T11:46:53.446Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "5eaed06e-6c0c-4e1b-b82a-4815cdd95a99",
@@ -73,6 +79,7 @@
       "title": "Scrollbar color token from theme",
       "status": "canceled",
       "description": "Token di tema per il thumb della scrollbar.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.212Z",
       "notes": "",
       "statusLog": [
         {
@@ -89,10 +96,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-08T11:46:53.445Z"
+      "updatedAt": "2026-07-08T11:46:53.445Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "65169deb-e528-4d33-83ed-fe73e9081786",
@@ -104,6 +115,7 @@
       "title": "ScrollRegion core implementation",
       "status": "done",
       "description": "PushClip/PopClip, bounds-shift e scrolling focus-gated.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.212Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -111,10 +123,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-07-01T18:12:56.212Z",
       "completedAt": "2026-07-01T18:12:56.212Z",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-01T18:12:56.212Z"
+      "updatedAt": "2026-07-01T18:12:56.212Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "68c713ec-66d8-430a-92c8-cc7b32183ead",
@@ -126,6 +142,7 @@
       "title": "Horizontal scroll axis",
       "status": "canceled",
       "description": "Supporto asse orizzontale con offset/thumb dedicati.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.212Z",
       "notes": "",
       "statusLog": [
         {
@@ -142,10 +159,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-08T11:46:53.446Z"
+      "updatedAt": "2026-07-08T11:46:53.446Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "8965eded-5630-4e53-93db-50d374e5373a",
@@ -157,6 +178,7 @@
       "title": "PageUp and PageDown scroll keys",
       "status": "deferred",
       "description": "Key handling per PageUp/PageDown nello ScrollRegion.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.212Z",
       "notes": "",
       "statusLog": [
         {
@@ -173,10 +195,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-08T11:46:53.446Z"
+      "updatedAt": "2026-07-08T11:46:53.446Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "d0dc62b5-c26b-4707-aa02-01a5afc01183",
@@ -188,6 +214,7 @@
       "title": "Sidebar scroll wire to ScrollRegion",
       "status": "planned",
       "description": "Montare la tree della sidebar dentro ScrollRegion.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.224Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -195,10 +222,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.224Z",
-      "updatedAt": "2026-07-01T18:12:56.224Z"
+      "updatedAt": "2026-07-01T18:12:56.224Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "d43f5f40-be28-4408-a995-2872d805db4d",
@@ -210,6 +241,7 @@
       "title": "Scrollable region pick mode",
       "status": "planned",
       "description": "Mode per selezionare rapidamente una regione scrollabile.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.224Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -217,10 +249,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.224Z",
-      "updatedAt": "2026-07-01T18:12:56.224Z"
+      "updatedAt": "2026-07-01T18:12:56.224Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "486740a3-877a-4b33-9c71-48d25f36f16a",
@@ -232,6 +268,7 @@
       "title": "Unify scrollbar behaviour — one shared implementation for every scrollable widget",
       "status": "planned",
       "description": "USER-RAISED 2026-07-24: \"scrollbar behavior MUST be controlled and implemented internally to all widgets that are scrollable (maybe a trait) and not reinvented when a scrollbar is needed\". I audited the library; the user is right. Recorded here rather than folded into F003/P011/T015 because it touches four widgets and changes all of them visually.\n\n═══ AUDIT (verified 2026-07-24 by grep + reading each file) ═══\nFOUR parallel implementations. They do not even agree on the thumb width — that is the proof they were copied, not shared:\n\n| widget | file | thumb w | model | drag | hover | grab lane | track paging |\n|---|---|---|---|---|---|---|---|\n| ScrollRegion | widgets/scroll_region.rs (~175 scroll refs) | SCROLLBAR_W = **8.0** (L50) | continuous px offset (Signal<f32>) | yes | yes | yes, THUMB_HIT_W 16 (L58) | yes, press-and-hold repeat |\n| ScrollBar | widgets/scroll_bar.rs (~49) | THUMB_W = **3.0** (L18) | continuous px (host supplies content/viewport/offset) | yes | yes | no | no |\n| Select | widgets/select.rs (~16) | SCROLLBAR_W = **4.0** (L79) | discrete ROW INDEX (`scroll: usize`, `max_scroll()`) | NO — hand-drawn `cx.rect` thumb at L693-709 | no | no | no |\n| CommandPalette | widgets/command_palette.rs | **none drawn** | discrete row index (`scroll: usize` L136, `visible_rows()` L251) | — | — | — | — |\n\nKEY FINDINGS:\n1. **ScrollRegion does NOT use the ScrollBar widget.** scroll_bar.rs's own module doc says its \"visual language intentionally matches ScrollRegion's accent thumb so hosts don't get a second scrollbar style\" — i.e. it re-creates the look by hand. That is exactly how 3.0 vs 8.0 vs 4.0 happened.\n2. **CommandPalette has no thumb at all** — a long result list gives the user no position feedback. Functional gap, not just style.\n3. **Two different scroll MODELS**, which is why they never converged: continuous pixel offset (ScrollRegion/ScrollBar) vs discrete row-window `scroll: usize` (Select/CommandPalette). A shared abstraction must serve both — a row-window widget feeds it row_count × row_height as the content extent.\n\n═══ WHAT TO BUILD ═══\nThe shared unit is thumb GEOMETRY + interaction derived from `(content_extent, viewport_extent, offset)` → thumb rect, hit lane, drag delta→offset, track-page target, hover/drag brightness. That is already what `ScrollBar` models, so prefer PROMOTING it (or extracting its maths into a `ScrollThumb`/`Scrollable` helper both it and ScrollRegion call) over inventing a fifth thing.\n1. Extract the geometry+interaction into one place (free functions or a trait with provided methods — a trait is only worth it if widgets share state shape; the maths is the real duplication).\n2. ScrollRegion renders its thumb through it (keeping its grab lane + press-and-hold paging, which are the richest behaviours and should become the shared baseline).\n3. Select renders its dropdown thumb through it — and GAINS drag + hover, which it lacks today.\n4. CommandPalette gains a real thumb.\n5. ONE set of tokens (thumb width, pad, grab lane, min thumb) — today 3.0/4.0/8.0. Theme-driven per the no-hardcoded-style rule; decide whether thumb width becomes a theme token.\n6. Docs BOTH audiences + showcase coverage for each converted widget.\n\n═══ CONSTRAINTS / EDGE CASES ═══\n- Select's rows are PLACED CHILDREN and its scroll is a row index — do not convert it to px offset as a side effect; feed the shared maths instead.\n- ScrollRegion's wheel is children-first (innermost hovered region wins) and hover-gated because Event::Scroll carries no position — preserve.\n- Keep the `bounds === drawn === clickable` invariant; ScrollRegion bakes -offset into child bounds.\n- A press must be matched by its release or a drag sticks to the cursor (fixed for the overlay path in F003/P011/T015 — Dialog/Overlay now route PointerReleased; make sure the shared path cannot regress it).\n- VERIFICATION: visual + interactive for all four widgets — user drives `cargo run -p heca-renderer --example showcase`. Unit tests cover the geometry maths only.",
+      "descriptionUpdatedAt": "2026-07-24T19:20:22.854Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -239,16 +276,23 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-24T19:20:22.854Z",
-      "updatedAt": "2026-07-24T19:20:22.854Z"
+      "updatedAt": "2026-07-24T19:20:22.854Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.860Z",
-  "updatedAt": "2026-07-27T11:40:15.489Z",
+  "updatedAt": "2026-10-19T16:17:01.305Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
 }

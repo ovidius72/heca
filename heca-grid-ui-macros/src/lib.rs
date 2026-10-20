@@ -144,7 +144,7 @@ fn takes_self_by_value(f: &syn::ImplItemFn) -> bool {
     matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(r)) if r.reference.is_none())
 }
 
-/// How a [`PropInput`] becomes this builder's argument type. Returns `None` for argument types
+/// How a `heca_grid_ui::PropInput` becomes this builder's argument type. Returns `None` for argument types
 /// that cannot come from static data (closures, boxed components) — those stay host-only even if
 /// someone marks them, rather than generating code that would not compile.
 fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {

@@ -560,8 +560,10 @@ nothing for the letter to run.
   trees keep working. Nothing writes them; do not use them in anything new.
 - A **grid track** as `"auto"`, `"1fr"`, `"200px"`, a bare number (pixels), `"min-content"` /
   `"max-content"`, or `"repeat(3, 1fr)"`, in the `columns` and `rows` lists of a `Grid`. A child
-  places itself with `area`, or `col`/`row` plus `col_span`/`row_span` — properties of the **child**,
-  as CSS has them, resolved against the grid that holds it. Same rule as everything above:
+  places itself with `area`, or `column`/`row` (a CSS line: `"2"`, `"1 / -1"`, `"1 / span 2"`) plus
+  `column_span`/`row_span` — properties of the **child**, as CSS has them, resolved against the grid
+  that holds it, and the same words the native builders use (`.area("title")`, `.column("1 / -1")`).
+  The older `col` / `col_span` are still read so trees already sent keep working; do not write them. Same rule as everything above:
   one parser, and the app's own `Grid::template("auto 1fr")` reads the identical words — the
   vocabulary used to live only on this side, which meant native code could not say `"1fr"` at all.
 - A **layout keyword** — `direction`, `justify`, `align` — as the word a stylesheet would write:

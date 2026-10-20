@@ -155,6 +155,18 @@ pub trait Component {
         }
     }
 
+    /// **Is this widget on screen?** The one answer every walk over the tree asks — letters, the
+    /// pointer, row navigation, drag targets, the keyboard — so none of them can see a widget the
+    /// others treat as gone.
+    ///
+    /// The default is [`visible`](Base::visible) and not [`hidden`](crate::style::Style). A surface
+    /// that stays laid out while closed (an [`Overlay`](crate::widgets::Overlay) keeps its box so it
+    /// can be shown again without a reflow) answers `false` while it is closed and not leaving —
+    /// otherwise its contents keep being lettered and hit under everything you can see.
+    fn is_shown(&self) -> bool {
+        self.base().visible.get_untracked() && !self.base().style.layout.hidden
+    }
+
     /// Whether this component currently has an **open overlay** (e.g. a `Select`
     /// dropdown). The host routes pointer/key events to an overlay-active widget
     /// first, so it can capture clicks/keys outside its layout bounds. Default
@@ -247,7 +259,7 @@ pub trait Component {
 
     /// Handle an event this widget's children did not take. Default: ignore it.
     ///
-    /// **A widget never routes to its children.** [`dispatch`] does that, always, for every event
+    /// **A widget never routes to its children.** [`dispatch`](fn@crate::dispatch) does that, always, for every event
     /// — which is the point: forwarding is not a line anyone writes, so it is not a line anyone can
     /// forget. A container that only cared about presses used to be free to handle the press and
     /// return, quietly stranding every child that needed the wheel or the release. That is how a
@@ -379,7 +391,7 @@ pub trait Component {
     /// the fold is not clickable) and the **picker** ([`hint`](crate::hint) — a row past the fold
     /// gets no letter). The picker was the one that did not, and its symptom was keycaps for
     /// scrolled-away sidebar rows painted over the top bar and the status bar, because a cap goes
-    /// into the overlay band and an overlay segment starts unclipped on purpose (F003/P082/T438).
+    /// into the overlay band and an overlay segment starts unclipped on purpose.
     ///
     /// If you are adding a fourth walk over the tree, it asks this too.
     fn clips_children(&self) -> bool {

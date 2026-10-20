@@ -13,6 +13,9 @@ use std::time::{Duration, Instant};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::UserAttentionType;
 
+/// How often a frame is drawn while something animates (about 60 a second).
+const FRAME_INTERVAL: Duration = Duration::from_millis(16);
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct BackendPollResult {
     pub has_data: bool,
@@ -99,7 +102,7 @@ pub(crate) fn next_wake(now: Instant, req: WakeRequests) -> Wake {
         .widget_in
         .map(|secs| now + Duration::from_secs_f32(secs.max(0.0)));
     let wake_at = [
-        req.animating.then(|| now + crate::chrome::FRAME_INTERVAL),
+        req.animating.then(|| now + FRAME_INTERVAL),
         widget_frame_due,
         req.toast_expiry,
         req.prefix_expiry,
@@ -154,7 +157,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // received and a fresh ask is meaningful again. Anything marking itself further down this pass
     // is asking for the *next* frame and must be able to wake us.
     heca_grid_ui::frame_served();
-    let prefix_timeout = crate::chrome::prefix_timeout(state);
+    let prefix_timeout = state.prefix.timeout;
     let should_timeout = matches!(
         state.input_mode,
         InputMode::Prefix | InputMode::Chord { .. }
@@ -177,7 +180,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     }
 
     state.layout_mut().advance_animations();
-    let dt = crate::chrome::FRAME_INTERVAL.as_secs_f32();
+    let dt = FRAME_INTERVAL.as_secs_f32();
     // **Which surfaces are mid-exit, before anything advances.** The tick below is the one that
     // advances them — they are children of this tree — so the registry has to look either side of
     // it to catch the frame an exit finishes. Reading it afterwards misses that frame entirely.
@@ -194,13 +197,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         .layers
         .retire_finished_exits(&mut state.window_root, &leaving_before);
     // A surface that opened under a pointer that is not moving covers what the pointer was on:
-    // hover is only worked out on a move, so it is prompted here (F004/P084/T529).
+    // hover is only worked out on a move, so it is prompted here.
     if state.layers.visible_set_changed() {
         crate::app::events::recheck_pointer_under_surfaces(state);
     }
 
-    // Auto-dismiss notifications past their deadline — F009/T202. `expire_due` only touches the
-    // store's own `Signal<Vec<ToastSpec>>` (F009/T208); it is not part of `chrome_runtime_changed`,
+    // Auto-dismiss notifications past their deadline. `expire_due` only touches the
+    // store's own `Signal<Vec<ToastSpec>>`; it is not part of `chrome_runtime_changed`,
     // which tracks the chrome_tree's signature, a tree the toast surface is never part of.
     //
     // **The pointer resting on a card holds the whole stack still**, and the time that costs is
@@ -393,7 +396,7 @@ mod tests {
         );
         assert_eq!(
             next_wake(now, requests(true, Some(1.0), Some(2.0), now)).wake_at,
-            Some(now + crate::chrome::FRAME_INTERVAL),
+            Some(now + FRAME_INTERVAL),
             "the animation is the soonest of the three",
         );
     }

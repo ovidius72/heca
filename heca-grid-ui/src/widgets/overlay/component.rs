@@ -22,6 +22,12 @@ impl Component for Overlay {
         self.is_open()
     }
 
+    /// On screen while **present** — open, or dismissed and still leaving. Closed, it keeps its
+    /// box for the next showing and is gone to every walk.
+    fn is_shown(&self) -> bool {
+        self.base.visible.get_untracked() && !self.base.style.layout.hidden && self.is_present()
+    }
+
     /// Layout just reset the panel to its taffy-computed position; in
     /// [`Anchored`](OverlayPosition::Anchored) mode, re-place it against the
     /// trigger rect (idempotent — see `place_panel`).
@@ -220,7 +226,7 @@ impl Component for Overlay {
             // built on top wrote its own dismissal instead (`Dialog`, `ContextMenu`,
             // `CommandPalette`: three copies of one sentence), and a surface **composed** rather
             // than built had none at all — a plugin's overlay could not be closed from the
-            // keyboard (F003/P097/T502).
+            // keyboard.
             //
             // **Unanswered when nothing was declared**, which is what keeps those three exactly as
             // they were: they set no dismissal on their inner overlay, so the key passes up to

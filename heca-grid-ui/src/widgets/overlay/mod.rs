@@ -1,8 +1,8 @@
 //! [`Overlay`] — the base overlay surface: scrim + panel chrome + viewport
 //! positioning, shared by every overlay widget.
 //!
-//! **Blocking is a property of this layer, not a per-widget reimplementation**
-//! (the T009 overlay rework): a *blocking* overlay paints a dimming scrim over
+//! **Blocking is a property of this layer, not a per-widget reimplementation**:
+//! a *blocking* overlay paints a dimming scrim over
 //! the whole viewport and swallows outside input (modal — [`Dialog`](super::Dialog));
 //! a non-blocking one lets outside input fall through (light-dismiss popovers).
 //! Positioning is a [property](OverlayPosition) of this layer: the default
@@ -58,8 +58,8 @@ use std::cell::Cell;
 /// Public because a full-window overlay whose content has to **fit** must know how much of the
 /// window it does not get: the exposé sizes its cards to fit the room it has, and not knowing about
 /// this margin made it overshoot by `2 × 24` on both axes — a whole workspace row off the bottom,
-/// four failed corrections deep, because the missing term was outside the code doing the fitting
-/// (F003/P082/T420). Read it rather than repeating the number.
+/// four failed corrections deep, because the missing term was outside the code doing the fitting.
+/// Read it rather than repeating the number.
 pub const VIEWPORT_MARGIN: f32 = 24.0;
 /// How far a blocking scrim reaches before a viewport has been cached (logical px).
 const SCRIM_REACH: f64 = 1.0e9;
@@ -142,7 +142,7 @@ pub struct Overlay {
     /// and nothing else. Every surface built on top therefore wrote its own dismissal: `Dialog`,
     /// `ContextMenu` and `CommandPalette` each have one, three copies of the same sentence, and a
     /// surface **composed** rather than built — which is what a plugin writes — had none at all
-    /// and could not be closed from the keyboard (F003/P097/T502).
+    /// and could not be closed from the keyboard.
     ///
     /// Unset means unset: the key is left alone and passes to whatever composes this overlay, so
     /// the three widgets above keep answering it exactly as they did.
@@ -152,7 +152,7 @@ pub struct Overlay {
     /// Tab is the universal focus primitive — not a rebindable binding — and it belongs to
     /// whatever *contains* the focusables. That is this widget: an open overlay already holds the
     /// keyboard, and its panel is the subtree to walk. It lived only in `Dialog`, so a surface
-    /// composed rather than built could not be tabbed through at all (F003/P097/T502).
+    /// composed rather than built could not be tabbed through at all.
     focus: crate::focus::FocusManager,
     /// **Which of its own controls the keyboard starts on**, by the name that control goes by.
     ///

@@ -24,7 +24,7 @@ pub fn release_at(root: &mut dyn Component, pos: Point, button: PointerButton) {
 /// A click: a press **and** the release that completes it, on the same spot, with the given
 /// button.
 ///
-/// Since F004/P084/T394 a control fires on the click, not on the press — so pressing and dragging
+/// A control fires on the click, not on the press — so pressing and dragging
 /// off cancels, the way every other control on the machine behaves. A test that only presses is
 /// testing half a gesture.
 pub fn click_at(root: &mut dyn Component, pos: Point, button: PointerButton) {
@@ -40,7 +40,7 @@ pub fn type_text(root: &mut dyn Component, text: &str) -> Handled {
 
 /// **Hand this widget the keyboard**, the way a host does when you click a field or Tab to it.
 ///
-/// Keys and typed text are delivered to the focus owner and nowhere else (F004/P084/T400), so a
+/// Keys and typed text are delivered to the focus owner and nowhere else, so a
 /// test that types has to say who is typing — exactly as a real surface has to. It replaces
 /// nothing: a widget used to be offered every key in the tree and decide for itself, which is why
 /// an unfocused row could answer an Enter meant for the cursor.

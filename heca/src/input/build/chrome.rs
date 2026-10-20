@@ -45,7 +45,7 @@ pub(super) fn build_chrome(
         // `dock` is OPTIONAL, which is what makes one action serve both doors: a keybinding cannot
         // name a container, so a bare binding picks one by letter; a caller that knows which dock it
         // wants says so and skips the pick. An action with a *required* argument could not be bound
-        // bare at all (F003/P010/T006).
+        // bare at all.
         "focus_dock" => Some(WmAction::FocusDock {
             dock: get_string(args, "dock"),
         }),

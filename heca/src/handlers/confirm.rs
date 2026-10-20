@@ -5,7 +5,7 @@ use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 
 /// Raise a declarative [`ConfirmSpec`](crate::actions::ConfirmSpec) as a host-owned overlay modal
-/// (`chrome::overlay`): a [`Dialog`](heca_grid_ui::Dialog) layer whose real buttons (hint targets +
+/// (`chrome::surfaces::overlay`): a [`Dialog`](heca_grid_ui::Dialog) layer whose real buttons (hint targets +
 /// focus-traversable) come from the spec's [`ResponseButton`](crate::actions::ResponseButton)s. The
 /// **title** is computed dynamically from the concrete `resolved` target ([`confirm_title`]); the
 /// body / buttons / dismissibility come from the spec. On resolve, [`run_outcome`] runs the chosen
@@ -24,7 +24,7 @@ pub(crate) enum Pending {
 }
 
 /// **The one place a confirm prompt is raised**, whatever it guards. Both kinds of action — a
-/// built-in's raw [`WmAction`] and a named action's [`Intent`] — arrive here, so the prompt, its
+/// built-in's raw [`WmAction`] and a named action's [`Intent`](crate::chrome::Intent) — arrive here, so the prompt, its
 /// buttons and what *go ahead* does cannot differ between them (that difference is exactly how a
 /// named action's confirm once went unenforced).
 fn raise_confirm(
@@ -65,7 +65,7 @@ fn raise_confirm(
         .collect();
     crate::chrome::open_modal(state, modal, move |state, registry, result| {
         // Back to Normal, always: chrome focus is not a mode and the container still has the
-        // keyboard if it had it before (F003/P086/T365).
+        // keyboard if it had it before.
         state.input_mode = InputMode::Normal;
         run_outcome(state, registry, &buttons, &resolved, &result);
         state.needs_redraw = true;
@@ -179,8 +179,9 @@ fn confirm_enabled(state: &AppState, config_name: &str, default_enabled: bool) -
 }
 
 /// The confirm config name for a raw destructive action (`None` if it isn't confirmable).
-/// The **owner action name** whose [`ActionMeta::confirm`] governs this action — not the toggle key.
-/// `ClosePane`/`ClosePaneById` are both owned by `close`, so they confirm identically.
+/// The **owner action name** whose [`ActionMeta::confirm`](crate::actions::ActionMeta::confirm) governs this
+/// action — not the toggle key. `ClosePane`/`ClosePaneById` are both owned by `close`, so they confirm
+/// identically.
 fn confirm_owner_name(action: &WmAction) -> Option<&'static str> {
     match action {
         WmAction::ClosePane | WmAction::ClosePaneById { .. } => Some("close"),
@@ -201,12 +202,12 @@ fn ws_label(state: &AppState, ws_idx: usize) -> String {
 }
 
 /// The dynamic confirm-prompt **title** for a raw destructive action (target-specific — the pane /
-/// column / workspace name — so it can't live in the static [`ConfirmSpec`]).
+/// column / workspace name — so it can't live in the static [`ConfirmSpec`](crate::actions::ConfirmSpec)).
 ///
 /// This resolves the *names* only; the wording is [`confirm_title_for`], split out because a dialog
 /// has **two** independent sources of wording — the button comes from `ConfirmSpec.buttons`, the
 /// title from here — and nothing was comparing them. The pane's title said "Delete" for a while
-/// after its button said "Close" (F003/P086/T370). The split is what lets a test hold them together
+/// after its button said "Close". The split is what lets a test hold them together
 /// without an `AppState`.
 fn confirm_title(state: &AppState, action: &WmAction) -> String {
     match action {
@@ -234,7 +235,7 @@ fn confirm_title(state: &AppState, action: &WmAction) -> String {
 /// **Close** for a pane, matching its action id, its binding name, its catalog label and this
 /// dialog's own button: one process ends and the layout absorbs the gap. **Delete** for a column or
 /// a workspace, which destroy every pane and process inside them — a different act, which should not
-/// read the same (decided with the user, 2026-07-29).
+/// read the same.
 /// Each title names **just its target** — its name when it has one, else the type word, exactly as
 /// an unnamed pane reads "Close Pane?" rather than its process title. A column has no name, so it is
 /// always the type word.
@@ -242,7 +243,7 @@ fn confirm_title_for(action: &WmAction, target: &str) -> String {
     match action {
         WmAction::ClosePaneById { .. } => format!("Close {target}?"),
         // No index and no parent workspace: the title says what is about to happen, and the column
-        // in question is the one just clicked or focused — it is on screen (F003/P086/T370).
+        // in question is the one just clicked or focused — it is on screen.
         WmAction::DeleteColumn { .. } => "Delete Column?".to_string(),
         WmAction::DeleteWorkspace { .. } => format!("Delete {target}?"),
         _ => "Confirm?".to_string(),
@@ -310,7 +311,7 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
     true
 }
 
-/// The confirm dialog's two halves must agree (F003/P086/T370).
+/// The confirm dialog's two halves must agree.
 ///
 /// The button's word lives in `ConfirmSpec.buttons` and the title's lives in [`confirm_title_for`],
 /// with nothing between them — which is how the pane came to be *closed* by its button and *deleted*
@@ -413,7 +414,7 @@ mod gate_coverage_tests {
         let _ = crate::actions::register_dynamic(
             &mut crate::actions::ActionRegistry::new(),
             &mut catalog,
-            crate::actions::ActionMeta::new("pro.erase").destructive(),
+            crate::actions::ActionMeta::new("demo.erase").destructive(),
             None,
         );
         let confirmed: Vec<String> = catalog

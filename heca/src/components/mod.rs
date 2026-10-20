@@ -1,5 +1,4 @@
-//! **App-level components** — compositions of `heca-grid-ui` widgets that bind an app concept
-//! (F011/P087/T373).
+//! **App-level components** — compositions of `heca-grid-ui` widgets that bind an app concept.
 //!
 //! The bricks are shared and the walls were not: every composed shape — a dock row, a pane header,
 //! an action button, a card in the map — lived inside the one function that needed it, so the only
@@ -33,7 +32,7 @@
 //! # How to write one
 //!
 //! **The full recipe is `AGENTS.md` § 0b-bis, "How to structure and build a component"**, worked
-//! through the exposé (`crate::chrome::expose`). What follows is its short form.
+//! through the exposé (`crate::chrome::surfaces::expose`). What follows is its short form.
 //!
 //! 1. **Signature: plain data plus the seams it binds** — a [`ChromeIntentEmitter`], an
 //!    [`Intent`], `&mut BuildCx` (drag ids, signals), an action **name**, a `&Theme`. **Never

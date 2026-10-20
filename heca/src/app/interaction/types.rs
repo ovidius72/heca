@@ -63,10 +63,10 @@ pub(crate) enum InteractionSource {
     /// panel's button.
     ///
     /// Its own source because the surface that holds the keyboard is a different actor from the
-    /// user typing at the app *behind* it, and [`domain_for`] has to tell them apart. While the
-    /// exposé is up, `prefix+j` must not move the focused pane underneath the map — but the map's
-    /// own `x` must still delete the card the cursor is on. Both arrive as keys; only the surface
-    /// they were declared on separates them.
+    /// user typing at the app *behind* it, and [`domain_for`](super::domain::domain_for) has to tell them
+    /// apart. While the exposé is up, `prefix+j` must not move the focused pane underneath the map — but the
+    /// map's own `x` must still delete the card the cursor is on. Both arrive as keys; only the surface they
+    /// were declared on separates them.
     ///
     /// The host stamps this when it builds a surface's emitter, so a plugin's surface is judged the
     /// same way without constructing anything: it declares a handler on its widget and the
@@ -113,7 +113,7 @@ pub(crate) enum InteractionIntent {
     /// component's own verbs.
     ///
     /// A component's selection-dependent actions declare
-    /// [`ActionPolicy::ContainerFocused`](ActionPolicy::ContainerFocused), so "delete the row my
+    /// [`ActionPolicy::ContainerFocused`](super::policy::ActionPolicy::ContainerFocused), so "delete the row my
     /// cursor is on" is refused unless that dock is the one being driven. That is the rule, not an
     /// obstacle to route around: this intent **satisfies** it rather than bypassing it — it focuses
     /// the container first, exactly as the user would, and the action is then judged by the ordinary
@@ -146,11 +146,11 @@ pub(crate) enum InteractionIntent {
         reason = "constructed from mouse/sidebar in future wiring pass"
     )]
     StartSidebarDrag { pane_id: PaneId },
-    /// A declarative [`ViewNode`](crate::chrome::ViewNode) intent — the universal
+    /// A declarative [`ViewNode`](heca_view::ViewNode) intent — the universal
     /// invocation currency for click / KeyHint / RPC / plugin (plan §2.7.2, "everything
     /// is an action"). Carries a `view::Intent { action, args }`; `dispatch_intent`
-    /// resolves it via [`dispatch_view_intent`] (name → `WmAction` → policy-routed
-    /// dispatch). Constructed by [`realize`](crate::chrome::realize) for actionable nodes.
+    /// resolves it via [`dispatch_view_intent`](super::view_intent::dispatch_view_intent) (name → `WmAction`
+    /// → policy-routed dispatch). Constructed by [`realize`](crate::chrome::realize) for actionable nodes.
     View(ViewIntent),
 }
 

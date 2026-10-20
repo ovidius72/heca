@@ -1,4 +1,4 @@
-<!-- agent-plan-managed-skill sha256:6631c2a0a8b5d84b28c7896d6fad94e01a673760c0fe48d6239cc1b6a433ed0e -->
+<!-- agent-plan-managed-skill sha256:7ab07d0b0cc661e64f8cb5d930b79b607ccf371b5bc12ee17a4d0f8d4215139f -->
 ---
 name: agent-plan
 summary: Cross-harness operating guide for Agent Plan projects.
@@ -79,6 +79,9 @@ A decision has exactly one owner: the project when it is project-wide, a feature
 
 ## Task execution
 
+- Task start claims ownership atomically; `started: true` for already-active work applies only to the owning caller. Another caller receives `TASK_OWNED_BY_ANOTHER_SESSION`.
+- A stdio MCP restart creates a fresh caller. After explicitly confirming the old caller has stopped, use `planner-session-recover` (`task`, `confirmed=true`) or Pi `session_recover` (`taskId`, `confirmed=true`) with its old active task or a pending return task. This transfers the complete owned work, return stack and focus without changing task statuses/checkpoints. Registered live processes and callers already owning work are refused; older sessions without process records rely on that explicit confirmation. Then reread context and start normally. Never invent client-side owner-ID mappings or recover another live caller.
+
 - Create rich feature, phase, and task descriptions with current state, concrete goals, relevant systems, file/symbol references, behaviors to preserve, and edge cases.
 - Use one task with checklist items for implementation steps. Do not create child tasks merely to scatter the same execution context.
 - Add, remove, and toggle checklist items granularly. Do not encode completion by adding `DONE` to checklist titles.
@@ -122,9 +125,9 @@ Then call `handoff_write` / `planner-handoff-write` once with the preparation to
 
 If a write fails for any reason, the planner retains the exact capsule you submitted against that phase and preparation token. **Do not redraft or resend `content`/`markdown_content` on the retry** — fix only what the error named (a missing field, a stale token needs a fresh `handoff_prepare`, a corrected supporting-document manifest, etc.) and call `handoff_write` again with the same `expectedHandoffUpdatedAt`, omitting `content`; the retained capsule is reused automatically. Only pass `content` again if you are deliberately changing the body — the new one replaces the retained one. Omitting it when nothing was ever retained for that exact phase + token (a first attempt, an aged-out draft, or a phase that has since gone terminal) is itself a typed failure (`HANDOFF_RETAINED_CONTENT_NOT_FOUND`) naming the fix. A stale token is still refused even when a capsule is retained for it — retention makes the retry cheap, it never lets outdated content overwrite newer state.
 
-A successful write persists only a **handoff candidate** and returns `resumeReady: false`. Immediately call `handoff_show` / `planner-handoff-show` with the exact phase reference and read the persisted capsule. If the capsule omits resume-critical context, rewrite it; otherwise call `handoff_verify` / `planner-handoff-verify` with the content hash. Source reviews and omission lists are optional legacy evidence; the planner derives them when omitted. Only a successful verification result with `resumeReady: true` authorizes telling the user that the handoff is resume-ready.
+A successful write persists only a **handoff candidate** and returns `resumeReady: false`. Immediately call `handoff_show` / `planner-handoff-show` with the exact phase reference and read the persisted capsule from the tool result text first, then from structured `content` when the host exposes it. Some hosts show only minimal structured keys while still exposing the full text body; do not mistake `structuredContent` with only identifiers for a missing handoff body. If neither text nor structured content includes the capsule body, retry the planner tool and report the tool or transport issue. Reading raw `.planner/*.json` or `.planner/EXPORT.md` is only a diagnostic/recovery fallback when the tool is unavailable or demonstrably failed; label it as a fallback and do not treat it as a successful `handoff_show` read-back. If the capsule omits resume-critical context, rewrite it; otherwise call `handoff_verify` / `planner-handoff-verify` with the content hash. Source reviews and omission lists are optional legacy evidence; the planner derives them when omitted. Only a successful verification result with `resumeReady: true` authorizes telling the user that the handoff is resume-ready.
 
-`handoff_list` is a compact paginated index of active handoffs and exposes whether each is resume-ready. Use `handoff_show` for one bounded active body and its metadata; after phase completion/rejection/cancellation, the same exact phase-scoped show call returns the latest terminal archive so its closeout and `.planner/docs/` references remain discoverable. Clear/archive only after explicit intent or when phase completion makes the handoff non-operational.
+`handoff_list` is a compact paginated index of active handoffs and exposes whether each is resume-ready. Use `handoff_show` for one bounded active body and its metadata; after phase completion/rejection/cancellation, the same exact phase-scoped show call returns the latest terminal archive so its closeout and `.planner/docs/` references remain discoverable. If `handoff_show` text is visible, use that body even when structured metadata is minimal. If the body is genuinely absent, diagnose the tool/client path before falling back to storage files, and never run export merely to refresh a handoff read unless the user explicitly asked for an export. Clear/archive only after explicit intent or when phase completion makes the handoff non-operational.
 
 ## Hierarchical description freshness
 
@@ -212,6 +215,8 @@ Pause, switch, deviation, requirement, and decision operations are available thr
 
 ## MCP tool inventory
 
+- Session recovery: `planner-session-recover`.
+
 The MCP adapter publishes these tools:
 
 - Core: `planner-version`, `planner-init`, `planner-show`, `planner-description-freshness`, `planner-repair`, `planner-cleanup-orphan-phases`, `planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`, `planner-load`, `planner-disable`, `planner-web`.
@@ -223,6 +228,8 @@ The MCP adapter publishes these tools:
 - Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
 
 ## Pi tool inventory
+
+- Session recovery: `session_recover`.
 
 The Pi adapter registers these tools:
 

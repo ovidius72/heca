@@ -9,56 +9,89 @@
 //! This is what warns. Same shape as `heca-grid-ui/tests/prop_drift.rs`, which stopped a fourteenth
 //! hand-written `layout.hidden` after thirteen had already gone in.
 
-use std::path::{Path, PathBuf};
+mod common;
 
-/// The surfaces that predate the rule. Each one is a place a thing on screen lives outside the
-/// tree, and each is removed by P097(F003).
+/// The surfaces that predate the rule, named by the **function** that registers each one. Each is a
+/// place a thing on screen lives outside the tree, and each one is meant to move into the tree.
 ///
-/// **The toast stack came off this list** (F003/P097/T494): it is placed in the window root with
+/// Named by function rather than by file, so moving a file into another folder neither breaks this
+/// list nor quietly excuses whatever else ends up in that file.
+///
+/// **The toast stack came off this list**: it is placed in the window root with
 /// `chrome::place_surface`, so the one walk delivers its pointer events and its × works. It is the
-/// worked example for the three that remain.
+/// worked example for the ones that remain.
 ///
 /// **Do not add to this list.** Adding an entry is the moment to read
 /// `docs/surface-compositor.md` § 0 instead — a surface belongs in the tree, and `Overlay` already
 /// gives you modal capture, fall-through, nesting, animation and keyboard.
 const KNOWN_REGISTRY_SURFACES: &[&str] = &[
     // the command palette
-    "chrome/palette.rs",
-    // OverlayHost: open_modal and open_dropdown
-    "chrome/overlay.rs",
-    // `register_named_layer`: the one door a *named* layer is registered through — the exposé, and
-    // every layer another crate adds with an extension's `.layer(..)`. It used to be written inside the exposé.
-    "chrome/layers_glue.rs",
+    "open_command_palette",
+    // OverlayHost: a modal, a dropdown menu, and a layer described as data
+    "open_modal",
+    "insert_menu_layer",
+    "open_view_layer",
+    // the one door a *named* layer is registered through — the exposé, and every layer another
+    // crate adds with an extension's `.layer(..)`
+    "register_named_layer",
 ];
 
 /// How a surface gets registered instead of placed.
 const REGISTRY_DOORS: &[&str] = &["layers.insert(", "layers.add_named(", "layers.add_view("];
 
-fn src_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
+/// The code lines of `src`, numbered from 1, with a method chain joined onto the line it continues.
+///
+/// rustfmt puts `state` and `.layers` and `.insert(..)` on lines of their own as soon as a call
+/// is long enough, so a guard that matched one line at a time went blind the first time a file
+/// was formatted. Comments are dropped: a door named in prose is not a door used.
+fn code_lines(src: &str) -> Vec<(usize, String)> {
+    let mut out: Vec<(usize, String)> = Vec::new();
+    for (i, line) in src.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        match out.last_mut() {
+            Some((_, joined)) if trimmed.starts_with('.') => joined.push_str(trimmed),
+            _ => out.push((i + 1, line.to_string())),
+        }
+    }
+    out
 }
 
-/// Every `.rs` under `heca/src`, labelled by its path relative to `src` so a failure names
-/// something you can open.
-fn sources() -> Vec<(String, String)> {
-    let root = src_root();
+/// The name of the function whose body holds line `line_no` (1-based) of `src`: the nearest
+/// `fn name(` above it.
+fn enclosing_fn(src: &str, line_no: usize) -> Option<String> {
+    src.lines().take(line_no).collect::<Vec<_>>().iter().rev().find_map(|l| {
+        let t = l.trim_start();
+        let at = t.find("fn ")?;
+        let head = &t[..at];
+        if !head.is_empty() && !head.ends_with(' ') {
+            return None;
+        }
+        let name: String = t[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        (!name.is_empty() && t[at + 3 + name.len()..].starts_with(['(', '<'])).then_some(name)
+    })
+}
+
+/// The registry's own module — the folder holding `struct LayerRegistry` — where the doors are
+/// defined and tested.
+fn registry_module() -> String {
+    let (file, _) = common::source_defining("pub(crate) struct LayerRegistry");
+    file.rsplit_once('/').map(|(dir, _)| format!("{dir}/")).unwrap_or(file)
+}
+
+/// Every registration outside the registry's own module, as (file, line, enclosing function).
+fn registrations() -> Vec<(String, usize, Option<String>)> {
+    let own = registry_module();
     let mut out = Vec::new();
-    let mut stack = vec![root.clone()];
-    while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir).expect("readable") {
-            let path = entry.expect("entry").path();
-            if path.is_dir() {
-                stack.push(path);
-                continue;
-            }
-            if path.extension().is_some_and(|e| e == "rs") {
-                let label = path
-                    .strip_prefix(&root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                let src = std::fs::read_to_string(&path).expect("readable");
-                out.push((label, src));
+    for (file, src) in common::all_sources() {
+        if file.starts_with(&own) {
+            continue;
+        }
+        for (line_no, line) in code_lines(&src) {
+            if REGISTRY_DOORS.iter().any(|door| line.contains(door)) {
+                out.push((file.clone(), line_no, enclosing_fn(&src, line_no)));
             }
         }
     }
@@ -75,24 +108,11 @@ fn sources() -> Vec<(String, String)> {
 /// reach outside the chrome tree, and § 0.7 if you have concluded you genuinely have no choice.
 #[test]
 fn a_new_surface_is_placed_in_the_tree_not_registered() {
-    let mut offenders = Vec::new();
-    for (file, src) in sources() {
-        // The registry's own module is where these doors are defined and tested.
-        if file.starts_with("chrome/layers/") {
-            continue;
-        }
-        if KNOWN_REGISTRY_SURFACES.contains(&file.as_str()) {
-            continue;
-        }
-        for (i, line) in src.lines().enumerate() {
-            if line.trim_start().starts_with("//") {
-                continue;
-            }
-            if REGISTRY_DOORS.iter().any(|door| line.contains(door)) {
-                offenders.push(format!("heca/src/{file}:{}", i + 1));
-            }
-        }
-    }
+    let offenders: Vec<String> = registrations()
+        .into_iter()
+        .filter(|(_, _, func)| !func.as_deref().is_some_and(|f| KNOWN_REGISTRY_SURFACES.contains(&f)))
+        .map(|(file, line, func)| format!("heca/src/{file}:{line} (in {})", func.as_deref().unwrap_or("?")))
+        .collect();
     assert!(
         offenders.is_empty(),
         "these register a surface instead of placing it in the tree, so nothing will deliver \
@@ -109,24 +129,16 @@ fn a_new_surface_is_placed_in_the_tree_not_registered() {
 /// next file to reuse the name — the same reasoning `prop_drift.rs` applies to its own allowlist.
 #[test]
 fn the_known_surface_list_is_exactly_what_still_registers() {
-    let files: Vec<(String, String)> = sources();
-    let mut stale = Vec::new();
-    for known in KNOWN_REGISTRY_SURFACES {
-        let still_registers = files.iter().any(|(file, src)| {
-            file == known
-                && src
-                    .lines()
-                    .filter(|l| !l.trim_start().starts_with("//"))
-                    .any(|l| REGISTRY_DOORS.iter().any(|door| l.contains(door)))
-        });
-        if !still_registers {
-            stale.push(*known);
-        }
-    }
+    let found = registrations();
+    let stale: Vec<&str> = KNOWN_REGISTRY_SURFACES
+        .iter()
+        .copied()
+        .filter(|known| !found.iter().any(|(_, _, func)| func.as_deref() == Some(*known)))
+        .collect();
     assert!(
         stale.is_empty(),
         "these no longer register a surface — remove them from KNOWN_REGISTRY_SURFACES so a future \
-         file reusing the path is not excused without anyone deciding that: {stale:?}",
+         function reusing the name is not excused without anyone deciding that: {stale:?}",
     );
 }
 
@@ -144,10 +156,7 @@ fn the_known_surface_list_is_exactly_what_still_registers() {
 /// was green with the menu entries doing nothing at all.
 #[test]
 fn contributed_menu_rows_go_through_the_one_conversion() {
-    let src = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/chrome/overlay.rs"),
-    )
-    .expect("read the overlay host");
+    let (_, src) = common::source_defining("fn merge_contributions(");
 
     let at = src
         .find("fn merge_contributions(")

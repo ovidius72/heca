@@ -18,6 +18,11 @@ impl Component for CommandPalette {
         self.is_open()
     }
 
+    /// On screen only while open: closed, its rows are still children, and gone to every walk.
+    fn is_shown(&self) -> bool {
+        self.base.visible.get_untracked() && !self.base.style.layout.hidden && self.is_open()
+    }
+
     /// An open palette grabs input for the whole viewport (typing, nav, outside
     /// click = dismiss), so every point is occluded while open — a host must not
     /// synthesize a page-level action (e.g. open a context menu) under it.

@@ -10,7 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Azioni e keybinding per zoom globale e controlli font-size UI/terminal.",
-  "description": "",
+  "description": "app-03: App-wide zoom and font-size controls.\n\n── Findings (verified in code 2026-10-19) ──\nEffectively DONE — candidate to close. WmAction::AppFontZoom (app-wide UI font, action app_font_zoom) and WmAction::PaneTerminalFontZoom (terminal font, action pane_terminal_font_zoom) both exist, are registered and keybound; terminal_font_zoom_step lives in config settings. Covers T126 (UI font inc/dec), T127 (app-wide zoom WmAction) and T131 (terminal font inc/dec).",
+  "descriptionUpdatedAt": "2026-10-19T16:16:54.701Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -37,6 +38,7 @@
       "title": "UI font size increase and decrease",
       "status": "planned",
       "description": "Controlli di incremento/decremento font UI.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -44,10 +46,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "2c58342a-be3a-4591-befb-e7a947803bcc",
@@ -59,6 +65,7 @@
       "title": "App-wide zoom WmAction",
       "status": "planned",
       "description": "Aggiungere le action per zoom globale.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -66,10 +73,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "92548b51-e669-4f8f-84dd-c96c8becfbfa",
@@ -81,6 +92,7 @@
       "title": "Terminal font size increase and decrease",
       "status": "planned",
       "description": "Controlli di incremento/decremento font terminale.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -88,16 +100,23 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.469Z",
+  "updatedAt": "2026-10-19T16:16:54.701Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
 }

@@ -169,7 +169,7 @@ pub(super) fn duration_from_delay(delay: image::Delay) -> Duration {
     }
 }
 
-/// Accumulates per-cell [`ImageCell`] slices into rectangular placement blocks
+/// Accumulates per-cell wezterm `ImageCell` slices into rectangular placement blocks
 /// while a snapshot is built row by row.
 ///
 /// wezterm lays an image across a uniform grid of cells, each carrying the

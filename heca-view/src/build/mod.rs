@@ -1,5 +1,4 @@
-//! Typed builders for [`ViewNode`](crate::ViewNode) — the authoring layer (plugin-task-ui-2,
-//! F003/P011/T006).
+//! Typed builders for [`ViewNode`](crate::ViewNode) — the authoring layer.
 //!
 //! A [`ViewNode`](crate::ViewNode) is a uniform bag of properties, which is right for a *wire
 //! format* and wrong for writing by hand: nothing stops `Label::new("x").prop("title", …)`, and
@@ -27,7 +26,7 @@
 //!
 //! **A type per kind**, so a method exists only where the widget really has that property.
 //! `Label::new("x").title("y")` does not compile. The shared arrangement and appearance properties
-//! live on [`Style`], written once, because they apply to every kind alike (F003/P017/T007).
+//! live on [`Style`], written once, because they apply to every kind alike.
 //! Children live on [`Parent`], implemented only for the kinds `realize` attaches children to — a
 //! `Toast` takes none, and now cannot be given any.
 //!

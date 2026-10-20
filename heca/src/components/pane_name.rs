@@ -28,7 +28,7 @@ pub(crate) struct PaneName<'a> {
     pub(crate) text: &'a str,
     /// Which colour this surface gives it, or `None` to **inherit** — which is what a name inside
     /// a selectable row should do, so it follows selection with no second copy built for the other
-    /// state (F003/P082/T480). A surface that genuinely owns the colour still passes one.
+    /// state. A surface that genuinely owns the colour still passes one.
     pub(crate) color: Option<Color>,
     /// Names are shown bold everywhere they are shown; a caller that wants otherwise says so.
     pub(crate) bold: bool,

@@ -20,8 +20,8 @@ use heca_core::layout::Layout;
 ///   and is now `Domain::Container`, the only domain `ActionPolicy::ContainerFocused` permits.
 ///
 /// Overlay *control* (`SubmitOverlay` / `CloseOverlay`) never reaches here — it is intercepted in
-/// [`dispatch_intent`] before routing — and an overlay's own Esc / Enter / nav reach the widget
-/// through the widget-keymap path, not the WM action system.
+/// [`dispatch_intent`](super::dispatch::dispatch_intent) before routing — and an overlay's own Esc / Enter /
+/// nav reach the widget through the widget-keymap path, not the WM action system.
 pub(crate) fn route_interaction(
     state: &AppState,
     source: InteractionSource,

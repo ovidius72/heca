@@ -87,7 +87,7 @@ fn test_remove_workspace_active_is_removed() {
     assert_eq!(w.view.active_workspace, 1);
 }
 
-/// **Two windows on one session move independently** (F012, decision 2c249a29): the content is
+/// **Two windows on one session move independently**: the content is
 /// shared, so a column one window adds is there for both, but where each is looking is its own.
 #[test]
 fn two_windows_on_one_session_keep_their_own_focus_and_scroll() {

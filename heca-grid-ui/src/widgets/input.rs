@@ -292,7 +292,7 @@ impl Input {
     /// Handle a plain editing key. Returns whether it was consumed. The emacs/readline
     /// shortcuts (Ctrl+h delete, Ctrl+u clear, Ctrl/Cmd+A select-all) are **not** here —
     /// they are host-configured (`[keys.widgets]` `edit_*` bindings) and arrive as the
-    /// [`Event::Widget`](crate::component::Event::Widget) `Edit*` intents. A modified char is
+    /// [`Event::Widget`] `Edit*` intents. A modified char is
     /// ignored so it is never typed as text (and so the host's shortcut resolution can act on it).
     fn handle_key(&mut self, key: GridKey) -> Handled {
         match key {
@@ -462,7 +462,7 @@ impl Component for Input {
         // Field: dark fill; border firms muted → accent on focus. Radius + border
         // width come from the theme so global settings scale this proportionally.
         // A faint theme rest glow (`interaction.control_rest_glow`) gives the field
-        // the shared neon identity at rest; `glow_size` scales it (T011).
+        // the shared neon identity at rest; `glow_size` scales it.
         let p = if focused { 1.0 } else { 0.0 };
         let rest_border = ia.control_rest_border as f32;
         let border_a = rest_border + (255.0 - rest_border) * p;

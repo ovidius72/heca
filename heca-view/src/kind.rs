@@ -51,7 +51,7 @@ pub enum WidgetKind {
     Row,
     Grid,
     /// **A grid of cards with a cursor** — the shape a picker surface is: an exposé, a palette of
-    /// tiles, a plugin's chooser (F003/P097/T501).
+    /// tiles, a plugin's chooser.
     ///
     /// Each child is one card, in reading order, and its own `key` is what activation hands back.
     /// The cursor is the widget's — arrow keys move it, hovering moves it, Enter activates, Escape
@@ -122,26 +122,24 @@ pub enum WidgetKind {
     /// **A place something can land**, outlined, with a letter in the middle when a key picks it
     /// (`label`, `filled`, and `while_dragging` — the kind of drag it appears for).
     LandingSlot,
-    /// **Something is happening and nobody knows for how long** — an indeterminate ring
-    /// (F003/P097/T501).
+    /// **Something is happening and nobody knows for how long** — an indeterminate ring.
     ///
     /// It takes no properties of its own: it animates itself off the frame clock, and its diameter
     /// is `width`/`height` like any other node's. Reach for [`Progress`](WidgetKind::Progress)
     /// instead the moment you can say *how far along* — a spinner is what you show when you cannot.
     Spinner,
-    /// **How far along something is**, `0.0..=1.0` in the `value` prop (F003/P097/T501).
+    /// **How far along something is**, `0.0..=1.0` in the `value` prop.
     ///
     /// The fill eases toward whatever it is given, so a described tree re-sent with a new `value`
     /// animates rather than jumping, with nothing declared.
     Progress,
-    /// **A keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows
-    /// (F003/P097/T501).
+    /// **A keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows.
     ///
     /// Its own `glyph` vocabulary ([`ViewNfGlyph`](crate::ViewNfGlyph)), because it is its own
     /// font. It is what lets a plugin draw a shortcut the way heca's own key hints do, rather than
     /// typing a character its user's font may not carry.
     NfIcon,
-    /// **A row of actions that gets out of its own way** (F003/P097/T501).
+    /// **A row of actions that gets out of its own way**.
     ///
     /// Its children are [`Button`](WidgetKind::Button) nodes. As the room runs out it shows icons
     /// instead of words, and whatever still does not fit collapses into a ⋮ menu that runs the same

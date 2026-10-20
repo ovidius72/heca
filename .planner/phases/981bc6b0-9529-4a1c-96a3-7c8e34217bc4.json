@@ -10,7 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Header slot, tab bar, corner brackets e status bar per la pane shell.",
-  "description": "",
+  "description": "gridui-02: Pane shell header and tabs. RETIRED as obsolete 2026-10-19.\n\n── Findings (verified in code 2026-10-19) ──\nThe pane shell got its header slot and corner brackets built INTO the Pane widget (FrameStyle::Bracketed; widgets/pane/mod.rs) — T091 and T093 done there. A Tabs widget exists (widgets/tabs.rs) — T088 done. T089 (StatusBar widget) CANCELED as superseded: there is no reusable StatusBar; the app's status bar (mode label + git + notifications) lives in chrome and is itself marked temporary/being replaced.",
+  "descriptionUpdatedAt": "2026-10-19T16:16:57.820Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -36,19 +37,33 @@
       "priority": 1,
       "shortName": "pane-tabbar-slot",
       "title": "Add optional tab bar slot to Pane widget",
-      "status": "planned",
-      "description": "Tab bar opzionale per pane multi-document.",
+      "status": "done",
+      "description": "Tab bar opzionale per pane multi-document.\n\n---\n**Completion summary:**\nDone: a Tabs widget exists (widgets/tabs.rs). Closed while retiring the obsolete pane-shell phase.",
+      "descriptionUpdatedAt": "2026-10-19T15:49:17.575Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5a29016c-c045-4f97-839b-452806a612d8-check-001-planned-done",
+          "date": "2026-10-19T15:49:17.574Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done: a Tabs widget exists (widgets/tabs.rs). Closed while retiring the obsolete pane-shell phase."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-19T15:49:17.574Z",
+      "completedAt": "2026-10-19T15:49:17.574Z",
       "createdAt": "2026-07-01T18:13:27.646Z",
-      "updatedAt": "2026-07-01T18:13:27.646Z"
+      "updatedAt": "2026-10-19T15:49:17.574Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "eba900d3-bb5e-4421-a2a6-87892c647993",
@@ -58,19 +73,33 @@
       "priority": 2,
       "shortName": "statusbar-widget",
       "title": "Build StatusBar widget",
-      "status": "planned",
+      "status": "canceled",
       "description": "Status bar composita per mode label, git info e notifications.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:27.646Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "eba900d3-bb5e-4421-a2a6-87892c647993-check-001-planned-canceled",
+          "date": "2026-10-19T15:50:06.120Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Superseded: no reusable StatusBar widget is needed — the app's status bar (mode label + git + notifications) is handled in chrome and is itself marked temporary/being replaced. Pane header + brackets shipped inside the Pane widget. Phase retired as obsolete.",
+          "description": "Superseded: no reusable StatusBar widget is needed — the app's status bar (mode label + git + notifications) is handled in chrome and is itself marked temporary/being replaced. Pane header + brackets shipped inside the Pane widget. Phase retired as obsolete."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.646Z",
-      "updatedAt": "2026-07-01T18:13:27.646Z"
+      "updatedAt": "2026-10-19T15:50:06.120Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "01f20c00-7714-4db5-9adc-f6ed6b6328fa",
@@ -80,19 +109,33 @@
       "priority": 4,
       "shortName": "pane-header-slot",
       "title": "Add optional header slot to Pane widget",
-      "status": "planned",
-      "description": "Header slot con title, status e action buttons.",
+      "status": "done",
+      "description": "Header slot con title, status e action buttons.\n\n---\n**Completion summary:**\nDone: the Pane widget carries a header/info-bar slot (widgets/pane/mod.rs). Closed while retiring the obsolete pane-shell phase.",
+      "descriptionUpdatedAt": "2026-10-19T15:49:15.206Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "01f20c00-7714-4db5-9adc-f6ed6b6328fa-check-001-planned-done",
+          "date": "2026-10-19T15:49:15.204Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done: the Pane widget carries a header/info-bar slot (widgets/pane/mod.rs). Closed while retiring the obsolete pane-shell phase."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-19T15:49:15.204Z",
+      "completedAt": "2026-10-19T15:49:15.204Z",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "updatedAt": "2026-10-19T15:49:15.204Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "2123c25d-128f-4c8c-8ec5-89332432d9df",
@@ -102,25 +145,59 @@
       "priority": 3,
       "shortName": "cornerbrackets-widget",
       "title": "Build CornerBrackets widget",
-      "status": "planned",
-      "description": "Indicatore di focus per il pane.",
+      "status": "done",
+      "description": "Indicatore di focus per il pane.\n\n---\n**Completion summary:**\nDone: corner brackets are built into the Pane widget as FrameStyle::Bracketed (paint_cx bracket_frame). Closed while retiring the obsolete pane-shell phase.",
+      "descriptionUpdatedAt": "2026-10-19T15:49:16.533Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2123c25d-128f-4c8c-8ec5-89332432d9df-check-001-planned-done",
+          "date": "2026-10-19T15:49:16.532Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done: corner brackets are built into the Pane widget as FrameStyle::Bracketed (paint_cx bracket_frame). Closed while retiring the obsolete pane-shell phase."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-19T15:49:16.532Z",
+      "completedAt": "2026-10-19T15:49:16.532Z",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "updatedAt": "2026-10-19T15:49:16.532Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.491Z",
+  "updatedAt": "2026-10-19T16:16:57.820Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "07bec918-2d0f-472b-b785-c0967c98d8dd",
+      "date": "2026-10-19T15:49:15.242Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "e9f50c3f-3e4a-4855-bff8-0a31f555cd41",
+      "date": "2026-10-19T15:50:06.147Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

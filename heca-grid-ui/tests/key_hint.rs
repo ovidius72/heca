@@ -15,7 +15,7 @@ fn key_hint_overlays_letter_only_when_set() {
         let theme = Theme::default();
         // `paint_via_child` (which paints through `paint_child`, not `w.paint`): the framework
         // draws the hint letter for whatever it is handed, which is what lets any widget carry one
-        // instead of only a `KeyHint` (F003/P082/T431). Calling `paint` directly is painting
+        // instead of only a `KeyHint`. Calling `paint` directly is painting
         // *around* the framework.
         let scene = common::paint_via_child(w, &theme);
         let mut texts = Vec::new();
@@ -51,7 +51,7 @@ fn key_hint_overlays_letter_only_when_set() {
     );
 }
 
-/// **A widget that is not a `KeyHint` gets its letter drawn too** (F003/P082/T431).
+/// **A widget that is not a `KeyHint` gets its letter drawn too**.
 ///
 /// This is the whole point of moving the drawing into `paint_child`: being pickable stopped
 /// depending on being wrapped. Before it, only `KeyHint::paint` knew how to draw a cap, so any

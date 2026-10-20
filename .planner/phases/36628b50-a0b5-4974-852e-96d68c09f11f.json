@@ -10,7 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Widget NfIcon con glyph catalog per programmi e chrome.",
-  "description": "",
+  "description": "gridui-03: Nerd-Font icon widget.\n\n── Findings (verified in code 2026-10-19) ──\nLargely DONE — candidate to close. widgets/nf_icon.rs (the NfIcon widget) and the NfGlyph enum exist, glyph ranges are embedded, and it is wired into chrome (keycaps/shortcuts in shortcut.rs, key_hint). Remaining T087 (\"verify Nerd Font license\") is paperwork, not code.",
+  "descriptionUpdatedAt": "2026-10-19T16:17:41.358Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -38,6 +39,7 @@
       "title": "Verify Nerd Font license",
       "status": "planned",
       "description": "Verificare la licenza della font usata per i glyph Nerd Font.\n\n## Answered (2026-07-30, F003/P085/T358)\n\nThe Nerd Font the app uses for glyphs is the one it **already ships**: `heca-renderer/assets/MapleMonoNormal-NF-Regular.ttf` (+ the Bold face), embedded as the default terminal face long before this phase. Its licence sits beside it — `heca-renderer/assets/MAPLE-OFL.txt`, **SIL Open Font License 1.1**, which permits embedding and redistribution in a binary.\n\nSo there is nothing to re-verify unless a **second**, different Nerd Font is introduced — which T090 deliberately avoided by reusing this one.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:27.646Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -45,10 +47,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.646Z",
-      "updatedAt": "2026-07-30T12:01:29.950Z"
+      "updatedAt": "2026-07-30T12:01:29.950Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "00a749da-995d-4012-8ab4-787b5f330987",
@@ -60,6 +66,7 @@
       "title": "Build NfIcon widget with NfGlyph enum",
       "status": "planned",
       "description": "Widget icon con enum di glyph semanticamente nominati.\n\n## Partially landed early, in F003/P085/T358 (2026-07-30)\n\nThe command palette's keycaps needed key glyphs, and neither existing face could give them: Phosphor has **no keyboard glyphs at all**, and the UI face (Geist Mono) has no `⌃ ⌥ ⌘ ⎋ ⇞ ⇟`. So the core of this task was built there:\n\n- **`FontRole::NerdFont`** (`heca-grid-ui/src/scene.rs`) — a third role beside `Text`/`Icon`. The renderer maps it to `font::NERD_FONT_FAMILY` in `heca-renderer/src/scene.rs`, riding the per-run family override the terminal path already had, so `text.rs` needed no new plumbing.\n- **`NfGlyph` + `NfIcon`** (`heca-grid-ui/src/widgets/nf_icon.rs`) — single-layer (a Nerd Font glyph is one codepoint, not a duotone pair), same color-inheritance contract as `Icon`.\n- **`PaintCx::nf_icon`**, and `paint_keycap_nf` / `KeyCap::Nf` so a keycap can draw one.\n- **Showcase gallery** (`NfGlyph::ALL` with name + codepoint) and a `docs/widgets.md` § NfIcon.\n\n**No second font was embedded** (see T098): the app already ships **Maple Mono Normal NF** as the terminal face — a real Nerd Font, loaded unconditionally at renderer init and addressed by family name, so a user's own terminal font cannot take the glyphs away from the UI.\n\n### What is left for this task\n\n`NfGlyph` currently covers **the keyboard set only** — Shift, Control, Option, Command, CapsLock, Enter, Escape, Tab, Space, Backspace, ArrowUp/Down/Left/Right. T103 (wire NfIcon into the program catalog) needs the **program/devicon** glyphs, which are not in the enum yet. Adding one = variant + `codepoint()` + `name()` + `ALL`.\n\n### The trap for whoever adds glyphs\n\n`heca-renderer/tests/font_coverage.rs` proves every codepoint is **in** the embedded font (a missing one would render as tofu, which no other test can see). It **cannot** prove a name matches its picture: the font names its glyphs `uniF0636`. The five `nf-md-apple_keyboard_*` codepoints were read off the Material block's alphabetical order (caps, command, control, option, shift = F0632..F0636) and **must be confirmed by eye in the showcase gallery** — same caveat `Glyph::CaretLeft` carries. If one is off by one it is a one-character fix.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:27.647Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -67,10 +74,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-30T12:01:22.270Z"
+      "updatedAt": "2026-07-30T12:01:22.270Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "adce30df-62ce-4a23-900a-097fec336df5",
@@ -82,6 +93,7 @@
       "title": "Embed Nerd Font glyph ranges",
       "status": "planned",
       "description": "Embedding dei range di glyph usati.\n\n## Reconsidered (2026-07-30, F003/P085/T358)\n\n**Nothing new needs embedding today.** The app already ships a full Nerd Font — Maple Mono Normal NF, the default terminal face — loaded unconditionally at renderer init (`heca-renderer/src/text.rs`) and now addressed by family name for chrome glyphs too (`font::NERD_FONT_FAMILY`, `FontRole::NerdFont`). Every glyph `NfGlyph` names was verified present in its `cmap`.\n\nSo this task is really about **subsetting**, not embedding: the face carries ~12k codepoints and the app uses a handful outside the terminal. That is a binary-size question to answer on its own evidence (how much of it the terminal itself needs — a terminal genuinely wants the whole NF range, which may leave nothing to strip), not a prerequisite for `NfIcon`.\n\nWhoever picks this up: measure first, and check whether subsetting the terminal face breaks a user's powerline/devicon prompt before touching anything.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:27.647Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -89,10 +101,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-30T12:01:39.024Z"
+      "updatedAt": "2026-07-30T12:01:39.024Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "eff958f7-1129-4b46-8730-92b0aaf385ef",
@@ -104,6 +120,7 @@
       "title": "Wire NfIcon into program catalog",
       "status": "planned",
       "description": "Usare NfIcon nel catalogo programmi e nel chrome.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:27.647Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -111,16 +128,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "updatedAt": "2026-07-01T18:13:27.647Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-30T12:01:39.024Z",
+  "updatedAt": "2026-10-19T16:17:41.358Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": [
@@ -132,5 +154,6 @@
       "title": "draft → planned",
       "description": ""
     }
-  ]
+  ],
+  "sessionInfo": []
 }

@@ -61,7 +61,7 @@ fn a_mode_that_is_not_a_pick_has_no_count() {
     assert_eq!(InputMode::Normal.pick_candidate_count(), None);
     assert_eq!(
         InputMode::Search {
-            terminal: crate::chrome::terminal::TerminalId(1)
+            terminal: crate::chrome::panes::terminal::TerminalId(1)
         }
         .pick_candidate_count(),
         None
@@ -76,12 +76,6 @@ fn every_pick_says_what_it_offers() {
     assert_eq!(PickKind::MovePaneToColumn.subject(), "column");
     assert_eq!(PickKind::SelectPane.subject(), "pane");
     assert_eq!(PickKind::FocusDock.subject(), "dock");
-}
-
-#[test]
-fn test_sidebar_item_state_eq() {
-    assert_eq!(SidebarItemState::Active, SidebarItemState::Active);
-    assert_ne!(SidebarItemState::Active, SidebarItemState::Visited);
 }
 
 #[test]
@@ -122,4 +116,18 @@ fn the_rename_dialog_submits_the_action_that_names_the_target() {
             name: "x".into()
         }
     );
+}
+
+/// **The prefix key and its wait come from `[keys]` together**, so a reload that takes one takes
+/// the other.
+#[test]
+fn the_prefix_key_carries_its_own_timeout() {
+    let keys = heca_config::keys::KeysConfig {
+        prefix: "ctrl+a".into(),
+        prefix_timeout_ms: 2500,
+        ..Default::default()
+    };
+    let prefix = PrefixKey::from_config(&keys);
+    assert_eq!(prefix.combo, crate::keymap::KeyCombo::parse("ctrl+a"));
+    assert_eq!(prefix.timeout, std::time::Duration::from_millis(2500));
 }

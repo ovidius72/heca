@@ -5,7 +5,7 @@
 //! (`ActionRegistry::execute`, through `mutations::after_action`), after any handler. It used to be
 //! written into each handler by hand: 52 of them asked for a redraw and 50 called a follow-up
 //! themselves, and a handler that forgot one left the screen or the exposé stale with nothing to
-//! notice (F003/P082/T509).
+//! notice.
 //!
 //! A **lint**, for the same reason as `by_id_actions.rs`: a handler takes `&mut AppState`, which
 //! needs a window, so there is no headless call to make. It reads every `handle_*` body.

@@ -58,7 +58,7 @@ impl Visibility {
     /// shows one, and the three that were hidden went on taking a dot's width each, overflowing a
     /// slot sized for one and drawing the visible dot over the icon beside it. They collapsed
     /// before only because the wrapper was squeezed by a row that had run out of room — the wrong
-    /// mechanism producing the right picture (F003/P096/T483).
+    /// mechanism producing the right picture.
     fn apply(&mut self, visible: bool) {
         self.base.set_hidden(!visible);
         if let Some(child) = self.base.children.first_mut() {

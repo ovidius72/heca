@@ -124,15 +124,16 @@ swap_modifier = "Shift"
 shell_integration = true
 
 # When a pane has a custom name (set via rename), also show its process/program
-# name as a small dimmed label next to it, e.g. `MyPane (nvim)`. The process label
-# is not part of the name — it is appended for reference only and never edited by
-# rename. Set false to show just the custom name.
+# name next to it, e.g. `MyPane (nvim)` — in the sidebar (small and dimmed), the
+# command palette and the exposé. The process label is not part of the name — it is
+# appended for reference only and never edited by rename. Set false to show just the
+# custom name.
 pane_renamed_add_process_name = true
 
-# DEPRECATED — now `[appearance.expose] show_cwd`. Still read and mapped onto it, with a
-# one-time notice to move it. It no longer affects the sidebar: the sidebar's folder line
-# is `[appearance.sidebar] pane_lines`.
-pane_show_cwd = false
+# DEPRECATED — now `[appearance.expose] show_cwd`. Still read while that key is not
+# written (once it is, it decides), with a one-time notice to move it. It no longer
+# affects the sidebar: the sidebar's folder line is `[appearance.sidebar] pane_lines`.
+# pane_show_cwd = true
 
 # Host terminal scrollback capacity in rows (history retained above the
 # visible viewport). The host scrollback viewport scrolls within this range.
@@ -328,8 +329,9 @@ hint_font_size = 12.0
 # border_width  : decorative border width, px. The app-wide BORDER control. The
 #                 chrome + every surface inherit it. 0 removes borders everywhere.
 # border_color  : the `bordered` frame color (chrome + surfaces). Set to e.g. the
-#                 accent for a bright, visible border. (The `bracketed` reticle
-#                 always uses the theme accent.)
+#                 accent for a bright, visible border. A `bracketed` reticle keeps
+#                 the theme accent unless its own surface sets border_color
+#                 (e.g. [appearance.sidebar] border_color).
 # border_radius : corner radius, px, inherited by surfaces.
 # border_width  = 1.0
 # border_color  = "#40e0ff"
@@ -420,7 +422,7 @@ search_current_match_alpha = 150
 # Info bar (segmented pill inside the pane top + action buttons on the right):
 # title_segments : left side, in order. [] hides it.
 #                  "location" | "app_name" | "pane_name" | "git_branch" | "git_status"
-#                  or a chip added by a program built on heca, e.g. "pro.status" (shows by
+#                  or a chip added by a program built on heca, e.g. "demo.status" (shows by
 #                  default while this list is the default; once you write your own list,
 #                  only what you list shows).
 #                  (a segment with no data for a pane — e.g. git outside a repo —
@@ -429,7 +431,7 @@ search_current_match_alpha = 150
 #                   Default ["location", "app_name"].
 # title_actions  : right side, in order. [] hides it.
 #                  "split" | "close" | "zoom" | "float" | "move_left" | "move_right"
-#                  or a button added by a program built on heca, e.g. "pro.show_notes"
+#                  or a button added by a program built on heca, e.g. "demo.show_notes"
 #                  (it shows by default while this list is the default; once you write your
 #                  own list, only what you list shows).
 #                  Default ["split", "close"] (panes are already movable by drag).
@@ -445,10 +447,11 @@ search_current_match_alpha = 150
 # Border fields unset → global [appearance] default → theme.
 # border_style    : none | bordered | bracketed. Default "bracketed".
 #                   - "bordered"  → a clean frame in border_color at border_width.
-#                   - "bracketed" → the accent corner-reticle (sized by
+#                   - "bracketed" → the corner-reticle in border_color (sized by
 #                                   border_width + border_radius too).
 # border_width    : frame width, px. 0 removes the border. Clamped [0, 10].
-# border_color    : the `bordered` frame color.
+# border_color    : the frame color, for both styles. Unset → "bordered" takes the
+#                   global border_color, "bracketed" the theme accent.
 # border_radius   : corner radius, px. Clamped [0, 40].
 # background_color: shell fill (unset → theme sidebar surface). Transparency still
 #                   applies on top.
@@ -457,7 +460,7 @@ search_current_match_alpha = 150
 # pane_lines      : the lines under a pane's name in the sidebar, by name, in order.
 #                   "cwd" (working directory) | "git" (branch and change counts, only
 #                   inside a repository), or a line added by a program built on heca,
-#                   e.g. "pro.status" (shown by default while this list is the default;
+#                   e.g. "demo.status" (shown by default while this list is the default;
 #                   once you write your own list, only what you list shows). [] shows
 #                   the name alone. Default ["cwd", "git"] — so a fresh install shows
 #                   the folder line under each pane's name in the sidebar.
@@ -478,10 +481,11 @@ search_current_match_alpha = 150
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.expose]
 # ─────────────────────────────────────────────────────────────────────────────
-# The exposé (prefix+q map of every pane).
+# The exposé (prefix+Tab map of every pane).
 # show_cwd: show each pane's working directory (folder icon + path) on its card.
-#           Off by default. Replaces `[settings] pane_show_cwd`, which still works.
-# show_cwd = false
+#           On by default. Replaces `[settings] pane_show_cwd`, which is still read
+#           only while this key is not written.
+# show_cwd = true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Program catalog — [program.<id>]

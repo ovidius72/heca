@@ -186,7 +186,7 @@ impl CommandPalette {
     }
     /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
     /// rows it shows**, and nothing else — the text stays at reading size at every size, which is why
-    /// this is its own property rather than [`LayoutExt::size`](crate::builders::LayoutExt::size),
+    /// this is its own property rather than [`LayoutExt::size`],
     /// whose font scaling would cascade through the whole panel.
     ///
     /// Whatever the variant, the panel never exceeds `PANEL_VIEWPORT_FRAC` of the window, so a

@@ -7,7 +7,7 @@
 //! and then draw its own translucent content on top.
 //!
 //! It is **content-agnostic and host/compositor-owned** (terminal panes reuse it;
-//! they don't roll their own — see `pluggable-chrome-plugin-plan.md` Phase 7.5).
+//! they don't roll their own).
 //!
 //! Typical frosted-pane flow (per frame):
 //! ```ignore

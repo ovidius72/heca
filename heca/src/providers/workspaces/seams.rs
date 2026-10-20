@@ -1,4 +1,4 @@
-//! **The app edges this dock binds, as one group** (F006/P032/T429).
+//! **The app edges this dock binds, as one group**.
 //!
 //! AGENTS.md § 0b-bis step 3: every app concept a surface binds travels in a single struct built
 //! once, and every component takes `&` it. Threading them one argument at a time is what produced
@@ -18,7 +18,8 @@
 
 use crate::actions::ActionCatalog;
 use crate::chrome::{
-    ChromeIntentEmitter, ChromeSignals, DragItemRegistry, WorkspacesContainerState,
+    ChromeIntentEmitter, ChromeSignals, DragItemRegistry, PaneRuntimeStore,
+    WorkspacesContainerState,
 };
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
@@ -29,7 +30,7 @@ use std::rc::Rc;
 pub(crate) struct DockSeams<'a> {
     /// This placement's **mount id**. Every row's cursor signal is registered under it, and the
     /// intents a row fires are stamped with it, so two seatings of this container light different
-    /// rows (F003/P085/T354).
+    /// rows.
     pub(crate) mount: &'a str,
     /// Every colour, size and radius. A component names a token, never a literal.
     pub(crate) theme: &'a GuiTheme,
@@ -40,10 +41,12 @@ pub(crate) struct DockSeams<'a> {
     /// Where a row's declared gesture goes. A row names an action; it never runs one.
     pub(crate) emit: &'a ChromeIntentEmitter,
     /// What an action **looks like** — the one thing a row cannot answer for itself, needed
-    /// because a row declares its own menu (F004/P084/T395).
+    /// because a row declares its own menu.
     pub(crate) catalog: &'a ActionCatalog,
     /// This component's own state: the active pane, the collapse set, the display settings.
     pub(crate) ws_state: &'a WorkspacesContainerState,
+    /// Every pane's live facts — program, folder, git — shared by every component.
+    pub(crate) panes: &'a PaneRuntimeStore,
     /// The pane holding focus, read once at the top rather than by each row.
     pub(crate) active_pane: Option<PaneId>,
 }

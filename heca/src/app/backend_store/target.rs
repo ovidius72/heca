@@ -4,7 +4,7 @@
 use heca_core::layout::PaneId;
 
 use super::BackendStore;
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 
 /// A pane's terminal, or one no pane owns (an extension's).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

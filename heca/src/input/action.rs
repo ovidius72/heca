@@ -44,8 +44,8 @@ pub enum WmAction {
     SplitHorizontal,
     SplitVertical,
     ZoomColumn,
-    /// Zoom **the column you name**, wherever it is — the parameterized twin of [`ZoomColumn`],
-    /// which acts on the active one (F003/P085/T356).
+    /// Zoom **the column you name**, wherever it is — the parameterized twin of [`ZoomColumn`](Self::ZoomColumn),
+    /// which acts on the active one.
     ///
     /// A component resolves its cursor to a column and dispatches this; a menu entry or an RPC call
     /// names one outright. Without it, "zoom the selected column" could only ever be a handler that
@@ -75,7 +75,7 @@ pub enum WmAction {
     MovePaneLeft {
         pane_id: Option<PaneId>,
     },
-    /// Move a pane one slot right within its column (see [`MovePaneLeft`] re: `pane_id`).
+    /// Move a pane one slot right within its column (see [`MovePaneLeft`](Self::MovePaneLeft) re: `pane_id`).
     MovePaneRight {
         pane_id: Option<PaneId>,
     },
@@ -142,7 +142,7 @@ pub enum WmAction {
     /// - `column`/`x` — the active column's own right-hand edge, so positive widens it.
     /// - `pane`/`y` — the boundary **below** the active pane, or the one **above** it when it is
     ///   last. For the last pane, moving that boundary down therefore **shrinks** it: the divider
-    ///   goes the way the key says, whichever pane is active (F004/P084/T414).
+    ///   goes the way the key says, whichever pane is active.
     ///
     /// `amount` is logical px for a pane and thousandths of the working width for a column.
     Resize {
@@ -173,7 +173,7 @@ pub enum WmAction {
     },
 
     // ── Font zoom ──
-    /// App-wide font zoom (the `app-03` base). Steps **both** the chrome/UI font
+    /// App-wide font zoom. Steps **both** the chrome/UI font
     /// (sidebar, tabs, status bar) and every terminal pane together, so the whole
     /// app scales. `Reset` returns to the configured `font.size.*`. No layout
     /// impact (policy: `Global`).
@@ -316,7 +316,7 @@ pub enum WmAction {
     ToggleCurrentColumnCollapsed,
 
     // ── System ──
-    /// Show / hide / toggle an **addressable layer** by name (F003/P082/T327).
+    /// Show / hide / toggle an **addressable layer** by name.
     ///
     /// `name` is `<owner>.<short>` — `heca.expose`, `docker.expose` — the stable handle a layer is
     /// registered under. A `LayerId` could not serve: it is a runtime counter, so no keybinding,
@@ -341,7 +341,7 @@ pub enum WmAction {
         dock: Option<String>,
     },
 
-    /// Open the command palette (F004/P092/T393).
+    /// Open the command palette.
     ///
     /// Both arguments are **optional**, and bare is exactly what it always was: the actions list,
     /// empty query. A *required* argument would have taken the action out of the palette's own
@@ -392,7 +392,7 @@ pub enum WmAction {
     ScrollToTop,
     /// Scroll to the live bottom (immediate).
     ScrollToBottom,
-    /// Scroll the focused chrome container one page **left** (F003/P085/T352).
+    /// Scroll the focused chrome container one page **left**.
     ///
     /// The four horizontal variants have no terminal half: a pane's scrollback has one axis, so
     /// there is nothing for them to do when no dock holds chrome focus. They exist because a scroll
@@ -468,7 +468,7 @@ pub enum WmAction {
         focus_after: bool,
     },
 
-    // ── Chrome container placement (parameterized) — plugin-02, §2.9 ──
+    // ── Chrome container placement (parameterized) — §2.9 ──
     // Host-level container moves. Parameterized (carry ids/region), so — like the
     // other parameterized variants — they are constructed programmatically (RPC,
     // mouse, command palette), not bound directly from a config key. They apply to
@@ -497,7 +497,7 @@ pub enum WmAction {
         visible: RegionVisibility,
     },
 
-    /// Give chrome **keyboard focus** to a mounted dock — one action, two ways in (F003/P011/T020).
+    /// Give chrome **keyboard focus** to a mounted dock — one action, two ways in.
     ///
     /// - `dock: None` (a bare `focus_dock` binding) opens the **pick**: every dock on screen lights
     ///   a letter and the next keypress focuses that one.
@@ -513,7 +513,7 @@ pub enum WmAction {
     },
 
     /// Focus a dock, or **give the keyboard back** if it already has it — the `global_focus`
-    /// gesture: `prefix+e` in, `prefix+e` out (F003/P082/T444).
+    /// gesture: `prefix+e` in, `prefix+e` out.
     ///
     /// **The toggle belongs to the binding, not to the action.** It lived inside `FocusDock` until
     /// now, which meant everything that asked to *focus* a dock inherited it: a click inside an
@@ -526,7 +526,7 @@ pub enum WmAction {
         dock: Option<crate::chrome::ContainerId>,
     },
 
-    /// Forget the past queries a search surface remembers (F004/P092/T392).
+    /// Forget the past queries a search surface remembers.
     ///
     /// `scope` is **optional**, and that is what makes one action serve both doors: bare it forgets
     /// every search surface's queries, which is what someone binding a key or picking it from the
@@ -536,7 +536,7 @@ pub enum WmAction {
         scope: Option<String>,
     },
 
-    /// Forget the usage counts that rank a search surface's list (F004/P092/T392).
+    /// Forget the usage counts that rank a search surface's list.
     ///
     /// Separate from [`ClearSearchHistory`](Self::ClearSearchHistory) because they are different
     /// intentions: forgetting what you typed is not forgetting what you use.
@@ -544,7 +544,7 @@ pub enum WmAction {
         scope: Option<String>,
     },
 
-    /// Give the keyboard back to the focused pane — chrome focus is released (F003/P085/T352).
+    /// Give the keyboard back to the focused pane — chrome focus is released.
     ///
     /// The counterpart of [`FocusDock`](Self::FocusDock), and the reason `Esc` is a *binding* in the
     /// focus layer rather than a key this module recognises: releasing focus has to be reachable
@@ -554,8 +554,7 @@ pub enum WmAction {
     /// **Put a mounted container's cursor on the row named by `key`.**
     ///
     /// A core action, not a provider's: every container has a cursor, so a plugin's rows move it
-    /// by naming this — nothing is declared by the widget. It is what a click on a row means, the
-    /// generic form of `providers::move_provider_cursor`.
+    /// by naming this — nothing is declared by the widget. It is what a click on a row means.
     ///
     /// It moves the cursor and does **nothing else**: it does not activate the row, focus a pane,
     /// or hand the keyboard anywhere. A *pick* does those (`workspaces.peek_selected`), and
@@ -565,7 +564,7 @@ pub enum WmAction {
     /// A caller that wants the cursor moved in a dock that does not yet hold the keyboard emits
     /// [`FocusDock`](Self::FocusDock) first: the events are queued and processed in order, so the
     /// dock is `Domain::Container` by the time this runs, which is what
-    /// [`ActionPolicy::ContainerFocused`] requires.
+    /// [`ActionPolicy::ContainerFocused`](crate::app::interaction::ActionPolicy::ContainerFocused) requires.
     CursorTo {
         mount: crate::chrome::ContainerId,
         key: String,
@@ -598,7 +597,7 @@ pub enum WmAction {
     // ── Config ──
     ReloadConfig,
 
-    // ── Notifications (F009) ──
+    // ── Notifications ──
     /// Dismiss one visible notification by id. Mouse (the toast's own × — a
     /// real, automatically-pickable Button) and RPC only; no default
     /// keybinding, because a keypress cannot supply an id.

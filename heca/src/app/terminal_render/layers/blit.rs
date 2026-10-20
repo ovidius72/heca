@@ -3,7 +3,7 @@
 use crate::app::terminal_host::TerminalMount;
 use crate::app::terminal_render::{TerminalTarget, rect_to_text_box};
 use crate::app_state::AppState;
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 use heca_core::layout::Rectangle;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::terminal::{SelectionOverlay, TerminalRenderer};

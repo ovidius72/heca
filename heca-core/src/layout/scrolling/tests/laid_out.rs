@@ -4,7 +4,7 @@ use super::*;
 
 
 /// **A column's box is exactly the panes it holds**, and the two views agree because they are
-/// one walk (F003/P082/T474).
+/// one walk.
 #[test]
 fn a_column_spans_the_panes_inside_it_and_agrees_with_them() {
     let mut space = space_with_columns(2);

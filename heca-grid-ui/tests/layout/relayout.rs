@@ -5,7 +5,7 @@ use super::*;
 /// The toggle runs on a CLICK, outside any layout pass, so applying `hidden` moves nothing on its
 /// own — every row keeps the bounds it already had and is painted where it used to be. That is
 /// what put a dock's rows on top of each other, and left nothing on screen when it was reopened,
-/// until an unrelated window resize happened to run a pass (F003/P096).
+/// until an unrelated window resize happened to run a pass.
 #[test]
 fn collapsing_a_dock_or_a_group_asks_for_a_layout() {
     use heca_grid_ui::{Component, DockFrame, Item, ItemGroup, PointerButton};

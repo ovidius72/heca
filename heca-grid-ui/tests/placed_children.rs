@@ -1,7 +1,7 @@
 //! **A container that is handed its children's rects keeps them, and paints each child once.**
 //!
-//! These two pin the traps that made the column-owns-its-panes move fail before (F003/P082/T474
-//! Part A). Neither depends on that move having happened: they are about the mechanism it will use,
+//! These two pin the traps that made the column-owns-its-panes move fail before.
+//! Neither depends on that move having happened: they are about the mechanism it will use,
 //! so they hold today and break the moment it is done the wrong way.
 
 mod common;

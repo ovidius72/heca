@@ -4,8 +4,8 @@
 use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app_state::AppState;
-use crate::chrome::terminal::Cell;
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::Cell;
+use crate::chrome::panes::terminal::TerminalId;
 use crate::input::{FontZoomStep, WmAction};
 use heca_core::backend::{BackendMouseButton, BackendMouseEventKind};
 use winit::event::MouseScrollDelta;

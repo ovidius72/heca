@@ -226,7 +226,7 @@ impl KeyHintGroup {
     /// A picker is otherwise the one thing a description could not have: natively it is a signal,
     /// an `open_when` binding it and an `on_action` closure that flips it — three things static
     /// data cannot carry. The widget owns all three behind this name, so a described picker is the
-    /// native one and not a cut-down copy (F003/P082/T436).
+    /// native one and not a cut-down copy.
     pub fn opens_on(self, action: impl Into<String>) -> Self {
         self.prop("opens_on", PropValue::Text(action.into()))
     }

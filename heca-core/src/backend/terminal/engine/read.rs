@@ -261,7 +261,7 @@ impl TerminalEngine {
 
     /// Collect inline-image placements for one visible row into `out`.
     ///
-    /// wezterm attaches an [`ImageCell`] to each grid cell an image covers
+    /// wezterm attaches an `ImageCell` to each grid cell an image covers
     /// (identically for Sixel / iTerm2 / Kitty). We group those per-cell slices
     /// by `(content hash, placement id, z-index)` into rectangular blocks — see
     /// [`GraphicsCollector`] — and decode each unique source image once.
@@ -348,7 +348,7 @@ pub(super) fn snapshot_line(
 
 /// Collect OSC 8 hyperlink spans for one visible row. Consecutive cells that
 /// carry the same link URI are merged into a single span (in cell columns), so a
-/// later phase can underline / open contiguous links without re-scanning.
+/// caller can underline / open contiguous links without re-scanning.
 pub(super) fn collect_row_hyperlinks(
     line: &wezterm_term::Line,
     row: usize,

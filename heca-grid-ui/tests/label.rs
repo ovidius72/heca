@@ -60,7 +60,7 @@ fn label_truncates_to_its_box_at_the_end_it_was_given() {
     // Degenerate boxes still say something rather than panicking.
     assert_eq!(drawn(Label::new(path).truncate(Ellipsis::End), 1.0), "…");
 
-    // **Cutting is the default** (F003/P082/T438): a label nobody said anything to still stays
+    // **Cutting is the default**: a label nobody said anything to still stays
     // inside its box, which is what makes it safe for an author who has never read this file.
     let by_default = drawn(Label::new(path), 10.0);
     assert!(
@@ -123,7 +123,7 @@ fn a_truncating_label_shrinks_inside_a_container_that_is_too_narrow() {
     );
 
     // The opt-out keeps its natural width and overflows — which is now something a caller asks for
-    // rather than what they get by saying nothing (F003/P082/T438).
+    // rather than what they get by saying nothing.
     let (w_plain, plain) = paint_in_row(Label::new(text).truncate(Ellipsis::None));
     assert_eq!(
         plain, text,
@@ -271,7 +271,7 @@ fn a_wrapping_label_hard_breaks_a_word_too_long_for_the_line() {
 fn a_plain_label_is_untouched_by_the_measure_path() {
     use heca_grid_ui::style::Length as L;
     // The label that stays out of the measure path is the one that opted OUT of cutting: it reports
-    // one fixed width and has nothing to answer (F003/P082/T438 made cutting the default).
+    // one fixed width and has nothing to answer.
     let plain = Label::new("some text").truncate(Ellipsis::None);
     assert!(
         matches!(plain.base().style.layout.height, L::Px(_)),

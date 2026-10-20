@@ -307,7 +307,11 @@ fn a_surface_holding_the_keyboard_is_where_the_keys_go() {
         Some(KeyboardArea::Surface("dialog".into())),
         "the popup answers its own keys"
     );
-    assert_eq!(page_scope(&root).as_deref(), Some("a"), "and still goes back to the dock");
+    assert_eq!(
+        page_scope(&root).as_deref(),
+        Some("a"),
+        "and still goes back to the dock"
+    );
 }
 
 /// A dock inside a surface is nearer than the surface, so its name is the area.
@@ -317,7 +321,10 @@ fn the_nearest_named_area_wins() {
     surface.base_mut().surface_slot = Some("popup".into());
     let mut root = Flex::row().child(surface);
     assert!(focus_scope(&mut root, "inner"));
-    assert_eq!(keyboard_area(&root), Some(KeyboardArea::Region("inner".into())));
+    assert_eq!(
+        keyboard_area(&root),
+        Some(KeyboardArea::Region("inner".into()))
+    );
 }
 
 /// A control outside every named area holds the keyboard in no area — and nothing holding it is
@@ -330,4 +337,57 @@ fn a_control_outside_every_area_is_in_none() {
     crate::settle_focus(&mut root);
     assert!(holder(&root).is_some());
     assert_eq!(keyboard_area(&root), None);
+}
+
+/// **A dock that has held nothing hands the keyboard to the first control inside it** — whatever
+/// the dock holds (a terminal, an input, a row), the way a dialog focuses its first field — so the
+/// next key reaches that control rather than stopping at the dock.
+#[test]
+fn a_region_that_held_nothing_gives_the_keyboard_to_its_first_control() {
+    let mut root = window();
+    assert!(focus_scope(&mut root, "b"));
+    assert_eq!(holder(&root), Some(vec![1, 0]), "the control inside dock b");
+
+    let mut empty = Flex::row().child(Flex::column().scope_key("bare"));
+    assert!(focus_scope(&mut empty, "bare"));
+    assert_eq!(
+        holder(&empty),
+        Some(vec![0]),
+        "with no control inside, the dock itself"
+    );
+}
+
+/// **A region that keeps the keyboard holds it itself** — for a list with its own cursor, so
+/// `Enter` acts on the cursor's row and never on the row clicked last. Taking the keyboard into it
+/// does not hand it to a control inside, a press on a control inside gives it to the region, and
+/// focusing the region again takes it back from anything inside.
+#[test]
+fn a_region_that_keeps_the_keyboard_never_hands_it_inside() {
+    let mut root = Flex::row().child(
+        crate::widgets::FocusScope::new(Flex::column().child(Control::new()).child(Control::new()))
+            .keeps_keyboard(true)
+            .scope_key("rows"),
+    );
+    assert!(focus_scope(&mut root, "rows"));
+    assert_eq!(
+        holder(&root),
+        Some(vec![0]),
+        "the region, not its first control"
+    );
+
+    crate::focus::focus_on_press(&mut root, &[0, 0, 1]);
+    assert_eq!(
+        holder(&root),
+        Some(vec![0]),
+        "a press inside leaves it with the region"
+    );
+
+    at(&root, &[0, 0, 1]).base().focus(false);
+    crate::focus::settle(&mut root);
+    assert!(focus_scope(&mut root, "rows"));
+    assert_eq!(
+        holder(&root),
+        Some(vec![0]),
+        "taken back from a control inside"
+    );
 }

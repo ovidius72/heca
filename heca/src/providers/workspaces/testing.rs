@@ -8,7 +8,6 @@
 use super::seams::{DockRegistries, DockSeams};
 use super::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceTree};
 use crate::actions::ActionCatalog;
-use crate::app_state::SidebarItemState;
 use crate::chrome::{
     ChromeIntentEmitter, ChromeSignals, DragItemRegistry, SharedChromeState,
     WorkspacesContainerState,
@@ -64,6 +63,7 @@ impl Fixture {
                 emit: &self.emit,
                 catalog: &self.catalog,
                 ws_state,
+                panes: &self.store.panes,
                 active_pane: ws_state.active_pane(),
             },
             DockRegistries {
@@ -84,7 +84,6 @@ pub(crate) fn tree() -> WorkspaceTree {
         name: "ws1".into(),
         custom_name: None,
         collapsed: false,
-        state: SidebarItemState::Active,
         columns: vec![column()],
         floating_panes: Vec::new(),
     });
@@ -107,7 +106,6 @@ pub(crate) fn pane(pane_id: PaneId, name: &str) -> PaneEntry {
         pane_id,
         name: name.into(),
         custom_name: None,
-        state: SidebarItemState::None,
     }
 }
 

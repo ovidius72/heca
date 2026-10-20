@@ -342,7 +342,7 @@ fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
     );
 }
 
-/// Focus-visible semantics (T014): a mouse click focuses a widget (Enter/Space
+/// Focus-visible semantics: a mouse click focuses a widget (Enter/Space
 /// work) but draws NO ring; keyboard navigation (advance) shows it. Widgets gate
 /// their ring paint on `Base::shows_focus_ring()`, which is exactly this.
 #[test]

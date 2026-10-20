@@ -260,8 +260,8 @@ value_set! {
 value_set! {
     /// How children are distributed along the main axis — mirrors grid-ui `Justify`.
     ///
-    /// Missed by F003/P011/T019, which took its list from the widgets' own properties: this one is a
-    /// `Layout` field, so it never appeared there. Found while building the authoring layer on top.
+    /// Missed when the list was taken from the widgets' own properties: this one is a `Layout`
+    /// field, so it never appeared there. Found while building the authoring layer on top.
     pub enum ViewJustify {
         Start => "start",
         Center => "center",

@@ -13,11 +13,11 @@ impl AppState {
     ///
     /// One definition, used by every terminal key. They must agree: a search started for one
     /// terminal while its steps went to another would find nothing to step.
-    pub fn keyboard_terminal(&self) -> Option<crate::chrome::terminal::TerminalId> {
+    pub fn keyboard_terminal(&self) -> Option<crate::chrome::panes::terminal::TerminalId> {
         match self.input_mode {
             InputMode::Search { terminal } => return Some(terminal),
             InputMode::Selection => {
-                if let Some(crate::app::selection_model::SelectionOwner(terminal)) =
+                if let Some(crate::app::terminal_host::selection::SelectionOwner(terminal)) =
                     self.selection.owner()
                 {
                     return Some(terminal);
@@ -32,7 +32,7 @@ impl AppState {
     /// **The terminal holding the window's keyboard**, wherever it is placed — asked of the window,
     /// the one record of where the keyboard is. `None` when the keyboard is on something else, or
     /// on nothing.
-    pub fn window_keyboard_terminal(&self) -> Option<crate::chrome::terminal::TerminalId> {
+    pub fn window_keyboard_terminal(&self) -> Option<crate::chrome::panes::terminal::TerminalId> {
         let holder = heca_grid_ui::keyboard_holder(&self.window_root)?;
         self.terminals
             .values()

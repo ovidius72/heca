@@ -69,8 +69,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .chrome_state
         .workspaces
         .set_active_pane(state.focused_pane);
-    // **The dock cursor follows the active pane — when the active pane CHANGES** (user decision,
-    // 2026-07-29; the second half added 2026-07-30, F003/P086/T365).
+    // **The dock cursor follows the active pane — when the active pane CHANGES.**
     //
     // The cursor points at "where you are", so when a pane becomes active you are there — a `prefix+q`
     // pick that leaves the dock highlighting the pane you came *from* is just wrong. Only the active
@@ -81,15 +80,9 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // cursor is on but which is not the active one, and the outline jumped to the active row the
     // moment the rename applied. Nothing there moved focus — so nothing should have moved the cursor.
     //
-    // Both halves are written because both are read: the domain-typed `nav_selection` is what the
-    // tree re-derives its positional cursor from after a rebuild (`apply_nav_selection`, below), and
-    // the per-mount `container_cursor` is what the row outlines draw from (F003/P085/T354). The
-    // setters are change-guarded, so an unchanged selection costs nothing and emits nothing.
+    // Each placement's cursor key is the one record of where it stands; the setter is
+    // change-guarded, so an unchanged selection costs nothing and emits nothing.
     if let Some(selection) = cursor_follow(prev_focused, state.focused_pane) {
-        state
-            .chrome_state
-            .workspaces
-            .set_nav_selection(Some(selection));
         let key = crate::providers::workspaces::selection_key(selection);
         // Every seating of the component, since each keeps its own cursor.
         let mounts: Vec<String> = state
@@ -185,12 +178,11 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     }
 
     // Sync sidebar tree from session state.
-    state.chrome_state.workspaces.tree_mut().sync_from_session(
-        state.layout(),
-        state.last_visited_ws_idx,
-        state.focused_pane,
-        &state.last_visited_pane_per_ws,
-    );
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .sync_from_session(state.layout());
     // Re-project the canonical workspace-collapse set (chrome_state) onto the rebuilt
     // tree — sync_from_session defaults to expanded.
     let collapsed = state
@@ -202,23 +194,13 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .workspaces
         .tree_mut()
         .apply_ws_collapsed(&collapsed, None);
-    // Same for the canonical nav selection: the rebuild renumbers `flat_items`, so the
-    // positional cursor is re-derived from the selection (which names its row and so
-    // survives the rebuild) rather than being left pointing at whatever now sits at that
-    // index. Collapse changes `flat_items` too, so this runs after `apply_ws_collapsed`.
-    let selection = state.chrome_state.workspaces.nav_selection();
-    state
-        .chrome_state
-        .workspaces
-        .tree_mut()
-        .apply_nav_selection(selection);
 }
 
 /// Where a dock's cursor should move after a focus sync: to the newly active pane, and **only when
 /// the active pane actually changed**.
 ///
 /// Split out from [`sync_focus`] so the rule is testable at all — `sync_focus` needs an `AppState`,
-/// which cannot be constructed without a window (F003/P086/T365).
+/// which cannot be constructed without a window.
 fn cursor_follow(
     prev: Option<PaneId>,
     now: Option<PaneId>,

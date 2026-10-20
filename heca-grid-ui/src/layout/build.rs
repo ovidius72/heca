@@ -9,7 +9,7 @@ impl LayoutEngine {
     /// Recursively create taffy nodes for `c` and its children.
     ///
     /// `inherited_size` is the size variant flowing down from the parent (see
-    /// [`Style::size_explicit`](crate::style::Style::size_explicit)). The root starts at the
+    /// [`Layout::size_explicit`](crate::style::Layout::size_explicit)). The root starts at the
     /// default.
     pub(super) fn build(
         &mut self,
@@ -61,13 +61,12 @@ impl LayoutEngine {
         // region would be squashed to 100 and there would be nothing left to scroll. `clips_children`
         // is the framework's existing name for "my content may exceed me", and it is the one place
         // that knows it — asked here so any viewport widget, including one nobody has written yet,
-        // gets the rule without declaring it (F003/P082/T438).
+        // gets the rule without declaring it.
         let content_may_overflow = c.clips_children();
         // A percentage needs something to be a percentage **of**. Against a parent that hugs its
         // content there is no basis, and capping there is meaningless — worse, it resolves to
         // nothing and takes the child with it, which is what emptied the showcase's command
-        // palette: that widget positions its own rows in a pass with no definite width
-        // (F003/P082/T438).
+        // palette: that widget positions its own rows in a pass with no definite width.
         let caps_children = !matches!(c.base().style.layout.width, crate::style::Length::Auto);
         // **A child's grid placement is settled here, against the parent that holds it.**
         //
@@ -149,8 +148,7 @@ impl LayoutEngine {
                     // The floor is what has to go, and it goes here rather than in the four
                     // widgets, because none of them is doing anything wrong: they compose a row and
                     // let the engine place it. A widget that must keep a size still says so —
-                    // `min_width` set explicitly, or `flex_shrink(0.0)` — and this leaves it alone
-                    // (F003/P082/T481).
+                    // `min_width` set explicitly, or `flex_shrink(0.0)` — and this leaves it alone.
                     //
                     // Not inside a viewport: there, exceeding the box is the point, and the floor
                     // is what keeps a 600px column 600px wide in a 100px scroll region.
@@ -161,7 +159,7 @@ impl LayoutEngine {
                         // happens to carry a design width. `Alert` is 360px, `Toast` 320, `Input`
                         // 240: in a narrower panel they painted straight through its border and out
                         // the other side, at *every* window size, because an intrinsic width never
-                        // consults the box it was given (F003/P082/T438).
+                        // consults the box it was given.
                         s.max_width = s.max_width.or(Some(crate::style::Length::Percent(1.0)));
                     }
                 }

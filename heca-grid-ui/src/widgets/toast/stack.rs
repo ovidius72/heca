@@ -16,8 +16,8 @@
 //! viewport-sized box whose `justify`/`align` come from its corner, with its gap between the
 //! cards and its margin as padding. Nothing here measures, positions, hit-tests or routes.
 //!
-//! It kept them outside the tree until F003/P096/T486, in a private list positioned by hand,
-//! and three things followed from that — none of them fixable inside the card:
+//! It once kept them outside the tree, in a private list positioned by hand, and three things
+//! followed from that — none of them fixable inside the card:
 //!
 //! - **No pick letters, ever.** The picker walks the laid-out tree, so a card that was not in it
 //!   could not be lettered, and a notification's action was reachable by mouse alone.

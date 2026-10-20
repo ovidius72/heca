@@ -56,7 +56,7 @@ fn a_dynamic_action_lives_in_the_same_catalog_as_the_builtins() {
     assert!(catalog.find("nope.not.a.thing").is_none());
 }
 
-/// **Introspection says whose verb it is** (F003/P085/T358). Without an owner, `list-actions`
+/// **Introspection says whose verb it is**. Without an owner, `list-actions`
 /// returns one flat list in which a component's actions are indistinguishable from the app's,
 /// and a tool has no way to group or scope them.
 #[test]

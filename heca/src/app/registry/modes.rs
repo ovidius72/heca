@@ -267,7 +267,7 @@ mod tests {
     }
 
     /// The focus layer ships the keys the **widgets** answer, and is never enterable by a trigger
-    /// — it is entered by focusing a dock (F003/P085/T352).
+    /// — it is entered by focusing a dock.
     #[test]
     fn the_focus_layer_ships_the_scroll_keys_and_the_way_out() {
         let config = heca_config::theme::Config::default();

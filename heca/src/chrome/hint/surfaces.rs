@@ -10,9 +10,9 @@ use heca_grid_ui::Component;
 /// **Which retained tree a hint declaration was collected from** — and there are only two kinds
 /// left.
 ///
-/// ⚠️ **This is not a list of surfaces, and must not become one again** (F003/P097/T499). It once
+/// ⚠️ **This is not a list of surfaces, and must not become one again**. It once
 /// had a `Layer(LayerId)` arm beside `Chrome`, from the days when a layer owned a tree of its own.
-/// Since `T494` seated every surface in the window root, a layer *is* a child of the chrome's own
+/// Every surface is seated in the window root, so a layer *is* a child of the chrome's own
 /// tree: `Layer(id)` resolved to `chrome::surface_node(&state.window_root, id)`, a node the
 /// `Chrome` walk had already descended into. So the two arms named one tree, every registry-owned
 /// surface's widgets were collected **twice** — once at their path from the root, once at their
@@ -58,7 +58,7 @@ pub(crate) struct HintTarget {
     ///
     /// This is the durable half. A path is child indices, so a rebuilt tree does not merely
     /// invalidate it — it makes it name *something else*, which is worse. Everything that has to
-    /// find this widget again goes through the identity first (F003/P082/T438).
+    /// find this widget again goes through the identity first.
     pub(crate) identity: Option<String>,
 }
 
@@ -93,7 +93,7 @@ pub(crate) fn resolve<'a>(
     let root = hint_surface_root(state, &target.surface)?;
     let paths = match &target.identity {
         // **Every place it is shown**, not the first: one pane is listed in both sidebars, and both
-        // views wear its letter (F003/P082/T431 had this exact bug from an `.any()`).
+        // views wear its letter (an `.any()` here once gave only the first one).
         Some(id) => heca_grid_ui::hint_targets_of(root, id),
         None => vec![target.path.clone()],
     };
@@ -111,24 +111,26 @@ pub(crate) fn hint_surface_root<'a>(
         // floating, so the surface resolves to the pane's own node. One function, read by every
         // side — offering a letter, running the pick and collecting the targets all ask here, so
         // none of them can disagree about where a pane is.
-        HintSurface::Pane(pane_id) => crate::chrome::workspace::pane_node(state, *pane_id),
+        HintSurface::Pane(pane_id) => crate::chrome::panes::workspace::pane_node(state, *pane_id),
     }
 }
 
 /// The retained tree a [`HintSurface`] names, **mutably** — what running a pick needs, since a pick
 /// that is not an explicit declaration acts on the widget through its own handlers, and handlers are
-/// `FnMut` (F003/P082/T441).
+/// `FnMut`.
 fn hint_surface_root_mut<'a>(
     state: &'a mut crate::app_state::AppState,
     surface: &HintSurface,
 ) -> Option<&'a mut dyn heca_grid_ui::Component> {
     match surface {
         HintSurface::Window => Some(&mut state.window_root as &mut dyn heca_grid_ui::Component),
-        HintSurface::Pane(pane_id) => crate::chrome::workspace::pane_node_mut(state, *pane_id),
+        HintSurface::Pane(pane_id) => {
+            crate::chrome::panes::workspace::pane_node_mut(state, *pane_id)
+        }
     }
 }
 
-/// **What to call this target, so its letter can find it again next time** (F003/P082/T445).
+/// **What to call this target, so its letter can find it again next time**.
 ///
 /// A target is addressed by a **path**, which lives exactly as long as the frame it was collected
 /// in — that is what makes the picker need no registry, and also what makes a letter forget which
@@ -136,7 +138,7 @@ fn hint_surface_root_mut<'a>(
 /// derived from its name and scope where it has not (`heca_grid_ui::identity_of`).
 ///
 /// **A thing that declared a key is named by that key alone, wherever it is shown.** A pane in the
-/// scrolling area and the sidebar row for that pane are two views of one pane — T447's rule — so
+/// scrolling area and the sidebar row for that pane are two views of one pane, so
 /// they must get ONE letter, not one each. Prefixing by the tree gave them two, and two letters for
 /// one thing is also what exhausts the alphabet and forces uppercase.
 ///
@@ -147,7 +149,7 @@ fn hint_surface_root_mut<'a>(
 /// and is only unique within its own tree — two docks holding the same rows is exactly the case
 /// the scope exists for.
 ///
-/// ⚠️ **There is no per-layer prefix, and adding one back is a bug** (F003/P097/T499). While
+/// ⚠️ **There is no per-layer prefix, and adding one back is a bug**. While
 /// `Chrome` and `Layer` were separate arms, the same widget seen from the root and from its layer
 /// produced `chrome/pane:7` and `layer:LayerId(3)/pane:7` — two names for one thing, each drawing
 /// its own letter. Within one tree the answer is the identity itself, and every node declaring it
@@ -198,7 +200,7 @@ pub(crate) fn fire_hint(state: &mut crate::app_state::AppState, target: &HintTar
         .is_some_and(|root| heca_grid_ui::fire_hint(root, &path))
 }
 
-/// **Run an action a widget on screen declares**, if any does (F003/P082/T427).
+/// **Run an action a widget on screen declares**, if any does.
 ///
 /// Front to back, so a surface in front shadows one behind it with the same name — the nearest
 /// declaration wins, the same rule keys and menus already follow. Only **visible** trees are

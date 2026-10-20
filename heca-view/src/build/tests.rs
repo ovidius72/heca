@@ -20,8 +20,7 @@ fn a_built_tree_is_an_ordinary_view_node() {
     assert_eq!(built, by_hand);
 }
 
-/// Appearance goes through the builders too, including the struct-shaped half that only became
-/// authorable in F003/P011/T018.
+/// Appearance goes through the builders too, including the struct-shaped half.
 #[test]
 fn appearance_including_border_and_glow_is_authorable() {
     let node = Surface::new()

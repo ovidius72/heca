@@ -118,7 +118,7 @@ fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame_with(rect, 3.0, 8.0);
+        cx.bracket_frame_with(rect, theme.colors.accent, 3.0, 8.0);
     }
     let bright_corners = scene.iter().filter(|c| matches!(
         c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.colors.accent && b.width > 0.0)
@@ -133,7 +133,7 @@ fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame_with(rect, 0.0, 8.0);
+        cx.bracket_frame_with(rect, theme.colors.accent, 0.0, 8.0);
     }
     assert!(
         scene.is_empty(),

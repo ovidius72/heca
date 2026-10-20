@@ -76,9 +76,9 @@ pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
         return;
     };
     // Focusing a pane changes which pane is active and **nothing else**. It does not release
-    // container focus (F003/P086/T364).
+    // container focus.
     //
-    // F003/P085/T352 put the release here, reasoning that "the keyboard goes to the pane". That is
+    // The release once lived here, reasoning that "the keyboard goes to the pane". That is
     // not a property of a pane getting focus — it is a property of *what the user asked for*, and
     // this handler cannot tell the two apart. `Space` (hint) focuses a pane and deliberately keeps
     // the keyboard on the dock; the rule fired anyway and `j`/`k` stopped working.

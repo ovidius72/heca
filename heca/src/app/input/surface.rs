@@ -1,4 +1,4 @@
-//! Which surface holds the keyboard, and the key a surface claims (F003/P082/T428).
+//! Which surface holds the keyboard, and the key a surface claims.
 //!
 //! A key acts on the surface in front of you: a layer, a focused dock, or the panes. The rule that
 //! resolves one is a pure function of plain data, so it is tested without a window.
@@ -7,20 +7,20 @@ use crate::app_state::AppState;
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use std::collections::HashMap;
 
-/// The keymap consulted while a chrome container holds keyboard focus (F003/P085/T352).
+/// The keymap consulted while a chrome container holds keyboard focus.
 ///
-/// It is a mode **keymap**, not an [`InputMode`]: chrome focus already answers "where do the keys
-/// go", and a mode beside it would be a second fact that can disagree with the first. Like the
-/// `sidebar` map it has no trigger — you enter it by focusing a dock, not by pressing something.
+/// It is a mode **keymap**, not an [`InputMode`](crate::app_state::InputMode): chrome focus already answers
+/// "where do the keys go", and a mode beside it would be a second fact that can disagree with the first. Like
+/// the `sidebar` map it has no trigger — you enter it by focusing a dock, not by pressing something.
 ///
 /// What lives here is what the **widgets** answer — paging and edges for whatever scroll area the
 /// focused container nests — because a scroll region behaves identically wherever it is mounted and
 /// no component should have to declare that. What a *component* declares is a separate, per-kind
-/// layer (`[keys.<kind>]`, F003/P085/T355) resolved through this same seam.
+/// layer (`[keys.<kind>]`) resolved through this same seam.
 pub(crate) const FOCUS_LAYER: &str = "focus";
 
 /// The keymap consulted while a **layer** holds the keyboard — the exposé, a modal, a plugin's
-/// surface (F003/P082/T428).
+/// surface.
 ///
 /// The layer twin of [`FOCUS_LAYER`], and it exists for the same reason: what every layer answers
 /// alike does not belong in each layer's own declaration. Today that is `Escape` — the front-most
@@ -29,7 +29,7 @@ pub(crate) const FOCUS_LAYER: &str = "focus";
 pub(crate) const LAYER_FLOOR: &str = "layer";
 
 /// The surface name of the **scrolling area** — the panes, and what is in front when no layer and
-/// no dock hold the keyboard (F003/P082/T428).
+/// no dock hold the keyboard.
 ///
 /// It is a surface like any other, so it can be spoken about in `[[keys.surface]]` the way a dock
 /// and an overlay already are. It ships with **no bindings of its own**, and that absence is
@@ -37,8 +37,7 @@ pub(crate) const LAYER_FLOOR: &str = "layer";
 /// `Escape` gets to mean what it means inside vim.
 pub(crate) const PANES_SURFACE: &str = "heca.panes";
 
-/// Which surface holds the keyboard — the one question the key-resolution rule is asked
-/// (F003/P082/T428).
+/// Which surface holds the keyboard — the one question the key-resolution rule is asked.
 ///
 /// Reduced from [`AppState`] by [`focused_surface`] so the rule itself is a pure function of plain
 /// data and can be tested without a window. Ordered from the front backwards: a layer covers a
@@ -59,9 +58,9 @@ pub(crate) enum FocusedSurface {
 }
 
 /// The action a key resolves to in **one named surface's** binding layer — a dock's `kind()`, a
-/// placement id, or a layer's own name (F003/P082/T416).
+/// placement id, or a layer's own name.
 ///
-/// Split out of [`focus_layer_action`] so a layer and a dock consult the same map by the same rule.
+/// Split out so a layer and a dock consult the same map by the same rule.
 /// Whichever surface holds the keyboard, its `[[keys.surface]]` entry is the more specific thing
 /// the key is aimed at, and there is exactly one lookup for both.
 fn surface_layer_action(
@@ -164,7 +163,7 @@ pub(crate) fn surface_of_area(
     }
 }
 
-/// The action a key resolves to **in the surface that holds the keyboard** (F003/P082/T428).
+/// The action a key resolves to **in the surface that holds the keyboard**.
 ///
 /// One order, whatever kind of surface it is: the surface's **own** `[[keys.surface]]` declaration
 /// first — a dock's rows are the more specific thing a key is aimed at than anything host-wide —
@@ -174,7 +173,7 @@ pub(crate) fn surface_of_area(
 /// A dock is consulted at two names, placement before component: an entry that named an `id` was
 /// built into a layer under that mount id, already carrying the id-less base merged underneath it,
 /// so finding the mount means the user narrowed this seating and missing it means they spoke about
-/// the component as a whole. Two lookups, no merging at press time (F003/P086/T362).
+/// the component as a whole. Two lookups, no merging at press time.
 ///
 /// Both key routes come through here, deliberately: the direct one (an unprefixed key while a dock
 /// is focused) and the prefix fall-through (the global `normal` map missed). One declaration, both

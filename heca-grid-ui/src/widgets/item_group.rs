@@ -5,7 +5,7 @@
 //! [`Signal`] and (optionally) reports it via [`on_toggle`](ItemGroup::on_toggle);
 //! collapsed children leave layout via `style.hidden` (`display: none`), so they
 //! take no space. A container (e.g. a sidebar Dock) composes these around
-//! [`Item`](super::Item) rows.
+//! [`Item`] rows.
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;

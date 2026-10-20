@@ -10,7 +10,9 @@
 //! This is what fails. Same shape as `surface_drift.rs`: a rule that lives only in AGENTS.md is
 //! found out after it has been broken a dozen times.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use common::{all_sources, app_lines, is_test_file};
 
 /// The UI code the rule covers: whatever draws, lays out or styles. (`app/` and `handlers/` move
 /// state and carry no look.)
@@ -48,32 +50,12 @@ const BUILDERS: &[&str] = &[
     "Space::Px(",
 ];
 
+/// The source under [`UI_DIRS`], labelled the way [`all_sources`] labels it.
 fn ui_sources() -> Vec<(String, String)> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut out = Vec::new();
-    let mut stack: Vec<PathBuf> = UI_DIRS.iter().map(|d| root.join(d)).collect();
-    while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir).expect("readable") {
-            let path = entry.expect("entry").path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.extension().is_some_and(|e| e == "rs") {
-                let label = path
-                    .strip_prefix(&root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                out.push((label, std::fs::read_to_string(&path).expect("readable")));
-            }
-        }
-    }
-    out
-}
-
-/// Is this file test code? Tests lay out fixtures in pixels on purpose: they have no theme.
-fn is_test_file(label: &str) -> bool {
-    let name = label.rsplit('/').next().unwrap_or(label);
-    name.contains("test") || label.contains("/tests/")
+    all_sources()
+        .into_iter()
+        .filter(|(label, _)| UI_DIRS.iter().any(|dir| label.starts_with(&format!("{dir}/"))))
+        .collect()
 }
 
 /// Does `after` (the text right after a builder's opening parenthesis) start with a number?
@@ -82,18 +64,14 @@ fn starts_with_number(after: &str) -> bool {
     after.chars().next().is_some_and(|c| c.is_ascii_digit())
 }
 
-/// Every `file:line` that passes a number to a size builder. A file's tests are the part after its
-/// `#[cfg(test)]`, which this stops at.
+/// Every `file:line` that passes a number to a size builder.
 fn offenders() -> Vec<String> {
     let mut out = Vec::new();
     for (file, src) in ui_sources() {
         if is_test_file(&file) {
             continue;
         }
-        for (i, line) in src.lines().enumerate() {
-            if line.trim_start().starts_with("#[cfg(test)]") {
-                break;
-            }
+        for (i, line) in app_lines(&src) {
             if line.trim_start().starts_with("//") {
                 continue;
             }
@@ -133,8 +111,10 @@ fn ui_code_names_its_sizes_instead_of_writing_numbers() {
 /// Named numbers that are **not a look** — a limit on an input, say — and so have no theme or
 /// config key to move to. Each says why. A look constant does not belong here: it goes to the
 /// theme or the config, with today's value as its default.
-const NOT_A_LOOK: &[(&str, &str, &str)] = &[(
-    "chrome/terminal/input.rs",
+///
+/// Named by the constant, not by the file it sits in, so moving the file neither breaks this list
+/// nor excuses a different constant that lands in the same file.
+const NOT_A_LOOK: &[(&str, &str)] = &[(
     "MAX_UNITS",
     "a clamp on one wheel event's delta, so a bogus device value cannot fling the scrollback",
 )];
@@ -147,10 +127,7 @@ fn named_numbers() -> Vec<String> {
         if is_test_file(&file) {
             continue;
         }
-        for (i, line) in src.lines().enumerate() {
-            if line.trim_start().starts_with("#[cfg(test)]") {
-                break;
-            }
+        for (i, line) in app_lines(&src) {
             let t = line.trim_start();
             let Some(rest) = t
                 .strip_prefix("const ")
@@ -166,9 +143,7 @@ fn named_numbers() -> Vec<String> {
             let numeric =
                 ty.trim_start().starts_with("f32 =") || ty.trim_start().starts_with("f64 =");
             if numeric
-                && !NOT_A_LOOK
-                    .iter()
-                    .any(|(f, n, _)| *f == file && *n == name.trim())
+                && !NOT_A_LOOK.iter().any(|(n, _)| *n == name.trim())
             {
                 out.push(format!("heca/src/{file}:{}  {}", i + 1, t));
             }
@@ -196,13 +171,15 @@ fn ui_code_has_no_named_look_numbers() {
 #[test]
 fn the_not_a_look_list_names_only_what_still_exists() {
     let sources = ui_sources();
-    for (file, name, _) in NOT_A_LOOK {
-        let present = sources
+    for (name, _) in NOT_A_LOOK {
+        let found = sources
             .iter()
-            .any(|(f, src)| f == file && src.contains(&format!("const {name}: f32")));
+            .filter(|(_, src)| src.contains(&format!("const {name}: f32")))
+            .count();
         assert!(
-            present,
-            "{file} no longer has `const {name}`: remove it from NOT_A_LOOK"
+            found == 1,
+            "`const {name}` is in {found} files, not one: remove it from NOT_A_LOOK if it is gone, \
+             or rename one if two share the name"
         );
     }
 }

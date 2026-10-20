@@ -1,13 +1,13 @@
 //! [`IconButton`] — a compact, clickable **icon affordance** (toolbar / header
 //! button). It is the icon-only cousin of [`Button`](super::Button): a single
-//! [`Icon`](super::Icon) with the same interactive chrome — an animated hover
+//! [`Icon`] with the same interactive chrome — an animated hover
 //! tint + border (+ optional glow), a press [`Flash`], a keyboard focus ring, and
 //! `on_click` (mouse + Enter/Space). At rest it is just the icon (ghost); the
 //! tinted background fades in on hover, so a row of them stays quiet until used.
 //!
 //! Hugging its icon by default, it sizes to the glyph + padding; pin a square with
 //! [`size`](IconButton::size). The hover/press hue is theme-driven (the accent,
-//! or an override via [`tone`](IconButton::tone)), never baked in.
+//! or an override via [`accent`](crate::builders::ToneExt::accent)), never baked in.
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
@@ -51,7 +51,7 @@ impl IconButton {
         // **Its name, taken while the icon is still typed.** An icon-only control IS its glyph, so
         // this is what it is called — and without it `nav::identity_of` returns `None` and the
         // button has no identity at all: nothing about it can be remembered, not a hint letter, not
-        // a cursor position (F003/P082/T444). Only `Label`, `Badge`, `BadgeButton` and `Tag`
+        // a cursor position. Only `Label`, `Badge`, `BadgeButton` and `Tag`
         // supplied a name before, so every pane-header action, close button and rail cell was in
         // that state. Read here rather than from the child, because `Icon` must stay silent: the
         // accessible-name walk takes the first child that answers, so an `Icon` naming itself would

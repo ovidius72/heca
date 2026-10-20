@@ -1,23 +1,22 @@
-//! App-owned notification domain model (F009 — Notification System).
+//! App-owned notification domain model.
 //!
 //! This module defines what a notification *is* in the host application, above the
 //! presentation seam. The grid-ui widget [`ToastSpec`]
-//! (`heca_grid_ui::widgets::ToastSpec`) is a thin *projection* of these types —
-//! see [`project`](crate::notification::project) in the T193 task — and never
+//! (`heca_grid_ui::widgets::ToastSpec`) is a thin *projection* of these types and never
 //! owns queue, lifecycle, timers, or dedup. Those are host responsibilities.
 //!
-//! Phase P061 builds the model in dependency order:
-//! - T184 — [`NotificationSource`] (this task): a descriptive, extensible origin
-//!   for log, history and dedup, carrying no routing or policy semantics.
-//! - T185 — lifecycle semantics + defaults.
-//! - T188 — canonical [`AppNotification`] + [`NotificationId`].
-//! - T189 — actions as [`heca_view::Intent`].
-//! - T190 — severity + `ToastSeverity` mapping.
-//! - T191 — `NotificationSystem` config enum.
-//! - T192 — `NotificationDraft` builder.
-//! - T193 — `AppNotification` → `ToastSpec` projection.
+//! What is here:
+//! - [`NotificationSource`]: a descriptive, extensible origin for log, history and dedup,
+//!   carrying no routing or policy semantics.
+//! - lifecycle semantics + defaults.
+//! - the canonical [`AppNotification`] + [`NotificationId`].
+//! - actions as [`heca_view::Intent`].
+//! - severity + `ToastSeverity` mapping.
+//! - the `NotificationSystem` config enum.
+//! - the `NotificationDraft` builder.
+//! - the `AppNotification` → `ToastSpec` projection.
 //!
-//! # Design rules (phase contract)
+//! # Design rules
 //!
 //! - Notification actions store a [`heca_view::Intent`] (name-keyed + args),
 //!   never closures and never bare [`crate::input::WmAction`].
@@ -28,14 +27,11 @@
 //! - No field holds a mutable reference to workspace/pane *indices*, which can
 //!   become invalid after a notification is archived; opaque identifiers
 //!   (strings) are used instead.
-//
-// Staged phase: P061 (F009) adds the notification domain types one task at a
-// time (T184 source → T185 lifecycle → T188 canonical model → T189 actions →
-// T190 severity → T191 config → T192 draft → T193 projection). Until T188
-// wires `AppNotification` (which owns a `NotificationSource`), the public API
-// below has no consumer in the binary, so the whole module is dead-code-clean
-// by construction rather than unused. Drop this allow as the consumers land.
+
+// Parts of the notification API (the draft builder, the store's history and look-ups) are for
+// producers and views that are planned but not built; tests exercise them.
 #![allow(dead_code)]
+//
 
 use heca_grid_ui::widgets::{ToastSeverity, ToastSpec};
 use heca_view::Intent;
@@ -102,8 +98,8 @@ impl NotificationSourceKind {
 /// Used for log lines, notification history, and dedup keys. It carries **no**
 /// routing or [`ActionPolicy`](crate::app::interaction) semantics — a
 /// `Pane` source does not by itself make a notification pane-scoped or
-/// floating-only; policy is decided by the action the notification carries
-/// (T189), not by where it came from.
+/// floating-only; policy is decided by the action the notification carries,
+/// not by where it came from.
 ///
 /// The `id` is an opaque, caller-supplied string. For `Pane` it should be a
 /// stable pane handle (not an index); for `Provider`/`Plugin` the registered
@@ -187,8 +183,8 @@ impl Default for NotificationSource {
 ///
 /// This is the *configured* lifetime only — it carries no `Instant` and no
 /// `expires_at`. The host store computes `expires_at` lazily, at the moment it
-/// promotes a notification to visible (see T185 contract: "the timer starts
-/// when the store promotes the notification to visible, not at push time").
+/// promotes a notification to visible: the timer starts when the store promotes
+/// the notification to visible, not at push time.
 /// Keeping the instant out of this type lets the domain builder stay pure and
 /// deterministic in tests.
 ///
@@ -300,7 +296,7 @@ impl Default for NotificationLifecycle {
     }
 }
 
-// Notifications do NOT vary their lifetime by severity (F009/T503). Severity is tone,
+// Notifications do NOT vary their lifetime by severity. Severity is tone,
 // not importance: every notification auto-dismisses after `[settings.notification_system]
 // auto_dismiss_ms`, and a producer that needs one to persist (an error to acknowledge, a
 // long-running status) opts in explicitly with `NotificationDraft::sticky()`. An earlier
@@ -454,10 +450,9 @@ impl NotificationAction {
 
 /// A session-monotonic, never-reused notification identity.
 ///
-/// Allocated via [`NotificationId::next`] from a process-wide atomic counter, so
-/// ids strictly increase and are never recycled within a session — even after a
-/// notification is dismissed and archived. This is what the store reconciles on
-/// and what `on_dismiss`/`on_action` report back.
+/// Allocated by the store's own counter, so ids strictly increase and are never recycled within a session —
+/// even after a notification is dismissed and archived. This is what the store reconciles on and what
+/// `on_dismiss`/`on_action` report back.
 ///
 /// Deliberately **not** `Copy`-able across the host boundary in a way that lets
 /// two owners mutate the same id; it is `Clone` (cheap, just a `u64`) for
@@ -483,8 +478,8 @@ impl NotificationId {
     }
 
     /// Reconstruct an id supplied by a transport boundary (RPC, a widget event,
-    /// or a serialized Intent). Allocation remains store-owned through
-    /// [`next`](Self::next); this constructor never advances the counter.
+    /// or a serialized Intent). Allocation remains store-owned; this
+    /// constructor never advances the counter.
     pub const fn from_raw(v: u64) -> Self {
         Self(v)
     }
@@ -501,7 +496,7 @@ impl NotificationId {
 /// - `Queued` — accepted but not yet promoted to visible (e.g. over the
 ///   max-visible cap; waiting for a slot).
 /// - `Visible` — in the active toast stack; may carry an `expires_at` computed
-///   lazily by the store at promotion time (T185 contract).
+///   lazily by the store at promotion time.
 /// - `History` — dismissed/expired/archived; kept up to
 ///   `notification_history_limit` then dropped (FIFO).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -545,9 +540,7 @@ impl Default for NotificationPlacement {
 /// presentation concerns; this type only describes *what* the notification is.
 ///
 /// Each entry of [`actions`](Self::actions) carries a [`heca_view::Intent`] (a
-/// routing name plus args), never a closure — per the phase contract. T189
-/// formalizes the action helpers for notifications; T188 just carries the
-/// field. A card may show **several** actions (the widget supports it, T487);
+/// routing name plus args), never a closure. A card may show **several** actions (the widget supports it);
 /// `on_action(id, key)` resolves back to one of them by matching `key` against
 /// that action's `intent.action` name, which doubles as its identity — no
 /// separate key field, so two actions on one notification must name distinct
@@ -555,7 +548,7 @@ impl Default for NotificationPlacement {
 ///
 /// `Clone` is cheap-ish (title/body/actions are `Arc`-shared on clone in a
 /// follow-up; for now they are owned `String`s — clone only for projection, not
-/// on every frame). Targeted projection to [`ToastSpec`] (T193) reads the
+/// on every frame). Targeted projection to [`ToastSpec`] reads the
 /// fields it needs without cloning the whole store.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppNotification {
@@ -565,19 +558,19 @@ pub struct AppNotification {
     /// same key as the same logical event (updates in place rather than
     /// stacking). Constructed from the source + a caller-supplied suffix.
     pub dedup_key: Option<String>,
-    /// Descriptive provenance (log/history/dedup). T184.
+    /// Descriptive provenance (log/history/dedup).
     pub source: NotificationSource,
     pub severity: NotificationSeverity,
     pub title: String,
     pub body: Option<String>,
-    /// Lifecycle policy (lifetime + dismissibility). T185.
+    /// Lifecycle policy (lifetime + dismissibility).
     pub lifecycle: NotificationLifecycle,
     /// Inline actions, each dispatched as a name-keyed [`Intent`] with a label
     /// and post-dispatch dismiss policy. Empty means no action affordance.
     pub actions: Vec<NotificationAction>,
     /// When the notification was created. Injected by the caller (not `now()`)
-    /// so domain tests are deterministic — per T185's rule that instants stay
-    /// out of the builder when tests need them.
+    /// so domain tests are deterministic — instants stay out of the builder
+    /// when tests need them.
     pub created_at: Instant,
     /// Current placement bucket. Mutated by the store; not by the builder.
     placement: NotificationPlacement,
@@ -668,14 +661,14 @@ impl NotificationStoreUpdate {
 /// The store owns every mutable lifecycle concern: the monotonic id counter,
 /// canonical payloads, deduplication index, queued order, stable visible slots,
 /// and bounded history. Callers never move an [`AppNotification`] between
-/// placements directly; the transition helpers added by P056 tasks perform the
-/// matching storage/index updates together.
+/// placements directly; the transition helpers perform the matching
+/// storage/index updates together.
 ///
 /// # Invariants
 ///
 /// - An id appears in exactly one placement: `queued`, one entry of `visible`,
 ///   or `history`.
-/// - `visible` has exactly [`max_visible`](NotificationStore::max_visible) slots, and the occupied
+/// - `visible` has exactly `max_visible` slots, and the occupied
 ///   ones are packed at the front: a card leaving closes its gap by sliding the ones after it up,
 ///   and a promoted card joins at the end. The column therefore reads top to bottom in the order
 ///   the notifications were raised, with no blank between them.
@@ -931,7 +924,7 @@ impl NotificationStore {
     ///
     /// A visible entry leaves its slot and the cards after it slide up to close the gap; a pending
     /// entry is removed from the FIFO. Both are archived, then a pending entry joins at the end.
-    /// Dedup keys remain indexed while in history so T195 can reactivate the same ID.
+    /// Dedup keys remain indexed while in history so the same ID can be reactivated.
     pub fn dismiss(
         &mut self,
         notification_id: NotificationId,
@@ -1031,15 +1024,15 @@ impl NotificationStore {
     /// Accept a producer draft into the canonical store.
     ///
     /// A new id is allocated only when no known deduplication key resolves to
-    /// an existing notification. The full update/reprioritization policy for
-    /// that existing entry belongs to T195; until then this method preserves
-    /// its state and returns its canonical id without creating a duplicate.
+    /// an existing notification. The full update policy for that existing
+    /// entry is planned; until then this method preserves its state and returns its canonical id without
+    /// creating a duplicate.
     ///
     /// New entries first join the pending FIFO and are then promoted into every
     /// vacant stable slot, oldest first. Promotion starts an auto-dismiss timer
     /// from `now`; queued entries have no expiry.
     ///
-    /// **Not public API** (`pub(crate)`, F009/T493): the deterministic `(draft, now)`
+    /// **Not public API** (`pub(crate)`): the deterministic `(draft, now)`
     /// primitive lifecycle tests drive, never a door a producer or plugin author reaches.
     /// The only public raise path is [`Notification::send`], which funnels through
     /// [`raise`].
@@ -1290,10 +1283,10 @@ impl NotificationStore {
 
 impl AppNotification {
     /// Build a notification with the given identity + title. Prefer the
-    /// [`NotificationDraft`] builder (T192) for ergonomics; this is the canonical
+    /// [`NotificationDraft`] builder for ergonomics; this is the canonical
     /// constructor the builder reduces to.
     ///
-    /// `created_at` is taken explicitly so tests stay deterministic (T185 rule).
+    /// `created_at` is taken explicitly so tests stay deterministic.
     pub fn new(
         id: NotificationId,
         source: NotificationSource,
@@ -1334,7 +1327,7 @@ impl AppNotification {
     }
 
     /// Append an inline notification action. Callable more than once — a card
-    /// may show several actions (T487); each must name a distinct
+    /// may show several actions; each must name a distinct
     /// `intent.action`, which `on_action(id, key)` uses to find it again.
     pub fn action(mut self, action: NotificationAction) -> Self {
         self.actions.push(action);
@@ -1519,7 +1512,7 @@ impl NotificationDraft {
     }
 
     /// Append an inline name-keyed notification action. Callable more than
-    /// once — each must name a distinct `intent.action` (T487: a card may show
+    /// once — each must name a distinct `intent.action` (a card may show
     /// several actions).
     pub fn action(mut self, action: NotificationAction) -> Self {
         self.actions.push(action);
@@ -1541,10 +1534,10 @@ impl NotificationDraft {
     }
 }
 
-/// The host's notification runtime, kept on [`AppState`](crate::app_state::AppState) — T208.
+/// The host's notification runtime, kept on [`AppState`](crate::app_state::AppState).
 ///
 /// Owns the [`NotificationStore`] **and** the retained `Signal<Vec<ToastSpec>>` the mounted
-/// `ToastStack` layer reads (T203/T206), now as plain data (`visible_toasts`): the window owns the
+/// `ToastStack` layer reads, now as plain data (`visible_toasts`): the window owns the
 /// signal it draws from, and refreshes it when the server says the notifications changed. [`sync_visible_toasts`](Self::sync_visible_toasts) is
 /// the one place the signal is written, called after every store mutation that can change the
 /// visible set (push, dismiss, expire).
@@ -1620,7 +1613,7 @@ impl NotificationRuntime {
     }
 
     /// The one-time notice that `mode = "system"` has no OS backend yet and is falling back to
-    /// the in-app stack — F009/T222. `Some` the first time it is asked while the mode is
+    /// the in-app stack. `Some` the first time it is asked while the mode is
     /// `System`, `None` after (until the mode changes). `App`/`None` never produce it.
     pub(crate) fn system_fallback_notice(&mut self) -> Option<NotificationDraft> {
         if self.mode != heca_config::settings::NotificationSystem::System
@@ -1797,7 +1790,7 @@ impl NotificationRuntime {
     }
 }
 
-/// Register the `notify` action — the raise capability (F009/T491).
+/// Register the `notify` action — the raise capability.
 ///
 /// Dismissing a notification was always a real action (`notification_dismiss_one`/`_all`/`_last`,
 /// [`crate::input::WmAction`] variants); raising one was not — [`NotificationRuntime::push`] is a
@@ -1808,7 +1801,7 @@ impl NotificationRuntime {
 /// plugin can raise a notification" is the point.
 ///
 /// No action-button argument in v1 — deliberate scope, not a widget limitation: `ToastSpec`
-/// already supports several typed actions per card (T487), but there is no argument kind for a
+/// already supports several typed actions per card, but there is no argument kind for a
 /// nested `Intent`, so a remote caller has no typed way to say "and run this other action with
 /// these args" as one argument value. A Rust-internal caller that wants a button uses
 /// [`NotificationDraft::action`] directly with a real `Intent` it already holds — unaffected by
@@ -1832,7 +1825,7 @@ pub fn register_notify_action(
             name: "notify".into(),
             label: "Raise Notification".into(),
             description: "Raise an in-app toast notification. The only door RPC, a keybinding, \
-                or a plugin has to F009 — a Rust caller with a real Intent in hand uses \
+                or a plugin has to the notification system — a Rust caller with a real Intent in hand uses \
                 NotificationDraft::action directly instead."
                 .into(),
             category: crate::actions::ActionCategory::Chrome,
@@ -1918,7 +1911,7 @@ pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
     NOTIFICATION_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
 }
 
-/// The host accepting a draft into the store — F009/T493.
+/// The host accepting a draft into the store.
 ///
 /// **The one place `Instant::now()` is read for a raised notification, and the only non-test
 /// caller of the crate-private [`NotificationRuntime::push`].** Both raise doors converge here:
@@ -1931,7 +1924,7 @@ pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
 /// store's internal verb off the public surface.
 pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationDraft) {
     // The server drops it under `mode = "none"` and falls back to the in-app stack under `system`
-    // (F009/T222) — both are its rules, not the window's.
+    // — both are its rules, not the window's.
     state.ask_server(crate::server::ServerAction::Raise(draft));
 }
 
@@ -1952,8 +1945,8 @@ pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationD
 ///
 /// A closure-based one-off action (`.action(label, variant, || { .. })`, registering an
 /// anonymous name-keyed action behind the scenes) is deliberately **not yet built** — it needs
-/// its own careful design around when the anonymous action registers and unregisters (see
-/// F009/T493's notes: register only once the draft is actually accepted into the store, so a
+/// its own careful design around when the anonymous action registers and unregisters (it must
+/// register only once the draft is actually accepted into the store, so a
 /// deduped or rejected notification never leaks a handler). Only the named `NotificationAction`
 /// form exists today.
 #[derive(Debug, Clone, PartialEq)]
@@ -2791,7 +2784,7 @@ mod tests {
         assert!(set.contains(&b));
     }
 
-    // -- lifecycle (T185) -------------------------------------------------
+    // -- lifecycle -------------------------------------------------
 
     #[test]
     fn lifecycle_default_is_dismissible_auto_5s() {
@@ -2845,7 +2838,7 @@ mod tests {
 
     #[test]
     fn severity_does_not_change_the_default_lifetime() {
-        // F009/T503: severity is tone, not importance — every severity gets the same
+        // Severity is tone, not importance — every severity gets the same
         // auto-dismiss default; a producer opts into sticky explicitly.
         for severity in [
             NotificationSeverity::Info,
@@ -2878,7 +2871,7 @@ mod tests {
         assert_eq!(sback, sticky);
     }
 
-    // -- severity adapter (T190) ------------------------------------------
+    // -- severity adapter ------------------------------------------
 
     #[test]
     fn notification_severity_maps_totally_to_toast_severity() {
@@ -2913,7 +2906,7 @@ mod tests {
         }
     }
 
-    // -- notification actions (T189) --------------------------------------
+    // -- notification actions --------------------------------------
 
     #[test]
     fn notification_action_defaults_to_non_dismissive_retry() {
@@ -2959,7 +2952,7 @@ mod tests {
         );
     }
 
-    // -- the public raise door (T493) -----------------------------------
+    // -- the public raise door -----------------------------------
 
     #[test]
     fn notification_send_hands_the_exact_draft_through_the_installed_sink() {
@@ -3071,7 +3064,7 @@ mod tests {
 
     #[test]
     fn a_visible_actions_intent_is_resolvable_for_the_relay_to_re_dispatch() {
-        // F009/P057/T238: `on_action(id, key)` names the relay action; the relay looks the key
+        // `on_action(id, key)` names the relay action; the relay looks the key
         // back up here and re-dispatches the *real* Intent through the router (registry/policy
         // path), never a direct handler. This is the lookup that makes that possible.
         let now = Instant::now();
@@ -3194,7 +3187,7 @@ mod tests {
         assert!(runtime.system_fallback_notice().is_some());
     }
 
-    // -- ToastSpec projection (T193) --------------------------------------
+    // -- ToastSpec projection --------------------------------------
 
     #[test]
     fn queued_and_history_notifications_do_not_project() {
@@ -3258,7 +3251,7 @@ mod tests {
         assert_eq!(second_spec.severity, ToastSeverity::Success);
     }
 
-    // -- draft builder (T192) ---------------------------------------------
+    // -- draft builder ---------------------------------------------
 
     #[test]
     fn notification_draft_has_domain_defaults() {
@@ -3306,7 +3299,7 @@ mod tests {
         assert!(n.expires_at().is_none());
     }
 
-    // -- canonical model (T188) -------------------------------------------
+    // -- canonical model -------------------------------------------
 
     #[test]
     fn notification_ids_are_monotonic_and_unique() {
@@ -3429,7 +3422,7 @@ mod tests {
             "Done",
             Instant::now(),
         );
-        let proj = n.clone(); // cheap clone for projection (T193 will read fields)
+        let proj = n.clone(); // cheap clone for projection
         assert_eq!(proj.id, n.id);
         assert_eq!(proj.title, n.title);
         // original untouched by projection

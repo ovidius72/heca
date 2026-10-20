@@ -2,14 +2,26 @@
 
 use super::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SidebarItemState {
-    /// Currently active (focused workspace / pane).
-    Active,
-    /// Was visited previously this session (last focused before current).
-    Visited,
-    /// Not visited this session.
-    None,
+/// **The prefix key** — the chord that starts a command, and how long it waits for the next key.
+///
+/// Both come from `[keys]` together, so startup and a config reload take them in one step and
+/// neither can be left behind.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrefixKey {
+    /// The chord itself, e.g. `Ctrl+b`.
+    pub combo: crate::keymap::KeyCombo,
+    /// How long prefix mode waits for the next key before giving up.
+    pub timeout: std::time::Duration,
+}
+
+impl PrefixKey {
+    /// The prefix key `[keys]` describes.
+    pub fn from_config(keys: &heca_config::keys::KeysConfig) -> Self {
+        Self {
+            combo: crate::keymap::KeyCombo::parse(&keys.prefix),
+            timeout: std::time::Duration::from_millis(keys.prefix_timeout_ms),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -139,7 +151,7 @@ pub enum InputMode {
     },
     /// Follow-link letter pick: each visible terminal hyperlink across **all
     /// visible panes** is assigned a letter (a keycap drawn over the link's first
-    /// cell); the next keypress opens that link via [`WmAction::OpenLink`]. Entered
+    /// cell); the next keypress opens that link (`OpenLink`). Entered
     /// with `prefix+Shift+o`. Each candidate carries its own `pane_id`.
     FollowLink {
         candidates: Vec<LinkHint>,
@@ -150,14 +162,14 @@ pub enum InputMode {
     /// and the matches in the terminal that shows them, not here.
     ///
     /// The terminal is named only because pane trees are not part of the window's keyboard yet —
-    /// a bridge, and not something a plugin sees. When they join it, this goes (T453).
+    /// a bridge, and not something a plugin sees. When they join it, this goes.
     Search {
-        terminal: crate::chrome::terminal::TerminalId,
+        terminal: crate::chrome::panes::terminal::TerminalId,
     },
     /// Dock (chrome container) letter pick, entered with a bare `focus_dock`: every dock on
     /// screen gets a letter (a `KeyHint` keycap over its body) and the next keypress gives it
     /// chrome **keyboard focus**. Candidates carry a **container id**, so the pick is
-    /// position-agnostic — a dock is picked wherever it is seated (F003/P011/T020).
+    /// position-agnostic — a dock is picked wherever it is seated.
     DockPick {
         candidates: Vec<(char, crate::chrome::ContainerId)>,
     },
@@ -178,7 +190,7 @@ pub enum InputMode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkHint {
     pub label: char,
-    pub terminal: crate::chrome::terminal::TerminalId,
+    pub terminal: crate::chrome::panes::terminal::TerminalId,
     pub row: usize,
     pub start_col: usize,
     pub url: String,

@@ -80,7 +80,7 @@ impl Column {
     /// The floor is here because this is where the width is *decided*. It used to live only in the
     /// resize handlers — which stop **you** dragging a column to nothing, and stopped nothing else:
     /// a proportion of a squeezed working area resolved straight through zero, and every pane in the
-    /// column laid out with no width at all (F003/P082/T478). A column narrower than its floor
+    /// column laid out with no width at all. A column narrower than its floor
     /// overflows the viewport instead, which is what a scrolling column layout is for.
     ///
     /// One constant, not two: the zoomed branch floored at a private `50.0` while everything else

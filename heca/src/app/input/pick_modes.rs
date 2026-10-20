@@ -30,6 +30,15 @@ pub(super) fn handle_pane_select_mode(
                 pane_id: *target_id,
             },
         );
+        // **Picking a pane is going there** — so a dock holding the keyboard lets it go, and the
+        // picked pane's terminal takes it, wherever the pick started. The same two acts a sidebar
+        // row's click sends; focusing a pane alone deliberately leaves a dock's keyboard alone.
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::UnfocusDock,
+        );
     }
     state.input_mode = InputMode::Normal;
 }
@@ -273,7 +282,7 @@ pub(super) fn handle_column_pick_mode(
 ///
 /// It goes back out through the same `focus_dock` action, carrying the picked id — so the letter, an
 /// RPC call and a script all take one path, and the pick is only how a keyboard supplies an argument
-/// it cannot type (F003/P011/T020).
+/// it cannot type.
 pub(super) fn handle_dock_pick_mode(
     registry: &ActionRegistry,
     state: &mut AppState,

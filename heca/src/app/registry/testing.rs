@@ -6,7 +6,7 @@ use crate::app::conflicts::Conflicts;
 use crate::keymap::{BindingIndex, KeymapRegistry};
 use std::collections::HashMap;
 
-/// The per-component layers alone. `global_focus` comes back separately (F003/P086/T363) and
+/// The per-component layers alone. `global_focus` comes back separately and
 /// has its own tests; every other case here is about what a focused container answers to.
 pub(super) fn layers_only(
     config: &heca_config::theme::Config,

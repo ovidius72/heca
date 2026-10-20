@@ -25,7 +25,6 @@ pub mod registry;
 pub mod render;
 pub(crate) mod scene_flush;
 pub mod selection;
-pub mod selection_model;
 pub mod startup;
 pub mod terminal_host;
 pub mod terminal_metrics;

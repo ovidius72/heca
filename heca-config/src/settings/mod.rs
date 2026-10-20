@@ -131,11 +131,11 @@ declare_settings! {
         /// show just the custom name.
         #[serde(alias = "pane-renamed-add-process-name")]
         pub pane_renamed_add_process_name: bool,
-        /// **Deprecated: `[appearance.expose] show_cwd`.** Still read and mapped onto it, with a one-time
-        /// notice to move it. It once switched the sidebar's folder line too; that line is now decided by
-        /// `[appearance.sidebar] pane_lines` alone.
+        /// **Deprecated: `[appearance.expose] show_cwd`.** Still read while that key is not written,
+        /// with a one-time notice to move it. It once switched the sidebar's folder line too; that
+        /// line is now decided by `[appearance.sidebar] pane_lines` alone.
         #[serde(alias = "pane-show-cwd")]
-        pub pane_show_cwd: bool,
+        pub pane_show_cwd: Option<bool>,
         /// Host terminal scrollback capacity in rows.
         ///
         /// This is the number of history rows the terminal engine retains above the

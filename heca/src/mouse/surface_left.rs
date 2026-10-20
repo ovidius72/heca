@@ -2,7 +2,7 @@
 //!
 //! Hit testing, click routing and drop acceptance. Every entry point here is *told* what it landed
 //! on: finding a target under the pointer was the old machine's job, and the framework resolves it
-//! now (F003/P097/T496).
+//! now.
 
 use crate::app::interaction::InteractionSource;
 use crate::app_state::AppState;
@@ -37,7 +37,7 @@ pub(crate) fn accept_drop(
 ) {
     // **The target arrives resolved.** It used to be hunted for under the pointer here, at the
     // moment of release — which is how the drop came to be tied to one sidebar: the hunt was keyed
-    // to it. The gesture now says what it landed on (F003/P097/T496).
+    // to it. The gesture now says what it landed on.
     let Some((row, side)) = target else {
         // Off any card: the pane stays where it is.
         return;

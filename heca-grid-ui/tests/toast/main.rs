@@ -6,7 +6,7 @@ use heca_grid_ui::prelude::*;
 use heca_grid_ui::{DrawCommand, Event, LayoutEngine, Point, Size, Theme};
 
 /// Lay a stack out the way a host does: settle its arrivals, then let the **engine** place the
-/// cards. Nothing here positions anything — that is the whole point of F003/P096/T486.
+/// cards. Nothing here positions anything.
 fn settled_stack(stack: &mut heca_grid_ui::ToastStack, vp: Size) {
     use heca_grid_ui::Component;
     // Reconcile + play every arrival to its end.

@@ -36,7 +36,7 @@ fn window() -> Rectangle {
     Rectangle::new(Point::default(), Size::new(320.0, 900.0))
 }
 
-/// **A draw the clips have already thrown away is not an escape** (F003/P082/T481).
+/// **A draw the clips have already thrown away is not an escape**.
 ///
 /// A widget laid out past a scroll viewport's edge opens its own clip out there, entirely
 /// outside the viewport's. Intersecting the two gives nothing — nothing inside reaches the
@@ -208,8 +208,8 @@ fn nested_overlay_keeps_parent_segment_and_composites_on_top() {
     // dropdown, a `Tooltip`) paints inside its own `with_overlay` — nested. Two past bugs:
     // (1) the inner `end_overlay` dropped the parent's segment (scrim/panel vanished);
     // (2) segments rendered in RECORD order, so the parent's draws AFTER the nest (its
-    // action buttons) painted over the nested panel (the Select-in-Dialog show-through,
-    // T009 BUG A). Nesting must yield three segments with the nested one LAST (on top):
+    // action buttons) painted over the nested panel (the Select-in-Dialog show-through).
+    // Nesting must yield three segments with the nested one LAST (on top):
     // parent-before, parent-after, then the deeper child.
     let mut s = Scene::new();
     s.begin_overlay(); // outer (Dialog panel)

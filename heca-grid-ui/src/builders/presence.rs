@@ -77,6 +77,36 @@ pub trait PresenceExt: Component + Sized {
     }
 
 
+    /// **Pressing this widget gives the keyboard to its part named `area`** — HTML's
+    /// `<label for>`, for any container.
+    ///
+    /// ```ignore
+    /// Pane::new()
+    ///     .keyboard_to("content")
+    ///     .child(Grid::new().template_area(["header", "content"]).child([header, content]))
+    /// ```
+    ///
+    /// A press — or a pick, which is a press — anywhere on this widget that lands on nothing that
+    /// takes the keyboard itself gives it to **the first thing in that part that does**, whatever
+    /// the part holds: a terminal, an editor, a plugin's tree. Nothing inside has to know.
+    ///
+    /// **What it hands the keyboard to wears no pick letter of its own**: this widget's letter
+    /// already reaches it, so a second one would be two letters for one place. Anything else in the
+    /// part keeps its letter, and so does a handed-to widget that
+    /// [declared a pick of its own](crate::builders::HintExt::on_hint).
+    ///
+    /// A part with nothing that takes the keyboard — a picture — changes nothing, as a press on
+    /// it would. See [`Base::keyboard_to`](crate::Base::keyboard_to).
+    ///
+    /// **In a description** it is the `keyboard_to` prop, a text naming the area — the SDK's
+    /// `Style::keyboard_to("body")` — which `realize` writes onto the widget for every kind.
+    #[heca_grid_ui_macros::prop]
+    fn keyboard_to(mut self, area: impl Into<String>) -> Self {
+        self.base_mut().keyboard_to = Some(area.into());
+        self
+    }
+
+
     /// **Take this widget out of the layout entirely** — CSS `display: none`. Its neighbours close
     /// up, and it is neither painted nor Tab-focused.
     ///

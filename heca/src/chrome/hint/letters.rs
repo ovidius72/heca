@@ -21,12 +21,12 @@ use heca_grid_ui::Component;
 /// Two spellings, because the two pickers genuinely know different things: a pick mode reads the
 /// **session** and knows *which pane* (an identity that outlives any tree), while the universal
 /// picker walks the **trees** and knows *which widget in which surface* (a path that lives one
-/// frame). Collapsing them is F011/P094/T457's business.
+/// frame). Merging the two into one is planned work.
 ///
 /// What they must NOT have is two lifecycles. `prefix+/` used to hand its letters out once, in
 /// `handle_hint_pick`, and nothing ever revisited them — so every rule this module enforces every
 /// frame (a covered view loses its letter; a withdrawal reaches every view) simply did not apply to
-/// it. One enum here, one loop below, one lifecycle for both (F003/P082/T438).
+/// it. One enum here, one loop below, one lifecycle for both.
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) enum Offer {
     /// By the identity the widget declares — `pane:7`, `ws:0/col:1`, a dock's id.
@@ -181,7 +181,7 @@ fn offer_in_every_tree(
 
     // **A path names one target already**, so there is nothing to search — and the question asked
     // of it is about *itself*, not about its tree. Every surface seated beside the chrome is one
-    // tree now (F003/P097/T499), so asking whether its surface is visible would ask whether
+    // tree now, so asking whether its surface is visible would ask whether
     // anything in the window is visible, which is always true: a target behind a covering exposé
     // would have kept its letter.
     let key = match offer {
@@ -214,7 +214,7 @@ fn offer_in_every_tree(
     // **several views of one thing**. A pane and the sidebar row that names it both declare
     // `pane:7`, and both must wear the letter: the pane owns the identity, the row shows it. An
     // early return here is what made a pane listed in BOTH sidebars get lettered in only one of
-    // them (F003/P082, found by tracing `nodes naming it: chrome=2` while one letter went out).
+    // them (found by tracing `nodes naming it: chrome=2` while one letter went out).
     let mut offered = false;
     offered |= heca_grid_ui::offer_hint_by_key(&state.window_root, key, label.clone());
     // **A pane behind a sidebar loses its letter — the pane, not the pick.** Its keycap draws on
@@ -227,7 +227,7 @@ fn offer_in_every_tree(
     // none at all, because the answer arrived as a set of pane *ids* and only the shell loop knew
     // what to do with it.
     for pane_id in crate::app::terminal_host::laid_out_pane_ids(state) {
-        if let Some(pane) = crate::chrome::workspace::pane_node(state, pane_id) {
+        if let Some(pane) = crate::chrome::panes::workspace::pane_node(state, pane_id) {
             offered |=
                 heca_grid_ui::offer_hint_by_key(pane, key, for_view(HintSurface::Pane(pane_id)));
         }
@@ -238,10 +238,11 @@ fn offer_in_every_tree(
     //
     // This used to be two paths — each tiled pane offered through its own surface, and then every
     // column offered again with no visibility check, which put the withdrawn letter straight back
-    // One path now (F003/P082/T474's node, one door).
-    offered |= crate::chrome::workspace::offer_to_columns(state, key, label.clone(), |pane| {
-        visible.surfaces.contains(&HintSurface::Pane(pane))
-    });
+    // One path now (one door).
+    offered |=
+        crate::chrome::panes::workspace::offer_to_columns(state, key, label.clone(), |pane| {
+            visible.surfaces.contains(&HintSurface::Pane(pane))
+        });
     offered
 }
 
@@ -300,7 +301,7 @@ mod tests {
         assert_eq!(offered, [(true, 'a')]);
     }
 
-    /// **A view that cannot be seen has its letter taken BACK, not skipped** (F003/P082/T438).
+    /// **A view that cannot be seen has its letter taken BACK, not skipped**.
     ///
     /// The difference is invisible while a picker opens and closes over a still layout, and it is
     /// the whole bug: `continue` leaves the label the view already wears. Resizing the window grew

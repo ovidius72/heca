@@ -114,9 +114,9 @@
       "priority": 2,
       "shortName": "step-2-terminal-becomes-a-comp",
       "title": "Step 2 — Terminal becomes a component you can put anywhere",
-      "status": "in-progress",
-      "description": "STEP 2 of P094. Depends on step 1 (T448).\n\nAntonio, 2026-08-18: \"Terminal should be a reusable component similar to a DOM <terminal/> we can put\nin any container in the app, even in a plugin or in a sidebar if we want.\"\n\nTODAY: the terminal is not a component at all. heca/src/app/terminal_render.rs (1700 lines) renders\ncells into retained GPU textures (sync_retained_terminal_layers, render_terminal_layer_update) and\nblits them (blit_retained_terminal_layer), with stencil and scissor passes around it, plus\nqueue_terminal_dynamic_overlays. Its rect is computed by hand — stable_tiled_content_rect /\nstable_floating_content_rect / pane_content_rect.\n\nBUILD: heca/src/chrome/terminal/ per AGENTS.md § 0b-bis (mod.rs is the ONLY file that may touch\nAppState; model.rs is the session reduced to plain data; testing.rs holds fixtures). The `Terminal`\ncomponent:\n- is an ordinary Component: it gets bounds, focus, events, hit-testing, clipping and children from\n  the framework like every other widget;\n- paints ONE command — the externally-rendered surface from step 1 — and nothing else;\n- takes its rect FROM THE LAYOUT ENGINE. Delete the hand-computed content rects: the engine gives\n  the child its bounds, and the GPU pass reads them.\n\nPRESERVE EXACTLY: retained terminal textures, damage tracking, the row-range merge, and the fact\nthat terminal cell glyphs carry no glow. Cell glyphs are the hottest path in the app. Drawing them as\nordinary scene commands is REJECTED and must not be attempted.\n\nAlso moves here: the per-pane viewport widgets (state.pane_viewport_widgets — the \"N lines above\"\nBadgeButton and the scrollbar). They scroll the TERMINAL's scrollback, so they belong to the terminal,\nnot to the pane. Per the settled tree the terminal sits inside a ScrollRegion that the content owns.\n\nCHECK: the pointer/keyboard funnel. Today mouse routing for pane content is hand-written in\nheca/src/mouse.rs against pane rects; as a component it should receive events through the ordinary\ntree dispatch. Run something before claiming either way.\n\nVERIFICATION: Antonio drives. A terminal must look and behave identically — same text, same\nselection, same scrollback, no new lag — and must additionally render correctly when mounted\nsomewhere that is not a pane.",
-      "descriptionUpdatedAt": "2026-08-18T14:16:51.811Z",
+      "status": "done",
+      "description": "STEP 2 of P094. Depends on step 1 (T448).\n\nAntonio, 2026-08-18: \"Terminal should be a reusable component similar to a DOM <terminal/> we can put\nin any container in the app, even in a plugin or in a sidebar if we want.\"\n\nTODAY: the terminal is not a component at all. heca/src/app/terminal_render.rs (1700 lines) renders\ncells into retained GPU textures (sync_retained_terminal_layers, render_terminal_layer_update) and\nblits them (blit_retained_terminal_layer), with stencil and scissor passes around it, plus\nqueue_terminal_dynamic_overlays. Its rect is computed by hand — stable_tiled_content_rect /\nstable_floating_content_rect / pane_content_rect.\n\nBUILD: heca/src/chrome/terminal/ per AGENTS.md § 0b-bis (mod.rs is the ONLY file that may touch\nAppState; model.rs is the session reduced to plain data; testing.rs holds fixtures). The `Terminal`\ncomponent:\n- is an ordinary Component: it gets bounds, focus, events, hit-testing, clipping and children from\n  the framework like every other widget;\n- paints ONE command — the externally-rendered surface from step 1 — and nothing else;\n- takes its rect FROM THE LAYOUT ENGINE. Delete the hand-computed content rects: the engine gives\n  the child its bounds, and the GPU pass reads them.\n\nPRESERVE EXACTLY: retained terminal textures, damage tracking, the row-range merge, and the fact\nthat terminal cell glyphs carry no glow. Cell glyphs are the hottest path in the app. Drawing them as\nordinary scene commands is REJECTED and must not be attempted.\n\nAlso moves here: the per-pane viewport widgets (state.pane_viewport_widgets — the \"N lines above\"\nBadgeButton and the scrollbar). They scroll the TERMINAL's scrollback, so they belong to the terminal,\nnot to the pane. Per the settled tree the terminal sits inside a ScrollRegion that the content owns.\n\nCHECK: the pointer/keyboard funnel. Today mouse routing for pane content is hand-written in\nheca/src/mouse.rs against pane rects; as a component it should receive events through the ordinary\ntree dispatch. Run something before claiming either way.\n\nVERIFICATION: Antonio drives. A terminal must look and behave identically — same text, same\nselection, same scrollback, no new lag — and must additionally render correctly when mounted\nsomewhere that is not a pane.\n\n---\n**Completion summary:**\nDONE. Shipped across PR #272, #281, #282 (stream1) and PR #287 (closing work, branch chore/t449-close, commit on top of main 0c554c02; awaiting Antonio's merge).\n\nVerified item by item against main (2026-10-12): chip and scrollbar are the terminal's children (heca/src/chrome/terminal/viewport.rs, component.rs); the terminal owns clicks, moves, wheel, selection and Cmd-click links (mouse.rs no longer routes pane content); terminals draw in scene order (heca/src/app/scene_flush.rs, heca/src/app/frame/host_work.rs; frame times 5.2–7.3 ms before, 2.1–2.6 ms after, from the 2026-10-05 handoff); the header rebuilds alone (3b10f47a, plus a new test that the terminal node survives a header change); selection belongs to any terminal (b4e39c03); docked terminals get keys first (3aeb14d1); focus on press is the library's (heca-grid-ui/tests/focus.rs, focus_door.rs).\n\nBuilt in PR #287: font size is each terminal's own wherever placed — Ctrl/Cmd+wheel zooms the terminal under the pointer, the font keys zoom the terminal holding the keyboard (library key commands ZoomIn/ZoomOut/ZoomReset in heca-grid-ui/src/event.rs, answered by the terminal like Find); zoom kept per terminal in heca/src/app/terminal_zoom.rs; pane_terminal_font_zoom takes an optional terminal. Terminal component handle split to heca/src/chrome/terminal/component/handle.rs. 10 new tests, each break-checked. Workspace clippy clean, workspace tests 2330 passed / 0 failed. Antonio checked by eye in the extend_heca example: docked terminal types, scrolls, selects; font keys and Ctrl+wheel zoom only the terminal meant; header chip does not disturb the terminal.\n\nDecisions (Antonio, 2026-10-12): no ScrollRegion around the terminal — scrollback lives in the terminal program, so there is nothing for it to scroll; terminal title rename moves to P094(F011)/T450 (its C3).\n\nLeft for other tasks, found during the check: T455/T453 are about half on main (pane rects still computed by hand in pane_outer_frames; floats keep their own mask settings; InputMode::Search still carries a terminal id). Terminals in overlays cannot receive terminal actions while the overlay is up (policy decision). \"Which terminal is meant\" has three answers (selection, scroll keys, search); one rule built on the tree, like zoom, would remove the class. Edge-scroll speed constants hardcoded in mouse.rs; task ids in code comments in mouse.rs, chrome/pane/shell.rs, mouse/release.rs; chrome/pane/shell/tests.rs is 554 lines.",
+      "descriptionUpdatedAt": "2026-10-13T10:49:59.106Z",
       "notes": "PROBE RESULT (2026-09-30, Antonio ran a temporary debug build; log had 527 frames, one TILED pane, no floating pane was opened; probe removed). Tiled pane 2: pane_rect=(320,40,316,728), extra_top=0 (chrome::pane::header_height finds no entry: in_state_panes=false, the pane lives in state.columns). Host content_rect=(324,44,308,720) = 39 rows at cell height 18.48. The pane's OWN tree put the header at (324,44,308,33) and the content area at (324,77,308,687) = 37.2 rows. So for a tiled pane the terminal is sized for 720px and starts at y=44, i.e. its first ~1.8 rows sit UNDER the 33px header band (painted on top), and its row count is 1-2 too many; the mouse-to-cell mapping (terminal_host.rs:1195) uses the same inset 0, so it is off by the header height. Antonio's screenshot looked fine only because the shell prompt was not on row 0 (zsh leaves a blank line), so a full-screen program (vim, top) would lose its first ~2 rows. Consequence for slice 1: reading the content area's bounds fixes this by construction; the terminal will have 1-2 FEWER rows and its first line becomes visible, which Antonio should expect when checking. Floating panes NOT measured yet (they are built in state.panes, where header_height does find the header). Also in the log: config load warning 'unknown variant demo.add in appearance.pane.title_actions' from Antonio's own config (belongs to heca-f3's T520 work, not this task).",
       "statusLog": [
         {
@@ -158,6 +158,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress (resume checkpoint)",
           "description": "Resumed from branch feat/t449-terminal-component; heca/src/chrome/pane_header.rs build_pane_viewport_widgets / sync_pane_viewport_widgets; app/terminal_render.rs paint_pane_viewport.. Start slice 3 (checklist item 2), then slice 4 and the terminal-process slice, plus the checklist item about rebuilding only the header."
+        },
+        {
+          "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-006-in-progress-done",
+          "date": "2026-10-13T10:49:59.104Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE. Shipped across PR #272, #281, #282 (stream1) and PR #287 (closing work, branch chore/t449-close, commit on top of main 0c554c02; awaiting Antonio's merge).\n\nVerified item by item against main (2026-10-12): chip and scrollbar are the terminal's children (heca/src/chrome/terminal/viewport.rs, component.rs); the terminal owns clicks, moves, wheel, selection and Cmd-click links (mouse.rs no longer routes pane content); terminals draw in scene order (heca/src/app/scene_flush.rs, heca/src/app/frame/host_work.rs; frame times 5.2–7.3 ms before, 2.1–2.6 ms after, from the 2026-10-05 handoff); the header rebuilds alone (3b10f47a, plus a new test that the terminal node survives a header change); selection belongs to any terminal (b4e39c03); docked terminals get keys first (3aeb14d1); focus on press is the library's (heca-grid-ui/tests/focus.rs, focus_door.rs).\n\nBuilt in PR #287: font size is each terminal's own wherever placed — Ctrl/Cmd+wheel zooms the terminal under the pointer, the font keys zoom the terminal holding the keyboard (library key commands ZoomIn/ZoomOut/ZoomReset in heca-grid-ui/src/event.rs, answered by the terminal like Find); zoom kept per terminal in heca/src/app/terminal_zoom.rs; pane_terminal_font_zoom takes an optional terminal. Terminal component handle split to heca/src/chrome/terminal/component/handle.rs. 10 new tests, each break-checked. Workspace clippy clean, workspace tests 2330 passed / 0 failed. Antonio checked by eye in the extend_heca example: docked terminal types, scrolls, selects; font keys and Ctrl+wheel zoom only the terminal meant; header chip does not disturb the terminal.\n\nDecisions (Antonio, 2026-10-12): no ScrollRegion around the terminal — scrollback lives in the terminal program, so there is nothing for it to scroll; terminal title rename moves to P094(F011)/T450 (its C3).\n\nLeft for other tasks, found during the check: T455/T453 are about half on main (pane rects still computed by hand in pane_outer_frames; floats keep their own mask settings; InputMode::Search still carries a terminal id). Terminals in overlays cannot receive terminal actions while the overlay is up (policy decision). \"Which terminal is meant\" has three answers (selection, scroll keys, search); one rule built on the tree, like zoom, would remove the class. Edge-scroll speed constants hardcoded in mouse.rs; task ids in code comments in mouse.rs, chrome/pane/shell.rs, mouse/release.rs; chrome/pane/shell/tests.rs is 554 lines."
         }
       ],
       "decisions": [],
@@ -190,13 +198,13 @@
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-003-slice-3-the-n-lines-above-badge-and-the-scrollbar-move-into-the-terminal-inside-a-scrollregion",
           "number": 2,
           "title": "Slice 3 — the \"N lines above\" badge and the scrollbar move into the terminal, inside a ScrollRegion",
-          "checked": false
+          "checked": true
         },
         {
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-004-slice-4-selection-mouse-reporting-scrolling-and-the-font-size-keys-are-the-terminal-s-own-handlers-the-hand-written-pane-content-routing-in-mouse-is-deleted",
           "number": 3,
           "title": "Slice 4 — selection, mouse reporting, scrolling and the font-size keys are the terminal's own handlers; the hand-written pane-content routing in mouse/ is deleted",
-          "checked": false
+          "checked": true
         },
         {
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-005-extra-offer-hint-by-key-set-text-by-key-and-set-selected-by-key-heca-grid-ui-src-hint-offer-rs-each-carry-their-own-walk-to-a-keyed-node-fold-them-onto-one-shared-private-walk-in-hint-architect-s-instruction",
@@ -214,37 +222,49 @@
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-006-slice-2b-the-blit-loops-perform-the-surface-requests-in-scene-order-instead-of-the-hand-written-per-pane-loops-stencil-mask-draw-order-and-frost-make-this-large-ask-the-architect-whether-it-is-wanted-in-t449",
           "number": 6,
           "title": "Slice 2b — the blit loops perform the surface requests in scene order instead of the hand-written per-pane loops (stencil mask, draw order and frost make this large: ask the architect whether it is wanted in T449)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-007-rebuild-only-the-header-when-its-shape-changes-t531-s-fix-heca-src-chrome-column-stale-rs-rebuilds-the-whole-pane-child-now-that-the-terminal-lives-inside-the-pane-a-chip-appearing-must-not-rebuild-the-terminal-component-its-process-survives-by-design-but-the-component-should-not-be-rebuilt-each-time",
           "number": 7,
           "title": "Rebuild only the header when its shape changes — T531's fix (heca/src/chrome/column/stale.rs) rebuilds the whole pane child; now that the Terminal lives inside the pane, a chip appearing must not rebuild the terminal component (its process survives by design, but the component should not be rebuilt each time)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-008-slice-2b-terminals-draw-in-scene-order-blit-at-the-surface-command-s-place-so-a-terminal-works-in-an-overlay-or-dock-same-look-bounded-cost-frame-times-before-after-after-the-terminal-process-slice-before-t449-closes",
           "number": 8,
           "title": "Slice 2b — terminals draw in scene order (blit at the surface command's place), so a Terminal works in an overlay or dock; same look, bounded cost, frame times before/after. After the terminal-process slice, before T449 closes.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-009-done-slices-3-4-pr-272-chip-and-scrollbar-are-terminal-children-wheel-buttons-moves-are-the-terminal-s-own-typed-input-cell-at-cell-origin-answered-by-the-terminal-terminal-host-split-into-a-folder-controls-hovered-gone-differences-recorded-a-release-reaches-a-program-only-if-it-heard-the-press-a-plain-click-clears-a-host-selection-only-on-a-terminal-the-program-hears-input-one-loop-turn-later-in-order-an-open-modal-stops-ctrl-cmd-wheel-zoom-reaching-panes-behind-it-the-wheel-event-carries-delta-pixels-scrollregion-declines-ctrl-cmd-wheel-on-left-release-stays-a-window-level-rule-until-p084-f004-t536",
           "number": 9,
           "title": "Done (slices 3+4, PR #272): chip and scrollbar are Terminal children; wheel/buttons/moves are the terminal's own typed input; cell_at/cell_origin answered by the terminal; terminal_host split into a folder; controls_hovered gone. Differences recorded: a release reaches a program only if it heard the press; a plain click clears a host selection only on a terminal; the program hears input one loop turn later, in order; an open modal stops Ctrl/Cmd+wheel zoom reaching panes behind it; the wheel event carries delta_pixels; ScrollRegion declines Ctrl/Cmd+wheel. on_left_release stays a window-level rule until P084(F004)/T536.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-010-done-heca-core-terminalbackendoptions-cwd-shell-and-command-a-path-that-is-not-a-folder-is-a-failed-spawn-checked-before-the-fork-the-command-spawn-test-that-timed-out-now-takes-shell-test-guard-it-already-pinned-bin-sh-so-the-user-s-rc-was-never-the-cause-pty-contention-was",
           "number": 10,
           "title": "Done (heca-core): TerminalBackendOptions.cwd (shell and command; a path that is not a folder is a failed spawn, checked before the fork). The command-spawn test that timed out now takes shell_test_guard — it already pinned /bin/sh, so the user's rc was never the cause; PTY contention was.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-011-done-process-slice-branch-feat-t449-terminal-process-backendstore-is-the-one-owner-ids-issued-by-the-store-never-reused-ensure-is-the-one-door-kill-for-pane-kill-all-the-only-ends-seven-spawn-sites-collapsed-onto-start-shell-in-start-terminal-factories-private-view-of-takes-its-id-from-the-store-terminal-run-and-terminal-kill-are-real-actions-terminal-id-pane-id-focused-kill-close-the-pane-spawn-command-takes-cwd-shell-with-missing-folder-starts-in-home-one-warning-command-fails-a-terminal-reports-its-grid-only-on-change-terminalinput-resize-and-the-per-frame-host-sizing-is-gone-readers-move-from-pane-keyed-get-to-terminalid-as-part-of-p104",
           "number": 11,
           "title": "Done (process slice, branch feat/t449-terminal-process): BackendStore is the one owner (ids issued by the store, never reused; ensure() is the one door; kill_for_pane/kill_all the only ends); seven spawn sites collapsed onto start_shell_in/start_terminal; factories private; view_of takes its id from the store; terminal_run and terminal_kill are real actions (terminal id | pane_id | focused; kill = close the pane); spawn_command takes cwd (shell with missing folder starts in home + one warning, command fails); a Terminal reports its grid only on change (TerminalInput::Resize) and the per-frame host sizing is gone. Readers move from pane-keyed get to TerminalId as part of P104.",
-          "checked": false
+          "checked": true
+        },
+        {
+          "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-012-5b-5c-resume-from-planner-docs-handoff-p094-stream1-md-stream1-stopped-2026-10-02-at-520425f3-mouse-by-id-done-next-library-focus-on-press-keys-into-a-docked-terminal-title-rename-design-first",
+          "number": 12,
+          "title": "5b/5c: resume from .planner/docs/handoff-p094-stream1.md (stream1 stopped 2026-10-02 at 520425f3: mouse by id done; next = library focus-on-press, keys into a docked terminal, title rename design first)",
+          "checked": true
+        },
+        {
+          "id": "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d-check-013-5c-slice-a-selection-for-unowned-terminals-findings-unowned-terminals-are-drawn-by-app-scene-flush-rs-with-no-selection-overlay-at-all-selection-overlay-for-pane-in-terminal-render-rs-948-is-pane-keyed-so-slice-a-must-add-the-overlay-to-that-draw-path-as-well-as-selectionowner-terminal-terminalid-pane-only-match-sites-to-make-total-handlers-links-rs-79-handlers-selection-rs-124-app-state-rs-1093-terminal-host-input-rs-167-drag-follow-terminal-render-rs-1065-1085-terminal-host-selection-rs-begin-enter-move-search-rs-131-set-caret-slice-c-link-hints-is-committed-as-089824e4",
+          "number": 13,
+          "title": "5c slice A (selection for unowned terminals) — findings: unowned terminals are drawn by app/scene_flush.rs with NO selection overlay at all (selection_overlay_for_pane in terminal_render.rs:948 is pane-keyed), so slice A must add the overlay to that draw path as well as SelectionOwner::Terminal(TerminalId); Pane-only match sites to make total: handlers/links.rs:79, handlers/selection.rs:124, app_state.rs:1093, terminal_host/input.rs:167 (drag follow), terminal_render.rs:1065/1085, terminal_host/selection.rs (begin/enter/move, search.rs:131 set_caret). Slice C (link hints) is committed as 089824e4.",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -273,16 +293,16 @@
         }
       ],
       "startedAt": "2026-09-30T15:25:16.818Z",
-      "completedAt": "",
+      "completedAt": "2026-10-13T10:49:59.104Z",
       "createdAt": "2026-08-18T14:16:51.811Z",
-      "updatedAt": "2026-10-01T14:03:41.125Z",
+      "updatedAt": "2026-10-13T10:49:59.104Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
           "createdAt": "2026-10-01T08:25:45.862Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287"
+      "activeOwnerSession": ""
     },
     {
       "id": "d302653b-b6c1-4c78-b2d5-a75ebfaccda4",
@@ -311,6 +331,12 @@
           "number": 2,
           "title": "column/stale.rs drops and rebuilds a pane whose header changed shape; the header rebuilds itself inside the Terminal — delete stale.rs and the header_keys bookkeeping in column/mod.rs",
           "checked": false
+        },
+        {
+          "id": "d302653b-b6c1-4c78-b2d5-a75ebfaccda4-check-003-rename-a-terminal-s-title-moved-from-t449-nothing-shows-or-renames-a-terminal-s-title-today-docked-or-in-a-pane-design-it-with-the-header-this-task-moves-into-the-terminal-then-build-it-so-a-docked-terminal-can-be-renamed-like-a-pane",
+          "number": 3,
+          "title": "Rename a terminal's title (moved from T449): nothing shows or renames a terminal's title today, docked or in a pane. Design it with the header this task moves into the terminal, then build it so a docked terminal can be renamed like a pane.",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -320,7 +346,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-18T14:17:05.685Z",
-      "updatedAt": "2026-10-02T08:05:20.513Z",
+      "updatedAt": "2026-10-13T10:49:37.450Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -366,7 +392,14 @@
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "7f282428-8598-49de-b593-25e76bef37f8-check-001-the-pane-types-through-gridkey-the-same-encoder-as-a-placed-terminal-app-terminal-host-typing-rs-delete-winit-key-to-backend-event-and-winit-key-to-terminal-input",
+          "number": 1,
+          "title": "The pane types through GridKey → the same encoder as a placed terminal (app/terminal_host/typing.rs); delete winit_key_to_backend_event and winit_key_to_terminal_input",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
@@ -374,7 +407,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-18T14:17:52.280Z",
-      "updatedAt": "2026-08-18T14:46:35.085Z",
+      "updatedAt": "2026-10-02T19:23:42.476Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -399,6 +432,12 @@
           "number": 1,
           "title": "Last pane_outer_frames user: chrome/pane/mod.rs sync_panes takes tiled+floating pane rects from it — tiled and floating panes share one source of bounds; then delete pane_outer_frames and terminal_host/frames.rs's duplicate geometry once T450/T455 have removed their uses",
           "checked": false
+        },
+        {
+          "id": "89939913-c7bb-4e78-9ae7-f2092fbcda30-check-002-remove-inputmode-search-s-terminalid-when-pane-trees-join-the-window-keyboard",
+          "number": 2,
+          "title": "remove InputMode::Search's TerminalId when pane trees join the window keyboard",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -408,7 +447,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-18T14:18:01.461Z",
-      "updatedAt": "2026-10-01T19:59:13.024Z",
+      "updatedAt": "2026-10-03T10:39:58.594Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -529,9 +568,9 @@
     }
   ],
   "createdAt": "2026-08-18T14:16:10.152Z",
-  "updatedAt": "2026-10-02T08:05:20.513Z",
-  "handoff": "# T449: slices 1-4 and the terminal process are shipped; first a small refactor PR, then slice 2b\n\nCreated at: 2026-08-28\nUpdated at: 2026-10-01T19:56:10.022Z\nReason: Stream 1 context is high. The orchestrator asked for an audit of this stream's merged work against the standing rules; the exact list is the first step for the fresh session, ahead of 2b.\n\n## Current focus\n- Feature F011, phase P094, task **P094(F011)/T449 — Terminal becomes a component** (in progress). Repo ~/projects/heca, currently on `feat/t449-terminal-scene-order` (cut from #274's branch; holds only planner commits, no 2b code). Orchestrator = session `heca-pro-commercial-agents` (carries Antonio's authority for order, reviews, commits, PRs). `stream2` = P104 (server/client split); it stays out of backend_store.rs until #274 merges.\n- **FIRST STEP: the refactor PR below. SECOND: slice 2b** (start in `heca-grid-ui/src/scene.rs`).\n\n## Current and partial state\n**Merged:** #270 (slices 1+2), #272 (slices 3+4: chip + scrollbar are Terminal children; the terminal's own typed input — wheel, press, release, move; `cell_at`/`cell_origin`; `app/terminal_host/` folder: input, selection, hyperlinks, search, frames).\n**Open, approved, eye-checked: #274** (branch `feat/t449-terminal-process`): BackendStore is the one owner (store-issued TerminalId, `ensure` the one door, `kill_for_pane`/`kill_all`), `start_shell_in`/`start_terminal` (`app/terminal_process.rs`), `terminal_run`/`terminal_kill` actions, `spawn_command` cwd, heca-core `cwd`, `TerminalInput::Resize`. Ask the orchestrator whether it merged before rebasing.\n\n## Refactor PR (first step, from origin/main, small, separate from 2b)\nAntonio's standing rules, checked on every review: no fix at the call site (fix the widget/component), CSS-like layout (Flex/Grid/Surface), composition and reuse, NOTHING hard-coded, old badly written code you touch is refactored in the same work. Audit of stream 1's work found (do these, then report the list to the orchestrator):\n1. `app/terminal_host/input.rs:22` `DEFAULT_CELL_H = 14.0` is a hard-coded fallback for the trackpad pixel-to-notch conversion. Use the backend's cell height, else `state.terminal_cell_size` (already on AppState); delete the constant.\n2. The cell-grid fitting rule is written twice: `chrome/terminal/input.rs` `Grid::fit` (+ `MAX_UNITS 16_384`) and `app/backend_factory.rs` `estimate_terminal_grid`/`estimate_terminal_units` (+ `MAX_TERMINAL_UNITS`). One rule: make `estimate_terminal_grid` call `Grid::fit` (keep the 80x24 fallback only as the \"no cell size yet\" answer) and delete the second constant.\n3. `app/terminal_host/input.rs` (~580 lines) holds three jobs (button/move policy + HeardPresses, wheel policy, wheel math). Split the wheel into `wheel.rs`; keep each file under ~400 lines.\n4. `app/terminal_host/hyperlinks.rs` `collect_link_hints` still places by `pane_outer_frames` (hand-held pane rects) with literal visibility tests; ask each Terminal for its drawn state (`placed()`/`cell_origin`) instead, and drop `pane_outer_frames` from that use.\n5. `should_intercept_selection_gesture` (terminal_host/input.rs) hit-tests panes by hand (`mouse::hit_test_pane`) to answer \"is a shift-press on a terminal grid\"; the Terminal already knows (it reports the press). Move the question to the Terminal / its message so the host does not hit-test.\n6. Not yet audited (do a pass): `chrome/column/stale.rs`, the `render.rs` changes, `chrome/terminal/mod.rs`, `terminal_process.rs`, `backend_store.rs`. Look for literal numbers in layout code, host-side fixes of component behaviour, duplicated rules.\n7. Test-only literals (e.g. `pad.delta_y = 0.7` in `chrome/terminal/component.rs`) are fine; production code is what counts.\n8. `on_left_release` comment: in #274 it names P084(F004)/T536 (the pointer-capture task's current number). Check it still does after the rebase; the orchestrator's note said T534, which was the old number.\nRules for the PR: from origin/main; fmt/clippy/tests green (`./scripts/lint-changed.sh fmt|clippy|test`, one cargo at a time, never --workspace); break-check any new test; planner commit last and separate.\n\n## Slice 2b design (approved)\nGoal: a Terminal inside an overlay/dock works because terminals draw in scene order. Today terminals are blitted in `render.rs` Pass 2 and a per-float step BEFORE the scene holding their pane tree is flushed.\n1. New band in `Scene`, scoped to its own flush (NOT the global overlay segments): `PaintCx::outline` / `after_children`. `Scene` gets an `outline` vec and tracks open base clips; begin replays them into the band, end pops, so segments are self-contained; `base_layer()` returns base then outline. Inside an overlay or another outline it paints inline. Clip-stack scene test incl. nested panes; document in docs/widgets.md.\n2. `heca-grid-ui/src/widgets/pane.rs` `paint`: fill first, children, then border + glow via the outline band (split today's single `cx.rect(fill, border, glow)` into a fill-only rect and a transparent-fill border+glow rect).\n3. Host flush splits only at `HostDraw::Surface`: flush base so far, blit that terminal (reuse `blit_retained_terminal_layer`, `queue_terminal_dynamic_overlays`; stencil/scissor of the holding scene: tiled mask, float mask, none for dock/overlay), flush its cursor/selection overlays, continue. Scenes with no surfaces stay one pass. The two hand loops in render.rs go. Surface id -> pane via `state.terminals`/`Terminal::id()`.\n4. Debug-only env var (off by default, documented) logging `render_frame` CPU time averaged over 120 frames plus pass count; numbers at 1/4/8 panes (+1 floating) before and after; say GPU time is unmeasured.\n5. API gap: `Terminal::new(\"name\")` reachable from an outside crate, command seam from BuildCx (like T520's doors). Needs a name-keyed process in the store and a pending-request path (BuildCx has no AppState; drain like `drain_pending_menus`). `heca/examples/extend_heca.rs` adds a dock/layer holding a Terminal; Antonio checks 2b by running `cargo run -p heca --example extend_heca`. NO temporary debug action.\nEye check for 2b: active border/glow over terminals, neighbours, float over tiled, frost, transparency, rounded corners, exposé, then the example dock.\n\n## Preservation constraints\n- Do not change what Antonio sees; retained textures, damage tracking, row-range merge, no glow on cell glyphs; cell glyphs are never scene commands. Antonio checks by eye; green tests are not verification; break-check every new test.\n- Never call a terminal process a \"session\". `on_left_release` stays a window-level rule until P084(F004)/T536.\n- **.planner is shared live state written by all streams.** Before ANY git command that switches branches, rebases, stashes, cherry-picks or resets, commit `.planner` as its own `chore(planner)` commit; never stash or check out `.planner` files; on conflict take the snapshot (live) side; if a step would discard planner changes, stop and tell the orchestrator. `.planning/STATE.md` belongs to an old tool: leave it modified (use `git rebase --autostash`), never commit it.\n- PR rules: fetch, rebase onto origin/main, re-run gates, planner commit last and separate; report each slice to the orchestrator with exact eye-check steps (Antonio has no RPC client: use palette entries or `[[keys.bind]]` lines).\n\n## Supporting documents\n- None beyond AGENTS.md § 0-0d, docs/layout.md, docs/widgets.md.\n\n## Blockers and risks\n- #274 must merge before the 2b branch is rebased. 2b is the highest visual risk of the task (Pane paint and flush order). Non-pane terminals need a store path.\n\n## How to resume\n1. `git status`; commit `.planner` if dirty; `planner-task-start P094(F011)/T449`; ask the orchestrator if #274 merged.\n2. Branch from origin/main for the refactor PR (list above); report; then rebase/continue the 2b branch and build 2b in the order above.",
-  "handoffUpdatedAt": "2026-10-01T19:56:10.022Z",
+  "updatedAt": "2026-10-13T10:49:59.104Z",
+  "handoff": "# One tree and Splitter committed; FIRST find why a real press is lost (no pane focus, dead header buttons, no divider drag)\n\nCreated at: 2026-08-28\nUpdated at: 2026-10-06T13:25:16.882Z\nReason: stream1 ran out of context. The one-tree work (step 1, cursor, click/outline fix, Splitter) is committed, but Antonio's real-app run of 07d28af9 shows presses never reach the panes. A cold agent must find that first; the tests passed because they do not enter at the winit press path.\n\n## Current focus\n- Feature F011, phase P094. Tasks: P094(F011)/T449 done (earlier handoff), now **T455 + T453** (one tree, library hit test, Splitter, floats). Repo ~/projects/heca, branch `feat/t449-terminal-named`, head **07d28af9**, local only (never pushed), tree clean except `.planning/STATE.md` (leave it) and `.DS_Store`. Orchestrator = session `master` (uds:/tmp/cc-socks/80269.sock; carries Antonio's authority). Report and ask ONLY by SendMessage to master.\n\n[Extended detail continues in the linked planner document.]\n\n## Current and partial state\nCommitted (all local, stacked on origin/main e926891a): ea04e9cc props (set_props/on_props with &mut Base), 4a2b62fb pane owns its header (HeaderEnv, PaneHeader; no header maps), 57c4b5f9 pane_header split, a8b043c5 dock terminal drawn (Drawn funnel in flush_scene), 9a5a71bf layout children one way, b26d87ea window = workspace in the window tree (Workspace widget + gather + seat; clip_children, reconcile_keyed with versions, Pane::frosted + backdrop corner, scene cut at backdrops, one paint + one flush), 76bcd609 showcase fix, d049eb3b shell tests split, 372c0e7f cursor (Cursor enum, Base.cursor, cursor_at; host maps once in mouse.rs update_cursor), b7b31436 click fix (Base.pointer_passthrough + outline settled where a widget's subtree ends), **07d28af9 Splitter** (library widget, Spacing-step grab via `.grab()`, workspace places edges between columns/stacked panes after columns and before floats; host divider hit test, ResizeDrag, right-press fallback deleted).\n\n[Extended detail continues in the linked planner document.]\n\n## Preservation constraints\n- Library first: before writing, ask \"does it live in heca-grid-ui so no host or plugin must remember it?\"; builders on the widget, no ids/registries/host-private types (Rule Zero); DOM-shaped events (capture, target, bubble); a component owns its input wherever placed; CSS-like layout (Flex/Grid, shares, Spacing steps; NO pixel constants in library code — master checks); compose and reuse, one way to do a thing; no names/dates in comments; no unwrap/expect outside tests; files ~400 lines (agree a split over 600; tests in `<file>/tests.rs`); every test break-checked (sabotage, red, restore); clippy -D warnings; rust-best-practices.\n\n[Extended detail continues in the linked planner document.]\n\n## Supporting documents\n- .planner/docs/handoff-p094-2026-10-06T13-25-16-882Z.md — Full submitted handoff detail externalized automatically because the inline resume capsule exceeded 8000 characters. Read this document before resuming.\n\n## Blockers and risks\n- The real-path press regression above blocks everything else; nothing else may be committed until fixed and re-verified by running the app.\n- No window in agent tests: all four checks must be driven with the mouse tool plus temporary eprintln along the press path (remove after).\n- Frosted floats now round their corners in the shader (untested by eye); the Cmd-drag ghost and insert hint are still immediate-mode draws until S2.4; `InputMode::Search` still carries a TerminalId it ignores (T453 C2); `hit_test_pane` stays until S2.4 replaces interactive move; Splitter grab default Spacing::Xs may feel narrow (one-word change `.grab(Spacing::Sm)` in workspace build_edge).\n- heca-renderer `showcase` example fixed (focus ring driven by the tree) but not viewed.\n\n## How to resume\n1. `git status` (branch feat/t449-terminal-named, head 07d28af9); read AGENTS.md (section 0, 0b, 0c, Rule Zero), docs/layout.md, docs/widgets.md; `ListAgents`, tell master you are the new stream1.\n2. Build and run `cargo run -p heca --example extend_heca` (or the release app), get its pid, drive it with `mouse.swift`: click on a pane, click a header button, drag a column divider and a stacked-pane divider, move over a float covering a divider. Add temporary eprintln at: events.rs MouseInput entry, dispatch_surface_pointer result, mouse::on_mouse_input arms, chrome::deliver (hit_test path of window_root at the pointer), the pane's on_click, a header button's click, Splitter press. Find where the press stops. Fix at the source (library if it is a hit-test rule). Remove prints.\n3. Add a test that enters at the SAME function winit calls for a press (events.rs handler / mouse::on_mouse_input with a real `Event::Raw`), covering: press focuses a pane, header button acts, Splitter drag resizes, resize cursor not shown under a float. Break-check each.\n4. Re-run all four checks with the tool and prints, paste what you saw to master, leave uncommitted for review.\n5. Then in order: S2.3, LandingSlot (+ col_idx and the read-only insert query), S2.4 (pane as drag source with a start predicate, drop targets, ghost, edge scroll as an action), each uncommitted until master reviews; then T450/T456/T452/T454/T457 per the phase work map.",
+  "handoffUpdatedAt": "2026-10-06T13:25:16.882Z",
   "handoffAudit": {
     "version": 1,
     "entries": [
@@ -737,11 +776,18 @@
         }
       ]
     },
-    "supportingDocuments": [],
-    "contentHash": "1b1618fc25170794822f42ae19e6b56e8890f159fc02f51988c826d97c083457",
-    "contentLength": 7869,
-    "verifiedAt": "2026-10-01T19:56:10.022Z",
-    "resumeReadyAt": "2026-10-01T19:56:11.865Z",
+    "supportingDocuments": [
+      {
+        "path": ".planner/docs/handoff-p094-2026-10-06T13-25-16-882Z.md",
+        "description": "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+        "contentHash": "53125453ca741b43a8156c4b8fec3c5823ee533ad554c1d3dcaea6f497c4fc55",
+        "contentLength": 8949
+      }
+    ],
+    "contentHash": "d3db45c8ac4a4032b94a2c4cd730f34c8552fda7dca6e955fdc93cde7112d4c7",
+    "contentLength": 5292,
+    "verifiedAt": "2026-10-06T13:25:16.882Z",
+    "resumeReadyAt": "2026-10-06T13:25:24.962Z",
     "readBackSourceReviews": [
       {
         "source": "conversation",
@@ -765,7 +811,7 @@
       }
     ]
   },
-  "handoffReadAt": "2026-10-01T19:56:11.865Z",
+  "handoffReadAt": "2026-10-06T13:25:24.962Z",
   "handoffHistory": [],
   "statusLog": [
     {

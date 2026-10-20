@@ -1,5 +1,5 @@
 //! Per-wake monitor bridging backend-detected runtime → canonical `Pane.runtime`
-//! (Phase 1) and emitting `pane.exited{code}` (Phase 2).
+//! and emitting `pane.exited{code}`.
 //!
 //! Detection itself lives in `TerminalBackend::update` (event-driven on the
 //! terminal-output / reader-EOF wake, debounced — **no periodic timer** per
@@ -32,7 +32,7 @@ pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
             panes_to_close.push(pane);
         } else {
             // The pane stays with a dead process (its close-policy keeps it) — say so, so a
-            // frozen-looking shell is explained rather than mysterious. F009/P055/T221. A pane
+            // frozen-looking shell is explained rather than mysterious. A pane
             // that is about to close needs no toast. dedup per pane so a backend that flaps
             // does not spray.
             notify_pane_exited(pane, code);
@@ -43,7 +43,7 @@ pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
     }
 }
 
-/// The pane-exited notification producer — F009/P055/T221.
+/// The pane-exited notification producer.
 fn notify_pane_exited(pane: PaneId, code: Option<i32>) {
     use crate::notification::{Notification, NotificationAction};
     use heca_view::{Intent, PropValue};
@@ -74,23 +74,11 @@ fn sync_pane_runtime_from_backends_impl(
 ) -> Vec<(PaneId, Option<i32>)> {
     let mut exits: Vec<(PaneId, Option<i32>)> = Vec::new();
 
-    for ws in &mut session.workspaces {
-        for col in &mut ws.scrolling.columns {
-            for pane in &mut col.panes {
-                if let Some(backend) = backends.get_mut(pane.id) {
-                    pane.runtime = backend.runtime();
-                    if let Some(code) = backend.take_exit_code() {
-                        exits.push((pane.id, Some(code)));
-                    }
-                }
-            }
-        }
-        for float in &mut ws.floating_panes {
-            if let Some(backend) = backends.get_mut(float.pane.id) {
-                float.pane.runtime = backend.runtime();
-                if let Some(code) = backend.take_exit_code() {
-                    exits.push((float.pane.id, Some(code)));
-                }
+    for pane in session.workspaces.iter_mut().flat_map(|ws| ws.panes_mut()) {
+        if let Some(backend) = backends.get_mut(pane.id) {
+            pane.runtime = backend.runtime();
+            if let Some(code) = backend.take_exit_code() {
+                exits.push((pane.id, Some(code)));
             }
         }
     }

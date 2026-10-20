@@ -1,6 +1,6 @@
 //! **Things heca has already told the user, so it says each one once.**
 //!
-//! "`pro.show_notes` is available; add it to `title_actions` to show it" is worth saying the first
+//! "`demo.show_notes` is available; add it to `title_actions` to show it" is worth saying the first
 //! time it is true and never again after — repeating it on every start is noise, and saying it
 //! nowhere leaves the thing undiscoverable. So each message has a key, and the key is remembered.
 //!
@@ -69,13 +69,13 @@ mod tests {
     #[test]
     fn a_message_is_first_time_once_and_across_launches() {
         let path = temp("once");
-        assert!(first_time_in(&path, "pane_button:pro.show_notes"));
+        assert!(first_time_in(&path, "pane_button:demo.show_notes"));
         assert!(
-            !first_time_in(&path, "pane_button:pro.show_notes"),
+            !first_time_in(&path, "pane_button:demo.show_notes"),
             "already said"
         );
         assert!(
-            first_time_in(&path, "pane_button:pro.other"),
+            first_time_in(&path, "pane_button:demo.other"),
             "a different message"
         );
     }

@@ -146,7 +146,7 @@ fn rect_of(base: &Base, viewport: Size) -> Option<(String, Rectangle)> {
 
 /// **Draw the widget's tooltip, if it has one and the pointer has rested on it.**
 ///
-/// Called from [`paint_child`](crate::component::paint_child) for every widget in the tree, beside
+/// Called from [`paint_child`] for every widget in the tree, beside
 /// the hint letter and the drag feedback — the three things the framework draws *over* a widget
 /// from state it already keeps, so nothing opts in.
 pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
@@ -205,7 +205,7 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
 
 /// **Seconds until this widget's bubble appears**, or `None` when nothing is pending.
 ///
-/// Folded into [`Component::next_redraw`](crate::component::Component::next_redraw) so the host
+/// Folded into [`Component::next_redraw`] so the host
 /// sleeps through the delay and wakes exactly once, rather than redrawing every frame — and so a
 /// bubble appears on time even when the pointer has stopped moving and nothing else would.
 pub(crate) fn wake(base: &Base) -> Option<f32> {

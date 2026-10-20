@@ -47,7 +47,7 @@ fn widget_size_scales_text_only_widgets_via_font() {
     );
 }
 
-/// **A zoom scales the picture, not just the box** (F003/P082/T327 item 1).
+/// **A zoom scales the picture, not just the box**.
 ///
 /// An overview opens by zooming out from life size, which a fade cannot express. The trap is
 /// scaling geometry alone: a half-size card whose text is still 14px, whose radius is still 6px and

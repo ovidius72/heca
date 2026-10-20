@@ -29,7 +29,7 @@ fn a_positioned_toast_lands_at_the_named_corner() {
 ///
 /// A host mounts its layers however it likes — the showcase stacks them in a column, where
 /// viewport-sized siblings each get a share of the height. A stack that trusted its own box put
-/// "top right" two thirds of the way down the window (F003/P096/T486).
+/// "top right" two thirds of the way down the window.
 #[test]
 fn the_cards_anchor_to_the_window_corner_not_to_the_slot_a_parent_gave() {
     use heca_grid_ui::{Overlay, ToastPosition, ToastSpec, ToastStack};
@@ -88,7 +88,7 @@ fn the_cards_anchor_to_the_window_corner_not_to_the_slot_a_parent_gave() {
 }
 
 /// **One vocabulary places the stack at every one of its members**, including the centres a
-/// four-member corner enum could not say (F003/P096/T487).
+/// four-member corner enum could not say.
 #[test]
 fn the_position_vocabulary_places_the_stack_at_each_of_its_members() {
     use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};

@@ -16,7 +16,7 @@
 //! fails when a pointer branch is handled without it. It is a lint, not a unit test: what it
 //! guards against is *absence*, which behaviour tests cannot see.
 
-use std::path::{Path, PathBuf};
+mod common;
 
 /// The single funnel: it takes a pointer event and gives it to whatever tree owns the pointer.
 const FUNNEL: &str = "dispatch_surface_pointer";
@@ -37,8 +37,9 @@ const POINTER_BRANCHES: &[(&str, &str)] = &[
     ),
 ];
 
-fn events_rs() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app/events.rs")
+/// The event loop's source — the module, wherever its files sit.
+fn events_rs() -> String {
+    common::module_source("app/events")
 }
 
 /// The body of a `WindowEvent::X` match arm: from the branch head to the next one at the same
@@ -57,7 +58,7 @@ fn branch_body<'a>(src: &'a str, head: &str) -> Option<&'a str> {
 
 #[test]
 fn every_pointer_branch_goes_through_the_one_funnel() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let src = events_rs();
     for (head, why) in POINTER_BRANCHES {
         let body = branch_body(&src, head)
             .unwrap_or_else(|| panic!("{head} is gone — update this guard with the event loop"));
@@ -80,7 +81,7 @@ fn every_pointer_branch_goes_through_the_one_funnel() {
 /// names the branch and the call it must contain.
 #[test]
 fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let src = events_rs();
     for (head, call, why) in [
         (
             "WindowEvent::MouseInput",
@@ -110,7 +111,7 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
 /// `if button_state == ElementState::Pressed`.
 #[test]
 fn the_button_branch_feeds_the_funnel_both_press_and_release() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let src = events_rs();
     let body = branch_body(&src, "WindowEvent::MouseInput").expect("the button branch");
     let call = body.find(FUNNEL).unwrap_or_else(|| {
         panic!("the button branch does not call `{FUNNEL}` — see the other test")
@@ -140,8 +141,7 @@ fn the_button_branch_feeds_the_funnel_both_press_and_release() {
 /// A lint, like its neighbours above: what it guards is *absence*, which no behaviour test can see.
 #[test]
 fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
-    let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
-        .expect("read the mouse layer");
+    let src = common::module_source("mouse");
 
     // The two arms that hand a right button to the tree. Named by their match pattern, because the
     // point is that BOTH halves of the gesture are handed over — not that the file mentions the
@@ -182,8 +182,7 @@ fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
 /// suite was fully green with right-click menus completely dead.
 #[test]
 fn a_right_click_is_handed_to_the_window_tree() {
-    let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
-        .expect("read the mouse layer");
+    let src = common::module_source("mouse");
 
     for arm in [
         "(Btn::Right, Kind::Pressed) =>",
@@ -217,7 +216,7 @@ fn a_right_click_is_handed_to_the_window_tree() {
 /// invisible to every behaviour test, because a test hands the tree both halves itself.
 #[test]
 fn the_key_funnel_delivers_releases_and_not_only_presses() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let src = events_rs();
     let body = branch_body(&src, "WindowEvent::KeyboardInput")
         .expect("the key branch is still a `WindowEvent::KeyboardInput` arm");
 
@@ -254,7 +253,7 @@ fn the_key_funnel_delivers_releases_and_not_only_presses() {
 /// guards is *absence*, and the absence is of an event nobody sent.
 #[test]
 fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let src = events_rs();
     let body = branch_body(&src, "WindowEvent::CursorMoved").expect("the move branch");
 
     let call = body
@@ -296,7 +295,7 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
 /// symptom is a value that is merely stale rather than an event that is missing.
 #[test]
 fn the_tree_learns_the_modifiers_before_the_app_reacts_to_them() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let src = events_rs();
     let body = branch_body(&src, "WindowEvent::ModifiersChanged").expect("the modifiers branch");
 
     // The *call*, not the event name: `WindowEvent::ModifiersChanged` — the branch head itself —
@@ -332,10 +331,7 @@ fn the_tree_learns_the_modifiers_before_the_app_reacts_to_them() {
 /// a per-kind wrapper comes back — that is the shape to reject, before it has callers.
 #[test]
 fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
-    let src = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/chrome/dispatch.rs"),
-    )
-    .expect("read the chrome dispatch module");
+    let (_, src) = common::source_defining("pub(crate) fn deliver(");
 
     assert!(
         src.contains("pub(crate) fn deliver("),
@@ -385,13 +381,11 @@ fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
 /// a question is not asked.
 #[test]
 fn the_loop_wakes_for_what_the_widgets_are_waiting_for() {
-    let lifecycle = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app/lifecycle.rs");
-    let src = std::fs::read_to_string(&lifecycle).expect("lifecycle.rs is readable");
+    let src = common::module_source("app/lifecycle");
     assert!(
         src.contains("next_redraw_across_trees"),
         "the frame loop decides when to wake without asking the widgets what they are waiting for; \
-         a tooltip under a resting pointer will never be drawn ({})",
-        lifecycle.display()
+         a tooltip under a resting pointer will never be drawn (heca/src/app/lifecycle)",
     );
     assert!(
         src.contains("ControlFlow::WaitUntil"),

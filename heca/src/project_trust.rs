@@ -47,15 +47,12 @@ fn notice_for(project: &heca_config::loader::ProjectFile) -> Option<Notification
         return None;
     }
     let key = format!("project_trust:{}:{}", project.dir.display(), project.hash);
-    let mut trust = Intent::new(TRUST_PROJECT);
-    trust.args.insert(
-        FOLDER_ARG.to_string(),
-        heca_view::PropValue::Text(project.dir.display().to_string()),
-    );
-    trust.args.insert(
-        HASH_ARG.to_string(),
-        heca_view::PropValue::Text(project.hash.clone()),
-    );
+    let trust = Intent::new(TRUST_PROJECT)
+        .arg(
+            FOLDER_ARG,
+            heca_view::PropValue::Text(project.dir.display().to_string()),
+        )
+        .arg(HASH_ARG, heca_view::PropValue::Text(project.hash.clone()));
     Some(
         Notification::warning("Project settings not trusted")
             .body(format!(
@@ -73,8 +70,8 @@ fn notice_for(project: &heca_config::loader::ProjectFile) -> Option<Notification
 /// Name-keyed, the same door `notify` and a component's declared actions use.
 ///
 /// **It needs a person.** It is confirm-gated, so a script over RPC — or, later, an agent working
-/// inside a cloned repository — cannot trust that repository's file silently. When heca-pro arrives,
-/// agent roles are not to be allowed this action by default.
+/// inside a cloned repository — cannot trust that repository's file silently. Extensions must not
+/// grant this action to automated callers by default.
 pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut ActionCatalog) {
     let mut meta = ActionMeta::new(TRUST_PROJECT)
         .label("Trust project settings")
@@ -241,9 +238,8 @@ mod tests {
             crate::handlers::prompt_needed(&spec, false),
             "no user setting turns it off"
         );
-        let mut intent = Intent::new(TRUST_PROJECT);
-        intent.args.insert(
-            FOLDER_ARG.to_string(),
+        let intent = Intent::new(TRUST_PROJECT).arg(
+            FOLDER_ARG,
             heca_view::PropValue::Text("/work/repo".to_string()),
         );
         let body = crate::handlers::confirm_message(&spec, &intent);

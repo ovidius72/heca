@@ -1,13 +1,15 @@
-//! The **whole workspaces dock** (F006/P032/T429).
+//! The **whole workspaces dock**.
 //!
 //! It owns the workspaces' vertical order, this placement's scroll area and keyboard gate, and the
 //! menu a right-click finds when no row claims it. It owns **nothing** about what is inside a
-//! workspace — that is [`WorkspaceFrame`](super::workspace_frame::WorkspaceFrame).
+//! workspace — that is [`WorkspaceFrame`].
 //!
 //! This is the body of the `workspaces` container: what `build_body`, the provider's render seam,
 //! returns. It is reached only through that seam — nothing in `chrome` calls it.
 
 use super::seams::{DockRegistries, DockSeams};
+use crate::chrome::{BuildCx, WidgetModel};
+use crate::providers::ChromeCtx;
 use super::{MENU_CONTAINER, WorkspaceTree, container_items, workspace_frame::WorkspaceFrame};
 use heca_grid_ui::builders::{LayoutExt, MenuExt, Parent};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
@@ -33,7 +35,7 @@ impl DockView<'_> {
             col = col.child(WorkspaceFrame { workspace }.build(seams, reg));
         }
         // The container nests its **own** scroll area, so its workspace list scrolls inside the slot
-        // the region gave it (F003/P011/T021). A scroll area is just a container, so this is
+        // the region gave it. A scroll area is just a container, so this is
         // composition rather than a capability the shell has to hand down: the shell scrolls its dock
         // list, this scrolls its content, and nesting decides which one a wheel or a keyboard page
         // reaches — the innermost that can move on that axis wins, and the outer one only sees what
@@ -41,7 +43,7 @@ impl DockView<'_> {
         //
         // The offset is the CONTAINER's, so it survives the tree being rebuilt (a pane's git status
         // changing is enough to do that) and is untouched by the dock list scrolling around it.
-        // Vertical only. A second axis was tried (2026-07-29) and reverted: a `Label` clips rather than
+        // Vertical only. A second axis was tried and reverted: a `Label` clips rather than
         // overflowing, so nothing ever exceeds the width and the horizontal axis had nothing to scroll —
         // while the extra scrollbar sat in front of the rows and took the press that starts a drag.
         // Revisit when label truncation/wrapping is settled (AGENTS.md lists it as open).
@@ -64,7 +66,7 @@ impl DockView<'_> {
             // on the way down and bubbles out to this one. A menu on a row still wins, because bubbling
             // stops at the nearest declaration.
             .context_menu({
-                let menu = crate::chrome::context_menu::menu_from_items(
+                let menu = crate::chrome::surfaces::context_menu::menu_from_items(
                     "Workspaces",
                     "What you can do here",
                     MENU_CONTAINER,
@@ -76,6 +78,69 @@ impl DockView<'_> {
             })
             .child(col)
     }
+}
+
+/// The render seam: project the frame's workspace tree into the container body.
+///
+/// Every input is read off the two contexts — nothing is captured — so one plain `fn`
+/// serves as the build hook for every mount of this container.
+///
+/// Outside a render pass the context carries no tree/theme/emitter
+/// ([`ChromeCtx::new`] vs [`ChromeCtx::for_build`]), so there is nothing to project:
+/// the body is an empty column. That is a real state — a host may build a
+/// contribution just to read its metadata — not an error, so it does not panic.
+pub(super) fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
+    let (Some(theme), Some(emit)) = (ctx.theme(), ctx.emit_intent()) else {
+        return Box::new(Flex::column());
+    };
+    let state = ctx.state();
+    // **This component's model and catalog come from its own state** — the shared
+    // context carries only what is true for any component. The borrow is a `RefCell`: it lasts for
+    // the projection, which reads the store but never writes back into it.
+    let tree = state.workspaces().tree();
+    let programs = state.workspaces().programs();
+    // The three registries are borrowed as *disjoint* fields, which is exactly why they
+    // are plain fields on `BuildCx` and not accessor methods: `bx.signals()` three times
+    // in one call would be three overlapping `&mut *bx` borrows.
+    // This placement's own scroll offset, keyed by mount id: place the container twice and each
+    // keeps its own position, while the workspaces it shows come from the shared store either way.
+    let scroll = state.container_scroll(bx.container_id());
+    let ws_state = state.workspaces();
+    // Read the id out before the registries are taken: `container_id()` borrows `bx`, and the two
+    // registries below borrow it mutably.
+    let mount = bx.container_id().to_string();
+    // **The only file that touches `ChromeCtx`.** Everything below this line takes plain data plus
+    // the seams it binds, so every component of this dock can be built in a test without a window
+    // (AGENTS.md § 0b-bis step 4).
+    let seams = DockSeams {
+        // This placement's id — the rows' cursor signals are keyed by it, so two seatings of one
+        // container light different rows.
+        mount: &mount,
+        theme,
+        programs: &programs,
+        emit,
+        catalog: ctx.action_catalog().expect("a render pass has the catalog"),
+        ws_state,
+        panes: state.panes(),
+        // Read once here rather than by each row: a workspace, a column and a card all ask the
+        // same question of it, and asking the store three hundred times is three hundred chances
+        // to ask it differently.
+        active_pane: ws_state.active_pane(),
+    };
+    // The three registries are borrowed as *disjoint* fields, which is exactly why they
+    // are plain fields on `BuildCx` and not accessor methods: `bx.signals()` twice
+    // in one call would be two overlapping `&mut *bx` borrows.
+    let mut reg = DockRegistries {
+        signals: bx.signals,
+        drag: bx.drag,
+    };
+    Box::new(
+        DockView {
+            tree: &tree,
+            scroll,
+        }
+        .build(&seams, &mut reg),
+    )
 }
 
 #[cfg(test)]

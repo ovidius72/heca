@@ -1,10 +1,10 @@
-//! The host side of a component's declared actions (F003/P085/T353).
+//! The host side of a component's declared actions.
 //!
-//! A component says *what* it can do ([`Provider::actions`]) and *how* to do it
-//! ([`Provider::perform`]). Everything between those two — putting the declaration into the one
-//! action catalog, deciding which placement a call is aimed at, keeping `&mut AppState` out of the
-//! component's hands, and applying what it asks for afterwards — is written **once**, here, for
-//! every component that will ever exist.
+//! A component says *what* it can do ([`Provider::actions`](super::Provider::actions)) and *how* to do it
+//! ([`Provider::perform`](super::Provider::perform)). Everything between those two — putting the declaration
+//! into the one action catalog, deciding which placement a call is aimed at, keeping `&mut AppState` out of
+//! the component's hands, and applying what it asks for afterwards — is written **once**, here, for every
+//! component that will ever exist.
 //!
 //! That is the whole point of the shape: a component author writes a `kind()`, some `ActionMeta`s
 //! and a short `perform`, and gets the palette entry, the icon and label, `describe-action`, RPC,
@@ -19,7 +19,6 @@ use crate::app_state::AppState;
 use crate::chrome::Intent;
 use crate::keymap::KeymapRegistry;
 use crate::providers::ProviderCx;
-use heca_grid_ui::reactive::SignalGet;
 
 /// Put every mounted component's declared actions into the registry and the catalog.
 ///
@@ -45,7 +44,7 @@ pub(crate) fn register_provider_actions(
             let id = meta.name.clone();
             // Who declared it is the **host's** answer, not the component's: stamped here from the
             // provider actually being registered, so an author can neither claim another
-            // component's name nor forget to say their own (F003/P085/T358).
+            // component's name nor forget to say their own.
             meta.owner = Some(kind.clone());
             match register_dynamic(
                 registry,
@@ -72,7 +71,7 @@ pub(crate) fn register_provider_actions(
     }
 }
 
-/// Bind every mounted component's **runtime-registered** keys into its layer (F003/P086/T366).
+/// Bind every mounted component's **runtime-registered** keys into its layer.
 ///
 /// This is the **plugin** path, and only the plugin path. A component shipped with heca writes its
 /// keys in `keybindings.default.toml` under `[[keys.component]]`, where the user can see them next
@@ -102,70 +101,6 @@ pub(crate) fn bind_provider_keybindings(
     }
 }
 
-/// Copy `mount`'s cursor onto every **other seating of the same component** (F003/P086/T365).
-///
-/// The host gives each placement its own `container_cursor`, which is right for a component that
-/// keeps one cursor per placement. The workspaces component does not: it has **one** tree with one
-/// cursor, so two views of it must light the same row — a click or a `j` in the left dock leaving
-/// the right one pointing somewhere else is the model disagreeing with itself.
-///
-/// Done here, after the component has written its own, rather than by teaching the render to read a
-/// shared cursor: the projection is deliberately keyed by `(mount, key)` so that a component
-/// which *does* keep per-placement cursors still gets them, and that must not be special-cased for
-/// one component.
-///
-/// A component keeping genuinely independent cursors per placement is a later change to its own
-/// model; this mirrors what is true today.
-fn mirror_cursor_to_siblings(state: &mut AppState, mount: &str) {
-    let Some(kind) = state
-        .chrome_host
-        .provider(mount)
-        .map(|p| p.kind().to_string())
-    else {
-        return;
-    };
-    let cursor = state.chrome_state.container_cursor(mount).get_untracked();
-    let siblings: Vec<String> = state
-        .chrome_host
-        .mounted_providers()
-        .filter(|p| p.kind() == kind && p.id() != mount)
-        .map(|p| p.id().to_string())
-        .collect();
-    for sibling in siblings {
-        state
-            .chrome_state
-            .set_container_cursor(&sibling, cursor.clone());
-    }
-}
-
-/// Move a placement's cursor to `key` — the host half of a click landing on a row
-/// (F003/P086/T365).
-///
-/// Two writes, because there are two readers: the **generic** per-mount cursor is what the row
-/// outlines draw from and what any host or plugin can read, and the component's own model is what
-/// `j`/`k` step through. Setting only the first would move the highlight and leave the next keypress
-/// continuing from the row the user had *before* they clicked.
-///
-/// Shaped like [`route_to_owner`] for the same reason: the provider lives inside
-/// `state.chrome_host`, so no `&mut AppState` may be alive while it runs.
-pub(crate) fn move_provider_cursor(state: &mut AppState, mount: &str, key: &str) {
-    state
-        .chrome_state
-        .set_container_cursor(mount, Some(key.to_string()));
-    let mut cx = ProviderCx::new(mount, state.chrome_state.clone());
-    let queued = match state.chrome_host.provider(mount) {
-        Some(provider) => {
-            provider.cursor_moved(key, &mut cx);
-            cx.drain()
-        }
-        None => return,
-    };
-    mirror_cursor_to_siblings(state, mount);
-    // Same door as `route_to_owner`'s: whatever the component asks for on the way is policy-routed
-    // and confirm-gated identically.
-    emit_queued(state, queued);
-}
-
 /// Send what a component asked for out the door a click or a key uses — policy-routed and
 /// confirm-gated. The one place a [`ProviderCx`]'s queue is applied, whether the call came through
 /// a mounted component ([`route_to_owner`]) or a free action (an extension's `.action(..)`).
@@ -178,16 +113,6 @@ pub(crate) fn emit_queued(state: &AppState, queued: Vec<Intent>) {
                 intent: crate::app::interaction::InteractionIntent::View(queued_intent),
             });
     }
-}
-
-/// `(mount, kind, declared actions)` for every mounted component that declares any.
-fn declarations(state: &AppState) -> Vec<(String, String, Vec<crate::actions::ActionMeta>)> {
-    state
-        .chrome_host
-        .mounted_providers()
-        .map(|p| (p.id().to_string(), p.kind().to_string(), p.actions()))
-        .filter(|(_, _, metas)| !metas.is_empty())
-        .collect()
 }
 
 /// Retire everything a mount declared — its actions leave the catalog and the registry with it.
@@ -215,6 +140,16 @@ pub(crate) fn retire_provider_actions(
     for handle in handles {
         unregister_dynamic(registry, &mut state.action_catalog, &handle.0);
     }
+}
+
+/// `(mount, kind, declared actions)` for every mounted component that declares any.
+fn declarations(state: &AppState) -> Vec<(String, String, Vec<crate::actions::ActionMeta>)> {
+    state
+        .chrome_host
+        .mounted_providers()
+        .map(|p| (p.id().to_string(), p.kind().to_string(), p.actions()))
+        .filter(|(_, _, metas)| !metas.is_empty())
+        .collect()
 }
 
 /// The bridge every declared action is dispatched through.
@@ -272,9 +207,6 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
             return;
         }
     };
-    // `perform` commonly moves the component's own cursor (`publish_cursor`), so the seatings are
-    // brought back into step here too — one rule, both writers.
-    mirror_cursor_to_siblings(state, &mount);
     // What the component asked for goes out the same door its widgets' clicks do, so it is
     // policy-routed and confirm-gated identically — a component cannot reach past the gate by
     // asking for something from inside `perform`.
@@ -307,7 +239,7 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
 /// action: the dispatch path stripped it as an address, `focus_dock` was left with no dock named,
 /// and a hint that meant "focus THIS seat" opened the **dock picker** instead — a second set of
 /// letters over every dock, and picking one toggled the focus away again. An action argument is a
-/// plain identifier, so a leading `@` cannot be one (F004/P084/T409 follow-up).
+/// plain identifier, so a leading `@` cannot be one.
 pub(crate) const SEAT_ARG: &str = "@seat";
 
 /// Which **placement** owns `action` when the call did not say — written down once, rather than
@@ -325,7 +257,7 @@ pub(crate) const SEAT_ARG: &str = "@seat";
 /// call declines rather than guessing.
 ///
 /// `pub(crate)` because it is the rule for **which placement a call means**, wherever the call comes
-/// from — the `perform` bridge below, a palette entry, an RPC line without `--dock` (F003/P085/T358).
+/// from — the `perform` bridge below, a palette entry, an RPC line without `--dock`.
 /// Written once so those three cannot answer it differently.
 pub(crate) fn owning_mount(state: &AppState, action: &str) -> Option<String> {
     let declares = |mount: &str| {

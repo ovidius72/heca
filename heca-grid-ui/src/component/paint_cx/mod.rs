@@ -65,7 +65,7 @@ pub struct PaintCx<'a> {
     ///
     /// Read by [`clip`](Self::clip) — a widget that draws into the **overlay band** needs it,
     /// because that band starts unclipped and geometry alone would let a keycap land outside the
-    /// dock it belongs to (F003/P082/T438).
+    /// dock it belongs to.
     pub(super) clip: Option<Rectangle>,
     /// The nearest clip with round corners, already placed and scaled into the scene — see
     /// [`with_rounded_clip`](Self::with_rounded_clip). `None` when nothing round clips this.

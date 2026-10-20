@@ -1,7 +1,8 @@
 //! Fake backend for testing layout performance without PTY overhead.
 
 use super::{
-    BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType, TerminalCell,
+    BackendKeyEvent, BackendMouseEvent, BackendRenderData, DEFAULT_CELL_SIZE, PaneBackend, PaneType,
+    TerminalCell,
     TerminalCursor, TerminalCursorShape, TerminalDamage, TerminalLine, TerminalSnapshot,
     TerminalUnderlineStyle,
 };
@@ -23,7 +24,7 @@ pub struct FakeBackend {
 
 impl FakeBackend {
     pub fn new(cols: usize, rows: usize) -> Self {
-        Self::with_cell_size(cols, rows, 8.4, 14.0)
+        Self::with_cell_size(cols, rows, DEFAULT_CELL_SIZE.0, DEFAULT_CELL_SIZE.1)
     }
 
     pub fn with_cell_size(cols: usize, rows: usize, cell_w: f32, cell_h: f32) -> Self {

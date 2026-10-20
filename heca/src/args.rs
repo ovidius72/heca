@@ -29,7 +29,7 @@ pub enum ArgKind {
 }
 
 /// Static declaration of **one argument** an action takes. The built-in half of [`ArgSpec`], living
-/// in [`ActionDescriptor::args`](crate::actions::ActionDescriptor::args) the same way [`ActionDescriptor`](crate::actions::ActionDescriptor) is the static half of
+/// in `ActionDescriptor::args` the same way `ActionDescriptor` is the static half of
 /// [`ActionMeta`](crate::actions::ActionMeta).
 ///
 /// This exists so an action can *say* what it takes. Before it, the only record of an argument's
@@ -73,7 +73,7 @@ impl ArgDescriptor {
     }
 
     /// A required argument limited to a fixed vocabulary. `values` must list every spelling the
-    /// argument's `FromStr` accepts — [`EnumArg::VALUES`](crate::args::EnumArg::VALUES) provides
+    /// argument's `FromStr` accepts — [`EnumArg::VALUES`] provides
     /// that list next to the parser, so the two cannot drift.
     pub const fn required_enum(
         name: &'static str,
@@ -311,7 +311,7 @@ pub fn sample_args(args: &[ArgSpec]) -> std::collections::HashMap<String, String
 ///
 /// [`VALUES`](EnumArg::VALUES) lists every spelling the type's `FromStr` accepts, aliases included,
 /// and lives next to that `FromStr` so the two are read and changed together. An
-/// [`ArgDescriptor`](crate::args::ArgDescriptor) points at it rather than restating the list, so
+/// [`ArgDescriptor`] points at it rather than restating the list, so
 /// an action's declared vocabulary is the parser's vocabulary by construction. The test
 /// `every_enum_arg_value_parses` walks each list through its own parser.
 pub trait EnumArg: std::str::FromStr {

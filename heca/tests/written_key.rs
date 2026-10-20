@@ -2,7 +2,7 @@
 //!
 //! "Is this key after the leader, and in which layer does it bind?" was answered by hand in ten
 //! places across five files — each one a `strip_prefix("prefix+")` and a choice between the
-//! `"normal"` and `"global"` layers (F003/P082/T509). `keymap::WrittenKey` and
+//! `"normal"` and `"global"` layers. `keymap::WrittenKey` and
 //! `keymap::split_leader` are the one reader now; this keeps it that way.
 
 use std::path::Path;

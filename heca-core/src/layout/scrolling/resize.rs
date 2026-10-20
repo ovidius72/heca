@@ -110,7 +110,7 @@ impl ScrollingRef<'_> {
     /// such column.
     ///
     /// **One clamp, asked two ways.** [`ScrollingMut::resize_column`] applies it;
-    /// [`achievable_width_delta`](Self::achievable_width_delta) asks it in advance so a two-sided
+    /// [`achievable_delta`](super::ScrollingSpace::achievable_delta) asks it in advance so a two-sided
     /// move can be clamped once.
     fn clamped_width(&self, idx: usize, delta: f64) -> Option<(ColumnWidth, ColumnWidth)> {
         self.space.clamped_width(idx, delta, self.view.area.size.w)

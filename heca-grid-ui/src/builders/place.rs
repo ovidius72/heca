@@ -31,6 +31,7 @@ pub trait PlaceExt {
     /// header.column("1 / -1")                  // the whole width, however many columns there are
     /// wide.column("1 / span 2")                // two columns from the first
     /// ```
+    #[heca_grid_ui_macros::prop]
     fn column(mut self, line: impl Into<crate::style::GridLine>) -> Self
     where
         Self: Sized,
@@ -49,6 +50,7 @@ pub trait PlaceExt {
 
     /// **Which row this item sits in, and how far it reaches** — CSS `grid-row`. Same spellings as
     /// [`column`](Self::column).
+    #[heca_grid_ui_macros::prop]
     fn row(mut self, line: impl Into<crate::style::GridLine>) -> Self
     where
         Self: Sized,
@@ -67,6 +69,7 @@ pub trait PlaceExt {
 
     /// **How many columns this item covers**, leaving where it starts to auto-placement — CSS
     /// `grid-column: span n`. `Span::All` is every column there are, now and after one is added.
+    #[heca_grid_ui_macros::prop]
     fn column_span(mut self, span: impl Into<crate::style::Span>) -> Self
     where
         Self: Sized,
@@ -82,6 +85,7 @@ pub trait PlaceExt {
     }
 
     /// **How many rows this item covers** — CSS `grid-row: span n`.
+    #[heca_grid_ui_macros::prop]
     fn row_span(mut self, span: impl Into<crate::style::Span>) -> Self
     where
         Self: Sized,
@@ -101,6 +105,7 @@ pub trait PlaceExt {
     /// The name is resolved against whichever grid holds it, during layout. So a child can be
     /// built before its parent, and changing the parent's template re-places the children without
     /// rebuilding any of them.
+    #[heca_grid_ui_macros::prop]
     fn area(mut self, name: impl Into<String>) -> Self
     where
         Self: Sized,

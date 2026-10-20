@@ -224,7 +224,7 @@ pub struct Base {
     /// nothing could point at it afterwards and `key` was a lie for exactly the widgets a plugin
     /// most needs to address.
     pub surface_slot: Option<String>,
-    /// **Is what is behind this surface still reachable?** — `true` locks it (F003/P097/T499).
+    /// **Is what is behind this surface still reachable?** — `true` locks it.
     ///
     /// While a surface is locked, actions on whatever it stands in front of are refused. A dialog
     /// locks: it is asking a question, so nothing behind it should be touched until you answer. A
@@ -270,6 +270,19 @@ pub struct Base {
     /// containing rows**, and a host commonly wants both from one press. Folding them together
     /// would also make a region turn up in `collect_keys` as a steppable row, which it is not.
     pub scope_key: Option<String>,
+    /// **This region holds the keyboard for everything inside it** — a list with its own cursor,
+    /// where `Enter` means "the row the cursor is on", never "the row that was last clicked".
+    ///
+    /// A press inside it gives the keyboard to the region, not to the control under the pointer
+    /// (the control still gets its click), and taking the keyboard into it never hands it on to a
+    /// control inside. Set with [`FocusScope::keeps_keyboard`](crate::widgets::FocusScope::keeps_keyboard).
+    pub keeps_keyboard: bool,
+    /// **Pressing this widget gives the keyboard to its part named this** — what HTML's
+    /// `<label for>` does for a field. The first thing in that part that takes the keyboard gets
+    /// it, whatever the part holds, and wears no pick letter of its own: this widget's letter
+    /// already reaches it. Set with
+    /// [`PresenceExt::keyboard_to`](crate::builders::PresenceExt::keyboard_to).
+    pub keyboard_to: Option<String>,
     /// Resolved font size in logical px, written by the layout pass: the widget's
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
@@ -298,7 +311,7 @@ pub struct Base {
     /// it instead of stranding a press somewhere.
     pub pointer: crate::pointer::PointerState,
     /// This widget's registered event handlers, keyed by [`EventKind`] — what
-    /// [`EventExt`](crate::builders::EventExt) writes and [`dispatch`] runs. `None` until
+    /// [`EventExt`](crate::builders::EventExt) writes and [`dispatch`](fn@crate::dispatch) runs. `None` until
     /// the first one is registered, which is the common case and costs a null pointer.
     pub handlers: Option<Box<Handlers>>,
     /// What this widget does with the props its owner hands it — see
@@ -339,14 +352,14 @@ pub struct Base {
     /// written with [`on_hint`](crate::builders::HintExt::on_hint), on any widget.
     ///
     /// It is the **override**, not the switch. Being pickable is not opt-in: anything actionable is
-    /// offered a letter and picking it does what clicking it does (F003/P082/T441). This says a
+    /// offered a letter and picking it does what clicking it does. This says a
     /// pick does something *else* — heca's sidebar row activates the pane and leaves the sidebar on
     /// a click, and stays in the sidebar on a pick.
     ///
     /// There is no id to register and no registry to reach; the declaration lives on the widget and
     /// the collector reads it out of the laid-out tree.
     ///
-    /// **The builder is on every widget** (F003/P082/T432). It used to be on
+    /// **The builder is on every widget**. It used to be on
     /// [`KeyHint`](crate::widgets::KeyHint) alone, which put the two facts about a target — who it
     /// is and what picking it does — on two different nodes, and which of them was on top depended
     /// on how the tree was built. That is why the matching code had to search both up and down, and
@@ -401,7 +414,7 @@ pub struct Base {
     ///
     /// It exists because being pickable is **not** opt-in: anything actionable gets a letter, so
     /// the only thing left to say is "not me". Setting it `true` does nothing — a widget nobody can
-    /// act on has nothing for a letter to run (F003/P082/T441).
+    /// act on has nothing for a letter to run.
     pub hintable: bool,
     /// **Can the user act on this widget — click it, or activate it from the keyboard?**
     ///
@@ -417,7 +430,7 @@ pub struct Base {
     /// `Handlers::has(Click)` is `false` for a `Button` — the single case that matters most. And
     /// the two spellings (`on_click`, `on_activate`) mean the same thing, so no set of `EventKind`s
     /// names it either. One flag, set where the action is wired, is the only thing a walk over the
-    /// tree can read (F003/P082/T441).
+    /// tree can read.
     pub activatable: bool,
     /// **This widget exists only to carry the one inside it** — a wrapper, not a thing of its own.
     ///
@@ -447,16 +460,16 @@ pub struct Base {
     ///
     /// A plugin's surface therefore gets the picker right by construction: it declares a hint, the
     /// framework offers it a letter, and its own paint puts that letter wherever the widget is.
-    /// There is nothing host-side to teach about the plugin's layering (F003/P082/T427).
+    /// There is nothing host-side to teach about the plugin's layering.
     pub hint_label: Signal<Option<String>>,
     /// **How this widget's letter is drawn** — where it sits, its size, its colour.
     ///
     /// These were private fields on [`KeyHint`](crate::widgets::KeyHint), which is why a letter
     /// could only appear by wrapping a widget in one. Here, the framework draws the cap for any
-    /// widget carrying a letter and each one places its own (F003/P082/T431).
+    /// widget carrying a letter and each one places its own.
     pub hint_style: crate::widgets::HintStyle,
     /// **Actions this widget declares by name** — what a binding, a menu entry or a script can ask
-    /// it to do (F003/P082/T427).
+    /// it to do.
     ///
     /// The counterpart of [`hint`](Self::hint): a hint says what a *pick* does to this region, an
     /// action says what a *named verb* does to it. Written with

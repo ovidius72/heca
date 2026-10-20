@@ -12,8 +12,7 @@ pub(crate) const PANE_CANDIDATE_LIMIT: usize = heca_grid_ui::widgets::DEFAULT_LE
 ///
 /// **One alphabet for every pick in the app** — panes, columns, docks, follow-link — and it is the
 /// *library's*, so a widget picker (`KeyHintGroup`) and a host pick hand out the same letters in the
-/// same order. The app kept its own 52-entry copy until F003/P082/T433; two copies of one decision
-/// is how home-row ordering would have had to be applied twice.
+/// same order. Two copies of one alphabet would have to be kept in step by hand.
 pub(crate) fn candidate_letter(idx: usize) -> Option<char> {
     heca_grid_ui::widgets::DEFAULT_LETTERS.chars().nth(idx)
 }
@@ -52,28 +51,15 @@ pub(crate) fn collect_all_pane_candidates(
     except: Option<PaneId>,
 ) -> Vec<(char, PaneId)> {
     let mut candidates = Vec::new();
-    for ws in &session.workspaces {
-        for col in &ws.scrolling.columns {
-            for pane in &col.panes {
-                if Some(pane.id) == except {
-                    continue;
-                }
-                // Running out of letters *is* the cap — no second number to keep in step.
-                let Some(ch) = candidate_letter(candidates.len()) else {
-                    return candidates;
-                };
-                candidates.push((ch, pane.id));
-            }
+    for pane in session.workspaces.iter().flat_map(|ws| ws.panes()) {
+        if Some(pane.id) == except {
+            continue;
         }
-        for float in &ws.floating_panes {
-            if Some(float.pane.id) == except {
-                continue;
-            }
-            let Some(ch) = candidate_letter(candidates.len()) else {
-                return candidates;
-            };
-            candidates.push((ch, float.pane.id));
-        }
+        // Running out of letters *is* the cap — no second number to keep in step.
+        let Some(ch) = candidate_letter(candidates.len()) else {
+            return candidates;
+        };
+        candidates.push((ch, pane.id));
     }
     candidates
 }
@@ -105,8 +91,8 @@ pub(crate) fn collect_workspace_candidates(
 /// **`except` is the column the pane is already in**, and it is skipped: moving a pane into its own
 /// column does nothing, so a letter on it is a letter that buys nothing.
 ///
-/// It is excluded **here**, where the candidates are counted, and not at the letter — the rule
-/// F003/P082/T475 settled. Filtering later lets a pick start, announce itself in the bottom bar and
+/// It is excluded **here**, where the candidates are counted, and not at the letter — that is the rule.
+/// Filtering later lets a pick start, announce itself in the bottom bar and
 /// then have a letter filtered away underneath it; with one column, `begin_pick` now refuses the
 /// pick and says so instead. [`collect_workspace_candidates`] already skips the active workspace
 /// for the same reason.

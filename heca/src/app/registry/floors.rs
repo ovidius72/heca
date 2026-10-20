@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(conflicts.way_outs.len(), 1);
     }
 
-    /// **`Escape` must not be a global binding** (F003/P082/T428). The global map is the fallback
+    /// **`Escape` must not be a global binding**. The global map is the fallback
     /// for what no surface in front claimed, so an `Escape` in it outranks all three floors at once
     /// — which is how `close_overlay` came to eat the key while a dock held the keyboard, closing
     /// nothing because no overlay was up.

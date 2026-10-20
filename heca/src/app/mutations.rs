@@ -2,7 +2,7 @@
 //!
 //! These helpers coordinate multi-step pane/workspace mutations that span
 //! session layout state, focus bookkeeping, backend lifecycle, and the shared
-//! post-mutation hooks introduced in Phase 2.
+//! post-mutation hooks.
 
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
@@ -22,7 +22,7 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
             // **Structure — and only structure.** What makes a layer stale is a pane, column or
             // workspace appearing or going. Not the focus moving, which happens constantly and
             // would rebuild the whole map (and reset the cursor inside it) on every keystroke —
-            // and, since F003/P082/T420, **not the window changing shape either**.
+            // and **not the window changing shape either**.
             //
             // `Config` used to rebuild too, because the exposé resolved a zoom from the room it had
             // when it was *built*, so an un-rebuilt layer kept the old window's zoom. That zoom is

@@ -1,11 +1,11 @@
-//! **`heca::extension("pro")`** — a program says who it is, once.
+//! **`heca::extension("demo")`** — a program says who it is, once.
 //!
 //! ```ignore
-//! let pro = heca::extension("pro");
-//! pro.action("start_worker").label("Start worker").run(start);   // the action `pro.start_worker`
-//! pro.layer("planner").view(|cx| planner_overlay(cx));           // the layer  `pro.planner`
-//! pro.pane_button("start_worker");                               // a button in every pane header
-//! pro.pane_chip("status", |facts| Some(PaneChip::new(icon, text))); // a chip in every pane header
+//! let demo = heca::extension("demo");
+//! demo.action("start_worker").label("Start worker").run(start);   // the action `demo.start_worker`
+//! demo.layer("planner").view(|cx| planner_overlay(cx));           // the layer  `demo.planner`
+//! demo.pane_button("start_worker");                               // a button in every pane header
+//! demo.pane_chip("status", |facts| Some(PaneChip::new(icon, text))); // a chip in every pane header
 //! ```
 //!
 //! **Why a handle and not a name on every item.** A name is `<owner>.<short>`, and the owner half
@@ -120,7 +120,7 @@ impl Extension {
     /// told once that it exists.
     pub fn pane_button(&self, short: &str) {
         if let Some(name) = self.full("pane button", short) {
-            crate::chrome::pane_items::add_extension_button(name);
+            crate::chrome::panes::pane_items::add_extension_button(name);
         }
     }
 
@@ -140,7 +140,7 @@ impl Extension {
         produce: impl Fn(&crate::PaneFacts) -> Option<crate::PaneChip> + 'static,
     ) {
         if let Some(name) = self.full("pane chip", short) {
-            crate::chrome::pane_items::add_extension_chip(name, produce);
+            crate::chrome::panes::pane_items::add_extension_chip(name, produce);
         }
     }
 
@@ -157,7 +157,7 @@ impl Extension {
         produce: impl Fn(&crate::PaneFacts) -> Option<crate::PaneLine> + 'static,
     ) {
         if let Some(name) = self.full("pane line", short) {
-            crate::chrome::pane_items::add_extension_line(name, produce);
+            crate::chrome::panes::pane_items::add_extension_line(name, produce);
         }
     }
 
@@ -195,10 +195,10 @@ mod tests {
     #[test]
     fn an_items_name_is_the_extension_then_the_short_name() {
         reset();
-        let pro = extension("pro");
-        assert_eq!(pro.action("start_worker").name, "pro.start_worker");
-        assert!(is_declared("pro"));
-        assert_eq!(pro.name(), Some("pro"));
+        let demo = extension("demo");
+        assert_eq!(demo.action("start_worker").name, "demo.start_worker");
+        assert!(is_declared("demo"));
+        assert_eq!(demo.name(), Some("demo"));
     }
 
     /// **`heca` is the app's; a dotted or empty name is not a name.**
@@ -221,18 +221,18 @@ mod tests {
     #[test]
     fn a_short_name_with_a_dot_or_nothing_is_refused() {
         reset();
-        let pro = extension("pro");
-        assert_eq!(pro.action("a.b").name, "");
-        assert_eq!(pro.action("").name, "");
+        let demo = extension("demo");
+        assert_eq!(demo.action("a.b").name, "");
+        assert_eq!(demo.action("").name, "");
     }
 
     /// **A second extension with the same name is refused, and the first keeps it.**
     #[test]
     fn a_second_extension_with_the_same_name_is_refused() {
         reset();
-        let first = extension("pro");
-        let second = extension("pro");
-        assert_eq!(first.name(), Some("pro"));
+        let first = extension("demo");
+        let second = extension("demo");
+        assert_eq!(first.name(), Some("demo"));
         assert_eq!(second.name(), None);
         assert_eq!(second.action("x").name, "");
     }
@@ -241,10 +241,10 @@ mod tests {
     #[test]
     fn a_terminal_is_named_by_the_extension_and_a_refused_one_starts_nothing() {
         reset();
-        let pro = extension("pro");
+        let demo = extension("demo");
         assert_eq!(
-            pro.terminal("shell").shown_title().as_deref(),
-            Some("pro.shell")
+            demo.terminal("shell").shown_title().as_deref(),
+            Some("demo.shell")
         );
         assert_eq!(
             extension("heca").terminal("shell").shown_title(),
@@ -252,7 +252,7 @@ mod tests {
             "`heca` is refused, so what hangs off it declares nothing"
         );
         assert_eq!(
-            pro.terminal("a.b").shown_title(),
+            demo.terminal("a.b").shown_title(),
             None,
             "a dotted short name is refused"
         );

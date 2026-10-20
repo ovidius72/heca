@@ -16,7 +16,7 @@ pub(crate) use look::pane_scissor_rect;
 
 use crate::app::terminal_host::TerminalMount;
 use crate::app_state::AppState;
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 use heca_core::layout::{PaneId, Rectangle};
 use heca_renderer::text::TextBox;
 
@@ -46,7 +46,7 @@ impl TerminalRenderState {
         pane: Option<PaneId>,
         opacity: f32,
     ) -> Self {
-        let content_rect = crate::chrome::terminal::room_of(state, id)
+        let content_rect = crate::chrome::panes::terminal::room_of(state, id)
             .map(|room| Rectangle::new(heca_core::layout::Point::new(0.0, 0.0), room));
         let mount = content_rect.and_then(|content_rect| {
             crate::app::terminal_host::prepare_terminal_mount(
@@ -57,7 +57,7 @@ impl TerminalRenderState {
             )
         });
         if let (Some(m), Some(pane)) = (&mount, pane) {
-            state.chrome_state.workspaces.set_pane_viewport(
+            state.chrome_state.panes.set_viewport(
                 pane,
                 m.snapshot.viewport_offset,
                 m.snapshot.at_bottom,

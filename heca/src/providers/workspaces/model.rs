@@ -1,4 +1,3 @@
-use crate::app_state::SidebarItemState;
 use crate::chrome::SidebarSelection;
 use heca_core::layout::{Layout, PaneId};
 
@@ -80,12 +79,6 @@ pub struct PaneEntry {
     pub name: String,
     /// User-set override name (from rename); when present it wins over the process name.
     pub custom_name: Option<String>,
-    /// Active/visited projection of the pane. Populated by `sync_from_session` and
-    /// asserted by tests; the in-app expanded sidebar reads active-state from
-    /// `chrome_state` instead, and this field is the model's own projection that the
-    /// planned `WorkspacesContainerProvider` (plugin-task-10) will consume.
-    #[allow(dead_code)]
-    pub state: SidebarItemState,
 }
 
 /// A column entry in the sidebar tree.
@@ -113,12 +106,9 @@ pub struct WorkspaceEntry {
     /// projection has to keep *whether* a name was chosen, not just what is drawn. Without it the
     /// component cannot tell a renamed workspace from a default one, so its own menu could not
     /// decide whether there is a name to clear — and the host had to resolve that from the session
-    /// and hand it over on the context target (F003/P086/T365).
+    /// and hand it over on the context target.
     pub custom_name: Option<String>,
     pub collapsed: bool,
-    /// Active/visited projection (see [`PaneEntry::state`]).
-    #[allow(dead_code)]
-    pub state: SidebarItemState,
     pub columns: Vec<ColumnEntry>,
     pub floating_panes: Vec<PaneEntry>,
 }
@@ -142,8 +132,8 @@ impl WorkspaceTree {
     ///
     /// The handlers this replaced asked the session (`find_pane_location`), which a component cannot
     /// reach and should not need to: the tree already knows where its own rows are, and reaching for
-    /// the session would be the component depending on app state it has no business holding
-    /// (F003/P085/T356). A floating pane is in no column, so it is absent here by construction.
+    /// the session would be the component depending on app state it has no business holding.
+    /// A floating pane is in no column, so it is absent here by construction.
     pub fn locate_pane(&self, pane_id: PaneId) -> Option<(usize, usize)> {
         self.workspaces.iter().find_map(|ws| {
             ws.columns.iter().find_map(|col| {
@@ -166,15 +156,10 @@ impl WorkspaceTree {
     }
 
     /// Rebuild the tree from the current session state.
-    /// `last_visited_pane_per_ws` provides per-workspace last-visited pane IDs
-    /// for toggle highlighting (Prefix+i).
-    pub fn sync_from_session(
-        &mut self,
-        layout: Layout<'_>,
-        last_visited_ws_idx: Option<usize>,
-        focused_pane: Option<PaneId>,
-        last_visited_pane_per_ws: &[Option<PaneId>],
-    ) {
+    ///
+    /// Which row is active and which is the one `prefix+i` returns to are not kept here: the
+    /// rows are told live, from the same record the bindings read (`sync_chrome_signals`).
+    pub fn sync_from_session(&mut self, layout: Layout<'_>) {
         // Preserve column collapse across rebuild. Workspace collapse is owned by
         // `chrome_state.collapsed_ws` now — callers re-apply it via `apply_ws_collapsed`
         // after sync (so it defaults to expanded here).
@@ -194,17 +179,6 @@ impl WorkspaceTree {
         self.workspaces = Vec::with_capacity(layout.session().workspaces.len());
 
         for (ws_idx, ws) in layout.session().workspaces.iter().enumerate() {
-            let is_active = ws_idx == layout.active_workspace_idx();
-            let state = if is_active {
-                SidebarItemState::Active
-            } else if Some(ws_idx) == last_visited_ws_idx {
-                SidebarItemState::Visited
-            } else {
-                SidebarItemState::None
-            };
-
-            let last_visited_in_ws = last_visited_pane_per_ws.get(ws_idx).copied().flatten();
-
             // Defaults to expanded; chrome_state's collapse set is applied post-sync.
             let collapsed = false;
 
@@ -217,7 +191,6 @@ impl WorkspaceTree {
                     .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
                 custom_name: ws.name.clone(),
                 collapsed,
-                state,
                 columns: Vec::with_capacity(ws.scrolling.columns.len()),
                 floating_panes: Vec::with_capacity(ws.floating_panes.len()),
             };
@@ -242,20 +215,10 @@ impl WorkspaceTree {
                     };
 
                     for pane in col.panes.iter() {
-                        let is_active_pane = Some(pane.id) == focused_pane;
-                        let is_visited_pane =
-                            !is_active_pane && Some(pane.id) == last_visited_in_ws;
                         col_entry.panes.push(PaneEntry {
                             pane_id: pane.id,
                             name: pane.title.clone(),
                             custom_name: pane.custom_name.clone(),
-                            state: if is_active_pane {
-                                SidebarItemState::Active
-                            } else if is_visited_pane {
-                                SidebarItemState::Visited
-                            } else {
-                                SidebarItemState::None
-                            },
                         });
                     }
 
@@ -264,20 +227,10 @@ impl WorkspaceTree {
             }
 
             for float in &ws.floating_panes {
-                let is_active_float = Some(float.pane.id) == focused_pane;
-                let is_visited_float =
-                    !is_active_float && Some(float.pane.id) == last_visited_in_ws;
                 ws_entry.floating_panes.push(PaneEntry {
                     pane_id: float.pane.id,
                     name: float.pane.title.clone(),
                     custom_name: float.pane.custom_name.clone(),
-                    state: if is_active_float {
-                        SidebarItemState::Active
-                    } else if is_visited_float {
-                        SidebarItemState::Visited
-                    } else {
-                        SidebarItemState::None
-                    },
                 });
             }
 
@@ -347,35 +300,43 @@ impl WorkspaceTree {
         self.current_item().map(WorkspaceRow::selection)
     }
 
-    /// Project the **canonical** selection from the chrome store back onto the cursor —
-    /// the selection counterpart of [`apply_ws_collapsed`](Self::apply_ws_collapsed),
-    /// and for the same reason: `sync_from_session` rebuilds `flat_items` from scratch,
-    /// so the positional cursor has to be re-derived from the state that outlives the
-    /// rebuild.
+    /// **Point the cursor at the row a placement selected**, by the `key` that row declared.
     ///
-    /// Because the store is the source of truth, this is also what makes the selection
-    /// **drivable from outside**: an RPC or a plugin that writes
-    /// [`set_nav_selection`](crate::chrome::WorkspacesContainerState::set_nav_selection)
-    /// moves the cursor here.
+    /// The placement's key is the cursor's one record; `cursor` is only where this list stands
+    /// while one action runs, loaded from that key first. `flat_items` is rebuilt from the session
+    /// on every layout change, so an index kept between actions would point at whatever now sits
+    /// there — a key names the row itself.
     ///
-    /// `None` leaves the cursor alone (nothing selected is not a request to move), and a
-    /// selection whose row no longer exists — its pane closed, its workspace deleted —
-    /// leaves the cursor where it was, clamped into range, rather than silently jumping
-    /// somewhere arbitrary.
-    pub fn apply_nav_selection(&mut self, selection: Option<SidebarSelection>) {
-        let Some(selection) = selection else {
+    /// `None` leaves the cursor alone (nothing selected is not a request to move), and a key whose
+    /// row no longer exists — its pane closed, its workspace deleted — leaves the cursor where it
+    /// was, clamped into range, rather than jumping somewhere arbitrary.
+    pub fn point_at(&mut self, key: Option<&str>) {
+        let Some(key) = key else {
             return;
         };
-        if let Some(idx) = self
-            .flat_items
-            .iter()
-            .position(|item| item.selection() == selection)
-        {
+        if let Some(idx) = self.position_of(key) {
             self.cursor = idx;
             self.scroll_to_cursor();
         } else {
             self.clamp_cursor();
         }
+    }
+
+    /// The row `key` names, as a [`SidebarSelection`] — `None` when no row declared it.
+    ///
+    /// Matched against this list's own rows rather than parsed: a tiled pane and a floating one
+    /// are both `pane:<id>`, and only the row knows which it is.
+    pub fn selection_of(&self, key: &str) -> Option<SidebarSelection> {
+        self.flat_items
+            .iter()
+            .map(WorkspaceRow::selection)
+            .find(|selection| super::selection_key(*selection) == key)
+    }
+
+    fn position_of(&self, key: &str) -> Option<usize> {
+        self.flat_items
+            .iter()
+            .position(|item| super::selection_key(item.selection()) == key)
     }
 
     fn is_navigable(&self, idx: usize) -> bool {

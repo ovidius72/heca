@@ -11,7 +11,7 @@ use super::*;
 /// [`DockFrame`](crate::widgets::DockFrame)) reuse this so a collapsed body/group
 /// never bleeds onto the rest of the tree.
 ///
-/// **It also draws the child's hint letter**, if it is carrying one (F003/P082/T431). That is here,
+/// **It also draws the child's hint letter**, if it is carrying one. That is here,
 /// and not in each widget, for the reason the hidden check is: it is the one place every container
 /// already funnels its children through, so a letter appears over *any* widget — a plugin's
 /// included — with nothing to opt into and no wrapper to remember. Before this, only

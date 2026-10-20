@@ -130,7 +130,7 @@ impl Keymap {
     ///
     /// A surface must deliver this as well as [`deliver_press`](Keymap::deliver_press), or
     /// [`on_key_up`](crate::builders::EventExt::on_key_up) is a builder that can never fire —
-    /// which is exactly what heca's own window loop did until 2026-08-11: it returned at
+    /// which is exactly what heca's own window loop used to do: it returned at
     /// `event.state != Pressed`, so a widget's release handler was dead in the real app while a
     /// headless test that dispatched both halves passed.
     pub fn deliver_release(

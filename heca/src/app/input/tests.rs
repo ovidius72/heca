@@ -260,7 +260,7 @@ fn only_the_way_out_of_a_dock_is_answered_before_the_tree() {
 }
 
 /// A dock is consulted at two names, **placement before component**, so narrowing one seating
-/// of a provider does not have to restate the rest (F003/P086/T362).
+/// of a provider does not have to restate the rest.
 #[test]
 fn a_dock_is_consulted_at_its_placement_then_its_kind() {
     let (modes, components) = defaults();

@@ -4,7 +4,7 @@
 //! (your "list item" with left/right slots).
 //!
 //! Slots are arbitrary [`Component`]s (an icon widget, a [`Badge`](super::Badge)
-//! kbd-hint, a [`StatusDot`](super::StatusDot), a `>` [`Label`](super::Label),
+//! kbd-hint, a [`StatusDot`](super::StatusDot), a `>` [`Label`],
 //! …), so `Item` is icon-agnostic — it lays the slots out and draws the row
 //! chrome + label, the slots draw themselves. Set [`on_activate`](Item::on_activate)
 //! to make it clickable/keyboard-operable (focusable); leave it unset for a

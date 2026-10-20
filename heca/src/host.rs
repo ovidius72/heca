@@ -1,9 +1,3 @@
-// The host API is a foundation **seam** (Phase 8): it is exercised by tests and
-// will be consumed by first-party providers + the WASM bridge in later phases, so
-// its methods read as dead code in the binary today. Mirrors `chrome/events.rs`
-// (the Phase 0 event bus) which carries the same allow for the same reason.
-#![allow(dead_code)]
-
 //! First-party **host API** facade — the seam first-party providers (and the
 //! future WASM plugin bridge) use to observe and read app state, mirroring §3.5 of
 //! `pluggable-chrome-plugin-plan.md`:
@@ -13,12 +7,16 @@
 //! - [`App::state`] — `app.state.*`: read-only selectors over the reactive chrome
 //!   store.
 //!
-//! Today this wraps the in-process [`SharedChromeState`] (the Phase 0 event bus +
-//! reactive store). The same surface is what the WASM bridge will marshal across
+//! Today this wraps the in-process [`SharedChromeState`] (the event bus + reactive
+//! store). The same surface is what the WASM bridge will marshal across
 //! the host boundary later, so plugins never touch the internal `floem_reactive`
 //! signals directly — they react via events and read via these selectors. The
 //! remaining host-API namespaces from §3.5 (`app.actions`, `app.overlay`,
-//! `app.regions`) are later phases and intentionally not implemented here.
+//! `app.regions`) are not built.
+
+// The host API is the seam first-party providers and the planned plugin bridge read through. Some
+// of its methods have no caller in the app yet; tests exercise them.
+#![allow(dead_code)]
 
 use crate::chrome::{ChromeEvent, ChromeSubscription, SharedChromeState, WorkspacesContainerState};
 use heca_core::layout::PaneId;
@@ -92,8 +90,7 @@ impl<'a> StateView<'a> {
         Self { state }
     }
 
-    /// This mount's own scroll offset signal, for a container that nests its own scroll area
-    /// (F003/P011/T021).
+    /// This mount's own scroll offset signal, for a container that nests its own scroll area.
     ///
     /// Keyed by **mount id** — `BuildCx::container_id` — so placing the same container twice gives
     /// each placement its own scroll position, the way rendering a component twice does. The
@@ -126,24 +123,24 @@ impl<'a> StateView<'a> {
     /// A snapshot of a pane's runtime (program, status, cwd, git, kind, exit code).
     /// `None` if the pane has no mirrored runtime.
     pub fn pane_runtime(&self, pane: PaneId) -> Option<PaneRuntime> {
-        self.state.workspaces.pane_runtime(pane)
+        self.state.panes.runtime(pane)
     }
 
     /// Convenience: a pane's current [`ProcessStatus`] (`None` if unknown).
     pub fn pane_status(&self, pane: PaneId) -> Option<ProcessStatus> {
-        self.state.workspaces.pane_runtime(pane).map(|r| r.status)
+        self.state.panes.runtime(pane).map(|r| r.status)
     }
 
     /// A pane's user-set custom name (from rename), if any. `None` means the pane's
     /// name tracks its running process. Observe changes via `PaneCustomNameChanged`.
     pub fn pane_custom_name(&self, pane: PaneId) -> Option<String> {
-        self.state.workspaces.pane_custom_name(pane)
+        self.state.panes.custom_name(pane)
     }
 
     /// Terminal viewport state for a pane, if mirrored in the store.
     /// Non-terminal panes or unmirrored panes return `None`.
     pub fn terminal_viewport(&self, pane: PaneId) -> Option<TerminalViewport> {
-        self.state.workspaces.terminal_viewport(pane)
+        self.state.panes.terminal_viewport(pane)
     }
 
     /// The keyboard pick currently in progress (move/select/swap/take), if any — its
@@ -158,18 +155,22 @@ impl<'a> StateView<'a> {
         self.state.workspaces.is_ws_collapsed(ws_idx)
     }
 
-    /// The sidebar-nav **selection** — the row under the nav cursor, or `None` when the
-    /// user is not navigating the sidebar.
+    /// The workspaces sidebar's **selected row** — the row under the cursor of the placement that
+    /// holds the keyboard, or `None` when no workspaces placement does.
     ///
     /// This is the cursor, **not** the focus: it moves with `j`/`k` without changing
     /// [`active_pane`](StateView::active_pane), and the sidebar renders the two
-    /// distinctly. Observe changes via `ChromeEvent::SidebarSelectionChanged`.
+    /// distinctly. Worked out from that placement's cursor key, which is the one record of it;
+    /// observe changes via `ChromeEvent::ContainerCursorChanged`.
     pub fn sidebar_selection(&self) -> Option<crate::chrome::SidebarSelection> {
-        self.state.workspaces.nav_selection()
+        use heca_grid_ui::reactive::SignalGet as _;
+        let mount = self.state.focused_container()?;
+        let key = self.state.container_cursor(&mount).get_untracked()?;
+        self.state.workspaces.tree().selection_of(&key)
     }
 
-    /// The **workspaces container's** namespaced state (§2.4) — active pane, per-pane
-    /// runtime mirror, collapsed workspaces, pending pick. The selectors above read
+    /// The **workspaces container's** namespaced state (§2.4) — active pane, collapsed
+    /// workspaces, pending pick. The selectors above read
     /// individual values out of it; a container that projects the *whole* tree in one
     /// build (the `workspaces` provider) borrows it directly instead of re-reading a
     /// selector per row.
@@ -178,6 +179,12 @@ impl<'a> StateView<'a> {
     /// what emits the [`ChromeEvent`]s providers observe.
     pub fn workspaces(&self) -> &WorkspacesContainerState {
         &self.state.workspaces
+    }
+
+    /// **Every pane's live facts** — program, status, folder, git, terminal viewport — as
+    /// signals, for a component that renders panes. Read-only, like the rest of the view.
+    pub fn panes(&self) -> &crate::chrome::PaneRuntimeStore {
+        &self.state.panes
     }
 
     /// Is the left sidebar region visible (not hidden)?
@@ -254,9 +261,11 @@ mod tests {
 
         // Seed the pane runtime, then change its status via the store write path.
         let pane = PaneId(3);
-        app.state
-            .workspaces
-            .set_pane_status(pane, ProcessStatus::Running);
+        let running = heca_core::runtime::PaneRuntime {
+            status: ProcessStatus::Running,
+            ..Default::default()
+        };
+        app.state.panes.set_runtime(pane, &running, None);
 
         assert_eq!(
             observed.borrow().as_slice(),

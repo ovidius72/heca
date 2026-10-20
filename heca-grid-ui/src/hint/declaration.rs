@@ -9,7 +9,7 @@
 /// function. The [`intent`](Hint::intent) beside it is the same act said as **data**, and it exists
 /// for one reason: a host cannot ask its own policy about an opaque closure. With it,
 /// `chrome::active_hint_targets` asks `route_interaction` per candidate and drops every refused one
-/// — one rule, every surface, no special case per widget (F003/P082/T432).
+/// — one rule, every surface, no special case per widget.
 ///
 /// The case that forced it: with a floating pane active, `prefix+/` lettered every pane and every
 /// sidebar row naming one, and pressing a letter did **nothing**, because `ActionPolicy` correctly

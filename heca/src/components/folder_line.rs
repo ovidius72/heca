@@ -13,13 +13,13 @@ use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 /// the same pane two different ways (`components` — the second caller is the move).
 ///
 /// The **text and the visibility come back as signals**, because a cwd changes without the tree
-/// being rebuilt: a `cd` in the shell updates the path in place, and `[settings] pane_show_cwd`
+/// being rebuilt: a `cd` in the shell updates the path in place, and the caller's setting
 /// turns the line on and off the same way. A caller that has nothing to bind can ignore them.
 pub(crate) struct FolderLine<'a> {
     /// The path to show, already home-relative (`crate::chrome::home_relative_path`). `None` draws
     /// nothing — a pane whose backend never reported a directory.
     pub(crate) path: Option<&'a str>,
-    /// Whether the line is shown at all — `[settings] pane_show_cwd` and the caller's own reasons.
+    /// Whether the line is shown at all — the caller's setting and its own reasons.
     pub(crate) show: bool,
     /// The size variant of the line: metadata sits under the name, never beside it in weight, so a
     /// caller says `Caption`. The glyph and the path both take it from the row (a variant cascades to

@@ -85,7 +85,10 @@ impl AppState {
     /// **The font size `terminal` is drawn at** — the global size plus its own zoom, whoever owns
     /// it. Both the grid its process is fitted to and the glyphs drawn derive from this one value,
     /// so they never disagree.
-    pub(crate) fn terminal_font_size(&self, terminal: crate::chrome::terminal::TerminalId) -> f32 {
+    pub(crate) fn terminal_font_size(
+        &self,
+        terminal: crate::chrome::panes::terminal::TerminalId,
+    ) -> f32 {
         self.terminal_zoom.size(terminal, self.terminal_zoom_base())
     }
 
@@ -93,7 +96,7 @@ impl AppState {
     /// global `terminal_cell_size`.
     pub(crate) fn terminal_base_cell_size(
         &self,
-        terminal: crate::chrome::terminal::TerminalId,
+        terminal: crate::chrome::panes::terminal::TerminalId,
     ) -> (f32, f32) {
         self.terminal_zoom
             .cell(terminal)

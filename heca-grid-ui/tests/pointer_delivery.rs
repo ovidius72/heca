@@ -19,7 +19,7 @@
 //! would go, in each container that takes part in dispatch, and require all four kinds to arrive. A
 //! container that forwards a subset fails here rather than in the app, months later.
 //!
-//! **Since F004/P084/T394 no container forwards anything**: the framework hit-tests the pointer and
+//! **No container forwards anything**: the framework hit-tests the pointer and
 //! carries it to the target and back up through whatever contains it, so the omission this file
 //! guards against is no longer a line anyone can write. The test stays: it is what proves that is
 //! still true, in each of the containers that used to own the walk.

@@ -173,7 +173,7 @@ fn pane_draws_rounded_accent_border_no_brackets() {
     );
 
     // The surface carries the faint theme REST glow (`interaction.control_rest_glow`)
-    // so the `glow_size` setting visibly scales panes at rest too (T011).
+    // so the `glow_size` setting visibly scales panes at rest too.
     let expected_i = theme.colors.interaction.control_rest_glow as f32 / 255.0;
     let rest_glow = scene.iter().any(|c| {
         matches!(

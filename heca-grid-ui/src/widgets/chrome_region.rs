@@ -20,9 +20,8 @@
 //! given the region's [`mode_signal`](ChromeRegion::mode_signal) via
 //! [`DockFrame::rail`](super::DockFrame::rail) draws icon-only while the region is
 //! [`RegionMode::CollapsedRail`]. Left as documented seams: **scrolling** an
-//! overflowing region needs the renderer's `PushClip`/`PopClip` (shipped with `ScrollRegion`,
-//! P019(F004));
-//! **Dock-level drop targets** wire onto the shipped `drag/` framework — P079(F004).
+//! overflowing region needs the renderer's `PushClip`/`PopClip` (shipped with
+//! `ScrollRegion`); **dock-level drop targets** wire onto the shipped `drag/` framework.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component};
@@ -139,7 +138,7 @@ impl ChromeRegion {
 
     /// Convenience intent: flip between [`RegionMode::Expanded`] and
     /// [`RegionMode::CollapsedRail`]. A host binds this to a key/RPC so collapse
-    /// is reachable without the mouse (P2). [`RegionMode::Hidden`] is a distinct
+    /// is reachable without the mouse. [`RegionMode::Hidden`] is a distinct
     /// state set explicitly via [`mode_signal`](Self::mode_signal).
     pub fn toggle(&self) {
         let next = match self.mode.get_untracked() {

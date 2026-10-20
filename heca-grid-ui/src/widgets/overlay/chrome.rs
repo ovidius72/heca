@@ -11,8 +11,8 @@ use crate::theme::FrameStyle;
 use heca_core::layout::Rectangle;
 
 /// Multiplier on the theme `shadow.blur` token — an overlay panel is large and
-/// wants a wider, softer halo than the small-surface base token. Raised from 4.0
-/// (2026-07-24): the panel read as barely lifted off the page.
+/// wants a wider, softer halo than the small-surface base token. Raised from 4.0:
+/// the panel read as barely lifted off the page.
 const SHADOW_BLUR_MULT: f32 = 6.0;
 /// Downward shadow offset lifting the panel off the scrim/page. Raised from 12.0
 /// alongside the blur so the panel sits more clearly *above* what's behind it.
@@ -24,12 +24,12 @@ const SHADOW_DROP: f32 = 16.0;
 /// and theme surface fill are not configurable: they are what makes every overlay
 /// panel read as the same surface. Whether an **edge** is drawn at all is the
 /// user's call, not the widget's — see
-/// [`FrameStyle`](crate::theme::FrameStyle)/`overlay_frame`.
+/// [`FrameStyle`]/`overlay_frame`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PanelChrome {
     /// The widget's preferred edge (color + width) — used **only** when
     /// `overlay_frame` draws an edge (`Bordered`/`Bracketed`), and ignored under
-    /// [`FrameStyle::None`](crate::theme::FrameStyle::None). `None` here falls back
+    /// [`FrameStyle::None`]. `None` here falls back
     /// to the theme's neutral `border` color, so the base [`Overlay`](crate::widgets::Overlay)
     /// still gets an edge when the user asks for one.
     pub border: Option<Border>,
@@ -52,7 +52,7 @@ pub struct PanelChrome {
 /// This exists because the panel shadow was tuned for surfaces that own the screen
 /// (a dialog is hundreds of pixels across). Applied unscaled to a ~30px
 /// [`Tooltip`](crate::widgets::Tooltip) bubble, the same shadow is **larger than the surface
-/// casting it** — user-verified 2026-07-25 as "too much". A transient hover bubble
+/// casting it** — judged by eye as "too much". A transient hover bubble
 /// is not at dialog depth, so it does not take the dialog's shadow.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PanelElevation {
@@ -268,7 +268,7 @@ mod tests {
             .expect("panel chrome always casts a shadow")
     }
 
-    /// **User-verified regression guard (2026-07-25).** The panel shadow is tuned
+    /// **Regression guard, judged by eye.** The panel shadow is tuned
     /// for surfaces hundreds of px across; unscaled on a ~30px tooltip bubble it is
     /// larger than the bubble itself ("the shadow is too much"). A `Hover` surface
     /// casts a fraction of it.

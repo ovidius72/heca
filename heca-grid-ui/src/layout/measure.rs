@@ -42,8 +42,7 @@ pub(super) fn measure_text_node(
         // One character rather than **zero**: `min_width: auto` means "my floor is whatever I
         // answered here", so answering zero is saying *my floor is nothing* — and a box resolved to
         // nothing holds no characters and draws no text, which is how a `Card` lost its title
-        // outright. Text with something to say is never silent; at its narrowest it is `…`
-        // (F003/P082/T438).
+        // outright. Text with something to say is never silent; at its narrowest it is `…`.
         (None, AvailableSpace::MinContent) if !ctx.wrap => cell,
         // A **wrapping** label is the case the longest word belongs to: wrapping cannot break a word
         // down further, so that word is a real floor (a longer-than-a-line word is hard-broken, so
@@ -75,7 +74,7 @@ pub(super) fn measure_text_node(
         // one cell short of its own text and draws `edit…` where `editor` fits. `mono_cells` keeps
         // half a pixel of slack for exactly this, and half a pixel is not enough — the loss is up
         // to a whole one. The measure is the place to fix it: a box that cannot hold the text it
-        // was measured for is wrong before anyone looks at it (F003/P082/T438).
+        // was measured for is wrong before anyone looks at it.
         width: width.min(natural).ceil() as f32,
         height: line * lines as f32,
     }

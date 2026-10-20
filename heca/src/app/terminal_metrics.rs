@@ -9,7 +9,7 @@
 //! single value so they never disagree.
 
 use crate::app_state::AppState;
-use crate::chrome::terminal::TerminalId;
+use crate::chrome::panes::terminal::TerminalId;
 use heca_config::font::FontConfig;
 
 /// Smallest allowed effective terminal font size (points). Guards against

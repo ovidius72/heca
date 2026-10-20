@@ -1,5 +1,5 @@
 //! [`Toast`] — a compact **notification card**: a bracket-framed surface with a
-//! severity-colored leading [`Icon`](super::Icon), a strong title, optional small
+//! severity-colored leading [`Icon`], a strong title, optional small
 //! body text, an optional inline **action** button, and an optional **×** dismiss
 //! affordance.
 //!
@@ -7,7 +7,7 @@
 //! state. Lifecycle (when a toast appears, how long it lives, auto-dismiss policy,
 //! deduplication, sound) is the **host application's** job; the widget merely
 //! *renders* one notification and *reports interactions* back via callbacks
-//! ([`on_click`](Toast::on_click), [`on_action`](Toast::on_action),
+//! ([`on_click`](Toast::on_click), [`action`](Toast::action),
 //! [`on_dismiss`](Toast::on_dismiss)). The host removes it from its own store.
 //!
 //! Because it is an ordinary in-tree component (not overlay-drawn), it is equally
@@ -18,8 +18,8 @@
 //! # Content is children
 //! The card paints only its own chrome — the tinted surface, the bracket frame, the action's
 //! button face, the press flash, the focus ring — and the **layout engine places the content**:
-//! the leading icon, the text column, and the × are real children. It measured and placed them
-//! itself until F003/P082/T481, and a card squeezed narrower than its own icon column then laid
+//! the leading icon, the text column, and the × are real children. When it measured and placed them
+//! itself, a card squeezed narrower than its own icon column then laid
 //! its title out past its right edge, because a constant column width cannot consult the width the
 //! card was actually given. Nothing here computes a position any more, and the card's sub-regions
 //! are found the way every other widget finds them: the engine's bounds, and the pointer's own
@@ -62,7 +62,7 @@ const COLUMN: usize = 1;
 const DISMISS: usize = 2;
 /// **An unfilled slot is removed from layout, not merely empty.** A zero-sized placeholder still
 /// costs the row's gap, which is how a card with no leading icon started its text a gap further in
-/// than a card with one. `hidden` is the engine's `display: none` (F003/P096/T483).
+/// than a card with one. `hidden` is the engine's `display: none`.
 fn empty_slot() -> Box<dyn Component> {
     let mut slot = Flex::empty();
     slot.base_mut().set_hidden(true);
@@ -436,7 +436,7 @@ impl Toast {
         };
     }
 
-    /// Rebuild the × slot — **a real [`IconButton`](super::IconButton)**, so its hover frame, its
+    /// Rebuild the × slot — **a real [`IconButton`]**, so its hover frame, its
     /// press flash and its focus ring are its own. The card used to paint that face and read the
     /// child's hover state to decide how bright it was; a control already knows.
     fn sync_dismiss(&mut self) {
@@ -510,7 +510,7 @@ impl Component for Toast {
         // Surface: severity-tinted fill + the shared Pane/DockFrame corner-bracket
         // reticle frame (GridCN fidelity — same as the Modal panel, #79). The theme
         // rest glow (`PaintCx::rest_glow`) keeps toasts scaling with `glow_size`
-        // (T011) — in the THEME glow color, not the severity tone: the bracket
+        // — in the THEME glow color, not the severity tone: the bracket
         // frame is always accent, and a danger-red halo under a blue frame blends
         // to a muddy purple fringe (user-reported).
         let glow = cx.rest_glow(GLOW_RADIUS);

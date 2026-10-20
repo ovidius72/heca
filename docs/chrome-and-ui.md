@@ -416,7 +416,7 @@ button decision. **Two gaps** this contract closes:
    closures) — a provider cannot `await` "which button was pressed".
 
 **Decision — a host-owned `OverlayHost`.** A new app-side overlay stack
-(`heca/src/chrome/overlay.rs`, built in `plugin-02`/Phase 8) owns an explicit
+(`heca/src/chrome/surfaces/overlay/`, built in `plugin-02`/Phase 8) owns an explicit
 z-ordered `Vec` of active overlays. It renders each entry through the *existing*
 grid-ui widget bound to host-owned signals — providers/plugins **never** build
 overlay widgets across the boundary (§2.6); they submit a **spec** and receive a
@@ -520,7 +520,7 @@ buttons and pushes a `Modal`-band layer; its buttons dispatch overlay-control ac
 ### 2.7.3 The command palette is a view of the catalog — decided 2026-07-30 (F003/P085/T358)
 
 `prefix+p` opens `heca-grid-ui`'s `CommandPalette` as an `Overlay`-band layer
-(`chrome/palette.rs`), built exactly like `open_dropdown`: the chosen entry comes back as a
+(`chrome/surfaces/palette/`), built exactly like `open_dropdown`: the chosen entry comes back as a
 `SubmitOverlay`, resolved by the overlay host, and dispatched through the one door.
 
 - **It lists everything registered** — the app's built-ins and every mounted component's actions.
@@ -675,6 +675,10 @@ mounted it does **nothing** rather than expanding a region to show an empty fram
 can hold focus.
 
 ## 2.11 A row is named, not described — the mouse and the menu — decided 2026-07-30 (F003/P086/T365)
+
+> **Superseded.** A row now declares its own menu on itself (`.context_menu()`), so the host never
+> resolves which row was right-clicked. `ContextTarget::Row` and `Provider::context_path` are gone;
+> what follows is the record of the step before.
 
 **The host resolves *which* row; the component says *what* it is.** A right-click, like a left-click,
 resolves to `(container under the point, the row's `nav_key`)` off the retained tree's real bounds.
@@ -838,7 +842,7 @@ These may be implementations of one generic region host abstraction.
 
 **Decision — canonical region identity: `RegionId`.** Today the only region
 identifier in the app is the **event-payload** enum
-`chrome::events::ChromeRegion { Left, Right }` (used by `RegionVisibilityChanged` /
+`chrome::state::events::ChromeRegion { Left, Right }` (used by `RegionVisibilityChanged` /
 `RegionSizeChanged`), and `SharedChromeState` exposes only `left_*` / `right_*`
 region reads/writes. The contract widens this to the four canonical regions:
 
@@ -918,7 +922,7 @@ how `realize()` already threads the same registries. A WASM provider never sees
 `BuildCx` — it returns a `ViewNode`, and the host's adapter realizes it, registering the
 ids on its behalf.
 
-**ChromeHost responsibilities** (app-side, `heca/src/chrome/host.rs`, `plugin-02`;
+**ChromeHost responsibilities** (app-side, `heca/src/chrome/docks/host/mod.rs`, `plugin-02`;
 bridges to the shipped `App` facade in `heca/src/host.rs` for state + events):
 
 - own a registry of mounted contributions **per `RegionId`**, with order + visibility;
@@ -1015,16 +1019,16 @@ Important convergence note with terminal work:
 
 ## 9. Shared UI / chrome state
 
-> **Planner:** BUILT — heca/src/chrome/state.rs
+> **Planner:** BUILT — heca/src/chrome/state/
 
 ## 3.3 Shared UI / chrome state
 
-> **Foundation landed** (pane-runtime initiative Phases 0–1): `SharedChromeState`
-> (`heca/src/chrome/state.rs`) is the shared, signal-backed store — region
-> visibility/size, active/hovered pane, per-workspace collapse, pick candidates,
-> scroll, and the per-pane runtime mirror. Reads via selectors; writes via the
-> store's `set_*` chokepoint (which emits events). Providers read it through the
-> host API's `app.state.*` (§3.5), not directly.
+> **Built:** `SharedChromeState` (`heca/src/chrome/state/`) is the shared, signal-backed
+> store: region visibility and size, each mount's scroll, cursor and focus (`shell.rs`), the
+> workspaces container's own state (`workspaces.rs`), and every pane's live facts in
+> `PaneRuntimeStore` (`pane_runtime.rs`), which any component reads. Reads via selectors;
+> writes via the store's `set_*` chokepoint (which emits events). Providers read it through
+> the host API's `app.state.*` (§3.5), not directly.
 
 A new shared state layer will be required to coordinate:
 
@@ -1138,12 +1142,14 @@ pub struct ChromeCtx {
 
 **Lifecycle (state machine).**
 
-1. **register** — `ChromeHost::register(Box<dyn Provider>)` records it and reads
-   its placement metadata (`supported_regions` / `default_region`). Where it sits among its region's docks is the
+1. **seat** — `regions("sidebar.left").append(..)` queues it, and `ChromeHost::mount_pending`
+   seats every queued dock as the app starts, reading its placement metadata
+   (`supported_regions` / `default_region`). Where it sits among its region's docks is the
    order it was added (`regions(..).append` / `.prepend`), or `.order(..)` on its body — there is
    no order on the provider.
-2. **on_activate** — provider subscribes to events (`ctx.on(...)`) and registers
-   actions; returns `ProviderHandles` the host keeps alive.
+2. **on_activate** — run once by `mount_pending`, after every queued dock is seated: the
+   provider subscribes to events (`ctx.on(...)`); returns `ProviderHandles` the host keeps for as
+   long as the dock stays seated.
 3. **build_contribution** — host calls it, receives a `Contribution` *model*, and
    mounts the mapped grid-ui subtree into the region shell.
 4. **react** — on a subscribed `ChromeEvent`, the provider marks itself dirty; the
@@ -1225,7 +1231,7 @@ This architecture implies future changes to at least these areas:
 ### 5.4 App/plugin event system
 
 - the app needs a formal event publication/subscription model
-- **DONE** (pane-runtime Phase 0 + 8): a typed `ChromeEvent` bus (`heca/src/chrome/events.rs`)
+- **DONE** (pane-runtime Phase 0 + 8): a typed `ChromeEvent` bus (`heca/src/chrome/state/events.rs`)
   with string-named events + `"*"` catch-all and RAII subscriptions, emitted from the
   store's mutation chokepoint; exposed first-party as `app.on(event, handler)` in
   `heca/src/host.rs`. WASM bridging is Phase 9.
@@ -1453,7 +1459,7 @@ The closed `DragSurfaceId` / `DragItemKind` enums are **correct for built-in sur
 
 ## 17. Shared state strategy
 
-> **Planner:** BUILT — heca/src/chrome/state.rs
+> **Planner:** BUILT — heca/src/chrome/state/
 
 - `ChromeHost`, region registry, dock placement/order, persistence.
 - `AppState` (the namespaced store), canonical state, the **action registry**, keybindings, RPC.
@@ -1535,7 +1541,7 @@ Status is the planner's, read 2026-07-26.
 |---|---|---|
 | Phase 0 — finish the current refactor | none needed | **done** — everything built on it is complete |
 | Phase 1 — architecture contracts | **F003/P005** (plugin-01) | done |
-| Phase 2 — shared UI / chrome state layer | none needed | **built** — `heca/src/chrome/state.rs`, 1158 lines |
+| Phase 2 — shared UI / chrome state layer | none needed | **built** — `heca/src/chrome/state/`, 1158 lines |
 | Phase 3 — ChromeHost + region hosts | **F003/P006** (plugin-02) | done |
 | Phase 4 — built-in provider system | **F003/P004** (plugin-03) | done |
 | Phase 5 — workspaces container migration | **F003/P004** | done |

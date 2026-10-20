@@ -244,7 +244,7 @@ impl TerminalEngine {
     /// correction arms `viewport_changed` so it surfaces as `TerminalDamage::Full`
     /// through the damage system.
     ///
-    /// Called at the end of [`TerminalBackend::update`] (right after PTY output is
+    /// Called at the end of [`update`](crate::backend::PaneBackend::update) (right after PTY output is
     /// drained, where alt-screen/clear transitions happen), so the stored offset is
     /// consistent before any downstream `snapshot()` read.
     pub(in crate::backend::terminal) fn reconcile_viewport_offset(&mut self) -> bool {

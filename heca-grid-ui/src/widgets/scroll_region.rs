@@ -33,7 +33,7 @@
 //! thumb is a theme-**accent** grip that brightens on hover/drag (mirroring
 //! [`MarkerGroup`](crate::widgets::MarkerGroup)'s grip bar) and sits in a wider
 //! invisible grab lane so a thin thumb is easy to click. Implements
-//! [`StyleExt`](crate::builders::StyleExt), so it can double as a **scrollable
+//! [`StyleExt`], so it can double as a **scrollable
 //! surface** (`.background(..).border(..)`). Nested regions compose: the wheel is
 //! offered to children first, so the innermost hovered scrollable wins. A distinct
 //! scrollbar color token and `PageUp`/`PageDown` (app actions) are future work.
@@ -78,8 +78,7 @@ const MIN_THUMB: f64 = 24.0;
 /// 16px left 9px where one pixel belonged to two widgets: the lane, and the row it was painted over.
 /// A host cannot arbitrate that — asking "who owns this pixel?" would couple every press path to
 /// this widget's internals — and the consequence was concrete: dragging the scrollbar dragged the
-/// row behind it, and the press order changed to avoid it stopped rows being draggable at all
-/// (F003/P085/T368).
+/// row behind it, and the press order changed to avoid it stopped rows being draggable at all.
 ///
 /// The cost is that content is 9px narrower beside a *visible* bar. Nothing is reserved when the
 /// region does not overflow, so a list that fits keeps its full width.
@@ -90,7 +89,7 @@ const SCROLLBAR_GUTTER: f64 = THUMB_HIT_W;
 /// previous build multiplied by a fixed line count × font, which made each notch
 /// jump ~75% of a small viewport and overshoot.)
 const WHEEL_STEP_FRAC: f64 = 0.1;
-/// How far one **keyboard page** moves, as a fraction of the viewport (F003/P011/T012).
+/// How far one **keyboard page** moves, as a fraction of the viewport.
 ///
 /// Not a whole viewport: a sliver of overlap means the line you were reading is still on screen
 /// after the jump, which is what every pager does and what makes paging through a list readable.
@@ -298,7 +297,7 @@ pub struct ScrollRegion {
     /// Both coordinates, because a horizontal region's cursor moves **sideways**: remembering only
     /// the top, a strip of cards would decide nothing had changed and never follow at all.
     last_revealed: Option<(f64, f64)>,
-    /// The **natural rect** of whatever last asked to be revealed — what [`center_pad`] keeps
+    /// The **natural rect** of whatever last asked to be revealed — what [`center_pad`](Self::center_pad) keeps
     /// centring while nothing is asking.
     ///
     /// A subtree can stop asking without anything having moved: a cursor-following grid withholds
@@ -306,7 +305,7 @@ pub struct ScrollRegion {
     /// at a card must not scroll it. Without this the pad would read "nothing to follow" and fall
     /// back to centring the *content as a whole* — so hovering would slide the map anyway, just to
     /// a different place. Holding the last target means the picture simply stays where the keyboard
-    /// left it (F003/P082/T418).
+    /// left it.
     last_reveal_rect: Option<Rectangle>,
     /// Seconds left before an idle wheel gesture is declared over, or `None` when nothing is
     /// waiting. A wheel has no release, so its end is a **silence**, not an event — see
@@ -918,7 +917,7 @@ impl ScrollRegion {
                 None => (vp_len - content) / 2.0,
             }
         };
-        // Temporary instrumentation (F003/P082/T420): the exposé's content measured 727 in a 730
+        // Temporary instrumentation: the exposé's content measured 727 in a 730
         // viewport — fitting — while this pushed it 185px down, which is the "it overflows, follow
         // the cursor" branch. Six analytic diagnoses in a row have been wrong; this prints what the
         // decision is actually made on.
@@ -1407,7 +1406,7 @@ impl Component for ScrollRegion {
                 }
                 if handled { Handled::Yes } else { Handled::No }
             }
-            // Keyboard scrolling (F003/P011/T012). Semantic, so the arithmetic lives here rather
+            // Keyboard scrolling. Semantic, so the arithmetic lives here rather
             // than in the app: the widget is what knows its viewport and its content.
             //
             // After the children, like the wheel, so the innermost scrollable region wins when
@@ -1814,7 +1813,7 @@ mod tests {
         r
     }
 
-    /// **The grab lane stays inside the space the bar reserved** (F003/P085/T368).
+    /// **The grab lane stays inside the space the bar reserved**.
     ///
     /// The reserved strip is what content is laid out and clipped short of; the lane is where a
     /// press counts as grabbing the thumb. While the lane was wider than the strip, 9px of it sat on
@@ -1849,7 +1848,7 @@ mod tests {
 
     /// A keyboard page moves by most of a viewport, and the region clamps its own ends.
     ///
-    /// The intents are semantic on purpose (F003/P011/T012): the host says "one page on" and the
+    /// The intents are semantic on purpose: the host says "one page on" and the
     /// widget decides what that means, because it is the only thing that knows its viewport and
     /// content. `ScrollToBottom` asks for `f64::MAX` and lands on the last scrollable pixel without
     /// the caller knowing where that is.
@@ -2302,7 +2301,7 @@ mod tests {
         );
     }
 
-    /// **REVERSED 2026-08-12.** This used to assert the opposite — that an overscrolling surface
+    /// **REVERSED.** This used to assert the opposite — that an overscrolling surface
     /// can be wheeled even when its content fits — on the reasoning that its position is carried by
     /// the centring pad, so `max_offset` is `0` whenever it fits, and clamping the range to
     /// `[0, 0]` left it "frozen under the mouse".
@@ -2619,7 +2618,7 @@ mod tests {
         );
     }
 
-    // ── Reporting the position (F004/P011/T3) ──────────────────────────────────────────────
+    // ── Reporting the position ──────────────────────────────────────────────
     //
     // Watching a scroll area must not require implementing one. These pin the three listeners:
     // what fires, when, and how a listener tells the user's gesture from its own `scroll_to`.

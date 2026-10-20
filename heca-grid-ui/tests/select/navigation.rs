@@ -158,8 +158,7 @@ fn select_keyboard_navigates_and_escape_closes() {
 
 /// **A closed select is one hover target, not two.** The chosen option is echoed inside the
 /// trigger, and while it stands there it is decoration: left hittable it hovered on its own, and
-/// its pill stops at the chevron gutter — so the text lit up and the caret beside it did not
-/// (F003/P096/T483).
+/// its pill stops at the chevron gutter — so the text lit up and the caret beside it did not.
 #[test]
 fn a_closed_select_hovers_as_one_control() {
     use heca_grid_ui::{DrawCommand, Select};
@@ -207,7 +206,7 @@ fn a_closed_select_hovers_as_one_control() {
 /// inside each child so runs of different sizes line up; an open `Select` keeps its option rows in
 /// a panel *below* itself, and that text was being counted as the line's deepest baseline — so
 /// every label beside the select was dropped 40px to meet it, landing below the row and drawing
-/// over whatever was underneath (F003/P096/T483).
+/// over whatever was underneath.
 #[test]
 fn an_open_select_leaves_the_row_around_it_alone() {
     use heca_grid_ui::{Align, Component, Flex, Label, LayoutExt, Length, Parent, Select};

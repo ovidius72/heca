@@ -176,6 +176,9 @@ rebuilding any of them. A child of something that is not a grid simply ignores w
 | `.area("title")` | CSS `grid-area` — the named region it belongs in |
 | `.align_self(..)` / `.justify_self(..)` | where it sits inside its own cell |
 
+A plugin's description says the same words — the SDK's `.area(..)`, `.column(..)`, `.row(..)`,
+`.column_span(..)` and `.row_span(..)` — and `realize` applies them through these same builders.
+
 ⚠️ There is **no `.cell(child, …)` and no `.row(child)` on the grid.** A parent writing a position
 into its child is the inversion this replaced — five positional numbers at the call site, and a
 child that could not say anything about where it goes.

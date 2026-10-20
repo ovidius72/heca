@@ -4,7 +4,7 @@
 //! a single icon, a **list** dock (workspaces / columns / panes) must keep one
 //! cell **per item** when collapsed — you still need to see, focus, and pick each
 //! pane. `RailCell` is that per-item cell: a themed square holding one
-//! [`Icon`](super::Icon), with the same interactive chrome as [`Row`](super::Row)
+//! [`Icon`], with the same interactive chrome as [`Row`](super::Row)
 //! (hover tint, active selection + same-hue border/glow, press flash, focus ring,
 //! `on_activate` on click / Enter / Space).
 //!
@@ -50,7 +50,7 @@ impl RailCell {
     pub fn new(icon: Icon) -> Self {
         // Its name, taken while the icon is still typed — a rail cell IS its glyph. Same reason as
         // `IconButton::new`: without it the cell has no identity at all, and `Icon` must stay silent
-        // so it does not shadow a `Label` beside it elsewhere (F003/P082/T444).
+        // so it does not shadow a `Label` beside it elsewhere.
         let name = icon.glyph_signal().get_untracked().name();
         let mut base = Base::new();
         // Center the single icon child both ways within the square cell.

@@ -33,7 +33,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         // OPTIONAL, deliberately: the bare binding opens the pick, and a caller that already
         // knows which dock it wants (RPC, a menu entry, a script) names it and skips the pick.
-        // A *required* argument would make the bare binding illegal (F003/P010/T006).
+        // A *required* argument would make the bare binding illegal.
         args: &[ArgDescriptor::optional(
             "dock",
             ArgKind::Text,
@@ -48,7 +48,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         // The toggle belongs to the *gesture*: pressing a key again plainly means "undo that",
         // while a click, an RPC call and a palette entry all mean "focus it" and nothing more.
-        // `global_focus` binds this; everything else binds `focus_dock` (F003/P082/T444).
+        // `global_focus` binds this; everything else binds `focus_dock`.
         args: &[ArgDescriptor::optional(
             "dock",
             ArgKind::Text,
@@ -127,7 +127,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ),
         ],
     },
-    // ── Chrome container placement (plugin-04/T1) ──
+    // ── Chrome container placement ──
     // The ONLY built-ins with dotted, namespaced names. Deliberate: this is the id scheme
     // plugins use, and container placement is the first host capability a plugin drives by
     // name. The other ~115 built-ins keep their snake_case config names — renaming them is a
@@ -350,7 +350,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ),
         ],
     },
-    // ── Notifications (F009) ──
+    // ── Notifications ──
     ActionDescriptor {
         name: "notification_dismiss_one",
         side: Side::Client,

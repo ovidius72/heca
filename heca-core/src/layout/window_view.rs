@@ -3,7 +3,7 @@
 //! The session holds the content every window shares: which workspaces, columns and panes exist.
 //! Where a window is looking at that content is its own: the workspace it shows, the animation
 //! between two workspaces, how far each workspace is scrolled, how big the window is. Two windows
-//! on one session each hold a [`WindowView`] and move independently (F012, decision 2c249a29).
+//! on one session each hold a [`WindowView`] and move independently.
 //!
 //! The layout reads and moves a view through [`Layout`](super::Layout) and
 //! [`LayoutMut`](super::LayoutMut); nothing outside this crate has to know what is in one, so

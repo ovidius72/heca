@@ -163,7 +163,7 @@ bypasses are bugs).
 flowchart TD
     subgraph SRC["Input sources (all funnel in)"]
         kb["Keyboard\nwinit event → app/input.rs\nhandle_keyboard_input"]
-        mo["Mouse\nheca/src/mouse.rs → mouse/target.rs\nsurface_* handlers"]
+        mo["Mouse\nheca/src/mouse/mod.rs → mouse/target.rs\nsurface_* handlers"]
         rpc["RPC\nheca/src/rpc.rs"]
         decl["Declarative\nheca-view Intent →\ndispatch_view_intent"]
     end
@@ -224,7 +224,7 @@ Key facts (from the code):
 Chrome is a **tree**, not a flat list. Paint order = pre-order over the tree =
 lexicographic z-path. The model and the universal KeyHint resolver live in
 `docs/surface-compositor.md`; the regions + mounted providers are owned by
-`ChromeHost` (`chrome/host.rs`); the per-frame rendering is in `chrome/`
+`ChromeHost` (`chrome/docks/host/mod.rs`); the per-frame rendering is in `chrome/`
 (`mod`, `overlay`, `layers`, `pane`/`expose`, `pane_header`, `palette`, `hint`).
 
 ```mermaid

@@ -55,7 +55,7 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 /// `realize` does **not** enumerate them — it merges by name against each half's own fields, so a
 /// field added to either is settable from a description with no change to the mapper.
 ///
-/// **Appearance became settable 2026-07-27 (F003/P017/T7).** `Visual` used to be unserializable on
+/// **Appearance is settable.** `Visual` used to be unserializable on
 /// purpose, so appearance was unreachable by construction. The theme is the default now, not a
 /// wall: set nothing and you follow the theme, which is what most widgets should do.
 ///
@@ -83,7 +83,7 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 ///
 /// Deliberately NOT properties, with the reason recorded on each builder: closures (behaviour
 /// crosses as an [`Intent`]), composed content (use `children`), and builders bound to live host
-/// signals. Appearance **used to be** in this group; it left on 2026-07-27 (F003/P017/T7).
+/// signals. Appearance **used to be** in this group; it has since left.
 ///
 /// # Props & events by kind
 /// Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
@@ -174,8 +174,7 @@ pub struct ViewNode {
     /// changed). The *only* way a node carries behaviour — an action id, not a closure.
     #[serde(default, skip_serializing_if = "Events::is_empty")]
     pub events: Events,
-    /// **The menu this node opens on a right-click** — a declaration, exactly as `press` is
-    /// (F003/P097/T501).
+    /// **The menu this node opens on a right-click** — a declaration, exactly as `press` is.
     ///
     /// ⚠️ **A menu is not a widget kind, and must not become one.** Natively it is one builder on
     /// *any* widget (`MenuExt::context_menu`) — no row identity, no path string, no registered
@@ -195,7 +194,7 @@ pub struct ViewNode {
     pub menu: Vec<DropdownItem>,
     /// This node's **own** named verbs (`name` → [`Intent`]) — the declarative spelling of
     /// `EventExt::on_action`, and how a described surface owns a verb of its own instead of
-    /// borrowing one the app already compiled in (F003/P082/T436).
+    /// borrowing one the app already compiled in.
     ///
     /// **Not the same thing as an event.** An event is fired *at* this node by something the user
     /// did to it (`press`, `change`); an action is a name said out loud — by a key binding
@@ -241,7 +240,7 @@ impl<N: Into<ViewNode>, const K: usize> IntoNodes for [N; K] {
 impl ViewNode {
     /// **Open this menu when the node is right-clicked** — the described spelling of
     /// `MenuExt::context_menu`, and available on every kind for the same reason it is on every
-    /// widget (F003/P097/T501).
+    /// widget.
     ///
     /// ```ignore
     /// ViewNode::new(WidgetKind::Row)
@@ -258,8 +257,8 @@ impl ViewNode {
         self
     }
 
-    /// A new node of `kind` with no props/events/children. (The ergonomic SwiftUI-style
-    /// builder is a separate task, plugin-task-ui-2; these are the minimal constructors.)
+    /// A new node of `kind` with no props/events/children. These are the minimal constructors;
+    /// the typed builders are in [`build`](crate::build).
     pub fn new(kind: WidgetKind) -> Self {
         Self {
             kind,

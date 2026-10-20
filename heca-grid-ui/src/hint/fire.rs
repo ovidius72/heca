@@ -6,7 +6,7 @@ use crate::component::Component;
 /// **Pick the widget at `path`.** `false` when the path no longer leads to a target — a tree rebuilt
 /// under the letters, which is not an error.
 ///
-/// **The pick is an event** (F003/P082/T432): it is delivered as
+/// **The pick is an event**: it is delivered as
 /// [`Event::Hint`](crate::event::Event::Hint) on the walk every other event uses — capture down the
 /// picked widget's ancestor chain, the target, then back up, with `stop_propagation` ending it.
 /// There is no second dispatch path for picks, which is what makes a container able to watch, and
@@ -32,6 +32,9 @@ pub fn fire_hint(root: &mut dyn Component, path: &[usize]) -> bool {
         key: node.base().identity().map(str::to_string),
         bounds: node.base().bounds,
     });
+    // **A pick is a press**: it gives the keyboard where a press there would — the control, or the
+    // region around it that keeps the keyboard — before the pick itself runs.
+    crate::focus::focus_on_press(root, path);
     crate::component::deliver_to_path(root, path, &ev);
     true
 }

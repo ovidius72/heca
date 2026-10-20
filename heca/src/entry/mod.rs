@@ -4,9 +4,9 @@
 //! ```ignore
 //! fn main() {
 //!     heca::regions("sidebar.left").append(Planner::new("planner")); // a dock
-//!     let pro = heca::extension("pro");                               // who this program is
-//!     pro.action("start_worker").label("Start worker").run(start);    // `pro.start_worker`
-//!     pro.layer("planner").view(planner_overlay);                     // `pro.planner`
+//!     let demo = heca::extension("demo");                               // who this program is
+//!     demo.action("start_worker").label("Start worker").run(start);    // `demo.start_worker`
+//!     demo.layer("planner").view(planner_overlay);                     // `demo.planner`
 //!     heca::run();
 //! }
 //! ```
@@ -22,7 +22,7 @@
 //! move lasts for the session.)
 //!
 //! **Which side each door lives on.** heca is going to run as a server holding all state, with each
-//! window a client that only draws (F012/P104). The doors are split by that line, so the split
+//! window a client that only draws. The doors are split by that line, so the split
 //! routes them rather than redesigning them:
 //!
 //! | side | doors | why |

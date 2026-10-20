@@ -1,7 +1,7 @@
-//! OS-native foreground-process detection for a PTY (pane-runtime Phase 2).
+//! OS-native foreground-process detection for a PTY.
 //!
 //! Event-first per `pane-runtime-state-plan.md` §0.2: this shim is called from
-//! [`super::TerminalBackend::update`] on the terminal-output / reader-EOF wake,
+//! [`update`](crate::backend::PaneBackend::update) on the terminal-output / reader-EOF wake,
 //! debounced to [`FOREGROUND_DEBOUNCE`]. It does **not** poll on a periodic
 //! timer — the deferred periodic-poll fallback is intentionally absent.
 //!
@@ -107,9 +107,8 @@ fn process_name(pid: libc::pid_t) -> Option<String> {
 }
 
 /// Resolve a pid's cwd. TODO(macOS): implement via `proc_pidinfo`
-/// (`PROC_PIDVNODEPATHINFO`) from libproc. Deferred — the **preferred** cwd source
-/// is OSC 7 (Phase 3 shell integration); the OS fallback lands in a follow-up so
-/// Phase 2 ships without risky struct-layout FFI.
+/// (`PROC_PIDVNODEPATHINFO`) from libproc. Not built — the **preferred** cwd source
+/// is OSC 7 (shell integration), and this fallback needs risky struct-layout FFI.
 #[cfg(target_os = "macos")]
 fn cwd_of(_pid: libc::pid_t) -> Option<PathBuf> {
     None

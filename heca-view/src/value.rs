@@ -98,10 +98,9 @@ pub enum PropValue {
     /// ```
     ///
     /// It exists because the alternative was a new variant per struct. `border` and `glow` were
-    /// **unreachable from a description for as long as this was missing** — F003/P017/T007 gave both
-    /// types serde derives and its commit claimed "the whole of `Visual`", but serde on the type is
-    /// not a value that can carry it, and nothing tested the two, so nothing failed. A future
-    /// struct-shaped property needs no change here (F003/P011/T018).
+    /// **unreachable from a description for as long as this was missing** — both types had serde
+    /// derives, but serde on the type is not a value that can carry it, and nothing tested the two,
+    /// so nothing failed. A future struct-shaped property needs no change here.
     ///
     /// Values nest: a [`Color`](PropValue::Color) inside a map is still a theme token name and is
     /// still resolved against the live theme.
@@ -197,6 +196,29 @@ impl Intent {
     /// a keybinding, or raised by a plugin. That is the whole reason it exists — see [`Intent`].
     pub fn arg(mut self, key: impl Into<String>, value: PropValue) -> Self {
         self.args.insert(key.into(), value);
+        self
+    }
+
+    /// Add several arguments at once — [`arg`](Self::arg) for each pair, in order, so a later key
+    /// replaces an earlier one.
+    ///
+    /// For arguments that already arrive as a list (the words of an RPC line, a key binding's `args`
+    /// table, a menu row's entries), so no caller folds them in a loop of its own. Each value is
+    /// still an explicit [`PropValue`], for the reason [`arg`](Self::arg) gives. A described intent
+    /// carries the same pairs as its `args` table: `{ "action": "x", "args": { "a": { "int": 1 } } }`.
+    /// `docs/widgets.md` → "Arguments — what an `Intent` may carry".
+    ///
+    /// ```
+    /// # use heca_view::{Intent, PropValue};
+    /// let pairs = [("column", 2), ("pane", 7)];
+    /// Intent::new("focus_pane").args(pairs.map(|(k, v)| (k, PropValue::Int(v))));
+    /// ```
+    pub fn args<K: Into<String>>(
+        mut self,
+        pairs: impl IntoIterator<Item = (K, PropValue)>,
+    ) -> Self {
+        self.args
+            .extend(pairs.into_iter().map(|(k, v)| (k.into(), v)));
         self
     }
 }

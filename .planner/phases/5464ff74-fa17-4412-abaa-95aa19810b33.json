@@ -1569,10 +1569,10 @@
       "priority": 8,
       "shortName": "split-the-files-that-are-doing",
       "title": "Split the files that are doing several jobs — the ones found while building T432",
-      "status": "deferred",
-      "description": "Split the files that are doing several jobs. AGENTS § 0 rule 4: aim under 400 lines, **above 600 stop and agree a split** — the line count is the smoke alarm, not the rule: **the defect is always the second job**.\n\n⚠️ FULL DESCRIPTION: `.planner/docs/t468-oversized-files.md`. It holds what used to be inline here, unchanged: the 2026-08-21 table of files found while building T432 with the jobs inside each, the order to do them in and why, and the rules for the work (a move never a rewrite; agree each split first; the doc-comment and shared-helper traps hit while splitting the two hint files). Moved out because `descriptionRef` refuses every path spelling and a description this size is silently dropped.\n\n⚠️ CENSUS REFRESHED 2026-09-04: `.planner/docs/oversized-files-2026-09-04.md` — a full sweep, not just the files T432 happened to touch. **65 files are over 600 lines, twelve of them over 2000.** Read it rather than re-measuring.\n\nSIX OF THE TWELVE LARGEST HAVE NO TASK AT ALL, which is the gap the census exists to close: `heca/src/handlers.rs` (3430), `heca/src/actions.rs` (3282), `heca/src/notification.rs` (3147), `heca-core/src/backend/terminal/engine.rs` (2249), `heca/src/input.rs` (2126), `heca-grid-ui/tests/phase_a.rs` (6654). The census carries a proposed split for the first three. **They are proposals — filing is Antonio's call (AGENTS § 0), never something to create while passing through.**\n\nAlready filed elsewhere: `app/registry.rs` is T466, `showcase.rs` T470, `scroll_region.rs` T471, `heca-view/src/lib.rs` T472.\n\nRaised because P097/T497 touched nineteen files that were already over the limit; AGENTS § 0 says to say so rather than quietly reorganise (Antonio, 2026-09-04: *\"do we have a task already in the planner that aims to rewrite large files? If so add those large files to the task description\"*).\n\n⚠️ MUST NOT be interleaved with P097 — these files are the same ones P097 is changing.",
-      "descriptionUpdatedAt": "2026-09-04T13:59:25.864Z",
-      "notes": "",
+      "status": "done",
+      "description": "Split the files that are doing several jobs. AGENTS § 0 rule 4: aim under 400 lines, **above 600 stop and agree a split** — the line count is the smoke alarm, not the rule: **the defect is always the second job**.\n\n⚠️ FULL DESCRIPTION: `.planner/docs/t468-oversized-files.md`. It holds what used to be inline here, unchanged: the 2026-08-21 table of files found while building T432 with the jobs inside each, the order to do them in and why, and the rules for the work (a move never a rewrite; agree each split first; the doc-comment and shared-helper traps hit while splitting the two hint files). Moved out because `descriptionRef` refuses every path spelling and a description this size is silently dropped.\n\n⚠️ CENSUS REFRESHED 2026-09-04: `.planner/docs/oversized-files-2026-09-04.md` — a full sweep, not just the files T432 happened to touch. **65 files are over 600 lines, twelve of them over 2000.** Read it rather than re-measuring.\n\nSIX OF THE TWELVE LARGEST HAVE NO TASK AT ALL, which is the gap the census exists to close: `heca/src/handlers.rs` (3430), `heca/src/actions.rs` (3282), `heca/src/notification.rs` (3147), `heca-core/src/backend/terminal/engine.rs` (2249), `heca/src/input.rs` (2126), `heca-grid-ui/tests/phase_a.rs` (6654). The census carries a proposed split for the first three. **They are proposals — filing is Antonio's call (AGENTS § 0), never something to create while passing through.**\n\nAlready filed elsewhere: `app/registry.rs` is T466, `showcase.rs` T470, `scroll_region.rs` T471, `heca-view/src/lib.rs` T472.\n\nRaised because P097/T497 touched nineteen files that were already over the limit; AGENTS § 0 says to say so rather than quietly reorganise (Antonio, 2026-09-04: *\"do we have a task already in the planner that aims to rewrite large files? If so add those large files to the task description\"*).\n\n⚠️ MUST NOT be interleaved with P097 — these files are the same ones P097 is changing.\n\n---\n**Completion summary:**\nFile-split census complete: 72/72 checklist items checked. Every Rust file that was ≥800 lines has been split into a folder of smaller single-job files, each under the 800-line limit. The final step, C57, split heca-grid-ui/src/pointer/mod.rs (813) into the router (mod.rs, 676) plus deliver.rs (150, the target-and-bubble delivery model). Each split was move-only with no behaviour change; clippy (-D warnings), cargo doc (--document-private-items), the crate test suite and cargo check -p heca were green on every step. Commits C49-C57: 3003651f, d778707b, 4d8fe31f, 6873561e, 6e776a50, 8f3f0ae8, bd030f38, fd831b8d, 4644f7f6.",
+      "descriptionUpdatedAt": "2026-10-19T15:10:10.943Z",
+      "notes": "Progress 2026-10-15 (2), branch refactor/split-chrome-mod in ~/projects/heca (uncommitted). Moves first, test count equal; then review fixes.\n\nDONE\n- chrome/mod.rs (2296) -> mod.rs (module list and exports only), division.rs (how the window is shared), emitter.rs (intent sink, fires/picks), names.rs (pane/column/slot/row names, pick scopes), retained.rs (kept chrome tree and its rebuild check), window_root.rs (seating chrome and surfaces); pane_drop_row joined drag.rs; tests moved beside their code (scene/tests/{mod,regions,docks}, theme, signals, pane_header/tests, division, names).\n- providers/workspaces/mod.rs (1797) -> mod.rs (provider), actions.rs, verbs.rs, keys.rs, menus.rs; build_body joined dock_view.rs; tests/{mod,cursor,build}.rs.\n- heca-grid-ui style.rs (1726) -> style/{mod,flow,space,length,grid,visual,layout}.rs.\n- Review fixes: (1) the chrome rebuild check no longer lists style settings by hand: theme and appearance change only on reload, which drops the tree, so a new setting needs nothing added; (2) RepaintWatch deleted: every user threw away its repaint signal, so it was an empty wrapper box (sidebar pane rows, column groups, status bar); (3) prefix key and its timeout are one PrefixKey taken from [keys] in one step: a config reload used to update the key but not the timeout (test the_prefix_key_carries_its_own_timeout, break-checked); FRAME_INTERVAL moved to app/lifecycle.rs; (4) runtime_snapshot wrapper deleted; (5) planner ids and history stripped from comments, stale allow(unused_imports) and unused re-exports removed, broken private doc links fixed; workspaces actions use the ActionMeta builder. AGENTS.md and docs/widgets.md paths updated.\n- Gates: workspace tests 2363 passed, clippy clean, cargo doc clean.\n\nFOUND, NOT FIXED (needs a decision)\n- The workspaces component keeps its cursor twice: a row key per mount and a typed nav_selection in the store; every writer must set both (app/focus.rs says so). T356 is done, so the second copy has no reason left.\n- Other hand-built ActionMeta literals: providers/mod.rs, notification.rs, chrome/palette.rs.\n\nNEXT: the rest of the census. Chrome files still over 600: state.rs 1450, layers/tests.rs 1228, palette.rs 883, context_menu.rs 869, expose/mod.rs 860, host.rs 850, overlay.rs 787, layers/mod.rs 717, expose/pane_card.rs 714, scene.rs 673. scroll_region.rs is T471, notification.rs is T512.\n\nProgress 2026-10-15, branch fix/surface-clip-follows-scene in ~/projects/heca-f012 (merged as #290). A move, never a rewrite.\n\nDONE\n- heca-grid-ui/src/component.rs (3187) -> component/ folder: mod.rs (frame requests, re-exports), tree.rs (tree queries, shift_subtree, wrap_transparently), base/mod.rs (Base struct), base/methods.rs (impl Base), behavior.rs (Component trait), dispatch.rs (event walk), paint_walk.rs (paint_child and the framework's draws over a widget), paint_cx/{mod,transform,layers,draw,chrome}.rs, tests.rs. PaintCx fields and its private helpers became pub(super) so the sibling files can reach them.\n- heca-grid-ui/src/builders.rs (1887) -> builders/ folder: place.rs, layout.rs, style.rs, children.rs (IntoComponent, IntoChildren, Parent, IntoContextMenu), tests/.\n- ComponentExt (842 lines, one trait) split by subject into eight traits, each blanket-implemented for every Component: EventExt, DragExt, MenuExt, TooltipExt, HintExt, IdentityExt, PresenceExt, ToneExt. The prelude exports them all; imports that named ComponentExt (about 80 files) now name the traits they use. docs/widgets.md has a table of them.\n- Tests that read source files by path were updated: prop_drift (Base's setter is now in component/base/methods.rs) and heca-view-realize every_universal_capability_is_reachable_from_the_sdk (now reads every builders/*.rs trait that has a blanket impl for all components).\n\nALSO ON THAT BRANCH (fixes found while splitting)\n- Keyboard area fix: keys, the menu key and actions go to the nearest named area (surface or region) around whatever holds the keyboard. Library: heca_grid_ui::keyboard_area. App: FocusedSurface::Widget in app/input/surface.rs. \"Which dock the keyboard returns to\" still uses page_scope. Checked by Antonio 2026-10-15.\n- Terminal drawing follows the scene; a parent's clip applies to every child (Component::children_clip).\n- Every drag shows a picture by default (.drag_chip() opts out); drop places open for a pane carried from anywhere; edge scroll only while a pane is carried.\n- About 150 broken doc links fixed; cargo doc denies broken and private links (workspace lints).\n\nSTILL OVER 400 (single definitions, not cut further)\n- component/base/mod.rs 488 (the Base struct), component/behavior.rs 544 (the Component trait).\n\nLEFT AS IS\n- focus_navigable_dock (handlers/docks.rs) is temporary until P086.\n\nTRAPS HIT\n- Do not run cargo fmt in this repo (AGENTS.md); many files already differ from rustfmt, so format moved import lines by hand.\n- A split breaks intra-doc links that relied on names in scope; run cargo doc --workspace --no-deps (and --document-private-items for the files you moved) after every split.\n- zsh does not split $var in a for loop; use while-read.",
       "statusLog": [
         {
           "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-001-planned-deferred",
@@ -1581,20 +1581,518 @@
           "toStatus": "deferred",
           "title": "Parked 2026-08-28 until the input work lands. These splits carve up the exact files P097(F003) and P094(F011) reshape — this task's own list names `heca-grid-ui/src/component.rs` (specifically its event router: dispatch, deliver, focus_path, deliver_to_path, broadcast, run_pick), `heca-grid-ui/src/event.rs`, and `heca/src/app/interaction.rs` (routing and dispatch). Those are precisely what \"one dispatch over the tree\" restructures.",
           "description": "Parked 2026-08-28 until the input work lands. These splits carve up the exact files P097(F003) and P094(F011) reshape — this task's own list names `heca-grid-ui/src/component.rs` (specifically its event router: dispatch, deliver, focus_path, deliver_to_path, broadcast, run_pick), `heca-grid-ui/src/event.rs`, and `heca/src/app/interaction.rs` (routing and dispatch). Those are precisely what \"one dispatch over the tree\" restructures.\n\nSplit them first and P097 immediately re-carves freshly split files; the work is done twice and the second diff is unreviewable. Split them after and each is a pure move over settled code, which is what AGENTS § 0 rule 4 asks for.\n\nResume after P097 and P094's terminal work. Nothing here is a defect — no user-visible behaviour waits on it."
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-002-deferred-planned",
+          "date": "2026-10-15T09:11:17.746Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Antonio asked to resume the splits now (2026-10-15). The reason it was parked, the input work (P097/P094) reshaping the same files, has landed.",
+          "description": "Antonio asked to resume the splits now (2026-10-15). The reason it was parked, the input work (P097/P094) reshaping the same files, has landed."
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-003-planned-in-progress",
+          "date": "2026-10-15T09:11:19.538Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d63716df-5f3f-401f-9d10-0469a6a4bf9c",
+          "date": "2026-10-15T10:53:16.301Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio's sidebar-colour check found [appearance.sidebar] border_color has no effect; he asked to fix it now (T449, which it waited on, is done).\nWhat was being done: T468 file splits committed as fa482cb5 on refactor/split-chrome-mod; Antonio checked sidebar rows, status bar and prefix timeout reload.\nResume location: Next oversized chrome file: chrome/state.rs (1450), then layers/tests.rs, palette.rs (another agent may be splitting palette/command_palette), context_menu.rs, expose/mod.rs, host.rs, overlay.rs, layers/mod.rs, expose/pane_card.rs, scene.rs.\nHow to resume: Move first with an equal test count, then review fixes; then resume T525 for heca-pro as Antonio asked."
+        },
+        {
+          "id": "fedee597-cd8a-46bf-9e30-e1f3a876b882",
+          "date": "2026-10-15T12:39:33.374Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from Next oversized chrome file: chrome/state.rs (1450), then layers/tests.rs, palette.rs (another agent may be splitting palette/command_palette), context_menu.rs, expose/mod.rs, host.rs, overlay.rs, layers/mod.rs, expose/pane_card.rs, scene.rs.. Move first with an equal test count, then review fixes; then resume T525 for heca-pro as Antonio asked."
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-006-in-progress-done",
+          "date": "2026-10-19T15:10:10.939Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "File-split census complete: 72/72 checklist items checked. Every Rust file that was ≥800 lines has been split into a folder of smaller single-job files, each under the 800-line limit. The final step, C57, split heca-grid-ui/src/pointer/mod.rs (813) into the router (mod.rs, 676) plus deliver.rs (150, the target-and-bubble delivery model). Each split was move-only with no behaviour change; clippy (-D warnings), cargo doc (--document-private-items), the crate test suite and cargo check -p heca were green on every step. Commits C49-C57: 3003651f, d778707b, 4d8fe31f, 6873561e, 6e776a50, 8f3f0ae8, bd030f38, fd831b8d, 4644f7f6."
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
+      "acceptedDecisions": [
+        {
+          "id": "0470d5da-bfa2-4cae-a11e-debd217d3294",
+          "title": "Census splits only for files of 800 lines or more",
+          "decision": "The census part of T468 splits only files of 800+ lines (16 files, 813–1741). The 17 files between 601 and 743 lines are not split in this task.",
+          "rationale": "Antonio, 2026-10-16: too many files; do not do those under 800 lines.",
+          "implementationNotes": "Dropped (2026-10-16 measure): overlay/tests.rs 743, layers/mod.rs 713, expose/pane_card.rs 713, providers/mod.rs 695, drag/resolve.rs 693, widgets/label.rs 670, widgets/input.rs 666, app/startup.rs 656, window/scene/mod.rs 653, input/action.rs 643, key_hint_group.rs 636, workspaces/model_tests.rs 626, widgets/overlay/mod.rs 616, tests/label.rs 611, workspaces/model.rs 609, toast/mod.rs 605, overlay/place.rs 601. Kept as steps C42–C57.",
+          "acceptedAt": "2026-10-16T15:14:43.843Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-001-chrome-mod-rs-move-into-division-emitter-names-retained-window-root-tests-beside-their-code-970-before-and-after",
+          "number": 1,
+          "title": "chrome/mod.rs: move into division, emitter, names, retained, window_root; tests beside their code (970 before and after)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-002-chrome-mod-rs-fix-the-rebuild-check-lists-style-settings-by-hand-the-settings-give-that-value-from-one-place",
+          "number": 2,
+          "title": "chrome/mod.rs fix: the rebuild check lists style settings by hand; the settings give that value from one place",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-003-chrome-mod-rs-fix-repaintwatch-is-a-general-widget-move-it-to-heca-grid-ui",
+          "number": 3,
+          "title": "chrome/mod.rs fix: RepaintWatch is a general widget; move it to heca-grid-ui",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-004-chrome-mod-rs-fix-prefix-timeout-and-frame-interval-are-not-chrome-move-them-to-input-and-the-app-loop",
+          "number": 4,
+          "title": "chrome/mod.rs fix: prefix_timeout and FRAME_INTERVAL are not chrome; move them to input and the app loop",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-005-chrome-mod-rs-fix-delete-runtime-snapshot-a-one-line-wrapper-with-one-caller",
+          "number": 5,
+          "title": "chrome/mod.rs fix: delete runtime_snapshot (a one-line wrapper with one caller)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-006-chrome-mod-rs-fix-strip-planner-ids-and-history-from-comments-drop-stale-allow-unused-imports",
+          "number": 6,
+          "title": "chrome/mod.rs fix: strip planner ids and history from comments; drop stale allow(unused_imports)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-007-providers-workspaces-mod-rs-split-and-review",
+          "number": 7,
+          "title": "providers/workspaces/mod.rs: split and review",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-008-style-rs-split-and-review",
+          "number": 8,
+          "title": "style.rs: split and review",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-009-chrome-state-rs-move-into-state-shell-workspaces-pane-runtime-tests-by-subject-22-before-and-after",
+          "number": 9,
+          "title": "chrome/state.rs: move into state/{shell,workspaces,pane_runtime} + tests/ by subject (22 before and after)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-010-state-fix-one-write-path-for-pane-runtime-six-test-only-setters-deleted-one-entry-helper-no-expect",
+          "number": 10,
+          "title": "state fix: one write path for pane runtime (six test-only setters deleted), one entry helper, no expect",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-011-state-fix-one-resize-helper-for-both-sidebars-new-test-config-defaults-read-from-config-not-copied-planner-ids-and-stale-doc-refs-stripped",
+          "number": 11,
+          "title": "state fix: one resize helper for both sidebars (new test); config defaults read from config, not copied; planner ids and stale doc refs stripped",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-012-state-fix-antonio-yes-pane-live-info-moves-to-its-own-paneruntimestore-on-the-shared-state-read-by-sidebar-rows-palette-expos-host-api",
+          "number": 12,
+          "title": "state fix (Antonio yes): pane live info moves to its own PaneRuntimeStore on the shared state; read by sidebar rows, palette, exposé, host API",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-013-state-fix-antonio-yes-expos-show-cwd-mirror-deleted-the-expos-reads-the-app-setting-directly",
+          "number": 13,
+          "title": "state fix (Antonio yes): exposé show_cwd mirror deleted; the exposé reads the app setting directly",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-014-decision-pending-workspaces-cursor-kept-three-times-per-placement-row-key-typed-nav-selection-list-position-keep-only-the-row-key",
+          "number": 14,
+          "title": "Decision pending: workspaces cursor kept three times (per-placement row key, typed nav_selection, list position) — keep only the row key",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-015-found-in-check-palette-expos-named-a-renamed-pane-without-its-program-palette-icon-always-terminal-palette-skipped-floats-workspace-panes-in-core-replaces-5-hand-loops-paneinfoview-label-expose-show-cwd-written-key-wins",
+          "number": 15,
+          "title": "Found in check: palette/exposé named a renamed pane without its program, palette icon always terminal, palette skipped floats; Workspace::panes() in core replaces 5 hand loops; PaneInfoView::label(); expose show_cwd written key wins",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-016-found-in-check-enter-in-a-dock-acted-on-the-last-focused-row-and-a-picked-dock-never-gave-its-terminal-the-keyboard-focus-scope-hands-it-to-the-first-control-the-keyboard-follows-a-moved-dock-cursor-focus-key-in-scope",
+          "number": 16,
+          "title": "Found in check: Enter in a dock acted on the last-focused row, and a picked dock never gave its terminal the keyboard — focus_scope hands it to the first control; the keyboard follows a moved dock cursor (focus_key_in_scope)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-017-private-doc-links-all-broken-ones-fixed-across-the-workspace-about-120-incl-redundant-targets-agents-gate-is-cargo-doc-document-private-items",
+          "number": 17,
+          "title": "Private doc links: all broken ones fixed across the workspace (about 120 incl. redundant targets); AGENTS gate is cargo doc --document-private-items",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-018-sync-with-origin-main-pr-291-split-palette-rs-command-palette-rs-reapply-the-palette-pane-row-fixes-to-the-new-files",
+          "number": 18,
+          "title": "Sync with origin/main (PR #291 split palette.rs / command_palette.rs — reapply the palette pane-row fixes to the new files)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-019-expose-mod-rs-split-into-wiring-tests-show-cwd-setting-moves-to-app-settings-hand-made-share-helper-replaced-by-the-library-s-flex",
+          "number": 19,
+          "title": "expose/mod.rs: split into wiring + tests; show_cwd setting moves to app settings; hand-made share helper replaced by the library's flex",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-020-context-menu-rs-split-into-registry-open-entries-pane-menu-tests-by-subject-duplicate-item-arg-helpers-removed",
+          "number": 20,
+          "title": "context_menu.rs: split into registry, open, entries, pane_menu + tests by subject; duplicate item/arg helpers removed",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-021-chrome-host-rs-split-into-mounted-tests-docks-get-their-start-hook-when-placed-new-test-dead-context-path-cursor-moved-hooks-deleted-no-expect-no-debug-stop",
+          "number": 21,
+          "title": "chrome/host.rs: split into mounted + tests; docks get their start hook when placed (new test); dead context_path/cursor_moved hooks deleted; no expect, no debug stop",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-022-rules-sweep-one-way-to-build-the-dock-context-9-hand-copies-planner-ids-out-of-all-code-comments-one-shared-way-to-turn-menu-args-into-an-action-expose-tests-under-400",
+          "number": 22,
+          "title": "Rules sweep: one way to build the dock context (9 hand copies); planner ids out of all code comments; one shared way to turn menu args into an action; expose tests under 400",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-023-chrome-grouped-by-job-docks-input-panes-surfaces-window-state-hint-no-loose-files-every-multi-file-module-is-a-folder-with-mod-rs-36-name-rs-beside-name-pairs-fixed-workspace-wide-agents-md-docs-hook-and-guards-updated",
+          "number": 23,
+          "title": "chrome/ grouped by job: docks/, input/, panes/, surfaces/, window/, state/ (+ hint/); no loose files; every multi-file module is a folder with mod.rs (36 name.rs-beside-name/ pairs fixed workspace-wide); AGENTS.md, docs, hook and guards updated",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-024-heca-view-realize-src-lib-rs-6099-lib-394-style-kinds-463-one-function-widgets-intents-props-vocab-tests-in-19-files-by-subject-96-tests-before-and-after-expos-tests-tests-folder",
+          "number": 24,
+          "title": "heca-view-realize/src/lib.rs 6099 → lib 394 + style, kinds (463, one function), widgets, intents, props, vocab + tests/ in 19 files by subject (96 tests before and after); exposé tests → tests/ folder",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-025-review-with-antonio-dead-code-deletions-reverted-described-layer-path-notification-store-functions-dock-action-retire-file-wide-allows-duplicate-sidebar-active-visited-field-deleted-the-live-highlights-read-the-one-record-intent-args-documented-in-widgets-md-plus-two-wrong-json-examples-fixed-realize-split-uses-named-imports-the-three-source-reading-guards-find-code-by-what-it-is-shared-helper-and-the-size-guard-no-longer-skips-code-after-a-test-file-line-historical-docs-restored-comment-rewordings-reviewed",
+          "number": 25,
+          "title": "Review with Antonio: dead-code deletions REVERTED (described-layer path, notification store functions, dock action retire, file-wide allows); duplicate sidebar active/visited field deleted (the live highlights read the one record); Intent::args documented in widgets.md (plus two wrong JSON examples fixed); realize split uses named imports; the three source-reading guards find code by what it is (shared helper), and the size guard no longer skips code after a test-file line; historical docs restored; comment rewordings reviewed",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-026-overlay-host-chrome-surfaces-overlay-rs-787-overlay-spec-host-modal-tests-the-menu-and-dropdown-part-moves-to-the-context-menu-surface-agreed-with-antonio-2026-10-16-move-only-test-count-equal",
+          "number": 26,
+          "title": "Overlay host (chrome/surfaces/overlay.rs, 787) → overlay/{spec, host, modal, tests}; the menu and dropdown part moves to the context-menu surface (agreed with Antonio 2026-10-16). Move only, test count equal.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-027-overlay-host-review-the-module-description-cites-an-old-plan-section-2-7-1-2-7-2-describe-the-behaviour-instead-check-the-moved-code-against-the-phase-s-review-rules-and-report-findings",
+          "number": 27,
+          "title": "Overlay host review: the module description cites an old plan section (§2.7.1 / §2.7.2) — describe the behaviour instead; check the moved code against the phase's review rules and report findings.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-028-review-fix-a-model-intent-is-sent-through-the-chrome-emitter-s-own-door-fire-intent-intent-sink-not-wrapped-by-hand-at-7-sites-guard-heca-tests-one-place-rs-seen-red-first",
+          "number": 28,
+          "title": "Review fix: a model intent is sent through the chrome emitter's own door (fire_intent / intent_sink), not wrapped by hand at 7 sites. Guard heca/tests/one_place.rs seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-029-review-fix-an-overlay-is-closed-and-answered-through-its-id-overlayid-closer-submitter-not-spelled-out-at-the-dialog-both-menus-and-the-palette-guard-seen-red-first-unit-test-break-checked",
+          "number": 29,
+          "title": "Review fix: an overlay is closed and answered through its id (OverlayId::closer / submitter), not spelled out at the dialog, both menus and the palette. Guard seen red first; unit test break-checked.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-030-review-fix-the-message-dialog-s-body-uses-the-typed-label-builder-not-a-raw-node-guard-forbids-raw-nodes-in-app-code-the-shared-source-scan-helpers-moved-into-heca-tests-common-and-the-app-code-reader-no-longer-stops-at-a-single-test-only-item",
+          "number": 30,
+          "title": "Review fix: the message dialog's body uses the typed Label builder, not a raw node; guard forbids raw nodes in app code. The shared source-scan helpers moved into heca/tests/common, and the app-code reader no longer stops at a single test-only item.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-031-pane-letter-the-pane-puts-its-pick-focus-this-pane-on-its-content-instead-of-itself-one-letter-per-pane-picking-it-gives-the-terminal-the-keyboard-and-focuses-the-pane-never-shared-with-the-sidebar-row-pressing-it-used-to-open-the-sidebar-row-test-seen-red-first",
+          "number": 31,
+          "title": "Pane letter: the pane puts its pick (focus this pane) on its content instead of itself — one letter per pane, picking it gives the terminal the keyboard and focuses the pane, never shared with the sidebar row (pressing it used to open the sidebar row). Test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-032-replaces-c31-reverted-moving-the-letter-onto-the-content-split-it-from-the-sidebar-row-and-broke-sidebar-letter-focuses-the-pane-the-pane-keeps-its-letter-shared-with-its-sidebar-row-new-library-setting-keyboard-to-area-presenceext-a-press-or-pick-on-the-frame-gives-the-keyboard-to-the-first-thing-in-that-part-that-takes-it-and-that-thing-wears-no-letter-of-its-own-unless-it-declared-a-pick-pane-hands-its-keyboard-to-its-content-a-dock-terminal-keeps-its-letter-main-area-columns-take-the-column-destination-scope-like-their-sidebar-view-tests-seen-red-first-library-7-app-5-break-checked",
+          "number": 32,
+          "title": "Replaces C31 (reverted: moving the letter onto the content split it from the sidebar row and broke \"sidebar letter focuses the pane\"). The pane keeps its letter, shared with its sidebar row; new library setting keyboard_to(area) (PresenceExt): a press or pick on the frame gives the keyboard to the first thing in that part that takes it, and that thing wears no letter of its own unless it declared a pick. Pane hands its keyboard to its content; a dock terminal keeps its letter. Main-area columns take the column-destination scope like their sidebar view. Tests seen red first (library 7, app 5), break-checked.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-033-event-file-split-move-only-heca-grid-ui-src-event-rs-1138-event-mod-description-exports-handled-the-was-this-mine-answer-keys-keys-modifiers-typed-text-pointer-button-pointer-drag-pick-details-raw-input-kinds-event-eventkind-intent-widgetintent-handlers-eventcx-handleroutcome-handlers-every-crate-event-path-unchanged-same-test-count-clippy-and-docs-clean",
+          "number": 33,
+          "title": "Event file split (move only): heca-grid-ui/src/event.rs (1138) → event/{mod (description + exports), handled (the was-this-mine answer), keys (keys, modifiers, typed text), pointer (button, pointer/drag/pick details, raw input), kinds (Event + EventKind), intent (WidgetIntent), handlers (EventCx, HandlerOutcome, Handlers)}. Every crate::event:: path unchanged; same test count; clippy and docs clean.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-034-event-split-review-each-new-file-against-agents-md-one-job-nothing-hardcoded-docs-and-the-rust-skill-each-fix-found-becomes-its-own-step-with-a-test-seen-red-first",
+          "number": 34,
+          "title": "Event split review: each new file against AGENTS.md (one job, nothing hardcoded, docs) and the Rust skill; each fix found becomes its own step with a test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-035-event-review-fix-1-the-handler-list-s-description-sits-above-a-one-line-helper-type-so-the-list-has-none-move-it-onto-the-list",
+          "number": 35,
+          "title": "Event review fix 1: the handler list's description sits above a one-line helper type, so the list has none — move it onto the list.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-037-event-review-fix-3-which-events-carry-a-pointer-is-written-in-four-lists-position-target-bounds-stamping-payload-and-drag-in-two-derive-position-and-target-bounds-from-the-payload-accessors-stamp-through-one-mutable-accessor-guard-test-that-every-event-answers-the-three-questions-the-same",
+          "number": 36,
+          "title": "Event review fix 3: \"which events carry a pointer\" is written in four lists (position, target bounds, stamping, payload) and drag in two — derive position and target bounds from the payload accessors, stamp through one mutable accessor; guard test that every event answers the three questions the same.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-038-event-review-fix-4-a-handler-asking-which-modifiers-are-held-gets-none-for-events-with-no-pointer-drag-payload-a-key-press-with-shift-although-the-library-tracks-the-held-state-answer-from-it-test-seen-red-first",
+          "number": 37,
+          "title": "Event review fix 4: a handler asking which modifiers are held gets \"none\" for events with no pointer/drag payload (a key press with Shift) although the library tracks the held state — answer from it. Test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-039-event-review-check-5-key-name-lookup-lowercases-a-single-character-a-a-though-its-doc-says-a-character-is-itself-find-who-relies-on-it-and-report-before-changing-anything",
+          "number": 38,
+          "title": "Event review check 5: key-name lookup lowercases a single character (\"A\" → 'a') though its doc says a character is itself — find who relies on it and report before changing anything.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-040-keyboard-to-give-it-its-declarative-viewnode-form-so-a-plugin-s-description-can-say-it-and-document-both-forms-rustdoc-docs-widgets-md-native-and-declarative-examples-per-agents-documentation-is-mandatory-test-seen-red-first",
+          "number": 39,
+          "title": "keyboard_to: give it its declarative (ViewNode) form so a plugin's description can say it, and document both forms (rustdoc + docs/widgets.md native and declarative examples), per AGENTS \"Documentation is MANDATORY\". Test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-040-key-name-lookup-correct-its-description-a-letter-is-read-in-lowercase-shift-is-carried-separately-add-an-example-showing-a-a-behaviour-unchanged-bindings-terminal-keys-rely-on-it",
+          "number": 40,
+          "title": "Key-name lookup: correct its description — a letter is read in lowercase (Shift is carried separately); add an example showing \"A\" → 'a'. Behaviour unchanged (bindings, terminal keys rely on it).",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-041-plugin-kit-setters-for-placing-a-child-in-a-grid-the-named-area-and-column-row-with-spans-under-the-same-names-as-the-native-placement-builders-realize-already-reads-them-a-guard-test-that-every-native-placement-builder-has-a-kit-setter-seen-red-first-docs-both-forms",
+          "number": 41,
+          "title": "Plugin kit: setters for placing a child in a grid — the named area, and column/row with spans — under the same names as the native placement builders; realize already reads them. A guard test that every native placement builder has a kit setter, seen red first; docs both forms.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-042-census-1-33-heca-renderer-src-text-rs-1741-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 42,
+          "title": "Census 1/33 — heca-renderer/src/text.rs (1741): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-043-census-2-33-heca-core-src-backend-terminal-mod-rs-1722-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 43,
+          "title": "Census 2/33 — heca-core/src/backend/terminal/mod.rs (1722): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-044-census-3-33-heca-config-src-appearance-rs-1688-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 44,
+          "title": "Census 3/33 — heca-config/src/appearance.rs (1688): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-045-census-4-33-heca-grid-ui-src-hint-tests-rs-1449-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 45,
+          "title": "Census 4/33 — heca-grid-ui/src/hint/tests.rs (1449): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-046-census-5-33-heca-src-app-selection-model-rs-1424-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 46,
+          "title": "Census 5/33 — heca/src/app/selection_model.rs (1424): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-047-census-6-33-heca-src-chrome-surfaces-layers-tests-rs-1226-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 47,
+          "title": "Census 6/33 — heca/src/chrome/surfaces/layers/tests.rs (1226): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-048-census-7-33-heca-grid-ui-src-widgets-context-menu-rs-1152-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 48,
+          "title": "Census 7/33 — heca-grid-ui/src/widgets/context_menu.rs (1152): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-049-census-8-33-heca-renderer-src-terminal-rs-1137-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 49,
+          "title": "Census 8/33 — heca-renderer/src/terminal.rs (1137): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-050-census-9-33-heca-theme-src-theme-rs-1086-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 50,
+          "title": "Census 9/33 — heca-theme/src/theme.rs (1086): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-051-census-10-33-heca-grid-ui-src-search-rs-988-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 51,
+          "title": "Census 10/33 — heca-grid-ui/src/search.rs (988): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-052-census-11-33-heca-grid-ui-src-widgets-button-rs-973-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 52,
+          "title": "Census 11/33 — heca-grid-ui/src/widgets/button.rs (973): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-053-census-12-33-heca-grid-ui-src-widgets-select-rs-970-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 53,
+          "title": "Census 12/33 — heca-grid-ui/src/widgets/select.rs (970): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-054-census-13-33-heca-grid-ui-src-widgets-dialog-rs-955-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 54,
+          "title": "Census 13/33 — heca-grid-ui/src/widgets/dialog.rs (955): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-055-census-14-33-heca-grid-ui-src-widgets-key-hint-rs-910-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 55,
+          "title": "Census 14/33 — heca-grid-ui/src/widgets/key_hint.rs (910): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-056-census-15-33-heca-grid-ui-src-nav-rs-865-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 56,
+          "title": "Census 15/33 — heca-grid-ui/src/nav.rs (865): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-057-census-16-33-heca-grid-ui-src-pointer-mod-rs-813-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 57,
+          "title": "Census 16/33 — heca-grid-ui/src/pointer/mod.rs (813): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-058-text-fix-1-the-gpu-setup-270-lines-builds-the-plain-and-the-stencil-pipeline-from-one-helper-and-the-embedded-fonts-are-loaded-by-the-font-code-not-the-gpu-setup",
+          "number": 58,
+          "title": "Text fix 1: the GPU setup (270 lines) builds the plain and the stencil pipeline from one helper, and the embedded fonts are loaded by the font code, not the GPU setup.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-059-text-fix-2-text-shaping-setup-metrics-buffer-family-weight-style-written-three-times-labels-terminal-runs-cell-measure-becomes-one-helper",
+          "number": 59,
+          "title": "Text fix 2: text shaping setup (metrics, buffer, family/weight/style) written three times — labels, terminal runs, cell measure — becomes one helper.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-060-text-fix-3-a-glyph-s-quad-and-the-faux-italic-slant-written-twice-labels-runs-one-quad-helper-and-one-slant-rule",
+          "number": 60,
+          "title": "Text fix 3: a glyph's quad and the faux-italic slant written twice (labels, runs) — one quad helper and one slant rule.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-061-text-fix-4-name-the-hardcoded-numbers-once-line-height-1-2-italic-slant-0-14-vertex-index-buffer-sizes-the-unbounded-shaping-box",
+          "number": 61,
+          "title": "Text fix 4: name the hardcoded numbers once — line height 1.2×, italic slant 0.14, vertex/index buffer sizes, the unbounded shaping box.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-062-text-fix-5-the-four-queue-functions-each-fill-the-18-command-fields-by-hand-one-starting-command-they-change-from",
+          "number": 62,
+          "title": "Text fix 5: the four queue functions each fill the 18 command fields by hand — one starting command they change from.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-063-terminal-fix-3-exit-code-0-is-success-else-error-is-written-twice-shell-report-process-reaped-one-rule-test-seen-red-first-where-a-test-can-be",
+          "number": 63,
+          "title": "Terminal fix 3: \"exit code 0 is success, else error\" is written twice (shell report, process reaped) — one rule. Test seen red first where a test can be.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-064-terminal-fix-4-the-pane-update-105-lines-four-jobs-becomes-named-steps-read-output-notice-the-end-re-check-the-foreground-program-keep-the-view-at-the-bottom-each-beside-the-code-it-belongs-with-same-tests-pass",
+          "number": 64,
+          "title": "Terminal fix 4: the pane update (105 lines, four jobs) becomes named steps — read output, notice the end, re-check the foreground program, keep the view at the bottom — each beside the code it belongs with. Same tests pass.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-065-terminal-fix-5-the-default-cell-size-8-4-14-is-written-three-times-two-test-starters-the-fake-backend-named-once",
+          "number": 65,
+          "title": "Terminal fix 5: the default cell size 8.4 × 14 is written three times (two test starters, the fake backend) — named once.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-066-terminal-fix-1-remove-the-four-unused-engine-starters-new-with-cell-size-with-cell-size-and-waker-with-cell-size-and-defaults-and-waker-only-with-options-with-command-are-called-from-the-store-s-one-door",
+          "number": 66,
+          "title": "Terminal fix 1: remove the four unused engine starters (new, with_cell_size, with_cell_size_and_waker, with_cell_size_and_defaults_and_waker) — only with_options / with_command are called, from the store's one door.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-067-terminal-fix-2-the-internal-starter-takes-the-options-group-whole-instead-of-four-loose-values-and-loses-its-too-many-arguments-allowance-and-its-later-refactor-note",
+          "number": 67,
+          "title": "Terminal fix 2: the internal starter takes the options group whole instead of four loose values (and loses its too_many_arguments allowance and its \"later refactor\" note).",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-068-docs-say-plainly-how-a-terminal-process-starts-one-door-the-store-s-ensure-a-placed-terminal-starts-its-own-from-its-settings-a-pane-s-is-started-by-the-server-from-the-pane-s-description-rpc-with-no-window-session-restore-agents-in-unseen-panes-need-that-the-component-shows-it",
+          "number": 68,
+          "title": "Docs: say plainly how a terminal process starts — one door (the store's ensure); a placed Terminal starts its own from its settings; a pane's is started by the server from the pane's description (RPC with no window, session restore, agents in unseen panes need that); the component shows it.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-069-prefix-q-picking-a-pane-also-releases-the-dock-holding-the-keyboard-so-the-picked-pane-s-terminal-takes-it-from-anywhere-sidebar-notes-no-end-to-end-test-harness-for-the-pick-checked-by-eye",
+          "number": 69,
+          "title": "prefix+q: picking a pane also releases the dock holding the keyboard, so the picked pane's terminal takes it from anywhere (sidebar, notes). No end-to-end test harness for the pick; checked by eye.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-070-terminal-s-derived-name-is-terminal-not-its-scroll-button-s-text-0-lines-above-so-its-pick-letter-stays-put-while-scrolling-test-seen-red-first",
+          "number": 70,
+          "title": "Terminal's derived name is \"terminal\", not its scroll button's text (\"0 lines above\"), so its pick letter stays put while scrolling. Test seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-071-appearance-review-fixes-stale-focus-border-todo-removed-and-its-1-5-read-from-config-s-default-app-showcase-one-opacity-and-one-blur-conversion-helper-were-7-copies-named-limits-and-defaults-border-width-pane-sidebar-radius-pane-padding-pane-sidebar-gap-chrome-opacity-share-existing-tests-guard-them-pure-tidy-ups",
+          "number": 71,
+          "title": "Appearance review fixes: stale focus-border TODO removed and its 1.5 read from config's default (app + showcase); one opacity and one blur conversion helper (were 7 copies); named limits and defaults (border width, pane/sidebar radius, pane padding, pane/sidebar gap, chrome opacity share). Existing tests guard them (pure tidy-ups).",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-072-c46-fix-strip-the-reserved-backend-native-selection-machinery-render-mode-phase-enum-opaque-region-selectionregion-is-now-a-struct-dead-selectionsource-rpc-removed",
+          "number": 72,
+          "title": "C46-fix: strip the reserved backend-native selection machinery (render-mode, phase enum, opaque region → SelectionRegion is now a struct; dead SelectionSource::Rpc removed)",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseHistory": [
+        {
+          "id": "a90c3a96-b543-4b6c-84d6-a69754811f26",
+          "reason": "Antonio's sidebar-colour check found [appearance.sidebar] border_color has no effect; he asked to fix it now (T449, which it waited on, is done).",
+          "whatWasBeingDone": "T468 file splits committed as fa482cb5 on refactor/split-chrome-mod; Antonio checked sidebar rows, status bar and prefix timeout reload.",
+          "resumeLocation": "Next oversized chrome file: chrome/state.rs (1450), then layers/tests.rs, palette.rs (another agent may be splitting palette/command_palette), context_menu.rs, expose/mod.rs, host.rs, overlay.rs, layers/mod.rs, expose/pane_card.rs, scene.rs.",
+          "howToResume": "Move first with an equal test count, then review fixes; then resume T525 for heca-pro as Antonio asked.",
+          "relatedTaskId": "250975ab-4f70-411e-91f4-ae13749a51b5",
+          "pausedAt": "2026-10-15T10:53:16.301Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-10-15T09:11:19.538Z",
+      "completedAt": "2026-10-19T15:10:10.939Z",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-09-04T13:59:25.862Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-10-19T15:10:10.939Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
+          "createdAt": "2026-10-15T12:39:33.249Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -1605,7 +2103,7 @@
       "priority": 11,
       "shortName": "split-heca-renderer-examples-s",
       "title": "Split heca-renderer/examples/showcase.rs (3254) — the catalog is one file doing every surface",
-      "status": "deferred",
+      "status": "canceled",
       "description": "Found while adding the layout sweeps (F003/P082/T438, 2026-08-24) and reported to Antonio, who asked for it to be filed. AGENTS § 0 rule 4: aim under 400 lines, above 600 agree a split first. This task is the list and the proposal, NOT a licence — agree the shape with Antonio before moving anything.\n\nCURRENT: heca-renderer/examples/showcase.rs, 3254 lines. Not in T468's list, which predates it being measured.\n\nWHY IT MATTERS MORE THAN ITS LINE COUNT\nIt is the only place every widget appears in a REAL composition, so it is where framework-wide changes are seen first: T438's sweep over it found 54 escapes at three window widths, five of them at 900px, which the synthetic per-kind samples never reached. It is also the second host for CommandPalette (:319) and the one that exposed P087(F011)/T469 — a widget rendering differently in two hosts. A 3254-line example is a bad place for that evidence to live.\n\nTHE JOBS IN IT\n- `build_ui` (:304) — the whole page: sidebar, docks, every widget gallery section, overlays.\n- `ThemeCtl` (:167) + the live theme controls (glow / radius / border / font / intensity / overlay frame / size / zoom / theme index).\n- `build_scene` (:2154) — per-frame paint + the winit event loop, input mapping (`GridKey`), the separate overlay layout pass (:2737-2741).\n- `apply_size` (:184) and other tree-walking helpers.\n- The T438 sweep test (`mod sweeps`, end of file).\n\nPROPOSED SPLIT — an example may be a DIRECTORY with a main.rs, so the shape is the same one the library uses:\n  heca-renderer/examples/showcase/\n  ├── main.rs        the event loop, the window, build_scene, input mapping\n  ├── controls.rs    ThemeCtl + the live theme controls\n  ├── gallery.rs     the widget catalog sections (one section per fn, grouped)\n  ├── overlays.rs    dialog / palette / context menu / toasts + their own layout pass\n  ├── sidebar.rs     the docks, rail and region-mode demo\n  └── tests.rs       the sweep (and anything else headless)\n\nRULES\n- A move, never a rewrite: no behaviour change in the same commit, and the example must still run (`cargo run -p heca-renderer --example showcase`).\n- Watch the trap from the two hint splits: a doc comment at the end of a segment belongs to the NEXT file's first item, and a helper used by two new modules needs one owner rather than a copy.\n- Gate per split: `cargo test -p heca-renderer --all-targets` and `./scripts/lint-changed.sh`.",
       "descriptionUpdatedAt": "2026-08-24T13:57:46.456Z",
       "notes": "Antonio, 2026-09-24: the showcase as a whole is behind what the app now has, and is better REWRITTEN once components and widgets are stable — not just split. When this is picked up, treat it as a rewrite onto the current widgets (e.g. `Tile`, `.flex`, `.order`, `regions(..)`), done after the widget set settles; splitting the current file first would carve up code that is going to be replaced.",
@@ -1617,6 +2115,14 @@
           "toStatus": "deferred",
           "title": "Parked 2026-08-28 with the other file splits (see T468). The showcase is the second host of every widget, so P097's dispatch change and P094's Terminal component both land in it — splitting it first means splitting a file about to be reshaped. It is also where T502's acceptance test (rebuild one real overlay through the described path) will land. Resume after that. No user-visible behaviour waits on it.",
           "description": "Parked 2026-08-28 with the other file splits (see T468). The showcase is the second host of every widget, so P097's dispatch change and P094's Terminal component both land in it — splitting it first means splitting a file about to be reshaped. It is also where T502's acceptance test (rebuild one real overlay through the described path) will land. Resume after that. No user-visible behaviour waits on it."
+        },
+        {
+          "id": "2d174619-b5c0-4040-9c32-133096cb4251-check-002-deferred-canceled",
+          "date": "2026-10-16T10:58:31.830Z",
+          "fromStatus": "deferred",
+          "toStatus": "canceled",
+          "title": "Antonio decided on 2026-10-16 to leave the showcase example as it is: it is not split. The other splits in this phase go ahead without it.",
+          "description": "Antonio decided on 2026-10-16 to leave the showcase example as it is: it is not split. The other splits in this phase go ahead without it."
         }
       ],
       "decisions": [],
@@ -1629,7 +2135,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T13:57:46.417Z",
-      "updatedAt": "2026-09-25T10:32:21.695Z",
+      "updatedAt": "2026-10-16T10:58:31.830Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -1865,8 +2371,9 @@
       "shortName": "a-column-in-the-scrolling-area",
       "title": "The column in the scrolling area does not own its identity — only its sidebar view does",
       "status": "done",
-      "description": "⚠️ THIS TASK NOW CARRIES TWO BODIES OF WORK. The authoring-API section immediately below is what is being done FIRST (Antonio, 2026-09-11); the column-identity work it was opened for — Parts A and B — starts further down and is unstarted.\n\n⚠️ WHAT LANDED 2026-09-14/15 IS IN THIS TASK'S **NOTES**, and in full in\n`.planner/docs/t474-library-capabilities-2026-09-15.md`. Four library capabilities beyond the\nchecklist: a space is one property; `.accent(Color)` overrides the accent for a widget and its\nsubtree; a container's letter no longer depends on how many children it holds; an exit animation now\nends. **Read the notes before Part A** — the second of those removed the blocker Part A reverted on\ntwice, and the trap list below is written as if it were still there.\n\n═══════════ THE AUTHORING API — library-wide, and the current work ═══════════\n\nWHY NOW, AND NOT LATER. P094(F011)'s next tasks (T449 Terminal-as-a-component, T450 the header) are NEW code. If the API lands first they get written right once; if it does not, they get written in the spellings being deleted and then swept. That is the whole reason this jumped the queue — it is not needed by Parts A/B and does not block them.\n\nTHE ORDER. Checklist items 1–6 are ADDITIVE to callers — `impl Into<..>`, `.child` taking a box, `.border_style` beside the existing builders, one spacing builder taking either kind — so nothing breaks and no call site is forced to change. Item 7 (the sweep) goes last and in its own commits, because a mechanical change across hundreds of sites mixed into a design commit is a diff nobody can review.\n\n⚠️ THIS DESCRIPTION IS THE PLAN; THE CHECKLIST IS THE STATE. They disagreed once — this text said the wire must move while the code deliberately had not moved it — because one was updated and the other was not. Trust the checklist and the commits; correct this text when they diverge.\n\nTHE DECISIONS, with the reasoning and the plugin impact:\n\n- SIZES — DONE (a73034e). `Length` already read `\"200px\"` / `\"100%\"` / `\"auto\"` and a bare number — its serde impl does exactly that — but `.width()` took `Length` by value, so none of it reached a call site and `Length::Px/Percent` is written by hand hundreds of times. The six sizing builders take `impl Into<Length>`; `Length::FULL/HALF/THIRD/QUARTER` are the named fractions. NO WIRE CHANGE: the described side already speaks these spellings, so this is the native side catching up.\n  ⚠️ `Percent` is a FRACTION 0.0..=1.0, not 0-100. Half is `Percent(0.5)`. Renamed from `Pct` because the abbreviation hid the question.\n  ⚠️ Unset ALREADY stretches, like CSS — so `.width(Length::FULL)` on a child that fills says nothing. Deleting those is a JUDGEMENT per call site (it depends on the parent), not part of the sweep, and Antonio drives it.\n\n- CHILDREN — DONE (69e8e05). `Box<dyn Component>` is not itself `Component`, which is the only reason sixteen `*_boxed` twins existed. `.child(..)` takes `impl IntoComponent` covering both and they all went AT ONCE — one widget at a time is how a library ends up half-converted. Native-only: `child_boxed` was realize's own seam and had no described name.\n\n- BORDER STYLE — DONE (350e0d8). `PaneFrame`'s three modes were all about the border — none, a continuous line, corner brackets — so the builder is named for what it is. `.border_style(..)` and NOT `.border(..)`, because `StyleExt::border(Color, width)` already exists; CSS separates `border-style` from colour and width for the same reason. It takes the theme's own `FrameStyle`, which the config's `BorderStyle` converts into — so `PaneFrame` was a THIRD copy of one vocabulary and is deleted, and `chrome::apply_pane_frame` with it. `Pane` is not a `WidgetKind`, so nothing on the wire changed.\n\n- SPACING — DONE. Native half in dbbab0d; the rest on 2026-09-14. `.gap(f32)` and `.gap_spacing(Spacing)` wrote to two different fields, and `.padding(px)` sat beside `.pad_all/.pad_x/.pad_y(Spacing)` — two paths over one property, in the library itself. The counts show what that cost: `.gap` 112 uses against `.gap_spacing` 8, and `.padding` 19 against the three token builders' 11, while the docs said PREFER THE TOKEN. Advice loses to whichever name is shorter.\n  `.gap` / `.padding` / `.padding_x` / `.padding_y` / the four per-side paddings / `.margin` / `.margin_x` / `.margin_y` all take a number, a `Spacing` step, or a string (`\"8px\"` / `\"sm\"`) through `style::Space`. The twins are deleted.\n  ⚠️ MARGIN IS DONE TOO (Antonio, 2026-09-14). It had no token twin to merge, so it was skipped at first; he decided it should speak a space like the other two rather than leave one of the three answering a different question.\n  ⚠️ THE AUTHORED STEP NOW SURVIVES LAYOUT. The old code resolved `gap_spacing`/`pad_spacing_*` into the px fields on every pass, which destroyed the authored value — a font, size-variant or zoom change then had nothing left to re-resolve. Pixels are produced only where the font is known (`Space::resolve`, the four padding-cascade accessors, `to_taffy`), and the rounding-to-whole-pixels rule moved there with it.\n\n- THE WIRE — DONE (Antonio decided 2026-09-14). One name, every spelling: `\"gap\": 8` and `\"gap\": \"sm\"` both land, and so does `\"padding\": \"md\"`. The retired names — `gap_spacing`, `pad_spacing_x`, `pad_spacing_y` — are still READ, so no existing tree breaks; nothing writes them any more.\n  HOW, and why there was only ever one shape: the described vocabulary IS the layout field list (docs/plugins.md § 8, \"Layout properties are read from the layout type itself — no list in the app\"). A property is accepted when its value fits that field's TYPE. So the fields themselves hold a `Space`, exactly as `width` holds a `Length` and has always read `\"50%\"`. No name table was added and none should be.\n  The guard that asserted a string on `\"padding\"` never parses now says what is true: a step name lands, nonsense still degrades to nothing.\n  ⚠️ The retired names are mapped in ONE place, in the merge that already resolves property names. That map is the cost of renaming a described field, and it should stay short.\n  ⚠️ A guard on the SDK side pins the property name a builder writes. Without it nothing can catch the builder emitting the retired name, because the retired name still works — that guard passed with its own fix deleted until it was rewritten.\n\nCONTAINERS, while touching this. A component composes whatever it needs — Flex, Grid, Surface, ScrollRegion, nested to any depth, picked per case. What is never right, whichever container is chosen, is a PARENT THAT COUNTS ITS CHILDREN to tell them apart: the pane holds `[header, content]` and the host asks \"does it have two children?\" to decide whether there is a header, so two things in the body make the first look like one. Documented in docs/widgets.md → Grid and Flex.\n  ⚠️ The picker was doing exactly this and was fixed 2026-09-15 — see the notes. It decided \"this node is a mere wrapper\" by counting children, so a container's letter appeared and vanished with the number of things inside it.\n\nNAMING. Never name a UI box `Column` — `Column` already means a column of panes in heca-core. That convention must be written in docs/widgets.md and AGENTS.md, not only in a phase description, because the obvious name for a vertical box is `Column` and the reason it is taken has to sit in front of whoever reaches for it.\n\nGATES. `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`. Never `--workspace`. Grep that output for `warning:` as well as `error` — a warning was missed by grepping for errors only. Per-file rustfmt count must not rise; a longer name pushes lines over the limit, which happened six times across this work. Sabotage every new guard: across this work three passed with their own fix deleted, and one did not exist until a sabotage passed.\n\n═══════════ PART A — the column owns its identity (UNSTARTED) ═══════════\n\nFound by Antonio driving T438, 2026-08-24: \"prefix+shift+c works but show letters only in the sidebar. not in the scrolling area. not sure this is what we deciced.\" It is not. It is the ownership inversion already decided against, still open for columns.\n\nTHE RULE, ALREADY SETTLED — P082(F003)/T447: \"WHOEVER OWNS THE THING DECLARES ITS IDENTITY; anything else displaying it is a view. A pane owns 'pane:7'. A sidebar row showing that pane is a second view of it, not the owner.\"\n\nThat was fixed FOR PANES by P094(F011)/T451: the pane shell carries `.key(pane_key(id))`, `pane_key` was given ONE home in heca/src/chrome/mod.rs, and the sidebar row became a view of it.\n\nSTATUS — HALF LANDED. `heca/src/chrome/column/` exists: the column in the scrolling area owns `col:<id>`, declares what picking it means, and wears its letter (6ab3058, 9bd6e8d, 518d4ba). What remains is THE COLUMN BECOMING THE PARENT OF ITS PANES — chosen over a sibling shell because a pane should move between containers like a div, with sticky columns and sticky panes later.\n\n⚠️ THE PARENT MOVE WAS TRIED ONCE AND REVERTED. It was done as one lump — ownership + sizing + placement + painting + focus — in the one part of the app no test can see; 1765 tests stayed green through every defect. FOUR TRAPS:\n1. Flex stacking the panes DROPS THE GAP between them, so every pane below the first is drawn higher than its terminal content and its header sits over the text. The WM owns pane geometry: place children at the slots `columns_with_positions` gives.\n2. Moving placement to the column skips the per-frame `shell::focus_state_to` write, so THE ACTIVE PANE LOSES ITS HIGHLIGHT. Nothing else writes it.\n3. A pane's key sits on the `Pane` INSIDE its `KeyHint` wrapper, so a naive `base().key` lookup on the column's child finds nothing — every tiled pane looks unbuilt and is REBUILT EVERY FRAME (100% CPU idle). Resolve through the wrapper.\n   ⚠️ 2026-09-14: this wrapper is gone from the SIDEBAR's rows — a `DockFrame`, a `MarkerGroup` and a `Row` are widgets and now declare their own pick — but the PANE shell is still `KeyHint::new(pane)`, so the trap stands here.\n4. ✅ **TRAP 4 IS GONE (2026-09-15).** It read: panes are painted individually under a per-pane theme, so a column painting its children either flattens them to one accent or double-paints them. The cause was that a pane re-tinted its contents by being painted under a COPY OF THE THEME with the accent swapped — which is what forced one paint call per pane, and therefore what stopped any container from painting its own children. A pane publishes its hue on itself now (`.accent`), so painting is the same walk for every widget and a column may own and paint its panes. See the notes and `.planner/docs/t474-library-capabilities-2026-09-15.md` § 2.\n\n⚠️ OWNERSHIP AND PAINTING CANNOT BE SEPARATED — the column's `paint_child` walks its children, so the moment panes are children they are painted twice. A first attempt at \"ownership only, painting unchanged\" was wrong for this reason, and its replacement — a host lookup function `pane::shell(state, id)` — was a registry by another name and was reverted too. With trap 4 gone this is no longer a blocker but it is still the shape of the work: ownership and painting move together, in steps Antonio drives one at a time (four commits after the first revert, each verified before the next).\n\nAlso asked for, not started: a \"new column\" PLACEHOLDER — while the column pick is open, a slim empty slot right of the current column wearing its own letter, gone when the pick closes. The same affordance a drag insertion marker needs later; `move_pane_to_new_column` already exists to run it.\n\n═══════════ PART B — move the current pane to a NEW column (DONE) ═══════════\nAntonio, 2026-08-24: \"A new action to move the current pane to a new column.\"\n\nLanded in 10bcdf8 as `move_pane_to_new_column` on `prefix+Shift+Enter`, with `act_refusal` for a key that cannot act. Decided while building it: a new column goes RIGHT OF THE CURRENT ONE, not at the end — \"you keep your place in the strip\"; and a pane alone in its column is NOT OFFERED a new column at all, rather than refused afterwards, the same rule that excludes the current column from the pick.\n\n═══════════ VERIFICATION ═══════════\nThe authoring-API work is mechanical and test-covered: green tests, no newly unformatted line, and every guard run red against its own bug. Nothing should change on screen, which is why none of it is visually verified.\n\nVerified on screen by Antonio 2026-09-14/15: panes look unchanged after the accent move; the workspaces dock's letter is consistent at one, two and three workspaces and no longer appears in `prefix+/`. NOT yet verified: the exposé no longer being lettered after it is closed.\n\nParts A/B are RENDERING. Green tests do not show where a letter is, and every defect in T451 was found by eye against a green suite. Antonio drives:\n- `prefix+Ctrl+c` with two or more columns letters the scrolling area AND the sidebar; the typed letter moves the active pane into that column; the letters withdraw together; check with the sidebar shown and hidden.\n- Watch for the same-letter-drawn-twice question — correct if the two are one target seen in two places, but confirm by eye.\n- The parent move: panes keep their gaps, the active pane keeps its highlight, nothing rebuilds every frame (watch idle CPU), and no pane is painted twice.\n\n⚠️ 45 commits sit on `feat/hint-collapses-to-the-tree` and are NOT PUSHED, plus a large uncommitted working tree. Pushing was never discussed; ask before doing it.\n\n---\n**Completion summary:**\nThe authoring-API half is COMPLETE: checklist 8 of 8. Sizes, children, border style, spacing (native and wire), the sweep and the docs. Four library capabilities landed with it — a space is one property, .accent overrides the accent for a widget and its subtree, the picker stopped counting children to decide what a node is, and an exit animation now ends. The column parent move, which this task was opened for, is still unstarted — but trap 4 is gone, because .accent removed the per-pane theme swap that forced one paint call per pane.\n\n**Verification:**\n1825 tests pass; clippy clean at the one pre-existing toast/stack.rs warning; no file left worse formatted than HEAD. Every new guard run red against its own bug by sabotage — except a_card_is_one_pick_target_not_two, which passes but could not be falsified and should be treated as unproven. Verified on screen by Antonio: panes unchanged after the accent move; the dock's letter consistent at one, two and three workspaces and absent from prefix+/; the exposé no longer lettered once closed. NOT yet checked on screen: one letter per card under the exposé's own s picker.\n\n**Remaining or unverified:**\nThe column parent move (three traps left). Six KeyHint wrappers still in the app, candidates for the same fix the exposé card got. Per-widget pickable defaults, untouched. The single dock letter under prefix+Shift+e when two mounts exist. The layer record's second visible flag, still unsettled after an animated close.\n\n**Files touched:**\n- heca-grid-ui/src/style.rs\n- heca-grid-ui/src/builders.rs\n- heca-grid-ui/src/component.rs\n- heca-grid-ui/src/layout.rs\n- heca-grid-ui/src/animation/presence.rs\n- heca-grid-ui/src/hint/collect.rs\n- heca-grid-ui/src/hint/offer.rs\n- heca-grid-ui/src/hint/mod.rs\n- heca-grid-ui/src/hint/tests.rs\n- heca-grid-ui/src/widgets/key_hint_group.rs\n- heca-grid-ui/tests/phase_a.rs\n- heca-view/src/lib.rs\n- heca-view/src/build.rs\n- heca-view-realize/src/lib.rs\n- heca/src/chrome/pane/shell.rs\n- heca/src/chrome/scene.rs\n- heca/src/chrome/mod.rs\n- heca/src/chrome/expose/pane_card.rs\n- heca/src/app/terminal_render.rs\n- heca/src/app/render.rs\n- docs/widgets.md\n- docs/plugins.md\n- docs/hint-architecture.md\n\n---\n**Completion summary:**\nDONE 2026-09-23, every part confirmed on screen by Antonio.\n\n═══ WHAT SHIPPED ═══\n\n**The authoring API** (checklist 8/8, done 2026-09-14/15): sizes, children, border style, spacing native and on the wire, the call-site sweep, the docs. Four library capabilities came with it — a space is one property, `.accent` overrides the accent for a widget and its subtree, the picker stopped counting children to decide what a node is, an exit animation now ends.\n\n**Part B** (done earlier): `move_pane_to_new_column` on `prefix+Shift+Enter`.\n\n**Part A — the column holds its panes** (ca9ea2b). A pane is a child of its column, placed with `at_rect` at the rect the layout engine gave it, so the space the WM leaves between panes survives; stacking them would close it and draw each pane over its own text. Children are reconciled, so a pane still there keeps its widget — its letter, a gesture in flight, an animation. `sync_panes` keeps only floating panes, which belong to no column. One place says where a pane's tree lives: `chrome::pane_roots` for the walks, `hint_surface_root` for a surface.\n\n**Naming** (ca9ea2b). A key says WHICH THING, so one thing has one name wherever it is drawn: the pane in the scrolling area, the sidebar row and the exposé card are three views of one pane and wear one letter between them. A control is `pane:7-zoom`, not `zoom`. `target_identity` stops prefixing by the tree a target was found in; that prefix remains only for a widget with no key.\n\n**The new-column offer** (a243f307), the last piece of Part A. A slim lettered slot right of the column the picked pane is in, gone when the pick closes. A destination is named rather than signalled by a magic id. It comes last so no existing letter moves. A pane alone in its column is not offered one — refused before the letter, not after.\n\n**Carried out of the leftovers, all confirmed:** a placement is named and a clash warns (4f1661b1); `prefix_timeout_ms` is configurable and its deadline is booked (e24e3579); a warning fails the lint gate (28c0cc67).\n\n═══ SUPPORTING WORK, IN ITS OWN COMMITS ═══\nKeyed child reconciliation in the library (1e9775d) — `ToastStack` had written it by hand and the column needed the same. A derived name counts the named things, not what is inside them (dcbd6fb) — three identical rows were `×`, `×[2]`, `×[4]`, and adding a label inside the first renamed the other two. The dock caps and scrolls (af03262). Frame requests coalesce (a2f3326). The workspace formatted (7231e2db).\n\n═══ VERIFICATION ═══\n1883 tests, clippy clean, formatting clean, all three gates green — and the gate now fails on a warning rather than printing it.\n\nConfirmed on screen by Antonio: panes keep their gaps; the active pane keeps its highlight; `prefix+/` letters the panes; `prefix+Ctrl+c` letters the columns and the typed letter moves the pane; a pane shows the same letter in the sidebar and the scrolling area while zoom/float/close differ per pane; the new-column slot appears and works; `prefix+Shift+e` letters all three dock placements and each focuses its own; idle CPU back to normal.\n\nEvery guard was broken on purpose and seen to fail before being put back.\n\n═══ NOT DONE, AND WHY ═══\n**Per-widget pickable defaults.** No symptom behind it, and it reverses a settled rule: `hint/collect.rs:111` says being pickable is NOT opt-in, because requiring a declaration made the picker show a curated handful and feel not worth having. Left alone deliberately.\n\n⚠️ THE HANDOFF'S CPU HYPOTHESIS WAS WRONG — do not re-derive it. It said a layout pass that never settles. Measuring showed 0 frames drawn while spinning, so nothing was laying out. The cause was every widget posting its own frame request; see the notes.\n\n═══ FILES ═══\nheca/src/chrome/{column/*, pane/*, mod.rs, scene.rs, host.rs, identity.rs, focus.rs, pane_header.rs, hint/*}, heca/src/app/{lifecycle.rs, input.rs, selection.rs, startup.rs}, heca/src/{app_state.rs, handlers.rs}, heca-grid-ui/src/{reconcile.rs, nav.rs, builders.rs, layout.rs, style.rs, component.rs, widgets/dock_frame.rs}, heca-config/src/keys.rs, scripts/lint-changed.sh, keybindings.default.toml, docs/keybindings.md, README.md, AGENTS.md.",
-      "descriptionUpdatedAt": "2026-09-23T08:50:09.778Z",
+      "description": "Completed column identity, pane ownership and library authoring API work. The full original description and completion history are preserved in the linked document.\n\nFuture requirement corrected by Antonio on 2026-10-12: **Pinned Column**. The user chooses a whole column to keep visible while other columns scroll. Its panes stay inside it. Independent sticky or pinned panes are not part of this feature. This is future work, not part of T474's completed implementation.",
+      "descriptionRef": ".planner/docs/t474-column-identity-and-authoring-api.md",
+      "descriptionUpdatedAt": "2026-10-12T17:42:29.956Z",
       "notes": "WHAT LANDED 2026-09-14/15 — full detail in .planner/docs/t474-library-capabilities-2026-09-15.md (read it; this is the index).\n\nFour library capabilities, each found by Antonio driving the app, each fixing a rule that sat in the wrong place:\n\n1. A SPACE IS ONE PROPERTY (C5/C6, checklist 8/8). gap/padding/margin take a number, a Spacing step or a string through style::Space, one parser shared with serde; the described side got it free because the vocabulary IS the layout field list. Retired names still read, mapped in one place. The authored step now survives layout — it used to be overwritten by its own resolved pixels every pass.\n\n2. .accent(Color) — override the accent for a widget AND everything inside it. Theme first, then an ancestor's, then the widget's own. It exists because a pane re-tinted its contents under a COPY OF THE THEME, which forces one paint call per pane and is exactly what blocked the column parent move. Verified on screen: panes unchanged.\n\n3. A CONTAINER'S LETTER NO LONGER DEPENDS ON HOW MANY CHILDREN IT HOLDS. The picker decided \"wrapper\" by counting children — the forbidden pattern — so the workspaces dock wore a letter with two workspaces and none with one. Base::transparent replaces the count. The dock's own letter is now scoped to the dock pick. Scoping it broke that pick, which forced the real fix: a scope governs COLLECTION, naming a target outright does not. Verified on screen at one, two and three workspaces.\n\n4. AN EXIT ANIMATION NOW ENDS. close() left a surface visible while its exit played and nothing took it down, so the exposé kept being offered letters after being shut. Presence::take_finished_exit reports the one frame it ends. VERIFIED ON SCREEN: the exposé is no longer lettered once closed. A second copy of the same bug remains in LayerRegistry::hide (the layer RECORD's visible is never settled) — two visibilities for one surface is the underlying smell.\n\nVERIFIED ON SCREEN BY ANTONIO 2026-09-15: ONE letter per card under the exposé's own picker (prefix+Tab to open, then s), after the KeyHint wrapper was removed from PaneCard. Before the fix there were two — one from the wrapper, one from the Row inside it. Note the guard a_card_is_one_pick_target_not_two still could not be falsified by sabotage: the real protection is that PaneCard::build returns Row, so the compiler rejects the wrapper.\n\nOPEN, reported 2026-09-15, not traced: prefix+Shift+e shows ONE letter though the workspaces dock is mounted in both sidebars and dock_candidates builds one per mount. And the dock pick's keycap is tinted warning — the same tone a workspace's own peek letter uses, so two different acts read identically.\n\n═══ 2026-09-21 — SIDEBAR VERIFIED, DOCKS CAPPED, AND THE CPU CAUSE FOUND ═══\n\nVerified on screen by Antonio: the left sidebar is right. Two docks, full width, half the height each. That closes the three uncommitted layout fixes (share as a property, Track::Fr as minmax(0,1fr), a grid filling the axis nobody templated).\n\nDOCKS NOW CAP AND SCROLL. DockFrame was a hand-stacked flex column, so its body sized to its rows: 914px of body inside a 450px frame, rows running off the bottom, and its own scroll area handed more height than it held, so it had nothing to scroll. It declares auto 1fr now — title at its height, body takes the rest. Measured 914 → 404 in a 450 frame, content 900 in 404. Guard: heca-grid-ui/tests/dock_body.rs, red when the fraction is made auto. This is T517's DockFrame half, arrangement only; deleting DockFrame::header(..) is still T517's and untouched.\n\nTHE 100% CPU CAUSE — FOUND, FIXED, NOT TRACKED AS ITS OWN TASK (Antonio, 2026-09-21).\nEvery widget that changes anything calls heca_grid_ui::request_frame, through mark_needs_paint and mark_needs_layout. Each call reached the host, and the host's hook posts a winit event — so the app woke once per WIDGET, not once per frame. Measured on an idle window: 101, 133, 176 and 185 wake-ups in a single second to draw 3 to 15 frames. request_frame's own doc already said the host coalesces; nothing did. Fixed in the library: one ask reaches the host per turn of the loop, re-armed by frame_served() which the loop calls once per pass. Measured after: 1 to 8 events a second. CPU went from pegged to 1–20%.\n\n⚠️ THE HANDOFF'S HYPOTHESIS WAS WRONG — do not re-derive it. It said a layout pass that never settles. The instrument showed 0 frames drawn while spinning, so nothing was laying out or painting. A second guess (a stuck timer deadline) was also wrong: no timer was ever armed. Only measuring found it.\n\nTHE INSTRUMENT, keep it: HECA_LOG_FRAMES=1, debug-only, heca/src/app/frame_reasons.rs. Prints once a second which reasons asked for a frame, which source armed the wake timer, and which events came through the loop's door. needs_frame was a ten-term boolean chain and is now named fields, which is why the question became answerable at all — the same defect T515 already fixed for the wake side one line below.\n\nSTILL OPEN: about 90 idle wakes a second right after activity, no events, no timer, nothing drawn. Smaller than what was fixed and unmeasured — the window-event counter was added but has not been run yet. Likeliest remaining path to the slow climb.\n\nSTATE: 1854 tests pass; clippy clean at the one pre-existing toast/stack.rs warning; nothing left worse formatted. NOTHING COMMITTED, HEAD 5cbc5d6 on feat/hint-collapses-to-the-tree.",
       "statusLog": [
         {
@@ -1985,7 +2492,7 @@
       "startedAt": "2026-09-11T07:28:41.221Z",
       "completedAt": "2026-09-23T08:50:09.772Z",
       "createdAt": "2026-08-24T14:48:00.678Z",
-      "updatedAt": "2026-09-23T08:50:09.772Z",
+      "updatedAt": "2026-10-12T17:42:29.949Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:76ebd5d0-168a-4a97-9b9d-499545debce4",
@@ -3408,9 +3915,9 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-30T15:02:16.652Z",
-  "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
-  "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
+  "updatedAt": "2026-10-19T15:10:10.939Z",
+  "handoff": "# T468 census splits under way — hint tests split proposed, not yet agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-10-17T10:29:04.837Z\nReason: Antonio asked for a handoff after the appearance split was committed and the next split (the hint library's tests) was proposed. The session's context is long; a cold agent needs the exact resume point, the proposed split, the commits so far and the rules Antonio enforced today.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: P082(F003)/T468 — Split the files that are doing several jobs (in progress; checklist 58/71)\n- Exact resume point: step C45 — `heca-grid-ui/src/hint/tests.rs` (1449 lines, 50 tests). Split PROPOSED to Antonio, **not yet agreed**. Ask him \"is this split OK?\" before moving anything.\n\n### Proposed split for C45 (pure move; every test keeps its name `hint::tests::<section>::<test>`)\nThe file already holds 10 inline `mod` blocks; each becomes its own file under `heca-grid-ui/src/hint/tests/`:\n| file | covers | ~lines (source lines) |\n|---|---|---|\n| tests/mod.rs | description + section list | 15 |\n| declarations.rs | which widgets get a letter: declarations, wrappers, containers, names | 405 (4–411) |\n| actionable.rs | anything actionable is lettered | 45 (412–455) |\n| pick_delivery.rs | a pick is an event: who runs it, listening, stopping | 120 (456–576) |\n| offer.rs | handing a letter by name | 80 (577–657) |\n| clipped_away.rs | rows scrolled out of view lose their letter | 150 (658–807) |\n| by_surface.rs | letters grouped by owning surface | 230 (808–1037) |\n| visibility.rs | widgets squeezed to nothing | 165 (1038–1202) |\n| scoped_pickers.rs | a picker's own scope | 175 (1203–1376) |\n| keyed_walk.rs | writes by name leave hidden parts alone | 35 (1377–1410) |\n| a_pick_is_a_press.rs | picking a field/row gives it the keyboard | 40 (1411–1449) |\nThen review each file (repeated helpers, stale notes), each fix its own checklist step.\n\n## Current and partial state\n- Branch `refactor/split-chrome-mod`, NOT pushed past `9eadf394`. Commits this session (all on Antonio's word): `29bc9e14` overlay split + one-door fixes; `1e2d5b8f` pane letter + `keyboard_to` library setting; `81827a60` extending-heca doc (other agent's fix); `71a8f6d6` event split + review fixes + plugin kit `keyboard_to`/`area`/`column`/`row`/spans; `2bb21691` renderer text split + fixes, AGENTS.md \"stay under 800\"; `5242c439` terminal backend split + fixes + docs on how a terminal process starts; `c81d7bf1` prefix+q releases the dock (goes into the terminal from anywhere); `c8cb985d` appearance split + fixes + terminal named \"terminal\".\n- Census steps left: C45–C57 (16 files ≥ 800 lines; C42–C44 done). Files 601–743 lines are dropped from T468 (accepted decision on T468, list in its notes).\n- Working tree clean except `.planning/STATE.md` (a hook's timestamp — never commit it) and `.DS_Store`.\n- Abandoned on Antonio's call (do not redo): a separate \"type here\" letter on the terminal with its own colour, and changing the sidebar pane row's letter to \"go and type\". Final design: `prefix+/` row letter = look and stay in the sidebar (j/k); `prefix+q` = go into the terminal. The removed work is saved at `/private/tmp/claude-501/-Users-antonio-projects-heca/16da7337-196c-4d78-9a0a-53a9de8c904d/scratchpad/t468/type_here/work.diff` (scratch, may vanish).\n\n## Preservation constraints\n- Antonio's rules: plain short English, no function names in replies, answer a question and WAIT; tell him before any change; end replies with \"For you: …\". Fix in the library, nothing hardcoded, composition/DOM-like builders, one path per rule.\n- Every split: propose the shape → OK → move only (same tests by name, clippy `-p <crates> --all-targets --all-features -D warnings`, `cargo doc --no-deps --document-private-items`) → review → each fix its own checklist step with a test seen red first (pure tidy-ups say so). Commit only on \"commit\"; Rust skill review before commit.\n- Read the phase + task in the planner before starting work (Antonio insisted).\n- Cargo is scoped by `.claude/hooks/cargo-scope.sh`; pass crates with literal `-p` (not via a variable). Full workspace only with `HECA_FULL_WORKSPACE=1` on Antonio's word.\n- Never `git checkout --` / restore a whole `git diff --name-only` list: it once reset the planner file. Back up first; exclude `.planner/`.\n- No GUI launch by the agent; Antonio checks by eye.\n\n## Supporting documents\n- None needed: `.planner/docs/t468-oversized-files.md` and `.planner/docs/oversized-files-2026-09-04.md` hold the original census; T468's checklist names each remaining file.\n\n## Blockers and risks\n- No end-to-end test harness for picks (needs full AppState); pick behaviour is checked by eye.\n- `heca-grid-ui/src/widgets/key_hint.rs` (910) and `hint/tests.rs` are census items; keep edits there small until split.\n- AGENTS.md now says \"aim under 400, stay under 800 — above 800 agree a split\"; older planner notes still say 600 (dated records, left as they are).\n\n## How to resume\n1. `planner-task-show T468 full=true`; read P082 phase. Ask Antonio whether the C45 split above is OK.\n2. On OK: back up the file, record `cargo test -p heca-grid-ui -- --list`, move each `mod` block to its file (dedent 4), keep `use super::*` chains, compare test names, run gates.\n3. Review, propose fixes, wait; then C46 (`heca/src/app/selection_model.rs`, 1424) — propose its split first.",
+  "handoffUpdatedAt": "2026-10-17T10:29:04.837Z",
   "handoffAudit": {
     "version": 1,
     "entries": [
@@ -3617,10 +4124,10 @@
       ]
     },
     "supportingDocuments": [],
-    "contentHash": "b866790847781c9ee587e34c58b63301253002468c20333d728bb8acf1aea8d2",
-    "contentLength": 3877,
-    "verifiedAt": "2026-09-29T18:17:53.766Z",
-    "resumeReadyAt": "2026-09-29T18:17:58.302Z",
+    "contentHash": "a56fda91493283fce9c18e232443590683c4f849faa052fd51fd190bbefc1fe5",
+    "contentLength": 5426,
+    "verifiedAt": "2026-10-17T10:29:04.837Z",
+    "resumeReadyAt": "2026-10-17T10:29:08.360Z",
     "readBackSourceReviews": [
       {
         "source": "conversation",
@@ -3644,7 +4151,7 @@
       }
     ]
   },
-  "handoffReadAt": "2026-09-29T18:17:58.302Z",
+  "handoffReadAt": "2026-10-17T10:29:08.360Z",
   "handoffHistory": [
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-09-23T08-58-18-900Z.md",
@@ -3720,9 +4227,29 @@
       "toStatus": "deferred",
       "title": "in-progress → deferred",
       "description": ""
+    },
+    {
+      "id": "5b1f4dda-eea7-4960-9037-34460d1575fb",
+      "date": "2026-10-15T09:11:17.789Z",
+      "fromStatus": "deferred",
+      "toStatus": "in-progress",
+      "title": "deferred → in-progress",
+      "description": ""
+    },
+    {
+      "id": "2220870c-71c8-4a08-a738-328902d75e34",
+      "date": "2026-10-19T15:10:11.013Z",
+      "fromStatus": "in-progress",
+      "toStatus": "deferred",
+      "title": "in-progress → deferred",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
+      "createdAt": "2026-10-15T12:39:33.249Z"
+    },
     {
       "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
       "createdAt": "2026-09-30T08:12:58.919Z"

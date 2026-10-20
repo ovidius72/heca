@@ -188,7 +188,7 @@ impl Component for Tag {
         // Radius from the theme (rounder than a box), clamped to a capsule.
         let radius = (radius_tok * RADIUS_MUL).min((pill.size.h / 2.0) as f32);
         // Theme rest glow (`PaintCx::rest_glow`), toned to the tag color, so the
-        // pill honors the `glow_size` setting at rest like every surface (T011).
+        // pill honors the `glow_size` setting at rest like every surface.
         let glow = cx.rest_glow(GLOW_RADIUS).map(|g| Glow { color: c, ..g });
         cx.rect(
             pill,
