@@ -39,7 +39,7 @@ use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Glow, TextAlign, TextStyle};
+use crate::scene::Glow;
 use crate::search::{Ranked, SearchAction, SearchModel};
 use crate::style::WidgetSize;
 use crate::style::{Direction, Length};
@@ -48,7 +48,7 @@ use crate::widgets::{
     paint_panel_chrome,
 };
 use heca_core::layout::{Point, Rectangle, Size};
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 
 mod command;
 mod component;
@@ -74,10 +74,10 @@ pub struct CommandPalette {
     /// Builder input kept until a named mode can be resolved. The query field
     /// remains the sole mode selector; editing or replacing it clears this input.
     named_prefill: Option<(String, String)>,
-    /// The query field — a real [`Input`], so editing (selection, word/line
-    /// delete, multi-click, caret) comes for free. Driven manually since the
-    /// palette is overlay-drawn: its bounds/font/focus are set at paint time.
-    query: RefCell<Input>,
+    /// The value of the query Input, which lives after the result rows in `Base.children`.
+    query: Signal<String>,
+    /// A typed edit asks the palette to reset ranking/history before its next read or action.
+    query_changed: Signal<bool>,
     selected: usize,
     scroll: usize,
     placeholder: String,
@@ -118,29 +118,26 @@ impl CommandPalette {
     pub fn new() -> Self {
         let open = signal(false);
         let mut base = Base::new();
-        // **Open is focused.** The palette's query field is its own (a `RefCell<Input>`, not a
-        // child), so the palette is the widget that types — and it types because it holds the
-        // keyboard, not because it declared that it takes raw keys and text.
+        // The palette owns modal containment; its child Input owns the keyboard.
         base.follow_focus_modal(open);
         // **A palette locks because it is a palette.** It has the keyboard for its query line,
         // and nothing behind it should be acted on while you are typing into it.
         base.lock = true;
+        let query_changed = signal(false);
+        let placeholder = String::from("Type a command…");
+        let query_field = Self::query_field(open, query_changed, String::new(), placeholder.clone());
+        let query = query_field.text();
+        base.children.push(Box::new(query_field));
         Self {
             base,
             commands: Vec::new(),
             modes: Vec::new(),
             named_prefill: None,
-            // The query field is off-tree, so nothing else can focus it — and the palette hands it
-            // every key and every character it decides is typing. It holds the keyboard for exactly
-            // as long as the palette does.
-            query: RefCell::new({
-                let mut q = Input::new();
-                q.base_mut().follow_focus(open);
-                q
-            }),
+            query,
+            query_changed,
             selected: 0,
             scroll: 0,
-            placeholder: "Type a command…".to_string(),
+            placeholder,
             panel_size: WidgetSize::Normal,
             open,
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
@@ -150,6 +147,21 @@ impl CommandPalette {
             title_marks: Vec::new(),
             title_text: Vec::new(),
             desc_wrap: Vec::new(),
+        }
+    }
+
+    /// Build the one query control; all editing stays in Input.
+    fn query_field(open: Signal<bool>, changed: Signal<bool>, text: String, placeholder: String) -> Input {
+        let mut field = Input::new().value(text).placeholder(placeholder).placeholder_on_focus(true)
+            .on_change(move |_| changed.set(true));
+        field.base_mut().follow_focus(open);
+        field
+    }
+
+    fn sync_query(&mut self) {
+        if self.query_changed.get_untracked() {
+            self.query_changed.set(false);
+            self.on_query_changed();
         }
     }
 
@@ -180,7 +192,7 @@ impl CommandPalette {
             *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
             column = column.child(d);
         }
-        self.base.children.push(Box::new(column));
+        self.base.children.insert(self.commands.len(), Box::new(column));
         self.commands.push(c);
         self
     }
@@ -201,6 +213,9 @@ impl CommandPalette {
     #[heca_grid_ui_macros::prop]
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
         self.placeholder = text.into();
+        let field = Self::query_field(self.open, self.query_changed, self.query_text(), self.placeholder.clone());
+        self.query = field.text();
+        *self.base.children.last_mut().expect("palette owns a query child") = Box::new(field);
         self
     }
 
@@ -212,7 +227,7 @@ impl CommandPalette {
     #[heca_grid_ui_macros::prop]
     pub fn query(mut self, text: impl Into<String>) -> Self {
         self.named_prefill = None;
-        self.query.borrow_mut().set_value(text.into());
+        self.query.set(text.into());
         // Mark, place the selection and reflow now, so this does not depend on being called before
         // `open` — properties are order-independent, and a mode set after it would otherwise paint
         // the wrong list once.
@@ -265,7 +280,7 @@ impl CommandPalette {
 
     /// The current query text (read from the [`Input`]).
     fn query_text(&self) -> String {
-        self.query.borrow().value_str()
+        self.query.get_untracked()
     }
 }
 

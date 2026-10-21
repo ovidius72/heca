@@ -15,7 +15,7 @@ with_event!(
     Item { on_press => Press }
     RailCell { on_press => Press }
     Choice { on_press => Press }
-    Input { on_change => Change }
+    Input { on_change => Change, on_submit => Submit }
     Toggle { on_change => Change }
     Checkbox { on_change => Change }
     Select { on_change => Change }

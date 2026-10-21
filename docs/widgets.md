@@ -19,7 +19,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
 - [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[what every widget gets](#what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Animations](#animations--how-a-surface-arrives-and-leaves)**, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
-  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
+  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`TreeLayout`](#treelayout), [`MessageList`](#messagelist), [`Resizable`](#resizable), [`Line`](#line), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
@@ -105,7 +105,7 @@ use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Size};
 ui.base_mut().style.width  = Length::Px(win_w);
 ui.base_mut().style.height = Length::Px(win_h);
 LayoutEngine::new()
-    .base_font(theme.font_size)
+    .theme(&theme)
     .compute(&mut ui, Size::new(win_w as f64, win_h as f64));
 
 // (b) paint into a fresh Scene. Pass the window size as the viewport so overlay
@@ -121,7 +121,7 @@ let mut scene = Scene::new();
 heca_renderer::scene::enqueue_scene(&mut grid_renderer, &mut text_renderer, &scene);
 ```
 
-See [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs) for a
+See [`heca-renderer/examples/showcase/main.rs`](../heca-renderer/examples/showcase/main.rs) for a
 complete winit + wgpu host (`cargo run -p heca-renderer --example showcase`).
 
 **Layout comes first, and nothing is painted before it has a box.** A widget's layout node is
@@ -504,7 +504,7 @@ the app's keyboard-driven sidebar scroll to follow.
 
 It follows the selection **without fighting the wheel**: the region remembers the target's *natural*
 (unscrolled) position, which changes when the selection moves and stays put when you scroll by hand.
-So it comes to the cursor once, and then leaves you alone.
+So it comes to the cursor once, then leaves you alone until the cursor moves or the viewport changes size.
 
 #### The reveal follows the keyboard, never the pointer
 
@@ -1257,7 +1257,7 @@ Font size is a **theme token inherited by every widget**, resolved centrally dur
   explicit override for that widget.
 - `Style.font_scale` (default `1.0`) is a **semantic multiplier** on the inherited base —
   e.g. a header sets `2.0`, a caption `0.8`. Ignored when `font_size` is set explicitly.
-- `LayoutEngine::new().base_font(theme.font_size)` supplies the base. For each node the
+- `LayoutEngine::new().theme(&theme)` supplies the base. For each node the
   layout pass computes `resolved = font_size > 0 ? font_size : base_font × font_scale`,
   writes it to **`Base::font`**, then calls **`Component::remeasure()`** so widgets whose
   dimensions depend on the font (Input/Select height, Button/Tabs/Badge size, Item row,
@@ -2365,6 +2365,13 @@ vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
+**Following appended content.** `.follow_bottom(true)` keeps the new bottom in view only when the
+reader was at the previous bottom. Off by default. Scrolling up pauses it; returning to the bottom
+resumes it. It also handles reflow and viewport resize. The same `follow_bottom` Bool property and
+`build::Scroll::follow_bottom` builder are available to descriptions. `MessageList` composes this
+capability rather than implementing another scroll offset.
+
+
 An embeddable **scroll viewport**: children laid out at their natural size (the layout engine never shrinks them, so they overflow), clipped to the region's own
 bounds. The visible window is the `ScrollRegion` itself; content beyond it is
 clipped (`PushClip`). It is a **dumb viewport** — it owns no selection state;
@@ -2663,7 +2670,7 @@ region and mounts a realized subtree inside it.
 > the cursor to keep it on screen. The row's visual state stays container-driven
 > via `Item::marker`/`state`. Keyboard *scrolling* of the region is separate: it
 > comes from the app's prefix-gated scroll actions, not from the widget. See
-> [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs) for
+> [`heca-renderer/examples/showcase/main.rs`](../heca-renderer/examples/showcase/main.rs) for
 > the wheel / thumb / click-track / two-axis demo.
 
 ### Label
@@ -2770,6 +2777,24 @@ Props `realize` reads: `text`, `bold`, `italic`, `underline`, `strikethrough` (a
 default `false`). The signals are **not** exposed declaratively — a `ViewNode` is static data and
 cannot carry a live signal (same rule as [`ScrollBar`](#scrollbar) being host-only); a plugin author
 re-emits the node with the new value instead.
+
+**Preformatted text and shared values.** `.preserve_whitespace(true)` preserves spaces and explicit
+newlines while wrapping (default false); use it for editable text and source excerpts. It is also
+the `preserve_whitespace` Bool property / `build::Label::preserve_whitespace`. Native code can use
+`.with_text_signal(signal)` to share an existing `Signal<String>`; descriptions carry static `text`
+instead. Layout and painting use the same wrapper, including source character indices.
+
+```rust
+use heca_grid_ui::{Label, reactive::signal};
+let value = signal(String::from("two  spaces\nand a newline"));
+let label = Label::new("").with_text_signal(value).wrap(true).preserve_whitespace(true);
+```
+
+```rust
+use heca_view::{ViewNode, WidgetKind, PropValue};
+let label = ViewNode::new(WidgetKind::Label).text("two  spaces\nand a newline")
+    .prop("wrap", PropValue::Bool(true)).prop("preserve_whitespace", PropValue::Bool(true));
+```
 
 ### Button
 
@@ -3165,9 +3190,163 @@ Checkbox::new().checked(true).label("ENCRYPT")
 Checkbox::new().label("LEFT LABEL").label_side(LabelSide::Left);
 ```
 
+### Line
+
+A connection inside a layout box. Its endpoints are **shares of that box**, so it follows resizing.
+It emits `DrawCommand::Line(LineCmd)`; the renderer uses the existing antialiased primitive and clip
+pipeline. Zero-length, non-finite and non-positive-width segments draw nothing.
+
+| Builder | Default | Meaning |
+|---|---|---|
+| `Line::new()` | horizontal, centred | Full width; one font line high unless sized by the parent |
+| `.start_x(f32)`, `.start_y(f32)` | `0`, `0.5` | Starting shares, clamped to `0..=1` |
+| `.end_x(f32)`, `.end_y(f32)` | `1`, `0.5` | Ending shares, clamped to `0..=1` |
+| `.arrows(ArrowHeads)` | `None` | `None`, `Start`, `End`, or `Both`; open arrowheads |
+
+Stroke colour follows the inherited content colour, or the theme accent; width follows
+`theme.colors.border_width`. Arrow size follows the
+resolved font and is capped at half the segment length. `LayoutExt` supplies ordinary sizing and
+placement. It has no events or children. `PaintCx::line(LineCmd)` is the lower-level primitive for
+widgets drawing connections between their own resolved child bounds; the command carries `start`,
+`end`, `color`, `width`, `arrows`, and `arrow_size`. Translation, scale, opacity and clips apply to all
+strokes, including arrowheads.
+
+```rust
+use heca_grid_ui::{Line, LayoutExt};
+use heca_grid_ui::scene::ArrowHeads;
+let connection = Line::new().arrows(ArrowHeads::End).width("100%");
+```
+
+```rust
+use heca_view::{ViewNode, WidgetKind, PropValue};
+let connection = ViewNode::new(WidgetKind::Line)
+    .prop("arrows", PropValue::Text("end".into()))
+    .prop("start_y", PropValue::Float(0.0))
+    .prop("end_y", PropValue::Float(1.0));
+```
+
+The typed SDK has the same five setters on `heca_view::build::Line`. See the **connections and text**
+row at the start of the [showcase](../heca-renderer/examples/showcase/page/connections_and_text.rs).
+
+### TreeLayout
+
+A parent above a row of equally shared branches. Grid and Flex size the content; the tree draws
+only the connecting lines, using the same theme stroke as `Line`. The level gap is the shared `lg`
+spacing step, and the branch gap is `md`.
+
+- `TreeLayout::new(parent)` takes any component, including an already boxed subtree.
+- `.branch(component)` appends a branch. Nest another `TreeLayout` to add a level.
+- `LayoutExt` sizes and places the whole tree. There are no tree-specific scalar props, events or
+  signals. Buttons, inputs and other children keep their own normal input handling.
+- No branches: only the parent. One branch: a vertical connection. Several branches: elbow
+  connections to each branch. No application-specific node types or IDs are required.
+
+```rust
+use heca_grid_ui::{TreeLayout, Label};
+let tree = TreeLayout::new(Label::new("Root"))
+    .branch(Label::new("One"))
+    .branch(TreeLayout::new(Label::new("Two")).branch(Label::new("Nested")));
+```
+
+A description puts the parent **first**, followed by the branches. An empty description makes an
+empty tree. The typed SDK uses the same children through `heca_view::build::TreeLayout`.
+
+```rust
+use heca_view::{ViewNode, WidgetKind};
+let tree = ViewNode::new(WidgetKind::TreeLayout)
+    .child(ViewNode::new(WidgetKind::Label).text("Root"))
+    .child(ViewNode::new(WidgetKind::Label).text("One"))
+    .child(ViewNode::new(WidgetKind::TreeLayout)
+        .child(ViewNode::new(WidgetKind::Label).text("Two"))
+        .child(ViewNode::new(WidgetKind::Label).text("Nested")));
+```
+
+### Resizable
+
+A content-sized box with a vertical resize grip. It composes `Grid`, `Line` and `Splitter`; it
+owns height changes and the content keeps its own input and overflow behavior. It works with an
+Input, a scroll region, or another composition.
+
+| Builder | Default | Meaning |
+|---|---|---|
+| `Resizable::new(content)` | natural content height | Wrap one widget or a composed subtree |
+| `.grip(Glyph)` | three diagonal corner strokes | Optionally replace the default mark with an icon; size and colors follow the theme |
+| `.min_height(...)`, `.max_height(...)` | content's pixel minimum; no ceiling | Shared layout constraints on the whole container; a larger content minimum is preserved |
+| `.height(...)` | automatic | Initial height; dragging selects a new height within the limits |
+
+The grip sits inside the bottom-right corner with the theme's `xs` inset; it adds no footer row.
+The control keeps its natural height and aligns to the start of its parent by default. An Input
+cannot be dragged below one readable text line plus its configured padding, including after a
+font change. A vertical Flex stack keeps the same gap between the resized control and its neighbors.
+Before dragging, content changes can grow or shrink the box. After dragging, content fills the
+chosen height. The pointer stays captured until release, including outside the box. Resizing does
+not take keyboard focus from the content. No new key binding or callback is required.
+
+```rust
+use heca_grid_ui::{Resizable, Input, LayoutExt};
+let composer = Resizable::new(Input::new().multiline(true))
+    .width("100%").min_height(60.0).max_height(240.0);
+```
+
+Descriptions use `WidgetKind::Resizable`. One child is the content; multiple children are stacked
+in a column. `grip` takes a glyph name. Shared layout props set the height limits. There are no
+container-specific events; child controls keep theirs. Typed SDK: `build::Resizable`, with `child`,
+`grip`, and the shared layout setters.
+
+```rust
+use heca_view::{ViewNode, WidgetKind, PropValue};
+let composer = ViewNode::new(WidgetKind::Resizable)
+    .prop("min_height", PropValue::Float(60.0))
+    .prop("max_height", PropValue::Float(240.0))
+    .child(ViewNode::new(WidgetKind::Input).prop("multiline", PropValue::Bool(true)));
+```
+
+### MessageList
+
+A growing list of **composed entries**. `ScrollRegion` owns clipping, wheel/thumb input and following
+the bottom. `Label` wraps the plain-text convenience entries. Scrolling up pauses following;
+returning to the bottom resumes it. A resize or new entry keeps the current reading position when
+the reader is away from the bottom.
+
+| API | Default / meaning |
+|---|---|
+| `MessageList::new()` | Empty list; height comes from its parent; follows the bottom |
+| `.message(text)` | Append a plain-text entry with Label's normal prose wrapping |
+| `.entry(component)` | Append arbitrary composed content; preserves its own controls and state |
+| `.visible_lines(usize)` | Optional viewport height in font lines, at least one; unset by default |
+| `.feed() -> MessageFeed` | A cloneable producer retained before moving the list into a tree |
+| `MessageFeed::message(text)` | Append wrapped text at runtime |
+| `MessageFeed::append(component)` | Append composed content at runtime |
+
+`LayoutExt` supplies sizing. Explicit `height` wins over `visible_lines`. The latter sizes the
+**viewport**, not the entries. Give either the parent a bounded height or the list a line count.
+The feed runs on the UI thread, schedules a frame, and requests layout as it appends. Existing
+entry widgets are retained. Entries have their own ordinary events; the list declares none.
+
+```rust
+use heca_grid_ui::MessageList;
+let list = MessageList::new().visible_lines(6).message("Build started");
+let feed = list.feed();
+// Put `list` into a dock, overlay or pane; later, on the UI thread:
+feed.message("Build finished");
+```
+
+A described list accepts `message`, `visible_lines`, generic layout properties, and ordinary
+children. `message` is appended before the children. Rich entries are composed children; the list
+does not assign roles, authors or formatting. The typed SDK is `heca_view::build::MessageList`.
+
+```rust
+use heca_view::{ViewNode, WidgetKind, PropValue};
+let list = ViewNode::new(WidgetKind::MessageList)
+    .prop("visible_lines", PropValue::Int(6))
+    .prop("message", PropValue::Text("Build started".into()))
+    .child(ViewNode::new(WidgetKind::Label).text("A wrapped report")
+        .prop("wrap", PropValue::Bool(true)));
+```
+
 ### Input
 
-Single-line editable text field with a blinking caret, placeholder, and a full
+Editable text field, single-line by default, with a blinking caret, placeholder, and a full
 mouse/keyboard selection + editing model. Focusable. The field carries the faint theme
 rest glow (`interaction.control_rest_glow`).
 
@@ -3243,6 +3422,59 @@ ViewNode::new(WidgetKind::Input)
 ViewNode::new(WidgetKind::Input)
     .prop("placeholder", PropValue::Text("filter containers…".into()));
 ```
+
+#### Multi-line Input
+
+Use `.multiline(true)` on the same Input. It shares the existing selection, editing, IME commit,
+paste and change-event model. `Label` owns its text; `ScrollRegion` owns its scrolling. It grows to
+`.max_lines(n)` (at least one), then scrolls. Unset, the limit comes from the theme's
+`[input].max_lines` setting. The shared `.max_height(...)` layout builder can impose a smaller
+ceiling in pixels or as a share of its parent; the field scrolls inside that height.
+Its minimum keeps one complete text line and the configured padding readable. The Input shell
+owns padding; its internal scroll region adds none.
+Resizing a scroll viewport keeps its focused caret in view, including when the caret itself has
+not moved. Manual scrolling still pauses following until the caret moves or the viewport resizes.
+An explicit `.height(...)` fills that height instead of the automatic line cap. Wrap the field
+in [`Resizable`](#resizable) to let the user choose its height with a grip.
+Enter adds a newline; Up/Down move between visual lines, with Shift extending
+the selection. Home/End and line deletion operate on the current explicit line.
+
+`.on_submit(handler)` receives `input-submit` with the full `SignalData::String` value when the
+field receives `WidgetIntent::EditSubmit`. It is **unbound by default**. A host can bind
+`[keys.widgets] edit_submit = "Ctrl+Enter"`; a single-line field uses the same handler. Without a
+handler the intent bubbles. Modified Enter is left for the keymap. Typing and pasting never submit.
+
+```rust
+use heca_grid_ui::{Input, SignalData};
+let composer = Input::new().multiline(true).max_lines(6)
+    .on_submit(|action| {
+        if let SignalData::String(text) = action.data { println!("{text}"); }
+    });
+```
+
+`.placeholder_on_focus(true)` keeps the empty field's placeholder visible while focused; default
+false. Text, caret, selection and pointer placement use the same resolved font in both modes.
+Ctrl+H, Ctrl+U and Ctrl/Cmd+A keep their configurable bindings.
+
+The described form uses `WidgetKind::Input` with `multiline` (Bool), `max_lines` (Int),
+`placeholder_on_focus` (Bool), and `submit`
+(Intent). The submit intent carries the full current text in `args["value"]`. Existing `change`,
+`name`, value and placeholder properties keep their meanings. Typed SDK: `build::Input` has
+`multiline`, `max_lines`, and `on_submit`.
+
+```rust
+use heca_view::{ViewNode, WidgetKind, PropValue, Intent};
+let composer = ViewNode::new(WidgetKind::Input)
+    .prop("multiline", PropValue::Bool(true))
+    .prop("max_lines", PropValue::Int(6))
+    .on("submit", Intent::new("chat.send"));
+```
+
+**Theme settings.** `[input]` in a colour-theme file contains `width` (240 logical px), `padding`
+(10 logical px, size-scaled), `caret_width` (1.5 logical px), `blink_period` (1 second; non-positive
+means steady), `glow_radius` (12 logical px), and `max_lines` (6). These are shared defaults, never
+copied into callers. `LayoutEngine::new().theme(&theme)` gives layout the same metrics as painting;
+`base_font` remains available for font-only callers. Font size still comes from the UI font config.
 
 ### Tabs
 
@@ -3443,7 +3675,7 @@ re-derived after every layout pass (`Component::on_layout`) and is idempotent.
 > **Host wiring**: while `overlay_active()`, route pointer + wheel to
 > `FocusManager::deliver_to_overlay`, and key input through `Keymap::dispatch` (raw key first, then
 > the resolved `WidgetIntent`s). See `route_overlay_key` in
-> [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs); in the app this is
+> [`heca-renderer/examples/showcase/main.rs`](../heca-renderer/examples/showcase/main.rs); in the app this is
 > `build_widget_keymap` → `AppState.widget_keymap` → the overlay branch of `heca/src/app/events.rs`.
 
 ### Choice
@@ -6426,7 +6658,10 @@ and a bad value costs only itself: the good props on the same node still apply.
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
 | `BadgeButton` | `text`, `variant`, `size` | `press` |
 | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
-| `Input` | `text` (the **value**), `placeholder`, `name` | `change` |
+| `Input` | `text` (the **value**), `placeholder`, `name`, `multiline`, `max_lines` | `change`, `submit` |
+| `Line` | `start_x`, `start_y`, `end_x`, `end_y`, `arrows` | — |
+| `TreeLayout` | parent first, then branches as children | — |
+| `MessageList` | `message`, `visible_lines`, composed children | — |
 | `Toggle` | `on` (Bool), `name` | `change` |
 | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 | `Gauge` | `value` (Float) | — |
@@ -6961,7 +7196,7 @@ let mut root = Flex::row()
     .padding(Spacing::Sm.scale() * theme.font_size)   // token, not a literal
     .child(Tag::new(label).color(theme.colors.accent));
 
-LayoutEngine::new().base_font(theme.font_size).compute(&mut root, viewport);
+LayoutEngine::new().theme(&theme).compute(&mut root, viewport);
 root.paint(&mut cx);
 ```
 

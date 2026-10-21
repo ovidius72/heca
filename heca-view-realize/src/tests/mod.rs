@@ -86,7 +86,10 @@ fn sample_node(kind: WidgetKind) -> ViewNode {
     let node = ViewNode::new(kind);
     match kind {
         // Containers: give them a child, which a correct arm attaches.
-        WidgetKind::VStack
+        WidgetKind::TreeLayout
+        | WidgetKind::MessageList
+        | WidgetKind::Resizable
+        | WidgetKind::VStack
         | WidgetKind::HStack
         | WidgetKind::CardGrid
         | WidgetKind::Card
@@ -161,6 +164,7 @@ fn sample_node(kind: WidgetKind) -> ViewNode {
         WidgetKind::Spinner => node
             .prop("width", PropValue::Float(28.0))
             .prop("height", PropValue::Float(28.0)),
+        WidgetKind::Line => node.prop("width", PropValue::Float(100.0)).prop("height", PropValue::Float(20.0)),
         WidgetKind::StatusDot => node,
         WidgetKind::Splitter => node
             .prop("line", PropValue::Bool(true))

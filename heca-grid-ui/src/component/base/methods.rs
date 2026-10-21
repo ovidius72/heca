@@ -94,6 +94,7 @@ impl Base {
             keyboard_to: None,
             font: 15.0,
             root_font: 15.0,
+            input_style: heca_theme::InputStyle::default(),
             viewport: Size::new(f64::MAX, f64::MAX),
             layout_only: false,
             pointer: crate::pointer::PointerState::new(),

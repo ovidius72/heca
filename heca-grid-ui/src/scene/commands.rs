@@ -2,12 +2,14 @@
 //! each one carries.
 
 use crate::color::Color;
-use heca_core::layout::Rectangle;
+use heca_core::layout::{Point, Rectangle};
 
 /// One drawable element. Adding a new effect is one variant here plus one branch
 /// in the renderer — component code is untouched.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawCommand {
+    /// A stroked segment, optionally with arrowheads at either end.
+    Line(LineCmd),
     /// Solid or rounded rectangle, with optional border and additive outer glow.
     Rect(RectCmd),
     /// L-shaped corner brackets framing a rectangle (Tron reticle).
@@ -22,6 +24,37 @@ pub enum DrawCommand {
     PopClip,
     /// **Work only the host can do, recorded in scene order.** See [`HostDraw`].
     Host(HostCmd),
+}
+
+/// Ends of a segment that carry an open arrowhead.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
+pub enum ArrowHeads {
+    /// No arrowheads.
+    #[default]
+    None,
+    /// Arrow at the starting point.
+    Start,
+    /// Arrow at the ending point.
+    End,
+    /// Arrows at both points.
+    Both,
+}
+
+/// A line in logical coordinates. A zero-length or non-finite segment draws nothing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineCmd {
+    /// Starting point, including the tip of a starting arrow.
+    pub start: Point,
+    /// Ending point, including the tip of an ending arrow.
+    pub end: Point,
+    /// Stroke colour.
+    pub color: Color,
+    /// Stroke thickness in logical pixels; non-positive means invisible.
+    pub width: f32,
+    /// Which ends have arrows.
+    pub arrows: ArrowHeads,
+    /// Arrowhead length; limited to half the segment for short connections.
+    pub arrow_size: f32,
 }
 
 /// **A request the drawing pass records and the host performs.**

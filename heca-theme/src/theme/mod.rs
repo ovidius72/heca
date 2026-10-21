@@ -10,9 +10,11 @@ use serde::{Deserialize, Serialize};
 mod defaults;
 mod effects;
 mod interaction;
+mod input;
 
 pub use effects::{FrameStyle, GlowLevel, Intensity, Shadow};
 pub use interaction::InteractionAlphas;
+pub use input::InputStyle;
 
 use defaults::*;
 
@@ -49,6 +51,9 @@ const GRADIENT_BOTTOM_DARKEN_FACTOR: f32 = 0.08;
 /// renderer uses it for chrome/terminal colors.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Theme {
+    /// Text-field layout and caret settings, shared by every input widget.
+    #[serde(default)]
+    pub input: InputStyle,
     pub name: String,
 
     // ── Core palette ──

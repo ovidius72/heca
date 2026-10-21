@@ -22,6 +22,13 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
         ..s
     };
     match cmd {
+        DrawCommand::Line(line) => DrawCommand::Line(crate::scene::LineCmd {
+            start: place(Rectangle::new(line.start, Size::new(0.0, 0.0))).loc,
+            end: place(Rectangle::new(line.end, Size::new(0.0, 0.0))).loc,
+            width: line.width * k,
+            arrow_size: line.arrow_size * k,
+            ..line
+        }),
         DrawCommand::Host(h) => DrawCommand::Host(HostCmd {
             rect: place(h.rect),
             // A blur radius and a corner are distances, so they scale with everything else; a
@@ -79,6 +86,10 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
 fn fade_command(cmd: DrawCommand, a: f32) -> DrawCommand {
     let dim = |c: Color| c.with_alpha((c.a as f32 * a).round().clamp(0.0, 255.0) as u8);
     match cmd {
+        DrawCommand::Line(line) => DrawCommand::Line(crate::scene::LineCmd {
+            color: dim(line.color),
+            ..line
+        }),
         // Host work composites at its own strength times the context's opacity, so a surface or a
         // frost inside a fading overlay fades with it.
         DrawCommand::Host(h) => DrawCommand::Host(HostCmd {

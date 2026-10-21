@@ -46,6 +46,8 @@ pub struct TextMeasure {
     /// Does the text reflow? A wrapping text answers with as many lines as the width needs; a
     /// cutting one is always **one** line and simply accepts whatever width it is given.
     pub wrap: bool,
+    /// Preserve spaces and explicit newlines instead of wrapping prose.
+    pub preserve_whitespace: bool,
     /// The most lines a wrapping text may take (`None` = as many as it needs). The same cap the
     /// paint applies, so the box is as tall as the lines that are drawn.
     pub max_lines: Option<usize>,
@@ -97,6 +99,7 @@ pub struct LayoutEngine {
     updated: usize,
     /// Base font size widgets inherit unless they set their own `style.font_size`.
     base_font: f32,
+    input_style: heca_theme::InputStyle,
 }
 
 impl LayoutEngine {
@@ -109,7 +112,15 @@ impl LayoutEngine {
             seen: HashSet::new(),
             updated: 0,
             base_font: DEFAULT_BASE_FONT,
+            input_style: heca_theme::InputStyle::default(),
         }
+    }
+
+    /// Use the same theme for layout metrics and painting. A reload reflows every field.
+    pub fn theme(mut self, theme: &crate::Theme) -> Self {
+        self.base_font = theme.font_size;
+        self.input_style = theme.colors.input;
+        self
     }
 
     /// **How many nodes the last pass changed** — zero when the tree was the same as the one laid

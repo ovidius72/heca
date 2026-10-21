@@ -173,6 +173,7 @@ fn the_marks_land_on_the_effective_query_not_the_sigil() {
     for c in "@zs".chars() {
         type_text(&mut p, &c.to_string());
     }
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let marks = marked_chars(&p);
     assert!(
         marks.contains(&"z".to_string()),

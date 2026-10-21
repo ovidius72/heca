@@ -59,6 +59,7 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         ),
         ("ToastStack", "host-only: it holds a queue the host drives"),
         // ── Not widgets: parts, values and helpers that happen to be exported ──
+        ("MessageFeed", "a producer handle for MessageList, not a Component"),
         (
             "GridCell",
             "not a widget: a CardGrid cell, built by realize",

@@ -58,6 +58,8 @@ pub enum WidgetIntent {
     EditDeleteToLineStart,
     /// [`Input`](crate::widgets::Input): select the whole field. `edit_select_all`.
     EditSelectAll,
+    /// Submit the focused text field through its own handler. Unbound by default; `edit_submit`.
+    EditSubmit,
 
     // ── Scrolling a scroll area from the keyboard ──
     //

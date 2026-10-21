@@ -1,6 +1,8 @@
 //! GPU renderer for Grid UI primitives: SDF rounded rectangles with border and
 //! additive neon glow. Backs `heca-grid-ui`'s `Rect`/`Brackets` draw commands.
 
+mod line;
+
 use wgpu::util::DeviceExt;
 
 use crate::clip::combine_clip;
@@ -8,7 +10,7 @@ use crate::composite::STENCIL_FORMAT;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct GridVertex {
+pub(super) struct GridVertex {
     position: [f32; 2],
     center: [f32; 2],
     half_size: [f32; 2],
@@ -25,6 +27,7 @@ struct GridVertex {
     shadow: [f32; 4],
     shadow_radius: f32,
     shadow_offset: [f32; 2],
+    direction: [f32; 2],
 }
 
 #[repr(C)]
@@ -100,7 +103,7 @@ impl GridRenderer {
     pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("grid_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("grid.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../grid.wgsl").into()),
         });
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -156,6 +159,7 @@ impl GridRenderer {
             11 => Float32x4, // shadow
             12 => Float32,   // shadow_radius
             13 => Float32x2, // shadow_offset
+            14 => Float32x2, // direction
         ];
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -357,6 +361,7 @@ impl GridRenderer {
 
         let v = |pos: [f32; 2]| GridVertex {
             position: pos,
+            direction: [1.0, 0.0],
             center,
             half_size: half,
             radius: r.radius,

@@ -421,7 +421,7 @@ fn chrome_root(
 pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiTheme) -> Scene {
     let mut scene = Scene::new();
     LayoutEngine::new()
-        .base_font(theme.font_size)
+        .theme(theme)
         .compute(root, Size::new(w as f64, h as f64));
     {
         let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));

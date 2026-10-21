@@ -25,7 +25,10 @@ pub(super) fn measure_text_node(
     let cell = (ctx.font * MONO_ADVANCE_RATIO) as f64;
     let line = ctx.font * MONO_LINE_RATIO;
     // One line, uncut — what the label would ask for if nothing constrained it.
-    let natural = ctx.text.chars().count() as f64 * cell;
+    let natural_chars = if ctx.preserve_whitespace {
+        ctx.text.split('\n').map(|line| line.chars().count()).max().unwrap_or(0)
+    } else { ctx.text.chars().count() };
+    let natural = natural_chars as f64 * cell;
     let width = match (known.width, available.width) {
         // The engine already resolved a width: wrap into exactly that.
         (Some(w), _) => w as f64,
@@ -59,9 +62,9 @@ pub(super) fn measure_text_node(
     // A cutting label is one line whatever happens to it — it is the *width* it accepts, not the
     // height. Only a wrapping one turns width into height.
     let lines = if ctx.wrap {
-        wrap_lines(&ctx.text, mono_cells(width, cell), ctx.max_lines)
-            .len()
-            .max(1)
+        if ctx.preserve_whitespace {
+            crate::font::wrap_preserved(&ctx.text, mono_cells(width, cell), ctx.max_lines).len()
+        } else { wrap_lines(&ctx.text, mono_cells(width, cell), ctx.max_lines).len().max(1) }
     } else {
         1
     };

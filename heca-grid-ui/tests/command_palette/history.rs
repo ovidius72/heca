@@ -162,12 +162,14 @@ fn command_palette_remembers_only_what_was_run() {
     };
 
     let mut p = open();
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     for c in "abandoned".chars() {
         type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Dismiss));
 
     let mut p = open();
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
     let scene = common::paint_in(&p, &theme, Size::new(1200.0, 800.0));
     let query = scene

@@ -104,6 +104,10 @@ fn every_widget_property_is_reachable_from_the_sdk() {
         <IconButton as SetProp>::PROP_NAMES,
         "IconButton",
     );
+    check("TreeLayout", <heca_grid_ui::TreeLayout as SetProp>::PROP_NAMES, "TreeLayout");
+    check("Line", <heca_grid_ui::Line as SetProp>::PROP_NAMES, "Line");
+    check("MessageList", <heca_grid_ui::MessageList as SetProp>::PROP_NAMES, "MessageList");
+    check("Resizable", <heca_grid_ui::Resizable as SetProp>::PROP_NAMES, "Resizable");
     check("Input", <Input as SetProp>::PROP_NAMES, "Input");
     check("Item", <Item as SetProp>::PROP_NAMES, "Item");
     check("ItemGroup", <ItemGroup as SetProp>::PROP_NAMES, "ItemGroup");

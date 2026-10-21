@@ -287,6 +287,8 @@ pub struct Base {
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
     pub font: f32,
+    /// Text-field metrics inherited from the layout theme.
+    pub input_style: heca_theme::InputStyle,
     /// **The tree's own base font**, written by the layout pass — before any widget's size variant
     /// scales it.
     ///

@@ -43,6 +43,7 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
             WidgetIntent::EditDeleteToLineStart,
         ),
         ("edit_select_all", WidgetIntent::EditSelectAll),
+        ("edit_submit", WidgetIntent::EditSubmit),
         ("item_previous", WidgetIntent::ItemPrevious),
         ("item_next", WidgetIntent::ItemNext),
         ("menu_up", WidgetIntent::MenuUp),
