@@ -93,6 +93,7 @@ pub struct Label {
     /// changes the label's **measure**, so the next layout pass re-measures it — which is exactly
     /// what makes the rows below shift.
     wrap: Signal<bool>,
+    preserve_whitespace: bool,
     /// The most lines a **wrapping** label may take; text that needs more ends its last line with
     /// `…`. `None` (the default) is "as many as it needs". A [`Signal`] for the same reason
     /// [`wrap`](Self::wrap) is: it changes the measure, so a host can drive it from state.
@@ -112,6 +113,13 @@ pub struct Label {
 
 #[heca_grid_ui_macros::props]
 impl Label {
+    /// Bind the text to an existing signal. Default constructors create their own signal.
+    #[heca_grid_ui_macros::host_only("live signals cannot cross as static properties")]
+    pub fn with_text_signal(mut self, text: Signal<String>) -> Self {
+        self.text = text;
+        self.remeasure();
+        self
+    }
     /// A label showing `text`.
     pub fn new(text: impl Into<String>) -> Self {
         let base = Base::new();
@@ -129,6 +137,7 @@ impl Label {
             strikethrough: signal(false),
             truncate: Ellipsis::End,
             wrap: signal(false),
+            preserve_whitespace: false,
             max_lines: signal(None),
             marks: signal(Vec::new()),
             mark_color: None,
@@ -187,6 +196,14 @@ impl Label {
         self.base.style.layout.flex_shrink = Some(1.0);
         self.base.style.layout.min_width = Some(Length::Px(0.0));
         self.remeasure();
+        self
+    }
+
+    /// Preserve spaces and explicit newlines when wrapping (default false).
+    /// Useful for source excerpts and editable text. The layout and paint share the same wrapper.
+    #[heca_grid_ui_macros::prop]
+    pub fn preserve_whitespace(mut self, preserve: bool) -> Self {
+        self.preserve_whitespace = preserve;
         self
     }
 
@@ -303,7 +320,8 @@ impl Label {
         let text = self.text.get_untracked();
         let cells = mono_cells(self.base.bounds.size.w, self.cell());
         if self.wrap.get_untracked() {
-            return wrap_indexed(&text, cells, self.max_lines.get_untracked())
+            return (if self.preserve_whitespace { crate::font::wrap_preserved(&text, cells, self.max_lines.get_untracked()) }
+                else { wrap_indexed(&text, cells, self.max_lines.get_untracked()) })
                 .into_iter()
                 .map(|line| line.into_iter().map(|(c, i)| (c, Some(i))).collect())
                 .collect();
@@ -525,7 +543,7 @@ impl Component for Label {
             self.base.style.layout.height = Length::Auto;
             return;
         }
-        if self.truncate != Ellipsis::None {
+        if self.truncate != Ellipsis::None || self.preserve_whitespace {
             // **No definite width either.** A fixed natural width cannot be taken away on the cross
             // axis of a column, so a cutting label put in one simply overflowed its container and
             // never cut at all. `auto` + the measure path lets the box it is given decide, which is
@@ -543,10 +561,11 @@ impl Component for Label {
     /// [`wrap`](Label::wrap)); every other case is sized by `remeasure` above.
     fn measure_text(&self) -> Option<crate::layout::TextMeasure> {
         let wrap = self.wrap.get_untracked();
-        (wrap || self.truncate != Ellipsis::None).then(|| crate::layout::TextMeasure {
+        (wrap || self.truncate != Ellipsis::None || self.preserve_whitespace).then(|| crate::layout::TextMeasure {
             text: self.text.get_untracked(),
             font: self.base.font,
             wrap,
+            preserve_whitespace: self.preserve_whitespace,
             max_lines: self.max_lines.get_untracked(),
         })
     }

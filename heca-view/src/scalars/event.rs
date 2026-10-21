@@ -16,6 +16,8 @@ named_set! {
         /// The value changed — `Input`, `Toggle`, `Checkbox`; on a `Select` / `Tabs` the intent
         /// carries the chosen option's `value`.
         Change => "change",
+        /// Submit an Input through its configurable editing action.
+        Submit => "submit",
         /// A collapsible group folded or unfolded — the intent carries the new state in
         /// `args["expanded"]`.
         Toggle => "toggle",

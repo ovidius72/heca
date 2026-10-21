@@ -96,12 +96,16 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 /// | `Card` | `text` (title) + children | — |
 /// | `Surface` | (container — children only) | — |
 /// | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
-/// | `Scroll` | `axes` (`vertical` \| `horizontal` \| `both`, default vertical) + children | — |
-/// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
+/// | `Scroll` | `axes` (`vertical` \| `horizontal` \| `both`, default vertical), `follow_bottom` (Bool, default false) + children | scroll lifecycle |
+/// | `Line` | `start_x` / `start_y` / `end_x` / `end_y` (Float shares), `arrows` (`none` \| `start` \| `end` \| `both`) | — |
+/// | `TreeLayout` | first child is parent, remaining children are branches | — |
+/// | `MessageList` | `message` (initial text entry), `visible_lines` (Int) + children | — |
+/// | `Resizable` | `grip` (optional Glyph override; default diagonal corner strokes) + content children; shared `min_height` / `max_height` | — |
+/// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough`, `preserve_whitespace` (Bool), `wrap` (Bool), `max_lines` (Int) | — |
 /// | `Badge` / `Tag` / `Alert` | `text` | — |
 /// | `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
 /// | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
-/// | `Input` | `text` (the **value**), `placeholder`, `name` | `change` |
+/// | `Input` | `text` (the **value**), `placeholder`, `placeholder_on_focus` (Bool, default false), `name`, `multiline` (Bool, default false), `max_lines` (Int, theme default) | `change` · `submit` |
 /// | `Toggle` | `on` (Bool), `name` | `change` |
 /// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 /// | `Gauge` | `value` (Float) | — |

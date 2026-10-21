@@ -4,6 +4,19 @@ use crate::{
 };
 
 builder!(
+    /// Parent first, followed by equally shared branches. Nest trees to add levels.
+    TreeLayout => TreeLayout
+);
+builder!(
+    /// Composed entries, with scrolling that follows the bottom while the reader is there.
+    MessageList => MessageList
+);
+builder!(
+    /// Content with a vertical resize grip. Set min/max height on this container.
+    Resizable => Resizable
+);
+
+builder!(
     /// A vertical box. Plain arrangement — no focus, no hover, no activation.
     VStack => VStack
 );
@@ -107,6 +120,14 @@ impl Parent for VStack {}
 impl Parent for HStack {}
 impl Parent for Row {}
 impl Parent for Grid {}
+impl Parent for TreeLayout {}
+impl Parent for MessageList {}
+impl Parent for Resizable {}
+
+impl Resizable {
+    /// Replace the default diagonal corner strokes with a glyph. Size and colors follow the theme.
+    pub fn grip(self, glyph: crate::ViewGlyph) -> Self { self.prop("grip", glyph) }
+}
 impl Parent for Card {}
 impl Parent for Scroll {}
 impl Parent for Panel {}
@@ -307,7 +328,18 @@ impl Overlay {
     }
 }
 
+impl MessageList {
+    /// Bound the viewport to this many text lines, instead of a height from its parent.
+    pub fn visible_lines(self, lines: u32) -> Self { self.prop("visible_lines", PropValue::Int(i64::from(lines))) }
+
+    /// Append a wrapped plain-text entry. Other entries are ordinary children.
+    pub fn message(self, text: impl Into<String>) -> Self { self.prop("message", PropValue::Text(text.into())) }
+}
+
 impl Scroll {
+    /// Follow appended content only while the reader is at the bottom (default false).
+    pub fn follow_bottom(self, follow: bool) -> Self { self.prop("follow_bottom", follow) }
+
     /// Which way it scrolls.
     pub fn axes(self, axes: ViewScrollAxes) -> Self {
         self.prop("axes", axes)

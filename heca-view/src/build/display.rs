@@ -85,6 +85,9 @@ builder!(
 );
 
 impl Label {
+    /// Preserve spaces and explicit newlines when wrapping (default false).
+    pub fn preserve_whitespace(self, preserve: bool) -> Self { self.prop("preserve_whitespace", preserve) }
+
     /// How the text sits in its box.
     pub fn align_text(self, a: ViewTextAlign) -> Self {
         self.prop("align", a)

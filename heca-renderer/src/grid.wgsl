@@ -29,6 +29,7 @@ struct VertexInput {
     @location(11) shadow: vec4<f32>,
     @location(12) shadow_radius: f32,
     @location(13) shadow_offset: vec2<f32>,
+    @location(14) direction: vec2<f32>,
 };
 
 struct VertexOutput {
@@ -47,6 +48,7 @@ struct VertexOutput {
     @location(11) shadow: vec4<f32>,
     @location(12) shadow_radius: f32,
     @location(13) shadow_offset: vec2<f32>,
+    @location(14) direction: vec2<f32>,
 };
 
 fn srgb_to_linear_channel(v: f32) -> f32 {
@@ -84,6 +86,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.shadow = in.shadow;
     out.shadow_radius = in.shadow_radius;
     out.shadow_offset = in.shadow_offset;
+    out.direction = in.direction;
     return out;
 }
 
@@ -96,7 +99,8 @@ fn sd_round_box(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let p = in.world - in.center;
+    let delta = in.world - in.center;
+    let p = vec2<f32>(dot(delta, in.direction), dot(delta, vec2<f32>(-in.direction.y, in.direction.x)));
     let d = sd_round_box(p, in.half_size, in.radius);
     // Resolution-independent antialiasing: ~1 physical pixel wide regardless of
     // DPI or zoom (fwidth gives the change in `d` per fragment).
@@ -173,7 +177,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 // `discard`-ing outside the shape leaves the stencil untouched there.
 @fragment
 fn fs_stencil(in: VertexOutput) {
-    let p = in.world - in.center;
+    let delta = in.world - in.center;
+    let p = vec2<f32>(dot(delta, in.direction), dot(delta, vec2<f32>(-in.direction.y, in.direction.x)));
     let d = sd_round_box(p, in.half_size, in.radius);
     if (d > 0.0) {
         discard;

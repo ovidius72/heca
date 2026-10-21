@@ -24,7 +24,7 @@ impl CommandPalette {
         let font = self.base.font;
         let line = self.line_h();
         let results = self.results();
-        let (panel, query, list_top) = self.layout(&results);
+        let (panel, _query, list_top) = self.layout(&results);
         // Remember the panel so the idle caret blink can damage just this rect.
         self.panel.set(panel);
 
@@ -63,31 +63,10 @@ impl CommandPalette {
                 },
             );
 
-            // Query line: a real Input, positioned + focused + painted manually
-            // (it draws its own box, caret, selection, and text).
-            {
-                let mut q = self.query.borrow_mut();
-                q.base_mut().bounds = query;
-                q.base_mut().font = font;
-                q.base().focus(false); // so the caret shows + blinks
-                q.paint(cx);
+            // The query is laid out with the rest of the tree, and receives input through it.
+            if let Some(field) = self.base.children.last() {
+                crate::component::paint_child(field.as_ref(), cx);
             }
-            // The Input hides its placeholder while focused; draw ours when empty.
-            if self.query_text().is_empty() {
-                let q_text = Rectangle::new(
-                    Point::new(query.loc.x + ROW_PAD_X, query.loc.y),
-                    Size::new(query.size.w - 2.0 * ROW_PAD_X, query.size.h),
-                );
-                cx.text(
-                    q_text,
-                    &self.placeholder,
-                    muted,
-                    font,
-                    TextAlign::Start,
-                    TextStyle::REGULAR,
-                );
-            }
-
             // Result rows (the visible scroll window), from the one geometry helper.
             for (ri, row) in self.row_rects(&results, panel, list_top) {
                 let m = &results[ri];

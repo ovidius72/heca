@@ -2,6 +2,11 @@ use super::{Parent, Style};
 use crate::{PropValue, ViewGlyph, ViewLabelSide, ViewMarker, ViewNode, ViewVariant, WidgetKind};
 
 builder!(
+    /// A theme-driven segment, optionally with arrowheads.
+    Line => Line
+);
+
+builder!(
     /// A tab strip plus panel. Its tabs are [`Choice`] children.
     Tabs => Tabs
 );
@@ -129,6 +134,14 @@ impl BadgeButton {
 }
 
 impl Input {
+    /// Keep an empty field's placeholder visible while focused (default false).
+    pub fn placeholder_on_focus(self, show: bool) -> Self { self.prop("placeholder_on_focus", show) }
+
+    /// Wrap and grow up to the configured line limit, then scroll. Enter inserts a newline.
+    pub fn multiline(self, multiline: bool) -> Self { self.prop("multiline", multiline) }
+    /// Override the maximum number of visible lines.
+    pub fn max_lines(self, lines: u32) -> Self { self.prop("max_lines", PropValue::Int(i64::from(lines))) }
+
     /// The text shown when the field is empty.
     pub fn placeholder(self, text: impl Into<String>) -> Self {
         self.prop("placeholder", PropValue::Text(text.into()))
@@ -234,4 +247,17 @@ impl RailCell {
     pub fn active(self, on: bool) -> Self {
         self.prop("active", on)
     }
+}
+
+impl Line {
+    /// Starting horizontal share (default zero).
+    pub fn start_x(self, share: f32) -> Self { self.prop("start_x", share) }
+    /// Starting vertical share (default one half).
+    pub fn start_y(self, share: f32) -> Self { self.prop("start_y", share) }
+    /// Ending horizontal share (default one).
+    pub fn end_x(self, share: f32) -> Self { self.prop("end_x", share) }
+    /// Ending vertical share (default one half).
+    pub fn end_y(self, share: f32) -> Self { self.prop("end_y", share) }
+    /// Arrowheads: none (default), start, end or both.
+    pub fn arrows(self, arrows: impl Into<String>) -> Self { self.prop("arrows", PropValue::Text(arrows.into())) }
 }

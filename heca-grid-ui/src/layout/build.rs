@@ -29,6 +29,7 @@ impl LayoutEngine {
             }
         };
         c.base_mut().style.layout.size = size;
+        c.base_mut().input_style = self.input_style;
 
         // Resolve the inherited font (own `style.font_size` if set, else the base)
         // and let the widget re-measure from it before we read its taffy style.

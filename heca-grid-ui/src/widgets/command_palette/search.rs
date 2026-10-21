@@ -51,6 +51,7 @@ impl CommandPalette {
 
     /// Move the selection down (Ctrl+J / ↓), keeping it on-screen.
     pub fn select_next(&mut self) {
+        self.sync_query();
         let n = self.results().len();
         if n == 0 {
             return;
@@ -62,6 +63,7 @@ impl CommandPalette {
 
     /// Move the selection up (Ctrl+K / ↑).
     pub fn select_prev(&mut self) {
+        self.sync_query();
         self.selected = self.selected.saturating_sub(1);
         self.follow_selection();
         self.sync_wrap();
@@ -69,6 +71,7 @@ impl CommandPalette {
 
     /// Run the selected command (fires its callback) and close.
     pub fn run_selected(&mut self) {
+        self.sync_query();
         let results = self.results();
         if let Some(m) = results.get(self.selected) {
             let cmd = &self.commands[m.index];
@@ -134,7 +137,7 @@ impl CommandPalette {
     pub(super) fn close(&mut self) {
         self.named_prefill = None;
         self.open.set(false);
-        self.query.borrow_mut().set_value("");
+        self.query.set(String::new());
         self.selected = 0;
         self.scroll = 0;
     }

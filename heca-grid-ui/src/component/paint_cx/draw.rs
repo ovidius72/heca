@@ -3,6 +3,13 @@
 use super::*;
 
 impl<'a> PaintCx<'a> {
+    /// Draw a segment with the active translation, scale, opacity and clip.
+    pub fn line(&mut self, mut line: crate::scene::LineCmd) {
+        line.start = self.placed(Rectangle::new(line.start, Size::new(0.0, 0.0))).loc;
+        line.end = self.placed(Rectangle::new(line.end, Size::new(0.0, 0.0))).loc;
+        self.emit(DrawCommand::Line(line));
+    }
+
     /// Queue a rounded rectangle with optional border and glow.
     /// **Place content something else rasterised** — a terminal, an image, a video, a plugin's own
     /// canvas — in `rect`.

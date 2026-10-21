@@ -98,6 +98,27 @@ pub(crate) fn realize_kind(
             let region = with_props(ScrollRegion::new(), node, theme);
             attach_children(Box::new(region), node, theme, emit, forms)
         }
+        WidgetKind::Line => Box::new(with_props(heca_grid_ui::Line::new(), node, theme)),
+        WidgetKind::Resizable => {
+            let content: Box<dyn Component> = match node.children.len() {
+                1 => realize(&node.children[0], theme, emit, forms),
+                _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
+            };
+            Box::new(with_props(heca_grid_ui::Resizable::new(content), node, theme))
+        }
+        WidgetKind::TreeLayout => {
+            let mut children = node.children.iter();
+            let parent = children.next().map(|child| realize(child, theme, emit, forms))
+                .unwrap_or_else(|| Box::new(Flex::empty()));
+            let mut tree = heca_grid_ui::TreeLayout::new(parent);
+            for child in children { tree = tree.branch(realize(child, theme, emit, forms)); }
+            Box::new(tree)
+        }
+        WidgetKind::MessageList => {
+            let mut list = with_props(heca_grid_ui::MessageList::new(), node, theme);
+            for child in &node.children { list = list.entry(realize(child, theme, emit, forms)); }
+            Box::new(list)
+        }
 
         // ── Leaves ──
         WidgetKind::Label => {
@@ -207,6 +228,14 @@ pub(crate) fn realize_kind(
             if let Some(carrier) = change_intent(node) {
                 let emit = emit.clone();
                 input = input.on_change(move |_a: Action| emit(carrier.clone()));
+            }
+            if let Some(carrier) = intent_carrier(node, ViewEvent::Submit) {
+                let emit = emit.clone();
+                input = input.on_submit(move |action| {
+                    if let heca_grid_ui::SignalData::String(value) = action.data {
+                        emit(carrier.clone().arg("value", PropValue::Text(value)));
+                    }
+                });
             }
             Box::new(input)
         }

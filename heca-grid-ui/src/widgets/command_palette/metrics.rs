@@ -21,8 +21,7 @@ pub(super) const TOP_FRAC: f64 = 0.12;
 pub(super) const BOTTOM_FRAC: f64 = 0.08;
 /// Panel inner padding.
 pub(super) const PAD: f64 = 12.0;
-/// Vertical padding inside the query line and each result row.
-pub(super) const QUERY_PAD_Y: f64 = 9.0;
+/// Vertical padding inside each result row.
 pub(super) const ROW_PAD_Y: f64 = 6.0;
 /// Horizontal inset of row content.
 pub(super) const ROW_PAD_X: f64 = 10.0;

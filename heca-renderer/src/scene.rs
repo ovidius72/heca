@@ -161,6 +161,7 @@ pub fn enqueue_scene(
     let mut clip_stack: Vec<[f32; 4]> = Vec::new();
     for cmd in scene.iter() {
         match cmd {
+            DrawCommand::Line(line) => grid.draw_line(line),
             DrawCommand::Rect(r) => {
                 let (x, y, w, h) = xywh(&r.rect);
                 let (border, border_width) = match r.border {

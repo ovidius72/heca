@@ -33,7 +33,7 @@ impl CommandPalette {
         }
         // Everything the panel spends before the first row: its own padding above and below the
         // query line, the query line itself, and the padding under the list.
-        let chrome = 3.0 * PAD + self.line_h() + 2.0 * QUERY_PAD_Y;
+        let chrome = 3.0 * PAD + self.line_h() + 2.0 * self.query_padding();
         // The panel starts at `vh * TOP_FRAC`, so filling the remaining `1 - TOP_FRAC` put its
         // bottom exactly on the window's edge. `BOTTOM_FRAC` is the room kept clear under it.
         let mut room = (vp.h * (1.0 - TOP_FRAC - BOTTOM_FRAC) - chrome).max(0.0);
@@ -49,6 +49,10 @@ impl CommandPalette {
         // Always at least one row: a window too short for even that is better showing a clipped row
         // than an empty panel.
         results.len().clamp(1, fits.max(1))
+    }
+
+    pub(super) fn query_padding(&self) -> f64 {
+        self.base.input_style.padding as f64 * self.base.size_scale() as f64
     }
 
     pub(super) fn line_h(&self) -> f64 {
@@ -148,7 +152,7 @@ impl CommandPalette {
         let results = self.results();
         let (panel, _query, list_top) = self.layout(&results);
         let dx = panel.loc.x + PAD + ROW_PAD_X + self.icon_col();
-        let mut targets: Vec<Option<Rectangle>> = vec![None; self.base.children.len()];
+        let mut targets: Vec<Option<Rectangle>> = vec![None; self.commands.len()];
         for (ri, row) in self.row_rects(&results, panel, list_top) {
             let cmd = results[ri].index;
             let h = self.base.children[cmd].base().bounds.size.h;
@@ -238,7 +242,7 @@ impl CommandPalette {
     pub(super) fn layout(&self, results: &[Ranked]) -> (Rectangle, Rectangle, f64) {
         let vp = self.viewport.get();
         let line = self.line_h();
-        let query_h = line + 2.0 * QUERY_PAD_Y;
+        let query_h = line + 2.0 * self.query_padding();
         let n_results = results.len();
         let visible = self.visible_rows(results);
         // The panel is as tall as the rows it will actually show — summed, since a row with two

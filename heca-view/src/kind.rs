@@ -50,6 +50,12 @@ pub enum WidgetKind {
     /// that cannot do it.
     Row,
     Grid,
+    /// A parent above equally shared branches; first child is the parent, remaining children are branches.
+    TreeLayout,
+    /// Growing composed entries with bottom-following scrolling.
+    MessageList,
+    /// Content with a vertical resize grip and shared height constraints.
+    Resizable,
     /// **A grid of cards with a cursor** — the shape a picker surface is: an exposé, a palette of
     /// tiles, a plugin's chooser.
     ///
@@ -114,6 +120,8 @@ pub enum WidgetKind {
     Item,
     /// A thin themed divider line.
     Separator,
+    /// A segment positioned as shares of its layout box, with optional arrowheads.
+    Line,
     /// **The edge between two things that a drag moves** — `orientation` (`vertical`: it runs up
     /// and down and moves left and right; `horizontal`: the other way) and `line` (draw a rule).
     /// Dragging it sends the `resize` intent with `delta`, the px it moved since the last report;

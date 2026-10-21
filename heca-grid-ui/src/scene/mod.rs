@@ -292,6 +292,7 @@ mod commands;
 mod runs;
 
 pub use commands::{
+    ArrowHeads, LineCmd,
     Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, Rounded,
     ScanlineCmd, Shadow, TextAlign, TextCmd, TextStyle,
 };
