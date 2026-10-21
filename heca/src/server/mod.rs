@@ -27,6 +27,7 @@ pub(crate) mod socket;
 mod terminals;
 #[cfg(test)]
 mod testing;
+mod waker;
 
 use std::rc::Rc;
 use std::time::Instant;
@@ -38,10 +39,10 @@ pub(crate) use change::{Change, Refusal};
 pub(crate) use cx::{Asker, ServerCx};
 pub(crate) use layout::ServerLayout;
 pub(crate) use terminals::Terminals;
+pub(crate) use waker::ServerWaker;
 
 use crate::app::backend_factory::{Launch, TerminalSettings, launch, terminal_palette_defaults};
 use crate::app::backend_store::BackendStore;
-use crate::app::events::AppEvent;
 use crate::app::git_monitor::GitRuntimeCache;
 use crate::notification::NotificationRuntime;
 
@@ -51,9 +52,9 @@ pub struct ServerState {
     pub backends: BackendStore,
     /// What the configuration says a terminal process starts with.
     terminal_settings: TerminalSettings,
-    /// How a terminal process wakes the app when its output changes. `None` where there is no loop
+    /// How a terminal process wakes the loop when its output changes. `None` where there is no loop
     /// to wake, as in a test.
-    waker: Option<winit::event_loop::EventLoopProxy<AppEvent>>,
+    waker: Option<ServerWaker>,
     /// How a terminal process is built.
     launch: Launch,
     /// The notification store: queueing, lifecycle, dedup, timers, and the list a window shows.
@@ -249,7 +250,7 @@ impl ServerState {
         notifications: NotificationRuntime,
         programs: ProgramsConfig,
         terminal_settings: TerminalSettings,
-        waker: Option<winit::event_loop::EventLoopProxy<AppEvent>>,
+        waker: Option<ServerWaker>,
     ) -> Self {
         Self {
             backends,

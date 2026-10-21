@@ -4,7 +4,7 @@
   "description": "Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.",
   "projectGuidelines": {
     "content": "- do not fix at call site. Always try to fix at library (widget/ component) side.\n- use css like syntax for laying down components: Flex, Grid, Surface etc...\n- prefer composition and reusability. DO NOT HARDCODE anything.",
-    "updatedAt": "2026-09-04T07:43:16.047Z",
+    "updatedAt": "2026-10-21T13:02:31.335Z",
     "sessionInfo": [
       {
         "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",

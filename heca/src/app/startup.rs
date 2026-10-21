@@ -441,7 +441,12 @@ pub(crate) async fn init_state(
         ),
         app_config.config.programs.clone(),
         TerminalSettings::from_config(app_config),
-        Some(event_proxy.clone()),
+        Some(crate::server::ServerWaker::new({
+            let proxy = event_proxy.clone();
+            move || {
+                let _ = proxy.send_event(crate::app::events::AppEvent::BackendWake);
+            }
+        })),
     );
     server
         .terminals()

@@ -17,7 +17,7 @@ use heca_core::runtime::PaneClosePolicy;
 /// Each variant's **kind** ([`WmActionKind`], one per variant, fields dropped) is derived, not
 /// written: the registry keys handlers by it, and tests walk every kind without keeping a list.
 // WmAction itself does not derive Hash: f64 fields in parameterized variants do not implement it.
-#[derive(Clone, Debug, PartialEq, strum::EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, strum::EnumDiscriminants, serde::Serialize, serde::Deserialize)]
 #[strum_discriminants(name(WmActionKind), derive(Hash, strum::EnumIter))]
 pub enum WmAction {
     // ── Navigation (unit) ──
@@ -581,6 +581,9 @@ pub enum WmAction {
     /// resolving its result to `ModalResult::Action { id: action }` and popping it. Bare, it is
     /// the front-most visible modal layer — the same rule as [`CloseOverlay`](WmAction::CloseOverlay).
     SubmitOverlay {
+        // An OverlayId is a client-side runtime counter; overlay control is handled in the window
+        // and never crosses to the server, so it is not carried on the wire.
+        #[serde(skip)]
         overlay: Option<crate::chrome::OverlayId>,
         action: String,
     },
@@ -591,6 +594,8 @@ pub enum WmAction {
     /// which is what "close the overlay" means to someone pressing Escape — and does nothing when
     /// none is up, so the key is harmless in normal use.
     CloseOverlay {
+        // See SubmitOverlay: a client-side overlay id, never sent to the server.
+        #[serde(skip)]
         overlay: Option<crate::chrome::OverlayId>,
     },
 

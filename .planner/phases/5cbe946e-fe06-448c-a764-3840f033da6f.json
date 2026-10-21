@@ -91,9 +91,9 @@
       "priority": 2,
       "shortName": "serializable-wire-model-plain",
       "title": "Serializable wire model — plain-data Change + terminal snapshot/damage + layout effects",
-      "status": "in-progress",
-      "description": "ready-02b. Make the server→client interface serializable so the socket can carry it. heca-core has no serde dependency today.\n\nReuse, don't duplicate (AGENTS.md: no second path). The cells are ALREADY plain data — TerminalCell { text, fg/bg: [f32;4], bold, italic, underline, width }, TerminalLine, TerminalDamage, TerminalCursor, TerminalRowRange, HyperlinkSpan, GraphicsPlacement — and so are the layout effects (SpaceEffect/PaneEffect/ColumnEffect) and geometry (Point/Size/Rectangle) + ids. Derive serde on those in place and reuse them.\n\nThe ONLY non-serializable thing is TerminalSnapshot.images = Vec<TerminalImage> (Arc<[u8]> decoded RGBA). So add ONE new plain type, WireSnapshot = TerminalSnapshot minus images, produced by TerminalSnapshot::to_wire(); graphics still reference images by image_id, and the bytes travel on a separate channel in T544+. Lines stay per-cell (reuse TerminalLine) — styled-run coalescing is a later wire-size optimization that doesn't change the client, not part of T543.\n\nIn scope: add serde (workspace dep) to heca-core; derive on the plain leaf/effect/geometry/id types; derive on Change (heca/src/server/change.rs) + Refusal; define WireSnapshot + to_wire(). Add serde_json dev-dep for round-trip tests.\n\nDone when: Change, the layout effects, TerminalDamage, and WireSnapshot each round-trip through serde in unit tests; no wezterm/image type (TerminalImage/TerminalImageFrame/Arc<[u8]>) appears in the wire form. Depends on T521.\n\n(Description corrected 2026-10-21: the original premise said the snapshot still held wezterm cell data and called for all-new duplicate wire types; the cells are already plain, so the DRY-correct plan reuses them and adds only the one WireSnapshot boundary type. Agreed with heca-dev1 and Antonio.)",
-      "descriptionUpdatedAt": "2026-10-21T11:45:41.955Z",
+      "status": "done",
+      "description": "ready-02b. Make the server→client interface serializable so the socket can carry it. heca-core has no serde dependency today.\n\nReuse, don't duplicate (AGENTS.md: no second path). The cells are ALREADY plain data — TerminalCell { text, fg/bg: [f32;4], bold, italic, underline, width }, TerminalLine, TerminalDamage, TerminalCursor, TerminalRowRange, HyperlinkSpan, GraphicsPlacement — and so are the layout effects (SpaceEffect/PaneEffect/ColumnEffect) and geometry (Point/Size/Rectangle) + ids. Derive serde on those in place and reuse them.\n\nThe ONLY non-serializable thing is TerminalSnapshot.images = Vec<TerminalImage> (Arc<[u8]> decoded RGBA). So add ONE new plain type, WireSnapshot = TerminalSnapshot minus images, produced by TerminalSnapshot::to_wire(); graphics still reference images by image_id, and the bytes travel on a separate channel in T544+. Lines stay per-cell (reuse TerminalLine) — styled-run coalescing is a later wire-size optimization that doesn't change the client, not part of T543.\n\nIn scope: add serde (workspace dep) to heca-core; derive on the plain leaf/effect/geometry/id types; derive on Change (heca/src/server/change.rs) + Refusal; define WireSnapshot + to_wire(). Add serde_json dev-dep for round-trip tests.\n\nDone when: Change, the layout effects, TerminalDamage, and WireSnapshot each round-trip through serde in unit tests; no wezterm/image type (TerminalImage/TerminalImageFrame/Arc<[u8]>) appears in the wire form. Depends on T521.\n\n(Description corrected 2026-10-21: the original premise said the snapshot still held wezterm cell data and called for all-new duplicate wire types; the cells are already plain, so the DRY-correct plan reuses them and adds only the one WireSnapshot boundary type. Agreed with heca-dev1 and Antonio.)\n\n---\n**Completion summary:**\nImplemented, tested, committed (6f6ceb18) and pushed on feat/p099-connection.\n\nAdded serde to heca-core (dep) + serde_json (dev-dep). Derived serde in place on the already-plain types and reused them — geometry (Point/Size/Rectangle) + PaneId; layout effects (SpaceEffect/PaneEffect/ColumnEffect); terminal leaf types (TerminalCell/TerminalLine/TerminalUnderlineStyle/TerminalCursor/TerminalCursorShape/TerminalDamage/TerminalRowRange/HyperlinkSpan/GraphicsPlacement); and the server Change + Refusal. Added PartialEq to TerminalCell/TerminalLine (needed for WireSnapshot equality).\n\nOne new type: WireSnapshot (heca-core/src/backend/snapshot.rs) = TerminalSnapshot minus images, via TerminalSnapshot::to_wire(). TerminalSnapshot stays non-serde (owns Arc<[u8]> image bytes), so to_wire() is the only path onto the wire and it drops the bytes; graphics reference images by image_id, bytes travel separately in T544+.\n\nDone-when met: Change, the layout effects, TerminalDamage and WireSnapshot each round-trip through serde (heca-core/tests/wire_model.rs: 5 tests; inline Change test in change.rs); a test asserts no rgba/images in the wire form. Break-checked both heca-core tests (reverted). Clippy clean workspace; graph refreshed.\n\nNot done here (later tasks): the actual image-bytes channel (T544+), and wiring the snapshot/damage into the socket transport.",
+      "descriptionUpdatedAt": "2026-10-21T12:38:28.162Z",
       "notes": "",
       "statusLog": [
         {
@@ -103,6 +103,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "e21d7360-4fff-465b-9a7d-b67016fce207-check-002-in-progress-done",
+          "date": "2026-10-21T12:38:28.161Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented, tested, committed (6f6ceb18) and pushed on feat/p099-connection.\n\nAdded serde to heca-core (dep) + serde_json (dev-dep). Derived serde in place on the already-plain types and reused them — geometry (Point/Size/Rectangle) + PaneId; layout effects (SpaceEffect/PaneEffect/ColumnEffect); terminal leaf types (TerminalCell/TerminalLine/TerminalUnderlineStyle/TerminalCursor/TerminalCursorShape/TerminalDamage/TerminalRowRange/HyperlinkSpan/GraphicsPlacement); and the server Change + Refusal. Added PartialEq to TerminalCell/TerminalLine (needed for WireSnapshot equality).\n\nOne new type: WireSnapshot (heca-core/src/backend/snapshot.rs) = TerminalSnapshot minus images, via TerminalSnapshot::to_wire(). TerminalSnapshot stays non-serde (owns Arc<[u8]> image bytes), so to_wire() is the only path onto the wire and it drops the bytes; graphics reference images by image_id, bytes travel separately in T544+.\n\nDone-when met: Change, the layout effects, TerminalDamage and WireSnapshot each round-trip through serde (heca-core/tests/wire_model.rs: 5 tests; inline Change test in change.rs); a test asserts no rgba/images in the wire form. Break-checked both heca-core tests (reverted). Clippy clean workspace; graph refreshed.\n\nNot done here (later tasks): the actual image-bytes channel (T544+), and wiring the snapshot/damage into the socket transport."
         }
       ],
       "decisions": [],
@@ -115,16 +123,16 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-10-21T11:36:37.694Z",
-      "completedAt": "",
+      "completedAt": "2026-10-21T12:38:28.161Z",
       "createdAt": "2026-10-21T11:14:47.035Z",
-      "updatedAt": "2026-10-21T11:45:41.953Z",
+      "updatedAt": "2026-10-21T12:38:28.161Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
           "createdAt": "2026-10-21T11:36:37.577Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c"
+      "activeOwnerSession": ""
     },
     {
       "id": "ed677df2-82fe-4abb-a23b-30f90bc40919",
@@ -134,26 +142,77 @@
       "priority": 3,
       "shortName": "headless-server-process-attach",
       "title": "Headless server process + attach protocol (detach/attach)",
-      "status": "planned",
+      "status": "in-progress",
       "description": "ready-02c. The server must run **without a window** so a session survives the window closing (detach/attach, decision d108b88c).\n\nCurrent: `ServerState` (heca/src/server/mod.rs) is built inside the window process via `AppState`; the in-process interface is `AppState.ask_server(ServerAction)` → `Change` → `window_reacts` (heca/src/app_state/reaction/mod.rs). T521 built the socket + the `AppEvent::Rpc` seam (heca/src/server/socket.rs).\n\nThis task carries that SAME interface over the socket: a window attaches as a pure client — sends actions + input, receives `Change`s + terminal snapshots/changed rows (the wire model, T543). `heca` with no server starts one in the background and attaches; closing the window detaches and the server keeps running; `heca` again reattaches with scrollback intact. ONE code path: standalone = server + one in-process client, identical to attaching over the socket.\n\nEdge cases: a stale socket from a crashed server; a slow client must never block the server. Done when: close the window mid-command, `heca` reattaches and it is still running. Depends on T543.",
       "descriptionUpdatedAt": "2026-10-21T11:21:03.516Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "59030d9a-c336-44f9-9740-16f685dec2d8",
+          "date": "2026-10-21T12:40:33.812Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-001-serverwaker-trait-decouple-the-server-from-the-winit-eventloopproxy-winit-impl-for-standalone-mpsc-impl-for-headless",
+          "number": 1,
+          "title": "ServerWaker trait — decouple the server from the winit EventLoopProxy (winit impl for standalone, mpsc impl for headless)",
+          "checked": true
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-002-transport-seam-clientmsg-servermsg-enums-serde-on-wmaction-two-impls-in-process-channel-for-standalone-serde-json-length-prefixed-frames-for-the-socket",
+          "number": 2,
+          "title": "Transport seam + ClientMsg/ServerMsg enums; serde on WmAction; two impls (in-process channel for standalone, serde_json length-prefixed frames for the socket)",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-003-sessioncontent-data-projection-the-window-draws-from-server-sent-data-never-from-session-directly-one-read-path-reused-as-p105-s-save-format",
+          "number": 3,
+          "title": "SessionContent data projection — the window draws from server-sent data, never from Session directly (one read path; reused as P105's save format)",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-004-headless-server-run-loop-heca-server-own-thread-mpsc-recv-timeout-next-wake-per-connection-and-per-pty-reader-threads-feed-serverevents",
+          "number": 4,
+          "title": "Headless server run loop — `heca --server`, own thread, mpsc recv_timeout(next_wake); per-connection and per-PTY reader threads feed ServerEvents",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-005-attach-detach-handshake-per-pane-snapshot-damage-delivery-slow-client-backpressure-bounded-per-client-queue-coalesce-changes-never-block-the-server",
+          "number": 5,
+          "title": "Attach/detach handshake + per-pane snapshot/damage delivery + slow-client backpressure (bounded per-client queue, coalesce Changes, never block the server)",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-006-process-spawn-heca-with-no-server-spawns-a-detached-heca-server-and-attaches-reattach-on-next-run-standalone-stays-one-process",
+          "number": 6,
+          "title": "Process spawn — `heca` with no server spawns a detached `heca --server` and attaches; reattach on next run; `--standalone` stays one process",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [
         "e21d7360-4fff-465b-9a7d-b67016fce207"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-10-21T12:40:33.812Z",
       "completedAt": "",
       "createdAt": "2026-10-21T11:14:49.739Z",
-      "updatedAt": "2026-10-21T11:21:03.514Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-10-21T14:00:40.086Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
+          "createdAt": "2026-10-21T12:40:33.702Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c"
     },
     {
       "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404",
@@ -273,7 +332,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-10-21T11:45:41.953Z",
+  "updatedAt": "2026-10-21T14:00:40.086Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -300,7 +359,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
-      "createdAt": "2026-10-21T11:36:37.577Z"
+      "createdAt": "2026-10-21T12:40:33.702Z"
     },
     {
       "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",

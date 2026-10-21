@@ -43,7 +43,7 @@ pub enum ContentKind {
 }
 
 /// Exit-time close policy for a pane that directly spawned a command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct PaneClosePolicy {
     /// Close the pane automatically when the direct command exits.
     pub close_pane: bool,

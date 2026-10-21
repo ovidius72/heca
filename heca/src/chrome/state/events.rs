@@ -15,7 +15,7 @@ use heca_core::runtime::ProcessStatus;
 /// Canonical identity of a pluggable chrome region (contract §3.1.1). The
 /// vertical sidebars and horizontal bars are all addressed by this enum; the
 /// grid-ui `ChromeRegion` *widget* is the oriented shell that renders one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RegionId {
     LeftSidebar,
     RightSidebar,
