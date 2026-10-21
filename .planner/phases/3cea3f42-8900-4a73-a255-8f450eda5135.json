@@ -51,9 +51,9 @@
       "priority": 1,
       "shortName": "add-lines-arrows-a-tree-layout",
       "title": "Add lines/arrows, a tree layout, a multi-line input and a message list to heca-grid-ui",
-      "status": "in-progress",
-      "description": "Execution task for P103. Read the phase description first. Run the pre-flight for each of the four types separately (AGENTS.md § 0): which existing widget, which task, or a proposal.\n\nCurrent: `heca-grid-ui/src/scene.rs:304` `DrawCommand` has no line; the renderer is `heca-renderer`. Input is single-line (`heca-grid-ui/src/widgets/input.rs`). Edge cases: lines crossing clips; tree with one child / many children / nested; multi-line input with IME and selection; message list keeping the bottom in view only while the user is at the bottom.",
-      "descriptionUpdatedAt": "2026-09-29T19:22:15.412Z",
+      "status": "done",
+      "description": "Execution task for P103. Read the phase description first. Run the pre-flight for each of the four types separately (AGENTS.md § 0): which existing widget, which task, or a proposal.\n\nCurrent: `heca-grid-ui/src/scene.rs:304` `DrawCommand` has no line; the renderer is `heca-renderer`. Input is single-line (`heca-grid-ui/src/widgets/input.rs`). Edge cases: lines crossing clips; tree with one child / many children / nested; multi-line input with IME and selection; message list keeping the bottom in view only while the user is at the bottom.\n\n---\n**Completion summary:**\nT524 complete: the F012 widgets — themed Line/arrow (new LineCmd + renderer primitive), TreeLayout (Grid+Flex), multi-line Input (Label+ScrollRegion on the existing editor model, shared theme metrics), MessageList/MessageFeed (follow-bottom only when at bottom), Resizable (Grid+Line+Splitter). CommandPalette query is now a real child Input; ScrollRegion and the showcase split by responsibility; native/described/typed SDK paths + catalog + Rustdoc updated (per decision 4b59b345). Composed and theme-driven, no hardcoded style. Reviewed green (grid-ui 39 suites, clippy -D clean on grid-ui+renderer), GPU behaviour accepted by Antonio. Committed 9a2d8ec3, merged to main via PR #295.",
+      "descriptionUpdatedAt": "2026-10-21T08:10:39.545Z",
       "notes": "Checkout /Users/antonio/projects/heca-p103-widgets; feat/t524-widgets, base 02408449. Pre-flight: Input, Grid/Flex, Label/ScrollRegion and line primitive; approved splits/config and vertical resizing. C1-C7 checked. Antonio accepted the corrected GPU showcase on 2026-10-20: ok. looks good. Peer review pending. Review/logs: target/t524-tools/REVIEW.md. Resize fixes: diagonal grip inside corner; readable Input minimum; child minimum retained; stable top/button gap; keyboard_to content focus. ScrollRegion re-reveals caret when viewport size changes. Native tests, showcase regression, described tests and scoped Clippy pass. Live GPU grow/shrink and scrollbar dragging verified. All changes uncommitted; no PR.",
       "statusLog": [
         {
@@ -63,6 +63,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-002-in-progress-done",
+          "date": "2026-10-21T08:10:39.544Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "T524 complete: the F012 widgets — themed Line/arrow (new LineCmd + renderer primitive), TreeLayout (Grid+Flex), multi-line Input (Label+ScrollRegion on the existing editor model, shared theme metrics), MessageList/MessageFeed (follow-bottom only when at bottom), Resizable (Grid+Line+Splitter). CommandPalette query is now a real child Input; ScrollRegion and the showcase split by responsibility; native/described/typed SDK paths + catalog + Rustdoc updated (per decision 4b59b345). Composed and theme-driven, no hardcoded style. Reviewed green (grid-ui 39 suites, clippy -D clean on grid-ui+renderer), GPU behaviour accepted by Antonio. Committed 9a2d8ec3, merged to main via PR #295."
         }
       ],
       "decisions": [],
@@ -125,20 +133,20 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-10-20T11:13:14.471Z",
-      "completedAt": "",
+      "completedAt": "2026-10-21T08:10:39.544Z",
       "createdAt": "2026-09-29T19:22:15.360Z",
-      "updatedAt": "2026-10-20T15:37:59.334Z",
+      "updatedAt": "2026-10-21T08:10:39.544Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:b2c0351c-2f5e-4ca3-8548-c6b5dee5349f",
           "createdAt": "2026-10-20T11:13:14.377Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:b2c0351c-2f5e-4ca3-8548-c6b5dee5349f"
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:46.992Z",
-  "updatedAt": "2026-10-20T15:37:59.334Z",
+  "updatedAt": "2026-10-21T08:10:39.544Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -151,6 +159,14 @@
       "fromStatus": "draft",
       "toStatus": "in-progress",
       "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "684ee759-a033-42ad-868f-92e985f17627",
+      "date": "2026-10-21T08:10:39.581Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],
