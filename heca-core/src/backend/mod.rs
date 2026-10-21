@@ -10,7 +10,7 @@ pub mod terminal;
 pub use fake::FakeBackend;
 pub use snapshot::{
     GraphicsPlacement, HyperlinkSpan, TerminalCursor, TerminalCursorShape, TerminalDamage,
-    TerminalImage, TerminalImageFrame, TerminalRowRange, TerminalSnapshot,
+    TerminalImage, TerminalImageFrame, TerminalRowRange, TerminalSnapshot, WireSnapshot,
 };
 pub use terminal::{PtyError, ShellIntegrationAssets, TerminalBackend, TerminalBackendOptions};
 
@@ -129,7 +129,7 @@ pub struct BackendMouseEvent {
 }
 
 /// Underline decoration style for a terminal cell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TerminalUnderlineStyle {
     None,
     Single,
@@ -146,7 +146,7 @@ impl TerminalUnderlineStyle {
 }
 
 /// A single cell in a terminal grid.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalCell {
     /// Full grapheme/text content for the visible cell anchor.
     pub text: String,
@@ -160,7 +160,7 @@ pub struct TerminalCell {
 }
 
 /// A line of terminal cells.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalLine {
     pub cells: Vec<TerminalCell>,
 }

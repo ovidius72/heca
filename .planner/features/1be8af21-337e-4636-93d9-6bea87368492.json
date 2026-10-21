@@ -128,6 +128,10 @@
   "updatedAt": "2026-10-21T11:23:15.256Z",
   "sessionInfo": [
     {
+      "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
+      "createdAt": "2026-10-21T11:36:37.577Z"
+    },
+    {
       "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
       "createdAt": "2026-10-21T09:50:05.743Z"
     },

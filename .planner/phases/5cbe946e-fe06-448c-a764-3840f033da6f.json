@@ -91,11 +91,20 @@
       "priority": 2,
       "shortName": "serializable-wire-model-plain",
       "title": "Serializable wire model — plain-data Change + terminal snapshot/damage + layout effects",
-      "status": "planned",
-      "description": "ready-02b. Make the server→client interface serializable so the socket can carry it. Today it is in-process only and **heca-core has no serde dependency at all**.\n\nIn scope: `Change` (heca/src/server/change.rs), the layout effects `SpaceEffect`/`PaneEffect`/`ColumnEffect` (heca-core/src/layout/scrolling/{pane_effect,effect}.rs) and geometry `Point`/`Size`/`Rectangle` + ids (heca-core/src/layout/types.rs), and a terminal snapshot + changed rows.\n\nKEY DECISION: `TerminalSnapshot`/`TerminalDamage` (heca-core/src/backend/snapshot.rs) hold wezterm cell data and decoded images — do NOT derive serde on them. Define a NEW plain-data wire snapshot (styled text runs, colours, cursor, viewport offset; images referenced by content-hash/handle, bytes fetched separately) that the in-memory snapshot converts into. Add serde (derive, workspace dep) to heca-core.\n\nDone when: every message the socket needs round-trips through serde in unit tests, and no wezterm/image type appears in the wire form. Depends on T521.",
-      "descriptionUpdatedAt": "2026-10-21T11:20:59.280Z",
+      "status": "in-progress",
+      "description": "ready-02b. Make the server→client interface serializable so the socket can carry it. heca-core has no serde dependency today.\n\nReuse, don't duplicate (AGENTS.md: no second path). The cells are ALREADY plain data — TerminalCell { text, fg/bg: [f32;4], bold, italic, underline, width }, TerminalLine, TerminalDamage, TerminalCursor, TerminalRowRange, HyperlinkSpan, GraphicsPlacement — and so are the layout effects (SpaceEffect/PaneEffect/ColumnEffect) and geometry (Point/Size/Rectangle) + ids. Derive serde on those in place and reuse them.\n\nThe ONLY non-serializable thing is TerminalSnapshot.images = Vec<TerminalImage> (Arc<[u8]> decoded RGBA). So add ONE new plain type, WireSnapshot = TerminalSnapshot minus images, produced by TerminalSnapshot::to_wire(); graphics still reference images by image_id, and the bytes travel on a separate channel in T544+. Lines stay per-cell (reuse TerminalLine) — styled-run coalescing is a later wire-size optimization that doesn't change the client, not part of T543.\n\nIn scope: add serde (workspace dep) to heca-core; derive on the plain leaf/effect/geometry/id types; derive on Change (heca/src/server/change.rs) + Refusal; define WireSnapshot + to_wire(). Add serde_json dev-dep for round-trip tests.\n\nDone when: Change, the layout effects, TerminalDamage, and WireSnapshot each round-trip through serde in unit tests; no wezterm/image type (TerminalImage/TerminalImageFrame/Arc<[u8]>) appears in the wire form. Depends on T521.\n\n(Description corrected 2026-10-21: the original premise said the snapshot still held wezterm cell data and called for all-new duplicate wire types; the cells are already plain, so the DRY-correct plan reuses them and adds only the one WireSnapshot boundary type. Agreed with heca-dev1 and Antonio.)",
+      "descriptionUpdatedAt": "2026-10-21T11:45:41.955Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "592ec16e-f0af-4eed-885d-6779c81311ab",
+          "date": "2026-10-21T11:36:37.694Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -105,12 +114,17 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-10-21T11:36:37.694Z",
       "completedAt": "",
       "createdAt": "2026-10-21T11:14:47.035Z",
-      "updatedAt": "2026-10-21T11:20:59.278Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-10-21T11:45:41.953Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
+          "createdAt": "2026-10-21T11:36:37.577Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c"
     },
     {
       "id": "ed677df2-82fe-4abb-a23b-30f90bc40919",
@@ -259,7 +273,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-10-21T11:27:12.369Z",
+  "updatedAt": "2026-10-21T11:45:41.953Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -284,6 +298,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
+      "createdAt": "2026-10-21T11:36:37.577Z"
+    },
     {
       "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
       "createdAt": "2026-10-21T09:50:05.743Z"

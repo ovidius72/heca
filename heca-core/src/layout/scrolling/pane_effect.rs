@@ -11,7 +11,7 @@ use crate::layout::types::{ColumnId, PaneId, Point};
 use crate::layout::window_view::ScrollView;
 
 /// What a change did to the panes of one column.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PaneEffect {
     /// A pane now sits at row `row` of column `col`; the ones from there on moved one row down.
     Inserted { col: usize, row: usize },
@@ -22,7 +22,7 @@ pub enum PaneEffect {
 }
 
 /// What a change did to a workspace's columns and panes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SpaceEffect {
     /// A whole column changed: one taken with its last pane counts here.
     Column(ColumnEffect),

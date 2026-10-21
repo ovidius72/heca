@@ -1,7 +1,7 @@
 use super::TerminalLine;
 
 /// Cursor state for a terminal snapshot.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TerminalCursorShape {
     Default,
     Block,
@@ -10,7 +10,7 @@ pub enum TerminalCursorShape {
 }
 
 /// Cursor state for a terminal snapshot.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalCursor {
     pub col: usize,
     pub row: usize,
@@ -19,7 +19,7 @@ pub struct TerminalCursor {
 }
 
 /// Inclusive-exclusive row range describing invalidated visible terminal rows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalRowRange {
     pub start: usize,
     pub end: usize,
@@ -36,7 +36,7 @@ impl TerminalRowRange {
 /// `Full` means the entire visible viewport should be redrawn. `Rows` scopes
 /// the redraw to the provided visible row ranges. `None` means there is no
 /// pending visual change to acknowledge.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TerminalDamage {
     None,
     Full,
@@ -55,7 +55,7 @@ impl TerminalDamage {
 /// phase can underline them and open them on click. An empty `hyperlinks` list
 /// means the renderer has nothing to do (links are opt-in; the renderer ignores
 /// this until the hyperlink-open feature lands).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HyperlinkSpan {
     /// Visible row (`0` = top of the viewport).
     pub row: usize,
@@ -75,7 +75,7 @@ pub struct HyperlinkSpan {
 /// funnel through the same per-cell path) into these blocks; the renderer blits
 /// one textured quad per placement, sampling the source sub-rect described by
 /// `src_top_left`/`src_bottom_right`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GraphicsPlacement {
     /// Top-left cell of the placement (visible-row coordinates).
     pub row: usize,
@@ -250,6 +250,57 @@ impl TerminalSnapshot {
             "terminal snapshot `viewport_offset` must stay within `[0, scrollback_rows - rows]`"
         );
     }
+
+    /// This snapshot as plain data for the wire: every field but the decoded image
+    /// bytes. See [`WireSnapshot`].
+    pub fn to_wire(&self) -> WireSnapshot {
+        WireSnapshot {
+            cols: self.cols,
+            rows: self.rows,
+            cell_w: self.cell_w,
+            cell_h: self.cell_h,
+            default_fg: self.default_fg,
+            default_bg: self.default_bg,
+            cursor_color: self.cursor_color,
+            cursor: self.cursor,
+            lines: self.lines.clone(),
+            viewport_offset: self.viewport_offset,
+            at_bottom: self.at_bottom,
+            scrollback_rows: self.scrollback_rows,
+            viewport_top_stable_row: self.viewport_top_stable_row,
+            hyperlinks: self.hyperlinks.clone(),
+            graphics: self.graphics.clone(),
+        }
+    }
+}
+
+/// **The serializable form of [`TerminalSnapshot`] for the connection** (F012, P099/T543).
+///
+/// Identical to the in-memory snapshot except it drops `images`: a [`TerminalImage`]
+/// holds decoded RGBA pixels (`Arc<[u8]>`), which must never travel inline on the
+/// wire. The placements in `graphics` still name the image each needs by
+/// [`GraphicsPlacement::image_id`] (a content hash); the pixel bytes are fetched over
+/// a separate channel, keyed by that handle. Every other field is already plain data
+/// and is **reused as-is** — there is no parallel cell, line, cursor or placement
+/// type, so what goes on the wire and what the renderer consumes cannot drift.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WireSnapshot {
+    pub cols: usize,
+    pub rows: usize,
+    pub cell_w: f32,
+    pub cell_h: f32,
+    pub default_fg: [f32; 4],
+    pub default_bg: [f32; 4],
+    pub cursor_color: [f32; 4],
+    pub cursor: TerminalCursor,
+    pub lines: Vec<TerminalLine>,
+    /// Host viewport offset in rows above the live bottom (see [`TerminalSnapshot::viewport_offset`]).
+    pub viewport_offset: usize,
+    pub at_bottom: bool,
+    pub scrollback_rows: usize,
+    pub viewport_top_stable_row: isize,
+    pub hyperlinks: Vec<HyperlinkSpan>,
+    pub graphics: Vec<GraphicsPlacement>,
 }
 
 #[cfg(test)]
