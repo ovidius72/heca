@@ -20,6 +20,10 @@ mod change;
 mod cx;
 mod handlers;
 mod layout;
+/// The local socket clients and scripts reach the server through. Unix for now (Windows named
+/// pipes later).
+#[cfg(unix)]
+pub(crate) mod socket;
 mod terminals;
 #[cfg(test)]
 mod testing;

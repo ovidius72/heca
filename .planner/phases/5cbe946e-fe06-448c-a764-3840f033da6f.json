@@ -23,7 +23,13 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "69a168bf-276e-401a-a337-597ef29221b3"
+    "69a168bf-276e-401a-a337-597ef29221b3",
+    "e21d7360-4fff-465b-9a7d-b67016fce207",
+    "ed677df2-82fe-4abb-a23b-30f90bc40919",
+    "e90e1886-2ec1-4a87-94a4-2a3d4b56c404",
+    "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
+    "df083f77-b084-42d5-b7f7-51924d8b11d2",
+    "01ea2d3f-f50d-4fdb-b38a-edacfa979d87"
   ],
   "tasks": [
     {
@@ -33,12 +39,21 @@
       "shortId": "6HNTZ",
       "priority": 1,
       "shortName": "local-socket-running-rpc-lines",
-      "title": "Clients attach over the local socket; detach/attach, several windows per session, `heca rpc` for scripts",
-      "status": "planned",
-      "description": "Execution task for P099 — read the phase and F012's decisions first. Depends on P104 (the server/client interface exists in one process); this task carries that interface over a local socket. Current: `heca/src/rpc.rs` (`parse_rpc` :132, `introspect` :86); `HecaApp::execute_rpc_command` `heca/src/main.rs:77`; CLI table `heca/src/app/cli.rs`. Edge cases: a stale socket from a crashed server; a slow client must never block the server; Windows named pipes; owner-only permissions; two windows of different sizes on one pane (size setting).",
-      "descriptionUpdatedAt": "2026-09-29T21:32:50.793Z",
+      "title": "Local socket + `heca rpc <line>` for scripts",
+      "status": "in-progress",
+      "description": "ready-02a. The local-only, owner-only Unix socket in a runtime folder (stale-socket cleanup), and the one-shot `heca rpc <line>` script door that runs any catalogued action through the existing RPC path (`execute_rpc_command`/`query_rpc_command`) via a new `AppEvent::Rpc`. The rest of P099 (wire model, headless server + attach/detach, several windows, `--events`, Windows pipe, docs) is split into sibling tasks. Built on `heca/src/server/socket.rs`. Windows pipe is its own task.",
+      "descriptionUpdatedAt": "2026-10-21T10:37:30.266Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "bd3ede19-86c7-4e5b-865a-5d68c47a5fec",
+          "date": "2026-10-21T09:50:05.868Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -46,7 +61,7 @@
           "id": "69a168bf-276e-401a-a337-597ef29221b3-check-001-local-only-socket-per-server-in-a-runtime-folder-owner-only-stale-sockets-cleaned",
           "number": 1,
           "title": "Local-only socket per server in a runtime folder; owner-only; stale sockets cleaned",
-          "checked": false
+          "checked": true
         },
         {
           "id": "69a168bf-276e-401a-a337-597ef29221b3-check-002-client-protocol-state-changes-terminal-snapshots-changed-rows-out-actions-input-in",
@@ -91,16 +106,195 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-10-21T09:50:05.868Z",
       "completedAt": "",
       "createdAt": "2026-09-29T19:22:04.075Z",
-      "updatedAt": "2026-09-29T21:33:07.321Z",
+      "updatedAt": "2026-10-21T10:37:30.265Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
+          "createdAt": "2026-10-21T09:50:05.743Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d"
+    },
+    {
+      "id": "e21d7360-4fff-465b-9a7d-b67016fce207",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 543,
+      "shortId": "SQX5L",
+      "priority": 2,
+      "shortName": "serializable-wire-model-plain",
+      "title": "Serializable wire model — plain-data Change + terminal snapshot/damage + layout effects",
+      "status": "planned",
+      "description": "ready-02b. A plain-data, serde-serializable wire form of the server→client interface: `Change`, `TerminalSnapshot`/`TerminalDamage` (a wire snapshot, NOT the wezterm/image-backed in-memory one), and the layout `SpaceEffect`/`PaneEffect`/`ColumnEffect` + geometry. heca-core has no serde today. Foundation the socket carries. Depends on T521.",
+      "descriptionUpdatedAt": "2026-10-21T11:14:47.097Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "69a168bf-276e-401a-a337-597ef29221b3"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:47.035Z",
+      "updatedAt": "2026-10-21T11:15:06.322Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "ed677df2-82fe-4abb-a23b-30f90bc40919",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 544,
+      "shortId": "DT5VG",
+      "priority": 3,
+      "shortName": "headless-server-process-attach",
+      "title": "Headless server process + attach protocol (detach/attach)",
+      "status": "planned",
+      "description": "ready-02c. The server runs without a window (no winit/GPU) so it survives the window closing; a window attaches over the socket as a pure client (sends actions/input, receives Changes + terminal snapshots/changed rows). Closing a window detaches; `heca` again reattaches with scrollback intact. Standalone = server + one client in one process, one code path (decision d108b88c). Depends on the wire model (ready-02b).",
+      "descriptionUpdatedAt": "2026-10-21T11:14:49.846Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "e21d7360-4fff-465b-9a7d-b67016fce207"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:49.739Z",
+      "updatedAt": "2026-10-21T11:15:07.101Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 545,
+      "shortId": "YP7Z6",
+      "priority": 4,
+      "shortName": "several-windows-per-session-ow",
+      "title": "Several windows per session — own view each, follow, pane size setting",
+      "status": "planned",
+      "description": "ready-02d. Several windows attach to one session: shared content, each its own view (per-window since P104); a `follow` option to mirror another window; a running pane's size when several windows show it decided by setting `smallest|latest|largest` (default `latest`, decision 463ccd07). Depends on attach protocol (ready-02c).",
+      "descriptionUpdatedAt": "2026-10-21T11:14:52.479Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:52.371Z",
+      "updatedAt": "2026-10-21T11:15:07.929Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 546,
+      "shortId": "U5U92",
+      "priority": 5,
+      "shortName": "heca-rpc-events-stream-events",
+      "title": "`heca rpc --events` — stream events to scripts",
+      "status": "planned",
+      "description": "ready-02e. `heca rpc --events` streams the session's events (the same ones a window reacts to) to a script over the socket. Depends on the attach protocol (ready-02c) carrying events.",
+      "descriptionUpdatedAt": "2026-10-21T11:14:54.219Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:54.116Z",
+      "updatedAt": "2026-10-21T11:15:08.673Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "df083f77-b084-42d5-b7f7-51924d8b11d2",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 547,
+      "shortId": "H6J5Q",
+      "priority": 6,
+      "shortName": "windows-named-pipe-transport",
+      "title": "Windows named-pipe transport",
+      "status": "planned",
+      "description": "ready-02f. The Windows path for the control socket: a named pipe, owner-only, behind the same interface the Unix socket uses (`crate::server::socket` is `cfg(unix)` today). Depends on T521 (the socket seam).",
+      "descriptionUpdatedAt": "2026-10-21T11:14:56.096Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "69a168bf-276e-401a-a337-597ef29221b3"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:55.996Z",
+      "updatedAt": "2026-10-21T11:15:09.489Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "01ea2d3f-f50d-4fdb-b38a-edacfa979d87",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 548,
+      "shortId": "S6JQU",
+      "priority": 7,
+      "shortName": "connection-attach-architecture",
+      "title": "Connection / attach architecture docs",
+      "status": "planned",
+      "description": "ready-02g. Extend docs/server-client-architecture.md (or a sibling) with the socket, the attach/detach model, several windows and the size setting, and `heca rpc`. Depends on the model existing (ready-02c/d).",
+      "descriptionUpdatedAt": "2026-10-21T11:14:57.761Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:57.658Z",
+      "updatedAt": "2026-10-21T11:15:10.024Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-09-29T21:33:23.091Z",
+  "updatedAt": "2026-10-21T11:15:10.024Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -114,7 +308,20 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "a79949b2-3fb0-4182-99f3-4a7f9d0a62db",
+      "date": "2026-10-21T09:50:06.095Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
+      "createdAt": "2026-10-21T09:50:05.743Z"
+    }
+  ]
 }

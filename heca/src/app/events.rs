@@ -42,6 +42,14 @@ pub enum AppEvent {
         terminal: crate::chrome::panes::terminal::TerminalId,
         input: crate::chrome::panes::terminal::TerminalInput,
     },
+    /// **One RPC line from the local socket**, to run on the main thread where the state lives
+    /// (`crate::server::socket`). The listener thread hands the line in and waits on `reply` for
+    /// the one-line answer — a query's JSON, `ok`, or `error: …`. The one door a script reaches an
+    /// action through; the same catalog, the same policy as a key or a menu entry.
+    Rpc {
+        line: String,
+        reply: std::sync::mpsc::Sender<String>,
+    },
 }
 
 pub(crate) fn handle_window_event(

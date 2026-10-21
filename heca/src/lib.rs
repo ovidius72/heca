@@ -91,10 +91,6 @@ impl HecaApp {
     /// The reply says what became of it, because a script cannot be told "ok" when nothing ran: an
     /// unknown name, an action the current domain refuses, and one whose component is not mounted
     /// are three different answers.
-    #[expect(
-        dead_code,
-        reason = "nothing listens on a socket yet; this is the entry a listener calls"
-    )]
     pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<(), rpc::RpcError> {
         use crate::app::interaction::{IntentOutcome, InteractionSource, dispatch_view_intent};
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
@@ -142,13 +138,25 @@ impl HecaApp {
     /// — the RPC server then routes it to [`execute_rpc_command`](HecaApp::execute_rpc_command) to run as an
     /// action. A query returns data, never a [`WmAction`](crate::input::WmAction), which is why it is a
     /// separate entry point.
-    #[expect(
-        dead_code,
-        reason = "nothing listens on a socket yet; this is the entry a listener calls"
-    )]
     pub fn query_rpc_command(&self, cmd: &str) -> Option<Result<String, rpc::RpcError>> {
         let state = self.state.as_ref()?;
         rpc::introspect(&state.action_catalog, cmd)
+    }
+
+    /// Run one RPC line from the socket and give back the one line to send to the caller. A query
+    /// (`list-actions` / `describe-action`) answers with its JSON; anything else runs as an action
+    /// and answers `ok` or `error: …`. The caller never gets a silent "did nothing".
+    fn run_rpc(&mut self, line: &str) -> String {
+        if let Some(result) = self.query_rpc_command(line) {
+            return match result {
+                Ok(json) => json,
+                Err(e) => format!("error: {e}"),
+            };
+        }
+        match self.execute_rpc_command(line) {
+            Ok(()) => "ok".to_string(),
+            Err(e) => format!("error: {e}"),
+        }
     }
 
     fn new(event_proxy: EventLoopProxy<AppEvent>) -> Self {
@@ -430,6 +438,21 @@ impl ApplicationHandler<AppEvent> for HecaApp {
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+        // The socket's RPC is answered even before the window's state exists, so a script that
+        // races startup gets a sentence rather than a hang. It runs on this thread (the one the
+        // state lives on) and sends the one-line answer back to the listener thread.
+        if let AppEvent::Rpc { line, reply } = event {
+            let answer = match self.state {
+                Some(_) => self.run_rpc(&line),
+                None => "error: heca is still starting".to_string(),
+            };
+            let _ = reply.send(answer);
+            if let Some(state) = self.state.as_mut() {
+                // An action may have changed the layout; show it.
+                state.window.request_redraw();
+            }
+            return;
+        }
         let Some(state) = self.state.as_mut() else {
             return;
         };
@@ -467,6 +490,8 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 crate::notification::raise(state, draft);
                 state.window.request_redraw();
             }
+            // Answered before the state guard above (it must reply even while starting).
+            AppEvent::Rpc { .. } => unreachable!("RPC is handled before the state guard"),
         }
     }
 }
@@ -488,6 +513,10 @@ pub fn run() {
         .expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     let event_proxy = event_loop.create_proxy();
+    // Start serving the local control socket: scripts (`heca rpc …`) and, later, attaching
+    // windows reach the server through it. A failure to open it never stops the window.
+    #[cfg(unix)]
+    crate::server::socket::serve(event_proxy.clone());
     let mut app = HecaApp::new(event_proxy);
     event_loop
         .run_app(&mut app)
