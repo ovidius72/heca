@@ -135,7 +135,95 @@ pub(super) fn draw_terminal_symbol_cell(
         return true;
     }
 
+    if draw_block_cell(primitive_renderer, ch, x, y, w, h, color) {
+        return true;
+    }
+
     draw_box_drawing_cell(primitive_renderer, ch, x, y, w, h, color)
+}
+
+/// One cell-filling rectangle for a Block Element: `(x, y, w, h)`.
+pub(super) type BlockRect = (f32, f32, f32, f32);
+/// The cell-filling rectangles of a **Block Element** (`U+2580`–`U+259F`),
+/// exactly as Alacritty/Kitty draw them: edge to edge in the *cell's* geometry,
+/// never the font's — a font's block glyphs stop short of the cell bounds
+/// (advance, hinting, ascent), so two same-colour blocks hand-rendered by the
+/// font show a hairline seam between them. Drawing the cell's own rectangles
+/// makes `█▄▀▌▐▙▟…` tile perfectly, which is what logos and ASCII art made of
+/// blocks need.
+///
+/// The shading characters (`░` `▒` `▓`) stay with the font: they are dithered
+/// textures, not solid fills, and the font draws them without seams at normal
+/// scale.
+pub(super) fn block_cell_rects(ch: char, x: f32, y: f32, w: f32, h: f32) -> Option<Vec<BlockRect>> {
+    // The cell cut in halves, for the quadrant characters (U+2596–U+259F).
+    let ul = (x, y, w * 0.5, h * 0.5);
+    let ur = (x + w * 0.5, y, w * 0.5, h * 0.5);
+    let ll = (x, y + h * 0.5, w * 0.5, h * 0.5);
+    let lr = (x + w * 0.5, y + h * 0.5, w * 0.5, h * 0.5);
+
+    let rects = match ch {
+        // U+2580 ▀ upper half
+        '\u{2580}' => vec![(x, y, w, h * 0.5)],
+        // U+2581–U+2587 ▁ ▂ ▃ ▄ ▅ ▆ ▇ — the lower n·⅛ of the cell
+        '\u{2581}'..='\u{2587}' => {
+            let n = (ch as u32 - 0x2580) as f32;
+            vec![(x, y + h * (8.0 - n) / 8.0, w, h * n / 8.0)]
+        }
+        // U+2588 █ full
+        '\u{2588}' => vec![(x, y, w, h)],
+        // U+2589–U+258B ▉ ▊ ▋ — the left 7·⅛, 6·⅛, 5·⅛ strips
+        '\u{2589}'..='\u{258B}' => {
+            let n = (0x2590 - ch as u32) as f32;
+            vec![(x, y, w * n / 8.0, h)]
+        }
+        // U+258C ▌ left half
+        '\u{258C}' => vec![(x, y, w * 0.5, h)],
+        // U+258D–U+258F ▍ ▎ ▏ — the left 3·⅛, 2·⅛, 1·⅛ strips
+        '\u{258D}'..='\u{258F}' => {
+            let n = (0x2590 - ch as u32) as f32;
+            vec![(x, y, w * n / 8.0, h)]
+        }
+        // U+2590 ▐ right half
+        '\u{2590}' => vec![(x + w * 0.5, y, w * 0.5, h)],
+        // U+2594 ▔ upper eighth
+        '\u{2594}' => vec![(x, y, w, h / 8.0)],
+        // U+2595 ▕ right eighth
+        '\u{2595}' => vec![(x + w * 7.0 / 8.0, y, w / 8.0, h)],
+        // U+2596–U+259F ▖ ▗ ▘ ▝ ▙ ▚ ▛ ▜ ▞ ▟ — their named quadrants
+        '\u{2596}' => vec![ll],
+        '\u{2597}' => vec![lr],
+        '\u{2598}' => vec![ul],
+        '\u{2599}' => vec![ul, ll, lr],
+        '\u{259A}' => vec![ul, lr],
+        '\u{259B}' => vec![ul, ur, ll],
+        '\u{259C}' => vec![ul, ur, lr],
+        '\u{259D}' => vec![ur],
+        '\u{259E}' => vec![ur, ll],
+        '\u{259F}' => vec![ur, ll, lr],
+        _ => return None,
+    };
+    Some(rects)
+}
+
+/// Draw one Block Element cell from [`block_cell_rects`] — the shared fg colour,
+/// every rectangle exact to its cell edge.
+fn draw_block_cell(
+    primitive_renderer: &mut PrimitiveRenderer,
+    ch: char,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    color: [f32; 4],
+) -> bool {
+    let Some(rects) = block_cell_rects(ch, x, y, w, h) else {
+        return false;
+    };
+    for (rx, ry, rw, rh) in rects {
+        primitive_renderer.draw_rect(rx, ry, rw, rh, color);
+    }
+    true
 }
 
 fn draw_box_drawing_cell(
@@ -305,5 +393,90 @@ fn draw_half_ellipse(
         } else {
             primitive_renderer.draw_rect(x + inset, band_y, (w - inset).max(0.0), draw_h, color);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{block_cell_rects, BlockRect};
+
+    /// A cell the tests measure: ten logical px, so an eighth is exact.
+    const X: f32 = 0.0;
+    const Y: f32 = 0.0;
+    const W: f32 = 10.0;
+    const H: f32 = 8.0;
+    const E: f32 = 1.0; // one eighth of the height
+
+    fn rects(ch: char) -> Vec<BlockRect> {
+        block_cell_rects(ch, X, Y, W, H).expect("expected a block element")
+    }
+
+    fn none(ch: char) {
+        assert!(
+            block_cell_rects(ch, X, Y, W, H).is_none(),
+            "{ch:?} must stay with the font"
+        );
+    }
+
+    #[test]
+    fn the_upper_and_lower_halves_meet_at_the_cell_middle_with_no_gap() {
+        let top = rects('▀');
+        let bottom = rects('▄');
+        assert_eq!(top, vec![(X, Y, W, 4.0 * E)]);
+        assert_eq!(
+            bottom,
+            vec![(X, Y + 4.0 * E, W, 4.0 * E)],
+            "the lower half starts exactly where the upper ends"
+        );
+    }
+
+    #[test]
+    fn the_lower_blocks_stack_by_eighths() {
+        assert_eq!(rects('▁'), vec![(X, Y + 7.0 * E, W, 1.0 * E)]);
+        assert_eq!(rects('▃'), vec![(X, Y + 5.0 * E, W, 3.0 * E)]);
+        assert_eq!(rects('▇'), vec![(X, Y + 1.0 * E, W, 7.0 * E)]);
+    }
+
+    #[test]
+    fn the_full_block_fills_the_whole_cell() {
+        assert_eq!(rects('█'), vec![(X, Y, W, H)]);
+    }
+
+    #[test]
+    fn the_left_and_right_strips_split_the_width_exactly() {
+        assert_eq!(rects('▌'), vec![(X, Y, 5.0, H)]);
+        assert_eq!(rects('▐'), vec![(X + 5.0, Y, 5.0, H)]);
+        assert_eq!(rects('▏'), vec![(X, Y, 1.25, H)]);
+        assert_eq!(rects('▕'), vec![(X + 8.75, Y, 1.25, H)]);
+    }
+
+    #[test]
+    fn the_quadrants_fill_their_quarter_of_the_cell() {
+        let (ul, ur, ll, lr) = (
+            (X, Y, 5.0, 4.0),
+            (X + 5.0, Y, 5.0, 4.0),
+            (X, Y + 4.0, 5.0, 4.0),
+            (X + 5.0, Y + 4.0, 5.0, 4.0),
+        );
+        assert_eq!(rects('▖'), vec![ll], "lower-left quadrant");
+        assert_eq!(rects('▗'), vec![lr], "lower-right quadrant");
+        assert_eq!(rects('▘'), vec![ul], "upper-left quadrant");
+        assert_eq!(rects('▝'), vec![ur], "upper-right quadrant");
+        assert_eq!(rects('▚'), vec![ul, lr], "the diagonal pair");
+        assert_eq!(
+            rects('▟'),
+            vec![ur, ll, lr],
+            "everything but the upper left"
+        );
+    }
+
+    #[test]
+    fn a_non_block_element_stays_with_the_font() {
+        none('a');
+        none('─'); // box drawing — `draw_box_drawing_cell` owns it
+        none('✻'); // a glyph, not a block — the Claude Code logo's star itself
+        none('░');
+        none('▒');
+        none('▓'); // shades: dithered font textures
     }
 }
