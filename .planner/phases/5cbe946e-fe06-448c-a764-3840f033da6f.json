@@ -175,7 +175,7 @@
           "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-003-sessioncontent-data-projection-the-window-draws-from-server-sent-data-never-from-session-directly-one-read-path-reused-as-p105-s-save-format",
           "number": 3,
           "title": "SessionContent data projection — the window draws from server-sent data, never from Session directly (one read path; reused as P105's save format)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-004-headless-server-run-loop-heca-server-own-thread-mpsc-recv-timeout-next-wake-per-connection-and-per-pty-reader-threads-feed-serverevents",
@@ -190,9 +190,9 @@
           "checked": false
         },
         {
-          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-006-process-spawn-heca-with-no-server-spawns-a-detached-heca-server-and-attaches-reattach-on-next-run-standalone-stays-one-process",
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-006-process-spawn-cli-dispatch-heca-with-no-server-spawns-a-detached-heca-server-and-attaches-reattach-on-next-run-standalone-stays-one-process-build-the-cli-subcommand-seam-here-incl-the-local-heca-install-integration-program-entry-p102-plugs-into-when-done-record-the-install-handler-signature-in-the-planner-for-whoever-owns-p102-t174-we-won-t-know-then-if-p102-is-finished-or-who-is-on-it-so-don-t-rely-on-messaging-codex",
           "number": 6,
-          "title": "Process spawn — `heca` with no server spawns a detached `heca --server` and attaches; reattach on next run; `--standalone` stays one process",
+          "title": "Process spawn + CLI dispatch — `heca` with no server spawns a detached `heca --server` and attaches; reattach on next run; `--standalone` stays one process. Build the CLI subcommand seam here (incl. the local `heca install integration <program>` entry P102 plugs into). WHEN DONE: record the `install` handler signature in the planner for whoever owns P102/T174 — we won't know then if P102 is finished or who is on it, so don't rely on messaging Codex.",
           "checked": false
         }
       ],
@@ -205,7 +205,7 @@
       "startedAt": "2026-10-21T12:40:33.812Z",
       "completedAt": "",
       "createdAt": "2026-10-21T11:14:49.739Z",
-      "updatedAt": "2026-10-21T14:00:40.086Z",
+      "updatedAt": "2026-10-22T09:30:31.880Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
@@ -258,7 +258,14 @@
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-001-add-change-paneagentchanged-pane-paneid-previous-option-box-agentstate-agent-option-box-agentstate-to-server-change-rs-reusing-heca-core-agent-agentstate-from-p102-snapshots-carry-current-agent-state-an-event-preserves-each-transition-agent-none-clears-needs-p102-s-agentstate-integrated-on-this-branch-next-first",
+          "number": 1,
+          "title": "Add Change::PaneAgentChanged { pane: PaneId, previous: Option<Box<AgentState>>, agent: Option<Box<AgentState>> } to server/change.rs, reusing heca_core::agent::AgentState (from P102). Snapshots carry current agent state; an event preserves each transition; agent: None clears. Needs P102's AgentState integrated on this branch/next first.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [
         "ed677df2-82fe-4abb-a23b-30f90bc40919"
@@ -268,7 +275,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T11:14:54.116Z",
-      "updatedAt": "2026-10-21T11:21:27.191Z",
+      "updatedAt": "2026-10-21T19:18:19.301Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -332,7 +339,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-10-21T14:00:40.086Z",
+  "updatedAt": "2026-10-22T09:30:31.880Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

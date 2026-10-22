@@ -8,7 +8,7 @@ pub const END: usize = usize::MAX;
 pub struct SessionId(pub u64);
 
 /// Unique identifier for a workspace.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct WorkspaceId(pub u64);
 
 /// Unique identifier for a pane.
@@ -25,11 +25,11 @@ impl std::fmt::Display for PaneId {
 }
 
 /// Unique identifier for a column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ColumnId(pub u64);
 
 /// Width of a column.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ColumnWidth {
     /// Proportion of the current view width (0.0 - 1.0).
     Proportion(f64),

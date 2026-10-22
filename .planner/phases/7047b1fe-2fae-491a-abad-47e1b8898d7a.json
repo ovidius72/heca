@@ -204,11 +204,11 @@
       "shortId": "QD7QU",
       "priority": 3,
       "shortName": "builtin-agent-drivers",
-      "title": "Claude Code, Codex and pi through the agent contract",
+      "title": "Persistent agent integrations — install, inspect, update and uninstall",
       "status": "planned",
-      "description": "Depends on T171 (the contract). Read P102's description; hook facts in heca `agent-integration/agent-integration-plan.md` §2.\n\n- **Claude Code:** hooks that print a notification escape code, added with `claude --settings <temp file>` so the user's own settings still load (hook lists add up across settings files). Map hook events to the status set.\n- **Codex:** reads the notification codes Codex already prints (turn complete, permission) — no setup needed for the basic states.\n- **pi:** a small extension heca ships, writing status to the side channel; installed once, never overwriting a user-changed copy.\nEach is a built-in implementation of the same contract a plugin uses; nothing special-cased.",
-      "descriptionUpdatedAt": "2026-09-29T19:27:31.823Z",
-      "notes": "",
+      "description": "Implement explicit, persistent agent integrations through the shared T171 contract. Built-in drivers cover Claude Code, Codex, pi and OpenCode; other programs use the same public registration API. Never branch on program names in the host.\n\nDesign authority: this task's Accepted Decision 7489ccb5-b087-428a-afa4-3291ef3a1744 replaces the earlier temporary-launch setup described here and in P102. Reuse verified native API facts from agent-integration/agent-integration-plan.md, not its older setup design.\n\n## User flow\nThe user explicitly chooses a program, for example `heca install integration codex`. Provide matching inspect, update and uninstall operations through one shared module. Nothing is installed automatically. The installed integration persists until removed and is inactive outside Heca. Once enabled, it reports for commands typed into existing Heca terminals and for Heca-launched programs. Per-session identity and reporting connections remain temporary; remove the competing per-launch hook/extension installation path.\n\n## Delivery, settings and updates\nBundle integration files with the Heca release. Keep installed files in stable per-user locations appropriate to each program and use Heca's normal config for program/event choices. Preserve existing native settings, hooks and plugins; register and remove only Heca-owned entries. Keep native hook review/trust intact. Record integration versions and owned files/entries; inspection checks the actual installation, including modified or missing files. Update is explicit, preserves choices and detects local edits before replacement. Heca app updates supply newer assets without silently reinstalling integrations. Safe writes and recoverable changes are required. Event selection is separate from installation; sounds belong to T175 and remain off by default.\n\n## Shared implementation and ownership\nThe installer is a machine-local filesystem operation and works without a session server. It must use the existing action/catalog conventions when exposed to app/plugin/RPC callers; it must not become another route for session mutations. A future settings page calls these same operations; building that page is outside this task.\n\nP099/T544 (heca-dev2) owns CLI dispatch in heca/src/app/cli.rs and supplies the registration entry point. P102 owns the handler/shared module and does not edit P099's dispatch file. Coordinate the concrete handler signature before connecting it.\n\nP099 owns heca/src/server/change.rs and T546 event/snapshot transport. P102 supplies serializable AgentState and agent transitions, including clearing state. Reuse the existing agent model, with previous/current values for transitions and current agent state in snapshots. No second wire model or parallel event store. Existing ServerWaker and serde work needs no installation changes.\n\n## Verification and completion\nVerify installation, repeat install, inspection, updates, removal, preservation of unrelated settings, edited files and native trust behavior. Exercise reports inside Heca through each built-in driver and an externally registered driver, and confirm installed integrations stay inactive outside Heca. Retain reusable work from T171 (contract), T173 (status line) and T175 (optional sounds); do not treat the temporary implementation as completion of this rework. Record native provider/account limitations separately from integration failures. Review with Opus before completion. PR targets next under F012 decision fa766c9f-b933-4b97-b626-9453265558a7. Do not commit without Antonio's request.",
+      "descriptionUpdatedAt": "2026-10-21T19:13:44.767Z",
+      "notes": "Implementation checkpoint, 2026-10-21 (uncommitted in /Users/antonio/projects/heca-p102, feat/p102-agent).\n\nShared API: heca::agent::integrations / integrations_in return Integrations with list, inspect and apply(IntegrationOperation). Extensible AgentDriver::integration describes resources. Each registered driver receives its own persistent directory. Built-ins use installed hooks/extensions; launch only supplies temporary reporting variables. No temporary settings, hook overrides or plugin-list injection remain.\n\nImplemented: versioned bundles and receipts; actual-file inspection including unmanaged content; repeat install, explicit update, uninstall; preservation of native JSON/TOML hooks and comments; user choices preserved during updates; private atomic writes, installer locking and recoverable batches. A real write-failure test found and verified the rollback fix. The modified-file guard was deliberately removed: the protection test failed, then source was restored. Extension registration tests prove independent installs for two extensions sharing a driver-local id.\n\nVerified: scoped all-targets tests for heca/core/config passed, excluding only the previously identified baseline focus_door::only_the_focus_door_writes_the_focused_flag check. Library results: heca 1002 passed (3 manual checks ignored), core 237, config 113; real-PTY tests passed. The changed extension test also passed in the latest agent suite. Scoped Clippy -D warnings passed. Manual native Pi autoload/startup and OpenCode TUI/plugin reporting passed against isolated configs. Installed Claude/Codex hook commands were executed successfully; full native Claude/Codex cycles and their trust/provider gates are not claimed complete. Logs: target/p102/installation-*.log and native-*-installation.log.\n\nStill pending: T544/C6 must land the committed CLI interface, then wire and verify heca install integration <program> and lifecycle commands; P099-owned Change/snapshot transport; full native cycles where required; Opus review. No CLI/server dispatch file was changed by this rework. Task status stays planned as Antonio requested; do not mark T174 or P102 done from this checkpoint. PR target remains next; commit only when Antonio asks.\n\n2026-10-22 CLI contract and launch verification: accepted P099's grammar and API recorded in .planner/docs/install-cli-seam.md. P099 owns CLI dispatch and text/JSON formatting. Added public Integrations::machine_local() in heca/src/agent/integration/mod.rs, delegating to the existing service and normal fallible config loading. Construction installs nothing; the same operations serve CLI and future settings UI. A separately compiled caller invoked the constructor and read-only list successfully for all four built-ins (target/p102/cli-seam-public-api.log). C4 is complete; actual CLI dispatch still belongs to T544 C6 and is not wired in this worktree.\n\nAdded real-PTY coverage in heca/tests/agent_launch.rs for an installed external integration invoked through both a Heca-launched command and a command typed in an existing terminal, plus inactivity outside Heca and persistence after terminal close. All five tests passed. Deliberately disabled launch setup: the typed-command test failed, then the source was restored exactly and the suite passed again. This is launch/contract evidence, not a substitute for C2's live native-program checks. Desktop automation detected concurrent interaction; live input is pending Antonio's reply about use of the isolated HecaP102 test window. Native installations and test configuration are isolated under target/p102/live-ui; no personal native settings were edited.\n\nT174 remains unfinished: C2 live native cycles, C10 final native launch verification, C12 P099 transport connection, and C13 final review remain open. T544 must also wire the agreed CLI operations. Preserve task status/ownership and the existing one-way T174-depends-on-T544 edge. Changes remain uncommitted; PR targets next.",
       "statusLog": [
         {
           "id": "4174a3e3-e23c-40e2-88bf-b95d4c56fd30",
@@ -228,36 +228,93 @@
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "7489ccb5-b087-428a-afa4-3291ef3a1744",
+          "title": "Explicit persistent integration installation and P099 ownership boundary",
+          "decision": "Users explicitly install persistent integrations per registered agent program. Nothing is installed automatically. Persistent installation replaces per-launch hook or extension injection; session identity and the reporting connection remain temporary and active only inside Heca. Provide one shared implementation for install, inspect, update and uninstall, callable by the CLI and a future settings page. Preserve user settings, unrelated hooks and plugins, and native trust prompts. Sounds remain optional and off by default. Machine-local installation does not require a running session server; commands that change session state still go through the existing socket/action path. P099/T544 owns CLI dispatch; P102 owns the integration handler and shared operations. P099 owns server/change.rs and T546 transport; P102 supplies the serializable agent state and transition contract.",
+          "rationale": "Antonio agreed to replace temporary launch setup with explicit persistent installation, discussed using the same operations from a future GUI, and requested this task description/checklist update. The 2026-10-21 coordination proposal from heca-dev2 separates CLI and transport ownership from P102 installation work. Existing ServerWaker and serde work is unaffected.",
+          "implementationNotes": "Ship integration assets with Heca, record installed versions and owned entries/files, inspect actual files, and offer explicit updates without silently rewriting agent settings when Heca itself updates. Preserve user choices and detect edits before replacing owned content. Reuse the existing driver registration path; no closed list or program-name branches in the host. The future settings page is outside T174. P099 adds Change::PaneAgentChanged using the same PaneId, previous and agent fields as P102 ChromeEvent::PaneAgentChanged, with AgentState reused from heca-core; do not create a duplicate wire model. Refer to F012 branch decision fa766c9f-b933-4b97-b626-9453265558a7: PR targets next. This task decision supersedes older temporary-setup examples in T174 and P102 research; it does not change task status or ownership.",
+          "acceptedAt": "2026-10-21T19:13:44.583Z"
+        }
+      ],
       "checklist": [
         {
-          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-001-claude-code-temp-settings-hooks-user-settings-untouched-temp-file-cleaned-on-pane-close",
-          "number": 1,
-          "title": "Claude Code: temp --settings hooks, user settings untouched, temp file cleaned on pane close",
-          "checked": false
-        },
-        {
-          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-002-codex-native-notification-codes-mapped",
-          "number": 2,
-          "title": "Codex: native notification codes mapped",
-          "checked": false
-        },
-        {
           "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-003-pi-shipped-extension-side-channel-safe-install",
-          "number": 3,
+          "number": 1,
           "title": "pi: shipped extension + side channel, safe install",
-          "checked": false
+          "checked": true
         },
         {
           "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-004-each-driven-end-to-end-in-the-app-working-waiting-finished",
-          "number": 4,
+          "number": 2,
           "title": "Each driven end to end in the app (working → waiting → finished)",
           "checked": false
         },
         {
           "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-005-docs-limits-e-g-org-managed-claude-settings-that-block-hooks",
-          "number": 5,
+          "number": 3,
           "title": "Docs: limits (e.g. org-managed Claude settings that block hooks)",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-006-define-the-shared-integration-lifecycle-on-the-existing-extensible-driver-registration-path-agree-the-cli-handler-signature-with-p099-t544-without-editing-its-dispatch-file",
+          "number": 4,
+          "title": "Define the shared integration lifecycle on the existing extensible driver registration path; agree the CLI handler signature with P099/T544 without editing its dispatch file.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-007-bundle-versioned-claude-code-codex-pi-and-opencode-integration-assets-and-track-heca-owned-installed-files-and-registration-entries",
+          "number": 5,
+          "title": "Bundle versioned Claude Code, Codex, pi and OpenCode integration assets and track Heca-owned installed files and registration entries.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-008-implement-explicit-repeatable-installation-that-preserves-existing-native-settings-unrelated-hooks-plugins-and-normal-trust-prompts",
+          "number": 6,
+          "title": "Implement explicit, repeatable installation that preserves existing native settings, unrelated hooks/plugins and normal trust prompts.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-009-implement-inspection-of-actual-files-and-registrations-reporting-installed-missing-outdated-and-locally-modified-content",
+          "number": 7,
+          "title": "Implement inspection of actual files and registrations, reporting installed, missing, outdated and locally modified content.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-010-implement-explicit-updates-with-safe-writes-recovery-and-preservation-of-user-event-settings-choices-never-silently-reinstall-during-a-heca-app-update",
+          "number": 8,
+          "title": "Implement explicit updates with safe writes, recovery and preservation of user event/settings choices; never silently reinstall during a Heca app update.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-011-implement-uninstall-that-removes-only-heca-owned-entries-files-and-preserves-unrelated-user-configuration",
+          "number": 9,
+          "title": "Implement uninstall that removes only Heca-owned entries/files and preserves unrelated user configuration.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-012-replace-temporary-per-launch-hook-extension-installation-while-retaining-temporary-terminal-identity-reporting-connections-verify-typed-commands-and-heca-launched-programs-report-only-inside-heca",
+          "number": 10,
+          "title": "Replace temporary per-launch hook/extension installation while retaining temporary terminal identity/reporting connections; verify typed commands and Heca-launched programs report only inside Heca.",
+          "checked": false
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-013-use-normal-heca-configuration-for-program-and-event-choices-install-nothing-automatically-and-keep-optional-t175-sounds-off-by-default",
+          "number": 11,
+          "title": "Use normal Heca configuration for program and event choices; install nothing automatically and keep optional T175 sounds off by default.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-014-coordinate-the-existing-agentstate-transition-shape-with-p099-owned-change-snapshot-transport-preserve-every-transition-and-explicit-state-clearing-without-a-duplicate-wire-model",
+          "number": 12,
+          "title": "Coordinate the existing AgentState transition shape with P099-owned Change/snapshot transport; preserve every transition and explicit state clearing without a duplicate wire model.",
+          "checked": false
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-015-verify-lifecycle-preservation-and-native-reporting-with-built-in-and-externally-registered-drivers-update-usage-docs-and-obtain-opus-review-before-completion-pr-targets-next",
+          "number": 13,
+          "title": "Verify lifecycle preservation and native reporting with built-in and externally registered drivers, update usage docs, and obtain Opus review before completion; PR targets next.",
           "checked": false
         }
       ],
@@ -267,14 +324,15 @@
         "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
         "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
         "88b87a32-ff00-4044-9a32-c575e3ed5401",
-        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738",
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:15:25.609Z",
-      "updatedAt": "2026-09-29T19:27:31.822Z",
+      "updatedAt": "2026-10-22T09:09:39.649Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -361,7 +419,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:40.860Z",
-  "updatedAt": "2026-10-03T10:02:43.377Z",
+  "updatedAt": "2026-10-22T09:09:39.649Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

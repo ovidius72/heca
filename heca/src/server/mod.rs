@@ -24,10 +24,12 @@ mod layout;
 /// pipes later).
 #[cfg(unix)]
 pub(crate) mod socket;
+mod run;
 mod terminals;
 #[cfg(test)]
 mod testing;
 mod waker;
+mod wire;
 
 use std::rc::Rc;
 use std::time::Instant;
