@@ -127,10 +127,15 @@ pub(super) fn graphics_signature(graphics: &[heca_core::backend::GraphicsPlaceme
     hasher.finish()
 }
 
+/// Copy the damaged rows into the retained texture, as pixel bands.
+///
+/// `grid_top` is the grid's top inset in the texture (the padding's top): the
+/// grid sits there, not at the texture's corner.
 pub(super) fn terminal_damage_copy_bands(
     damage: &TerminalDamage,
     snapshot: &TerminalSnapshot,
     logical_height: f32,
+    grid_top: f32,
     scale_factor: f64,
     texture_height: u32,
 ) -> Vec<TerminalCopyBand> {
@@ -142,7 +147,9 @@ pub(super) fn terminal_damage_copy_bands(
         }],
         TerminalDamage::Rows(ranges) => {
             let scale = scale_factor as f32;
-            let max_height = logical_height.max(0.0);
+            // The rows' bottom limit is the grid's own height: the padding below
+            // it holds background, never rows.
+            let max_height = (logical_height - grid_top).max(0.0);
             let mut bands = Vec::with_capacity(ranges.len());
             for range in ranges {
                 let start = range.start.min(snapshot.rows);
@@ -150,9 +157,10 @@ pub(super) fn terminal_damage_copy_bands(
                 if start >= end {
                     continue;
                 }
-                let top = ((start as f32 * snapshot.cell_h) * scale).floor() as u32;
-                let bottom =
-                    (((end as f32 * snapshot.cell_h).min(max_height)) * scale).ceil() as u32;
+                let top = (grid_top + start as f32 * snapshot.cell_h) * scale;
+                let top = (top.floor() as u32).min(texture_height);
+                let bottom = (grid_top + (end as f32 * snapshot.cell_h).min(max_height)) * scale;
+                let bottom = (bottom.ceil() as u32).min(texture_height);
                 let y = top.min(texture_height);
                 let clipped_bottom = bottom.min(texture_height);
                 if clipped_bottom > y {

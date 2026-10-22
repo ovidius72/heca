@@ -2,15 +2,21 @@
 
 use super::*;
 
+/// The grid's size as the tests ask it — from the shared state, the same thing the
+/// renderer's doors read, without a method only tests would call.
+fn room(t: &Terminal) -> Option<Size> {
+    t.shared.size.get()
+}
+
 /// A terminal in a box learns the box's size — the only thing it needs to size its grid.
 #[test]
 fn a_terminal_learns_the_size_of_the_box_it_is_given() {
     let t = Terminal::new();
-    assert_eq!(t.room(), None, "nothing is known before the first layout");
+    assert_eq!(room(&t), None, "nothing is known before the first layout");
 
     let _root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
 
-    let size = t.room().expect("laid out");
+    let size = room(&t).expect("laid out");
     assert_eq!((size.w, size.h), (300.0, 200.0));
 }
 
@@ -22,7 +28,7 @@ fn below_a_header_a_terminal_gets_what_the_header_leaves() {
     let t = Terminal::new();
     let _root = header_above(Box::new(t.clone()), 33.0, 308.0, 720.0);
 
-    let size = t.room().expect("laid out");
+    let size = room(&t).expect("laid out");
     assert_eq!((size.w, size.h), (308.0, 687.0));
 }
 
@@ -36,7 +42,7 @@ fn a_terminal_never_exceeds_its_box() {
     ] {
         let t = Terminal::new();
         let _root = header_above(Box::new(t.clone()), header, w, h);
-        let size = t.room().expect("laid out");
+        let size = room(&t).expect("laid out");
         assert!(size.w <= w && size.h <= h, "{size:?} exceeds {w}x{h}");
     }
 }
@@ -47,7 +53,52 @@ fn a_clone_is_the_same_terminal() {
     let t = Terminal::new();
     let placed = t.clone();
     let _root = laid_out_in(Box::new(placed), 120.0, 80.0);
-    assert_eq!(t.room().map(|s| (s.w, s.h)), Some((120.0, 80.0)));
+    assert_eq!(room(&t).map(|s| (s.w, s.h)), Some((120.0, 80.0)));
+}
+
+/// Its padding is where its grid does not go: every side holds the grid in, the grid is
+/// the pane minus the padding, and the process is told the smaller grid — never cropped ones.
+#[test]
+fn the_padding_is_where_the_grid_does_not_go() {
+    for (top, bottom, left, right) in [(8.0, 2.0, 6.0, 4.0), (0.0, 0.0, 20.0, 0.0)] {
+        let t = Terminal::new();
+        t.set_content_padding(top, bottom, left, right);
+        let _root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+
+        let size = room(&t).expect("laid out");
+        assert_eq!(
+            (size.w, size.h),
+            (300.0 - left - right, 200.0 - top - bottom),
+            "the grid fills what the padding leaves"
+        );
+
+        let c = t.content_box().expect("laid out");
+        assert_eq!(
+            (c.loc.x, c.loc.y),
+            (left, top),
+            "left and top are where the grid starts"
+        );
+    }
+}
+
+/// Without padding nothing is held in: the grid's box **is** the pane, at 0,0, and
+/// so is the surface's whole box — exactly what was drawn before padding existed.
+#[test]
+fn without_padding_both_boxes_are_the_pane() {
+    let t = Terminal::new();
+    let _root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+
+    let c = t.content_box().expect("laid out");
+    assert_eq!(
+        (c.loc.x, c.loc.y, c.size.w, c.size.h),
+        (0.0, 0.0, 300.0, 200.0)
+    );
+
+    let f = t.full_box().expect("laid out");
+    assert_eq!(
+        (f.loc.x, f.loc.y, f.size.w, f.size.h),
+        (0.0, 0.0, 300.0, 200.0)
+    );
 }
 
 /// Painting is one command, and it is the terminal's box below the header — not the pane's.

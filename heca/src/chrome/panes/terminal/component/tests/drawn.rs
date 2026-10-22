@@ -2,7 +2,7 @@
 //! held them.
 
 use super::*;
-use crate::chrome::panes::terminal::{Drawn, settle};
+use crate::chrome::panes::terminal::{settle, Drawn};
 
 /// What the flush does with a scene: note every terminal surface it reaches.
 fn flush(scene: &Scene, drawn: &mut Drawn) {

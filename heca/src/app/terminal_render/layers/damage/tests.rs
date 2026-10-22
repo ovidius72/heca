@@ -1,6 +1,6 @@
 use super::{
-    TerminalCopyBand, graphics_signature, image_row_ranges, merge_row_ranges, ranges_overlap,
-    retained_damage_to_apply, terminal_damage_copy_bands,
+    graphics_signature, image_row_ranges, merge_row_ranges, ranges_overlap,
+    retained_damage_to_apply, terminal_damage_copy_bands, TerminalCopyBand,
 };
 use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 
@@ -32,8 +32,14 @@ fn snapshot(rows: usize, cell_h: f32) -> TerminalSnapshot {
 
 #[test]
 fn terminal_damage_copy_bands_full_covers_entire_texture() {
-    let bands =
-        terminal_damage_copy_bands(&TerminalDamage::Full, &snapshot(3, 12.0), 36.0, 2.0, 72);
+    let bands = terminal_damage_copy_bands(
+        &TerminalDamage::Full,
+        &snapshot(3, 12.0),
+        36.0,
+        0.0,
+        2.0,
+        72,
+    );
     assert_eq!(bands, vec![TerminalCopyBand { y: 0, height: 72 }]);
 }
 
@@ -43,7 +49,7 @@ fn terminal_damage_copy_bands_rows_convert_row_ranges_to_pixel_bands() {
         heca_core::backend::TerminalRowRange::new(1, 3),
         heca_core::backend::TerminalRowRange::new(4, 5),
     ]);
-    let bands = terminal_damage_copy_bands(&damage, &snapshot(5, 10.0), 50.0, 2.0, 100);
+    let bands = terminal_damage_copy_bands(&damage, &snapshot(5, 10.0), 50.0, 0.0, 2.0, 100);
     assert_eq!(
         bands,
         vec![
@@ -56,8 +62,18 @@ fn terminal_damage_copy_bands_rows_convert_row_ranges_to_pixel_bands() {
 #[test]
 fn terminal_damage_copy_bands_clamps_rows_to_visible_height() {
     let damage = TerminalDamage::Rows(vec![TerminalRowRange::new(2, 8)]);
-    let bands = terminal_damage_copy_bands(&damage, &snapshot(4, 12.0), 48.0, 1.0, 48);
+    let bands = terminal_damage_copy_bands(&damage, &snapshot(4, 12.0), 48.0, 0.0, 1.0, 48);
     assert_eq!(bands, vec![TerminalCopyBand { y: 24, height: 24 }]);
+}
+
+/// The grid sits at the padding's top inset in the texture, not at its corner: the
+/// bands carry that inset so row damage lands on the rows it names.
+#[test]
+fn terminal_damage_copy_bands_rows_sit_below_the_grid_top() {
+    let damage = TerminalDamage::Rows(vec![TerminalRowRange::new(1, 2)]);
+    // Grid 10px/row, top inset 8px (padding), scale 2 — texture is the whole surface.
+    let bands = terminal_damage_copy_bands(&damage, &snapshot(5, 10.0), 58.0, 8.0, 2.0, 116);
+    assert_eq!(bands, vec![TerminalCopyBand { y: 36, height: 20 }]);
 }
 
 fn rng(start: usize, end: usize) -> TerminalRowRange {
@@ -96,6 +112,28 @@ fn retained_damage_passes_full_through_when_stable() {
 fn retained_damage_upgrades_to_full_on_resize_even_if_backend_reports_none() {
     assert_eq!(
         retained_damage_to_apply(true, false, false, &TerminalDamage::None, &[], &[]),
+        Some(TerminalDamage::Full)
+    );
+}
+
+#[test]
+fn retained_damage_upgrades_to_full_on_a_fresh_layers_first_update() {
+    // A newly created layer's texture is transparent, and it is created at the
+    // current size — so creation reports "not resized" and the backend's first
+    // damage is often only dirty rows. Without this upgrade the first update
+    // would paint the row bands alone and leave the texture transparent outside
+    // the grid — the surface background's box with it, which is what its padding
+    // ring (and the rest of the frame) would show through.
+    let rows = &[rng(0, 4)];
+    assert_eq!(
+        retained_damage_to_apply(
+            true,
+            false,
+            false,
+            &TerminalDamage::Rows(rows.to_vec()),
+            &[],
+            &[]
+        ),
         Some(TerminalDamage::Full)
     );
 }

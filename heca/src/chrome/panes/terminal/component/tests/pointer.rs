@@ -24,10 +24,8 @@ fn the_wheel_says_which_cell_it_turned_over() {
         Handled::Yes
     );
     let said = pointer_input(&said);
-    let [
-        TerminalInput::Wheel { x, y, cell, .. },
-        TerminalInput::Wheel { pixels, .. },
-    ] = said.as_slice()
+    let [TerminalInput::Wheel { x, y, cell, .. }, TerminalInput::Wheel { pixels, .. }] =
+        said.as_slice()
     else {
         panic!("two wheel messages, got {said:?}");
     };

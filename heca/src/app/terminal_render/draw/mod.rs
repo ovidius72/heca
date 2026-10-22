@@ -7,7 +7,7 @@ use crate::app::terminal_host::TerminalMount;
 use crate::app::terminal_render::layers::{
     blit_retained_terminal_layer, queue_terminal_dynamic_overlays,
 };
-use crate::app::terminal_render::{TerminalRenderState, pane_scissor_rect, rect_to_text_box};
+use crate::app::terminal_render::{pane_scissor_rect, rect_to_text_box, TerminalRenderState};
 use crate::app_state::{AppState, InputMode};
 use heca_core::layout::Rectangle;
 use heca_renderer::primitive::PrimitiveRenderer;
@@ -87,6 +87,14 @@ fn draw_terminal(
         return;
     };
     let surface_physical_size = state.window.inner_size();
+    // The grid's size is what the layout gave it (minus its padding); its place is
+    // where the scene drew it, held in by the padding the terminal keeps:
+    // content_rect's location is that padding. The surface keeps the whole box the
+    // scene asked for — the padding is inside the terminal, its background fills it.
+    let rect = Rectangle::new(
+        heca_core::layout::Point::new(at.rect.loc.x + room.loc.x, at.rect.loc.y + room.loc.y),
+        room.size,
+    );
     let blitted = blit_retained_terminal_layer(
         state,
         terminal.id,
@@ -96,13 +104,12 @@ fn draw_terminal(
             surface_physical_size.width as f32,
             surface_physical_size.height as f32,
         ),
+        at.rect,
         at,
     );
     if at.echo {
         return;
     }
-    // Its size is what the layout gave it; its place is where the scene drew it.
-    let rect = Rectangle::new(at.rect.loc, room.size);
     let selection_overlay = selection_overlay_for_terminal(state, terminal.id, &mount.snapshot);
     let content_clip = at.clip.unwrap_or(rect);
     let scissor = pane_scissor_rect(
@@ -159,6 +166,7 @@ fn draw_terminal(
             },
             TerminalMount {
                 content_rect: rect,
+                surface_rect: at.rect,
                 ..mount.clone()
             },
             selection_overlay,
@@ -201,10 +209,14 @@ pub(crate) fn render_terminal_mount(
     } = render_ctx;
     let TerminalMount {
         content_rect,
+        surface_rect,
         snapshot,
         damage: _damage,
     } = mount;
     let content_box = rect_to_text_box(content_rect);
+    let surface_box = rect_to_text_box(surface_rect);
+    // Glyphs are held in by the content box (the padding ring stays clear of
+    // text), so the *text* clip stays content-scoped.
     let clip_x = content_box.x.max(content_clip.loc.x as f32);
     let clip_y = content_box.y.max(content_clip.loc.y as f32);
     let clip_right =
@@ -213,10 +225,25 @@ pub(crate) fn render_terminal_mount(
         (content_box.y + content_box.h).min((content_clip.loc.y + content_clip.size.h) as f32);
     let clip_w = (clip_right - clip_x).max(0.0);
     let clip_h = (clip_bottom - clip_y).max(0.0);
+    // The *primitive* pass must scissor to the surface box instead: the base
+    // background spans the whole surface (the padding is inside it), so a
+    // content-scoped scissor here would crop exactly that ring away in this
+    // direct pass — the same artifact the row-band path used to show.
+    let scissor_x = surface_box.x.max(content_clip.loc.x as f32);
+    let scissor_y = surface_box.y.max(content_clip.loc.y as f32);
+    let scissor_right =
+        (surface_box.x + surface_box.w).min((content_clip.loc.x + content_clip.size.w) as f32);
+    let scissor_bottom =
+        (surface_box.y + surface_box.h).min((content_clip.loc.y + content_clip.size.h) as f32);
     {
         text_renderer.set_clip(Some([clip_x, clip_y, clip_w, clip_h]));
         let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
-        terminal_renderer.render_snapshot(&snapshot, content_box, terminal_style);
+        terminal_renderer.render_snapshot(
+            &snapshot,
+            content_box,
+            terminal_style,
+            Some(surface_box),
+        );
         if let Some(ref overlay) = selection_overlay {
             terminal_renderer.render_selection_overlay(
                 overlay,
@@ -229,10 +256,10 @@ pub(crate) fn render_terminal_mount(
     }
 
     let clip_rect = pane_scissor_rect(
-        clip_x,
-        clip_y,
-        clip_w,
-        clip_h,
+        scissor_x,
+        scissor_y,
+        (scissor_right - scissor_x).max(0.0),
+        (scissor_bottom - scissor_y).max(0.0),
         scale_factor,
         surface_physical_size,
     );

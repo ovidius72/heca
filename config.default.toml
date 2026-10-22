@@ -373,6 +373,12 @@ hint_font_size = 12.0
 #                         … 255 (solid). Only used with bell_visual.
 # search_match_alpha    : opacity of the highlight over every scrollback-search match, 0 … 255.
 # search_current_match_alpha : the same for the match the search is on (bolder).
+# padding               : space between the pane edge and the terminal grid, px on
+#                         ALL FOUR sides. The grid flows into the smaller box (the
+#                         process is told fewer cells), never cropped.
+# padding_top/bottom/left/right : override one side. Every value is px, clamped >= 0.
+#                         Add top padding in most terminals with:
+#                           padding = 6
 transparency = 0
 floating_transparency = 0
 floating_blur = 0
@@ -388,6 +394,11 @@ bell_audible = false
 bell_flash_alpha = 56
 search_match_alpha = 64
 search_current_match_alpha = 150
+# padding               = 0
+# padding_top           = 0
+# padding_bottom        = 0
+# padding_left          = 0
+# padding_right         = 0
 
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.pane]

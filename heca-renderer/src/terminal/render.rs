@@ -1,5 +1,7 @@
+use super::decorations::{
+    draw_hyperlink_decoration, draw_terminal_symbol_cell, draw_underline_style,
+};
 use super::*;
-use super::decorations::{draw_hyperlink_decoration, draw_terminal_symbol_cell, draw_underline_style};
 use crate::primitive::PrimitiveRenderer;
 use crate::text::{TextBox, TextRenderer, TextStyle};
 use heca_core::backend::{
@@ -19,6 +21,11 @@ struct TerminalRenderLayout<'a> {
     rows: usize,
     style: TerminalStyle<'a>,
     rect: TextBox,
+    /// The surface's **whole** box — set when configured padding holds the grid
+    /// in: the padding is *inside* the terminal, so the default background
+    /// fills this box and the cells stay in `rect`. `None` means the background
+    /// covers `rect` (no padding), exactly as it always has.
+    surface: Option<TextBox>,
     /// OSC 8 hyperlink spans over the visible grid (recolor + decorate).
     hyperlinks: &'a [HyperlinkSpan],
 }
@@ -39,6 +46,7 @@ impl<'a> TerminalRenderer<'a> {
         snapshot: &TerminalSnapshot,
         rect: TextBox,
         style: TerminalStyle<'_>,
+        surface: Option<TextBox>,
     ) {
         render_terminal_lines(
             self.text_renderer,
@@ -52,6 +60,7 @@ impl<'a> TerminalRenderer<'a> {
                 rows: snapshot.rows,
                 style,
                 rect,
+                surface,
                 hyperlinks: &snapshot.hyperlinks,
             },
             None,
@@ -63,11 +72,12 @@ impl<'a> TerminalRenderer<'a> {
         snapshot: &TerminalSnapshot,
         rect: TextBox,
         style: TerminalStyle<'_>,
+        surface: Option<TextBox>,
         damage: &TerminalDamage,
     ) {
         match damage {
             TerminalDamage::None => {}
-            TerminalDamage::Full => self.render_snapshot(snapshot, rect, style),
+            TerminalDamage::Full => self.render_snapshot(snapshot, rect, style, surface),
             TerminalDamage::Rows(ranges) => render_terminal_lines(
                 self.text_renderer,
                 self.primitive_renderer,
@@ -80,6 +90,7 @@ impl<'a> TerminalRenderer<'a> {
                     rows: snapshot.rows,
                     style,
                     rect,
+                    surface,
                     hyperlinks: &snapshot.hyperlinks,
                 },
                 Some(ranges),
@@ -176,6 +187,7 @@ fn render_terminal_lines(
         rows,
         style,
         rect,
+        surface,
         hyperlinks,
     } = layout;
     let TextBox {
@@ -185,6 +197,16 @@ fn render_terminal_lines(
         h: ph,
         ..
     } = rect;
+    // The padding is *inside* the terminal: the default background spans the whole
+    // surface (so the pane's corners stay one colour under the held-in grid), the
+    // cells stay in `rect`. Without `surface` this is exactly `rect`, as it always was.
+    let bg_box = surface.unwrap_or(TextBox {
+        x: px,
+        y: py,
+        w: pw,
+        h: ph,
+    });
+    let (bx, by, bw, bh) = (bg_box.x, bg_box.y, bg_box.w, bg_box.h);
     let (fitted_rows, fitted_cols) = fitted_grid(rect, cell_w, cell_h);
     if fitted_rows == 0 || fitted_cols == 0 {
         return;
@@ -197,7 +219,7 @@ fn render_terminal_lines(
     let surface_bg = with_surface_alpha(default_bg, style.surface_alpha);
     let full_redraw = dirty_rows.is_none();
     if full_redraw && surface_bg[3] > 0.0 {
-        primitive_renderer.draw_rect(px, py, pw, ph, surface_bg);
+        primitive_renderer.draw_rect(bx, by, bw, bh, surface_bg);
     }
     let max_rows = fitted_rows.min(rows).min(lines.len());
     let max_cols = fitted_cols.min(cols);
@@ -221,9 +243,15 @@ fn render_terminal_lines(
         }
 
         if !full_redraw && surface_bg[3] > 0.0 {
+            // The row band's base background spans the **surface** box, not the
+            // grid box: these bands replace the retained texture's rows — full
+            // width — so holding them in to the grid box would erase the surface
+            // background's padding ring in every dirty row (the band copy hands
+            // the scratch's transparent side columns over the previously painted
+            // ring). The grid stays in `rect`; only the base background spans.
             let y = py + row_start as f32 * cell_h;
             let h = (row_end - row_start) as f32 * cell_h;
-            primitive_renderer.draw_rect(px, y, pw, h, surface_bg);
+            primitive_renderer.draw_rect(bx, y, bw, h, surface_bg);
         }
 
         for (row, line) in lines

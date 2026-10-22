@@ -9,7 +9,7 @@ mod layers;
 mod look;
 
 pub(crate) use draw::{
-    TerminalTarget, draw_surface, hyperlink_decor_from, terminal_font_families_from,
+    draw_surface, hyperlink_decor_from, terminal_font_families_from, TerminalTarget,
 };
 pub(crate) use layers::sync_retained_terminal_layers;
 pub(crate) use look::pane_scissor_rect;
@@ -26,8 +26,10 @@ pub(crate) struct TerminalRenderState {
     /// How see-through its cells' background is: a floating pane's terminal covers what is under
     /// it more than a tiled one. Its own, so wherever it is drawn it looks the same.
     pub(crate) opacity: f32,
-    /// The room its terminal was given, at the origin: its size is what is known before the scene
-    /// draws it; where it is comes with the surface the scene asks for.
+    /// The room its terminal's **grid** was given (the layout's box held in by its configured
+    /// padding), relative to where the surface is drawn: its size is what is known before the
+    /// scene draws it; the padding offset and the surface's place come with the surface the
+    /// scene asks for.
     pub(crate) content_rect: Option<Rectangle>,
     pub(crate) mount: Option<TerminalMount>,
 }
@@ -46,14 +48,17 @@ impl TerminalRenderState {
         pane: Option<PaneId>,
         opacity: f32,
     ) -> Self {
-        let content_rect = crate::chrome::panes::terminal::room_of(state, id)
-            .map(|room| Rectangle::new(heca_core::layout::Point::new(0.0, 0.0), room));
+        let content_rect = crate::chrome::panes::terminal::content_box_of(state, id);
         let mount = content_rect.and_then(|content_rect| {
             // Read the terminal through the server interface, not by reaching into its backends:
             // the server owns the process and hands back the snapshot and the rows that changed.
             let (snapshot, damage) = state.server.terminal_view(id, state.scale_factor as f32)?;
+            // The surface's own box, padding included: the background fills it while the
+            // grid above stays held in by `content_rect`.
+            let surface_rect = crate::chrome::panes::terminal::full_box_of(state, id)?;
             Some(crate::app::terminal_host::TerminalMount {
                 content_rect,
+                surface_rect,
                 snapshot,
                 damage,
             })

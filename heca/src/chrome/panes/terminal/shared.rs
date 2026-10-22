@@ -32,8 +32,16 @@ pub(super) struct Shared {
     pub(super) intents: IntentSlot,
     /// One cell's size in logical pixels, as the last viewport said.
     pub(super) cell: Cell<(f32, f32)>,
-    /// The box the terminal was last painted in — what its cells are counted from.
+    /// The box the terminal was last painted in — what its surface is drawn in.
     pub(super) bounds: Cell<Rectangle>,
+    /// Per-side (top, bottom, left, right) space between the pane's edges and its
+    /// grid, logical px. Said once by whoever reads config; the default is none —
+    /// the grid fills the panel as it always did.
+    pub(super) padding: Cell<(f64, f64, f64, f64)>,
+    /// The grid's box on screen, in window coordinates — what [`Self::bounds`]
+    /// covers minus [`Self::padding`] on each side, said by layout so `padding`
+    /// is one value's whole job. Cells are counted from **this** box.
+    pub(super) content: Cell<Rectangle>,
     /// The font's own cell size — what the grid is fitted from.
     pub(super) nominal: Cell<(f32, f32)>,
     /// The grid last asked of the process. A new one is asked only when this changes.
@@ -149,12 +157,13 @@ impl Shared {
         }
     }
 
-    /// The grid cell the pointer is on, if it is on the grid.
+    /// The grid cell the pointer is on, if it is on the grid — inside the
+    /// **content** box, so the configured padding keeps a press out of cell maths.
     pub(super) fn cell_at(&self, p: &heca_grid_ui::PointerEvent) -> Option<GridCell> {
         let (cell_w, cell_h) = self.cell.get();
         GridCell::at(
             (p.pos.x, p.pos.y),
-            self.bounds.get(),
+            self.content.get(),
             cell_w as f64,
             cell_h as f64,
         )

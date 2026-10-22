@@ -16,10 +16,10 @@ mod terminal;
 #[cfg(test)]
 mod tests;
 
-pub use pane::{PaneAppearance, default_pane_title_actions, default_pane_title_segments};
-pub use sidebar::{SidebarAppearance, default_sidebar_pane_lines};
+pub use pane::{default_pane_title_actions, default_pane_title_segments, PaneAppearance};
+pub use sidebar::{default_sidebar_pane_lines, SidebarAppearance};
 pub use styles::{BorderStyle, HyperlinkStyle, ScrollbarVisibility, Vibrancy};
-pub use terminal::TerminalAppearance;
+pub use terminal::{TerminalAppearance, TerminalPadding};
 
 use crate::color::Color;
 use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
