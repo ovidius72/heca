@@ -4,8 +4,8 @@
   "shortId": "",
   "priority": 0,
   "name": "🧩 Pluggable Chrome Architecture",
-  "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
-  "descriptionUpdatedAt": "",
+  "description": "Pluggable Chrome Architecture — provider/component contract for chrome regions.\n\nCore contract (decided 2026-07-29):\n- **Widgets answer gestures; components declare semantics** — ScrollRegion answers wheel/click/drag/keyboard scrolling; a component declares only what its selection means (rename *this*, delete *this*, restart *this*).\n- **Focus is the mode** — no `InputMode` variant. Chrome focus answers \"where do keys go\". Key routing: prefix → global → focused component's `[keys.<kind>]` layer (swallow if unbound) → focused pane backend.\n- **`perform(id, args, cx)`** — single entry point for all component actions (built-in or declared). `ProviderCx` enforces §2.3 (no `&mut AppState`).\n- **`kind()` vs `id()`** — `kind()` = type (config namespace `[keys.docker]`); `id()` = mount (cursor, scroll, focus per placement).\n- **`nav_key`** — row's one identity: cursor, right-click target, later drag.\n- **Dynamic bindings** — `[keys.<kind>]` table merges per key; `[[keys.<kind>.bind]]` for arg-carrying actions; explicit `unbind` table.\n- **Actions declared via `ActionMeta`** — label, icon, category, `policy`, declared `args`, optional `confirm`. Join same catalog as built-ins; reachable from keys, palette, RPC, context menu.\n- **Central confirm gate** — destructive actions prompt on every surface automatically.\n- **`ActionDispatched` event** — notification at chokepoint (after policy, before execute), not a veto.\n\nCurrent phase: P085 (components declare actions; chrome focus is the mode). P085/T357 emits ContainerSelectionChanged + ActionDispatched. P085/T360 implements per-mount value store + ViewNode.bindings + WorkspacesContainerState migration. P085/T359 seats second container as integration test.\n\nLinked requirements:\n- widget-keys-config: In-widget keys should be customizable\n- available-actions: Context-aware available-actions query",
+  "descriptionUpdatedAt": "2026-10-23T23:11:24.127Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -34,11 +34,16 @@
     "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
     "2219cca3-9ed4-4708-9e4c-bc480faad753",
     "5464ff74-fa17-4412-abaa-95aa19810b33",
-    "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5"
+    "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+    "5de43f15-8304-4f64-870f-8514d534d5a5",
+    "2e5af5db-420b-45bb-8bde-7e763c69cbea",
+    "073be8b6-3d7e-43eb-85c9-988b6a4e501b",
+    "51d44c9f-a378-4c24-80e6-3eaa7369762d",
+    "b4da797f-fbe4-443e-8c8c-68e001f7f48d"
   ],
   "dependsOn": [],
   "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-07-13T15:29:44.427Z",
+  "updatedAt": "2026-10-23T23:11:24.127Z",
   "sessionInfo": []
 }

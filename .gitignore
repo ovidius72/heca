@@ -4,3 +4,4 @@
 book/
 heca-ui/
 .DS_Store
+/graphify-out/cache
