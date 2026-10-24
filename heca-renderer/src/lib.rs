@@ -11,5 +11,6 @@ pub mod image;
 pub mod input;
 pub mod primitive;
 pub mod scene;
+pub mod ui_image;
 pub mod terminal;
 pub mod text;

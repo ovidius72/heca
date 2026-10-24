@@ -21,6 +21,9 @@ fn pane_runtime_round_trips_through_signals() {
             dirty: true,
         }),
         kind: ContentKind::Terminal,
+        agent: Some(heca_core::agent::AgentState::new(
+            "demo", "Demo", heca_core::agent::AgentStatus::new("reviewing"),
+        )),
     };
 
     s.panes.set_runtime(pane, &runtime, Some("my pane"));
@@ -74,6 +77,33 @@ fn pane_runtime_events_emit_only_on_change() {
             "pane.git.changed",
         ],
     );
+}
+
+#[test]
+fn agent_events_carry_transitions_without_changing_process_status() {
+    use heca_core::agent::{AgentState, AgentStatus};
+    let s = state();
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let captured = seen.clone();
+    let _sub = s.events().subscribe("pane.agent.changed", move |event| {
+        captured.borrow_mut().push(event.clone());
+    });
+    let pane = PaneId(19);
+    let working = AgentState::new("demo", "Demo", AgentStatus::new("working"));
+    let waiting = AgentState::new("demo", "Demo", AgentStatus::new("waiting_input"));
+    let mut runtime = PaneRuntime { agent: Some(working.clone()), ..Default::default() };
+    s.panes.set_runtime(pane, &runtime, None);
+    s.panes.set_runtime(pane, &runtime, None);
+    runtime.agent = Some(waiting.clone());
+    s.panes.set_runtime(pane, &runtime, None);
+    runtime.agent = None;
+    s.panes.set_runtime(pane, &runtime, None);
+    assert_eq!(seen.borrow().as_slice(), &[
+        ChromeEvent::PaneAgentChanged { pane, previous: None, agent: Some(Box::new(working.clone())) },
+        ChromeEvent::PaneAgentChanged { pane, previous: Some(Box::new(working)), agent: Some(Box::new(waiting.clone())) },
+        ChromeEvent::PaneAgentChanged { pane, previous: Some(Box::new(waiting)), agent: None },
+    ]);
+    assert_eq!(s.panes.runtime(pane).unwrap().status, ProcessStatus::Idle);
 }
 
 #[test]

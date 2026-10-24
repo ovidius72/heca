@@ -100,12 +100,12 @@ pub struct ModalSpec {
 }
 
 impl ModalSpec {
-    /// A simple message modal: `title` over a one-line body `message`, no actions yet (add
-    /// them with [`action`](ModalSpec::action)).
+    /// A simple message modal: `title` over a body that wraps to the panel's width, with no
+    /// actions yet (add them with [`action`](ModalSpec::action)). The full warning stays readable.
     pub fn message(title: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             title: title.into(),
-            body: heca_view::build::Label::new(message).into(),
+            body: heca_view::build::Label::new(message).wrap(true).into(),
             actions: Vec::new(),
             danger: false,
             dismissible: true,

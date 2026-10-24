@@ -22,7 +22,7 @@ fn host_cmds(scene: &Scene) -> Vec<HostCmd> {
     scene
         .iter()
         .filter_map(|c| match c {
-            DrawCommand::Host(h) => Some(*h),
+            DrawCommand::Host(h) => Some(h.clone()),
             _ => None,
         })
         .collect()
@@ -155,7 +155,7 @@ fn a_scaled_subtree_scales_the_blur_radius_and_leaves_the_rest_alone() {
 
     let cmds = host_cmds(&scene);
     assert_eq!(cmds.len(), 2);
-    match cmds[0].draw {
+    match &cmds[0].draw {
         HostDraw::Backdrop { radius, .. } => {
             assert!((radius - 16.0).abs() < 1e-6, "the radius scales: {radius}")
         }

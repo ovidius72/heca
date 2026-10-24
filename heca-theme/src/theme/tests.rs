@@ -19,6 +19,18 @@ fn default_theme_is_grid_tron() {
 }
 
 #[test]
+fn workspace_washes_are_optional_in_bundled_and_custom_themes() {
+    for source in [include_str!("../themes/grid_tron.toml"), include_str!("../themes/mocha.toml"), include_str!("../themes/latte.toml")] {
+        let theme: Theme = toml::from_str(source).unwrap();
+        assert_eq!(theme.active_wash_alpha, 0.0);
+        let custom = source.lines().filter(|line| !line.starts_with("active_wash_alpha"))
+            .collect::<Vec<_>>().join("\n");
+        let theme: Theme = toml::from_str(&custom).unwrap();
+        assert_eq!(theme.active_wash_alpha, 0.0, "omitted token must stay off");
+    }
+}
+
+#[test]
 fn control_radius_is_half_of_radius() {
     let theme = Theme::grid_tron();
     assert!((theme.control_radius() - 2.0).abs() < f32::EPSILON);

@@ -15,8 +15,12 @@
             built.ui.base_mut().style.layout.width = Length::Px(width);
             built.ui.base_mut().style.layout.height = Length::Px(900.0);
             LayoutEngine::new().theme(&theme).compute(&mut built.ui, Size::new(width as f64, 900.0));
-            let demo = built.ui.base().children[0].base();
-            assert!(built.ui.base().children[1].base().bounds.size.h > demo.bounds.size.h,
+            // The page contains the image demo, the text demo, then the catalog.
+            let [_, text_demo, catalog] = built.ui.base().children.as_slice() else {
+                panic!("showcase page structure changed");
+            };
+            let demo = text_demo.base();
+            assert!(catalog.base().bounds.size.h > demo.bounds.size.h,
                 "the full catalog keeps its natural height in the vertical page");
             let list = demo.children[3].base().children[1].base();
             let viewport = list.children[0].base();

@@ -61,6 +61,7 @@ impl GpuState {
         };
         surface.configure(&device, &config);
 
+        let ui_images = heca_renderer::ui_image::UiImages::new(&device, format);
         let theme = load_grid_theme("grid_tron");
         let compositor =
             heca_renderer::composite::Compositor::new(&device, format, config.width, config.height);
@@ -107,6 +108,7 @@ impl GpuState {
             config,
             grid,
             text,
+            ui_images,
             compositor,
             scale_factor,
             theme,

@@ -21,7 +21,7 @@
 //!   thin gutter.
 //!
 //! To make the gutter a comfortable, discoverable handle, it is widened to a
-//! [`GRIP_W`]-wide hit zone (the visible bar stays thin) and **brightens +
+//! font-scaled hit zone (the visible bar stays thin) and **brightens +
 //! thickens on hover**. (The OS grab *cursor* is a windowing concern the host
 //! sets from this hover state — `heca-grid-ui` only emits the visual.) All bar
 //! styling is read from the [`Theme`](crate::theme::Theme) at paint.
@@ -30,13 +30,9 @@ use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::Glow;
-use crate::style::Direction;
+use crate::style::{Direction, Space, Spacing};
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Width of the left **grip gutter** (logical px): the group's own grab/target
-/// hit zone + keycap anchor. Children start after it; the visible bar is drawn at
-/// its left edge (thinner than the gutter — the extra is invisible grab padding).
-const GRIP_W: f64 = 12.0;
 /// Resting visible bar width (logical px). Matches [`Row`](super::Row)'s active bar.
 const BAR_W: f64 = 3.0;
 /// Thickened bar width on hover (the "grab here" affordance).
@@ -57,6 +53,8 @@ const BAR_GLOW_INTENSITY: f32 = 0.16;
 /// bar also brightens/thickens while its grip gutter is hovered.
 pub struct MarkerGroup {
     base: Base,
+    marker: bool,
+    gutter: Space,
     /// Active state: brightens the bar to the accent (+ glow). Bind reactively
     /// via [`state`](MarkerGroup::state).
     active: Signal<bool>,
@@ -75,6 +73,8 @@ impl MarkerGroup {
         base.style.layout.direction = Direction::Column;
         Self {
             base,
+            marker: true,
+            gutter: Spacing::Sm.into(),
             active: signal(false),
             nav: signal(false),
             hovered: signal(false),
@@ -85,6 +85,21 @@ impl MarkerGroup {
     #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
+        self
+    }
+
+    /// Show the column marker and its grip gutter. Hidden markers reserve no space
+    /// and do not intercept pointer input intended for child rows.
+    #[heca_grid_ui_macros::prop]
+    pub fn marker(mut self, visible: bool) -> Self {
+        self.marker = visible;
+        self
+    }
+
+    /// Space reserved for the group marker and grip. Resolves from the inherited font.
+    #[heca_grid_ui_macros::prop]
+    pub fn gutter(mut self, space: Spacing) -> Self {
+        self.gutter = space.into();
         self
     }
 
@@ -115,7 +130,7 @@ impl MarkerGroup {
     /// Is `pos` within the left grip gutter (the group's own grab/target surface)?
     fn in_grip(&self, pos: Point) -> bool {
         let b = self.base.bounds;
-        b.contains(pos) && (pos.x - b.loc.x) <= GRIP_W
+        self.marker && b.contains(pos) && (pos.x - b.loc.x) <= f64::from(self.gutter.resolve(self.base.font))
     }
 }
 
@@ -144,7 +159,7 @@ impl Component for MarkerGroup {
     fn taffy_style(&self) -> taffy::Style {
         use taffy::prelude::length;
         let mut s = self.base.style.layout.to_taffy(self.base.font);
-        s.padding.left = length(GRIP_W as f32);
+        if self.marker { s.padding.left = length(self.gutter.resolve(self.base.font)); }
         s
     }
 
@@ -223,7 +238,9 @@ impl Component for MarkerGroup {
         // width/2 literal — so `border_radius` in config / `prefix+Shift+r` reflows
         // the bar. The SDF path clamps radius to half the bar width, so default themes
         // still render a pill; a sharp theme (border_radius 0) makes it square.
-        cx.rect(bar, color, None, cx.theme().colors.control_radius(), glow);
+        if self.marker {
+            cx.rect(bar, color, None, cx.theme().colors.control_radius(), glow);
+        }
 
         // Children paint on top of (right of) the gutter.
         for child in &self.base.children {
@@ -275,7 +292,27 @@ mod tests {
     fn reserves_left_grip_gutter() {
         let g = MarkerGroup::new();
         let s = g.taffy_style();
-        assert_eq!(s.padding.left, taffy::prelude::length(GRIP_W as f32));
+        assert_eq!(s.padding.left, taffy::prelude::length(g.gutter.resolve(g.base.font)));
+    }
+
+    #[test]
+    fn a_hidden_marker_reserves_no_gutter_and_owns_no_grip() {
+        let g = MarkerGroup::new().marker(false);
+        assert_eq!(g.taffy_style().padding.left, taffy::prelude::length(0.0));
+        assert!(!g.in_grip(Point::new(5.0, 20.0)));
+    }
+
+    #[test]
+    fn the_grip_hit_area_and_padding_follow_the_same_font_scaled_space() {
+        let mut group = MarkerGroup::new().gutter(Spacing::Xs);
+        group.base.bounds = Rectangle::from_size(Size::new(120.0, 80.0));
+        for font in [20.0, 40.0] {
+            group.base.font = font;
+            let gap = f64::from(font * Spacing::Xs.scale());
+            assert_eq!(group.taffy_style().padding.left, taffy::prelude::length(gap as f32));
+            assert!(group.in_grip(Point::new(gap / 2.0, 20.0)));
+            assert!(!group.in_grip(Point::new(gap + 1.0, 20.0)));
+        }
     }
 
     #[test]

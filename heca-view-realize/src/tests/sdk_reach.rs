@@ -99,6 +99,7 @@ fn every_widget_property_is_reachable_from_the_sdk() {
     check("DockFrame", <DockFrame as SetProp>::PROP_NAMES, "DockFrame");
     check("Gauge", <Gauge as SetProp>::PROP_NAMES, "Gauge");
     check("Icon", <Icon as SetProp>::PROP_NAMES, "Icon");
+    check("Image", <heca_grid_ui::Image as SetProp>::PROP_NAMES, "Image");
     check(
         "IconButton",
         <IconButton as SetProp>::PROP_NAMES,

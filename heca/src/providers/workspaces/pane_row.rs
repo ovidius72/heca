@@ -23,7 +23,7 @@ use crate::chrome::panes::pane_items::LineCx;
 use crate::chrome::{ChromeDragItem, PaneFacts, alpha_u8, pane_info_view};
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{
-    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, StyleExt,
+    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, StyleExt, FlashExt,
 };
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::style::Spacing;
@@ -77,7 +77,7 @@ impl PaneRow<'_> {
             // so the sidebar keeps surfacing what's actually running under a custom name.
             ws_state.pane_renamed_add_process_name(),
         );
-        // A constant theme-driven card; the *selected* look (accent pill + border + bar)
+        // A constant theme-driven card; the selected outline and light wash
         // is drawn by `Row` from its `active` signal, not baked into the background. This
         // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
         // no tree rebuild) and theme-driven (no ad-hoc per-state alphas).
@@ -92,8 +92,8 @@ impl PaneRow<'_> {
         let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
         let icon_widget = Icon::new(info.icon).color(theme.colors.foreground);
         let icon_signal = icon_widget.glyph_signal();
-        // The pane's name — ONE label, not one per colour. Its colour follows the row's selected
-        // state through the content colour the `Row` publishes each paint, which unstyled labels
+        // The pane's name — one label. Its colour follows the readable content colour
+        // the `Row` publishes each paint, which unstyled labels
         // inherit; a caller that wants its own says so with `.color(..)`.
         //
         // It used to be built twice, once accent and once foreground, stacked in a column with one
@@ -153,7 +153,9 @@ impl PaneRow<'_> {
                 )
             })
         };
-        let line_cx = LineCx { theme, facts };
+        let line_cx = LineCx { theme, facts, agent_statuses: ws_state.agent_statuses };
+        let runtime_signals = seams.panes.signals(pane_id);
+        let flash = runtime_signals.flash;
         // **The card's arrangement is the library's `Tile`** — pip, icon, the name with its dimmed
         // `(program)` suffix, then the folder and git lines under it. This file keeps only what a
         // pane row *means*: its signals, its click, its menu, its drag, its pick. The showcase
@@ -172,6 +174,7 @@ impl PaneRow<'_> {
         }
         let content = content.grow(1.0);
         let card = Row::new()
+            .flash(flash)
             .background(
                 theme
                     .colors
@@ -180,8 +183,7 @@ impl PaneRow<'_> {
             )
             .radius(theme.colors.control_radius())
             .padding(Spacing::Sm)
-            // No bar: the column's `MarkerGroup` already draws one down the left of every row here,
-            // and the selected panel says which row is current. Two lines said it twice.
+            // The selected panel identifies the current row; an extra marker would repeat it.
             .active(active)
             .nav_selected(false)
             // The row's ONE identity: the cursor and (later) drag read this single declaration.
@@ -241,6 +243,7 @@ impl PaneRow<'_> {
             // Click / Enter / Space run the row's declared click.
             .on_activate(press)
             .child(content);
+        super::feedback::bind(runtime_signals, pane_id, ws_state.agent_statuses, ws_state.selection.active_pane);
         // **Every state that moves with focus, published in the same breath as its initial value.**
         // See this module's note: a bool read at build time freezes, because the tree does not
         // rebuild on a focus change.
@@ -477,7 +480,7 @@ mod tests {
 
     /// The card's inner column — the name row plus every metadata line stacked under it.
     fn metadata_column(node: &dyn heca_grid_ui::Component) -> Option<&dyn heca_grid_ui::Component> {
-        if node.base().children.len() == METADATA_COLUMN_CHILDREN {
+        if node.base().children.len() == 1 + heca_config::appearance::default_sidebar_pane_lines().len() {
             return Some(node);
         }
         node.base()
@@ -485,9 +488,6 @@ mod tests {
             .iter()
             .find_map(|c| metadata_column(c.as_ref()))
     }
-
-    /// The name row, the directory line and the git line.
-    const METADATA_COLUMN_CHILDREN: usize = 3;
 
     /// **The git line is the same line, and it was written the same way.** It only ever looked
     /// right because `chrome_signature` carried a term saying "this pane has a branch", forcing the
@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(
             content.base().bounds.size.h,
             name_row.base().bounds.size.h,
-            "the two hidden lines, and the gaps above them, took height from a card with \
+            "the hidden lines, and the gaps above them, took height from a card with \
              nothing to say",
         );
     }

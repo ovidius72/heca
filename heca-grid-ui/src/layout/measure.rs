@@ -1,26 +1,45 @@
-//! Taffy's measure callback: how big is a piece of text in the room it is offered?
+//! Shared intrinsic-content measurement: text reflow and natural image proportions.
 
-use super::TextMeasure;
+use super::Measure;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO, mono_cells, wrap_lines};
 use taffy::prelude::*;
 
-/// Taffy's measure callback: how tall is this text in the width being offered?
+/// Measure intrinsic content against the width/height constraints taffy resolved.
 ///
-/// Called only for nodes carrying a [`TextMeasure`], and only while taffy is resolving them — which
-/// is the whole point: the width is known here and nowhere earlier.
+/// Text carries its reflow data; replaced content carries its natural size and preferred ratio.
+/// Measurement runs inside taffy, after constraints have supplied the available space.
 ///
 /// The three width questions taffy asks are answered separately, because a wrapping label has three
 /// honest answers. Collapsing them onto the definite case makes a label in an `auto`-sized parent
 /// measure one line and then paint three.
-pub(super) fn measure_text_node(
+pub(super) fn measure_content(
     known: taffy::Size<Option<f32>>,
     available: taffy::Size<AvailableSpace>,
     _node: taffy::NodeId,
-    ctx: Option<&mut TextMeasure>,
-    _style: &taffy::Style,
+    ctx: Option<&mut Measure>,
+    style: &taffy::Style,
 ) -> taffy::Size<f32> {
     let Some(ctx) = ctx else {
         return taffy::Size::ZERO;
+    };
+    let ctx = match ctx {
+        Measure::Intrinsic { size, ratio } => {
+            let definite = |space| match space {
+                AvailableSpace::Definite(value) => Some(value),
+                _ => None,
+            };
+            let authored = |dimension, space| match dimension {
+                Dimension::Auto => None,
+                _ => definite(space),
+            };
+            let width = known.width.or_else(|| authored(style.size.width, available.width));
+            let height = known.height.or_else(|| authored(style.size.height, available.height));
+            let width = width.or_else(|| height.map(|h| h * *ratio)).unwrap_or_else(|| {
+                definite(available.width).map_or(size.w as f32, |available| (size.w as f32).min(available))
+            });
+            return taffy::Size { width, height: height.unwrap_or(width / *ratio) };
+        }
+        Measure::Text(text) => text,
     };
     let cell = (ctx.font * MONO_ADVANCE_RATIO) as f64;
     let line = ctx.font * MONO_LINE_RATIO;

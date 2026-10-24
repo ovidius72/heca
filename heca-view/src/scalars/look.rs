@@ -119,3 +119,8 @@ impl From<ViewSize> for PropValue {
         PropValue::Size(v)
     }
 }
+
+value_set! {
+    /// How an image fits its box; layout dimensions and aspect ratio size the box separately.
+    pub enum ViewImageFit { Contain => "contain", Cover => "cover", Stretch => "stretch" }
+}

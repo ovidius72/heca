@@ -16,6 +16,39 @@ use std::time::Instant;
 const POST_COMMAND_FG_REFRESHES: u8 = 2;
 
 impl TerminalBackend {
+    pub(super) fn configure_agents(&mut self, options: Option<crate::agent::AgentOptions>) -> Result<(), crate::agent::AgentError> {
+        if let Some(options) = options {
+            let limit = options.max_report_bytes;
+            if let Some(session) = &mut self.agent_session {
+                session.configure(options)?;
+            } else {
+                self.agent_session = Some(crate::agent::AgentSession::prepare(options, self.agent_wake.clone())?);
+            }
+            self.osc.set_notification_limit(limit);
+        } else if let Some(session) = &mut self.agent_session {
+            session.disable()?;
+        }
+        let state = self.agent_session.as_ref().and_then(|session| {
+            if self.exited || self.runtime.status != ProcessStatus::Running { return None }
+            let program = self.runtime.program.as_deref()?;
+            let replay = self.last_agent_notification.as_ref().and_then(|notification| {
+                session.drivers().read_status(program, crate::agent::AgentInput::Notification(notification)).ok().flatten()
+            });
+            replay.or_else(|| self.runtime.agent.clone().filter(|agent| {
+                session.drivers().recognize(program).is_some_and(|driver| driver.id() == agent.driver)
+            }))
+        });
+        self.set_agent(state);
+        Ok(())
+    }
+
+    fn set_agent(&mut self, state: Option<crate::agent::AgentState>) {
+        let state = state.map(|report| report.retain_session(self.runtime.agent.as_ref()));
+        if self.runtime.agent == state { return }
+        if let Some(session) = &mut self.agent_session { session.record(state.clone()); }
+        self.runtime.agent = state;
+    }
+
     /// Re-sample the PTY's foreground process (event-driven; debounced in
     /// [`update`](PaneBackend::update)). Updates the cached `runtime`
     /// program/status/cwd. `program == None` from the detector ⇒ the shell is
@@ -68,6 +101,8 @@ impl TerminalBackend {
             }
             OscEvent::Program(program) => {
                 if !program.is_empty() {
+                    self.last_agent_notification = None;
+                    self.set_agent(None);
                     self.runtime.program = Some(program);
                     self.runtime.status = ProcessStatus::Running;
                     self.semantic_status_active = false;
@@ -77,6 +112,8 @@ impl TerminalBackend {
                 false
             }
             OscEvent::CommandFinished(code) => {
+                self.last_agent_notification = None;
+                self.set_agent(None);
                 self.runtime.status = ProcessStatus::of_exit(code);
                 self.runtime.exit_code = Some(code);
                 self.semantic_status_active = true;
@@ -85,6 +122,20 @@ impl TerminalBackend {
             }
             OscEvent::Cwd(cwd) => {
                 self.runtime.cwd = Some(cwd);
+                false
+            }
+            OscEvent::Notification(notification) => {
+                if let Some(session) = &self.agent_session
+                    && let Some(program) = self.runtime.program.as_deref()
+                    && let Ok(Some(report)) = session.drivers().read_status(
+                        program,
+                        crate::agent::AgentInput::Notification(&notification),
+                    )
+                {
+                    self.set_agent(Some(report));
+                }
+                if self.agent_session.is_some() { self.last_agent_notification = Some(notification); }
+                // Unrelated and malformed notifications cannot alter process status.
                 false
             }
         }
@@ -97,12 +148,14 @@ impl TerminalBackend {
 pub(super) struct Output {
     pub(super) had_data: bool,
     pub(super) saw_program_event: bool,
+    pub(super) agent_changed: bool,
 }
 
 impl TerminalBackend {
     /// **Read everything the program wrote since the last wake**, feeding it to the emulator and
     /// acting on the shell's escape codes on the way.
     pub(super) fn read_output(&mut self) -> Output {
+        let previous_agent = self.runtime.agent.clone();
         let mut had_data = false;
         let mut saw_program_event = false;
 
@@ -131,9 +184,21 @@ impl TerminalBackend {
                 }
             }
         }
+        let reports = self.agent_session.as_ref().map(|session| session.drain()).unwrap_or_default();
+        for report in reports {
+            if let Some(session) = &self.agent_session
+                && self.runtime.status == ProcessStatus::Running
+                && self.runtime.program.as_deref()
+                    .and_then(|program| session.drivers().recognize(program))
+                    .is_some_and(|driver| driver.id() == report.driver)
+            {
+                self.set_agent(Some(report));
+            }
+        }
         Output {
             had_data,
             saw_program_event,
+            agent_changed: previous_agent != self.runtime.agent,
         }
     }
 
@@ -166,6 +231,8 @@ impl TerminalBackend {
             && let Some(code) = exit_code
         {
             self.runtime.status = ProcessStatus::of_exit(code);
+            self.last_agent_notification = None;
+            self.set_agent(None);
             self.runtime.exit_code = Some(code);
             self.pending_exit = Some(code);
         }

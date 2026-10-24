@@ -3,7 +3,7 @@
 
 use super::engine::TerminalEngine;
 use super::osc::OscSnooper;
-use super::pty::PtyHandle;
+use super::pty::{PtyHandle, PtyLaunchOptions};
 use super::{PtyError, TerminalBackend, process};
 use crate::backend::TerminalPaletteDefaults;
 use crate::runtime::{ContentKind, PaneRuntime};
@@ -58,6 +58,8 @@ pub(super) enum LaunchTarget<'a> {
 /// Optional terminal-backend spawn behavior layered on top of the required
 /// grid size and cell metrics.
 pub struct TerminalBackendOptions {
+    /// Status implementations available to this terminal, including user additions.
+    pub agents: Option<crate::agent::AgentOptions>,
     /// Terminal palette defaults injected into the emulation engine.
     pub palette_defaults: Option<TerminalPaletteDefaults>,
     /// Wake callback fired when PTY output arrives.
@@ -96,6 +98,7 @@ impl TerminalBackendOptions {
 impl Default for TerminalBackendOptions {
     fn default() -> Self {
         Self {
+            agents: None,
             palette_defaults: None,
             wake_on_output: None,
             shell_integration: None,
@@ -144,6 +147,7 @@ impl TerminalBackend {
     ) -> Result<Self, PtyError> {
         let (cell_w, cell_h) = cell_size;
         let TerminalBackendOptions {
+            agents,
             palette_defaults,
             wake_on_output,
             shell_integration,
@@ -152,6 +156,11 @@ impl TerminalBackend {
             shell_override,
             cwd,
         } = options;
+        let osc = OscSnooper::with_notification_limit(agents.as_ref().map(|agents| agents.max_report_bytes));
+        let agent_session = agents.map(|agents| {
+            crate::agent::AgentSession::prepare(agents, wake_on_output.clone())
+        }).transpose().map_err(PtyError::agent_setup)?;
+        let agent_wake = wake_on_output.clone();
         let (pty, auto_close_on_exit) = match launch {
             LaunchTarget::Shell(shell) => {
                 let pty = PtyHandle::new_with_shell(
@@ -159,11 +168,14 @@ impl TerminalBackend {
                     rows,
                     cell_size,
                     wake_on_output,
-                    shell_integration,
-                    shell.override_path,
-                    shell.env_clear,
-                    &shell.env,
-                    cwd.as_deref(),
+                    PtyLaunchOptions {
+                        shell_integration: shell_integration.as_ref(),
+                        shell_override: shell.override_path,
+                        env_clear: shell.env_clear,
+                        env: &shell.env,
+                        cwd: cwd.as_deref(),
+                        agents: agent_session.as_ref(),
+                    },
                 )?;
                 (pty, true)
             }
@@ -174,8 +186,14 @@ impl TerminalBackend {
                     cell_size,
                     wake_on_output,
                     command,
-                    shell_override.as_deref(),
-                    cwd.as_deref(),
+                    PtyLaunchOptions {
+                        shell_integration: None,
+                        shell_override: shell_override.as_deref(),
+                        env_clear: false,
+                        env: &[],
+                        cwd: cwd.as_deref(),
+                        agents: agent_session.as_ref(),
+                    },
                 )?,
                 false,
             ),
@@ -196,6 +214,9 @@ impl TerminalBackend {
             .checked_sub(process::FOREGROUND_DEBOUNCE)
             .unwrap_or_else(Instant::now);
         Ok(Self {
+            agent_session,
+            agent_wake,
+            last_agent_notification: None,
             engine,
             pty,
             cols,
@@ -215,7 +236,7 @@ impl TerminalBackend {
             },
             pending_exit: None,
             last_fg_check,
-            osc: OscSnooper::default(),
+            osc,
             semantic_status_active: false,
             post_command_fg_refreshes: 0,
             shell_reported_program_active: false,

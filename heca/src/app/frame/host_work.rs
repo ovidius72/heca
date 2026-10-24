@@ -41,6 +41,14 @@ pub(super) fn do_host_work(
     encoder: &mut wgpu::CommandEncoder,
 ) {
     match work {
+        heca_grid_ui::HostWork::Image(at) => {
+            let stencil = at.rounded.map(|_| targets.stencil);
+            state.ui_images.draw(heca_renderer::ui_image::ImageFrame {
+                device: &state.device, queue: &state.queue, encoder, target: targets.view,
+                stencil, viewport: (targets.phys_size.width as f32, targets.phys_size.height as f32),
+                scale: state.scale_factor as f32,
+            }, at);
+        }
         heca_grid_ui::HostWork::Surface(at) => {
             let stencil = at.rounded.map(|rounded| {
                 cut_round_corners(state, targets.stencil, rounded, encoder);

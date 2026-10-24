@@ -29,6 +29,7 @@ mod place;
 mod presence;
 mod style;
 mod tone;
+mod flash;
 mod tooltip;
 #[cfg(test)]
 mod tests;
@@ -44,4 +45,5 @@ pub use place::PlaceExt;
 pub use presence::PresenceExt;
 pub use style::StyleExt;
 pub use tone::ToneExt;
+pub use flash::FlashExt;
 pub use tooltip::TooltipExt;

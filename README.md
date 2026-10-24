@@ -1238,10 +1238,88 @@ your own list, only the names you list show, and heca tells you once when a butt
 listed is available. A name nothing provides is reported and skipped, with the nearest real one.
 
 **Lines under a pane's name in the sidebar** (`[appearance.sidebar] pane_lines`, default
-`["cwd", "git"]`): `cwd` is the working directory and `git` is the branch with change counts, shown
+`["cwd", "git", "agent"]`): `cwd` is the working directory and `git` is the branch with change counts, shown
 only inside a repository. **A fresh install shows the folder line under each pane's name in the
 sidebar.** Which lines show is decided by this list alone. A program built
 on heca can add its own, named `<extension>.<short>`; the same rules apply as for buttons and chips.
+
+`agent` shows the reporting program's name, status and optional task. It hides itself in other panes.
+Its labels and glyphs come from `[settings.agents.statuses]`; unlisted status ids are shown as reported.
+
+### Agent status and sounds
+
+**Reporting starts off for every program.** Integrations are installed explicitly and persist until
+removed. Installation adds Heca's hooks or extension without replacing existing hooks, plugins or
+other native settings. It also enables that program in Heca's user config. Installed integrations
+stay inactive outside Heca.
+
+`heca::agent::integration::Integrations::machine_local()` builds the shared installation service from
+normal Heca configuration and registered drivers. It provides `list`, `inspect` and `apply` with
+`IntegrationOperation::{Install, Update, Uninstall}`. Construction installs nothing and returns invalid
+configuration to the caller. The future settings page will use the same operations.
+
+The command-line entry is not wired yet: P099/T544 supplies it using these agreed commands:
+
+- `heca install|update|uninstall integration <program> [--json]`
+- `heca inspect integration <program> [--json]`
+- `heca list integrations [--json]`
+
+Files ship with Heca, with a version per integration. Inspection checks the actual installed files
+and registrations. Updates are explicit and preserve reporting choices. Heca refuses to overwrite
+modified integration files; an interrupted write is recovered before another installation change.
+Uninstall removes owned files and registrations, restores native feature settings, and disables the
+program in Heca. No installation server or separate download is required.
+
+Program and event choices are separate from installation:
+
+```toml
+[settings.agents.programs.codex]
+enabled = true
+# Optional: report only these native events. Omit this list to use every configured report.
+enabled_events = ["UserPromptSubmit", "Stop"]
+```
+
+Use the same `enabled` setting for `claude`, `pi`, `opencode` or an added driver. An empty
+`enabled_events = []` disables reporting without uninstalling anything. Native event names are listed in
+[`config.default.toml`](config.default.toml). Open a new terminal after changing launch setup;
+each terminal owns its reporting files and wrappers for its lifetime.
+
+Automatic setup uses the existing Bash, Zsh and Fish integration on Unix; it does not change Windows commands.
+Only the terminal identity, reporting environment and report files are temporary. Launches do not
+inject native settings, hook definitions or plugin lists. Explicit install/update/uninstall are the
+only operations that change native configuration, preserving unrelated entries.
+The master `[settings.agents] enabled = false` disables all reporting setup. `max_report_bytes` limits each incoming report;
+`channel_capacity` limits queued reports and transitions, keeping the latest when full.
+`launch_timeout_ms` bounds the wait for per-run setup. Codex keeps its normal hook-trust review;
+review its installed reporting hooks when prompted. Heca never bypasses that review.
+Native policy can disable user hooks, so installed files alone do not prove that reporting is active.
+See the [Claude hooks](https://code.claude.com/docs/en/hooks),
+[Codex hooks](https://learn.chatgpt.com/docs/hooks), [Pi extensions](https://pi.dev/docs/latest/extensions)
+and [OpenCode CLI plugins](https://dev.opencode.ai/v2/docs/cli/plugins) documentation.
+
+`[settings.agents.programs.<driver>]` sets `enabled`, `name`, `executables`, `enabled_events` and `reports` (native event
+name to status id). Built-in and added drivers use the same contract. Status ids are open: additional
+drivers and project settings can introduce their own.
+Added drivers keep their declared name and executables unless those fields are overridden.
+
+Sounds are off by default. Set `[settings.agents.sounds] enabled = true` and a sound file on the
+statuses you want to hear:
+
+```toml
+[settings.agents.sounds]
+enabled = true
+volume = 0.7
+queue_capacity = 32
+
+[settings.agents.statuses.finished]
+sound = "/path/to/finished.wav"
+```
+
+A trusted project's `.heca/config.toml` can override the same keys through the normal config loader.
+Playback happens on status transitions, on a background worker. Repeated reports and task-title changes
+do not repeat a sound. A missing sound file or audio device does not interrupt the terminal.
+Volume is limited to `0.0`–`1.0`; the sound queue holds at least one entry.
+Supported sound files are WAV, Ogg Vorbis, MP3 and FLAC.
 
 **The exposé's folders** are `[appearance.expose] show_cwd` (on by default; `false` hides them). It replaces
 `[settings] pane_show_cwd`, which is still read while the new key is not written (once it is, it

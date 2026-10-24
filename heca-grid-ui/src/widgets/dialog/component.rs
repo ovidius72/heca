@@ -85,6 +85,13 @@ impl Component for Dialog {
         &mut self.base
     }
 
+    fn remeasure(&mut self) {
+        let max_width = self.panel_max_width.unwrap_or(crate::style::Length::Px(
+            self.base.font * self.base.dialog_style.max_width_em,
+        ));
+        self.base.children[0].base_mut().children[0].base_mut().style.layout.max_width = Some(max_width);
+    }
+
     /// Focusable only while open, so the host's overlay scan routes input here.
     fn focusable(&self) -> bool {
         self.is_open()

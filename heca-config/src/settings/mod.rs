@@ -4,6 +4,7 @@ use crate::color::Color;
 use serde::{Deserialize, Serialize};
 
 mod defaults;
+mod agents;
 mod enums;
 mod notifications;
 mod schema;
@@ -18,6 +19,7 @@ use schema::declare_settings;
 
 pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, SearchCase};
 pub use notifications::{NotificationSystem, NotificationSystemConfig};
+pub use agents::{AgentProgramConfig, AgentSoundsConfig, AgentStatusConfig, AgentStatuses, AgentsConfig};
 
 declare_settings! {
     defaults: [];
@@ -195,6 +197,8 @@ declare_settings! {
         /// `[settings.notification_system]` — in-app toast notification behaviour.
         #[serde(alias = "notification-system")]
         pub notification_system: NotificationSystemConfig,
+        /// Status reporting, pane-row presentation and sounds for terminal agents.
+        pub agents: AgentsConfig,
         // Destructive-action confirmation moved to the generic `[confirm]` table
         // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
     }

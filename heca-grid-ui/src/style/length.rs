@@ -30,6 +30,12 @@ pub enum Length {
     Percent(f32),
 }
 
+impl crate::prop::PropName for Length {
+    // CSS lengths are an open string value rather than a finite list of enum names.
+    const VARIANT_NAMES: &'static [&'static str] = &[];
+    fn from_prop_name(name: &str) -> Option<Self> { name.parse().ok() }
+}
+
 impl From<f32> for Length {
     /// A bare number is pixels, the way `width(12.0)` already reads — so every existing
     /// `margin_left(8.0)` keeps its meaning now that a margin may also be a percentage.

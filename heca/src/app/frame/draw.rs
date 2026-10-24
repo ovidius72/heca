@@ -111,6 +111,7 @@ impl Frame {
         scene: &heca_grid_ui::Scene,
         terminals: &FrameTerminals,
     ) {
+        state.ui_images.begin_frame();
         let pass = self.pass();
         let targets = HostTargets::new(&self.scene, &self.stencil, &self.v);
         flush_scene(

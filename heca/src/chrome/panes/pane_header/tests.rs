@@ -18,11 +18,9 @@ fn facts_for(cwd: &str) -> super::super::pane_items::PaneFacts {
     )
 }
 
-/// **When the bar is too narrow only the path gives way.** The chip that is a path carries that
-/// as its own property (`Fit::PathLeft`), so the header keeps no list of which chip is the long
-/// one — and the others keep their words.
+/// The header preserves values and their fitting hints; labels own shortening and tooltips.
 #[test]
-fn a_narrow_bar_shortens_the_path_chip_and_nothing_else() {
+fn a_narrow_bar_keeps_full_values_for_the_widgets_tooltips() {
     let chips = super::super::pane_items::PaneChips::default();
     let defs: Vec<_> = ["location", "app_name"]
         .iter()
@@ -30,15 +28,12 @@ fn a_narrow_bar_shortens_the_path_chip_and_nothing_else() {
         .collect();
     let facts = facts_for("/a/very/long/path/to/some/project/directory");
 
-    let roomy = segment_items(&chips, &defs, &facts, 10_000.0, 13.0);
-    let tight = segment_items(&chips, &defs, &facts, 120.0, 13.0);
+    let roomy = segment_items(&chips, &defs, &facts);
+    let tight = segment_items(&chips, &defs, &facts);
 
-    assert_eq!(roomy[0].2, "/a/very/long/path/to/some/project/directory");
-    assert!(
-        tight[0].2.chars().count() < roomy[0].2.chars().count(),
-        "the path shortened"
-    );
-    assert_eq!(tight[1].2, roomy[1].2, "the program name is untouched");
+    assert_eq!(roomy[0].chip.text, "/a/very/long/path/to/some/project/directory");
+    assert_eq!(tight[0].chip.text, roomy[0].chip.text, "shortening belongs to Label, preserving the tooltip");
+    assert_eq!(tight[1].chip.text, roomy[1].chip.text, "the program name is untouched");
     assert_eq!(tight.len(), 2);
 }
 
@@ -48,12 +43,48 @@ fn a_bar_is_built_from_what_the_chips_say() {
     let chips = super::super::pane_items::PaneChips::default();
     let defs = [chips.get("pane_name").expect("shipped")];
     let facts = facts_for("/tmp");
-    let items = segment_items(&chips, &defs, &facts, 400.0, 13.0);
-    assert!(build_pane_info_bar(items, &GuiTheme::default()).is_some());
+    let items = segment_items(&chips, &defs, &facts);
+    assert!(build_pane_info_bar(items).is_some());
     assert!(
-        build_pane_info_bar(Vec::new(), &GuiTheme::default()).is_none(),
+        build_pane_info_bar(Vec::new()).is_none(),
         "no chips, no bar"
     );
+}
+
+#[test]
+fn header_segments_keep_full_hover_values_and_theme_colours_when_squeezed() {
+    use heca_grid_ui::{DrawCommand, Flex, Length, builders::{LayoutExt, Parent}};
+    let chips = super::super::pane_items::PaneChips::default();
+    let defs: Vec<_> = ["location", "app_name", "git_branch"].iter()
+        .map(|name| chips.get(name).unwrap()).collect();
+    let mut facts = facts_for("/a/very/long/path/to/the/project/directory");
+    facts.git = Some(GitInfo { branch: Some("feature/a-long-branch-name".into()), ..Default::default() });
+    let tag = build_pane_info_bar(segment_items(&chips, &defs, &facts)).unwrap();
+    let mut root = Flex::row().width(Length::FULL).child(tag);
+    let theme = GuiTheme::default();
+    for width in [280.0, 480.0] {
+        let scene = crate::chrome::paint_chrome_root(&mut root, width, 100.0, &theme);
+        assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == facts.app_name)),
+            "the short application name should remain readable");
+        let tag = &root.base().children[0];
+        let path_tip = tag.base().children[0].base().tooltip.as_ref().unwrap();
+        let branch_tip = tag.base().children[2].base().tooltip.as_ref().unwrap();
+        assert_eq!(path_tip.text.get_untracked(), "/a/very/long/path/to/the/project/directory");
+        assert_eq!(branch_tip.text.get_untracked(), "feature/a-long-branch-name");
+        for (index, expected) in [(0, theme.colors.accent), (2, theme.colors.warning)] {
+            let segment = tag.base().children[index].base().bounds;
+            assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
+                if segment.contains(text.rect.loc) && text.color == expected)));
+        }
+        for cmd in scene.iter() {
+            if let DrawCommand::Text(text) = cmd {
+                assert!(text.rect.loc.x + text.rect.size.w <= f64::from(width) + 1.0, "header text escaped: {text:?}");
+            }
+        }
+    }
+    heca_grid_ui::set_text_by_key(&root, &segment_text_key("location"), "/another/complete/path");
+    let tag = &root.base().children[0];
+    assert_eq!(tag.base().children[0].base().tooltip.as_ref().unwrap().text.get_untracked(), "/another/complete/path");
 }
 
 /// **Which actions are destructive is the action's own declaration, not a surface's.**
@@ -143,6 +174,7 @@ fn pane_info_view_resolves_program_status_and_git_segments() {
             dirty: true,
         }),
         kind: ContentKind::Terminal,
+        agent: None,
     };
 
     // No custom name → title is the program name, no process hint (the title IS the process).

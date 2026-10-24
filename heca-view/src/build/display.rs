@@ -145,6 +145,10 @@ impl Badge {
 }
 
 impl Tag {
+    /// Whether the text segment can shrink inside the available width.
+    pub fn segment_shrink(self, shrink: bool) -> Self {
+        self.prop("segment_shrink", shrink)
+    }
     /// Tag colour: a theme token name or a literal.
     pub fn color(self, colour: &str) -> Self {
         self.prop("color", PropValue::Color(colour.to_string()))
@@ -299,5 +303,25 @@ impl Separator {
     /// How long the rule is, in px. Unset, it stretches to its container.
     pub fn length(self, px: f32) -> Self {
         self.prop("length", px)
+    }
+}
+
+builder!(
+    /// SVG or bitmap image, decoded by the shared image service.
+    Image => Image
+);
+impl Image {
+    pub fn load(path: impl Into<String>) -> Self { Self::new().source(path) }
+    pub fn source(self, path: impl Into<String>) -> Self { self.prop("source", path.into()) }
+    pub fn svg(self, svg: impl Into<String>) -> Self { self.prop("svg", svg.into()) }
+    pub fn asset_root(self, root: impl Into<String>) -> Self { self.prop("asset_root", root.into()) }
+    pub fn fit(self, fit: crate::ViewImageFit) -> Self { self.prop("fit", fit) }
+    pub fn color(self, color: impl Into<String>) -> Self { self.prop("color", color.into()) }
+    pub fn alt(self, alt: impl Into<String>) -> Self { self.prop("alt", alt.into()) }
+    pub fn placeholder(mut self, child: impl Into<ViewNode>) -> Self {
+        self.0.children.push(child.into().prop("slot", PropValue::Text("loading".into()))); self
+    }
+    pub fn fallback(mut self, child: impl Into<ViewNode>) -> Self {
+        self.0.children.push(child.into().prop("slot", PropValue::Text("error".into()))); self
     }
 }

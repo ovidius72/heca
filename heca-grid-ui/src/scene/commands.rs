@@ -73,8 +73,17 @@ pub struct LineCmd {
 ///
 /// **Recorded in scene order, with the clip stack resolved**, so a surface inside a scroll region
 /// clips like anything else and a backdrop blurs exactly what was drawn before it.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HostDraw {
+    /// A decoded image supplied by a widget. Vectors are rasterised at destination pixel density.
+    Image {
+        /// A ready shared asset; no host-private registry or surface id is needed.
+        image: std::sync::Arc<crate::image::ImageData>,
+        /// The picture's fitting inside the widget's box.
+        fit: crate::image::ImageFit,
+        /// CSS `currentColor`, inherited from the surrounding control or theme.
+        color: Color,
+    },
     /// **Put the surface `id` here.** The host holds the texture and knows nothing else is needed;
     /// this crate never sees a texture, a format or a device.
     ///
@@ -91,7 +100,7 @@ pub enum HostDraw {
 }
 
 /// A [`HostDraw`] and the box it applies to.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HostCmd {
     pub draw: HostDraw,
     /// Where it goes, in logical pixels, already placed by the paint context.

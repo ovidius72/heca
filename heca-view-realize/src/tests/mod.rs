@@ -85,6 +85,9 @@ fn recording_emitter() -> (IntentEmitter, Rc<std::cell::RefCell<Vec<Intent>>>) {
 fn sample_node(kind: WidgetKind) -> ViewNode {
     let node = ViewNode::new(kind);
     match kind {
+        WidgetKind::Image => node.prop("svg", PropValue::Text("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16'/></svg>".into()))
+            .prop("width", 16.0.into()).prop("height", 16.0.into())
+            .child(ViewNode::new(WidgetKind::Label).text("loading").prop("slot", PropValue::Text("loading".into()))),
         // Containers: give them a child, which a correct arm attaches.
         WidgetKind::TreeLayout
         | WidgetKind::MessageList

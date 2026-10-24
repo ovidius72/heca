@@ -41,6 +41,7 @@ pub(crate) fn estimate_terminal_grid(
 /// The server holds it: set from the configuration at start and again on every reload.
 #[derive(Clone, Debug)]
 pub(crate) struct TerminalSettings {
+    pub(crate) agents: Option<heca_core::agent::AgentOptions>,
     pub(crate) theme: Theme,
     pub(crate) shell_integration: bool,
     pub(crate) scrollback: usize,
@@ -54,6 +55,7 @@ impl TerminalSettings {
     pub(crate) fn from_config(app_config: &AppConfig) -> Self {
         let settings = &app_config.config.settings;
         Self {
+            agents: crate::agent::options(&settings.agents),
             theme: app_config.theme.clone(),
             shell_integration: settings.shell_integration,
             scrollback: settings.terminal_scrollback_lines,
@@ -95,6 +97,7 @@ pub(crate) fn launch(
                 settings.terminal.scroll_animations,
             );
             options.cwd = spec.cwd.clone();
+            options.agents = settings.terminal.agents.clone();
             create_terminal_backend_with_options(cols, rows, settings.cell_size, options)
         }
         Program::Command(command) => {
@@ -109,6 +112,7 @@ pub(crate) fn launch(
                 settings.terminal.scroll_animations,
             );
             options.cwd = spec.cwd.clone();
+            options.agents = settings.terminal.agents.clone();
             create_command_backend_with_options(cols, rows, settings.cell_size, command, options)
                 .map_err(SpawnError)?
         }
@@ -183,6 +187,7 @@ fn terminal_backend_options(
         None
     };
     TerminalBackendOptions {
+        agents: None,
         palette_defaults: terminal_palette_defaults(theme),
         wake_on_output,
         shell_integration,

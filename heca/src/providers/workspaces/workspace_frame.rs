@@ -78,10 +78,8 @@ impl WorkspaceFrame<'_> {
                     .padding_right(Spacing::Sm)
                     .child(badge),
             );
-        // Light accent wash over the whole active workspace area (+ the accent count badge).
-        // Signal-driven like every other state here, so it flips in place via
-        // `sync_chrome_signals` instead of forcing a tree rebuild; the alpha is the theme's
-        // `active_wash_alpha` token, not a baked-in literal.
+        // Keep the active identity live. The theme may enable a workspace-wide wash through
+        // `active_wash_alpha` (off by default); the count badge also identifies this workspace.
         dock = dock.active(active_ws);
         dock = dock.nav_selected(false);
         // **The row's one identity, declared like every other row's.** A pane card and a column

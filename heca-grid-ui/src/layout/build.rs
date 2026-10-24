@@ -1,7 +1,7 @@
 //! Turning a component tree into taffy nodes: the style each widget asks for, and the rules the
 //! engine applies on its parents' behalf.
 
-use super::{LayoutEngine, TextMeasure};
+use super::{LayoutEngine, Measure};
 use crate::component::Component;
 use crate::style::WidgetSize;
 
@@ -30,6 +30,7 @@ impl LayoutEngine {
         };
         c.base_mut().style.layout.size = size;
         c.base_mut().input_style = self.input_style;
+        c.base_mut().dialog_style = self.dialog_style;
 
         // Resolve the inherited font (own `style.font_size` if set, else the base)
         // and let the widget re-measure from it before we read its taffy style.
@@ -54,7 +55,10 @@ impl LayoutEngine {
         // fields here, which destroyed the authored step after the first pass: a font change then
         // had nothing left to re-resolve.
         c.remeasure();
-        let style = c.taffy_style();
+        let mut style = c.taffy_style();
+        // Replaced content is measured from the final constrained width, so max-width does
+        // not leave the height computed from a wider, pre-clamp box in taffy 0.7.
+        if c.intrinsic_size().is_some() { style.aspect_ratio = None; }
         // **A viewport's content does not give way — that is what a viewport is for.**
         //
         // Shrinking is the default (flexbox's), so an item too big for its line is squeezed to fit.
@@ -191,7 +195,9 @@ impl LayoutEngine {
         // A leaf that measures itself from the width it is offered gets taffy's node context; a
         // widget with children is laid out by its children and never measures its own text.
         let context = if child_nodes.is_empty() {
-            c.measure_text()
+            c.measure_text().map(super::Measure::Text).or_else(|| c.intrinsic_size().map(|size| super::Measure::Intrinsic {
+                size, ratio: c.base().style.layout.aspect_ratio.filter(|r| r.is_finite() && *r > 0.0).unwrap_or((size.w / size.h) as f32),
+            }))
         } else {
             None
         };
@@ -235,7 +241,7 @@ impl LayoutEngine {
         &mut self,
         node: taffy::NodeId,
         style: taffy::Style,
-        context: Option<TextMeasure>,
+        context: Option<Measure>,
         children: &[taffy::NodeId],
     ) {
         if self.tree.style(node).ok() != Some(&style) {

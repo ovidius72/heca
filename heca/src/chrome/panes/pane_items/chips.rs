@@ -40,10 +40,14 @@ pub struct PaneFacts {
     pub title: String,
     /// The program running in it — always the process, never a rename.
     pub app_name: String,
+    /// The foreground program's lifecycle, independent of an agent's reported work state.
+    pub status: heca_core::runtime::ProcessStatus,
     /// Its working directory, when known.
     pub cwd: Option<PathBuf>,
     /// The git state of that directory; `None` outside a repository.
     pub git: Option<GitInfo>,
+    /// Last explicit report from the agent running in the pane.
+    pub agent: Option<heca_core::agent::AgentState>,
 }
 
 impl PaneFacts {
@@ -63,8 +67,10 @@ impl PaneFacts {
             icon: view.icon,
             title: view.title,
             app_name: view.app_name,
+            status: view.status,
             cwd: runtime.and_then(|r| r.cwd.clone()),
             git: runtime.and_then(|r| r.git.clone()),
+            agent: runtime.and_then(|r| r.agent.clone()),
         }
     }
 }
@@ -75,6 +81,8 @@ impl PaneFacts {
 pub struct PaneChip {
     pub icon: Glyph,
     pub text: String,
+    /// Optional semantic colour, resolved from the current theme by the header.
+    pub tone: Option<heca_grid_ui::Tone>,
 }
 
 impl PaneChip {
@@ -83,7 +91,14 @@ impl PaneChip {
         Self {
             icon,
             text: text.into(),
+            tone: None,
         }
+    }
+
+    /// Colour the chip by meaning. Extensions use the same theme palette as built-in chips.
+    pub fn tone(mut self, tone: heca_grid_ui::Tone) -> Self {
+        self.tone = Some(tone);
+        self
     }
 }
 
@@ -93,6 +108,8 @@ impl PaneChip {
 pub(crate) enum Fit {
     /// Left as it is.
     Keep,
+    /// Shorten the text from the end while retaining its complete hover value.
+    End,
     /// The text is a path: shorten it from the left (`…/heca/src`) by the overflow.
     PathLeft,
 }
@@ -250,21 +267,21 @@ fn builtin_chips() -> Vec<PaneChipDef> {
         own("location", Fit::PathLeft, |f| {
             f.cwd
                 .as_ref()
-                .map(|cwd| PaneChip::new(Glyph::Folder, crate::chrome::home_relative_path(cwd)))
+                .map(|cwd| PaneChip::new(Glyph::Folder, crate::chrome::home_relative_path(cwd)).tone(heca_grid_ui::Tone::Accent))
         }),
         // Always the running program's name, never a rename, so the bar keeps showing what runs.
         own("app_name", Fit::Keep, |f| {
             Some(PaneChip::new(f.icon, f.app_name.clone()))
         }),
         // The pane's own name: a rename wins, else the program.
-        own("pane_name", Fit::Keep, |f| {
+        own("pane_name", Fit::End, |f| {
             (!f.title.is_empty()).then(|| PaneChip::new(f.icon, f.title.clone()))
         }),
-        own("git_branch", Fit::Keep, |f| {
+        own("git_branch", Fit::End, |f| {
             f.git
                 .as_ref()
                 .and_then(|g| g.branch.clone())
-                .map(|branch| PaneChip::new(Glyph::GitBranch, branch))
+                .map(|branch| PaneChip::new(Glyph::GitBranch, branch).tone(heca_grid_ui::Tone::Warning))
         }),
         // `+A ~M -D`, and nothing at all when the tree is clean.
         own("git_status", Fit::Keep, |f| {
@@ -279,7 +296,9 @@ fn builtin_chips() -> Vec<PaneChipDef> {
             if g.deleted > 0 {
                 parts.push(format!("-{}", g.deleted));
             }
-            (!parts.is_empty()).then(|| PaneChip::new(Glyph::GitCommit, parts.join(" ")))
+            (!parts.is_empty()).then(|| PaneChip::new(Glyph::GitCommit, parts.join(" ")).tone(
+                if g.modified > 0 || g.deleted > 0 { heca_grid_ui::Tone::Warning } else { heca_grid_ui::Tone::Success },
+            ))
         }),
     ]
 }

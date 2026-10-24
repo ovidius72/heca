@@ -9,6 +9,8 @@ use heca_config::theme::{AppConfig, ModifierKey};
 /// The `[settings]` (and `[confirm]`) values a window reads while it runs.
 #[derive(Clone, Debug)]
 pub struct WindowSettings {
+    /// Agent labels and sound policy from the shared configuration loader.
+    pub agents: heca_config::settings::AgentsConfig,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether a dragged pane scrolls the view when it nears the content edge.
@@ -50,6 +52,7 @@ impl WindowSettings {
     pub fn from_config(app_config: &AppConfig) -> Self {
         let settings = &app_config.config.settings;
         Self {
+            agents: settings.agents.clone(),
             mouse_enabled: settings.mouse,
             auto_scroll_edge: settings.auto_scroll_edge,
             edge_scroll_distance: settings.edge_scroll_distance,

@@ -213,6 +213,120 @@ max_visible = 5
 # that needs more than this ends with "…". Clamped to at least 1.
 max_lines = 8
 
+[settings.agents]
+# Master switch. Each program below stays off until the user enables it.
+enabled = true
+max_report_bytes = 65536
+channel_capacity = 256
+launch_timeout_ms = 5000
+
+[settings.agents.sounds]
+# Enable the bundled defaults or choose files/assets per status. Project config may override it.
+enabled = false
+volume = 0.7
+queue_capacity = 32
+
+[settings.agents.programs.claude]
+enabled = false
+name = "Claude Code"
+executables = ["claude"]
+[settings.agents.programs.claude.reports]
+SessionStart = "waiting_input"
+UserPromptSubmit = "working"
+PreToolUse = "working"
+"Notification:permission_prompt" = "waiting_permission"
+"Notification:idle_prompt" = "waiting_input"
+PermissionRequest = "waiting_permission"
+PostToolUse = "working"
+PostToolUseFailure = "error"
+StopFailure = "error"
+PreCompact = "compacting"
+PostCompact = "working"
+SubagentStart = "subagent_running"
+SubagentStop = "working"
+Stop = "finished"
+
+[settings.agents.programs.codex]
+enabled = false
+name = "Codex"
+executables = ["codex"]
+[settings.agents.programs.codex.reports]
+SessionStart = "waiting_input"
+UserPromptSubmit = "working"
+PreToolUse = "working"
+PermissionRequest = "waiting_permission"
+PostToolUse = "working"
+PreCompact = "compacting"
+PostCompact = "working"
+SubagentStart = "subagent_running"
+SubagentStop = "working"
+Stop = "finished"
+Interrupt = "waiting_input"
+
+[settings.agents.programs.pi]
+enabled = false
+name = "pi"
+executables = ["pi"]
+[settings.agents.programs.pi.reports]
+session_start = "waiting_input"
+agent_start = "working"
+"agent_settled:completed" = "finished"
+"agent_settled:error" = "error"
+"agent_settled:aborted" = "waiting_input"
+session_before_compact = "compacting"
+session_compact = "working"
+session_compact_failed = "error"
+
+[settings.agents.programs.opencode]
+enabled = false
+name = "OpenCode"
+executables = ["opencode"]
+[settings.agents.programs.opencode.reports]
+"session.execution.started" = "working"
+"session.execution.succeeded" = "finished"
+"session.execution.failed" = "error"
+"session.execution.interrupted" = "waiting_input"
+"permission.asked" = "waiting_permission"
+"permission.replied" = "working"
+
+# Status ids are open. Add your own label, glyph or sound file here. Colours follow the theme.
+[settings.agents.statuses.working]
+label = "Working"
+icon = "lightning"
+tone = "accent"
+[settings.agents.statuses.waiting_input]
+label = "Waiting…"
+icon = "chat_circle_dots"
+tone = "warning"
+sound = { source = "asset:attention" }
+[settings.agents.statuses.waiting_permission]
+label = "Waiting…"
+icon = "lock"
+tone = "warning"
+sound = { source = "asset:locked" }
+[settings.agents.statuses.finished]
+label = "Finished"
+icon = "check"
+tone = "success"
+sound = { source = "asset:completed" }
+[settings.agents.statuses.error]
+label = "Error"
+icon = "x_circle"
+tone = "danger"
+sound = { source = "asset:error" }
+[settings.agents.statuses.compacting]
+label = "Compacting"
+icon = "gear"
+tone = "muted"
+[settings.agents.statuses.subagent_running]
+label = "Subagent running"
+icon = "cards"
+tone = "accent"
+[settings.agents.statuses.success]
+label = "Success"
+icon = "check_circle"
+tone = "success"
+
 # ─────────────────────────────────────────────────────────────────────────────
 [confirm]
 # ─────────────────────────────────────────────────────────────────────────────
@@ -462,8 +576,7 @@ search_current_match_alpha = 150
 #                   inside a repository), or a line added by a program built on heca,
 #                   e.g. "demo.status" (shown by default while this list is the default;
 #                   once you write your own list, only what you list shows). [] shows
-#                   the name alone. Default ["cwd", "git"] — so a fresh install shows
-#                   the folder line under each pane's name in the sidebar.
+#                   the name alone. "agent" shows a reporting program's status and task.
 # border_style     = "bracketed"
 # border_width     = 1.0
 # border_color     = "#40e0ff"
@@ -471,7 +584,7 @@ search_current_match_alpha = 150
 # background_color = "#0b0f14"
 # gap              = 12.0
 # width            = 300
-# pane_lines       = ["cwd", "git"]
+pane_lines = ["cwd", "git", "agent"]
 
 # Per-project settings: a `.heca/config.toml` in the folder heca was started in (or the nearest
 # parent that has a `.heca/` folder) is merged over this file key by key — any key it sets wins, and

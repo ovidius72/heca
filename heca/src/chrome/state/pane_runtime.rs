@@ -11,6 +11,10 @@ use super::*;
 /// reading `panes` can't double-borrow the `panes` signal (which would panic).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PaneRuntimeSignals {
+    /// Visual feedback belongs to this pane, surviving row rebuilds and dock moves.
+    pub(crate) flash: heca_grid_ui::FlashHandle,
+    /// One observer per pane, independent of how many rows display it.
+    pub(crate) feedback_bound: Signal<bool>,
     /// Raw foreground program name, verbatim (e.g. `"nvim"`); `None` until detected.
     pub(crate) program: Signal<Option<String>>,
     /// High-level foreground-process lifecycle status.
@@ -23,6 +27,8 @@ pub(crate) struct PaneRuntimeSignals {
     pub(crate) git: Signal<Option<GitInfo>>,
     /// Source/content kind hosted by the pane (`Terminal` now; `App`/`Plugin` later).
     pub(crate) kind: Signal<ContentKind>,
+    /// Last state explicitly reported by a recognized agent.
+    pub(crate) agent: Signal<Option<heca_core::agent::AgentState>>,
     /// User-set custom display name (from rename); `None` while tracking the process.
     /// Mirrored here so plugins observe renames via the store + `PaneCustomNameChanged`.
     pub(crate) custom_name: Signal<Option<String>>,
@@ -38,12 +44,15 @@ pub(crate) struct PaneRuntimeSignals {
 impl PaneRuntimeSignals {
     fn new(runtime: &PaneRuntime) -> Self {
         Self {
+            flash: heca_grid_ui::FlashHandle::new(),
+            feedback_bound: signal(false),
             program: signal(runtime.program.clone()),
             status: signal(runtime.status.clone()),
             cwd: signal(runtime.cwd.clone()),
             exit_code: signal(runtime.exit_code),
             git: signal(runtime.git.clone()),
             kind: signal(runtime.kind.clone()),
+            agent: signal(runtime.agent.clone()),
             custom_name: signal(None),
             viewport_offset: signal(0),
             at_bottom: signal(true),
@@ -64,6 +73,7 @@ impl PaneRuntimeSignals {
             exit_code: self.exit_code.get(),
             git: self.git.get(),
             kind: self.kind.get(),
+            agent: self.agent.get(),
         }
     }
 
@@ -77,6 +87,7 @@ impl PaneRuntimeSignals {
             exit_code: self.exit_code.get_untracked(),
             git: self.git.get_untracked(),
             kind: self.kind.get_untracked(),
+            agent: self.agent.get_untracked(),
         }
     }
 }
@@ -90,14 +101,21 @@ impl PaneRuntimeSignals {
 pub struct PaneRuntimeStore {
     events: ChromeEventBus,
     panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
+    sounds: std::rc::Rc<crate::agent::sounds::AgentSounds>,
 }
 
 impl PaneRuntimeStore {
     pub(super) fn new(events: ChromeEventBus) -> Self {
+        let sounds = std::rc::Rc::new(crate::agent::sounds::AgentSounds::new(&events));
         Self {
             events,
             panes: signal(HashMap::new()),
+            sounds,
         }
+    }
+
+    pub(crate) fn configure_agents(&self, config: &heca_config::settings::AgentsConfig) {
+        self.sounds.configure(config);
     }
 
     /// Look at one pane's signals, if the store has met it.
@@ -171,50 +189,67 @@ impl PaneRuntimeStore {
         runtime: &PaneRuntime,
         custom_name: Option<&str>,
     ) -> bool {
-        let sigs = self.signals(pane);
-        let cur = sigs.current();
-        let mut changed = false;
-        if cur.program != runtime.program {
-            sigs.program.set(runtime.program.clone());
-            self.events.emit(ChromeEvent::PaneProcessChanged { pane });
-            changed = true;
-        }
-        if cur.status != runtime.status {
-            sigs.status.set(runtime.status.clone());
-            self.events.emit(ChromeEvent::PaneStatusChanged {
-                pane,
-                status: runtime.status.clone(),
-            });
-            changed = true;
-        }
-        if cur.cwd != runtime.cwd {
-            sigs.cwd.set(runtime.cwd.clone());
-            self.events.emit(ChromeEvent::PaneCwdChanged { pane });
-            changed = true;
-        }
-        if cur.exit_code != runtime.exit_code {
-            sigs.exit_code.set(runtime.exit_code);
-            changed = true;
-        }
-        if cur.git != runtime.git {
-            sigs.git.set(runtime.git.clone());
-            self.events.emit(ChromeEvent::PaneGitChanged { pane });
-            changed = true;
-        }
-        if cur.kind != runtime.kind {
-            sigs.kind.set(runtime.kind.clone());
-            changed = true;
-        }
-        let next_custom = custom_name.map(str::to_string);
-        if sigs.custom_name.get_untracked() != next_custom {
-            sigs.custom_name.set(next_custom.clone());
-            self.events.emit(ChromeEvent::PaneCustomNameChanged {
-                pane,
-                name: next_custom,
-            });
-            changed = true;
-        }
-        changed
+        // Publish one coherent snapshot to effects, not transient combinations
+        // of a new program with the previous program's status.
+        heca_grid_ui::reactive::batch(|| {
+            let sigs = self.signals(pane);
+            let cur = sigs.current();
+            let mut changed = false;
+            if cur.program != runtime.program {
+                sigs.program.set(runtime.program.clone());
+                self.events.emit(ChromeEvent::PaneProcessChanged { pane });
+                changed = true;
+            }
+            if cur.status != runtime.status {
+                sigs.status.set(runtime.status.clone());
+                self.events.emit(ChromeEvent::PaneStatusChanged {
+                    pane,
+                    status: runtime.status.clone(),
+                });
+                changed = true;
+            }
+            if cur.cwd != runtime.cwd {
+                sigs.cwd.set(runtime.cwd.clone());
+                self.events.emit(ChromeEvent::PaneCwdChanged { pane });
+                changed = true;
+            }
+            if cur.exit_code != runtime.exit_code {
+                sigs.exit_code.set(runtime.exit_code);
+                changed = true;
+            }
+            if cur.git != runtime.git {
+                sigs.git.set(runtime.git.clone());
+                self.events.emit(ChromeEvent::PaneGitChanged { pane });
+                changed = true;
+            }
+            if cur.kind != runtime.kind {
+                sigs.kind.set(runtime.kind.clone());
+                changed = true;
+            }
+            changed |= self.set_agent(pane, runtime.agent.clone());
+            let next_custom = custom_name.map(str::to_string);
+            if sigs.custom_name.get_untracked() != next_custom {
+                sigs.custom_name.set(next_custom.clone());
+                self.events.emit(ChromeEvent::PaneCustomNameChanged {
+                    pane,
+                    name: next_custom,
+                });
+                changed = true;
+            }
+            changed
+        })
+    }
+
+    /// Publish each backend report before the final runtime snapshot is mirrored.
+    pub(crate) fn set_agent(&self, pane: PaneId, agent: Option<heca_core::agent::AgentState>) -> bool {
+        let signal = self.signals(pane).agent;
+        let previous = signal.get_untracked();
+        if previous == agent { return false }
+        signal.set(agent.clone());
+        self.events.emit(ChromeEvent::PaneAgentChanged {
+            pane, previous: previous.map(Box::new), agent: agent.map(Box::new),
+        });
+        true
     }
 
     /// Mirror terminal viewport state from a backend snapshot into the store.

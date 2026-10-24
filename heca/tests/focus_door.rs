@@ -24,6 +24,17 @@ const WRITES: &[&str] = &[
     ".focus_visible.set(",
 ];
 
+fn writes_focus_flag(path: &Path, line: &str) -> bool {
+    let code = line.split("//").next().unwrap_or("");
+    // Input's private View stores a bool for painting, not Base's focus signal.
+    let code = if path == Path::new("heca-grid-ui/src/widgets/input/component.rs") {
+        code.replace("view.focused = focused;", "")
+    } else {
+        code.to_owned()
+    };
+    WRITES.iter().any(|write| code.contains(write))
+}
+
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -69,8 +80,7 @@ fn only_the_focus_door_writes_the_focused_flag() {
             continue;
         };
         for (n, line) in text.lines().enumerate() {
-            let code = line.split("//").next().unwrap_or("");
-            if WRITES.iter().any(|w| code.contains(w)) {
+            if writes_focus_flag(relative, line) {
                 offenders.push(format!("{}:{}: {}", relative.display(), n + 1, line.trim()));
             }
         }
@@ -82,4 +92,23 @@ fn only_the_focus_door_writes_the_focused_flag() {
          so that who holds the keyboard is answered in one place:\n  {}",
         offenders.join("\n  "),
     );
+}
+
+#[test]
+fn the_input_paint_copy_does_not_hide_focus_signal_writes() {
+    let input = Path::new("heca-grid-ui/src/widgets/input/component.rs");
+    assert!(!writes_focus_flag(input, "view.focused = focused;"));
+    for write in [
+        "self.base.focused = signal(false);",
+        "self.base.focused.set(true);",
+        "self.base.focused.update(|value| *value = true);",
+        "self.base.focus_visible.set(true);",
+        "view.focused = focused; self.base.focused.set(true);",
+    ] {
+        assert!(writes_focus_flag(input, write), "missed: {write}");
+    }
+    assert!(writes_focus_flag(
+        Path::new("heca/src/other.rs"),
+        "view.focused = focused;"
+    ));
 }

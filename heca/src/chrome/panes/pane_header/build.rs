@@ -150,11 +150,9 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         content.chips,
         content.segments,
         content.facts,
-        f32::INFINITY,
-        font,
     )
     .into_iter()
-    .map(|(name, glyph, _)| (name, glyph))
+    .map(|item| (item.name, item.chip.icon, item.chip.tone))
     .collect();
     let chip_names: Vec<&str> = content.segments.iter().map(|d| d.name.as_str()).collect();
     format!(
@@ -179,10 +177,7 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
 /// when there are neither segments-with-data nor actions.
 pub(crate) fn build_pane_header(
     content: &PaneHeaderContent,
-    theme: &GuiTheme,
     band: heca_grid_ui::Color,
-    font: f32,
-    avail_w: f32,
     ctx: PaneHeaderCtx,
 ) -> Option<Surface> {
     // The button set is a dynamic vector of descriptors (config-driven today,
@@ -299,16 +294,12 @@ pub(crate) fn build_pane_header(
     // stated backstop. That clip is gone (the bar is a child of its pane now), so the guess had
     // nothing catching it. The row divides the space instead: the group keeps its buttons at their
     // own size and gives them up when it must, and the title chip ellipses itself in what is left.
-    let bar_max = avail_w;
     let bar = build_pane_info_bar(
         segment_items(
             content.chips,
             content.segments,
             content.facts,
-            bar_max,
-            font,
         ),
-        theme,
     );
 
     // **The bar carries no size of its own.** It fills the width and the height it is given and

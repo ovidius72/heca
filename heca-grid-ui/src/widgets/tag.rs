@@ -9,7 +9,7 @@
 //! border width and colors all from the [`Theme`](crate::theme::Theme) — nothing
 //! hardcoded); the slots draw themselves, so it stays composable and neutral.
 
-use crate::builders::{LayoutExt, Parent};
+use crate::builders::{LayoutExt, Parent, TooltipExt};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet};
@@ -55,6 +55,12 @@ impl Tag {
     /// A new chip whose first segment shows `label`. Add a leading icon with
     /// [`leading`](Tag::leading), or further segments with [`segment`](Tag::segment).
     pub fn new(label: impl Into<String>) -> Self {
+        Self::from_label(Label::new(label))
+    }
+
+    /// A first segment with a configured label (for example, path truncation or a semantic tone).
+    #[heca_grid_ui_macros::host_only("composed label content")]
+    pub fn from_label(label: Label) -> Self {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Center;
@@ -62,9 +68,9 @@ impl Tag {
         base.style.layout.padding_x = Some((PAD_X).into());
         base.style.layout.padding_y = Some((PAD_Y).into());
         base.style.layout.gap = (SEG_GAP).into();
-        let label = Label::new(label).font_scale(FONT_SCALE);
+        let label = label.font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
-        base.children.push(Box::new(segment().child(label)));
+        base.children.push(Box::new(segment().tooltip_signal(label_signal).tooltip_quick(true).child(label)));
         Self {
             base,
             color: None,
@@ -88,6 +94,16 @@ impl Tag {
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn segment(mut self, c: impl Component + 'static) -> Self {
         self.base.children.push(Box::new(c));
+        self
+    }
+
+    /// Whether the most recently added segment may give up width. Short identifiers can
+    /// keep their natural width while path or description segments absorb the squeeze.
+    #[heca_grid_ui_macros::prop]
+    pub fn segment_shrink(mut self, shrink: bool) -> Self {
+        if let Some(segment) = self.base.children.last_mut() {
+            segment.base_mut().style.layout.flex_shrink = Some(if shrink { 1.0 } else { 0.0 });
+        }
         self
     }
 
@@ -124,11 +140,20 @@ impl Tag {
         key: Option<&str>,
     ) -> Self {
         use crate::builders::IdentityExt as _;
-        let mut text = Label::new(label).font_scale(FONT_SCALE);
+        let mut text = Label::new(label);
         if let Some(k) = key {
             text = text.key(k);
         }
-        let mut seg = segment().child(text);
+        self.segment_label(text, leading)
+    }
+
+    /// Append a configured label and optional leading content. The segment's tooltip follows
+    /// the label's full value, even when its visible text is shortened or updated in place.
+    #[heca_grid_ui_macros::host_only("composed label content")]
+    pub fn segment_label(self, label: Label, leading: Option<Box<dyn Component>>) -> Self {
+        let label = label.font_scale(FONT_SCALE);
+        let text = label.text_signal();
+        let mut seg = segment().tooltip_signal(text).tooltip_quick(true).child(label);
         if let Some(icon) = leading {
             seg.base_mut().children.insert(0, icon);
         }

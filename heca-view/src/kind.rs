@@ -106,6 +106,8 @@ pub enum WidgetKind {
     BadgeButton,
     Tag,
     Icon,
+    /// A shared local image: SVG or bitmap, with asynchronous loading and fitting.
+    Image,
     Input,
     Select,
     Toggle,

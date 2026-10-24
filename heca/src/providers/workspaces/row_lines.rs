@@ -18,14 +18,14 @@ use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, TooltipSide, Vis
 use super::pane_row::{META_INDENT, set_if_changed};
 use crate::chrome::panes::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLine};
 
-/// heca's own two lines, in the order the row has always shown them.
+/// The built-in lines; configuration chooses their order and visibility.
 pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
     let own = |name: &str, build: fn(&LineCx<'_>) -> Box<dyn Component>| PaneLineDef {
         name: name.to_string(),
         build: Rc::new(build),
         from_extension: false,
     };
-    vec![own("cwd", cwd_line), own("git", git_line)]
+    vec![own("cwd", cwd_line), own("git", git_line), own("agent", super::agent_line::build)]
 }
 
 /// **Where the pane is**: a folder glyph and the home-relative path. The one shape the exposé's card
@@ -219,6 +219,7 @@ mod tests {
         let line = build(&LineCx {
             theme: &theme,
             facts,
+            agent_statuses: signal(Rc::new(heca_config::settings::AgentsConfig::default().statuses)),
         });
         // Visibility is applied at layout, so each check lays the row out first.
         let mut root: Box<dyn Component> = Box::new(Flex::column().child(line));
@@ -269,6 +270,7 @@ mod tests {
         let line = git_line(&LineCx {
             theme: &theme,
             facts,
+            agent_statuses: signal(Rc::new(heca_config::settings::AgentsConfig::default().statuses)),
         });
         // A card about as wide as a sidebar row, narrower than the row's natural width.
         let mut root = Flex::column()

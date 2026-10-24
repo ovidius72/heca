@@ -22,6 +22,50 @@ fn message_spec_wraps_body_in_a_label() {
     assert!(spec.dismissible && !spec.danger && spec.actions.is_empty());
 }
 
+#[test]
+fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
+    use heca_grid_ui::{DrawCommand, Flex, Length, builders::{LayoutExt, Parent}};
+    let message = "Trust /Users/example/projects/really-long-worktree/target/p102/harness-icons-preview/.heca/config.toml? It can bind keys to commands, so only trust a project you know.";
+    let theme = heca_grid_ui::Theme::default();
+    for width in [360.0, 640.0, 2000.0] {
+        let spec = ModalSpec::message("Trust project settings", message)
+            .action(ModalAction::new("cancel", "Cancel"))
+            .action(ModalAction::new("trust", "Trust"));
+        let root = build_modal_root(&spec,
+            OverlayId(crate::chrome::LayerRegistry::default().reserve_id()), &theme,
+            &noop_emit(), &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default());
+        let mut root = Flex::column().width(Length::FULL).height(Length::FULL).child(root);
+        // Advance the normal arrival before inspecting what the dialog actually paints.
+        root.tick(1.0);
+        let scene = crate::chrome::paint_chrome_root(&mut root, width, 480.0, &theme);
+        let dialog = &root.base().children[0];
+        let overlay = &dialog.base().children[0];
+        let panel = &overlay.base().children[0];
+        for child in &panel.base().children {
+            let bounds = child.base().bounds;
+            assert!(bounds.loc.y + bounds.size.h <= panel.base().bounds.loc.y + panel.base().bounds.size.h + 1.0,
+                "dialog child escapes panel at {width}px: panel {:?}; child {:?}", panel.base().bounds, bounds);
+        }
+        assert!(panel.base().bounds.size.w <= f64::from(theme.font_size * theme.colors.dialog.max_width_em) + 1.0);
+        let body = panel.base().children[1].base().bounds;
+        let lines: Vec<_> = scene.iter().filter_map(|cmd| match cmd {
+            DrawCommand::Text(text) if text.rect.loc.y >= body.loc.y
+                && text.rect.loc.y < body.loc.y + body.size.h => Some(text),
+            _ => None,
+        }).collect();
+        assert!(lines.len() > 1, "a long warning was still one truncated line at {width}px; body {body:?}; lines {lines:?}");
+        let compact = |text: &str| text.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+        let painted = lines.iter().map(|line| compact(&line.text)).collect::<String>();
+        assert_eq!(painted, compact(message), "part of the warning was lost");
+        for line in lines {
+            // Taffy rounds the label box; painted line metrics retain fractional pixels.
+            assert!(line.rect.loc.y + line.rect.size.h <= body.loc.y + body.size.h + 1.0);
+            assert!(line.rect.loc.x >= body.loc.x);
+            assert!(line.rect.loc.x + line.rect.size.w <= body.loc.x + body.size.w + 0.01);
+        }
+    }
+}
+
 /// Every modal action button declares what a `prefix+/` pick does to it, and it is the same
 /// `SubmitOverlay` its click carries — so the picker reaches a dialog's buttons with nothing
 /// registered anywhere.

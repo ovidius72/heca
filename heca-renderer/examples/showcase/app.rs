@@ -4,6 +4,9 @@ impl ApplicationHandler for App {
     /// When the capped-frame timer (set via `WaitUntil`) fires, request the next
     /// animation frame.
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        // Acknowledge the previous turn before widgets or background completions ask for another.
+        // Same shared frame-request contract as the app's lifecycle.
+        heca_grid_ui::frame_served();
         if let StartCause::ResumeTimeReached { .. } = cause
             && let Some(state) = &self.state
             && state.next_frame_in.is_some()

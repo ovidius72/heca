@@ -59,7 +59,16 @@ pub trait ToneExt: Component + Sized {
     /// Every text or glyph inside without a colour of its own follows it; a control that colours
     /// its own content keeps it. See [`Visual::content_tone`](crate::style::Visual::content_tone).
     fn content_tone(mut self, tone: crate::Tone) -> Self {
+        self.base_mut().content_tone = None;
         self.base_mut().style.visual.content_tone = Some(tone);
+        self
+    }
+
+    /// Follow a live semantic tone without rebuilding the widget or its children.
+    /// `None` restores the surrounding content colour. Explicit child colours still win.
+    fn content_tone_signal(mut self, tone: crate::reactive::Signal<Option<crate::Tone>>) -> Self {
+        self.base_mut().style.visual.content_tone = None;
+        self.base_mut().content_tone = Some(tone);
         self
     }
 }

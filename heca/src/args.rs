@@ -2,7 +2,7 @@
 //! against that declaration.
 //!
 //! Two unrelated callers share it: every action ([`ActionMeta::args`](crate::actions::ActionMeta::args))
-//! and the command line (`app/cli.rs`). Checking both with the same [`check_args`] is what makes a
+//! and the command line (`app/cli`). Checking both with the same [`check_args`] is what makes a
 //! bad keybinding and a bad `heca --describe-action` produce the same sentence.
 
 /// The type of one action argument — what a supplied value has to look like.

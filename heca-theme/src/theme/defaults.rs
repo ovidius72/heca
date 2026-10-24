@@ -33,7 +33,7 @@ pub(super) fn default_icon_secondary_alpha() -> f32 {
     0.30
 }
 pub(super) fn default_active_wash_alpha() -> f32 {
-    0.11
+    0.0
 }
 pub(super) fn default_drag_edge_width() -> f32 {
     3.0

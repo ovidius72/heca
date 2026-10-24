@@ -1,6 +1,15 @@
 use super::*;
 use crate::{Intent, PropValue, ViewEvent, ViewNode, WidgetKind};
 
+#[test]
+fn marker_and_tag_properties_reach_the_described_tree() {
+    let marker = MarkerGroup::new().marker(false).gutter(crate::ViewSpacing::Lg).into_node();
+    assert_eq!(marker.props.get("marker"), Some(&PropValue::Bool(false)));
+    assert_eq!(marker.props.get("gutter"), Some(&PropValue::Text("lg".into())));
+    let tag = Tag::new("status").segment_shrink(false).into_node();
+    assert_eq!(tag.props.get("segment_shrink"), Some(&PropValue::Bool(false)));
+}
+
 /// The builders produce the same node hand-authoring does — they are sugar, not a second model.
 #[test]
 fn a_built_tree_is_an_ordinary_view_node() {
@@ -124,6 +133,7 @@ fn every_kind_has_a_builder_that_can_be_given_a_hint() {
     fn builder(kind: WidgetKind) -> Option<ViewNode> {
         use WidgetKind as K;
         Some(match kind {
+            K::Image => Image::new().svg(r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#).on_hint(Intent::new("pick")).into_node(),
             K::VStack => VStack::new().on_hint(Intent::new("pick")).into_node(),
             K::HStack => HStack::new().on_hint(Intent::new("pick")).into_node(),
             K::Row => Row::new().on_hint(Intent::new("pick")).into_node(),

@@ -246,6 +246,7 @@ struct GpuState {
     config: wgpu::SurfaceConfiguration,
     grid: GridRenderer,
     text: TextRenderer,
+    ui_images: heca_renderer::ui_image::UiImages,
     compositor: heca_renderer::composite::Compositor,
     scale_factor: f64,
     theme: Theme,

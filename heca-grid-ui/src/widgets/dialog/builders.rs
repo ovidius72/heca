@@ -49,6 +49,7 @@ impl Dialog {
             has_actions: false,
             body_at: None,
             danger: false,
+            panel_max_width: None,
         }
     }
 
@@ -76,6 +77,13 @@ impl Dialog {
         let style = &mut self.panel_mut().style.layout;
         style.width = width;
         style.height = height;
+        self
+    }
+
+    /// Override the theme's readable width cap. The viewport still limits narrow windows.
+    #[heca_grid_ui_macros::prop]
+    pub fn panel_max_width(mut self, width: Length) -> Self {
+        self.panel_max_width = Some(width);
         self
     }
 

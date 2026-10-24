@@ -277,6 +277,44 @@ fn row_without_on_activate_is_not_focusable() {
 }
 
 #[test]
+fn a_selected_row_keeps_text_readable_inside_a_quiet_outline() {
+    let theme = Theme::default();
+    let mut row = Row::new().active(true).child(Label::new("Session"));
+    LayoutEngine::new().theme(&theme).compute(&mut row, Size::new(320.0, 60.0));
+    let scene = common::paint(&row, &theme);
+    assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
+        if text.text == "Session" && text.color == theme.colors.foreground)));
+    assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Rect(rect)
+        if rect.fill.a == theme.colors.interaction.row_active_fill
+            && rect.border.is_some_and(|border|
+                border.color == theme.colors.accent.with_alpha(theme.colors.interaction.row_active_border)
+                    && border.width == theme.focus_border_width)
+            && rect.glow.is_none())));
+    row.nav_state().set(true);
+    let scene = common::paint(&row, &theme);
+    assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Rect(rect)
+        if rect.fill.a == 0 && rect.border.is_some() && rect.glow.is_some())),
+        "the keyboard cursor keeps its stronger glowing ring");
+}
+
+#[test]
+fn the_previous_row_keeps_its_configured_highlight_and_yields_to_the_active_state() {
+    let mut theme = Theme::default();
+    theme.colors.previous_background = Some(Color::new(60, 72, 96, 180));
+    let previous = theme.colors.effective_previous_background();
+    let mut row = Row::new().previous(true).child(Label::new("Previous session"));
+    LayoutEngine::new().theme(&theme).compute(&mut row, Size::new(320.0, 60.0));
+    let has_previous_fill = |row: &Row| common::paint(row, &theme).iter().any(|cmd|
+        matches!(cmd, DrawCommand::Rect(rect) if rect.fill == previous && rect.border.is_none()));
+    assert!(has_previous_fill(&row), "the previous-pane color must keep its configured opacity");
+    row.previous_state().set(false);
+    assert!(!has_previous_fill(&row), "the mark follows focus history without rebuilding");
+    row.previous_state().set(true);
+    row.state().set(true);
+    assert!(!has_previous_fill(&row), "the current pane keeps its own quiet selection style");
+}
+
+#[test]
 fn rail_cell_lays_out_a_square_with_centered_icon() {
     use heca_grid_ui::{Glyph, Icon, RailCell};
 

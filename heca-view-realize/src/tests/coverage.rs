@@ -59,6 +59,9 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         ),
         ("ToastStack", "host-only: it holds a queue the host drives"),
         // ── Not widgets: parts, values and helpers that happen to be exported ──
+        ("ImageFit", "a value set on Image.fit, not a widget"),
+        ("ImageState", "observable image load state, not a widget"),
+        ("Svg", "an alias of Image; inline SVG is the Image.svg property"),
         ("MessageFeed", "a producer handle for MessageList, not a Component"),
         (
             "GridCell",

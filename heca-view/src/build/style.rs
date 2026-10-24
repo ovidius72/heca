@@ -31,6 +31,9 @@ pub trait Style: Sized {
         self
     }
 
+    /// Preferred width / height, shared with the native layout engine.
+    fn aspect_ratio(self, ratio: f32) -> Self { self.prop("aspect_ratio", ratio) }
+
     // ── Arrangement ──
     /// **Space between children** — a number of pixels, a theme step, or either said as a string.
     ///

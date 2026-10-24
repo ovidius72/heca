@@ -1,13 +1,12 @@
 //! The component model's own tests.
 
 use super::*;
-use std::rc::Rc;
 
 #[test]
 fn mark_needs_paint_sets_the_flag_and_requests_a_frame() {
-    let frames = Rc::new(Cell::new(0u32));
+    let frames = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let f = frames.clone();
-    install_frame_request(move || f.set(f.get() + 1));
+    install_frame_request(move || { f.fetch_add(1, std::sync::atomic::Ordering::Relaxed); });
 
     let base = Base::new();
     assert!(base.needs_paint(), "a fresh widget needs its first paint");
@@ -17,7 +16,7 @@ fn mark_needs_paint_sets_the_flag_and_requests_a_frame() {
     base.mark_needs_paint();
     assert!(base.needs_paint(), "marking re-sets the repaint flag");
     assert_eq!(
-        frames.get(),
+        frames.load(std::sync::atomic::Ordering::Relaxed),
         1,
         "marking asks the host for exactly one frame"
     );

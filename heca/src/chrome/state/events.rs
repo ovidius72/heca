@@ -142,6 +142,13 @@ pub enum ChromeEvent {
         pane: PaneId,
         status: ProcessStatus,
     },
+    /// A report changed, or the agent left the foreground command. Process status is separate.
+    /// Both values let subscribers react to transitions without keeping another state store.
+    PaneAgentChanged {
+        pane: PaneId,
+        previous: Option<Box<heca_core::agent::AgentState>>,
+        agent: Option<Box<heca_core::agent::AgentState>>,
+    },
     PaneCwdChanged {
         pane: PaneId,
     },
@@ -224,6 +231,7 @@ impl ChromeEvent {
             ChromeEvent::HintLettersChanged { .. } => "hint.changed",
             ChromeEvent::PaneProcessChanged { .. } => "pane.process.changed",
             ChromeEvent::PaneStatusChanged { .. } => "pane.status.changed",
+            ChromeEvent::PaneAgentChanged { .. } => "pane.agent.changed",
             ChromeEvent::PaneCwdChanged { .. } => "pane.cwd.changed",
             ChromeEvent::PaneGitChanged { .. } => "pane.git.changed",
             ChromeEvent::PaneCustomNameChanged { .. } => "pane.name.changed",

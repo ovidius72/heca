@@ -42,6 +42,8 @@ pub struct AppState {
     pub text_renderer: TextRenderer,
     /// Inline terminal-image renderer (Sixel / iTerm2 / Kitty graphics).
     pub image_renderer: ImageRenderer,
+    /// Shared vector UI asset cache and compositor.
+    pub ui_images: heca_renderer::ui_image::UiImages,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
     pub terminal_layers: HashMap<crate::chrome::panes::terminal::TerminalId, RetainedTerminalLayer>,
