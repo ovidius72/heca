@@ -1,18 +1,27 @@
-//! **Lengths** — a size along one axis, and an out-of-flow placement.
+//! Shared native and serialized size vocabulary.
 
-use super::*;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A size along one axis.
 ///
 /// Serializes to the spelling an author would reach for rather than to its enum shape:
 /// [`Auto`](Self::Auto) is `"auto"`, [`Px`](Self::Px) is a bare number, and
-/// [`Percent`](Self::Percent) is a percentage string (`"50%"`). So a declarative description writes
+/// [`Percent`](Self::Percent) is a percentage string (`"50%"`), and [`Em`](Self::Em) is a
+/// font-relative string (`"22em"`). So a declarative description writes
 /// `"width": 240` or `"width": "50%"`, not `{"px": 240}`. Round-trips, which the layout merge
 /// relies on.
 ///
 /// **Set neither a width nor a height and the widget fills its parent across the cross axis**,
 /// exactly as CSS `align-items: stretch` does — so `.width(Length::FULL)` on a child that
 /// already fills says nothing, and is better left off.
+///
+/// ```
+/// use heca_grid_ui::builders::LayoutExt;
+/// use heca_grid_ui::widgets::Flex;
+/// let panel = Flex::column().min_width("22em");
+/// ```
+/// A described tree uses the identical `"min_width": "22em"` property. The SDK spelling is
+/// `VStack::new().min_width("22em")` with `heca_view::build::{Style, VStack}` imported.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Length {
     /// Sized by content / flex rules.
@@ -20,6 +29,9 @@ pub enum Length {
     Auto,
     /// Fixed logical pixels.
     Px(f32),
+    /// Multiples of the widget's resolved font size, including its size variant.
+    /// Resolved afresh during layout, so a font or zoom change also changes the size.
+    Em(f32),
     /// **A fraction of the parent, `0.0..=1.0` — NOT a 0–100 percentage.** Half the parent is
     /// `Percent(0.5)`; `Percent(50.0)` is fifty times it, and nothing warns you.
     ///
@@ -62,7 +74,7 @@ impl From<u32> for Length {
 impl std::str::FromStr for Length {
     type Err = LengthParseError;
 
-    /// **The one parser.** `"auto"`, `"50%"`, `"200px"`, `"200"` — the spellings CSS uses and the
+    /// **The one parser.** `"auto"`, `"50%"`, `"22em"`, `"200px"`, `"200"` — the spellings CSS uses and the
     /// ones a description already travels in. [`Deserialize`] calls this, so the wire and native
     /// code can never come to disagree about what `"50%"` means.
     fn from_str(t: &str) -> Result<Self, Self::Err> {
@@ -77,6 +89,11 @@ impl std::str::FromStr for Length {
                 .map(|v| Length::Percent(v / 100.0))
                 .map_err(|_| LengthParseError);
         }
+        if let Some(em) = t.strip_suffix("em") {
+            return em.trim().parse::<f32>()
+                .map(Length::Em)
+                .map_err(|_| LengthParseError);
+        }
         // `px` is optional and means the same as no suffix, which is what CSS authors expect and
         // what the described side already accepts as a bare number.
         let t = t.strip_suffix("px").map_or(t, str::trim_end);
@@ -86,14 +103,14 @@ impl std::str::FromStr for Length {
     }
 }
 
-/// What [`Length`]'s `from_str` returns when a string is none of the four spellings.
+/// What [`Length`]'s [`FromStr`](std::str::FromStr) parser returns for an unsupported spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LengthParseError;
 
 impl std::fmt::Display for LengthParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
-            "expected a number, \"auto\", a percentage like \"50%\", or a length like \"200px\"",
+            "expected a number, \"auto\", a percentage like \"50%\", or a length like \"200px\" or \"22em\"",
         )
     }
 }
@@ -101,7 +118,7 @@ impl std::fmt::Display for LengthParseError {
 impl std::error::Error for LengthParseError {}
 
 impl From<&str> for Length {
-    /// `.width("50%")` / `.width("200px")` / `.width("auto")`.
+    /// `.width("50%")` / `.width("200px")` / `.min_width("22em")` / `.width("auto")`.
     ///
     /// ⚠️ **An unrecognised string degrades to [`Auto`](Length::Auto)** rather than panicking —
     /// the same rule the grid's track vocabulary already follows, because these spellings arrive
@@ -124,6 +141,7 @@ impl Serialize for Length {
         match *self {
             Length::Auto => s.serialize_str("auto"),
             Length::Px(v) => s.serialize_f32(v),
+            Length::Em(v) => s.serialize_str(&format!("{v}em")),
             Length::Percent(v) => s.serialize_str(&format!("{}%", v * 100.0)),
         }
     }
@@ -140,8 +158,8 @@ impl<'de> Deserialize<'de> for Length {
         }
         match Repr::deserialize(d)? {
             Repr::Num(v) => Ok(Length::Px(v)),
-            // **One parser, not a second copy**, so the wire and native code cannot drift about
-            // what `"50%"` means.
+            // **One parser, not a second copy.** This used to spell the rules out again here, so
+            // the wire and native code could drift about what `"50%"` meant with nothing failing.
             Repr::Text(t) => t
                 .parse::<Length>()
                 .map_err(|e| D::Error::custom(e.to_string())),
@@ -159,22 +177,24 @@ impl Length {
     /// A quarter of the parent.
     pub const QUARTER: Length = Length::Percent(0.25);
 
-    pub(super) fn to_taffy(self) -> taffy::Dimension {
+    pub(super) fn to_taffy(self, font_px: f32) -> taffy::Dimension {
         use taffy::prelude::*;
         match self {
             Length::Auto => auto(),
             Length::Px(v) => length(v),
+            Length::Em(v) => length(v * font_px),
             Length::Percent(p) => percent(p),
         }
     }
 
     /// The same value as a taffy **inset** — the type an edge offset takes, which admits `Auto`
     /// (meaning "this edge is not pinned") where a size would not.
-    pub(super) fn to_taffy_inset(self) -> taffy::LengthPercentageAuto {
+    pub(super) fn to_taffy_inset(self, font_px: f32) -> taffy::LengthPercentageAuto {
         use taffy::prelude::*;
         match self {
             Length::Auto => taffy::LengthPercentageAuto::Auto,
             Length::Px(v) => length(v),
+            Length::Em(v) => length(v * font_px),
             Length::Percent(p) => percent(p),
         }
     }
@@ -205,7 +225,6 @@ pub struct Placement {
     /// [`width`](Placement::width).
     pub height: Length,
 }
-
 
 #[cfg(test)]
 mod length_spellings {
@@ -283,7 +302,7 @@ mod length_spellings {
     #[test]
     fn the_wire_and_a_call_site_read_a_size_through_the_same_parser() {
         use serde::de::IntoDeserializer;
-        for spelling in ["auto", "50%", "200px", "200", "0%"] {
+        for spelling in ["auto", "50%", "200px", "200", "0%", "22em", " 1.5 em "] {
             let d: serde::de::value::StrDeserializer<serde::de::value::Error> =
                 spelling.into_deserializer();
             let from_wire = Length::deserialize(d).expect("the wire reads every spelling");
@@ -302,5 +321,43 @@ mod length_spellings {
         let d: serde::de::value::F32Deserializer<serde::de::value::Error> =
             240.0f32.into_deserializer();
         assert_eq!(Length::deserialize(d).unwrap(), Length::from(240));
+    }
+    #[test]
+    fn em_lengths_are_resolved_for_every_length_bearing_layout_field() {
+        use crate::style::{Layout, Placement};
+        let authored = Layout {
+            width: Length::from("4em"),
+            height: Length::from("3em"),
+            min_width: Some(Length::from("2em")),
+            min_height: Some(Length::from("1em")),
+            max_width: Some(Length::from("8em")),
+            max_height: Some(Length::from("6em")),
+            flex_basis: Some(Length::from("5em")),
+            margin_left: Some(Length::from("0.5em")),
+            ..Layout::default()
+        };
+        for font in [12.0, 24.0] {
+            use taffy::prelude::length;
+            let s = authored.to_taffy(font);
+            assert_eq!(s.size.width, length(4.0 * font));
+            assert_eq!(s.size.height, length(3.0 * font));
+            assert_eq!(s.min_size.width, length(2.0 * font));
+            assert_eq!(s.min_size.height, length(font));
+            assert_eq!(s.max_size.width, length(8.0 * font));
+            assert_eq!(s.max_size.height, length(6.0 * font));
+            assert_eq!(s.flex_basis, length(5.0 * font));
+            assert_eq!(s.margin.left, length(0.5 * font));
+            let placed = Layout {
+                placement: Some(Placement {
+                    left: Length::from("1em"), top: Length::from("2em"),
+                    width: Length::from("7em"), height: Length::Auto,
+                }),
+                ..authored
+            }.to_taffy(font);
+            assert_eq!(placed.inset.left, length(font));
+            assert_eq!(placed.inset.top, length(2.0 * font));
+            assert_eq!(placed.size.width, length(7.0 * font));
+            assert_eq!(placed.size.height, length(3.0 * font));
+        }
     }
 }

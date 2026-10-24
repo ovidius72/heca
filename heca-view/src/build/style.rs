@@ -93,26 +93,26 @@ pub trait Style: Sized {
     fn margin_y(self, px: f32) -> Self {
         self.prop("margin_y", px)
     }
-    /// Left margin, in px.
-    fn margin_left(self, px: f32) -> Self {
-        self.prop("margin_left", px)
+    /// Left margin, in pixels or CSS spelling (`"1em"`, `"5%"`, `"auto"`).
+    fn margin_left(self, value: impl Into<PropValue>) -> Self {
+        self.prop("margin_left", value)
     }
-    /// Right margin, in px.
-    fn margin_right(self, px: f32) -> Self {
-        self.prop("margin_right", px)
+    /// Right margin, in pixels or CSS spelling (`"1em"`, `"5%"`, `"auto"`).
+    fn margin_right(self, value: impl Into<PropValue>) -> Self {
+        self.prop("margin_right", value)
     }
-    /// Top margin, in px.
-    fn margin_top(self, px: f32) -> Self {
-        self.prop("margin_top", px)
+    /// Top margin, in pixels or CSS spelling (`"1em"`, `"5%"`, `"auto"`).
+    fn margin_top(self, value: impl Into<PropValue>) -> Self {
+        self.prop("margin_top", value)
     }
-    /// Bottom margin, in px.
-    fn margin_bottom(self, px: f32) -> Self {
-        self.prop("margin_bottom", px)
+    /// Bottom margin, in pixels or CSS spelling (`"1em"`, `"5%"`, `"auto"`).
+    fn margin_bottom(self, value: impl Into<PropValue>) -> Self {
+        self.prop("margin_bottom", value)
     }
 
-    /// A fixed width in px.
-    fn width(self, px: f32) -> Self {
-        self.prop("width", px)
+    /// Width in pixels or CSS spelling, such as `"50%"`, `"22em"`, or `"auto"`.
+    fn width(self, value: impl Into<PropValue>) -> Self {
+        self.prop("width", value)
     }
     /// A width as a fraction of the parent — `0.5` is half.
     fn width_pct(self, fraction: f32) -> Self {
@@ -122,9 +122,9 @@ pub trait Style: Sized {
     fn width_auto(self) -> Self {
         self.prop("width", "auto")
     }
-    /// A fixed height in px.
-    fn height(self, px: f32) -> Self {
-        self.prop("height", px)
+    /// Height in pixels or CSS spelling, such as `"50%"`, `"2em"`, or `"auto"`.
+    fn height(self, value: impl Into<PropValue>) -> Self {
+        self.prop("height", value)
     }
     /// A height as a fraction of the parent.
     fn height_pct(self, fraction: f32) -> Self {
@@ -134,21 +134,21 @@ pub trait Style: Sized {
     fn height_auto(self) -> Self {
         self.prop("height", "auto")
     }
-    /// Smallest width, in px.
-    fn min_width(self, px: f32) -> Self {
-        self.prop("min_width", px)
+    /// Smallest width, in pixels or CSS spelling (for example `"22em"`).
+    fn min_width(self, value: impl Into<PropValue>) -> Self {
+        self.prop("min_width", value)
     }
-    /// Smallest height, in px.
-    fn min_height(self, px: f32) -> Self {
-        self.prop("min_height", px)
+    /// Smallest height, in pixels or CSS spelling (for example `"22em"`).
+    fn min_height(self, value: impl Into<PropValue>) -> Self {
+        self.prop("min_height", value)
     }
-    /// Largest width, in px.
-    fn max_width(self, px: f32) -> Self {
-        self.prop("max_width", px)
+    /// Largest width, in pixels or CSS spelling (for example `"22em"`).
+    fn max_width(self, value: impl Into<PropValue>) -> Self {
+        self.prop("max_width", value)
     }
-    /// Largest height, in px.
-    fn max_height(self, px: f32) -> Self {
-        self.prop("max_height", px)
+    /// Largest height, in pixels or CSS spelling (for example `"22em"`).
+    fn max_height(self, value: impl Into<PropValue>) -> Self {
+        self.prop("max_height", value)
     }
 
     /// Where children sit across the main axis.
