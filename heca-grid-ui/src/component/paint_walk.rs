@@ -56,7 +56,8 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
 /// [`paint_child`] once the parent's cut is in place: the hue the widget publishes, then the paint.
 fn paint_inherited(c: &dyn Component, cx: &mut PaintCx) {
     let visual = &c.base().style.visual;
-    let content = visual.content_tone.map(|tone| tone.resolve(cx.theme()));
+    let tone = c.base().content_tone.map_or(visual.content_tone, |tone| tone.get());
+    let content = tone.map(|tone| tone.resolve(cx.theme()));
     match (visual.accent, content) {
         (Some(hue), Some(text)) => cx.with_accent(hue, |cx| {
             cx.with_content_color(text, |cx| paint_subtree(c, cx))
@@ -74,6 +75,7 @@ fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
     let outline = cx.scene.outline_mark();
     paint_holding(c, cx);
     cx.scene.settle_outline(outline);
+    crate::flash::paint(c.base(), cx);
     crate::widgets::key_hint::paint_hint_label(c, cx);
     crate::widgets::tooltip::paint_tooltip(c, cx);
     paint_drag_feedback(c, cx);

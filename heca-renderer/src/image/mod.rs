@@ -9,6 +9,7 @@
 //! `z >= 0` images sit over them.
 
 use std::collections::HashMap;
+pub(crate) mod texture;
 
 use heca_core::backend::{GraphicsPlacement, TerminalImage};
 use wgpu::util::DeviceExt;
@@ -83,7 +84,7 @@ impl ImageRenderer {
     pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("image_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("image.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../image.wgsl").into()),
         });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -286,25 +287,8 @@ impl ImageRenderer {
         queue: &wgpu::Queue,
         image: &TerminalImage,
     ) -> (wgpu::Texture, wgpu::BindGroup) {
-        let size = wgpu::Extent3d {
-            width: image.width.max(1),
-            height: image.height.max(1),
-            depth_or_array_layers: 1,
-        };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("terminal_inline_image"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        // The first frame is always present (frames is non-empty by construction).
-        if let Some(frame) = image.frames.first() {
-            write_image_frame(queue, &texture, image, &frame.rgba);
-        }
+        let rgba = image.frames.first().map_or(&[][..], |frame| frame.rgba.as_ref());
+        let texture = texture::upload(device, queue, image.width, image.height, rgba);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terminal_inline_image_bind_group"),
@@ -440,25 +424,7 @@ fn write_image_frame(
     image: &TerminalImage,
     rgba: &[u8],
 ) {
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        rgba,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(image.width * 4),
-            rows_per_image: Some(image.height),
-        },
-        wgpu::Extent3d {
-            width: image.width.max(1),
-            height: image.height.max(1),
-            depth_or_array_layers: 1,
-        },
-    );
+    texture::write(queue, texture, image.width, image.height, rgba);
 }
 
 /// Map a placement's cell rect to a logical pixel rect `[x, y, w, h]`.

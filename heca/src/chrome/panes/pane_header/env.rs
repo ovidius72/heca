@@ -127,11 +127,9 @@ fn show_pane_header(
         content.chips,
         content.segments,
         content.facts,
-        input.avail_w,
-        font,
     )
     .into_iter()
-    .map(|(name, _, text)| (segment_text_key(&name), text))
+    .map(|item| (segment_text_key(&item.name), item.chip.text))
     .collect();
     header.texts(words);
     header.show(key, || {
@@ -141,7 +139,7 @@ fn show_pane_header(
             col_idx: input.col_idx,
             event_proxy: env.event_proxy.clone(),
         };
-        let root = build_pane_header(&content, &env.theme, env.band, font, input.avail_w, ctx)?;
+        let root = build_pane_header(&content, env.band, ctx)?;
         // The identity rule's warning half: each control carries a key naming which pane's
         // control it is, and this says so if that ever goes.
         crate::chrome::input::identity::report_ambiguous_widgets("pane-header", &root);

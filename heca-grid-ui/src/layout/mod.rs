@@ -19,7 +19,7 @@
 use crate::component::Component;
 use crate::style::WidgetSize;
 use heca_core::layout::{Point, Rectangle, Size};
-use measure::measure_text_node;
+use measure::measure_content;
 use std::collections::HashSet;
 use taffy::prelude::*;
 
@@ -53,12 +53,15 @@ pub struct TextMeasure {
     pub max_lines: Option<usize>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum Measure { Text(TextMeasure), Intrinsic { size: heca_core::layout::Size, ratio: f32 } }
+
 /// **What a tree remembers of its last layout**, kept on its root
 /// ([`Base::layout_cache`](crate::component::Base::layout_cache)): the taffy tree, which tree it is (so a
 /// component moved in from another one is not mistaken for a node here), and which nodes are live (so one
 /// that left the tree can be dropped).
 pub(crate) struct RetainedLayout {
-    tree: TaffyTree<TextMeasure>,
+    tree: TaffyTree<Measure>,
     id: u64,
     live: HashSet<taffy::NodeId>,
 }
@@ -87,7 +90,7 @@ impl RetainedLayout {
 pub struct LayoutEngine {
     /// The tree being laid out: the root's retained one, moved in for the length of a
     /// [`compute`](Self::compute) and back out after.
-    tree: TaffyTree<TextMeasure>,
+    tree: TaffyTree<Measure>,
     /// Which retained tree `tree` is.
     tree_id: u64,
     /// The nodes that were live before this pass.
@@ -100,6 +103,7 @@ pub struct LayoutEngine {
     /// Base font size widgets inherit unless they set their own `style.font_size`.
     base_font: f32,
     input_style: heca_theme::InputStyle,
+    dialog_style: heca_theme::DialogStyle,
 }
 
 impl LayoutEngine {
@@ -113,6 +117,7 @@ impl LayoutEngine {
             updated: 0,
             base_font: DEFAULT_BASE_FONT,
             input_style: heca_theme::InputStyle::default(),
+            dialog_style: heca_theme::DialogStyle::default(),
         }
     }
 
@@ -120,6 +125,7 @@ impl LayoutEngine {
     pub fn theme(mut self, theme: &crate::Theme) -> Self {
         self.base_font = theme.font_size;
         self.input_style = theme.colors.input;
+        self.dialog_style = theme.colors.dialog;
         self
     }
 
@@ -243,7 +249,7 @@ impl LayoutEngine {
             height: AvailableSpace::Definite(available.h as f32),
         };
         self.tree
-            .compute_layout_with_measure(node, space, measure_text_node)?;
+            .compute_layout_with_measure(node, space, measure_content)?;
         // Taffy lays the root out inside the space it is given, so the root has no
         // parent box to be offset within and its margin is dropped. Apply it here, or
         // `.margin_left(x)` on a root silently does nothing while working on every

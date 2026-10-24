@@ -308,7 +308,7 @@ fn host_draws(o: &Overlay) -> (Vec<HostCmd>, Vec<HostCmd>) {
     let host = |s: &Scene| -> Vec<HostCmd> {
         s.iter()
             .filter_map(|c| match c {
-                DrawCommand::Host(h) => Some(*h),
+                DrawCommand::Host(h) => Some(h.clone()),
                 _ => None,
             })
             .collect()

@@ -75,6 +75,34 @@ impl Dialog {
             .map(|c| c.base().bounds)
             .unwrap_or_else(|| Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0)))
     }
+
+    /// Compose the readable width cap with the room supplied by Overlay.
+    fn constrain_panel_width(&mut self) -> bool {
+        let overlay = self.base.children[0].base();
+        let available = (overlay.bounds.size.w as f32
+            - overlay.style.layout.pad_left(overlay.font)
+            - overlay.style.layout.pad_right(overlay.font)).max(0.0);
+        let requested = self.panel_max_width.unwrap_or(crate::Length::Em(
+            self.base.dialog_style.max_width_em,
+        ));
+        let resolve = |requested| match requested {
+            crate::Length::Em(em) => em * self.base.font,
+            crate::Length::Px(px) => px,
+            crate::Length::Percent(fraction) => available * fraction,
+            crate::Length::Auto => available,
+        };
+        let maximum = resolve(requested);
+        let maximum = if overlay.bounds.size.w > 0.0 { maximum.min(available) } else { maximum };
+        let floor = resolve(Self::BASELINE_WIDTH).min(maximum);
+        let panel = &mut self.base.children[0].base_mut().children[0].base_mut().style.layout;
+        let minimum = Some(if panel.width == crate::Length::Auto {
+            crate::Length::Px(floor)
+        } else { crate::Length::Auto });
+        let changed = panel.max_width != Some(crate::Length::Px(maximum)) || panel.min_width != minimum;
+        panel.max_width = Some(crate::Length::Px(maximum));
+        panel.min_width = minimum;
+        changed
+    }
 }
 
 impl Component for Dialog {
@@ -83,6 +111,16 @@ impl Component for Dialog {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
+    }
+
+    fn remeasure(&mut self) {
+        self.constrain_panel_width();
+    }
+
+    fn on_layout(&mut self) {
+        if self.constrain_panel_width() {
+            self.base.mark_needs_layout();
+        }
     }
 
     /// Focusable only while open, so the host's overlay scan routes input here.

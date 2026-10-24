@@ -205,20 +205,21 @@ impl GpuState {
         let glow_alpha_scale = heca_renderer::scene::glow_alpha_scale_for_background(
             self.theme.colors.background.to_f32x4(),
         );
-        enqueue_scene(
-            &mut self.grid,
-            &mut self.text,
-            &scene.base_layer(),
-            glow_alpha_scale,
-        );
-        self.grid.render(&self.queue, scene_view, &mut encoder);
-        self.text
-            .render(&self.queue, scene_view, &mut encoder, None);
-        for overlay in scene.overlay_segments() {
-            enqueue_scene(&mut self.grid, &mut self.text, &overlay, glow_alpha_scale);
-            self.grid.render(&self.queue, scene_view, &mut encoder);
-            self.text
-                .render(&self.queue, scene_view, &mut encoder, None);
+        self.ui_images.begin_frame();
+        for layer in std::iter::once(scene.base_layer()).chain(scene.overlay_segments()) {
+            for run in layer.base_runs() {
+                enqueue_scene(&mut self.grid, &mut self.text, &run.draws, glow_alpha_scale);
+                self.grid.render(&self.queue, scene_view, &mut encoder);
+                self.text.render(&self.queue, scene_view, &mut encoder, None);
+                if let Some(heca_grid_ui::HostWork::Image(at)) = run.then {
+                    self.ui_images.draw(heca_renderer::ui_image::ImageFrame {
+                        device: &self.device, queue: &self.queue, encoder: &mut encoder,
+                        target: scene_view, stencil: at.rounded.map(|_| self.compositor.stencil_view()),
+                        viewport: (self.config.width as f32, self.config.height as f32),
+                        scale: self.scale_factor as f32,
+                    }, &at);
+                }
+            }
         }
         // Blit the composited scene onto the swapchain.
         self.compositor.blit(&view, &mut encoder);

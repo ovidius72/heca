@@ -51,12 +51,16 @@ impl Default for SidebarAppearance {
     }
 }
 
-/// The lines the sidebar's pane row shows under the name until the user says otherwise: `cwd` (the
-/// working directory) and `git` (branch
-/// and change counts, only inside a repository).
+/// The pane-row line list from the embedded configuration, until the user supplies their own.
 ///
 /// A line is **named**, not typed: which names exist is answered in the app, where a program built
 /// on heca can add its own (`demo.status`).
 pub fn default_sidebar_pane_lines() -> Vec<String> {
-    vec!["cwd".to_string(), "git".to_string()]
+    static LINES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    LINES.get_or_init(|| {
+        let defaults: toml::Value = toml::from_str(crate::loader::CONFIG_DEFAULT)
+            .expect("embedded config.default.toml must be valid TOML");
+        defaults["appearance"]["sidebar"]["pane_lines"].clone().try_into()
+            .expect("embedded appearance.sidebar.pane_lines must be a list of names")
+    }).clone()
 }

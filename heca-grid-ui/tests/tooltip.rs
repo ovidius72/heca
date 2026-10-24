@@ -4,6 +4,26 @@ use heca_grid_ui::prelude::*;
 use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Scene, Size, Theme};
 
 #[test]
+fn the_hovered_fields_tooltip_wins_over_its_rows_general_help() {
+    let mut row = Flex::row().tooltip("General row help").tooltip_delay(0.0)
+        .child(Label::new("Short path").tooltip("/the/complete/folder/path").tooltip_delay(0.0))
+        .child(Label::new("Other field"));
+    LayoutEngine::new().compute(&mut row, Size::new(600.0, 100.0));
+    for (index, expected, absent) in [
+        (0, "/the/complete/folder/path", "General row help"),
+        (1, "General row help", "/the/complete/folder/path"),
+    ] {
+        let rect = row.base().children[index].base().bounds;
+        let point = Point::new(rect.loc.x + rect.size.w / 2.0, rect.loc.y + rect.size.h / 2.0);
+        heca_grid_ui::dispatch(&mut row, &Event::pointer_moved(point));
+        let scene = common::paint_via_child(&row, &Theme::default());
+        let shown = |word| scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == word));
+        assert!(shown(expected), "missing {expected}");
+        assert!(!shown(absent), "wrong tooltip covered the hovered field: {absent}");
+    }
+}
+
+#[test]
 fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     use heca_grid_ui::Tooltip;
 

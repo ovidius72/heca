@@ -5,7 +5,7 @@ use super::*;
 /// A theme-derived **spacing** token for container padding. Resolved to px from the
 /// inherited font at layout time (so it scales with the theme / font zoom) — callers
 /// pick a token instead of hand-computing px. Used via `LayoutExt::pad`/`pad_x`/`pad_y`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, heca_grid_ui_macros::PropName)]
 #[serde(rename_all = "snake_case")]
 pub enum Spacing {
     None,

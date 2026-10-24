@@ -11,10 +11,14 @@ mod defaults;
 mod effects;
 mod interaction;
 mod input;
+mod dialog;
+mod flash;
 
 pub use effects::{FrameStyle, GlowLevel, Intensity, Shadow};
 pub use interaction::InteractionAlphas;
 pub use input::InputStyle;
+pub use dialog::DialogStyle;
+pub use flash::FlashStyle;
 
 use defaults::*;
 
@@ -54,6 +58,12 @@ pub struct Theme {
     /// Text-field layout and caret settings, shared by every input widget.
     #[serde(default)]
     pub input: InputStyle,
+    /// Readable panel width for every dialog; a widget may override it explicitly.
+    #[serde(default)]
+    pub dialog: DialogStyle,
+    /// Shared visual feedback for state changes and plugin actions.
+    #[serde(default)]
+    pub flash: FlashStyle,
     pub name: String,
 
     // ── Core palette ──
@@ -183,10 +193,9 @@ pub struct Theme {
     pub hint_color: Option<Color>,
     #[serde(default = "default_icon_secondary_alpha")]
     pub icon_secondary_alpha: f32,
-    /// Opacity (`0.0..=1.0`) of the **active-region wash** — the faint accent
-    /// overlay a `DockFrame` paints over itself when marked active (e.g. the
-    /// active workspace in the sidebar). Theme/config-driven, not baked into the
-    /// widget, so the active highlight flips in place via the bound signal.
+    /// Opacity (`0.0..=1.0`) of a `DockFrame`'s active and previous workspace backgrounds.
+    /// Off by default so a whole container does not tint the text and cards inside it.
+    /// Setting a positive value enables the wash; it does not affect text, badges or navigation.
     #[serde(default = "default_active_wash_alpha")]
     pub active_wash_alpha: f32,
     /// Falloff radius (logical px, before the theme's `glow_size` scales it) of the halo around the

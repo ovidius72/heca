@@ -117,23 +117,6 @@ pub(crate) fn git_deleted(info: &heca_core::runtime::GitInfo) -> Option<String> 
     (info.deleted > 0).then(|| format!("-{}", info.deleted))
 }
 
-/// Left-truncate `text` to `max_chars`, keeping the **tail** with a leading
-/// ellipsis (`…/HypeSupport`) — paths read most usefully from the end.
-pub(crate) fn truncate_path_left(text: &str, max_chars: usize) -> String {
-    let len = text.chars().count();
-    if len <= max_chars {
-        return text.to_string();
-    }
-    match max_chars {
-        0 => String::new(),
-        1 => "…".to_string(),
-        n => {
-            let tail: String = text.chars().skip(len - (n - 1)).collect();
-            format!("…{tail}")
-        }
-    }
-}
-
 /// A path shown home-relative (`/Users/x/proj` → `~/proj`).
 pub(crate) fn home_relative_path(path: &std::path::Path) -> String {
     if let Some(home) = std::env::var_os("HOME") {

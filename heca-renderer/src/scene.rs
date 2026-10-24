@@ -94,7 +94,7 @@ fn intersect_clip(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
 /// a target, would give a function that turns a scene into draw work a second job (owning GPU pass
 /// lifetime) and force every caller to supply one, including the showcase, which has no GPU pass of
 /// its own.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HostRequest {
     pub draw: HostDraw,
     /// Logical pixels, as the widget placed it.
@@ -136,7 +136,7 @@ pub fn host_requests(scene: &Scene) -> Vec<HostRequest> {
                 clip_stack.pop();
             }
             DrawCommand::Host(h) => out.push(HostRequest {
-                draw: h.draw,
+                draw: h.draw.clone(),
                 rect: h.rect,
                 clip: clip_stack.last().copied(),
                 alpha: h.alpha,

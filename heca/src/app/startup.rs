@@ -292,6 +292,7 @@ pub(crate) async fn init_state(
 
     let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
     let image_renderer = heca_renderer::image::ImageRenderer::new(&device, surface_format);
+    let ui_images = heca_renderer::ui_image::UiImages::new(&device, surface_format);
     let mut text_renderer = TextRenderer::new(&device, surface_format);
     text_renderer.set_scale_factor(scale_factor);
     text_renderer.set_target_size(physical.width, physical.height);
@@ -456,6 +457,7 @@ pub(crate) async fn init_state(
         primitive_renderer,
         text_renderer,
         image_renderer,
+        ui_images,
         grid_renderer,
         compositor,
         terminal_layers: std::collections::HashMap::new(),

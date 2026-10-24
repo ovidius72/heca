@@ -1,6 +1,7 @@
 //! Assemble the catalog and its shared controls. Each demo lives beside this module.
 use super::*;
 mod connections_and_text;
+mod images;
 mod select;
 mod button;
 mod composed_buttons;
@@ -610,6 +611,7 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // The text demo uses the window width. Oversized catalog recipes have their own
     // horizontal viewport, so they cannot enlarge a wrapping editor or message list.
     let ui = ScrollRegion::new()
+        .child(images::build(theme).padding("lg"))
         .child(connections_and_text::build(theme).padding("lg"))
         .child(Flex::column().width("100%")
             .child(ScrollRegion::new().horizontal().align("start").width("100%").child(page)));

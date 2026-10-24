@@ -22,7 +22,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`TreeLayout`](#treelayout), [`MessageList`](#messagelist), [`Resizable`](#resizable), [`Line`](#line), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
-  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
+  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Image` / `Svg`](#image), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there), [Cursor](#cursor--what-the-pointer-looks-like-over-a-widget)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
@@ -588,6 +588,7 @@ return `Self` for chaining.
 | `.padding_xy(x, y)` | Both axes at once. Either kind, each. |
 | `.padding_left/right/top/bottom(f32)` | **One side**, overriding the axis and the uniform value (side → axis → uniform, the same cascade as the per-side margins). Use it to reserve space along a single edge without moving the opposite one — a [`ScrollRegion`](#scrollregion) keeping content clear of its scrollbar is the case that asked for it. Also settable from a description, for free: the declarative property surface *is* `Layout`'s own fields. |
 | `.width(..)` / `.height(..)` / `.min_*` / `.max_*` | **Any spelling a size is written in** — see the table below. **Set neither width nor height and the widget fills its parent across the cross axis**, exactly as CSS `align-items: stretch` does, so a panel with no width in a 600px column is 600px wide and `.width(Length::FULL)` on a child that already fills says nothing; leave it off. |
+| `.aspect_ratio(f32)` | Preferred **width / height**, shared by every widget. Used when a dimension is automatic; two explicit dimensions win. Invalid or non-positive values remove the preference. Images use their natural ratio when this is unset. |
 | `.flex(f32)` | **CSS `flex: <n>` — take `n` parts of the room the parent has to give**, whatever this widget holds. `1.0` beside `3.0` is a quarter and three quarters; `0.0` is as big as its content. Runs along the parent's direction (height in a column, width in a row). Does nothing in a [`Grid`](#grid), whose tracks size its cells. Said by the child, so a child added later brings its own part. **The one to reach for** when children should split a box — full reference: [`layout.md` → Shares](layout.md#shares). Declarative: the `flex` property. |
 | `.order(..)` | **CSS `order` — where this child is laid out among its siblings.** Lower first; ties, and siblings that say nothing (`0`), keep the order they were added. A number or a list: `.order(-1)`, `.order([0, 5])` to land between siblings at `0` and `1` you do not own. Visual only — paint, Tab and the picker keep the tree's order. In a `Grid`, a child placed with `.row`/`.column`/`.area` stays put. Full reference: [`layout.md` → Order](layout.md#order). Declarative: the `order` property. |
 | `.grow(f32)` | CSS `flex-grow` **alone** — a share of what is **left over** after every child took its content. Children holding different amounts never land in their ratio (2:1 comes out 606/294 in 900px), so for "n parts" use `.flex(n)`. Keep `grow` for a spacer that pushes its siblings apart. "A share of the widest sibling" is neither: it is a **percentage against one denominator**. |
@@ -801,6 +802,10 @@ Every text or glyph inside without a colour of its own (`Label`, `Icon`) follows
 own `.color(..)` keeps it, and a control that colours its own content (a `Button`, a selected
 `Choice`) keeps its own. Applied to the subtree by `paint_child`, beside the accent, so nothing
 opts in. `Dialog::danger(true)` is built on it.
+
+For changing state, `.content_tone_signal(signal)` follows a `Signal<Option<Tone>>`
+without rebuilding the subtree. `None` restores the surrounding colour. The current
+theme resolves the tone on each paint, including after a theme reload.
 
 <a id="what-every-widget-gets"></a>
 **What every widget gets** — one builder trait per subject, each implemented for every
@@ -1579,6 +1584,91 @@ nothing else.
 
 A reusable press effect: `Flash::new()` / `Flash::with_duration(s)`; `.trigger()` on press,
 `.tick(dt)` each frame (`true` while fading), `.amount()` (0–1) to paint via `cx.flash`.
+
+### `FlashHandle`
+
+**A pulsing light on any widget.** Use this for a status change, a completed
+operation or a plugin event. It reuses `Flash` through the shared framework paint
+walk. The component needs no timer, custom painting, `tick` forwarding, key or id.
+
+```rust
+use heca_grid_ui::prelude::*;
+
+let flash = FlashHandle::new();
+let row = Row::new()
+    .flash(flash)
+    .child(Label::new("Background operation"));
+
+// From the operation's event handler:
+flash.trigger(Tone::Success);
+```
+
+`FlashExt` is implemented for every `Component` and exported in the prelude.
+The same `.flash(handle)` works on a `Surface`, `Card`, `Row` or a custom plugin
+widget. A new handle is idle. Copying a handle shares the request, so several
+widgets can flash together. `trigger(tone)` starts a finite burst using the theme's
+pulse count. `repeat(tone)` keeps pulsing until `clear()`, for an operation awaiting
+acknowledgement. Another explicit trigger restarts it. `clear()` ends it on every
+target sharing that handle. For example, a plugin can call `flash.repeat(Tone::Warning)`
+when it needs attention, then `flash.clear()` from its existing focus or action handler.
+
+The theme resolves `Tone::{Accent, Muted, Success, Warning, Danger}` at paint time.
+Each pulse lights the border and adds a subtle glow and tint inside the widget's
+bounds, then fades to a dark pause. Text, content colours and selection remain intact.
+Normal clipping and frame scheduling apply. Each `PaintCx::new` automatically
+re-arms the shared frame requester, so hosts need no animation-specific work.
+It stops requesting frames when cleared, when a finite burst ends, or when disabled.
+Hidden widgets do not keep an animation loop running.
+
+In a **theme file**, the shared settings are:
+
+```toml
+[flash]
+enabled = true
+duration_s = 0.65
+pause_s = 0.45
+pulses = 3
+frames_per_second = 30
+border_width_em = 0.12
+border_alpha = 235
+fill_alpha = 18
+glow_radius_em = 0.65
+glow_strength = 0.45
+```
+
+`border_width_em` follows the target's resolved font size. `border_alpha` is the
+peak border opacity, from 0 to 255; `fill_alpha` controls the subtle tint. Glow size
+also follows the font. `duration_s` is the lit fade, `pause_s` the dark interval,
+and `pulses` the finite burst count (at least one). `frames_per_second` limits the
+lit fade's redraw frequency; dark pauses sleep until the next pulse through the
+existing widget deadline scheduler. Set `enabled = false` to disable
+these flashes. Invalid duration, pause or width settings produce no animation.
+
+An event, plugin command or existing action handler can trigger the same handle:
+
+```rust
+let flash = FlashHandle::new();
+let panel = Surface::new()
+    .flash(flash)
+    .on_action("demo.completed", move || flash.trigger(Tone::Success));
+```
+
+Expose the action through Heca's existing action path when it should be callable
+from RPC. The handle needs no registry lookup. Audio stays with the host's
+configured sound service; triggering a visual flash never enables audio.
+
+The workspace dock uses this API only on pane rows for real program and agent state
+transitions. A background row repeats until its pane receives focus. A state change
+in the focused pane plays a finite burst. Hovering is not acknowledgement.
+Feedback belongs to the pane, so rebuilding rows or adding a column does not move
+the light to a new pane. One observer follows the pane's actual focus, shared by
+all its rows; old row focus signals cannot restart or clear it. Initial program/working reports initialize silently;
+an explicit attention or outcome report can still draw attention immediately.
+While an agent reports its work state, later process-name or process-status
+discovery does not count as a work-state change. Programs without agent reporting
+use their actual process-status transitions; discovering a name alone stays quiet.
+Initial rendering, duplicate reports, title/model/task edits and changes to
+presentation settings do not restart the row's flash.
 
 ### `Attention`
 
@@ -3836,17 +3926,20 @@ ViewNode::new(WidgetKind::Item)
 
 ### Row
 
-`Item`'s open cousin: the same interactive chrome (hover tint, active/selected pill +
+`Item`'s open cousin: interactive chrome (hover tint, active/selected outline +
 `ActiveMarker`, press flash, focus ring, `on_activate` on click / Enter / Space) wrapped around
 **any** children — e.g. a multi-line [`Grid`](#grid) of `Label`/`Icon`/`Badge`. Use it for rich,
-clickable, selectable Dock rows. The active/hover highlight derives from the row's own
-background (a stronger same-hue tint) so a state-tinted row never gets a clashing accent overlay.
+clickable, selectable Dock rows. Hover follows the row's own background. Selection uses the theme's
+selected hue as a light wash and an accent outline; text keeps the theme foreground for
+readability. The fill and border use `interaction.row_active_fill` and `row_active_border`.
 
 - **Construct**: `Row::new()`. Add content with `.child(...)`.
 - **Builders**: `.on_activate(impl Fn())` (also makes it focusable), `.active(bool)`,
   `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
-  distinctly from the filled `active` pill; a row can show one, the other, or both),
+  more strongly than the quiet `active` outline; a row can show one, the other, or both),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
+  `.previous(bool)` (last-focused row, using the theme's `previous_background` at its configured
+  opacity; the current row's `active` style wins), `.previous_tint(Color)` (override that color),
   `.attention(Signal<bool>)` + `.attention_color(Color)`,
   `.reveal_when(Signal<bool>)` (gate this row's request to be scrolled into view — see
   [Following the cursor](#following-the-cursor); only needed when the cursor also follows the
@@ -4377,6 +4470,9 @@ A single **duotone** glyph from the embedded Phosphor Duotone font. Renders two 
 — a dimmed *secondary* wash + a full-strength *primary* — in the same hue. Colors are
 theme-driven, never baked in. Square, font-sized.
 
+Both layers retain the font's shared origin and advance when centered, so asymmetric
+details stay aligned at every size. Ordinary labels still align by their visible ink.
+
 **Color is inherited when unset** (like [`Label`](#label)): with no explicit `.color(..)` the primary
 layer takes the [content color](#scene--drawcommand--paintcx-for-building-widgets) published by an
 enclosing control, falling back to `theme.foreground`; the secondary layer follows the primary at
@@ -4421,13 +4517,129 @@ ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("git_branch".into(
 
   > `Folder`, `FolderOpen`, `File`, `FileCode`, `GitBranch`, `GitCommit`, `GitMerge`,
   > `GitPullRequest`, `Terminal` (`terminal-window`), `Gear` (`gear-six`),
-  > `Search` (`magnifying-glass`), `Close` (`x`), `Check`, `CaretRight`, `CaretLeft`, `CaretDown`, `Play`,
+  > `Search` (`magnifying-glass`), `Close` (`x`), `Check`, `CheckCircle`, `ChatCircleDots`, `Lock`, `CaretRight`, `CaretLeft`, `CaretDown`, `Play`,
   > `Pause`, `Stop`, `Warning`, `WarningCircle`, `Info`, `Circle`, `Lightning`, `List`,
   > `Sidebar` (`sidebar-simple`), `DotsThreeVertical`, `ArrowRight`, `ArrowLineLeft`,
   > `ArrowLineRight`, `Plus`, `Minus`, `SquareSplitVertical`, `XSquare`, `FrameCorners`, `Cards`,
   > `Pencil`, `NotePencil`, `Backspace`, `Trash`, `XCircle`, `PlusCircle`, `FolderSimpleMinus`,
   > `FolderSimplePlus`, `PlusSquare`, `StackPlus`, `StackMinus`, `ColumnsPlusLeft`,
   > `ColumnsPlusRight`, `SquareHalf`, `SquareSplitHorizontal`, `SquareHalfBottom`
+
+### Image
+
+A local image widget, shared by native UI, described trees and plugin-authored UI. SVG, PNG and
+JPEG use **one source/decoding/cache/rendering path**. GIF, WebP and BMP are also decoded by the
+existing codec library; animated files show their first frame. This widget does not fetch URLs.
+
+```rust,ignore
+use heca_grid_ui::{Image, ImageFit, Svg};
+use heca_grid_ui::builders::LayoutExt;
+
+Image::load("assets/preview.png")
+    .width("100%")
+    .aspect_ratio(16.0 / 9.0)
+    .fit(ImageFit::Contain);
+
+Svg::new(include_str!("../assets/logo.svg"));
+Image::from_bytes(include_bytes!("../assets/logo.png").as_slice());
+```
+
+`Svg` is an **alias of Image**, not a second widget, decoder or cache. `Svg::new(svg_text)` and
+`Image::new(svg_text)` take SVG **contents**. `Image::load(filename)` takes a local **path**. The file
+format is detected from its contents, so callers do not branch on filename extensions.
+
+#### Sources and paths
+
+- A relative filename starts at the widget's creation directory. It is not resolved later on the
+  decoder thread, and it is not relative to the Rust source file.
+- `.asset_root(directory)` supplies an explicit base for relative filenames. A plugin host can
+  supply the installed package's asset directory through this same API; a native caller can supply
+  a project asset directory. Absolute filenames remain absolute. **This is path resolution, not a
+  plugin sandbox or a plugin discovery mechanism.**
+- `include_str!` / `include_bytes!` embed an asset when Rust compiles the caller. Their paths are
+  relative to that caller's `.rs` file, and the asset file need not be present at runtime.
+- SVGs are self-contained: external image/file references are not resolved. SVG text/font loading
+  and embedded bitmap images inside SVG are not enabled; use SVG paths for portable artwork.
+
+#### Layout and fitting
+
+`width`, `height`, `min_width`, `max_width`, `min_height`, `max_height`, `aspect_ratio`, grid placement,
+flex shares and all other common builders are the **ordinary LayoutExt properties**. Image-specific
+sizing arithmetic does not belong in callers. The decoded dimensions provide intrinsic size without
+replacing the caller's authored layout properties.
+
+| Setting | Result |
+|---|---|
+| no dimensions | natural image dimensions, subject to the surrounding layout |
+| one automatic dimension | follows the explicit aspect ratio, or the image's natural ratio |
+| two explicit dimensions | define the box; the ratio does not replace them |
+| min/max constraints | constrain the box through the shared layout engine |
+
+The **box** and the **picture inside it** have separate jobs:
+
+| `.fit(..)` | Picture |
+|---|---|
+| `ImageFit::Contain` (default) | preserve proportions, show the whole image, centre unused space |
+| `ImageFit::Cover` | preserve proportions, fill the box and crop overflow |
+| `ImageFit::Stretch` | fill both dimensions, allowing distortion |
+
+The picture follows scene clips, rounded clipping, scaling and opacity. SVGs are rasterised for the
+actual physical pixel size instead of scaling a small baked bitmap. `.color(Color)` sets SVG CSS
+`currentColor`; unset inherits the enclosing control's content colour, then the theme foreground.
+Explicit SVG brand colours and bitmap pixels are preserved.
+
+#### Loading, errors and live sources
+
+File reading, bitmap decoding and SVG rasterisation run on the shared background image queue.
+Completion wakes the window through the **existing frame requester**; there is no timer or continuous
+redraw. Hosts install the normal `install_frame_request` callback, which is now `Send + Sync` so
+background jobs can use a captured `FrameWake`. Multiple windows keep their own requester.
+
+`state_signal()` exposes `ImageState::Loading`, `Ready { width, height }` or `Failed(message)` on the
+UI thread. Missing files, unsupported/corrupt data and decoding errors fail the image request, not the
+application. The source signal accepts a new `image::ImageSource` in place and the widget handles the
+new request and relayout. Live consumers of an unchanged source share decoded data. Cached requests
+are released when their consumers disappear; files are snapshots, not live filesystem watches.
+
+```rust,ignore
+Image::load("assets/preview.jpg")
+    .width("100%")
+    .aspect_ratio(16.0 / 9.0)
+    .placeholder(Spinner::new())
+    .fallback(Label::new("Preview unavailable"));
+```
+
+Loading and error views are **real composed children**. They participate in the normal layout,
+painting and event system; neither the host nor the caller forwards input to them. No view is
+required. `.alt(text)` supplies an accessible image description; set it for meaningful pictures.
+
+#### Described and typed plugin form
+
+`WidgetKind::Image` has `source` (filename) or `svg` (inline contents), `asset_root`, `fit` (`contain`,
+`cover`, `stretch`), `color` and `alt`. Use one source form. Common layout properties, including
+`aspect_ratio`, use the shared style merge. Optional children with `slot = "loading"` and
+`slot = "error"` are the described equivalents of placeholder/fallback.
+
+```rust,ignore
+use heca_view::{build, ViewImageFit};
+use heca_view::build::Style;
+
+build::Image::load("icons/logo.svg")
+    .asset_root(package_asset_directory)
+    .width_pct(1.0)
+    .aspect_ratio(1.0)
+    .fit(ViewImageFit::Contain)
+    .alt("My Harness")
+    .placeholder(build::Label::new("Loading"))
+    .fallback(build::Label::new("Unavailable"));
+```
+
+These are descriptions read by `heca-view-realize`, which builds the **same Image widget**. They do
+not depend on private renderer types, surface IDs or a harness-name catalog. Plugin package loading
+is separate work; these properties do not imply that the WASM loader already exists.
+
+**Showcase:** the image section compares inline SVG, file PNG/JPEG, the three fitting modes and a
+typed described image. Source: `heca-renderer/examples/showcase/page/images.rs`.
 
 ### NfIcon
 
@@ -4552,6 +4764,13 @@ description carries.
 
 ### Tag
 
+Every text segment reveals its full value in a tooltip, including after live updates.
+`Tag::from_label(Label::new(path).truncate(Ellipsis::Start))` configures the first
+label; `.segment_label(label, leading)` adds another. Labels and leading content
+accept `.content_tone(Tone)` to follow the current theme.
+`.segment_shrink(false)` keeps the most recently added segment at its natural
+width while neighbouring paths or descriptions shorten.
+
 A bordered metadata chip — git branch / path / filter, hue-configurable and domain-neutral.
 **Multi-segment**: chain `.segment_*` to render thin-divided sections (e.g. `path │ ⎇ main │ 5
 +152 -12`). Theme-driven radius + border; generous per-axis padding. In a `Grid` cell, wrap in
@@ -4673,6 +4892,12 @@ moved to in `args["expanded"]`, so one binding tells you which way it went.
 
 ### MarkerGroup
 
+`.marker(false)` hides the marker and removes its grip gutter and hit area. Child
+rows retain their normal selection, focus and pointer behaviour.
+The default grip gutter is `Spacing::Sm`, resolved from the group's inherited
+font. `.gutter(Spacing::Xs)` or another spacing token changes it through the same
+builder/property API. Hit testing and child layout use that same resolved gap.
+
 A vertical group of rows fronted by a left **marker bar** that brightens to the theme accent (+
 glow) when the group is `active`. Domain-neutral: a host composes rows in and flips `active` to
 show the group holds the current selection (e.g. a sidebar *column* whose bar lights when it holds
@@ -4721,7 +4946,9 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Badge`), `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
-  `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace),
+  `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace;
+  off by default. The same opacity controls the previous-workspace background and never dims
+  content, badges or navigation outlines),
   `.nav_selected(bool)` (a hollow accent **border** marking the sidebar-nav cursor on a
   workspace frame — distinct from the filled active wash).
 - **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
@@ -5410,6 +5637,10 @@ let cursor = cursor_at(&window_root, point);      // what the pointer is over, r
   is draggable, resizable or a link.
 
 ### Tooltip
+
+The deepest hovered widget with a non-empty tooltip takes priority over its
+ancestors. A field's full value therefore wins over general help on its row;
+moving to another part of the row restores that row's tooltip.
 
 **A tooltip is a property of a widget, not a box around it.** Every widget takes one, on the same
 terms, with one builder:
@@ -6450,6 +6681,8 @@ toasts.update(|v| v.push(
 > app: run a timer, then remove the id from `items`.
 
 ---
+
+Dialog panels use the theme’s `[dialog] max_width_em` cap (40 font units) and remain bounded by narrow windows. `.panel_max_width(Length::Px(...))` overrides that cap. The composed Overlay preserves explicit panel maximum dimensions.
 
 ## Declarative UI model (`ViewNode`)
 

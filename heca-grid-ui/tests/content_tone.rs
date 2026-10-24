@@ -51,6 +51,29 @@ fn a_label_with_its_own_colour_keeps_it() {
     assert_eq!(colour_of(&runs, "own"), own);
 }
 
+#[test]
+fn a_live_tone_restores_inheritance_and_follows_theme_changes() {
+    use heca_grid_ui::reactive::{signal, SignalUpdate};
+    let tone = signal(Some(Tone::Success));
+    let mut row = Flex::row().content_tone_signal(tone)
+        .child(Label::new("state"))
+        .child(Label::new("own").color(Theme::default().colors.foreground));
+    LayoutEngine::new().compute(&mut row, Size::new(600.0, 100.0));
+    for next in [Some(Tone::Success), Some(Tone::Danger), None] {
+        tone.set(next);
+        assert!(row.base_mut().tick_presence(0.0), "a changed tone requests repaint");
+        assert!(!row.base_mut().tick_presence(0.0), "an unchanged tone stays idle");
+        for theme in [Theme::default(), Theme { colors: heca_theme::load_theme("latte"), ..Default::default() }] {
+            let scene = common::paint_via_child(&row, &theme);
+            let runs: Vec<_> = scene.iter().filter_map(|cmd| match cmd {
+                DrawCommand::Text(text) => Some((text.text.clone(), text.color)), _ => None,
+            }).collect();
+            assert_eq!(colour_of(&runs, "state"), next.map_or(theme.colors.foreground, |tone| tone.resolve(&theme)));
+            assert_eq!(colour_of(&runs, "own"), Theme::default().colors.foreground);
+        }
+    }
+}
+
 /// Show the dialog the way a host does, through its handle, and let it settle.
 fn open(mut d: Dialog) -> Dialog {
     d.handle().show();

@@ -303,6 +303,14 @@ pub(super) fn config_file_paths() -> [Option<PathBuf>; 2] {
     ]
 }
 
+/// The user file this loader reads, or its first normal location when no file exists yet.
+/// Settings writers use this same search order instead of inventing another config location.
+pub fn user_config_path() -> Option<PathBuf> {
+    let paths = config_file_paths();
+    paths.iter().flatten().find(|path| path.exists()).cloned()
+        .or_else(|| paths.into_iter().flatten().next())
+}
+
 /// Candidate paths for the user's `keybindings.toml`, in priority order.
 pub(super) fn keybindings_file_paths() -> [Option<PathBuf>; 2] {
     [

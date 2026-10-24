@@ -2,6 +2,10 @@ if [[ -r "${OLD_ZDOTDIR:-$HOME}/.zshrc" ]]; then
   source "${OLD_ZDOTDIR:-$HOME}/.zshrc"
 fi
 
+if [[ -n "${HECA_AGENT_BIN:-}" ]]; then
+  export PATH="$HECA_AGENT_BIN:$PATH"
+fi
+
 heca__osc() {
   print -rn -- $'\e]'"$1"$'\a'
 }

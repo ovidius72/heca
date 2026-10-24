@@ -60,9 +60,11 @@ impl TextRenderer {
             let mut max_x = i32::MIN;
             let mut line_top = 0.0f32;
             let mut line_height = 0.0f32;
+            let mut advance_w = 0.0f32;
             // (glyph left, glyph top in physical px, atlas entry).
             let mut placed: Vec<(i32, i32, crate::atlas::AtlasGlyph, CacheKey)> = Vec::new();
             for run in buffer.layout_runs() {
+                advance_w = advance_w.max(run.line_w);
                 line_top = run.line_top;
                 line_height = run.line_height;
                 for glyph in run.glyphs {
@@ -88,17 +90,20 @@ impl TextRenderer {
                 // Empty/whitespace — cache an empty layout so we don't re-shape it.
                 LabelLayout {
                     glyphs: Vec::new(),
-                    content_w: 0,
+                    content_w: 0.0,
                     line_top,
                     line_height,
                     min_y: 0,
                     last_used: self.frame,
                 }
             } else {
+                // Duotone layers share a font origin and advance. Centering their ink
+                // separately moves asymmetric layers out of alignment.
+                let origin_x = if cmd.icon { 0 } else { min_x };
                 let glyphs = placed
                     .into_iter()
                     .map(|(l, t, ag, cache_key)| PlacedGlyph {
-                        rel_x: (l - min_x) as f32,
+                        rel_x: (l - origin_x) as f32,
                         rel_y: (t - min_y) as f32,
                         w: ag.width as f32,
                         h: ag.height as f32,
@@ -108,7 +113,7 @@ impl TextRenderer {
                     .collect();
                 LabelLayout {
                     glyphs,
-                    content_w: (max_x - min_x) as u32,
+                    content_w: if cmd.icon { advance_w } else { (max_x - min_x) as f32 },
                     line_top,
                     line_height,
                     min_y,
@@ -128,10 +133,9 @@ impl TextRenderer {
             };
         }
 
-        // Centering: place the label ink box's top-left — horizontally per `align` on
-        // the ink width, vertically on the stable line box — then offset each glyph by
-        // its (cached) position within the ink box.
-        let screen_w = layout.content_w as f32 / scale;
+        // Text aligns its ink; icons align their shared advance box and keep side bearings.
+        // Both use the stable line box vertically.
+        let screen_w = layout.content_w / scale;
         let (screen_x, screen_y) = if cmd.centered || cmd.line_box {
             let x = cmd.x
                 + match cmd.align {
@@ -235,6 +239,56 @@ impl TextRenderer {
             verts,
             bbox: ink.bbox(halo_reach),
             last_used: self.frame,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use heca_grid_ui::widgets::Glyph;
+
+    #[test]
+    fn duotone_layers_keep_their_shared_font_origin() {
+        let instance = wgpu::Instance::default();
+        let adapter = pollster::block_on(instance.request_adapter(&Default::default()))
+            .expect("a GPU adapter for the rendering regression");
+        let (device, queue) = pollster::block_on(adapter.request_device(&Default::default()))
+            .expect("a rendering device");
+        let mut renderer = TextRenderer::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb);
+        for size in [16.0, 20.0, 24.0] {
+            for scale in [1.0, 2.0] {
+                for icon in [Glyph::Folder, Glyph::GitBranch, Glyph::Warning] {
+                    let primary = icon.primary_char().unwrap() as u32;
+                    for cp in [primary - 1, primary] {
+                        let text = char::from_u32(cp).unwrap().to_string();
+                        let face = shape::Face {
+                            family: &renderer.icon_family,
+                            bold: false,
+                            italic: false,
+                            ligatures: true,
+                        };
+                        let buffer = shape::shape(&mut renderer.font_system, &text, size * scale, &face);
+                        let run = buffer.layout_runs().next().unwrap();
+                        let physical = run.glyphs[0].physical((0.0, run.line_y), 1.0);
+                        let image = renderer.swash_cache
+                            .get_image(&mut renderer.font_system, physical.cache_key)
+                            .as_ref().expect("the icon layer rasterizes");
+                        let expected_x = (size - run.line_w / scale) * 0.5
+                            + (physical.x + image.placement.left) as f32 / scale;
+                        renderer.queue_text_in_box(
+                            &text, 0.0, 0.0, size, size, size, [1.0; 4],
+                            false, false, TextAlign::Center, true, None, None,
+                        );
+                        let cmd = renderer.commands.pop().unwrap();
+                        let emitted = renderer.build_emission(&queue, &cmd, size * scale, scale);
+                        assert!(
+                            (emitted.verts[0].position[0] - expected_x).abs() < 0.001,
+                            "{icon:?} U+{cp:04X} at {size}px / {scale}x lost its font origin",
+                        );
+                    }
+                }
+            }
         }
     }
 }

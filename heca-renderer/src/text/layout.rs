@@ -42,8 +42,8 @@ pub(super) struct PlacedGlyph {
 /// the text and rasterizes any not-yet-seen glyphs into the atlas.
 pub(super) struct LabelLayout {
     pub(super) glyphs: Vec<PlacedGlyph>,
-    /// Ink width in physical px (`0` = empty/whitespace), for horizontal alignment.
-    pub(super) content_w: u32,
+    /// Horizontal alignment width in physical px: ink for text, font advance for icons.
+    pub(super) content_w: f32,
     /// Stable line-box metrics (physical px) for baseline-anchored centering.
     pub(super) line_top: f32,
     pub(super) line_height: f32,

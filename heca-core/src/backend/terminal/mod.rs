@@ -38,6 +38,9 @@ use std::time::Instant;
 /// A backend that runs a real shell inside a PTY and models its state via
 /// `wezterm-term`.
 pub struct TerminalBackend {
+    agent_session: Option<crate::agent::AgentSession>,
+    agent_wake: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+    last_agent_notification: Option<crate::agent::TerminalNotification>,
     engine: TerminalEngine,
     pty: PtyHandle,
     cols: usize,

@@ -43,6 +43,7 @@ mod shell;
 mod workspaces;
 
 pub use pane_runtime::PaneRuntimeStore;
+pub(crate) use pane_runtime::PaneRuntimeSignals;
 pub use shell::SharedChromeState;
 pub use workspaces::WorkspacesContainerState;
 

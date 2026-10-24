@@ -124,13 +124,13 @@ fn a_widget_that_draws_its_own_children_is_still_cut() {
                     draw: HostDraw::Surface { id: 9 },
                     ..
                 },
-            ) => Some(*h),
+            ) => Some(h.clone()),
             _ => None,
         })
         .expect("the child drew its surface");
     let clip = clip.expect("the child is drawn inside a clip of the widget's box");
     assert!(
-        at(&clip) < at(&DrawCommand::Host(surface)),
+        at(&clip) < at(&DrawCommand::Host(surface.clone())),
         "the clip is open when the child draws"
     );
     assert_eq!(

@@ -216,6 +216,14 @@ impl DockFrame {
 }
 
 impl MarkerGroup {
+    /// Whether to show the group's marker.
+    pub fn marker(self, visible: bool) -> Self {
+        self.prop("marker", visible)
+    }
+    /// Reserve a theme spacing step for the marker and grip.
+    pub fn gutter(self, spacing: crate::ViewSpacing) -> Self {
+        self.prop("gutter", spacing)
+    }
     /// Show as the current one.
     pub fn active(self, on: bool) -> Self {
         self.prop("active", on)

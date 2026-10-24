@@ -65,6 +65,7 @@ impl Base {
     pub fn new() -> Self {
         Self {
             style: Style::default(),
+            flash: None,
             grid_area: None,
             node: None,
             layout_tree: Cell::new(0),
@@ -95,6 +96,7 @@ impl Base {
             font: 15.0,
             root_font: 15.0,
             input_style: heca_theme::InputStyle::default(),
+            dialog_style: heca_theme::DialogStyle::default(),
             viewport: Size::new(f64::MAX, f64::MAX),
             layout_only: false,
             pointer: crate::pointer::PointerState::new(),
@@ -114,6 +116,7 @@ impl Base {
             hint_scopes: Vec::new(),
             picker_scope: None,
             tooltip: None,
+            content_tone: None,
             hintable: true,
             activatable: false,
             transparent: false,
@@ -141,8 +144,13 @@ impl Base {
     /// a caret move, an imperative state edit. (Reactive state changes route here
     /// too, at their mutation site.)
     pub fn mark_needs_paint(&self) {
-        self.needs_paint.set(true);
+        self.dirty_next_paint();
         request_frame();
+    }
+
+    /// Retain damage for a frame already scheduled through `next_redraw`.
+    pub(crate) fn dirty_next_paint(&self) {
+        self.needs_paint.set(true);
     }
 
     /// Whether this widget needs repainting.
@@ -289,6 +297,13 @@ impl Base {
         // A widget that follows a host signal for focus catches up here, once a frame, for every
         // widget — see [`Base::follow_focus`].
         self.sync_focus_follow();
+        let tone_changed = self.content_tone.is_some_and(|tone| {
+            let next = tone.get_untracked();
+            if self.style.visual.content_tone == next { return false; }
+            self.style.visual.content_tone = next;
+            self.mark_needs_paint();
+            true
+        });
         let animating = self.presence.tick(dt);
         // **Exactly the frame an exit ends.** Asked of the presence rather than inferred from
         // "not open and not leaving", which is also true of a widget that was never up — and which
@@ -296,7 +311,7 @@ impl Base {
         if self.presence.take_finished_exit() {
             crate::reactive::SignalUpdate::set(&self.visible, false);
         }
-        animating
+        animating || tone_changed
     }
 
     pub fn highlight_rect(&self, inset: f64) -> Rectangle {

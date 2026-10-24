@@ -42,6 +42,7 @@ impl PaneLine {
 pub(crate) struct LineCx<'a> {
     pub(crate) theme: &'a GuiTheme,
     pub(crate) facts: Rc<dyn Fn() -> PaneFacts>,
+    pub(crate) agent_statuses: heca_grid_ui::reactive::Signal<Rc<heca_config::settings::AgentStatuses>>,
 }
 
 /// How a line is built for one pane.

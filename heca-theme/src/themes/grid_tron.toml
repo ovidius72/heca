@@ -14,7 +14,7 @@ selected_background = "#185677"
 
 # A selected row, the row back-and-forth returns to, and the two workspace frames —
 # four strengths of one idea, as colours rather than alphas so they can simply be seen.
-previous_background = "#164965"
+previous_background = "#16496580"
 workspace_active_background = "#102735"
 workspace_previous_background = "#0e1f2a"
 danger = "#ff4654"
@@ -36,7 +36,7 @@ show_focus_border = true
 # hint_color = "#ffb86c"  # the `prefix+/` picker's letters; unset = accent. ONE colour for every
 #                         # letter in the app — size is `[appearance] hint_font_size`
 icon_secondary_alpha = 0.30
-active_wash_alpha = 0.11
+active_wash_alpha = 0.0
 card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }
 float_background = "#0c1820"

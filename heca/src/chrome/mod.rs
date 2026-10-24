@@ -56,6 +56,7 @@ pub use state::events::{
     ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection,
 };
 pub use state::{PaneRuntimeStore, SharedChromeState, WorkspacesContainerState};
+pub(crate) use state::PaneRuntimeSignals;
 
 // ── surfaces ──
 pub use surfaces::context_menu::MenuBuild;

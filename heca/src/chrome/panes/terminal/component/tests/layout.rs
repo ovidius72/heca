@@ -115,7 +115,7 @@ fn a_terminal_paints_one_surface_at_its_own_box() {
     let surfaces: Vec<_> = scene
         .iter()
         .filter_map(|c| match c {
-            DrawCommand::Host(h) => Some(*h),
+            DrawCommand::Host(h) => Some(h.clone()),
             _ => None,
         })
         .collect();

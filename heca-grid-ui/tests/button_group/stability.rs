@@ -73,12 +73,10 @@ fn the_group_adds_nothing_to_the_tree_after_the_first_layout() {
 /// frame: the app never went idle and sat at a full core with nothing happening.
 #[test]
 fn constructing_a_group_does_not_request_a_frame() {
-    use std::cell::Cell;
-    use std::rc::Rc;
 
-    let frames = Rc::new(Cell::new(0u32));
+    let frames = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let seen = frames.clone();
-    heca_grid_ui::install_frame_request(move || seen.set(seen.get() + 1));
+    heca_grid_ui::install_frame_request(move || { seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed); });
 
     let _g = ButtonGroup::new()
         .size(WidgetSize::Small)
@@ -86,10 +84,10 @@ fn constructing_a_group_does_not_request_a_frame() {
         .child(Button::new("Close").icon(Glyph::Minus));
 
     assert_eq!(
-        frames.get(),
+        frames.load(std::sync::atomic::Ordering::Relaxed),
         0,
         "building a group asked for {} frame(s); nothing is being changed, only made",
-        frames.get()
+        frames.load(std::sync::atomic::Ordering::Relaxed)
     );
 }
 

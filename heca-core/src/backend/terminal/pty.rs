@@ -22,6 +22,7 @@ pub(super) enum PtyRead {
 pub enum PtyOperation {
     OpenPty,
     Spawn,
+    AgentSetup,
     CloneReader,
     TakeWriter,
     Resize,
@@ -32,6 +33,7 @@ impl PtyOperation {
         match self {
             Self::OpenPty => "failed to open PTY",
             Self::Spawn => "failed to spawn PTY child",
+            Self::AgentSetup => "failed to prepare agent reporting",
             Self::CloneReader => "failed to clone PTY reader",
             Self::TakeWriter => "failed to take PTY writer",
             Self::Resize => "failed to resize PTY",
@@ -47,6 +49,9 @@ pub struct PtyError {
 }
 
 impl PtyError {
+    pub(super) fn agent_setup(error: crate::agent::AgentError) -> Self {
+        Self::new(PtyOperation::AgentSetup, error)
+    }
     fn new(operation: PtyOperation, source: impl Into<AnyError>) -> Self {
         Self {
             operation,
@@ -96,30 +101,36 @@ fn check_cwd(cwd: Option<&Path>) -> Result<(), PtyError> {
     }
 }
 
+/// Process-launch inputs, kept together for shell and direct-command terminals.
+pub(super) struct PtyLaunchOptions<'a> {
+    pub(super) shell_override: Option<&'a str>,
+    pub(super) shell_integration: Option<&'a ShellIntegrationAssets>,
+    pub(super) env_clear: bool,
+    pub(super) env: &'a [(String, String)],
+    pub(super) cwd: Option<&'a Path>,
+    pub(super) agents: Option<&'a crate::agent::AgentSession>,
+}
+
 impl PtyHandle {
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn new_with_shell(
         cols: usize,
         rows: usize,
         cell_px: (f32, f32),
         wake_on_output: Option<WakeCallback>,
-        shell_integration: Option<ShellIntegrationAssets>,
-        shell_override: Option<&str>,
-        env_clear: bool,
-        env: &[(String, String)],
-        cwd: Option<&Path>,
+        options: PtyLaunchOptions<'_>,
     ) -> Result<Self, PtyError> {
-        check_cwd(cwd)?;
+        check_cwd(options.cwd)?;
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows, cell_px);
         let pair = pty_system
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
-        let shell = shell_override
+        let shell = options.shell_override
             .map(str::to_string)
             .unwrap_or_else(default_shell);
-        let cmd = command_for_shell(&shell, shell_integration.as_ref(), env_clear, env, cwd);
+        let mut cmd = command_for_shell(&shell, options.shell_integration, options.env_clear, options.env, options.cwd);
+        if let Some(agents) = options.agents { cmd.env("HECA_AGENT_BIN", agents.bin()); }
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }
 
@@ -129,10 +140,9 @@ impl PtyHandle {
         cell_px: (f32, f32),
         wake_on_output: Option<WakeCallback>,
         command: &str,
-        shell_override: Option<&str>,
-        cwd: Option<&Path>,
+        options: PtyLaunchOptions<'_>,
     ) -> Result<Self, PtyError> {
-        check_cwd(cwd)?;
+        check_cwd(options.cwd)?;
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows, cell_px);
         let pair = pty_system
@@ -141,10 +151,11 @@ impl PtyHandle {
 
         // An explicit shell wins over `$SHELL`: a caller that needs the same behaviour on every
         // machine cannot have the user's interactive rc in the way.
-        let shell = shell_override
+        let shell = options.shell_override
             .map(str::to_string)
             .unwrap_or_else(default_shell);
-        let cmd = command_for_spawned_command(&shell, command, cwd);
+        let prepared = options.agents.map(|agents| agent_command(&shell, &agents.bin(), command));
+        let cmd = command_for_spawned_command(&shell, prepared.as_deref().unwrap_or(command), options.cwd);
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }
 
@@ -334,6 +345,22 @@ fn command_for_spawned_command(shell: &str, command: &str, cwd: Option<&Path>) -
         cmd.arg(command);
     }
     cmd
+}
+
+#[cfg(not(windows))]
+fn agent_command(shell: &str, bin: &Path, command: &str) -> String {
+    let bin = crate::agent::quote(&bin.to_string_lossy());
+    if shell_kind(shell) == Some(ShellKind::Fish) {
+        format!("set -gx PATH {bin} $PATH; {command}")
+    } else {
+        format!("export PATH={bin}:\"$PATH\"; {command}")
+    }
+}
+
+#[cfg(windows)]
+fn agent_command(_shell: &str, _bin: &Path, command: &str) -> String {
+    // The reporting wrappers use Unix shell integration. Keep Windows commands unchanged.
+    command.to_owned()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

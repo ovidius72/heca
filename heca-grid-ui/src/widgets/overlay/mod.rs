@@ -174,6 +174,7 @@ impl Overlay {
     /// A new (closed) blocking overlay with an empty panel slot.
     pub fn new() -> Self {
         let mut base = Base::new();
+        base.style.layout.direction = crate::style::Direction::Column;
         // Fill the viewport and center the panel on both axes — real taffy
         // centering, so every descendant gets true bounds.
         base.style.layout.width = Length::Percent(1.0);
@@ -269,8 +270,8 @@ impl Overlay {
             return;
         };
         let style = &mut panel.base_mut().style.layout;
-        style.max_width = Some(Length::Percent(1.0));
-        style.max_height = Some(Length::Percent(1.0));
+        style.max_width.get_or_insert(Length::Percent(1.0));
+        style.max_height.get_or_insert(Length::Percent(1.0));
         if let Some((w, h)) = self.panel_size {
             style.width = w;
             style.height = h;

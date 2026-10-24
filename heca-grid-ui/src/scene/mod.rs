@@ -296,7 +296,7 @@ pub use commands::{
     Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, Rounded,
     ScanlineCmd, Shadow, TextAlign, TextCmd, TextStyle,
 };
-pub use runs::{BackdropAt, BaseRun, Escape, HostWork, SurfaceAt};
+pub use runs::{BackdropAt, BaseRun, Escape, HostWork, SurfaceAt, ImageAt};
 
 #[cfg(test)]
 mod tests;

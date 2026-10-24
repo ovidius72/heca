@@ -306,6 +306,17 @@ pub trait PaneBackend: Send {
         PaneRuntime::default()
     }
 
+    /// Drain reported agent transitions in order, including removal on command exit.
+    /// Unlike the runtime snapshot, this preserves multiple changes between UI updates.
+    fn take_agent_updates(&mut self) -> Vec<Option<crate::agent::AgentState>> {
+        Vec::new()
+    }
+
+    /// Apply reporting opt-in and drivers to an existing terminal without restarting its process.
+    fn reload_agent_config(&mut self, _options: Option<crate::agent::AgentOptions>) -> Result<(), crate::agent::AgentError> {
+        Ok(())
+    }
+
     /// Drain a one-shot exit code captured since the last call (set when the
     /// backend's child process exited). The per-wake monitor drains this to emit
     /// `pane.exited{code}`. Returns `Some(code)` once, then `None` until another

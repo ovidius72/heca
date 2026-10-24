@@ -151,7 +151,7 @@ fn rect_of(base: &Base, viewport: Size) -> Option<(String, Rectangle)> {
 /// from state it already keeps, so nothing opts in.
 pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
     let base = c.base();
-    if !base.visible.get_untracked() {
+    if !base.visible.get_untracked() || base.children.iter().any(|child| owns_hover_tip(child.as_ref())) {
         return;
     }
     let Some((text, rect)) = rect_of(base, cx.viewport()) else {
@@ -201,6 +201,15 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
             TextStyle::REGULAR,
         );
     });
+}
+
+/// A descendant's specific explanation takes priority over its ancestor's general help,
+/// including while its reveal delay is pending. Pointer routing already owns the hover path.
+fn owns_hover_tip(c: &dyn Component) -> bool {
+    let base = c.base();
+    base.visible.get_untracked() && base.hovered()
+        && (base.tooltip.as_ref().is_some_and(|tip| !tip.text.get_untracked().is_empty())
+            || base.children.iter().any(|child| owns_hover_tip(child.as_ref())))
 }
 
 /// **Seconds until this widget's bubble appears**, or `None` when nothing is pending.

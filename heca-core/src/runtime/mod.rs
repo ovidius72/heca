@@ -43,7 +43,7 @@ pub enum ContentKind {
 }
 
 /// Exit-time close policy for a pane that directly spawned a command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct PaneClosePolicy {
     /// Close the pane automatically when the direct command exits.
     pub close_pane: bool,
@@ -89,6 +89,8 @@ pub struct PaneRuntime {
     pub exit_code: Option<i32>,
     pub git: Option<GitInfo>,
     pub kind: ContentKind,
+    /// Last report from a recognized agent, separate from the process lifecycle.
+    pub agent: Option<crate::agent::AgentState>,
 }
 
 #[cfg(test)]

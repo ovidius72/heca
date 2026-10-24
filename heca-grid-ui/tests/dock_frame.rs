@@ -5,6 +5,42 @@ use heca_grid_ui::prelude::*;
 use heca_grid_ui::{LayoutEngine, Point, Size, Theme};
 
 #[test]
+fn workspace_state_backgrounds_are_off_by_default() {
+    use heca_grid_ui::{DockFrame, DrawCommand};
+    let theme = Theme::default();
+    for active in [true, false] {
+        let mut dock = DockFrame::new("Workspace").frameless(true)
+            .active(active).previous(!active).child(Label::new("Session"));
+        LayoutEngine::new().theme(&theme).compute(&mut dock, Size::new(320.0, 240.0));
+        let scene = common::paint(&dock, &theme);
+        assert!(!scene.iter().any(|cmd| matches!(cmd, DrawCommand::Rect(rect)
+            if rect.rect == dock.base().bounds && rect.fill.a > 0)),
+            "a workspace-wide tint still paints with the default theme");
+    }
+}
+
+#[test]
+fn workspace_wash_opacity_affects_only_the_background() {
+    use heca_grid_ui::{Color, DockFrame, DrawCommand};
+    let mut theme = Theme::default();
+    theme.colors.active_wash_alpha = 0.25;
+    theme.colors.workspace_active_background = Some(Color::new(11, 22, 33, 128));
+    let mut dock = DockFrame::new("Workspace").frameless(true).active(true)
+        .child(Label::new("Session"));
+    LayoutEngine::new().theme(&theme).compute(&mut dock, Size::new(320.0, 240.0));
+    let scene = common::paint(&dock, &theme);
+    assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Rect(rect)
+        if rect.rect == dock.base().bounds && rect.fill == Color::new(11, 22, 33, 32))));
+    assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
+        if text.text == "Session" && text.color == theme.colors.foreground)),
+        "background opacity must not dim text");
+    dock.nav_state().set(true);
+    let scene = common::paint(&dock, &theme);
+    assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Rect(rect)
+        if rect.border.is_some() && rect.glow.is_some())), "navigation keeps its outline");
+}
+
+#[test]
 fn dock_frame_body_has_height_when_expanded() {
     use heca_grid_ui::DockFrame;
     let mut dock = DockFrame::new("FILES").child(fixed_box(120.0, 80.0));

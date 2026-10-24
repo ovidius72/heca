@@ -78,6 +78,9 @@ pub struct PaintCx<'a> {
 impl<'a> PaintCx<'a> {
     /// Create a painting context over `scene` using `theme`.
     pub fn new(scene: &'a mut Scene, theme: &'a Theme) -> Self {
+        // Starting a paint pass serves the pending frame. Widgets can now request
+        // its successor without making each host remember to re-arm the wakeup.
+        super::frame_served();
         Self {
             scene,
             theme,

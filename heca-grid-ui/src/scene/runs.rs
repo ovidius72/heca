@@ -37,7 +37,10 @@ impl Scene {
                             heca_core::layout::Size::new(0.0, 0.0),
                         ))
                     });
-                    let work = match *draw {
+                    let work = match draw.clone() {
+                        HostDraw::Image { image, fit, color } => HostWork::Image(ImageAt {
+                            image, fit, color, rect: *rect, alpha: *alpha, clip, rounded: *rounded,
+                        }),
                         HostDraw::Surface { id } => HostWork::Surface(SurfaceAt {
                             id,
                             rect: *rect,
@@ -169,16 +172,18 @@ pub struct BaseRun {
 impl BaseRun {
     /// The terminal surface this run ends with, if it ends with one.
     pub fn surface(&self) -> Option<SurfaceAt> {
-        match self.then {
-            Some(HostWork::Surface(at)) => Some(at),
+        match &self.then {
+            Some(HostWork::Surface(at)) => Some(*at),
             _ => None,
         }
     }
 }
 
 /// What the host does between two runs.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HostWork {
+    /// Rasterise and composite a reusable vector asset here.
+    Image(ImageAt),
     /// Draw a terminal surface here.
     Surface(SurfaceAt),
     /// Blur what the runs before drew, here.
@@ -237,4 +242,16 @@ impl std::fmt::Display for Escape {
             self.rect.loc.x + self.rect.size.w,
         )
     }
+}
+
+/// A vector asset placed by the scene, with the same clipping and opacity as other content.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageAt {
+    pub image: std::sync::Arc<crate::image::ImageData>,
+    pub fit: crate::image::ImageFit,
+    pub color: crate::Color,
+    pub rect: Rectangle,
+    pub alpha: f32,
+    pub clip: Option<Rectangle>,
+    pub rounded: Option<super::Rounded>,
 }

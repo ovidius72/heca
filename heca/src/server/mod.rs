@@ -188,6 +188,9 @@ impl ServerState {
     fn configure_terminals(&mut self, settings: TerminalSettings) {
         let palette = terminal_palette_defaults(&settings.theme);
         for backend in self.backends.values_mut() {
+            if let Err(error) = backend.reload_agent_config(settings.agents.clone()) {
+                crate::chrome::warn_author(format!("[heca] cannot update terminal agent reporting: {error}"));
+            }
             backend.set_scroll_animations_enabled(settings.scroll_animations);
             backend.set_link_detection(settings.link_detection);
             backend.reload_terminal_config(palette, settings.scrollback);

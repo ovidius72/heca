@@ -20,11 +20,9 @@ impl Dialog {
     /// and give way to the viewport cap. [`panel_size`](Dialog::panel_size) overrides it.
     pub fn new(title: impl Into<String>) -> Self {
         // Panel: a padded column holding the title, then body + actions as they're added.
-        // A preferred basis gives the baseline without an absolute minimum
-        // overriding Overlay's viewport cap. Larger content keeps its natural minimum.
+        // The dialog resolves this font-relative floor against Overlay's available room.
         let panel = Flex::column()
-            .basis(Self::BASELINE_WIDTH)
-            .min_width(Length::Auto)
+            .min_width(Self::BASELINE_WIDTH)
             .padding(DIALOG_PAD)
             .gap(DIALOG_GAP)
             .child(Label::new(title));
@@ -59,6 +57,7 @@ impl Dialog {
             has_actions: false,
             body_at: None,
             danger: false,
+            panel_max_width: None,
         }
     }
 
@@ -87,7 +86,14 @@ impl Dialog {
         let style = &mut self.panel_mut().style.layout;
         style.width = width;
         style.height = height;
-        style.flex_basis = Some(if width == Length::Auto { Self::BASELINE_WIDTH } else { width });
+        style.flex_basis = None;
+        self
+    }
+
+    /// Override the theme's readable width cap. The viewport still limits narrow windows.
+    #[heca_grid_ui_macros::prop]
+    pub fn panel_max_width(mut self, width: Length) -> Self {
+        self.panel_max_width = Some(width);
         self
     }
 

@@ -88,6 +88,8 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_pane_lines(state.pane_lines.shown(&state.appearance.sidebar.pane_lines));
+    state.chrome_state.workspaces.set_agent_statuses(&state.settings.agents.statuses);
+    state.chrome_state.panes.configure_agents(&state.settings.agents);
     // The program catalog is this component's, not the shared context's. Mirrored
     // here like the display flags above, so `prefix+Shift+r` reaches it; guarded on `Rc` identity,
     // which is exactly what a reload replaces.
@@ -217,6 +219,7 @@ mod tests {
                     dirty: true,
                 }),
                 kind: ContentKind::Terminal,
+                agent: None,
             };
             ws.find_pane_mut(PaneId(20)).expect("floating pane").runtime = PaneRuntime {
                 program: Some("lazygit".into()),
@@ -225,6 +228,7 @@ mod tests {
                 exit_code: None,
                 git: None,
                 kind: ContentKind::Terminal,
+                agent: None,
             };
         }
 

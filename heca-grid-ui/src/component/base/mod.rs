@@ -8,6 +8,10 @@ mod methods;
 pub struct Base {
     /// Layout + visual style.
     pub style: Style,
+    /// Optional semantic flash, drawn by the shared paint walk over this widget.
+    pub flash: Option<crate::FlashHandle>,
+    /// Optional live inherited text/icon tone, resolved against the current theme at paint.
+    pub content_tone: Option<Signal<Option<crate::Tone>>>,
     /// This component's node in the layout tree (set during layout).
     pub node: Option<taffy::NodeId>,
     /// Which retained layout tree [`node`](Self::node) belongs to, so a component moved in from
@@ -289,6 +293,8 @@ pub struct Base {
     pub font: f32,
     /// Text-field metrics inherited from the layout theme.
     pub input_style: heca_theme::InputStyle,
+    /// Dialog sizing supplied by the shared theme/layout path.
+    pub dialog_style: heca_theme::DialogStyle,
     /// **The tree's own base font**, written by the layout pass — before any widget's size variant
     /// scales it.
     ///

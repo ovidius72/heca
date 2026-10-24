@@ -72,9 +72,20 @@ pub struct WorkspacesContainerState {
     /// name; mirrored in `sync_chrome_state`, read when a row is built. A change rebuilds the rows
     /// (`chrome_signature` hashes the names), so it is not a per-frame signal.
     pub(crate) pane_lines: Signal<crate::chrome::panes::pane_items::PaneLineSet>,
+    /// Open status labels and glyphs, read by each agent line's own subscription.
+    pub(crate) agent_statuses: Signal<std::rc::Rc<heca_config::settings::AgentStatuses>>,
 }
 
 impl WorkspacesContainerState {
+    pub(crate) fn set_agent_statuses(
+        &self,
+        statuses: &heca_config::settings::AgentStatuses,
+    ) {
+        if self.agent_statuses.with(|current| current.as_ref() != statuses) {
+            self.agent_statuses.set(std::rc::Rc::new(statuses.clone()));
+        }
+    }
+
     /// The lines to build under each pane's name. See [`pane_lines`](Self::pane_lines) field.
     pub(crate) fn pane_lines(&self) -> crate::chrome::panes::pane_items::PaneLineSet {
         use heca_grid_ui::reactive::SignalGet as _;
@@ -124,6 +135,9 @@ impl WorkspacesContainerState {
                 crate::chrome::PaneRowLines::default()
                     .shown(&heca_config::appearance::default_sidebar_pane_lines()),
             ),
+            agent_statuses: signal(std::rc::Rc::new(
+                heca_config::settings::AgentsConfig::default().statuses,
+            )),
         }
     }
 

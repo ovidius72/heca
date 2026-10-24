@@ -3,7 +3,7 @@
 
 use heca_grid_ui::{
     Action, Alert, Badge, BadgeButton, Button, Card, Checkbox, Component, DockFrame, Flex, Gauge,
-    Glyph, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LandingSlot, MarkerGroup,
+    Glyph, Icon, IconButton, Image, Input, Item, ItemGroup, KeyHintGroup, Label, LandingSlot, MarkerGroup,
     NfGlyph, NfIcon, Overlay, Panel, ProgressBar, RailCell, Row as GridRow, ScrollRegion, Select,
     Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Theme, Toast, Toggle,
 };
@@ -214,6 +214,17 @@ pub(crate) fn realize_kind(
             Some(glyph) => Box::new(Icon::new(glyph)),
             None => Box::new(Flex::empty()),
         },
+        WidgetKind::Image => {
+            let mut image = with_props(Image::load(""), node, theme);
+            for child in &node.children {
+                match slot_of(child) {
+                    Some("loading") => image = image.placeholder(realize(child, theme, emit, forms)),
+                    Some("error") => image = image.fallback(realize(child, theme, emit, forms)),
+                    slot => warn_unknown_slot(node, child, slot, &["loading", "error"]),
+                }
+            }
+            Box::new(image)
+        }
         WidgetKind::Input => {
             let mut input = with_props(Input::new().value(text_of(node)), node, theme);
             if let Some(name) = name_prop(node) {

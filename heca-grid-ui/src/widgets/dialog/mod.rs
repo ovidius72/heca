@@ -83,6 +83,7 @@ pub struct Dialog {
     body_at: Option<usize>,
     /// Set by [`danger`](Dialog::danger).
     danger: bool,
+    panel_max_width: Option<crate::style::Length>,
 }
 
 impl LayoutExt for Dialog {}

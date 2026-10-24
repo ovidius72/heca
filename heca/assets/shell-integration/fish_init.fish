@@ -1,3 +1,7 @@
+if set -q HECA_AGENT_BIN
+    set -gx PATH $HECA_AGENT_BIN $PATH
+end
+
 function __heca_osc
     printf '\e]%s\a' $argv[1]
 end

@@ -9,6 +9,10 @@ use crate::backend::{
 use crate::runtime::PaneRuntime;
 
 impl PaneBackend for TerminalBackend {
+    fn reload_agent_config(&mut self, options: Option<crate::agent::AgentOptions>) -> Result<(), crate::agent::AgentError> {
+        self.configure_agents(options)
+    }
+
     fn pane_type(&self) -> PaneType {
         PaneType::Terminal
     }
@@ -112,7 +116,7 @@ impl PaneBackend for TerminalBackend {
         self.notice_exit();
         self.refresh_foreground_after(output);
         self.keep_the_view_on_output(output.had_data);
-        output.had_data
+        output.had_data || output.agent_changed
     }
 
     fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
@@ -175,6 +179,10 @@ impl PaneBackend for TerminalBackend {
 
     fn runtime(&self) -> PaneRuntime {
         self.runtime.clone()
+    }
+
+    fn take_agent_updates(&mut self) -> Vec<Option<crate::agent::AgentState>> {
+        self.agent_session.as_mut().map(|session| session.take_updates()).unwrap_or_default()
     }
 
     fn take_exit_code(&mut self) -> Option<i32> {

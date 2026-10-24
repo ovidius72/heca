@@ -55,6 +55,8 @@ pub mod search;
 pub mod style;
 pub mod theme;
 pub mod tone;
+mod flash;
+pub use flash::FlashHandle;
 pub mod widgets;
 
 /// Geometry primitives, re-exported from `heca-core` so consumers of the public
@@ -68,13 +70,13 @@ pub use animation::{
 };
 pub use builders::{
     DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
-    StyleExt, ToneExt, TooltipExt,
+    StyleExt, ToneExt, TooltipExt, FlashExt,
 };
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, area, area_slot,
     collect_damage, deliver, dispatch, frame_served, holds_keyboard, install_frame_request,
-    needs_layout, overlay_occluded_at, paint_child, request_frame, shift_subtree,
+    needs_layout, overlay_occluded_at, paint_child, request_frame, frame_waker, FrameWake, shift_subtree,
 };
 pub use cursor::{Cursor, cursor_at};
 pub use drag::{DropAction, DropHit, DropSide, resolve_at, source_at};
@@ -99,7 +101,7 @@ pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
 pub use pointer::{PointerState, clear_hover, dragged_kind, dragging, hit_test};
 pub use scene::{
-    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, TextStyle,
+    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, ImageAt, TextStyle,
 };
 pub mod prop;
 pub mod props;
@@ -114,7 +116,7 @@ pub use widgets::{
     ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonVariant,
     Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame,
     DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton,
-    Input, Item, ItemGroup, MessageList, MessageFeed, Line, TreeLayout, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
+    Image, ImageFit, ImageState, Svg, Input, Item, ItemGroup, MessageList, MessageFeed, Line, TreeLayout, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
     LandingSlot, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel,
     ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo,
     ScrollRegion, Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast,
@@ -124,13 +126,14 @@ pub use widgets::{
 
 /// Common imports for building UIs.
 pub mod prelude {
+    pub use crate::FlashHandle;
     pub use crate::action::{Action, SignalData};
     pub use crate::animation::{
         Animate, Animation, AnimationFrame, Fade, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     };
     pub use crate::builders::{
         DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
-        StyleExt, ToneExt, TooltipExt,
+        StyleExt, ToneExt, TooltipExt, FlashExt,
     };
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
@@ -161,3 +164,6 @@ pub mod prelude {
         TooltipSide, Visibility, container,
     };
 }
+
+/// Shared local image sources, asynchronous decoding and vector rasterisation.
+pub mod image;

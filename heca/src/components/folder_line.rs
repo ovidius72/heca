@@ -1,6 +1,6 @@
 //! [`FolderLine`] — a pane's working directory, as a line of metadata under its name.
 
-use heca_grid_ui::builders::{LayoutExt, Parent};
+use heca_grid_ui::builders::{LayoutExt, Parent, TooltipExt};
 use heca_grid_ui::reactive::Signal;
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -58,6 +58,7 @@ impl FolderLine<'_> {
             .color(self.theme.colors.foreground)
             .truncate(Ellipsis::Start);
         let text = label.text_signal();
+        let label = label.tooltip_signal(text).tooltip_quick(true);
         let widget = Visibility::new(
             Flex::row()
                 .align("center")
@@ -134,6 +135,17 @@ mod tests {
             2,
             "a glyph and a path",
         );
+    }
+
+    #[test]
+    fn the_tooltip_keeps_the_full_path_and_follows_directory_changes() {
+        use heca_grid_ui::reactive::SignalUpdate;
+        let line = built(Some("~/projects/a/long/folder"), true);
+        let label = &line.widget.base().children[0].base().children[1];
+        let tip = label.base().tooltip.as_ref().expect("the path owns its tooltip");
+        assert_eq!(tip.text.get_untracked(), "~/projects/a/long/folder");
+        line.text.set("~/projects/another/folder".into());
+        assert_eq!(tip.text.get_untracked(), "~/projects/another/folder");
     }
 
     /// **Nothing to say, nothing shown** — a pane with no directory, and the setting turned off,

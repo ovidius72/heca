@@ -1,4 +1,6 @@
 mod actions;
+pub mod agent;
+pub mod audio;
 mod announced;
 mod app;
 mod app_state;
@@ -479,6 +481,10 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 /// The whole of the `heca` program, and the last line of any program built on it — whatever a
 /// crate adds first is picked up here.
 pub fn run() {
+    if let Some(result) = heca_core::agent::launcher::run_if_requested() {
+        let code = result.unwrap_or_else(|error| { eprintln!("[heca] agent launch: {error}"); 1 });
+        std::process::exit(code);
+    }
     // Command-line questions — `--help`, `--keys-show`, `--list-actions`, `--describe-action` —
     // are answered and exited before the window, so a script can ask heca anything without a GPU.
     // One table dispatches and documents them; see `app::cli`.

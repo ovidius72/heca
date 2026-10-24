@@ -2,6 +2,8 @@
 //! shell, waiting for it, and reading what it drew.
 
 mod exit;
+#[cfg(unix)]
+mod agents;
 mod folder;
 mod screen;
 mod shells;

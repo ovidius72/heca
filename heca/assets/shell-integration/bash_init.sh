@@ -2,6 +2,10 @@ if [ -r "$HOME/.bashrc" ]; then
   . "$HOME/.bashrc"
 fi
 
+if [ -n "${HECA_AGENT_BIN:-}" ]; then
+  export PATH="$HECA_AGENT_BIN:$PATH"
+fi
+
 heca__osc() {
   printf '\033]%s\a' "$1"
 }

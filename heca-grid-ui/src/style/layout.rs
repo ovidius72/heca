@@ -121,6 +121,8 @@ pub struct Layout {
     pub max_width: Option<Length>,
     /// Maximum height — see [`max_width`](Layout::max_width).
     pub max_height: Option<Length>,
+    /// Preferred width / height. Used when a dimension is automatic; fixed dimensions win.
+    pub aspect_ratio: Option<f32>,
     pub flex_grow: f32,
 
     /// **CSS `flex: <n>`** — take `n` parts of the room the parent has to give. Set it with
@@ -265,6 +267,7 @@ impl Default for Layout {
             min_height: None,
             max_width: None,
             max_height: None,
+            aspect_ratio: None,
             flex_grow: 0.0,
             flex: None,
             order: None,
@@ -327,6 +330,8 @@ impl Layout {
         }
         taffy::Style {
             display: Display::Flex,
+            aspect_ratio: self.aspect_ratio.filter(|r| r.is_finite() && *r > 0.0)
+                .filter(|_| matches!(self.width, Length::Auto) || matches!(self.height, Length::Auto)),
             flex_direction: match self.direction {
                 Direction::Row => FlexDirection::Row,
                 Direction::Column => FlexDirection::Column,
@@ -393,9 +398,25 @@ impl Layout {
                         width: axis(p.width, self.width),
                         height: axis(p.height, self.height),
                     },
-                    None => Size {
-                        width: self.width.to_taffy(font_px),
-                        height: self.height.to_taffy(font_px),
+                    None => {
+                        let constrained = |value: Length, min: Option<Length>, max: Option<Length>| {
+                            let value = value.to_taffy(font_px);
+                            if self.aspect_ratio.is_none() { return value }
+                            match value {
+                                Dimension::Length(mut value) => {
+                                    if let Some(Dimension::Length(max)) = max.map(|v| v.to_taffy(font_px)) {
+                                        value = value.min(max);
+                                    }
+                                    if let Some(Dimension::Length(min)) = min.map(|v| v.to_taffy(font_px)) {
+                                        value = value.max(min);
+                                    }
+                                    Dimension::Length(value)
+                                }
+                                other => other,
+                            }
+                        };
+                        Size { width: constrained(self.width, self.min_width, self.max_width),
+                               height: constrained(self.height, self.min_height, self.max_height) }
                     },
                 }
             },

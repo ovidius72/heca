@@ -95,7 +95,7 @@ pub struct DockFrame {
     /// flipped it.
     was_expanded: bool,
     /// Active (current) state: when `true` the frame paints a faint **wash** of the theme's
-    /// selected colour (`effective_selected_background` at `active_wash_alpha`) over itself — e.g.
+    /// workspace colour at `active_wash_alpha` over itself — e.g.
     /// the active workspace in the sidebar. A wash, not the panel a selected *row* gets: a
     /// container hint must not cancel out the selection inside it. Signal-backed so a host can flip it in place via
     /// [`active_state`](DockFrame::active_state) without rebuilding the tree.
@@ -263,8 +263,8 @@ impl DockFrame {
         self.expanded
     }
 
-    /// Mark the frame **active** (the current one). An active frame paints a faint wash of the
-    /// theme's selected colour over itself. Defaults to inactive.
+    /// Mark the frame active (the current one). A state background is painted only when the
+    /// theme enables `active_wash_alpha`; it is off by default. Defaults to inactive.
     #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
@@ -440,45 +440,18 @@ impl Component for DockFrame {
             cx.rect(b, f, None, radius, glow);
         }
 
-        // Active-region wash — a faint accent overlay over the whole frame when
-        // this is the active one (e.g. the active workspace). Theme-driven alpha
-        // and signal-backed, so the host flips it in place (no tree rebuild).
-        // **"You were just here"** — under the active wash, so a frame that is both simply reads
-        // as active. Where you are outranks where you were.
-        if self.previous.get_untracked() && !self.active.get_untracked() {
-            // ⚠️ **A frame's wash is CONTAINER-scale, never the row's `previous_wash_alpha`.**
-            //
-            // That token is tuned against a single row; over a whole frame the same value lifts
-            // every row inside it, and the pane mark within — which is the same colour — then has
-            // almost nothing left to say. The last-visited pane became indistinguishable from its
-            // siblings in exactly the workspace it was meant to be found in. So this is derived
-            // from `active_wash_alpha`, the theme's own answer for how faint a container hint is,
-            // and sits below it.
-            cx.rect(
-                b,
-                cx.theme().colors.effective_workspace_previous_background(),
-                None,
-                radius,
-                None,
-            );
-        }
-        if self.active.get_untracked() {
-            // **A faint WASH of the selected colour — never the panel itself.**
-            //
-            // One colour family with `Row`'s selection, two different levels of hierarchy: this
-            // says *the current workspace*, a container hint, while a row's opaque panel says
-            // *this item is selected*. Painting both at full strength made them cancel exactly —
-            // the selected row inside the active frame became the same colour as the frame, and
-            // only the column's marker bar still said which row it was. `active_wash_alpha` is the
-            // theme's own answer to how faint a container hint should be.
-            cx.rect(
-                b,
-                cx.theme().colors.effective_workspace_active_background(),
-                None,
-                radius,
-                None,
-            );
-        }
+        // Container-wide state backgrounds are optional and use the documented theme opacity.
+        // Apply it only to these draws: text, badges and the navigation outline stay crisp.
+        cx.with_opacity(cx.theme().colors.active_wash_alpha, |cx| {
+            if self.previous.get_untracked() && !self.active.get_untracked() {
+                cx.rect(b, cx.theme().colors.effective_workspace_previous_background(),
+                    None, radius, None);
+            }
+            if self.active.get_untracked() {
+                cx.rect(b, cx.theme().colors.effective_workspace_active_background(),
+                    None, radius, None);
+            }
+        });
 
         // Nav-cursor outline — a thick border + faint fill marking the cursor on this frame.
         // Drawn ALWAYS when nav, even on the active frame, so it stays visible where it coincides

@@ -43,7 +43,7 @@ const CHECK_GUTTER: f64 = 14.0;
 /// A focusable, selectable container holding arbitrary child content.
 pub struct Row {
     base: Base,
-    /// Active (selected/current) state: tinted bg + optional marker.
+    /// Active (selected/current) state: outline, light wash and optional marker.
     active: Signal<bool>,
     /// Sidebar-nav cursor state: a hollow outline, distinct from `active`.
     nav: Signal<bool>,
@@ -57,8 +57,8 @@ pub struct Row {
     marker: ActiveMarker,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
-    /// Override for the hover/active highlight color. Defaults to the row's own
-    /// background (a stronger tint of the same hue), else the theme accent.
+    /// Override for the hover/active highlight color. Otherwise selection follows the theme's
+    /// selected background and accent border; hover follows the row's background.
     highlight: Option<Color>,
     /// Overrides the theme's row-scale previous mark — see [`Row::previous_tint`].
     previous_tint: Option<Color>,
@@ -83,9 +83,8 @@ impl Row {
             nav: signal(false),
             previous: signal(false),
             reveal: None,
-            // **No bar by default** — the same default `Item` has always had. Selected is now a
-            // filled panel, which says it on its own; a bar beside it is a second mark for one
-            // state, and where a container already draws its own (a `MarkerGroup` column in the
+            // No bar by default: the selection outline already identifies the row. A bar adds a
+            // second mark for that state; where a container already draws its own (a `MarkerGroup` column in the
             // sidebar) it came out as two lines side by side. A caller that genuinely wants one
             // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
@@ -99,10 +98,8 @@ impl Row {
         }
     }
 
-    /// Override the hover/active highlight color. By default the highlight derives
-    /// from the row's background — a stronger tint of the **same hue** — so a
-    /// state-tinted row highlights in its own color (not the accent); rows with no
-    /// background fall back to the theme accent.
+    /// Override the hover/active highlight hue. Fill and border strength still follow the theme's
+    /// interaction tokens, so choosing a hue cannot turn selection into an opaque panel.
     #[heca_grid_ui_macros::prop]
     pub fn highlight(mut self, c: Color) -> Self {
         self.highlight = Some(c);
@@ -314,9 +311,9 @@ impl Component for Row {
         // so state-tinted rows stay in-family. With an explicit `highlight`, use the
         // lighter Item-style accent wash instead of a heavy same-hue tint.
         let highlight_base = self.highlight.or(self.base.style.visual.fill);
-        // **"You were just here"** — painted first, so selection and cursor land on top of it and
-        // it only shows on a row that has neither.
-        if self.previous.get_untracked() {
+        // The theme owns this history highlight, including its opacity. It is independent of
+        // hover, and yields to the active state so the current pane keeps its quiet outline.
+        if self.previous.get_untracked() && !active {
             cx.rect(
                 sel,
                 self.previous_tint.unwrap_or(previous_bg),
@@ -326,23 +323,13 @@ impl Component for Row {
             );
         }
         if active {
-            // **Selected is a FILLED PANEL, and it carries no border.**
-            //
-            // The selection and the nav cursor are drawn on the same rectangle, so as long as both
-            // were an accent fill plus an accent edge, the cursor arriving on the selected row
-            // erased the difference between them. Changing the cursor's *hue* did not fix it —
-            // every shipped theme's foreground, accent and glow are one family. So the two marks
-            // differ in **kind**: this is a panel, the cursor is a glowing ring, and one sits
-            // inside the other with both still readable.
-            //
-            // The colour is the theme's, not the row's: `selected_background`, explicit in a theme
-            // or derived from its surface and accent. A row that overrides `highlight` still gets
-            // its own hue, which is what that builder is for.
-            let fill = self
-                .highlight
-                .map(|h| h.with_alpha(ia.row_active_fill))
-                .unwrap_or(selected_bg);
-            cx.rect(sel, fill, None, sel_radius, None);
+            // Selection stays quiet behind content. The stronger glowing navigation ring below
+            // still identifies the keyboard cursor when it coincides with the selected row.
+            let hue = self.highlight.unwrap_or(selected_bg);
+            cx.rect(sel, hue.with_alpha(ia.row_active_fill), Some(Border {
+                color: self.highlight.unwrap_or(accent).with_alpha(ia.row_active_border),
+                width: sel_border_w,
+            }), sel_radius, None);
         } else if self.base.hovered() {
             let c = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_hover_fill)
@@ -358,11 +345,8 @@ impl Component for Row {
         // ALWAYS when nav — even on the active row — so the cursor stays visible when it coincides
         // with the active pill.
         //
-        // **A glowing ring, and nothing else** — no fill, so whatever it is drawn over stays
-        // visible through it. That is the whole trick: the selected panel above is a *fill* and
-        // this is an *edge*, so the cursor sitting on the selected row shows both at once instead
-        // of one erasing the other. Trying to separate them by hue failed twice (accent, then
-        // foreground) because every shipped theme's foreground, accent and glow are one family.
+        // A stronger glowing ring, without another fill: navigation remains distinct from the
+        // quiet selected outline, including when both point at this row.
         //
         // Drawn ALWAYS when nav — even on the active row — for the same reason.
         if self.nav.get_untracked() {
@@ -418,17 +402,9 @@ impl Component for Row {
             }
         }
 
-        // Content, under the row's **state color** — published once per paint and inherited by any
-        // unstyled `Label`/`Icon` inside, exactly as [`Item`] does it.
-        //
-        // Without this a caller that wants its text to follow selection has to colour the text
-        // itself, and since a colour is fixed at build time that means building the content TWICE
-        // — one copy per state — and showing one. heca's sidebar pane row did precisely that, and
-        // the two copies had to be stacked, so the name and the `(program)` suffix beside it never
-        // shared a line. A control owns its content's state colour; a caller that
-        // wants its own says so with `.color(..)`, which still wins.
-        let content_color = if active { accent } else { foreground };
-        cx.with_content_color(content_color, |cx| {
+        // Selection is carried by the frame; content keeps the readable theme foreground.
+        // Explicit child colours and the fills inside brand artwork remain their own.
+        cx.with_content_color(foreground, |cx| {
             for child in &self.base.children {
                 crate::component::paint_child(child.as_ref(), cx);
             }

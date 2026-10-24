@@ -163,7 +163,7 @@ impl Extension {
 
     /// `<extension>.<short>`, or `None` — after saying why — when either half is refused. An empty
     /// name is what a refused item carries, and what its `run`/`view` recognise and drop.
-    fn full(&self, what: &str, short: &str) -> Option<String> {
+    pub(crate) fn full(&self, what: &str, short: &str) -> Option<String> {
         let owner = self.name.as_deref()?;
         if short.is_empty() || short.contains('.') {
             warn_author(format!(

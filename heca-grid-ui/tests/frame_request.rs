@@ -1,13 +1,11 @@
 //! However many widgets ask for a frame, the host is asked once.
 
-use std::cell::Cell;
-use std::rc::Rc;
 
 /// Install a hook that counts how many times the host was actually asked.
-fn counting_host() -> Rc<Cell<u32>> {
-    let asks = Rc::new(Cell::new(0));
+fn counting_host() -> std::sync::Arc<std::sync::atomic::AtomicU32> {
+    let asks = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let seen = asks.clone();
-    heca_grid_ui::install_frame_request(move || seen.set(seen.get() + 1));
+    heca_grid_ui::install_frame_request(move || { seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed); });
     asks
 }
 
@@ -25,10 +23,10 @@ fn a_hundred_widgets_asking_wake_the_host_once() {
         heca_grid_ui::request_frame();
     }
     assert_eq!(
-        asks.get(),
+        asks.load(std::sync::atomic::Ordering::Relaxed),
         1,
         "the host was asked {} times for one frame",
-        asks.get(),
+        asks.load(std::sync::atomic::Ordering::Relaxed),
     );
 }
 
@@ -40,12 +38,12 @@ fn the_next_frame_can_still_be_asked_for() {
     heca_grid_ui::frame_served();
     heca_grid_ui::request_frame();
     heca_grid_ui::request_frame();
-    assert_eq!(asks.get(), 1, "two asks, one wake");
+    assert_eq!(asks.load(std::sync::atomic::Ordering::Relaxed), 1, "two asks, one wake");
 
     heca_grid_ui::frame_served();
     heca_grid_ui::request_frame();
     assert_eq!(
-        asks.get(),
+        asks.load(std::sync::atomic::Ordering::Relaxed),
         2,
         "after the host took the request, a fresh ask must reach it",
     );
@@ -64,8 +62,21 @@ fn marking_a_widget_goes_through_the_same_door() {
     a.mark_needs_paint();
     b.mark_needs_paint();
     a.mark_needs_layout();
-    assert_eq!(asks.get(), 1, "three marks, one wake");
+    assert_eq!(asks.load(std::sync::atomic::Ordering::Relaxed), 1, "three marks, one wake");
     assert!(a.needs_paint(), "the widget still knows it must repaint");
     assert!(a.needs_layout(), "and that it must lay out again");
     assert!(b.needs_paint());
+}
+
+/// Background asset completion uses the same coalescing and wakes the correct captured window.
+#[test]
+fn a_background_job_can_request_the_next_frame() {
+    let asks = counting_host();
+    let wake = heca_grid_ui::frame_waker();
+    std::thread::spawn(move || { for _ in 0..100 { wake.request(); } }).join().unwrap();
+    assert_eq!(asks.load(std::sync::atomic::Ordering::Relaxed), 1);
+    heca_grid_ui::frame_served();
+    let wake = heca_grid_ui::frame_waker();
+    std::thread::spawn(move || wake.request()).join().unwrap();
+    assert_eq!(asks.load(std::sync::atomic::Ordering::Relaxed), 2);
 }

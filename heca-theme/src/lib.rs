@@ -15,4 +15,4 @@ pub mod theme;
 
 pub use color::Color;
 pub use loader::{available_themes, config_dir, load_theme};
-pub use theme::{InputStyle, FrameStyle, GlowLevel, Intensity, Shadow, Theme};
+pub use theme::{DialogStyle, FlashStyle, InputStyle, FrameStyle, GlowLevel, Intensity, Shadow, Theme};

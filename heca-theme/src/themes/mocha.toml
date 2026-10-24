@@ -14,7 +14,7 @@ selected_background = "#566990"
 
 # A selected row, the row back-and-forth returns to, and the two workspace frames —
 # four strengths of one idea, as colours rather than alphas so they can simply be seen.
-previous_background = "#4f5e82"
+previous_background = "#4f5e8280"
 workspace_active_background = "#3c435c"
 workspace_previous_background = "#383c53"
 danger = "#f38ba8"
@@ -32,7 +32,7 @@ glow_size = "none"
 intensity = "off"
 show_focus_border = true
 icon_secondary_alpha = 0.30
-active_wash_alpha = 0.11
+active_wash_alpha = 0.0
 card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }
 float_background = "#313244"
