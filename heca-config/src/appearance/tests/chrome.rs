@@ -89,10 +89,9 @@ fn overlay_border_style_overrides_the_theme_else_inherits_it() {
 
 #[test]
 fn border_style_parses_snake_case_and_resolves_defaults() {
-    let cfg: AppearanceConfig = toml::from_str(
-        "[pane]\nborder_style = \"bracketed\"\n[sidebar]\nborder_style = \"none\"",
-    )
-    .expect("border styles should parse snake_case");
+    let cfg: AppearanceConfig =
+        toml::from_str("[pane]\nborder_style = \"bracketed\"\n[sidebar]\nborder_style = \"none\"")
+            .expect("border styles should parse snake_case");
     assert_eq!(cfg.pane.border_style, Some(BorderStyle::Bracketed));
     assert_eq!(cfg.sidebar.border_style, Some(BorderStyle::None));
     assert_eq!(cfg.effective_pane_border_style(), BorderStyle::Bracketed);

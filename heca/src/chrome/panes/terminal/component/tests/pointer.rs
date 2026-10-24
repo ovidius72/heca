@@ -24,10 +24,8 @@ fn the_wheel_says_which_cell_it_turned_over() {
         Handled::Yes
     );
     let said = pointer_input(&said);
-    let [
-        TerminalInput::Wheel { x, y, cell, .. },
-        TerminalInput::Wheel { pixels, .. },
-    ] = said.as_slice()
+    let [TerminalInput::Wheel { x, y, cell, .. }, TerminalInput::Wheel { pixels, .. }] =
+        said.as_slice()
     else {
         panic!("two wheel messages, got {said:?}");
     };
@@ -43,6 +41,42 @@ fn an_unbound_terminal_leaves_the_wheel_alone() {
     let mut root = laid_out_in(Box::new(Terminal::new()), 300.0, 200.0);
     let ev = Event::wheel(heca_grid_ui::Point::new(5.0, 5.0), 0.0, 1.0);
     assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &ev), Handled::No);
+}
+
+#[test]
+fn pointer_cells_follow_the_rendered_terminal_after_subtree_shifts() {
+    for (top, left) in [(0.0, 0.0), (8.0, 6.0)] {
+        let (seams, said) = recording();
+        let t = Terminal::new();
+        t.bind(seams);
+        t.set_content_padding(top, 0.0, left, 0.0);
+        t.show(&scrolled(0));
+        let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+
+        for (dx, dy) in [(50.0, 60.0), (-20.0, -30.0)] {
+            heca_grid_ui::component::shift_subtree(root.as_mut(), dx, dy);
+            let _ = painted(root.as_ref());
+            said.borrow_mut().clear();
+            let origin = root.base().bounds.loc;
+            let at = Point::new(origin.x + left + 5.0, origin.y + top + 10.0);
+            heca_grid_ui::dispatch(
+                root.as_mut(),
+                &Event::pointer_pressed(at, PointerButton::Right),
+            );
+            let emitted = pointer_input(&said);
+            let Some(TerminalInput::Press {
+                cell: Some(cell), ..
+            }) = emitted.first()
+            else {
+                panic!("expected a grid press: {emitted:?}");
+            };
+            assert_eq!(
+                (cell.row, cell.col),
+                (0, 0),
+                "first drawn cell; padding=({top},{left}), origin={origin:?}"
+            );
+        }
+    }
 }
 
 /// A press, a release and a move on the terminal itself say where in the grid they were — and

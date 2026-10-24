@@ -135,7 +135,175 @@ pub(super) fn draw_terminal_symbol_cell(
         return true;
     }
 
+    if draw_block_cell(primitive_renderer, ch, x, y, w, h, color) {
+        return true;
+    }
+
     draw_box_drawing_cell(primitive_renderer, ch, x, y, w, h, color)
+}
+
+/// One cell-filling arrangement for a **Block Element** — pure data over the
+/// character alone, so the mapping is testable headless and the draw costs no
+/// allocation: a solid block is either one eighth-anchored rectangle or a set
+/// of quadrants, never anything a `Vec` is needed for.
+pub(super) enum BlockFill {
+    /// One axis-aligned rectangle, its edges in **eighths of the cell**:
+    /// `rows`/`cols` hold `[start, end]` where `1` is an eighth; e.g. `▄` is
+    /// `rows: [4, 8]`, the cell's own geometry without any font say.
+    Rect { rows: [u8; 2], cols: [u8; 2] },
+    /// A quadrant set (`U+2596`–`U+259F`), one bit per corner: [`Self::UPPER_LEFT`],
+    /// [`Self::UPPER_RIGHT`], [`Self::LOWER_LEFT`], [`Self::LOWER_RIGHT`].
+    Quads(u8),
+}
+
+impl BlockFill {
+    /// The upper-left quadrant bit for [`BlockFill::Quads`].
+    pub(super) const UPPER_LEFT: u8 = 0b0001;
+    /// The upper-right quadrant bit.
+    pub(super) const UPPER_RIGHT: u8 = 0b0010;
+    /// The lower-left quadrant bit.
+    pub(super) const LOWER_LEFT: u8 = 0b0100;
+    /// The lower-right quadrant bit.
+    pub(super) const LOWER_RIGHT: u8 = 0b1000;
+}
+
+/// The cell-filling arrangement of a **Block Element** (`U+2580`–`U+259F`),
+/// exactly as Alacritty/Kitty draw them: edge to edge in the *cell's* geometry,
+/// never the font's — a font's block glyphs stop short of the cell bounds
+/// (advance, hinting, ascent), so two same-colour blocks hand-rendered by the
+/// font show a hairline seam between them. Drawing the cell's own rectangles
+/// makes `█▄▀▌▐▙▟…` tile perfectly, which is what logos and ASCII art made of
+/// blocks need.
+///
+/// The shading characters (`░` `▒` `▓`) stay with the font: they are dithered
+/// textures, not solid fills, and the font draws them without seams at normal
+/// scale.
+pub(super) fn block_fill(ch: char) -> Option<BlockFill> {
+    // The row and column slices are said in eighths, which covers every solid
+    // block: the vertical stacks `▁..▀` and the side strips `▏..▕` are one rect
+    // each; the quadrants are a bit per corner.
+    let eighths = |top: u32, bottom: u32| BlockFill::Rect {
+        rows: [top as u8, bottom as u8],
+        cols: [0, 8],
+    };
+    match ch {
+        // U+2580 ▀ upper half
+        '\u{2580}' => Some(eighths(0, 4)),
+        // U+2581–U+2587 ▁ ▂ ▃ ▄ ▅ ▆ ▇ — the lower n·⅛ of the cell
+        '\u{2581}'..='\u{2587}' => {
+            let n = ch as u32 - 0x2580;
+            Some(eighths(8 - n, 8))
+        }
+        // U+2588 █ full
+        '\u{2588}' => Some(eighths(0, 8)),
+        // U+2589–U+258B ▉ ▊ ▋ — the left 7·⅛, 6·⅛, 5·⅛ strips
+        '\u{2589}'..='\u{258B}' => {
+            let n = 0x2590 - ch as u32;
+            Some(BlockFill::Rect {
+                rows: [0, 8],
+                cols: [0, n as u8],
+            })
+        }
+        // U+258C ▌ left half
+        '\u{258C}' => Some(BlockFill::Rect {
+            rows: [0, 8],
+            cols: [0, 4],
+        }),
+        // U+258D–U+258F ▍ ▎ ▏ — the left 3·⅛, 2·⅛, 1·⅛ strips
+        '\u{258D}'..='\u{258F}' => {
+            let n = 0x2590 - ch as u32;
+            Some(BlockFill::Rect {
+                rows: [0, 8],
+                cols: [0, n as u8],
+            })
+        }
+        // U+2590 ▐ right half
+        '\u{2590}' => Some(BlockFill::Rect {
+            rows: [0, 8],
+            cols: [4, 8],
+        }),
+        // U+2594 ▔ upper eighth
+        '\u{2594}' => Some(BlockFill::Rect {
+            rows: [0, 1],
+            cols: [0, 8],
+        }),
+        // U+2595 ▕ right eighth
+        '\u{2595}' => Some(BlockFill::Rect {
+            rows: [0, 8],
+            cols: [7, 8],
+        }),
+        // U+2596–U+259F ▖ ▗ ▘ ▝ ▙ ▚ ▛ ▜ ▞ ▟ — their named quadrants
+        '\u{2596}' => Some(BlockFill::Quads(BlockFill::LOWER_LEFT)),
+        '\u{2597}' => Some(BlockFill::Quads(BlockFill::LOWER_RIGHT)),
+        '\u{2598}' => Some(BlockFill::Quads(BlockFill::UPPER_LEFT)),
+        '\u{2599}' => Some(BlockFill::Quads(
+            BlockFill::UPPER_LEFT | BlockFill::LOWER_LEFT | BlockFill::LOWER_RIGHT,
+        )),
+        '\u{259A}' => Some(BlockFill::Quads(
+            BlockFill::UPPER_LEFT | BlockFill::LOWER_RIGHT,
+        )),
+        '\u{259B}' => Some(BlockFill::Quads(
+            BlockFill::UPPER_LEFT | BlockFill::UPPER_RIGHT | BlockFill::LOWER_LEFT,
+        )),
+        '\u{259C}' => Some(BlockFill::Quads(
+            BlockFill::UPPER_LEFT | BlockFill::UPPER_RIGHT | BlockFill::LOWER_RIGHT,
+        )),
+        '\u{259D}' => Some(BlockFill::Quads(BlockFill::UPPER_RIGHT)),
+        '\u{259E}' => Some(BlockFill::Quads(
+            BlockFill::UPPER_RIGHT | BlockFill::LOWER_LEFT,
+        )),
+        '\u{259F}' => Some(BlockFill::Quads(
+            BlockFill::UPPER_RIGHT | BlockFill::LOWER_LEFT | BlockFill::LOWER_RIGHT,
+        )),
+        _ => None,
+    }
+}
+
+/// Draw one Block Element cell from [`block_fill`] — the shared fg colour,
+/// every rectangle exact to its cell edge. No allocation: the arrangement is
+/// fixed data, played straight into the primitive pass.
+fn draw_block_cell(
+    primitive_renderer: &mut PrimitiveRenderer,
+    ch: char,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    color: [f32; 4],
+) -> bool {
+    let Some(fill) = block_fill(ch) else {
+        return false;
+    };
+    match fill {
+        BlockFill::Rect { rows, cols } => {
+            let (r0, r1) = (rows[0] as f32, rows[1] as f32);
+            let (c0, c1) = (cols[0] as f32, cols[1] as f32);
+            primitive_renderer.draw_rect(
+                x + w * c0 / 8.0,
+                y + h * r0 / 8.0,
+                w * (c1 - c0) / 8.0,
+                h * (r1 - r0) / 8.0,
+                color,
+            );
+        }
+        BlockFill::Quads(mask) => {
+            // One quarter-cell each; adjacent quadrants share the cell's own
+            // edges, so neighbouring cells still meet with no seam.
+            if mask & BlockFill::UPPER_LEFT != 0 {
+                primitive_renderer.draw_rect(x, y, w * 0.5, h * 0.5, color);
+            }
+            if mask & BlockFill::UPPER_RIGHT != 0 {
+                primitive_renderer.draw_rect(x + w * 0.5, y, w * 0.5, h * 0.5, color);
+            }
+            if mask & BlockFill::LOWER_LEFT != 0 {
+                primitive_renderer.draw_rect(x, y + h * 0.5, w * 0.5, h * 0.5, color);
+            }
+            if mask & BlockFill::LOWER_RIGHT != 0 {
+                primitive_renderer.draw_rect(x + w * 0.5, y + h * 0.5, w * 0.5, h * 0.5, color);
+            }
+        }
+    }
+    true
 }
 
 fn draw_box_drawing_cell(
@@ -305,5 +473,108 @@ fn draw_half_ellipse(
         } else {
             primitive_renderer.draw_rect(x + inset, band_y, (w - inset).max(0.0), draw_h, color);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{block_fill, BlockFill};
+
+    fn fill(ch: char) -> BlockFill {
+        block_fill(ch).expect("expected a block element")
+    }
+
+    fn rows(ch: char) -> [u8; 2] {
+        match fill(ch) {
+            BlockFill::Rect { rows, .. } => rows,
+            _ => panic!("{ch:?} should be one rect"),
+        }
+    }
+
+    fn cols(ch: char) -> [u8; 2] {
+        match fill(ch) {
+            BlockFill::Rect { cols, .. } => cols,
+            _ => panic!("{ch:?} should be one rect"),
+        }
+    }
+
+    fn quads(ch: char) -> u8 {
+        match fill(ch) {
+            BlockFill::Quads(mask) => mask,
+            _ => panic!("{ch:?} should be quadrants"),
+        }
+    }
+
+    fn none(ch: char) {
+        assert!(block_fill(ch).is_none(), "{ch:?} must stay with the font");
+    }
+
+    #[test]
+    fn the_upper_and_lower_halves_meet_at_the_cell_middle_with_no_gap() {
+        assert_eq!(rows('▀'), [0, 4], "the upper half starts at the top");
+        assert_eq!(
+            rows('▄'),
+            [4, 8],
+            "the lower half starts exactly where the upper ends"
+        );
+        assert_eq!(cols('▀'), cols('▄'), "both span the whole width");
+    }
+
+    #[test]
+    fn the_lower_blocks_stack_by_eighths() {
+        assert_eq!(rows('▁'), [7, 8]);
+        assert_eq!(rows('▃'), [5, 8]);
+        assert_eq!(rows('▇'), [1, 8]);
+    }
+
+    #[test]
+    fn the_full_block_fills_the_whole_cell() {
+        assert_eq!(rows('█'), [0, 8]);
+        assert_eq!(cols('█'), [0, 8]);
+    }
+
+    #[test]
+    fn the_left_and_right_strips_split_the_width_exactly() {
+        for (ch, end) in [('▉', 7), ('▊', 6), ('▋', 5)] {
+            assert_eq!(cols(ch), [0, end], "{ch} starts at the left cell edge");
+            assert_eq!(rows(ch), [0, 8]);
+        }
+        assert_eq!(cols('▌'), [0, 4]);
+        assert_eq!(cols('▐'), [4, 8]);
+        assert_eq!(cols('▏'), [0, 1]);
+        assert_eq!(cols('▕'), [7, 8]);
+        assert_eq!(
+            rows('▌'),
+            rows('▐'),
+            "the side strips span the whole height"
+        );
+    }
+
+    #[test]
+    fn the_quadrants_fill_their_quarter_of_the_cell() {
+        assert_eq!(quads('▖'), BlockFill::LOWER_LEFT);
+        assert_eq!(quads('▗'), BlockFill::LOWER_RIGHT);
+        assert_eq!(quads('▘'), BlockFill::UPPER_LEFT);
+        assert_eq!(quads('▝'), BlockFill::UPPER_RIGHT);
+        assert_eq!(
+            quads('▚'),
+            BlockFill::UPPER_LEFT | BlockFill::LOWER_RIGHT,
+            "the diagonal pair"
+        );
+        assert_eq!(
+            quads('▟'),
+            BlockFill::UPPER_RIGHT | BlockFill::LOWER_LEFT | BlockFill::LOWER_RIGHT,
+            "everything but the upper left"
+        );
+    }
+
+    #[test]
+    fn a_non_block_element_stays_with_the_font() {
+        none('a');
+        none('─'); // box drawing — `draw_box_drawing_cell` owns it
+        none('✻'); // a glyph, not a block — the Claude Code logo's star itself
+        none('░');
+        none('▒');
+        none('▓'); // shades: dithered font textures
     }
 }

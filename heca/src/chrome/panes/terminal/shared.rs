@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 
 use heca_config::theme::ModifierKey;
 use heca_core::backend::HyperlinkSpan;
-use heca_core::layout::Rectangle;
+use heca_core::layout::{Point, Rectangle};
 use heca_grid_ui::Size;
 
 use super::input::{Cell as GridCell, Grid, Search, TerminalInput};
@@ -32,8 +32,12 @@ pub(super) struct Shared {
     pub(super) intents: IntentSlot,
     /// One cell's size in logical pixels, as the last viewport said.
     pub(super) cell: Cell<(f32, f32)>,
-    /// The box the terminal was last painted in — what its cells are counted from.
+    /// The box the terminal was last painted in — what its surface is drawn in.
     pub(super) bounds: Cell<Rectangle>,
+    /// Per-side (top, bottom, left, right) space between the pane's edges and its
+    /// grid, logical px. Said once by whoever reads config; the default is none —
+    /// the grid fills the panel as it always did.
+    pub(super) padding: Cell<(f64, f64, f64, f64)>,
     /// The font's own cell size — what the grid is fitted from.
     pub(super) nominal: Cell<(f32, f32)>,
     /// The grid last asked of the process. A new one is asked only when this changes.
@@ -73,6 +77,31 @@ pub(super) struct Declared {
 }
 
 impl Shared {
+    /// The grid's box relative to its surface. Keep padding geometry in one place
+    /// for layout, rendering and cell coordinates.
+    pub(super) fn content_box(&self) -> Rectangle {
+        let bounds = self.bounds.get();
+        let (top, bottom, left, right) = self.padding.get();
+        Rectangle::new(
+            Point::new(left, top),
+            Size::new(
+                (bounds.size.w - left - right).max(0.0),
+                (bounds.size.h - top - bottom).max(0.0),
+            ),
+        )
+    }
+
+    /// The grid's current window coordinates. A parent may shift the subtree
+    /// after layout, so derive this from the bounds refreshed by paint rather
+    /// than caching a second absolute rectangle in on_layout.
+    pub(super) fn content_bounds(&self) -> Rectangle {
+        let mut content = self.content_box();
+        let origin = self.bounds.get().loc;
+        content.loc.x += origin.x;
+        content.loc.y += origin.y;
+        content
+    }
+
     /// Say `input` to the terminal's owner. `false` when nobody has said where it goes.
     pub(super) fn emit(&self, input: TerminalInput) -> bool {
         match self.intents.borrow().as_ref() {
@@ -149,12 +178,13 @@ impl Shared {
         }
     }
 
-    /// The grid cell the pointer is on, if it is on the grid.
+    /// The grid cell the pointer is on, if it is on the grid — inside the
+    /// **content** box, so the configured padding keeps a press out of cell maths.
     pub(super) fn cell_at(&self, p: &heca_grid_ui::PointerEvent) -> Option<GridCell> {
         let (cell_w, cell_h) = self.cell.get();
         GridCell::at(
             (p.pos.x, p.pos.y),
-            self.bounds.get(),
+            self.content_bounds(),
             cell_w as f64,
             cell_h as f64,
         )

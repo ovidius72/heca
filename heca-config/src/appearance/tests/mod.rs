@@ -4,3 +4,4 @@ mod chrome;
 mod defaults;
 mod effective;
 mod parsing;
+mod terminal_padding;

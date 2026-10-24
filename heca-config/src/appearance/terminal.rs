@@ -72,6 +72,17 @@ fn default_terminal_search_current_match_alpha() -> u8 {
     150
 }
 
+/// Terminal content padding, **resolved per side** (logical px): how much room
+/// the terminal keeps between the pane's edge and its grid. [`TerminalAppearance`]
+/// carries the raw config words; this is what the app hands the terminal.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TerminalPadding {
+    pub top: f64,
+    pub bottom: f64,
+    pub left: f64,
+    pub right: f64,
+}
+
 /// Terminal **content** surface translucency/blur (`[appearance.terminal]`). The
 /// pane *frame* (border/radius/gap) lives in [`PaneAppearance`] — this owns only
 /// the see-through-ness of the terminal surface itself.
@@ -145,6 +156,22 @@ pub struct TerminalAppearance {
     /// and rendering entirely. Default `true`.
     #[serde(default = "default_terminal_images")]
     pub images: bool,
+    /// Extra space between the pane's edge and the terminal grid, **all four
+    /// sides**, logical px. `0` (default) leaves the grid filling the pane; a
+    /// value holds the grid in from every side.
+    #[serde(default)]
+    pub padding: Option<f64>,
+    /// Per-side overrides of [`Self::padding`]: whichever of
+    /// `padding_top`/`padding_bottom`/`padding_left`/`padding_right` is written
+    /// decides that side alone. Defaults: `0`.
+    #[serde(default)]
+    pub padding_top: Option<f64>,
+    #[serde(default)]
+    pub padding_bottom: Option<f64>,
+    #[serde(default)]
+    pub padding_left: Option<f64>,
+    #[serde(default)]
+    pub padding_right: Option<f64>,
 }
 
 impl Default for TerminalAppearance {
@@ -166,6 +193,26 @@ impl Default for TerminalAppearance {
             search_match_alpha: default_terminal_search_match_alpha(),
             search_current_match_alpha: default_terminal_search_current_match_alpha(),
             images: default_terminal_images(),
+            padding: None,
+            padding_top: None,
+            padding_bottom: None,
+            padding_left: None,
+            padding_right: None,
+        }
+    }
+}
+
+impl TerminalAppearance {
+    /// The terminal's content padding: [`Self::padding`] for every side first,
+    /// then each `padding_{top,bottom,left,right}` deciding its own side. Every
+    /// value clamps at `0` — a terminal cannot crop into its frame.
+    pub fn effective_terminal_padding(&self) -> TerminalPadding {
+        let all = self.padding.unwrap_or(0.0).max(0.0);
+        TerminalPadding {
+            top: self.padding_top.unwrap_or(all).max(0.0),
+            bottom: self.padding_bottom.unwrap_or(all).max(0.0),
+            left: self.padding_left.unwrap_or(all).max(0.0),
+            right: self.padding_right.unwrap_or(all).max(0.0),
         }
     }
 }

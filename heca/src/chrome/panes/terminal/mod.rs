@@ -54,7 +54,10 @@ use crate::app_state::AppState;
 pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
     let id = state.server.backends.id_for(pane_id);
     let proxy = state.event_proxy.clone();
-    state
+    // The padding is config's, and a terminal is made once: say it now, and again
+    // whenever the terminal is looked at, so a reload does not leave an old value.
+    let p = state.appearance.terminal.effective_terminal_padding();
+    let placed = state
         .terminals
         .entry(id)
         .or_insert_with(|| {
@@ -62,8 +65,9 @@ pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
             terminal.attach(id);
             terminal.bind(seams(proxy, Some(pane_id), id));
             terminal
-        })
-        .clone()
+        });
+    placed.set_content_padding(p.top, p.bottom, p.left, p.right);
+    placed.clone()
 }
 
 /// **Start the terminals extensions declared**, once each, and show each the process it got.
@@ -94,6 +98,8 @@ pub(crate) fn start_declared(state: &mut AppState) {
         }
         terminal.attach(id);
         terminal.bind(seams(state.event_proxy.clone(), None, id));
+        let p = state.appearance.terminal.effective_terminal_padding();
+        terminal.set_content_padding(p.top, p.bottom, p.left, p.right);
         state.terminals.insert(id, terminal);
     }
 }
@@ -214,11 +220,30 @@ fn settle<'a>(terminals: impl Iterator<Item = &'a Terminal>, drawn: &Drawn) {
     }
 }
 
-/// **The box a terminal fills**: how much room the layout gave it (known for every terminal, on
-/// screen or not, so one scrolled out of view keeps its size). Its size only — where it is drawn
-/// comes from the scene that draws it, at the moment it is drawn.
-pub(crate) fn room_of(state: &AppState, id: TerminalId) -> Option<heca_core::layout::Size> {
-    state.terminals.get(&id)?.room()
+/// **The box a terminal's grid fills, relative to where the terminal is drawn** — the room the
+/// layout gave it held in by its configured padding (see `[appearance.terminal] padding*`): where
+/// the padding holds it in and how much room is left. Known for every terminal, on screen or not,
+/// so one scrolled out of view keeps its size; where it is drawn comes from the scene that draws
+/// it, at the moment it is drawn.
+pub(crate) fn content_box_of(state: &AppState, id: TerminalId) -> Option<heca_core::layout::Rectangle> {
+    state.terminals.get(&id)?.content_box()
+}
+
+/// **The box a terminal's surface spans, relative to where it is drawn** — the whole
+/// box the layout gave it, padding included. The terminal's background fills this and
+/// the grid above is held in by [`content_box_of`]; `None` before the first layout.
+pub(crate) fn full_box_of(state: &AppState, id: TerminalId) -> Option<heca_core::layout::Rectangle> {
+    state.terminals.get(&id)?.full_box()
+}
+
+/// **Say the configured terminal padding to every terminal** — each new one (a pane's, a dock's, an
+/// extension's) and, on `prefix+Shift+r`, every running one, so a reload looks the same as a
+/// restart. Reads `[appearance.terminal] padding*` once; the components apply it at layout.
+pub(crate) fn apply_configured_padding(state: &mut AppState) {
+    let p = state.appearance.terminal.effective_terminal_padding();
+    for terminal in state.terminals.values() {
+        terminal.set_content_padding(p.top, p.bottom, p.left, p.right);
+    }
 }
 
 /// **Show each terminal how its viewport looks**, from the snapshots this frame prepared. Returns

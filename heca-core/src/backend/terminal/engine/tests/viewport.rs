@@ -1,6 +1,36 @@
 use super::*;
 
 #[test]
+fn boot_resize_keeps_the_prompt_on_the_first_row() {
+    // Boot at the spawn grid (80x24), let the shell print its two prompt lines,
+    // then resize to the pane's real grid — the boot sequence every pane runs
+    // when its first layout reports. The engine keeps the prompt on the first
+    // visible row: a blank top row on screen is the shell's own output (its
+    // prompt-redraw newline), not a viewport or reflow shift.
+    let mut engine = viewport_engine(80, 24, 3500);
+    engine.advance_bytes(b"~ via v25.4.0\r\n");
+    engine.advance_bytes(b"\xe2\x80\xba . ");
+    engine.resize(37, 40);
+
+    let snap = engine.snapshot((8.0, 17.0));
+    assert_eq!(snap.rows, 40);
+    let first = &snap.lines[0];
+    let has_glyphs = first
+        .cells
+        .iter()
+        .any(|c| c.text.trim() != "" || c.bg[3] > 0.0);
+    eprintln!(
+        "row0 {:?}",
+        first
+            .cells
+            .iter()
+            .map(|c| c.text.clone())
+            .collect::<String>()
+    );
+    assert!(has_glyphs, "first visible row lost the prompt");
+}
+
+#[test]
 fn viewport_starts_pinned_to_bottom_with_zero_offset() {
     let mut engine = viewport_engine(20, 4, 3500);
     fill_scrollback(&mut engine, 20, 10);

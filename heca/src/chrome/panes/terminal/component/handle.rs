@@ -3,7 +3,6 @@
 //! The same handle a tree holds and its owner keeps: every method speaks to the shared terminal.
 
 use heca_core::layout::Rectangle;
-use heca_grid_ui::Size;
 
 use super::super::input::{Cell as GridCell, Seams, TerminalCommand};
 use super::super::model::TerminalId;
@@ -239,7 +238,7 @@ impl Terminal {
         let (cell_w, cell_h) = self.shared.cell.get();
         GridCell::at(
             (pos.0 as f64, pos.1 as f64),
-            self.shared.bounds.get(),
+            self.shared.content_bounds(),
             cell_w as f64,
             cell_h as f64,
         )
@@ -250,7 +249,7 @@ impl Terminal {
     pub(crate) fn cell_origin(&self, row: usize, col: usize) -> Option<(f32, f32)> {
         self.shared.placed.get()?;
         let (cell_w, cell_h) = self.shared.cell.get();
-        let at = self.shared.bounds.get().loc;
+        let at = self.shared.content_bounds().loc;
         Some((
             at.x as f32 + col as f32 * cell_w,
             at.y as f32 + row as f32 * cell_h,
@@ -288,8 +287,37 @@ impl Terminal {
         self.shared.link_at(row as usize, col)
     }
 
-    /// How much room the layout gave it the last time it was laid out.
-    pub(crate) fn room(&self) -> Option<Size> {
-        self.shared.size.get()
+    /// **Hold the grid in by per-side padding** — `(top, bottom, left, right)`,
+    /// logical px. Said once by whoever reads config (each new terminal, and every
+    /// terminal again on `prefix+Shift+r`); the component applies it at layout:
+    /// the grid flows into the smaller box, the process is told fewer cells, and
+    /// nothing is cropped. The default is no padding at all.
+    pub(crate) fn set_content_padding(&self, top: f64, bottom: f64, left: f64, right: f64) {
+        self.shared.padding.set((top, bottom, left, right));
+    }
+
+    /// **The grid's box, relative to where the terminal was placed** — where the
+    /// padding holds it in (left, top) and how much room is left. What the render
+    /// path needs to put the terminal where the scene asks and keep its cells
+    /// aligned; `None` before the first layout.
+    ///
+    /// Both halves come from the layout alone (the padding and the grid's size),
+    /// so the box never depends on when it was painted: the inset is the padding,
+    /// whatever the frame.
+    pub(crate) fn content_box(&self) -> Option<Rectangle> {
+        self.shared.size.get()?;
+        Some(self.shared.content_box())
+    }
+
+    /// **The surface's whole box, relative to where it is drawn** — (0, 0) and the
+    /// full box the layout gave the terminal, padding included: the background's
+    /// box, where the grid above sits held in. `None` before the first layout.
+    pub(crate) fn full_box(&self) -> Option<Rectangle> {
+        self.shared.size.get()?;
+        let size = self.shared.bounds.get().size;
+        Some(Rectangle::new(
+            heca_core::layout::Point::new(0.0, 0.0),
+            size,
+        ))
     }
 }

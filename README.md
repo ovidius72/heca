@@ -905,6 +905,19 @@ show_scrollbar = "when_needed"
 # Scrolled-up indicator badge ("N lines above", click snaps to bottom).
 # true | false (default true)
 show_scrolled_up_badge = true
+# Space between the pane edge and the terminal grid (logical px):
+#   padding                  — all four sides
+#   padding_top/bottom/left/right — override one side
+# The grid reflows into the smaller box (the program is told fewer cells), it is
+# never cropped. Default 0 (unchanged rendering).
+padding = 0
+```
+
+Give a startup screen breathing room, the way most terminals do:
+
+```toml
+[appearance.terminal]
+padding = 6            # or per side: padding_top = 6, padding_left = 6, …
 ```
 
 **How frost is produced:**

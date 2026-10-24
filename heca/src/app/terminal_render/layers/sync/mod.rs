@@ -4,7 +4,7 @@ use super::damage::{
     graphics_signature, image_row_ranges, retained_damage_to_apply, terminal_damage_copy_bands,
 };
 use crate::app::terminal_host::TerminalMount;
-use crate::app::terminal_render::{TerminalRenderState, rect_to_text_box};
+use crate::app::terminal_render::{rect_to_text_box, TerminalRenderState};
 use crate::app_state::AppState;
 use crate::chrome::panes::terminal::TerminalId;
 use heca_core::backend::TerminalDamage;
@@ -43,7 +43,7 @@ pub(crate) fn sync_retained_terminal_layers(
         pane_style.surface_alpha = pane.opacity;
         let render_key = terminal_layer_render_key(&pane_style);
 
-        let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
+        let physical_size = retained_terminal_texture_size(mount.surface_rect, state.scale_factor);
         // The offscreen scratch must match the pane's exact physical size. A
         // larger reused target would render the terminal at the wrong pixel
         // density and then crop the top-left subset during the copy into the
@@ -76,6 +76,12 @@ pub(crate) fn sync_retained_terminal_layers(
         if style_changed {
             layer.render_key = render_key;
         }
+        // A layer created this frame is transparent, so its first update paints
+        // the whole texture even though `ensure_size` reports no resize (it was
+        // created at the current size). Consumed either way — from here on the
+        // layer has a last frame to retain.
+        let created = layer.first_update;
+        layer.first_update = false;
 
         let graphics_sig = graphics_signature(&mount.snapshot.graphics);
         let graphics_changed = layer.graphics_sig != graphics_sig;
@@ -98,7 +104,7 @@ pub(crate) fn sync_retained_terminal_layers(
         // resize or style change still forces a full repaint. An image placement
         // change or animation frame advance damages the image rows (old ∪ new).
         let Some(damage) = retained_damage_to_apply(
-            resized,
+            resized || created,
             style_changed,
             graphics_changed || anim_advanced,
             &mount.damage,
@@ -158,12 +164,12 @@ fn terminal_layer_render_key(style: &TerminalStyle<'_>) -> u64 {
 }
 
 fn retained_terminal_texture_size(
-    content_rect: Rectangle,
+    surface_rect: Rectangle,
     scale_factor: f64,
 ) -> winit::dpi::PhysicalSize<u32> {
     let scale = scale_factor as f32;
-    let width = (content_rect.size.w as f32 * scale).ceil().max(1.0) as u32;
-    let height = (content_rect.size.h as f32 * scale).ceil().max(1.0) as u32;
+    let width = (surface_rect.size.w as f32 * scale).ceil().max(1.0) as u32;
+    let height = (surface_rect.size.h as f32 * scale).ceil().max(1.0) as u32;
     winit::dpi::PhysicalSize::new(width, height)
 }
 
@@ -177,10 +183,10 @@ fn render_terminal_layer_update(
     window_physical_size: winit::dpi::PhysicalSize<u32>,
 ) {
     let logical_size = (
-        mount.content_rect.size.w as f32,
-        mount.content_rect.size.h as f32,
+        mount.surface_rect.size.w as f32,
+        mount.surface_rect.size.h as f32,
     );
-    let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
+    let physical_size = retained_terminal_texture_size(mount.surface_rect, state.scale_factor);
 
     state
         .primitive_renderer
@@ -197,15 +203,20 @@ fn render_terminal_layer_update(
     // Inline images draw in the same logical space as the primitive/text passes.
     // Textures were already uploaded/advanced in `sync_retained_terminal_layers`
     // before the damage decision; here we just queue one quad per placement to
-    // flush into the scratch around the glyph pass below.
+    // flush into the scratch around the glyph pass below. The grid sits at the
+    // content inset (the padding), not the texture's corner.
     state
         .image_renderer
         .set_screen_size(&state.queue, logical_size.0, logical_size.1);
+    let grid_origin = (
+        mount.content_rect.loc.x as f32,
+        mount.content_rect.loc.y as f32,
+    );
     for placement in &mount.snapshot.graphics {
         state.image_renderer.queue_placement(
             placement,
-            0.0,
-            0.0,
+            grid_origin.0,
+            grid_origin.1,
             mount.snapshot.cell_w,
             mount.snapshot.cell_h,
         );
@@ -231,7 +242,9 @@ fn render_terminal_layer_update(
         timestamp_writes: None,
     });
 
-    let local_rect = Rectangle::new(
+    // The texture is the surface's whole box; the grid sits at the content inset
+    // (the padding) inside it and the background fills the whole of it.
+    let local_surface = Rectangle::new(
         Point::new(0.0, 0.0),
         Size::new(logical_size.0 as f64, logical_size.1 as f64),
     );
@@ -240,8 +253,9 @@ fn render_terminal_layer_update(
             TerminalRenderer::new(&mut state.text_renderer, &mut state.primitive_renderer);
         terminal_renderer.render_snapshot_damage(
             &mount.snapshot,
-            rect_to_text_box(local_rect),
+            rect_to_text_box(mount.content_rect),
             terminal_style,
+            Some(rect_to_text_box(local_surface)),
             damage,
         );
     }
@@ -275,6 +289,7 @@ fn render_terminal_layer_update(
         damage,
         &mount.snapshot,
         logical_size.1,
+        mount.content_rect.loc.y as f32,
         state.scale_factor,
         physical_size.height,
     );

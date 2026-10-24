@@ -244,6 +244,9 @@ impl HecaApp {
                 .text_renderer
                 .set_font_family(self.app_config.config.font.family.ui_normal());
             refresh_terminal_cell_size(state);
+            // Terminal padding is config's too: re-say it to every running terminal, so
+            // `prefix+Shift+r` changes `[appearance.terminal] padding*` live.
+            crate::chrome::panes::terminal::apply_configured_padding(state);
             state.terminal_layers.clear();
             // The pane shells and the headers they hold bake the theme, fonts and shortcuts at
             // build, so a reload drops them all and the next frame rebuilds them.

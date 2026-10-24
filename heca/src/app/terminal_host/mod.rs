@@ -28,7 +28,14 @@ use heca_core::layout::{PaneId, Rectangle};
 
 #[derive(Clone)]
 pub(crate) struct TerminalMount {
+    /// The **grid's** box, relative to where the surface is drawn: the surface's
+    /// box held in by the terminal's configured padding (`Rectangle::loc` is the
+    /// inset, i.e. (0, 0) with no padding). Cells, cursor and selection live here.
     pub content_rect: Rectangle,
+    /// The surface's **whole** box, relative to itself: (0, 0) with the surface's
+    /// own size. The terminal's background fills it — the padding is *inside* the
+    /// terminal — while the grid above stays held in by `content_rect`.
+    pub surface_rect: Rectangle,
     pub snapshot: TerminalSnapshot,
     /// Pending visible damage for this pane's terminal content. Carried through
     /// the mount/render boundary even when the renderer still falls back to

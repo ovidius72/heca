@@ -40,6 +40,7 @@ impl Terminal {
             intents: IntentSlot::default(),
             cell: Cell::new((0.0, 0.0)),
             bounds: Cell::new(Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0))),
+            padding: Cell::new((0.0, 0.0, 0.0, 0.0)),
             nominal: Cell::new((0.0, 0.0)),
             reported: Cell::new(None),
             controls: RefCell::default(),
@@ -180,9 +181,11 @@ impl Component for Terminal {
         if let Some(id) = self.shared.id.get() {
             cx.surface(self.base.bounds, id.0);
         }
-        self.shared
-            .search
-            .paint_highlights(cx, self.base.bounds.loc, self.shared.cell.get());
+        self.shared.search.paint_highlights(
+            cx,
+            self.shared.content_bounds().loc,
+            self.shared.cell.get(),
+        );
         for child in &self.base.children {
             heca_grid_ui::paint_child(child.as_ref(), cx);
         }
@@ -254,12 +257,21 @@ impl Component for Terminal {
             }),
             _ => false,
         };
-        if said { Handled::Yes } else { Handled::No }
+        if said {
+            Handled::Yes
+        } else {
+            Handled::No
+        }
     }
 
-    /// The box is known: say how big it is.
+    /// The box is known: say the grid's box — the room held in by the configured
+    /// padding — and the terminal's whole box, padding included. [`Shared::size`]
+    /// carries the grid's size (so the process is told fewer cells, never cropped
+    /// ones). The grid's window coordinates are derived from [`Shared::bounds`],
+    /// which paint refreshes after any parent displacement.
     fn on_layout(&mut self) {
-        self.shared.size.set(Some(self.base.bounds.size));
+        self.shared.bounds.set(self.base.bounds);
+        self.shared.size.set(Some(self.shared.content_box().size));
         self.shared.report_grid();
     }
 }

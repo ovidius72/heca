@@ -14,6 +14,13 @@ pub struct RetainedTerminalLayer {
     /// placement change or animation frame advance can damage the *old* rows too
     /// (otherwise a removed/moved image would leave stale pixels behind).
     pub image_rows: Vec<heca_core::backend::TerminalRowRange>,
+    /// True until this layer's first update ran. A freshly created texture is
+    /// transparent — there is no last frame to retain — so its first update must
+    /// be a full repaint even when its size already matches (creation at the
+    /// current size reports "not resized") and the backend only reports dirty
+    /// rows: the row-band path fills the grid rows and would leave everything
+    /// outside the grid transparent, the padding included.
+    pub first_update: bool,
 }
 
 impl RetainedTerminalLayer {
@@ -39,6 +46,7 @@ impl RetainedTerminalLayer {
             render_key,
             graphics_sig: 0,
             image_rows: Vec::new(),
+            first_update: true,
         }
     }
 
