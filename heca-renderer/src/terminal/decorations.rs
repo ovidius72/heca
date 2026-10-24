@@ -201,7 +201,7 @@ pub(super) fn block_fill(ch: char) -> Option<BlockFill> {
             let n = 0x2590 - ch as u32;
             Some(BlockFill::Rect {
                 rows: [0, 8],
-                cols: [(8 - n) as u8, 8],
+                cols: [0, n as u8],
             })
         }
         // U+258C ▌ left half
@@ -535,6 +535,10 @@ mod tests {
 
     #[test]
     fn the_left_and_right_strips_split_the_width_exactly() {
+        for (ch, end) in [('▉', 7), ('▊', 6), ('▋', 5)] {
+            assert_eq!(cols(ch), [0, end], "{ch} starts at the left cell edge");
+            assert_eq!(rows(ch), [0, 8]);
+        }
         assert_eq!(cols('▌'), [0, 4]);
         assert_eq!(cols('▐'), [4, 8]);
         assert_eq!(cols('▏'), [0, 1]);

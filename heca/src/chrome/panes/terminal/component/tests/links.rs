@@ -84,6 +84,22 @@ fn a_link_covers_its_cells_from_the_start_up_to_the_end() {
     assert_eq!(t.link_at(at(5.0, 2.0)), None, "another row");
 }
 
+#[test]
+fn cell_origins_and_link_queries_follow_the_rendered_terminal_after_a_shift() {
+    let (t, mut root, ..) = with_a_link();
+    heca_grid_ui::component::shift_subtree(root.as_mut(), 50.0, 60.0);
+    let _ = painted(root.as_ref());
+
+    assert_eq!(t.cell_origin(3, 4), Some((90.0, 120.0)));
+    let cell = t.cell_at((95.0, 121.0)).expect("on the rendered link");
+    assert_eq!((cell.row, cell.col), (3, 4));
+    assert_eq!(
+        t.link_at((95.0, 121.0)).as_deref(),
+        Some("https://example.com")
+    );
+    assert_eq!(t.link_at((45.0, 61.0)), None, "the link moved away");
+}
+
 /// A link on a row the selection keeps is found by its stable row, and only while on screen.
 #[test]
 fn a_link_is_found_by_the_stable_row_a_selection_keeps() {

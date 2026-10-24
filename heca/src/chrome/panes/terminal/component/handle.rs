@@ -238,7 +238,7 @@ impl Terminal {
         let (cell_w, cell_h) = self.shared.cell.get();
         GridCell::at(
             (pos.0 as f64, pos.1 as f64),
-            self.shared.content.get(),
+            self.shared.content_bounds(),
             cell_w as f64,
             cell_h as f64,
         )
@@ -249,7 +249,7 @@ impl Terminal {
     pub(crate) fn cell_origin(&self, row: usize, col: usize) -> Option<(f32, f32)> {
         self.shared.placed.get()?;
         let (cell_w, cell_h) = self.shared.cell.get();
-        let at = self.shared.content.get().loc;
+        let at = self.shared.content_bounds().loc;
         Some((
             at.x as f32 + col as f32 * cell_w,
             at.y as f32 + row as f32 * cell_h,
@@ -305,12 +305,8 @@ impl Terminal {
     /// so the box never depends on when it was painted: the inset is the padding,
     /// whatever the frame.
     pub(crate) fn content_box(&self) -> Option<Rectangle> {
-        let (top, _bottom, left, _right) = self.shared.padding.get();
-        let size = self.shared.size.get()?;
-        Some(Rectangle::new(
-            heca_core::layout::Point::new(left, top),
-            size,
-        ))
+        self.shared.size.get()?;
+        Some(self.shared.content_box())
     }
 
     /// **The surface's whole box, relative to where it is drawn** — (0, 0) and the

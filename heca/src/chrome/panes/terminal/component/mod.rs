@@ -41,7 +41,6 @@ impl Terminal {
             cell: Cell::new((0.0, 0.0)),
             bounds: Cell::new(Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0))),
             padding: Cell::new((0.0, 0.0, 0.0, 0.0)),
-            content: Cell::new(Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0))),
             nominal: Cell::new((0.0, 0.0)),
             reported: Cell::new(None),
             controls: RefCell::default(),
@@ -184,7 +183,7 @@ impl Component for Terminal {
         }
         self.shared.search.paint_highlights(
             cx,
-            self.shared.content.get().loc,
+            self.shared.content_bounds().loc,
             self.shared.cell.get(),
         );
         for child in &self.base.children {
@@ -268,22 +267,11 @@ impl Component for Terminal {
     /// The box is known: say the grid's box — the room held in by the configured
     /// padding — and the terminal's whole box, padding included. [`Shared::size`]
     /// carries the grid's size (so the process is told fewer cells, never cropped
-    /// ones); [`Shared::content`] carries where it sits on screen, and
-    /// [`Shared::bounds`] the whole box for the render paths that need the surface
-    /// as well as the grid.
+    /// ones). The grid's window coordinates are derived from [`Shared::bounds`],
+    /// which paint refreshes after any parent displacement.
     fn on_layout(&mut self) {
-        let b = self.base.bounds;
-        let (top, bottom, left, right) = self.shared.padding.get();
-        let content = Rectangle::new(
-            Point::new(b.loc.x + left, b.loc.y + top),
-            Size::new(
-                (b.size.w - left - right).max(0.0),
-                (b.size.h - top - bottom).max(0.0),
-            ),
-        );
-        self.shared.bounds.set(b);
-        self.shared.content.set(content);
-        self.shared.size.set(Some(content.size));
+        self.shared.bounds.set(self.base.bounds);
+        self.shared.size.set(Some(self.shared.content_box().size));
         self.shared.report_grid();
     }
 }
