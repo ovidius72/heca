@@ -10,11 +10,21 @@ use crate::widgets::{Flex, Label, Overlay};
 
 #[heca_grid_ui_macros::props]
 impl Dialog {
+    /// Preferred width of a content-sized panel, relative to its resolved font.
+    /// Content may need more room; a narrow viewport may offer less.
+    pub const BASELINE_WIDTH: Length = Length::Em(22.0);
+
     /// A new (closed) dialog titled `title`. Add content with [`body`](Dialog::body) and
     /// buttons with [`action`](Dialog::action), in that order.
+    /// Content-sized panels start at a preferred `22em` width, grow for larger content,
+    /// and give way to the viewport cap. [`panel_size`](Dialog::panel_size) overrides it.
     pub fn new(title: impl Into<String>) -> Self {
         // Panel: a padded column holding the title, then body + actions as they're added.
+        // A preferred basis gives the baseline without an absolute minimum
+        // overriding Overlay's viewport cap. Larger content keeps its natural minimum.
         let panel = Flex::column()
+            .basis(Self::BASELINE_WIDTH)
+            .min_width(Length::Auto)
             .padding(DIALOG_PAD)
             .gap(DIALOG_GAP)
             .child(Label::new(title));
@@ -67,7 +77,8 @@ impl Dialog {
     ///     .action(Button::new("Cancel"))
     /// ```
     ///
-    /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Percent`](Length::Percent)
+    /// `Length::Auto` on width restores content sizing with the baseline; on height it hugs
+    /// content. A non-auto width overrides the baseline. A [`Percent`](Length::Percent)
     /// resolves against the **viewport** (the composed [`Overlay`] fills it).
     #[heca_grid_ui_macros::host_only(
         "takes more than one value, which a single property cannot carry"
@@ -76,6 +87,7 @@ impl Dialog {
         let style = &mut self.panel_mut().style.layout;
         style.width = width;
         style.height = height;
+        style.flex_basis = Some(if width == Length::Auto { Self::BASELINE_WIDTH } else { width });
         self
     }
 

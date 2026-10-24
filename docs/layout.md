@@ -249,6 +249,7 @@ declarative side matches — `ViewNode::child(..)` takes one node or a list of t
 ```rust
 .width("200px")     .width(200)        .width(Length::Px(200.0))
 .width("50%")       .width(Length::HALF)
+.min_width("22em")  .height("2em")     // multiples of the resolved font size
 .width("auto")
 ```
 
@@ -256,6 +257,7 @@ declarative side matches — `ViewNode::child(..)` takes one node or a list of t
 | --- | --- |
 | `"200px"`, `"200"`, `200` | fixed logical pixels |
 | `"50%"` | a fraction of the parent |
+| `"22em"` | 22 times the widget's resolved font, including its size variant |
 | `"auto"` | the widget decides |
 
 ⚠️ **`Percent` is a fraction, `0.0..=1.0`** — half is `Percent(0.5)`, not 50.
@@ -263,6 +265,13 @@ declarative side matches — `ViewNode::child(..)` takes one node or a list of t
 nothing; deleting such a call is a judgement about its parent, not a mechanical sweep.
 
 Named fractions: `Length::FULL`, `HALF`, `THIRD`, `QUARTER`.
+
+Font-relative lengths remain authored as `em` across font changes and serialization. The SDK
+accepts the same spelling: `heca_view::build::VStack::new().min_width("22em")` (with its `Style`
+trait imported); a JSON description uses `"min_width": "22em"`. Dimensions, min/max limits,
+flex basis, placement and individual margins all resolve these units centrally during layout.
+As in CSS, an explicit minimum wins over a conflicting maximum; use a preferred flex basis when
+the box must still shrink below its baseline.
 
 ---
 

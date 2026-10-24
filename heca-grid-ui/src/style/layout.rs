@@ -352,12 +352,8 @@ impl Layout {
                 // A side may be a **percentage** of the parent, which is what lets a caller place
                 // a box at a proportional position — a floating pane in the exposé sits at
                 // `x / strip_width` of its row, with no pixel scale anywhere.
-                let side = |v: Option<Length>, axis: f32| match v {
-                    Some(Length::Px(px)) => length(px),
-                    Some(Length::Percent(f)) => percent(f),
-                    // `Auto` is the CSS centring margin; taffy spells it on this type.
-                    Some(Length::Auto) => taffy::LengthPercentageAuto::Auto,
-                    None => length(axis),
+                let side = |v: Option<Length>, axis: f32| {
+                    v.map_or_else(|| length(axis), |v| v.to_taffy_inset(font_px))
                 };
                 Rect {
                     left: side(self.margin_left, mx),
@@ -389,8 +385,8 @@ impl Layout {
             // clicked in both became the window.
             size: {
                 let axis = |placed: Length, own: Length| match placed {
-                    Length::Auto => own.to_taffy(),
-                    other => other.to_taffy(),
+                    Length::Auto => own.to_taffy(font_px),
+                    other => other.to_taffy(font_px),
                 };
                 match self.placement {
                     Some(p) => Size {
@@ -398,8 +394,8 @@ impl Layout {
                         height: axis(p.height, self.height),
                     },
                     None => Size {
-                        width: self.width.to_taffy(),
-                        height: self.height.to_taffy(),
+                        width: self.width.to_taffy(font_px),
+                        height: self.height.to_taffy(font_px),
                     },
                 }
             },
@@ -413,8 +409,8 @@ impl Layout {
             },
             inset: match self.placement {
                 Some(p) => Rect {
-                    left: p.left.to_taffy_inset(),
-                    top: p.top.to_taffy_inset(),
+                    left: p.left.to_taffy_inset(font_px),
+                    top: p.top.to_taffy_inset(font_px),
                     // The size is given, so the far edges must stay free: pinning all four would
                     // make taffy stretch the box between them and ignore the width and height.
                     right: taffy::LengthPercentageAuto::Auto,
@@ -430,12 +426,12 @@ impl Layout {
             // `None` leaves taffy's default (`auto`), which for a flex item is its
             // content size — the reason an unset region refuses to shrink.
             min_size: Size {
-                width: self.min_width.map_or_else(auto, Length::to_taffy),
-                height: self.min_height.map_or_else(auto, Length::to_taffy),
+                width: self.min_width.map_or_else(auto, |v| v.to_taffy(font_px)),
+                height: self.min_height.map_or_else(auto, |v| v.to_taffy(font_px)),
             },
             max_size: Size {
-                width: self.max_width.map_or_else(auto, Length::to_taffy),
-                height: self.max_height.map_or_else(auto, Length::to_taffy),
+                width: self.max_width.map_or_else(auto, |v| v.to_taffy(font_px)),
+                height: self.max_height.map_or_else(auto, |v| v.to_taffy(font_px)),
             },
             flex_wrap: if self.wrap {
                 taffy::FlexWrap::Wrap
@@ -446,7 +442,7 @@ impl Layout {
             // `auto` unless the author said otherwise, exactly as flexbox has it.
             flex_basis: self
                 .flex_basis
-                .map_or(taffy::style::Dimension::Auto, |b| b.to_taffy()),
+                .map_or(taffy::style::Dimension::Auto, |b| b.to_taffy(font_px)),
             // Widgets use explicit Px sizes; never let a flex container squish them
             // — unless the widget opts in (a scroll viewport must absorb the squeeze).
             flex_shrink: self.flex_shrink.unwrap_or(1.0),

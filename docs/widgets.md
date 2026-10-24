@@ -602,6 +602,7 @@ Every sizing builder takes `impl Into<Length>`, so a size is written the way it 
 .width(200)              .width(200.0)     // pixels — integer or decimal
 .width("200px")          .width("200")     // the px suffix is optional
 .width("50%")                              // a fraction of the parent
+.min_width("22em")                        // multiples of the resolved font
 .width("auto")                             // sized by content and flex rules
 .width(Length::HALF)                       // FULL / HALF / THIRD / QUARTER
 // …and nothing at all                     // already fills the parent
@@ -611,6 +612,7 @@ Every sizing builder takes `impl Into<Length>`, so a size is written the way it 
 |---|---|
 | `200` / `200.0` / `"200"` / `"200px"` | logical pixels |
 | `"50%"` | a fraction of the parent |
+| `"22em"` | multiples of the widget's resolved font, including its size variant |
 | `"auto"` | sized by content and flex rules |
 | `Length::FULL` / `HALF` / `THIRD` / `QUARTER` | the same fractions, with no number to mistype |
 | *nothing* | fills the parent across the cross axis — CSS `align-items: stretch` |
@@ -618,6 +620,22 @@ Every sizing builder takes `impl Into<Length>`, so a size is written the way it 
 **There is exactly one parser** (`Length: FromStr`), and `Deserialize` calls it — so a call site,
 a plugin's description, an RPC message and `config.toml` can never come to disagree about what
 `"50%"` means. Held by `the_wire_and_a_call_site_read_a_size_through_the_same_parser`.
+
+`em` is resolved again on every layout, so font and size changes do not freeze a pixel value into
+the authored style. It works on dimensions, min/max limits, flex basis, placement and individual
+margins. Both native and SDK authoring use the same spelling:
+
+```rust
+use heca_grid_ui::builders::LayoutExt;
+let native = heca_grid_ui::widgets::Flex::column().min_width("22em");
+
+use heca_view::build::{Style, VStack};
+let described = VStack::new().min_width("22em");
+```
+
+The serialized property is `"min_width": "22em"`. Minimum and maximum retain CSS precedence:
+an explicit minimum wins if it exceeds the maximum. A shrinkable preferred baseline belongs in
+`basis`, rather than an absolute minimum.
 
 ⚠️ **`"50"` is fifty pixels, not half** — exactly as in CSS. The `%` is what makes it a fraction.
 
@@ -5946,8 +5964,14 @@ the dialog) and `Activate` commits its row.
   (focuses the first focusable — a text field body if present, so the user types immediately;
   otherwise the first button as a safe default), and `.body(..)` also takes a realized body
   from a mapper (e.g. `realize`).
+- **Default width**: content-sized panels have a preferred **22em** baseline
+  (`Dialog::BASELINE_WIDTH`). Larger content may grow the panel; a narrow viewport may shrink it.
+  The baseline follows the resolved font and uses flex basis with the content's automatic
+  minimum, so it respects Overlay's viewport cap. Native callers and plugin/RPC modal requests
+  reach the same Dialog implementation; callers do not calculate a width.
 - **Sizing + a scrollable body**: `.panel_size(width: Length, height: Length)` bounds the panel
-  instead of letting it hug its content (default = hug; `Length::Auto` keeps hugging on that axis;
+  instead of letting it hug its content (an explicit width overrides the baseline;
+  `Length::Auto` restores content sizing with the baseline on width, and content sizing on height;
   `Length::Percent` resolves against the **viewport**). This is what makes a long body scrollable: a
   [`ScrollRegion`](#scrollregion) only scrolls when its parent bounds it, so wrap the body in one and
   size the panel. Put **only the body** in the region — the title and the action row stay fixed:

@@ -256,6 +256,7 @@ impl LayoutEngine {
         let root_margin = |side: Option<crate::style::Length>, uniform: f32, space: f64| match side
         {
             Some(crate::style::Length::Px(px)) => px as f64,
+            Some(crate::style::Length::Em(em)) => (em * root.base().font) as f64,
             Some(crate::style::Length::Percent(f)) => f as f64 * space,
             Some(crate::style::Length::Auto) | None => uniform as f64,
         };
