@@ -17,16 +17,24 @@ impl ScrollRegion {
     }
     /// Set the horizontal scroll offset, clamped to `[0, max_offset_x]`, bake it
     /// into the children's bounds, and request a repaint. Returns the clamped value.
+    /// Pauses layout-only following until navigation or typing, including across resize.
     pub fn scroll_to_x(&mut self, offset: f32) -> f32 {
-        self.set_offset_x(offset, None)
+        let before = self.scroll_offset_x.get_untracked();
+        let applied = self.set_offset_x(offset, None);
+        self.reveal_paused |= applied != before;
+        applied
     }
     /// Set the scroll offset, clamped to `[0, max_offset]`, bake it into the
     /// children's bounds immediately, and request a repaint. Returns the clamped
     /// value actually applied. Prefer this over raw `scroll_offset().set()` —
     /// it keeps the shifted bounds (used for paint, hit-testing, and DnD) in
     /// sync with the offset in the same call.
+    /// Pauses layout-only following until navigation or typing, including across resize.
     pub fn scroll_to(&mut self, offset: f32) -> f32 {
-        self.set_offset_y(offset, None)
+        let before = self.scroll_offset.get_untracked();
+        let applied = self.set_offset_y(offset, None);
+        self.reveal_paused |= applied != before;
+        applied
     }
     /// The **only** way the vertical offset moves: clamp, bake the shift, report.
     ///
@@ -41,6 +49,7 @@ impl ScrollRegion {
         self.snap_if_driven(cause);
         self.sync_shift();
         if changed {
+            self.reveal_paused |= cause.is_some();
             self.report_scroll(cause);
         }
         v
@@ -54,6 +63,7 @@ impl ScrollRegion {
         self.snap_if_driven(cause);
         self.sync_shift();
         if changed {
+            self.reveal_paused |= cause.is_some();
             self.report_scroll(cause);
         }
         v

@@ -46,7 +46,7 @@ pub(super) fn do_host_work(
             state.ui_images.draw(heca_renderer::ui_image::ImageFrame {
                 device: &state.device, queue: &state.queue, encoder, target: targets.view,
                 stencil, viewport: (targets.phys_size.width as f32, targets.phys_size.height as f32),
-                scale: state.scale_factor as f32,
+                scale: state.scale_factor as f32, damage: None,
             }, at);
         }
         heca_grid_ui::HostWork::Surface(at) => {

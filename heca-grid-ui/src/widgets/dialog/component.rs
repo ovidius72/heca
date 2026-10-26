@@ -36,13 +36,8 @@ impl Dialog {
     /// When a button itself is focused, Enter is delivered straight to it (it consumes it), so
     /// this only runs for the non-button-focused case.
     fn activate_primary(&mut self) {
-        if !self.has_actions {
-            return;
-        }
-        let panel = self.base.children[0].base_mut().children[0].base_mut();
-        // Panel layout is `[title, body?, action-row]`; the action row is the last child, and
-        // its first child is the primary (leftmost) button.
-        if let Some(row) = panel.children.last_mut()
+        // The first declared action is primary; body-builder order cannot change its row.
+        if let Some(row) = self.part_mut(ACTIONS_AREA)
             && let Some(primary) = row.base_mut().children.first_mut()
         {
             // **Ask it to act; do not pretend to be a keyboard.** This used to dispatch a

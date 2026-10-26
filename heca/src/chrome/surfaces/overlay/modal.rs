@@ -130,7 +130,7 @@ pub(super) fn build_modal_root(
     crate::chrome::input::identity::report_unkeyed_description("modal body", &spec.body);
     let body = crate::chrome::realize(&spec.body, theme, &emit.intent_sink(), forms);
     let mut dialog = Dialog::new(spec.title.clone())
-        .body(body)
+        .child(body)
         .danger(spec.danger);
     for action in &spec.actions {
         let variant = if action.danger {

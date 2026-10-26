@@ -27,10 +27,10 @@ impl ScrollRegion {
         let vp_bot = vp.loc.y + vp.size.h;
         if cur > natural_top - vp_top {
             // Item's top is above the viewport — scroll up to align tops.
-            self.scroll_to((natural_top - vp_top) as f32);
+            self.set_offset_y((natural_top - vp_top) as f32, None);
         } else if cur < natural_bot - vp_bot {
             // Item's bottom is below the viewport — scroll down to align bottoms.
-            self.scroll_to((natural_bot - vp_bot) as f32);
+            self.set_offset_y((natural_bot - vp_bot) as f32, None);
         }
         // else already fully visible — no scroll.
     }
@@ -54,12 +54,12 @@ impl ScrollRegion {
         if self.axes.is_vertical() {
             let natural_top = visual_rect.loc.y + self.applied_offset;
             let mid = natural_top + visual_rect.size.h / 2.0;
-            self.scroll_to((mid - vp.loc.y - vp.size.h / 2.0) as f32);
+            self.set_offset_y((mid - vp.loc.y - vp.size.h / 2.0) as f32, None);
         }
         if self.axes.is_horizontal() {
             let natural_left = visual_rect.loc.x + self.applied_offset_x;
             let mid = natural_left + visual_rect.size.w / 2.0;
-            self.scroll_to_x((mid - vp.loc.x - vp.size.w / 2.0) as f32);
+            self.set_offset_x((mid - vp.loc.x - vp.size.w / 2.0) as f32, None);
         }
     }
     /// Convenience: scroll so the direct child at `index` is fully visible. Use
@@ -117,26 +117,34 @@ impl ScrollRegion {
     ///
     /// It moves when the target moves or its viewport changes size. The remembered position is
     /// the target's natural one, so scrolling by hand does not change it and the view does not snap back — the
-    /// user can always look somewhere else.
+    /// user can always look somewhere else, including while resizing the viewport. Resizing
+    /// only follows the same target while following has not been paused by explicit scrolling.
     ///
     /// [`reveal_align`](Self::reveal_align) decides *where* it lands: minimally in view, or centred.
     pub(super) fn follow_revealed(&mut self) {
-        let target = crate::component::reveal_target_in(&self.base.children);
-        let Some(rect) = target else {
-            self.last_revealed = None;
-            return;
-        };
+        let requests = crate::component::reveal_requests_in(&self.base.children);
+        let next: Vec<_> = requests.iter().map(|(id, rect)| (
+            *id, rect.loc.x + self.applied_offset_x, rect.loc.y + self.applied_offset,
+        )).collect();
+        let changed = next.first().is_some_and(|request| {
+            let previous = self.last_revealed.iter().find(|old| old.0 == request.0);
+            let resized = self.last_reveal_viewport != Some(self.base.bounds.size);
+            (previous != Some(request) || resized)
+                && (!self.reveal_paused || previous.is_none())
+        });
+        self.last_revealed = next;
+        self.last_reveal_viewport = Some(self.base.bounds.size);
+        let Some((_, rect)) = requests.first().copied() else { return };
         // Natural = what layout produced, before this region's shift was baked in.
         let natural = (
             rect.loc.x + self.applied_offset_x,
             rect.loc.y + self.applied_offset,
         );
         self.last_reveal_rect = Some(Rectangle::new(Point::new(natural.0, natural.1), rect.size));
-        let revealed = (natural.0, natural.1, self.base.bounds.size);
-        if self.last_revealed == Some(revealed) {
+        if !changed {
             return;
         }
-        self.last_revealed = Some(revealed);
+        self.reveal_paused = false;
         match self.reveal_align {
             RevealAlign::Minimal => self.ensure_visible(rect),
             // With `overscroll` the centring pad already tracks the target on every sync, and a
@@ -145,8 +153,8 @@ impl ScrollRegion {
             // cursor is a new instruction that supersedes it — so it goes back to zero and the pad
             // puts the target dead centre, instead of centring it half a screen off for good.
             RevealAlign::Center if self.overscroll => {
-                self.scroll_to(0.0);
-                self.scroll_to_x(0.0);
+                self.set_offset_y(0.0, None);
+                self.set_offset_x(0.0, None);
             }
             RevealAlign::Center => self.center_on(rect),
         }

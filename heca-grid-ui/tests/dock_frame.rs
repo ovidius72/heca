@@ -1,5 +1,26 @@
 mod common;
 
+#[test]
+fn ordinary_parent_children_share_the_dock_body() {
+    use heca_grid_ui::{DockFrame, Parent};
+
+    let mut dock = Parent::child(
+        DockFrame::new("FILES"),
+        [Label::new("first"), Label::new("second")],
+    );
+    LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+    let body = heca_grid_ui::component::area(&dock, "body").unwrap();
+    assert_eq!(body.base().children.len(), 2);
+    let scene = common::paint(&dock, &Theme::default());
+    assert!(scene.iter().any(|command| matches!(command,
+        heca_grid_ui::DrawCommand::Text(text) if text.text == "FILES")));
+    for child in &body.base().children {
+        assert!(child.base().bounds.loc.y >= body.base().bounds.loc.y);
+        assert!(child.base().bounds.loc.y + child.base().bounds.size.h
+            <= body.base().bounds.loc.y + body.base().bounds.size.h);
+    }
+}
+
 use common::{click_at, fixed_box};
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::{LayoutEngine, Point, Size, Theme};
@@ -419,4 +440,36 @@ fn dock_frame_rail_paints_icon_not_title() {
         icons >= 2,
         "rail paints the duotone dock icon (secondary + primary), got {icons}"
     );
+}
+
+
+#[test]
+fn nested_header_frames_do_not_claim_the_outer_frames_parts() {
+    use heca_grid_ui::{DockFrame, Glyph, RegionMode};
+    use heca_grid_ui::reactive::signal;
+
+    let mode = signal(RegionMode::Expanded);
+    let inner = DockFrame::new("INNER").child(Label::new("inner body"))
+        .rail(mode, Glyph::FolderOpen);
+    let mut outer = DockFrame::new("OUTER").header(inner)
+        .child([Label::new("outer first"), Label::new("outer second")])
+        .rail(mode, Glyph::FolderOpen);
+    LayoutEngine::new().compute(&mut outer, Size::new(700.0, 600.0));
+    let own = |name: &str| outer.base().children.iter()
+        .find(|c| c.base().grid_area.as_deref() == Some(name)).unwrap();
+    assert_eq!(own("body").base().children.len(), 2,
+        "the outer body must receive its children, even with another body in the header");
+    assert!(own("rail").base().style.layout.hidden,
+        "the outer frame must own a rail distinct from the nested header frame");
+
+    outer.state().set(false);
+    LayoutEngine::new().compute(&mut outer, Size::new(700.0, 600.0));
+    let outer_body = outer.base().children.iter()
+        .find(|c| c.base().grid_area.as_deref() == Some("body")).unwrap();
+    assert!(outer_body.base().style.layout.hidden, "folding hides the outer body");
+    let inner = heca_grid_ui::area(&outer, "controls").unwrap();
+    let inner_body = inner.base().children.iter()
+        .find(|c| c.base().grid_area.as_deref() == Some("body")).unwrap();
+    assert!(!inner_body.base().style.layout.hidden, "the nested header frame keeps its own state");
+    assert_eq!(inner_body.base().children.len(), 1, "no outer content leaked into the inner body");
 }
