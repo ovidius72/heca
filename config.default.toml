@@ -198,9 +198,8 @@ show_bottom_bar = true # the status bar
 mode = "app"
 
 # How long a notification stays on screen before it dismisses itself, in
-# milliseconds. Applies to every notification that auto-dismisses; one a
-# producer marks sticky (e.g. an error you must acknowledge) ignores this, and
-# a notification that sets its own lifetime still wins.
+# milliseconds. Used when the producer omits a duration. An explicit duration
+# overrides this value; a sticky notification never expires automatically.
 auto_dismiss_ms = 4000
 
 # How many notification cards are on screen at once. Further notifications queue in

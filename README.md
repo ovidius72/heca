@@ -1031,9 +1031,9 @@ max_visible = 5        # how many are on screen at once; the rest queue
 
 - **Severity is tone, not importance.** `info` / `success` / `warning` / `danger`
   change the accent colour; they do **not** change how long a toast stays. Every
-  toast auto-dismisses after `auto_dismiss_ms` unless the code that raised it
-  marked it sticky (a config-reload failure is sticky — you fix it and press
-  **Retry**).
+  toast uses `auto_dismiss_ms` unless its producer supplies an explicit duration
+  or marks it sticky (a config-reload failure is sticky — you fix it and press
+  **Retry**). If the setting is omitted, the bundled configuration supplies the fallback.
 - **Interacting:** click a toast's × or one of its buttons; `prefix+/` puts pick
   letters on the visible toasts' buttons and their × , and `prefix+n` dismisses.
   **Resting the pointer on a card holds the whole stack still**, so nothing retires
@@ -1045,7 +1045,10 @@ max_visible = 5        # how many are on screen at once; the rest queue
   bottom, where a card that has just arrived belongs.
 - **Raising one** — from a keybinding, a script, or a plugin — is the `notify`
   action: `notify title="Build finished" body="3 warnings" severity=success`.
-  Rust code in the app uses `Notification::info("…").body("…").send()`.
+  Native Rust extensions use `heca::Notification::info("…").body("…").send()`.
+  An optional `.auto_dismiss(std::time::Duration::from_secs(10))` overrides the
+  configured duration for that notification. `.sticky()` disables automatic expiry.
+  A config reload affects future notifications, not deadlines already assigned.
 - What produces a toast today: a new pane, a pane whose process exited while the
   pane stays open, `prefix+Shift+r` (success or the parse error), and a command
   that fails to spawn.

@@ -39,6 +39,7 @@ pub use chrome::{
 };
 pub use entry::{Extension, LayerBuilder, LayerCx, extension};
 pub use heca_view::{Intent, PropMap, PropValue};
+pub use notification::{Notification, NotificationAction};
 pub use providers::{ChromeCtx, Provider, ProviderCx, ProviderHandles};
 
 use app::events::AppEvent;

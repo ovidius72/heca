@@ -29,9 +29,8 @@ declare_settings! {
         /// Where a notification is delivered: `app` (default) / `system` (reserved) / `none`.
         pub mode: NotificationSystem,
         /// How long a notification stays on screen before it dismisses itself, in
-        /// milliseconds. Applies to every notification that auto-dismisses; one a
-        /// producer marks sticky ignores it, and a per-notification lifetime override
-        /// still wins. Default: 4000.
+        /// milliseconds, when its producer omits an explicit duration. A per-notification
+        /// duration takes precedence; sticky notifications never expire. Default: 4000.
         pub auto_dismiss_ms: u64,
         /// How many notification cards are on screen at once. Further notifications queue in the order
         /// they were raised — nothing is dropped.
