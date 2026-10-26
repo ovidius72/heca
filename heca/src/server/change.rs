@@ -6,7 +6,7 @@
 
 /// Something that changed in the state every window shares.
 ///
-/// `PartialEq` but not `Eq`: [`Floated`](Self::Floated) carries a [`Rectangle`] of logical pixels
+/// `PartialEq` but not `Eq`: [`Floated`](Self::Floated) carries a [`Rectangle`](heca_core::layout::Rectangle) of logical pixels
 /// (`f64`), which is `PartialEq` only.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Change {

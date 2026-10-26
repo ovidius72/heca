@@ -265,9 +265,9 @@ impl Component for Terminal {
     }
 
     /// The box is known: say the grid's box — the room held in by the configured
-    /// padding — and the terminal's whole box, padding included. [`Shared::size`]
+    /// padding — and the terminal's whole box, padding included. The shared size
     /// carries the grid's size (so the process is told fewer cells, never cropped
-    /// ones). The grid's window coordinates are derived from [`Shared::bounds`],
+    /// ones). The grid's window coordinates are derived from the shared bounds,
     /// which paint refreshes after any parent displacement.
     fn on_layout(&mut self) {
         self.shared.bounds.set(self.base.bounds);
