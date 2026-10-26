@@ -12,6 +12,8 @@ pub struct ImageFrame<'a> {
     pub stencil: Option<&'a wgpu::TextureView>,
     pub viewport: (f32, f32),
     pub scale: f32,
+    /// Logical redraw region, shared with the primitive and text passes. None redraws all.
+    pub damage: Option<[f32; 4]>,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -29,13 +31,15 @@ impl UiImages {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         Self { sampler: Backdrop::new(device, format), mask: crate::grid::GridRenderer::new(device, format), cache: HashMap::new(), generation: 0 }
     }
-    pub fn begin_frame(&mut self) {
+    /// Returns true when an asynchronous raster became ready and needs a full scene repaint.
+    pub fn begin_frame(&mut self) -> bool {
         self.mask.begin_frame();
         self.cache.retain(|_, entry| entry.generation == self.generation);
         self.generation = self.generation.wrapping_add(1);
+        self.cache.values().any(|entry| entry.view.is_none() && matches!(entry.raster.result(), Some(Ok(_))))
     }
     pub fn draw(&mut self, frame: ImageFrame<'_>, at: &ImageAt) {
-        let Some((picture, dst, uv)) = placement(at, frame.scale) else { return };
+        let Some((picture, _, _)) = placement(at, frame.scale, None) else { return };
         if at.alpha <= 0.0 { return }
         let size = if at.image.is_vector() {
             ((picture.size.w as f32 * frame.scale).ceil() as u32, (picture.size.h as f32 * frame.scale).ceil() as u32)
@@ -54,6 +58,9 @@ impl UiImages {
                 .create_view(&wgpu::TextureViewDescriptor::default()));
         }
         let Some(view) = &cached.view else { return };
+        // Keep visible textures alive even when damage excludes them. Repainting them outside
+        // damage would blend transparent pixels over the preserved scene again on every frame.
+        let Some((_, dst, uv)) = placement(at, frame.scale, frame.damage) else { return };
         if let (Some(rounded), Some(stencil)) = (at.rounded, frame.stencil) {
             self.mask.set_scale_factor(f64::from(frame.scale));
             self.mask.set_target_size(frame.viewport.0 as u32, frame.viewport.1 as u32);
@@ -73,7 +80,7 @@ impl UiImages {
 }
 
 /// Fit first, then clip while retaining source UVs. Cover cropping never stretches the picture.
-fn placement(at: &ImageAt, scale: f32) -> Option<(Rectangle, crate::backdrop::RectPx, [f32; 4])> {
+fn placement(at: &ImageAt, scale: f32, damage: Option<[f32; 4]>) -> Option<(Rectangle, crate::backdrop::RectPx, [f32; 4])> {
     let size = at.rect.size;
     if !scale.is_finite() || scale <= 0.0 || !size.w.is_finite() || !size.h.is_finite()
         || size.w <= 0.0 || size.h <= 0.0 { return None }
@@ -84,7 +91,13 @@ fn placement(at: &ImageAt, scale: f32) -> Option<(Rectangle, crate::backdrop::Re
     };
     let picture = Rectangle::new(Point::new(at.rect.loc.x + (size.w - pw) / 2.0, at.rect.loc.y + (size.h - ph) / 2.0), Size::new(pw, ph));
     let visible = picture.intersection(at.rect)?;
-    let visible = match at.clip { Some(clip) => visible.intersection(clip)?, None => visible };
+    let clip = crate::clip::combine_clip(damage, at.clip.map(|r|
+        [r.loc.x as f32, r.loc.y as f32, r.size.w as f32, r.size.h as f32]));
+    let visible = match clip {
+        Some([x, y, w, h]) => visible.intersection(Rectangle::new(
+            Point::new(x as f64, y as f64), Size::new(w as f64, h as f64)))?,
+        None => visible,
+    };
     if visible.size.w <= 0.0 || visible.size.h <= 0.0 { return None }
     let uv = [((visible.loc.x - picture.loc.x) / pw) as f32, ((visible.loc.y - picture.loc.y) / ph) as f32,
         ((visible.loc.x + visible.size.w - picture.loc.x) / pw) as f32, ((visible.loc.y + visible.size.h - picture.loc.y) / ph) as f32];

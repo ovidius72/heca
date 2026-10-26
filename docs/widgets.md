@@ -27,6 +27,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
+- [Providers and startup regions](#providers-and-startup-regions) — add, remove and order docks; placement identity; native/plugin availability
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
 
@@ -504,7 +505,13 @@ the app's keyboard-driven sidebar scroll to follow.
 
 It follows the selection **without fighting the wheel**: the region remembers the target's *natural*
 (unscrolled) position, which changes when the selection moves and stays put when you scroll by hand.
-So it comes to the cursor once, then leaves you alone until the cursor moves or the viewport changes size.
+So it comes to the cursor once, then leaves you alone until the cursor moves. A viewport resize
+keeps the cursor visible while following is active.
+
+The region remembers all outstanding reveal requests. Releasing a field's focus therefore does
+not reactivate an unchanged navigation marker elsewhere in the tree. After explicit scrolling,
+layout reflow and viewport resize do not pull the view back; a new navigation target or typing
+resumes following. Resize still clamps the offset to the available content.
 
 #### The reveal follows the keyboard, never the pointer
 
@@ -2671,7 +2678,8 @@ regions("sidebar.left").append(git);   // brings its own part; the others keep t
 
 There is no size method on the provider and no size list on the region — a `fn grow()` on the
 provider and a `template_row` on the region both existed and were removed (P082(F003)/T518). The
-region says only the air between its docks, with `regions(..).gap(..)`; unset, the theme's `"sm"`
+region says only the air between its docks, with `regions(..).gap(..)` (see
+[Providers and startup regions](#providers-and-startup-regions)); unset, the theme's `"sm"`
 step. A rule is drawn between two docks; it asks for no part, so the docks divide what is left
 exactly as asked.
 
@@ -3541,7 +3549,7 @@ ceiling in pixels or as a share of its parent; the field scrolls inside that hei
 Its minimum keeps one complete text line and the configured padding readable. The Input shell
 owns padding; its internal scroll region adds none.
 Resizing a scroll viewport keeps its focused caret in view, including when the caret itself has
-not moved. Manual scrolling still pauses following until the caret moves or the viewport resizes.
+not moved. Manual scrolling pauses following across resize until editing or navigation resumes.
 An explicit `.height(...)` fills that height instead of the automatic line cap. Wrap the field
 in [`Resizable`](#resizable) to let the user choose its height with a grip.
 Enter adds a newline; Up/Down move between visual lines, with Shift extending
@@ -4936,12 +4944,19 @@ marker bar is an indicator; the rows inside carry their own intents.
 
 ### DockFrame
 
+For adding, removing or ordering a dock in the application, use the
+[Provider and startup region API](#providers-and-startup-regions). `DockFrame` supplies the UI frame;
+the host mounts the provider.
+
 A titled, collapsible, bracket-framed shell for a Dock: a title bar (drag-handle grip + chevron
 + title + a header-controls slot) over a foldable body. Reuses `Pane`'s corner brackets.
 **Rail-aware**: bound to a region's [`RegionMode`](#chromeregion) signal, it folds header + body
 away to a single centered `Icon` while the region is collapsed to a rail.
 
-- **Construct**: `DockFrame::new(title)`. Add body with `.child(...)`.
+- **Construct**: `DockFrame::new(title)`. Add body with `.child(...)`: one component or an
+  array/`Vec` of a common type; chain `.child(a).child(b)` for different types. Every child stays in
+  the body. The frame's named Grid areas identify its own title, controls and body. Nested
+  components may use the same area names: their content, fold state and rail remain independent.
 - **Builders**: `.header(impl Component)` (fill the controls slot, e.g. a search field or count
   `Badge`), `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
@@ -5921,6 +5936,9 @@ keyed on it, no declaration outside the tree.
   arrival. `open_signal()` is the same fact as a signal, which is how a *composing* widget drives it
   ([`Dialog`](#dialog)'s buttons flip it); `Overlay::tick` follows the signal, so a flip is an
   arrival or a dismissal exactly as the verbs are.
+  Reopening after an animated exit restores visibility through the same lifecycle edge, whether
+  driven by a signal or by `show()`. Sibling overlays occupy the same containing viewport instead
+  of dividing its layout space, so each panel retains its own centering.
 - **Who calls them for a mounted surface** — in `heca`, the **layer stack**, not the surface itself.
   The exposé is the worked example, and it calls none of the three:
   1. `prefix+Tab` → `WmAction::ToggleLayer { name: "heca.expose" }` →
@@ -6187,8 +6205,12 @@ the dialog) and `Activate` commits its row.
 > scrolled subtree bounds are in scrolled-tree coordinates, not screen coordinates; this was
 > tried and reverted).
 
-- **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
-  (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
+- **Construct**: `Dialog::new(title).child(content).action(button)`. Children and actions can be
+  added in either order: the panel uses named Grid areas for its title, body and actions. Repeated
+  `.child(...)` calls append body content; arrays/`Vec` need a common type, and different types use
+  chained calls. `.body(...)` remains a compatibility alias for `.child(...)`.
+  Buttons sit in a right-aligned row in action call order; the first action remains primary.
+  An empty title leaves no title row, and absent body/actions leave no empty tracks or gaps.
 - **Builders**: `.danger(bool)` (a destructive question — the body's text takes the theme's danger colour; title and buttons keep theirs), `.dismissible(bool)` (default `true`; `false` = forced-decision — `Dismiss`/scrim
   swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on `WidgetIntent::Dismiss` / scrim),
   `.open(bool)`
@@ -6207,10 +6229,13 @@ the dialog) and `Activate` commits its row.
   [`ScrollRegion`](#scrollregion) only scrolls when its parent bounds it, so wrap the body in one and
   size the panel. Put **only the body** in the region — the title and the action row stay fixed:
 
+  Dialog layers share the containing viewport without dividing it among sibling overlays. When
+  the window becomes shorter, the bounded body gives space back and scrolls within the panel.
+
   ```rust
   Dialog::new("Pick a container")
       .panel_size(Length::Percent(0.5), Length::Percent(0.6))   // 50% × 60% of the viewport
-      .body(ScrollRegion::new().child(long_list))       // only this scrolls
+      .child(ScrollRegion::new().child(long_list))      // only this scrolls
       .action(Button::secondary("Cancel"))
   ```
   A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the nested-overlay routing above), so overlay-in-scrolled-overlay is supported.
@@ -6218,7 +6243,7 @@ the dialog) and `Activate` commits its row.
 
 ```rust
 let dialog = Dialog::new("Delete pane?")
-    .body(Label::new("This action cannot be undone."))
+    .child(Label::new("This action cannot be undone."))
     .action(KeyHint::new(Button::secondary("Cancel").on_click(cancel)).on_hint(cancel_hint))
     .action(KeyHint::new(Button::destructive("Delete").on_click(delete)).on_hint(delete_hint))
     .on_dismiss(move || emit(close))
@@ -6683,6 +6708,85 @@ toasts.update(|v| v.push(
 ---
 
 Dialog panels use the theme’s `[dialog] max_width_em` cap (40 font units) and remain bounded by narrow windows. `.panel_max_width(Length::Px(...))` overrides that cap. The composed Overlay preserves explicit panel maximum dimensions.
+
+## Providers and startup regions
+
+This section documents the **Heca host API** (`heca`), separate from the GPU-free widget library.
+
+A **widget** builds a piece of UI. A **`Provider`** contributes a dock to the window chrome; the
+host builds and mounts its content. You do not construct or access the workspace's internal
+`DockView` to add your own dock. Compose its content from the public widgets instead.
+
+Write a provider, then place it **before `heca::run()`**:
+
+```rust,ignore
+use heca::{PlaceDock, regions};
+
+regions("sidebar.right").append(MyDock::new("tools"));
+regions("sidebar.left").prepend(MyOtherDock::new("outline"));
+regions("sidebar.right").append(MyDock::new("logs").flex(2.0).order(-1));
+regions("sidebar.left").remove("workspaces");
+regions("sidebar.right").retain(|id| id != "notes");
+
+heca::run();
+```
+
+`MyDock` and `MyOtherDock` stand for your types implementing `heca::Provider`; they are not built-in
+widgets. The complete compiling example is
+[`heca/examples/extend_heca.rs`](../heca/examples/extend_heca.rs): its `Notes` provider builds a
+label and a Terminal, then adds that dock to `sidebar.right`.
+
+| What you want | Public API | Meaning |
+|---|---|---|
+| Add at the end | `regions(name).append(provider)` | One provider or an array/`Vec` with a common element type. Chain calls for different types. |
+| Add at the start | `regions(name).prepend(provider)` | A collection keeps its own order. |
+| Remove a dock | `regions(name).remove(id)` | Remove the placement with that id from this region. |
+| Keep selected docks | `regions(name).retain(predicate)` | Filter the region's current list by placement id. |
+| Choose visual order | `provider.order(value)` | Lower first; ties keep insertion order. Accepts a number or an order path such as `[0, 5]`. |
+| Choose a share | `provider.flex(parts)` | Overrides the share requested by the provider's body. |
+| Set space between docks | `regions(name).gap("md")` | Uses the shared spacing vocabulary. |
+
+Region names are `sidebar.left`, `sidebar.right`, `bar.top` and `bar.bottom`. An unknown name is
+reported and changes nothing. These calls queue defaults for startup; calls after startup are
+reported and refused. They do not dynamically load or unload providers.
+
+The older `left-sidebar` / `left` spellings are also read by the shared region-name parser.
+`retain` changes the existing list; Rust's `filter` would instead build another collection. Regions
+take no numeric dock indexes or per-dock size lists: appending another provider must not invalidate
+another dock's placement. A placer's `.order(..)` / `.flex(..)` overrides the values on the dock's
+own body; ties keep insertion order, and spacing belongs to the region.
+
+`Provider::id()` identifies a **placement**. `Provider::kind()` identifies the component type and
+its action/config namespace; it defaults to `id()` for the single-placement case. Two placements of
+one component have different ids, so their focus, cursor and scroll state remain separate. Implement
+`supported_regions`, `default_region`, `title` and `build_contribution` to describe the dock. The optional
+`on_activate` hook returns `ProviderHandles`; dropping those handles releases the subscriptions. The host owns its
+mounting, frame, layout and event delivery.
+
+The current `ContainerContribution` build hook still exposes boxed native subtrees. The compiling
+example shows that existing API; the public-authoring refactor is removing that requirement. Adding
+a dock through `regions` itself needs no manual boxing or host registry handle.
+
+At runtime, already mounted docks can be moved and reordered through registered actions such as
+`chrome.container.move_to_region`, `chrome.container.reorder_before` and
+`chrome.container.reorder_after`. That action path is separate from the startup list above.
+
+### Plugin startup parity
+
+Native Rust consumers use the public API above. A sandbox plugin sends a typed, serializable
+contribution; it does not pass a Rust `Provider`, widget object or closure across the boundary.
+The host-owned adapter must offer the **same startup operations and ordering semantics**, apply
+them in the startup sequence before mounting the final region list, and retain the plugin's owner
+identity. A guest-side filter needs a serializable operation or a guest-evaluated result; a Rust
+`retain` closure cannot be sent to the host.
+
+The WASM loading/contribution adapter is **planned, not implemented** (P022(F003)/T075). Its required acceptance is an
+actual plugin adding, prepending, removing, retaining and ordering startup docks with the same result
+as native code, including defined behavior for unknown regions/ids and calls after startup. Until
+that adapter is delivered, a native example or serialized tree alone is not proof of plugin runtime
+support. See [Writing a plugin](plugins.md#adding-a-dock-to-a-region) for the boundary and authoring model.
+
+---
 
 ## Declarative UI model (`ViewNode`)
 

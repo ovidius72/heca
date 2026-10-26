@@ -54,7 +54,9 @@ impl ScrollRegion {
             on_scroll: None,
             on_scroll_end: None,
             scrolling: false,
-            last_revealed: None,
+            last_revealed: Vec::new(),
+            last_reveal_viewport: None,
+            reveal_paused: false,
             last_reveal_rect: None,
             wheel_idle: None,
         }

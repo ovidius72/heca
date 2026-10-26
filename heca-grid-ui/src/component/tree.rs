@@ -14,7 +14,8 @@ const DAMAGE_PAD: f64 = 64.0;
 /// The host calls this each frame: on an animation/timed frame the result scissors
 /// the render to just the changed pixels; on an input frame the host repaints in
 /// full (an event can change unknown things) but still calls this to clear flags.
-/// Hidden subtrees are skipped — their bounds are stale.
+/// A dirty hidden root still invalidates its old bounds once, erasing its last
+/// painted frame; its hidden descendants are skipped because their bounds are stale.
 pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
     fn union(a: Rectangle, b: Rectangle) -> Rectangle {
         let x0 = a.loc.x.min(b.loc.x);
@@ -25,9 +26,6 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
     }
     fn walk(c: &dyn Component, acc: &mut Option<Rectangle>) {
         let b = c.base();
-        if !b.visible.get_untracked() || b.style.layout.hidden {
-            return;
-        }
         if b.needs_paint() {
             b.clear_needs_paint();
             // Overlay widgets (tooltip bubble, command palette) paint outside their
@@ -39,6 +37,9 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
                 Size::new(r.size.w + 2.0 * DAMAGE_PAD, r.size.h + 2.0 * DAMAGE_PAD),
             );
             *acc = Some(acc.map_or(padded, |a| union(a, padded)));
+        }
+        if !b.visible.get_untracked() || b.style.layout.hidden {
+            return;
         }
         for ch in &b.children {
             walk(ch.as_ref(), acc);

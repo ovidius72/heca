@@ -140,3 +140,46 @@ fn collect_damage_unions_dirty_widgets_then_clears_flags() {
         "damage horizontally covers the marked widget"
     );
 }
+
+
+#[test]
+fn every_surface_animation_frame_damages_the_surface_through_its_final_exit() {
+    use heca_grid_ui::{Animation, Component, Overlay, collect_damage};
+
+    let viewport = Size::new(800.0, 600.0);
+    let mut ui = Flex::column().width(Length::Px(viewport.w as f32))
+        .height(Length::Px(viewport.h as f32)).child(Label::new("Unrelated animation"))
+        .child(Overlay::new().animation(Animation::ZoomFade)
+            .panel(Label::new("Animated surface")));
+    LayoutEngine::new().compute(&mut ui, viewport);
+    collect_damage(&ui);
+    ui.base_mut().children[1].show();
+    collect_damage(&ui); // The input frame has already painted the opening edge.
+
+    for closing in [false, true] {
+        if closing { ui.base_mut().children[1].close(); }
+        let mut frames = 0;
+        loop {
+            let overlay = ui.base_mut().children[1].as_mut();
+            let previous = overlay.base().presence.frame();
+            let was_shown = overlay.is_shown();
+            let moving = overlay.tick(1.0 / 60.0);
+            let changed = previous != overlay.base().presence.frame()
+                || was_shown != overlay.is_shown();
+            // A spinner elsewhere must not mask a missing surface invalidation.
+            ui.base().children[0].base().mark_needs_paint();
+            let damage = collect_damage(&ui).expect("the unrelated widget is dirty");
+            if changed {
+                frames += 1;
+                assert!(damage.loc.x <= 0.0 && damage.loc.y <= 0.0
+                    && damage.loc.x + damage.size.w >= viewport.w
+                    && damage.loc.y + damage.size.h >= viewport.h,
+                    "every changed surface frame must repaint the viewport, closing={closing}: {damage:?}");
+            }
+            if !moving { break; }
+        }
+        assert!(frames > 1, "the test must exercise several animation frames");
+    }
+    assert!(!ui.base().children[1].is_shown());
+    assert!(collect_damage(&ui).is_none(), "settled surfaces must stop invalidating");
+}

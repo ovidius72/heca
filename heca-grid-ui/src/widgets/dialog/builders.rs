@@ -2,11 +2,11 @@
 //! dismissal and open policy — and the body-shaping helpers those builders use.
 
 use super::*;
-use crate::builders::{Parent, PresenceExt as _};
+use crate::builders::{IntoChildren, Parent, PlaceExt, PresenceExt as _};
 use crate::component::Component;
 use crate::reactive::{Signal, SignalUpdate};
-use crate::style::Length;
-use crate::widgets::{Flex, Label, Overlay};
+use crate::style::{Length, Track};
+use crate::widgets::{Flex, Grid, Label, Overlay, Surface};
 
 #[heca_grid_ui_macros::props]
 impl Dialog {
@@ -14,18 +14,29 @@ impl Dialog {
     /// Content may need more room; a narrow viewport may offer less.
     pub const BASELINE_WIDTH: Length = Length::Em(22.0);
 
-    /// A new (closed) dialog titled `title`. Add content with [`body`](Dialog::body) and
-    /// buttons with [`action`](Dialog::action), in that order.
+    /// A new (closed) dialog titled `title`. Add content with [`child`](Dialog::child) and
+    /// buttons with [`action`](Dialog::action), in either order.
     /// Content-sized panels start at a preferred `22em` width, grow for larger content,
     /// and give way to the viewport cap. [`panel_size`](Dialog::panel_size) overrides it.
     pub fn new(title: impl Into<String>) -> Self {
-        // Panel: a padded column holding the title, then body + actions as they're added.
-        // The dialog resolves this font-relative floor against Overlay's available room.
-        let panel = Flex::column()
+        let title = title.into();
+        let mut layout = Grid::new()
+            .template_column("1fr")
+            .grow(1.0)
+            .min_height(0.0)
+            .gap(DIALOG_GAP)
+            .area(LAYOUT_AREA);
+        if !title.is_empty() {
+            layout = layout
+                .template_row("auto")
+                .template_area(TITLE_AREA)
+                .child(Label::new(title).area(TITLE_AREA));
+        }
+        // Surface owns the panel box; Grid arranges its content inside that box.
+        let panel = Surface::new()
             .min_width(Self::BASELINE_WIDTH)
             .padding(DIALOG_PAD)
-            .gap(DIALOG_GAP)
-            .child(Label::new(title));
+            .child(layout);
 
         // The base Overlay owns the layer presentation: blocking (scrim + swallow),
         // viewport centering, drop shadow, panel fill, bracket reticle. Its open
@@ -34,9 +45,7 @@ impl Dialog {
         // is reachable until you answer — the caller never says so, and cannot get it wrong. A
         // modeless one (find/replace, a properties panel) turns it off with `.lock(false)`.
         // Root: a full-size passthrough so the overlay child fills the viewport.
-        let mut base = Base::new();
-        base.style.layout.width = Length::Percent(1.0);
-        base.style.layout.height = Length::Percent(1.0);
+        let mut base = Base::viewport_layer();
 
         // **One flag, handed down.** The dialog is up when `Base::open` says so — the flag every
         // component carries — and the overlay it composes *follows* that same signal rather than
@@ -54,8 +63,6 @@ impl Dialog {
             base,
             dismissible: true,
             on_dismiss: None,
-            has_actions: false,
-            body_at: None,
             danger: false,
             panel_max_width: None,
         }
@@ -97,15 +104,37 @@ impl Dialog {
         self
     }
 
-    /// Set the dialog **body** — an arbitrary component (a message label, a form, a table…),
-    /// inserted between the title and the action row. Call before [`action`](Dialog::action).
+    /// Append one or many body components, independently of action-builder order.
+    /// Nested Flex/Grid layouts remain ordinary children; none is inferred to be a header.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn body(mut self, body: impl crate::builders::IntoComponent) -> Self {
-        self.body_at = Some(self.panel_mut().children.len());
-        self.panel_mut().children.push(body.into_component());
-        self.fit_body();
+    pub fn child(mut self, children: impl IntoChildren) -> Self {
+        let mut children = children.into_children();
+        if children.is_empty() {
+            return self;
+        }
+        for child in &mut children {
+            Self::fit_body(child.as_mut());
+        }
+        if self.part_mut(BODY_AREA).is_none() {
+            let body = Flex::column().gap(DIALOG_GAP).area(BODY_AREA);
+            let layout = self.layout_mut().base_mut();
+            let before_actions = layout.children.iter().position(|part| {
+                part.base().grid_area.as_deref() == Some(ACTIONS_AREA)
+            }).unwrap_or(layout.children.len());
+            layout.children.insert(before_actions, Box::new(body));
+        }
+        self.part_mut(BODY_AREA)
+            .expect("the body was just created")
+            .base_mut().children.extend(children);
         self.tone_body();
+        self.sync_template();
         self
+    }
+
+    /// Compatibility spelling for [`child`](Dialog::child). It accepts one or many children.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
+    pub fn body(self, children: impl IntoChildren) -> Self {
+        self.child(children)
     }
 
     /// **A destructive question**: the body says its consequence in the theme's danger colour.
@@ -126,12 +155,10 @@ impl Dialog {
     /// Put the danger tone on the body, when there is one and the dialog is destructive. Never
     /// clears a tone: a body that set its own keeps it when the dialog is not destructive.
     fn tone_body(&mut self) {
-        if let (true, Some(at)) = (self.danger, self.body_at) {
-            self.panel_mut().children[at]
-                .base_mut()
-                .style
-                .visual
-                .content_tone = Some(crate::Tone::Danger);
+        if self.danger && let Some(body) = self.part_mut(BODY_AREA) {
+            for child in &mut body.base_mut().children {
+                child.base_mut().style.visual.content_tone = Some(crate::Tone::Danger);
+            }
         }
     }
 
@@ -156,9 +183,8 @@ impl Dialog {
     ///
     /// Only defaults are filled in: an explicit width / grow / gap the caller set
     /// is respected.
-    fn fit_body(&mut self) {
-        let idx = self.panel_mut().children.len() - 1;
-        let style = &mut self.panel_mut().children[idx].base_mut().style.layout;
+    fn fit_body(body: &mut dyn Component) {
+        let style = &mut body.base_mut().style.layout;
         if style.width == Length::Auto {
             style.width = Length::Percent(1.0);
         }
@@ -175,18 +201,16 @@ impl Dialog {
     /// the panel bottom, in call order.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn action(mut self, button: impl Component + 'static) -> Self {
-        if !self.has_actions {
+        if self.part_mut(ACTIONS_AREA).is_none() {
             // Lazily create the right-aligned action row on first use.
-            let row = Flex::row().gap(DIALOG_BTN_GAP).justify("end");
-            self.panel_mut().children.push(Box::new(row));
-            self.has_actions = true;
+            let row = Flex::row().gap(DIALOG_BTN_GAP).justify("end").area(ACTIONS_AREA);
+            self.layout_mut().base_mut().children.push(Box::new(row));
         }
-        let panel = self.panel_mut();
-        let row_idx = panel.children.len() - 1;
-        panel.children[row_idx]
+        self.part_mut(ACTIONS_AREA).expect("the action row was just created")
             .base_mut()
             .children
             .push(Box::new(button));
+        self.sync_template();
         self
     }
 
@@ -290,5 +314,32 @@ impl Dialog {
     /// The panel container (the composed [`Overlay`]'s single child), mutably.
     fn panel_mut(&mut self) -> &mut Base {
         self.base.children[0].base_mut().children[0].base_mut()
+    }
+
+    /// Search only this panel's parts: a nested dialog may use the same area names.
+    pub(super) fn part_mut(&mut self, name: &str) -> Option<&mut Box<dyn Component>> {
+        self.layout_mut().base_mut().child_in_area(name)
+    }
+
+    fn layout_mut(&mut self) -> &mut Box<dyn Component> {
+        self.panel_mut().child_in_area(LAYOUT_AREA)
+            .expect("the panel owns its layout")
+    }
+
+    /// Rebuild the template during construction, retaining the panel's Base and live children.
+    /// Absent parts contribute neither a row nor a gap; body content takes the remaining space.
+    fn sync_template(&mut self) {
+        let slot = self.layout_mut();
+        let mut rows = Vec::new();
+        let mut areas = Vec::new();
+        for part in &slot.base().children {
+            if let Some(name) = &part.base().grid_area {
+                rows.push(if name == BODY_AREA { Track::Fr(1.0) } else { Track::Auto });
+                areas.push(name.clone());
+            }
+        }
+        let mut panel = Grid::new().template_column("1fr").template_row(rows).template_area(areas);
+        std::mem::swap(panel.base_mut(), slot.base_mut());
+        *slot = Box::new(panel);
     }
 }

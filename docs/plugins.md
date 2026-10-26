@@ -15,6 +15,7 @@ containers are built — is not your business and lives in
 | You want | Go to |
 |---|--- |
 | what a plugin can put on screen, and who owns each shape | [the map](#the-plugin-story-on-one-page) |
+| add, remove or order a dock through a Provider at startup | [Providers and regions](#adding-a-dock-to-a-region) |
 | why any of this is shaped the way it is — read before the rules | [§0](#0-what-all-of-this-is-for--read-this-before-the-rules) |
 | the model: nodes, props, events, children | [§1](#1-what-the-model-is) |
 | the rules an author actually trips over | [§3](#3-the-rules) |
@@ -49,33 +50,14 @@ A plugin never puts a surface in the tree itself. It offers one, exactly as it o
 
 ### Adding a dock to a region
 
-A region — a sidebar, a bar — is a **place reached by name that holds a list**. A plugin adds to it
-with one line, and never builds, finds or registers anything:
+A **`Provider` contributes a dock**; the host mounts its content in a named region. The canonical
+[Providers and startup regions reference](widgets.md#providers-and-startup-regions) contains the
+add/remove/order API, required methods, identities, runnable example and startup cutoff.
 
-```rust
-regions("sidebar.left").append(Docker::new("docker"));     // at the end
-regions("sidebar.left").prepend(Outline::new("outline"));  // at the start
-regions("sidebar.right").remove("workspaces");             // take out a built-in, by name
-regions("sidebar.left").retain(|id| id != "notes");        // keep only what you say yes to
-regions("sidebar.left").gap("md");                         // air between the docks
-```
-
-| names | `"sidebar.left"`, `"sidebar.right"`, `"bar.top"`, `"bar.bottom"` (the older `"left-sidebar"` / `"left"` also read) |
-|---|---|
-| **size** | said by the dock, on the body it builds: `.flex(3.0)` — or by whoever adds it: `.append(Docker::new("d").flex(3.0))`. See [`layout.md` → Shares](layout.md#shares) |
-| **position** | the order it was added, or `.order(..)` on its body, or by whoever adds it: `.append(Docker::new("d").order(-1))`. See [`layout.md` → Order](layout.md#order) |
-| **who wins** | whoever **adds** the dock, over what the dock's own body says — like a style written where an element is used beating the one its component shipped with |
-| a name nobody knows | said out loud, lists the real ones, and changes nothing |
-| a call after startup | said out loud and dropped. Regions are set up once, as the app starts |
-
-**Why `retain` and not `filter`.** In Rust, `filter` builds a new list and leaves the old one as it
-was; `retain` changes the list in place — the containers it says no to leave the region. That is
-what this does, so it takes the name Rust already uses for it (`Vec::retain`).
-
-**The region holds no sizes and no indexes.** It is a list anyone may append to: a size list written
-there would be wrong the moment one more dock arrived, and an index would shift under everyone after
-a plugin's insert with nothing failing. The ends are stable, and each dock carries its own size and,
-if it needs one, its own place.
+Native code can use that API now. Sandbox plugins send typed descriptions through a host adapter;
+the WASM contribution adapter is still planned. Its acceptance requires the same startup operations
+and results as native code, as specified in the reference's
+[plugin startup parity section](widgets.md#plugin-startup-parity).
 
 ### What a named surface inherits, and therefore does not have to build
 

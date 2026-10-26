@@ -36,7 +36,7 @@
 //! viewport and centers the panel by taffy), so every descendant gets true bounds (which the
 //! hint picker and pointer hit-testing need).
 
-use crate::builders::LayoutExt;
+use crate::builders::{IntoChildren, LayoutExt, Parent};
 use crate::component::Base;
 use crate::style::Spacing;
 
@@ -61,11 +61,17 @@ pub const DIALOG_GAP: Spacing = Spacing::Md;
 /// Space between adjacent action buttons.
 pub const DIALOG_BTN_GAP: Spacing = Spacing::Sm;
 
+const TITLE_AREA: &str = "dialog-title";
+const BODY_AREA: &str = "dialog-body";
+const ACTIONS_AREA: &str = "dialog-actions";
+const LAYOUT_AREA: &str = "dialog-layout";
+
 /// A centered overlay panel over a scrim, holding real child components.
 ///
 /// Structure: the `Dialog` base is a full-viewport passthrough whose single child is a
 /// **blocking [`Overlay`](crate::widgets::Overlay)** (scrim + chrome + centering), whose single child
-/// is the **panel** — a padded column of `[title, body?, action-row?]`. The action row is a
+/// is the **panel** — a padded Surface containing a Grid of named title, body and action areas.
+/// The action row is a
 /// right-aligned [`Flex`](crate::widgets::Flex) row of the caller's [`Button`](super::Button)s.
 pub struct Dialog {
     base: Base,
@@ -76,14 +82,15 @@ pub struct Dialog {
     /// Fired when Esc or a scrim click requests dismissal (only if `dismissible`). The host
     /// points this at its overlay-close path (e.g. emit `CloseOverlay`).
     on_dismiss: Option<Box<dyn Fn()>>,
-    /// Whether an action row exists yet (created lazily on the first [`action`](Dialog::action)).
-    has_actions: bool,
-    /// Where [`body`](Dialog::body) put the body in the panel — remembered when it is placed, so
-    /// nothing has to work out which child it is afterwards.
-    body_at: Option<usize>,
     /// Set by [`danger`](Dialog::danger).
     danger: bool,
     panel_max_width: Option<crate::style::Length>,
 }
 
 impl LayoutExt for Dialog {}
+
+impl Parent for Dialog {
+    fn child(self, children: impl IntoChildren) -> Self {
+        Dialog::child(self, children)
+    }
+}

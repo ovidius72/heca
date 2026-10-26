@@ -3,6 +3,11 @@
 use super::*;
 
 impl Base {
+    /// A part owned by this container, without crossing into a nested component's template.
+    pub(crate) fn child_in_area(&mut self, name: &str) -> Option<&mut Box<dyn Component>> {
+        self.children.iter_mut().find(|child| child.base().grid_area.as_deref() == Some(name))
+    }
+
     /// **Does this widget declare anything the pointer could mean on it?** A handler, a focus
     /// stop, a drag or drop role, a cursor, a tooltip, a menu, a hint, or something painted (fill,
     /// border, glow). A box with none of these is layout only: where no child is, nothing is under
@@ -58,6 +63,19 @@ impl Base {
     pub fn container() -> Self {
         let mut base = Self::new();
         base.layout_only = true;
+        base
+    }
+
+    /// A layer shares its containing viewport instead of taking space from sibling layers.
+    /// Composed surfaces need the same outer box as the overlay they contain.
+    pub(crate) fn viewport_layer() -> Self {
+        let mut base = Self::new();
+        base.style.layout.width = crate::Length::Percent(1.0);
+        base.style.layout.height = crate::Length::Percent(1.0);
+        base.style.layout.placement = Some(crate::style::Placement {
+            left: crate::Length::Px(0.0), top: crate::Length::Px(0.0),
+            width: crate::Length::Auto, height: crate::Length::Auto,
+        });
         base
     }
 
@@ -304,11 +322,18 @@ impl Base {
             self.mark_needs_paint();
             true
         });
+        let previous_frame = self.presence.frame();
         let animating = self.presence.tick(dt);
         // **Exactly the frame an exit ends.** Asked of the presence rather than inferred from
         // "not open and not leaving", which is also true of a widget that was never up — and which
         // hid the whole tree on the first tick when it was tried that way.
-        if self.presence.take_finished_exit() {
+        let finished_exit = self.presence.take_finished_exit();
+        if previous_frame != self.presence.frame() || finished_exit {
+            // A moving surface must invalidate itself even when another widget already
+            // supplied a smaller damage region. Include the final frame that removes it.
+            self.mark_needs_paint();
+        }
+        if finished_exit {
             crate::reactive::SignalUpdate::set(&self.visible, false);
         }
         animating || tone_changed

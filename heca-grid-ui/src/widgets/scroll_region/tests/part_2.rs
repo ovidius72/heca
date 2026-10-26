@@ -292,3 +292,66 @@ use super::*;
         assert_eq!(viewport_h, 100.0);
         assert_eq!(max_y, (content_h - viewport_h) as f32);
     }
+    #[test]
+    fn releasing_one_request_does_not_reveal_an_unchanged_fallback() {
+        let mut r = region_with_children(&[40.0, 400.0, 40.0]);
+        let mut first = crate::widgets::Row::new().nav_selected(true);
+        let mut last = crate::widgets::Row::new().nav_selected(true);
+        let first_nav = first.nav_state();
+        first.base_mut().bounds = r.base.children[0].base().bounds;
+        last.base_mut().bounds = r.base.children[2].base().bounds;
+        r.base.children[0] = Box::new(first);
+        r.base.children[2] = Box::new(last);
+        r.follow_revealed();
+        r.scroll_to(100.0);
+
+        first_nav.set(false);
+        r.follow_revealed();
+
+        assert_eq!(r.scroll_offset.get_untracked(), 100.0,
+            "the fallback was already requesting: releasing another request is not navigation");
+    }
+
+    #[test]
+    fn a_fallback_that_requests_again_is_revealed() {
+        let mut r = region_with_children(&[40.0, 400.0, 40.0]);
+        let mut first = crate::widgets::Row::new().nav_selected(true);
+        let mut last = crate::widgets::Row::new().nav_selected(true);
+        let (first_nav, last_nav) = (first.nav_state(), last.nav_state());
+        first.base_mut().bounds = r.base.children[0].base().bounds;
+        last.base_mut().bounds = r.base.children[2].base().bounds;
+        r.base.children[0] = Box::new(first);
+        r.base.children[2] = Box::new(last);
+        r.follow_revealed();
+        r.scroll_to(100.0);
+        first_nav.set(false);
+        last_nav.set(false);
+        r.follow_revealed();
+
+        last_nav.set(true);
+        r.follow_revealed();
+
+        assert_eq!(r.scroll_offset.get_untracked(), 380.0,
+            "a renewed navigation request still brings its row into view");
+    }
+
+    #[test]
+    fn manual_scrolling_pauses_reflow_following_until_typing_moves_the_target() {
+        let mut r = region_with_children(&[40.0, 400.0, 40.0]);
+        let mut row = crate::widgets::Row::new().nav_selected(true);
+        row.base_mut().bounds = r.base.children[2].base().bounds;
+        r.base.children[2] = Box::new(row);
+        r.follow_revealed();
+        r.scroll_to(100.0);
+
+        r.base.children[2].base_mut().bounds.loc.y += 20.0;
+        r.follow_revealed();
+        assert_eq!(r.scroll_offset.get_untracked(), 100.0,
+            "layout reflow must not undo the reader's scroll");
+
+        r.on_event_capture(&Event::TextInput("x".into()));
+        r.base.children[2].base_mut().bounds.loc.y += 20.0;
+        r.follow_revealed();
+        assert_eq!(r.scroll_offset.get_untracked(), 420.0,
+            "typing resumes following a moving cursor");
+    }

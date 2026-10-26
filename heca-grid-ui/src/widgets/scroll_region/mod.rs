@@ -292,7 +292,7 @@ pub struct ScrollRegion {
     on_scroll_end: Option<ScrollListener>,
     /// Whether a scroll gesture is currently in flight (between start and end).
     scrolling: bool,
-    /// The **natural** (unscrolled) top-left of the descendant last brought into view.
+    /// The identity and **natural** (unscrolled) top-left of every outstanding reveal request.
     ///
     /// Natural rather than on-screen on purpose: it changes when the *selection moves* and stays
     /// put when the *user scrolls*, which is exactly the difference between "follow the cursor" and
@@ -300,8 +300,13 @@ pub struct ScrollRegion {
     ///
     /// Both coordinates, because a horizontal region's cursor moves **sideways**: remembering only
     /// the top, a strip of cards would decide nothing had changed and never follow at all.
-    /// The viewport size is part of the key: shrinking must keep the same cursor in view too.
-    last_revealed: Option<(f64, f64, Size)>,
+    /// Remember lower-priority requests too: releasing focus must not make an unchanged request
+    /// elsewhere in the tree look like a new selection.
+    last_revealed: Vec<(u64, f64, f64)>,
+    /// Shrinking the viewport must keep the same cursor in view too.
+    last_reveal_viewport: Option<Size>,
+    /// Explicit scrolling pauses layout-only following until navigation or typing.
+    reveal_paused: bool,
     /// The **natural rect** of whatever last asked to be revealed — what [`center_pad`](Self::center_pad) keeps
     /// centring while nothing is asking.
     ///

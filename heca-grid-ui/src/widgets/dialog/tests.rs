@@ -28,7 +28,7 @@ fn structure_is_overlay_holding_panel_with_title_body_and_action_row() {
     let overlay = &d.base().children[0];
     // The overlay's single child is the panel: [title, body, action-row].
     assert_eq!(overlay.base().children.len(), 1, "overlay holds the panel");
-    let panel = &overlay.base().children[0];
+    let panel = crate::component::area(&d, LAYOUT_AREA).unwrap();
     assert_eq!(panel.base().children.len(), 3, "title + body + action row");
     // Action row holds the two buttons.
     let row = &panel.base().children[2];
@@ -67,8 +67,7 @@ fn cancel_nav_fires_dismiss_when_dismissible() {
 
 /// Buttons in the action row that currently hold focus (drives the focus ring).
 fn focused_buttons(d: &Dialog) -> Vec<usize> {
-    let panel = &d.base().children[0].base().children[0];
-    let row = &panel.base().children[2];
+    let row = crate::component::area(d, ACTIONS_AREA).unwrap();
     row.base()
         .children
         .iter()
@@ -330,4 +329,104 @@ fn a_dialog_raised_by_its_handle_starts_where_it_said() {
         "opened from a closure holding nothing but the handle, and the keyboard landed on the \
          control the dialog named: {names:?}",
     );
+}
+
+#[test]
+fn interleaved_body_and_actions_keep_field_focus_and_primary_activation() {
+    use crate::widgets::Input;
+
+    let primary = Rc::new(Cell::new(false));
+    let canceled = Rc::new(Cell::new(false));
+    let submit = primary.clone();
+    let cancel = canceled.clone();
+    let mut dialog = Dialog::new("Rename")
+        .action(Button::new("Save").on_click(move || submit.set(true)))
+        .child(Input::new().value("name"))
+        .child(Label::new("A second body component"))
+        .action(Button::new("Cancel").on_click(move || cancel.set(true)))
+        .default_open(true);
+
+    assert_eq!(
+        crate::component::dispatch(&mut dialog, &Event::TextInput("x".into())),
+        Handled::Yes,
+        "the field receives focus even when an action was declared before the body",
+    );
+    crate::component::dispatch(&mut dialog, &Event::Widget(WidgetIntent::Activate));
+    assert!(primary.get(), "the first declared action remains primary");
+    assert!(!canceled.get(), "body content cannot become the action row");
+}
+
+#[test]
+fn nested_and_multiple_children_stay_between_the_title_and_actions() {
+    use crate::builders::{Parent, PlaceExt};
+    use crate::widgets::{Flex, Grid};
+
+    for (width, height) in [(240.0, 220.0), (700.0, 500.0)] {
+        let mut dialog = Dialog::new("Question")
+            .panel_size(crate::Length::Percent(0.8), crate::Length::Percent(0.8))
+            .action(Button::new("OK"))
+            .child(Grid::new().template_row("auto auto")
+                .child(Label::new("First")).child(Label::new("Second")))
+            .child(Flex::column().child([Label::new("Third"), Label::new("Fourth")]))
+            .default_open(true);
+        crate::LayoutEngine::new().compute(&mut dialog, Size::new(width, height));
+
+        let panel = dialog.panel_bounds();
+        let body = dialog.part_mut(BODY_AREA).unwrap().base().bounds;
+        let actions = dialog.part_mut(ACTIONS_AREA).unwrap().base().bounds;
+        assert!(body.loc.y + body.size.h <= actions.loc.y + 0.01);
+        assert!(actions.loc.y + actions.size.h <= panel.loc.y + panel.size.h + 0.01);
+        assert!(body.loc.x >= panel.loc.x && body.loc.x + body.size.w <= panel.loc.x + panel.size.w);
+        let panel_base = dialog.base.children[0].base().children[0].base();
+        let inner_width = panel.size.w
+            - panel_base.style.layout.pad_left(panel_base.font) as f64
+            - panel_base.style.layout.pad_right(panel_base.font) as f64;
+        assert!((body.size.w - inner_width).abs() < 0.01,
+            "the body fills the panel width rather than hugging its text");
+        assert!((actions.size.w - inner_width).abs() < 0.01,
+            "the action row can align its buttons against the panel's right edge");
+        // Adding unrelated named areas inside a body cannot shadow the panel's own parts.
+        let nested = Flex::column().area(ACTIONS_AREA).child(Label::new("Not an action"));
+        let dialog = Parent::child(dialog, nested);
+        assert_eq!(crate::component::area(&dialog, LAYOUT_AREA).unwrap().base().children.len(), 3);
+    }
+}
+
+#[test]
+fn missing_parts_leave_no_header_or_action_gap() {
+    use crate::builders::Parent;
+    use crate::widgets::Flex;
+
+    let mut dialog = Parent::child(Dialog::new(""), [Flex::column().height(30.0)])
+        .default_open(true);
+    crate::LayoutEngine::new().compute(&mut dialog, Size::new(600.0, 400.0));
+    let panel = dialog.panel_bounds();
+    let body = dialog.part_mut(BODY_AREA).unwrap().base().bounds;
+    let panel_base = dialog.base.children[0].base().children[0].base();
+    let padding = panel_base.style.layout.pad_top(panel_base.font) as f64;
+    assert!((panel.size.h - body.size.h - padding * 2.0).abs() < 0.01,
+        "only body and padding remain, without empty header/action tracks or gaps");
+}
+
+#[test]
+fn resizing_a_panel_gives_extra_height_to_its_body() {
+    let mut previous: Option<(f32, f64, f64, f64)> = None;
+    for height in [180.0, 360.0] {
+        let mut dialog = Dialog::new("Question")
+            .panel_size(crate::Length::Px(300.0), crate::Length::Px(height))
+            .child(Label::new("Body"))
+            .action(Button::new("OK"))
+            .default_open(true);
+        crate::LayoutEngine::new().compute(&mut dialog, Size::new(800.0, 600.0));
+        let body = dialog.part_mut(BODY_AREA).unwrap().base().bounds.size.h;
+        let title = dialog.part_mut(TITLE_AREA).unwrap().base().bounds.size.h;
+        let actions = dialog.part_mut(ACTIONS_AREA).unwrap().base().bounds.size.h;
+        if let Some((old_height, old_body, old_title, old_actions)) = previous {
+            assert!((body - old_body - (height - old_height) as f64).abs() < 0.01,
+                "the body receives the added space, rather than stretching title/actions");
+            assert_eq!(title, old_title);
+            assert_eq!(actions, old_actions);
+        }
+        previous = Some((height, body, title, actions));
+    }
 }

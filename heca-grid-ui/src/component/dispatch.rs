@@ -234,3 +234,21 @@ pub(crate) fn reveal_target(node: &dyn Component) -> Option<Rectangle> {
 pub(crate) fn reveal_target_in(children: &[Box<dyn Component>]) -> Option<Rectangle> {
     children.iter().find_map(|c| reveal_target(c.as_ref()))
 }
+
+/// All outstanding requests, deepest first. A lower-priority request remains the same request
+/// when the one before it lets go, so a scroll region must remember it too.
+pub(crate) fn reveal_requests_in(children: &[Box<dyn Component>]) -> Vec<(u64, Rectangle)> {
+    fn collect(node: &dyn Component, requests: &mut Vec<(u64, Rectangle)>) {
+        for child in &node.base().children {
+            collect(child.as_ref(), requests);
+        }
+        if node.wants_visible() {
+            requests.push((node.base().focus_id(), node.base().bounds));
+        }
+    }
+    let mut requests = Vec::new();
+    for child in children {
+        collect(child.as_ref(), &mut requests);
+    }
+    requests
+}

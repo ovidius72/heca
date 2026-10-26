@@ -20,9 +20,19 @@ fn main() {
 }
 ```
 
-A dock is contributed separately through `heca::regions(..)` and a `Provider`; its `id()` names
-the placement and its `kind()` names the provider type. The complete compiling example shows both
-APIs: [`heca/examples/extend_heca.rs`](../heca/examples/extend_heca.rs).
+**Docks are contributed through Providers.** The canonical
+[Provider and startup region reference](widgets.md#providers-and-startup-regions) documents adding,
+removing and ordering them from native Heca/library code, plus the sandbox-plugin startup parity
+requirement and current availability.
+
+## Providers and docks at startup
+
+The canonical [Provider and region API reference](widgets.md#providers-and-startup-regions) explains
+how to add, remove and order docks, the required `Provider` methods, placement identity, startup
+cutoff and native/plugin availability. Use that reference for the operation contract.
+
+A complete native implementation is [`heca/examples/extend_heca.rs`](../heca/examples/extend_heca.rs):
+its `Notes` provider contributes a dock containing a label and a Terminal to `sidebar.right`.
 
 ## The rules
 

@@ -29,8 +29,8 @@ impl Component for ScrollRegion {
         }
         self.previous_bottom = bottom;
         let x = self.scroll_offset_x.get_untracked();
-        self.scroll_to(y);
-        self.scroll_to_x(x);
+        self.set_offset_y(y, None);
+        self.set_offset_x(x, None);
         self.reserve_scrollbar_gutters();
         self.follow_revealed();
     }
@@ -144,6 +144,9 @@ impl Component for ScrollRegion {
         self.sync_shift();
         let vp = self.base.bounds;
 
+        if matches!(ev, Event::Key { pressed: true, .. } | Event::TextInput(_) | Event::Widget(_)) {
+            self.reveal_paused = false;
+        }
         match ev {
             Event::PointerDown(p) => self.press_capture(p.pos, vp, ev),
             Event::PointerMove(p) => self.move_capture(p.pos, vp, ev),

@@ -44,6 +44,32 @@ fn dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body() {
     );
 }
 
+#[test]
+fn legacy_dock_header_slots_match_the_native_named_area_layout() {
+    use heca_grid_ui::{Badge, DockFrame, Item, LayoutEngine, Parent, Size};
+
+    let node = ViewNode::new(WidgetKind::DockFrame).text("EXPLORER")
+        .prop("frameless", PropValue::Bool(true))
+        .child(ViewNode::new(WidgetKind::Badge).text("3")
+            .prop("slot", PropValue::Text("header".into())))
+        .child(ViewNode::new(WidgetKind::Item).text("src"))
+        .child(ViewNode::new(WidgetKind::Item).text("tests"));
+    let mut described = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+    let mut native = Parent::child(
+        DockFrame::new("EXPLORER").frameless(true).header(Badge::new("3")),
+        [Item::new("src"), Item::new("tests")],
+    );
+    for size in [Size::new(180.0, 220.0), Size::new(700.0, 500.0)] {
+        LayoutEngine::new().compute(&mut native, size);
+        LayoutEngine::new().compute(described.as_mut(), size);
+        for name in ["header", "controls", "body", "toggle"] {
+            let a = heca_grid_ui::component::area(&native, name).unwrap().base().bounds;
+            let b = heca_grid_ui::component::area(described.as_ref(), name).unwrap().base().bounds;
+            assert_eq!(a, b, "wire slot and native composition agree for {name}");
+        }
+    }
+}
+
 /// `Item` has **no default slot** — its middle is the label, which comes from `text` — so a child
 /// naming no slot (or an unknown one) is ignored rather than dropped somewhere it doesn't belong.
 /// Either way: no panic. Realize stays total for untrusted input.
