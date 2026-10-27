@@ -23,13 +23,6 @@ impl AppState {
         self.session.through_mut(&mut self.view)
     }
 
-    /// **Ask the server to do something, and react to what changed** — the one door from a window
-    /// to the state every window shares. The server's clock is read here, not the asker's.
-    pub(crate) fn ask_server(&mut self, action: crate::server::ServerAction) {
-        let changes = self.server.execute(action, std::time::Instant::now());
-        self.apply(changes);
-    }
-
     /// Do what only a window can about what the server says changed on its own.
     pub(crate) fn apply(&mut self, changes: Vec<crate::server::Change>) {
         self.apply_answer(changes, None);
@@ -44,7 +37,8 @@ impl AppState {
     ) {
         for change in changes {
             if matches!(change, crate::server::Change::NotificationsChanged) {
-                self.sync_toasts();
+                // The toast data rides its own message (`ServerMsg::Notifications`), applied in
+                // `receive_client`; this dataless fact only asks for a redraw.
                 self.needs_redraw = true;
                 continue;
             }
@@ -85,21 +79,19 @@ impl AppState {
             self.terminal_cell_size,
         );
         let before = self.layout().before();
-        let changes = self.server.run(&mut self.session, asker, action);
-        self.apply_answer(
-            changes,
-            Some(Asked {
-                action,
-                name,
-                before: &before,
-            }),
-        );
+        self.client.act(action.clone(), asker, name.into(), before);
     }
 
-    /// Point the toast stack's signal at what the server says is on show, if that changed.
-    pub(crate) fn sync_toasts(&mut self) {
+    /// Rebuild the toast stack's signal from the notification projection the server sent
+    /// ([`notifications`](Self::notifications)), if it changed. Each view becomes a `ToastSpec`
+    /// through the one window-side builder, so the cut and action wiring live in one place.
+    pub(crate) fn rebuild_toasts(&mut self) {
         use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
-        let next = self.server.visible_toasts();
+        let next: Vec<_> = self
+            .notifications
+            .iter()
+            .map(crate::notification::toast_spec)
+            .collect();
         if self.toasts.get_untracked() != next {
             self.toasts.set(next);
         }

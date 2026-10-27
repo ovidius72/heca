@@ -30,7 +30,7 @@ pub(super) fn handle_prefix_mode(
             let combo = state.prefix.combo.clone();
             crate::app::tree_keys::deliver_press_to_tree(state, keymap, &combo, "");
         } else if let Some(pane_id) = state.focused_pane
-            && let Some(backend) = state.server.backends.get_mut(pane_id)
+            && let Some(backend) = state.client.backends.get_mut(pane_id)
         {
             let literal = prefix_combo_to_literal_input(&state.prefix.combo);
             if !literal.is_empty() {

@@ -64,7 +64,7 @@ pub(crate) fn refresh_terminal_cell_size(state: &mut AppState) {
     // box or its font changes (`TerminalInput::Resize`), and the font it reads is the one just
     // measured above — so there is one place a size is decided.
     let scale = state.scale_factor as f32;
-    for backend in state.server.backends.values_mut() {
+    for backend in state.client.backends.values_mut() {
         backend.set_scale_factor(scale);
     }
 }
@@ -113,7 +113,7 @@ pub(crate) fn apply_terminal_font_zoom(state: &mut AppState, terminal: TerminalI
     // Push the resolved cell size straight into the terminal's process so it reflows at once
     // rather than waiting for the grid the terminal asks for on its next layout.
     let cell = state.terminal_base_cell_size(terminal);
-    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
         backend.set_cell_size(cell.0, cell.1);
     }
     state.mark_full_redraw();

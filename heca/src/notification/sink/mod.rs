@@ -33,9 +33,10 @@ pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
 /// A producer never reaches `push` directly: this is what keeps the caller's clock and the
 /// store's internal verb off the public surface.
 pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationDraft) {
-    // The server drops it under `mode = "none"` and falls back to the in-app stack under `system`
-    // — both are its rules, not the window's.
-    state.ask_server(crate::server::ServerAction::Raise(draft));
+    // Over the wire to the server, which owns the queue, timers and dedup. It drops the draft under
+    // `mode = "none"` and falls back to the in-app stack under `system` — both are its rules, not
+    // the window's — then sends the new projection back for the window to draw.
+    state.client.notify(crate::server::NotificationCommand::Raise(draft));
 }
 
 /// **The raise capability — the one public door.** A native producer and an extension author type

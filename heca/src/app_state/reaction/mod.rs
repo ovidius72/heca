@@ -81,6 +81,7 @@ pub(crate) struct Reaction {
 pub(crate) fn refusal_words(reason: Refusal) -> &'static str {
     match reason {
         Refusal::OnlyPaneInColumn => "it is already the only pane in its column",
+        Refusal::TerminalUnavailable => "the terminal is no longer available",
     }
 }
 

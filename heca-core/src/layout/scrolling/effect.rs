@@ -7,7 +7,7 @@
 use super::*;
 
 /// What a change did to a workspace's columns.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ColumnEffect {
     /// A column now sits at `idx`; the ones from there on moved one place along.
     Inserted { idx: usize },

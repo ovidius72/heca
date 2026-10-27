@@ -6,6 +6,7 @@ mod app;
 mod app_state;
 mod args;
 mod chrome;
+mod client;
 mod components;
 mod entry;
 mod handlers;
@@ -70,6 +71,7 @@ pub(crate) fn pane_name(_id: PaneId) -> String {
 }
 
 struct HecaApp {
+    launch_mode: crate::app::cli::LaunchMode,
     state: Option<Box<AppState>>,
     app_config: AppConfig,
     event_proxy: EventLoopProxy<AppEvent>,
@@ -82,6 +84,24 @@ struct HecaApp {
 }
 
 impl HecaApp {
+    fn receive_server(&mut self) {
+        let calls = match self.state.as_mut() {
+            Some(state) => match state.client.poll() {
+                Ok(update) => state.receive_client(update),
+                Err(error) => {
+                    state.status_note = Some(format!("Session connection lost: {error}"));
+                    state.mark_full_redraw();
+                    state.window.request_redraw();
+                    Vec::new()
+                }
+            },
+            None => Vec::new(),
+        };
+        for (request_id, line) in calls {
+            let answer = self.run_rpc(&line);
+            if let Some(state) = &self.state { state.client.reply_rpc(request_id, answer); }
+        }
+    }
     /// Parse and execute an RPC command string.
     ///
     /// **Both vocabularies, one gate**: a named built-in command and the generic
@@ -94,15 +114,12 @@ impl HecaApp {
     /// The reply says what became of it, because a script cannot be told "ok" when nothing ran: an
     /// unknown name, an action the current domain refuses, and one whose component is not mounted
     /// are three different answers.
-    #[expect(
-        dead_code,
-        reason = "nothing listens on a socket yet; this is the entry a listener calls"
-    )]
     pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<(), rpc::RpcError> {
         use crate::app::interaction::{IntentOutcome, InteractionSource, dispatch_view_intent};
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
         // One map: the name is looked up in the same catalog every other caller uses.
-        let (intent, dock) = rpc::parse_rpc(cmd)?.into_intent(&state.action_catalog)?;
+        let (mut intent, dock) = rpc::parse_rpc(cmd)?.into_intent(&state.action_catalog)?;
+        state.client.normalize_server_intent(&mut intent)?;
         // **Which placement, and does it need the keyboard?**
         //
         // `--dock` names the seating outright. Without it, an action a *component* declared
@@ -145,16 +162,28 @@ impl HecaApp {
     /// — the RPC server then routes it to [`execute_rpc_command`](HecaApp::execute_rpc_command) to run as an
     /// action. A query returns data, never a [`WmAction`](crate::input::WmAction), which is why it is a
     /// separate entry point.
-    #[expect(
-        dead_code,
-        reason = "nothing listens on a socket yet; this is the entry a listener calls"
-    )]
     pub fn query_rpc_command(&self, cmd: &str) -> Option<Result<String, rpc::RpcError>> {
         let state = self.state.as_ref()?;
         rpc::introspect(&state.action_catalog, cmd)
     }
 
-    fn new(event_proxy: EventLoopProxy<AppEvent>) -> Self {
+    /// Run one RPC line from the socket and give back the one line to send to the caller. A query
+    /// (`list-actions` / `describe-action`) answers with its JSON; anything else runs as an action
+    /// and answers `ok` or `error: …`. The caller never gets a silent "did nothing".
+    fn run_rpc(&mut self, line: &str) -> String {
+        if let Some(result) = self.query_rpc_command(line) {
+            return match result {
+                Ok(json) => json,
+                Err(e) => format!("error: {e}"),
+            };
+        }
+        match self.execute_rpc_command(line) {
+            Ok(()) => "ok".to_string(),
+            Err(e) => format!("error: {e}"),
+        }
+    }
+
+    fn new(event_proxy: EventLoopProxy<AppEvent>, launch_mode: crate::app::cli::LaunchMode) -> Self {
         let app_config = AppConfig::load();
         let registry = build_registry();
         // Every collision — a key bound twice, an id declared twice — is collected here and
@@ -166,6 +195,7 @@ impl HecaApp {
         crate::app::conflicts::settle_drag_modifiers(&app_config.config.settings, &mut conflicts);
 
         Self {
+            launch_mode,
             state: None,
             app_config,
             event_proxy,
@@ -221,7 +251,7 @@ impl HecaApp {
             // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
             state.theme = self.app_config.theme.clone();
-            state.server.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
+            state.client.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
             // Appearance: opacity re-reads every frame, so updating the snapshot
             // makes `transparency` (the amount) live-reload. The OS vibrancy
             // material is applied once at startup and NOT re-applied here — doing
@@ -268,15 +298,10 @@ impl HecaApp {
                 .apply_visibility(&crate::chrome::shown_from_settings(
                     &self.app_config.config.settings,
                 ));
-            // The notification settings go to the server whole, so none can be left out.
-            let notifications = &self.app_config.config.settings.notification_system;
-            state.ask_server(crate::server::ServerAction::Configure(
-                crate::server::NotificationSettings {
-                    auto_dismiss: std::time::Duration::from_millis(notifications.auto_dismiss_ms),
-                    mode: notifications.mode,
-                    max_visible: notifications.max_visible,
-                },
-            ));
+            // Terminal and notification settings belong to the server, which re-reads the file
+            // itself (`ClientMsg::Reload`) — the window hands nothing over. How many lines a card
+            // may show is a window-side presentation choice the mounted `ToastStack` reads, so it
+            // stays here.
             heca_grid_ui::reactive::SignalUpdate::set(
                 &state.notification_max_lines,
                 self.app_config
@@ -286,9 +311,7 @@ impl HecaApp {
                     .max_lines
                     .max(1),
             );
-            state.ask_server(crate::server::ServerAction::ConfigureTerminals(Box::new(
-                crate::app::backend_factory::TerminalSettings::from_config(&self.app_config),
-            )));
+            state.client.reload();
             // Layout options and chrome geometry changes must reflow the real viewport
             // path so cached column widths, pane sizes, and working areas stay
             // coherent after reload.
@@ -311,7 +334,7 @@ impl HecaApp {
     }
 
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
-        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone()).await
+        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone(), self.launch_mode).await
     }
 }
 
@@ -364,6 +387,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut state.action_catalog,
                 &mut self.conflicts,
             );
+            state.client.install_actions(self.registry.clone(), state.action_catalog.clone());
             // What another crate added with an extension's `.layer(..)`: registered hidden, under its name,
             // so `toggle_layer` finds it from a key, a menu, the palette and RPC.
             crate::entry::register_queued_layers(&mut state);
@@ -417,6 +441,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.receive_server();
         // Config reload requested via keybinding — do it before borrowing state.
         let needs_reload = self
             .state
@@ -436,6 +461,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+        self.receive_server();
         let Some(state) = self.state.as_mut() else {
             return;
         };
@@ -473,6 +499,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 crate::notification::raise(state, draft);
                 state.window.request_redraw();
             }
+            // Answered before the state guard above (it must reply even while starting).
         }
     }
 }
@@ -498,7 +525,9 @@ pub fn run() {
         .expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     let event_proxy = event_loop.create_proxy();
-    let mut app = HecaApp::new(event_proxy);
+    // Start serving the local control socket: scripts (`heca rpc …`) and, later, attaching
+    // windows reach the server through it. A failure to open it never stops the window.
+    let mut app = HecaApp::new(event_proxy, crate::app::cli::launch_mode(&args));
     event_loop
         .run_app(&mut app)
         .expect("Failed to run event loop");

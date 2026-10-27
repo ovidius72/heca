@@ -36,6 +36,7 @@
 pub mod animation;
 pub mod arrange;
 pub mod column;
+pub mod content;
 pub mod floating;
 mod handle;
 mod motion;
@@ -52,6 +53,9 @@ pub mod workspace;
 
 pub use arrange::{Added, Arranged, Moved, Removed};
 pub use column::{Column, Pane};
+pub use content::{
+    ColumnContent, FloatingContent, PaneContent, SessionContent, WorkspaceContent,
+};
 pub use handle::{Before, Layout, LayoutMut};
 pub use scrolling::{
     ColumnEffect, Direction, LaidOutColumn, LaidOutPane, PaneEffect, Place, PlaceKind, Positions,

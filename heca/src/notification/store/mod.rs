@@ -1,6 +1,5 @@
 use super::*;
 use std::{collections::{HashMap, VecDeque}, time::Instant};
-use heca_grid_ui::widgets::ToastSpec;
 use heca_view::Intent;
 
 mod transitions;
@@ -326,13 +325,12 @@ impl NotificationStore {
         self.dedup_index.get(key).copied()
     }
 
-    /// Project the stable visible slots to `ToastSpec`s, in visible-slot order.
+    /// Project the stable visible slots to serializable [`NotificationView`]s, in visible-slot
+    /// order — what the server sends a window, which builds its own `ToastSpec`s from them.
     ///
-    /// Pickability is automatic now — there is no hint-target registration
-    /// seam to thread through here. The store remains the only owner of
-    /// queueing and lifecycle state.
-    pub fn visible_toasts(&self) -> Vec<ToastSpec> {
-        self.visible().filter_map(project_visible_toast).collect()
+    /// The store remains the only owner of queueing and lifecycle state; this is a pure read.
+    pub fn visible_views(&self) -> Vec<NotificationView> {
+        self.visible().filter_map(notification_view).collect()
     }
 
     /// Whether the store holds no queued, visible, or retained notification.

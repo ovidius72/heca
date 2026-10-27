@@ -9,6 +9,8 @@
 
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use crate::notification::{NotificationDraft, NotificationId};
 
 /// How notifications behave, as `[settings.notification_system]` says — handed over whole on start
@@ -43,4 +45,38 @@ pub(crate) enum ServerAction {
     /// New terminal settings (reload): every running process takes them, and every one started
     /// from now on starts with them.
     ConfigureTerminals(Box<crate::app::backend_factory::TerminalSettings>),
+}
+
+/// **A window's notification request, carried over the wire.**
+///
+/// The serializable subset of [`ServerAction`] a pure client sends ([`ClientMsg::Notify`]). It
+/// leaves out `Configure`/`ConfigureTerminals`, which a window never hands over: the server reads
+/// its own settings from disk on a [`ClientMsg::Reload`](crate::server::wire::ClientMsg::Reload),
+/// so the window's whole `Theme` never crosses the wire.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) enum NotificationCommand {
+    /// Raise a notification. Dropped by the server when the mode says nowhere.
+    Raise(NotificationDraft),
+    /// Dismiss one notification by id.
+    DismissOne(NotificationId),
+    /// Dismiss the first eligible visible notification, in stable order.
+    DismissLast,
+    /// Dismiss every visible notification.
+    DismissAll,
+    /// Whether the pointer rests on a notification card.
+    Hover(bool),
+}
+
+impl NotificationCommand {
+    /// The [`ServerAction`] this command runs — the server maps it on receipt so the state has one
+    /// door whatever asked ([`ServerState::execute`](super::ServerState::execute)).
+    pub(crate) fn into_server_action(self) -> ServerAction {
+        match self {
+            Self::Raise(draft) => ServerAction::Raise(draft),
+            Self::DismissOne(id) => ServerAction::DismissOne(id),
+            Self::DismissLast => ServerAction::DismissLast,
+            Self::DismissAll => ServerAction::DismissAll,
+            Self::Hover(hovered) => ServerAction::Hover(hovered),
+        }
+    }
 }

@@ -4314,6 +4314,13 @@ sidebar. Severity maps to theme tokens, never literals.
   `.on_click(f)` — the whole card, which also makes it focusable so Enter/Space activate it. There
   is **no `on_action`**: an action is a real control you passed in, so its own `on_click` is its
   callback.
+- **Countdown bar**: `.progress(bool)` (default **off**) draws a hairline along the bottom edge that
+  depletes over the toast's lifetime, so a timed card shows how long it has left. It needs a span to
+  run over — `.countdown(Duration)`, the host's auto-dismiss duration — and shows nothing without
+  one (a sticky card has no timer, so no bar). `.countdown_paused(Signal<bool>)` binds the stack's
+  hold-still signal so the bar freezes with the deadline while the pointer rests on a card. The host
+  owns the timer; the bar animates locally over the span. `ToastStack` turns this on for any card
+  whose `ToastSpec` carries `.countdown(..)`, so the app never sets it per card by hand.
 - **Accessors**: `.title_signal() -> Signal<String>`, `.open_signal() -> Signal<bool>`,
   `.is_showing() -> bool` (true **including while leaving**, which is when it is still drawn and no
   longer interactive).

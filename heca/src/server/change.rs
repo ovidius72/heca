@@ -8,7 +8,7 @@
 ///
 /// `PartialEq` but not `Eq`: [`Floated`](Self::Floated) carries a [`Rectangle`](heca_core::layout::Rectangle) of logical pixels
 /// (`f64`), which is `PartialEq` only.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Change {
     /// The notifications on show, or when they expire, are different.
     NotificationsChanged,
@@ -59,8 +59,10 @@ pub(crate) enum Change {
 }
 
 /// Why the server did not do what it was asked — plain data; the words are the window's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Refusal {
+    /// The terminal targeted by the request has already been removed.
+    TerminalUnavailable,
     /// The pane is already the only one in its column, so taking it out would change nothing.
     OnlyPaneInColumn,
 }
@@ -109,5 +111,46 @@ impl Change {
             .into_iter()
             .chain([landed])
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Change, Refusal};
+    use heca_core::layout::{ColumnEffect, PaneEffect, PaneId, Point, Rectangle, Size, SpaceEffect};
+
+    /// Serialize, deserialize, and assert the change is unchanged — the connection
+    /// carries `Change`s (F012, P099/T543), so each variant must survive the trip.
+    fn roundtrip(change: Change) {
+        let json = serde_json::to_string(&change).expect("serialize");
+        let back: Change = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(change, back, "Change changed across a serde round-trip");
+    }
+
+    #[test]
+    fn every_change_variant_round_trips() {
+        roundtrip(Change::NotificationsChanged);
+        roundtrip(Change::LayoutChanged);
+        roundtrip(Change::ColumnZoomed { workspace: 1, column: 2 });
+        roundtrip(Change::PaneMoved { pane: PaneId(5), workspace: 0, column: 3 });
+        roundtrip(Change::PaneAdded { pane: PaneId(6), workspace: 1, column: 0 });
+        roundtrip(Change::Floated {
+            pane: PaneId(7),
+            workspace: 2,
+            rect: Rectangle::new(Point::new(10.0, 20.0), Size::new(300.0, 200.0)),
+        });
+        roundtrip(Change::PaneRemoved { pane: PaneId(8) });
+        roundtrip(Change::Arranged {
+            workspace: 0,
+            effects: vec![
+                SpaceEffect::Column(ColumnEffect::Removed { idx: 1 }),
+                SpaceEffect::Pane(PaneEffect::Inserted { col: 0, row: 2 }),
+            ],
+        });
+        roundtrip(Change::ColumnMoved { workspace: 1, column: 0 });
+        roundtrip(Change::WorkspaceAdded { index: 3 });
+        roundtrip(Change::WorkspaceRemoved { index: 2 });
+        roundtrip(Change::NamesChanged);
+        roundtrip(Change::Refused(Refusal::OnlyPaneInColumn));
     }
 }

@@ -4,7 +4,7 @@
 use crate::args::EnumArg;
 
 /// Target for resize actions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ResizeTarget {
     Column,
     Pane,
@@ -43,7 +43,7 @@ impl std::str::FromStr for ResizeTarget {
 /// ```
 ///
 /// Omit it and nothing changes — [`Auto`](Self::Auto) is what every existing binding gets.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ResizeEdge {
     /// The edge the target already owned: for a pane, the one below it — or above, when it is last
     /// and has nothing below. The default, so an unchanged binding behaves exactly as before.
@@ -82,7 +82,7 @@ impl std::str::FromStr for ResizeEdge {
 }
 
 /// Direction of a terminal font-zoom step.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum FontZoomStep {
     /// Increase the font size by one step.
     In,
@@ -128,7 +128,7 @@ impl std::str::FromStr for FontZoomStep {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SpawnKind {
     Terminal,
     App,
@@ -153,7 +153,7 @@ impl std::str::FromStr for SpawnKind {
 
 /// **Shown, hidden, or the other of the two** — what `set_region_visible` does to a region.
 /// Omitted, it toggles.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RegionVisibility {
     Show,
     Hide,

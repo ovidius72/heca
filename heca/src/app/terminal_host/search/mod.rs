@@ -23,7 +23,7 @@ pub(crate) fn on_search(state: &mut AppState, terminal: TerminalId, search: Sear
         Search::Editing(false) => leave_search_entry(state, terminal),
         Search::Query(query) => run_search(state, terminal, &query),
         Search::Step { forward } => step(state, terminal, forward),
-        Search::Close => leave_search_entry(state, terminal),
+        Search::Close => { state.client.cancel_search(terminal); leave_search_entry(state, terminal); },
     }
     state.needs_redraw = true;
 }
@@ -54,7 +54,7 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
         return;
     };
     if state
-        .server
+        .client
         .backends
         .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())
@@ -89,13 +89,10 @@ pub(crate) fn search_step(state: &mut AppState, forward: bool) {
 /// Re-run the search for `query` in `terminal`, refresh the match list, focus the match nearest
 /// at/above the caret (else the last), jump to it, and show the terminal what was found.
 fn run_search(state: &mut AppState, terminal: TerminalId, query: &str) {
-    let Some(backend) = state.server.backends.get_by_id(terminal) else {
-        return;
-    };
-    let Some(cols) = backend.terminal_snapshot().map(|snap| snap.cols) else {
-        return;
-    };
-    let matches = backend.search_scrollback(query, cols);
+    state.client.search(terminal, query.into());
+}
+
+pub(crate) fn receive_matches(state: &mut AppState, terminal: TerminalId, matches: Vec<heca_core::backend::SearchMatch>) {
     let caret_row = state.selection.cursor_cell().map(|(_, row, _)| row);
     let current = nearest_at_or_above(&matches, caret_row);
     // Handed over once, and the terminal is the one that keeps it.
@@ -150,7 +147,7 @@ fn jump_to_current_match(state: &mut AppState, terminal: TerminalId) {
         .selection
         .set_caret(SelectionOwner(terminal), m.stable_row, m.start_col);
     if let Some(snapshot) = state
-        .server
+        .client
         .backends
         .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())

@@ -1,6 +1,20 @@
 use super::*;
 
 #[test]
+fn capturing_another_clients_view_never_moves_the_live_view() {
+    let mut engine = viewport_engine(20, 4, 3500);
+    fill_scrollback(&mut engine, 20, 12);
+    let before = engine.snapshot((8.0, 14.0));
+    let history = engine.snapshot_at((8.0, 14.0), 3);
+    let after = engine.snapshot((8.0, 14.0));
+    assert_eq!(history.viewport_offset, 3);
+    assert_eq!(history.viewport_top_stable_row, before.viewport_top_stable_row - 3);
+    assert_eq!(after.to_wire(), before.to_wire());
+    assert_eq!(engine.viewport_offset(), 0);
+    assert!(!engine.take_viewport_changed());
+}
+
+#[test]
 fn boot_resize_keeps_the_prompt_on_the_first_row() {
     // Boot at the spawn grid (80x24), let the shell print its two prompt lines,
     // then resize to the pane's real grid — the boot sequence every pane runs

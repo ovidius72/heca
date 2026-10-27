@@ -4,13 +4,14 @@ How heca's state is split between the **server** — the content every window sh
 **client** — one window's view of it — and the one seam between them.
 
 This is the model F012 builds on (accepted decisions
-[`d108b88c`](#decisions), [`463ccd07`](#decisions), [`2c249a29`](#decisions)). It is being built in
-one process first: standalone heca is the server **and** one client in one process, so there is one
-code path, and the socket for several windows / detach-attach comes later (P099).
+[`d108b88c`](#decisions), [`463ccd07`](#decisions), [`2c249a29`](#decisions)). Standalone heca is the
+server **and** one client in one process, so there is one code path; the **same seam also runs over a
+local socket**, so a window can detach and reattach and a session outlives its window (P099).
 
 - [The model](#the-model)
 - [What is shared, what is per window](#what-is-shared-what-is-per-window)
 - [The seam](#the-seam)
+- [The connection — a local socket, detach and attach](#the-connection--a-local-socket-detach-and-attach)
 - [Per-window state is keyed by id, resolved at read time](#per-window-state-is-keyed-by-id-resolved-at-read-time)
 - [Terminals](#terminals)
 - [Decisions](#decisions)
@@ -84,6 +85,40 @@ client ◀──(TerminalSnapshot + TerminalDamage)── server     the window 
 
 A `Change` says *what changed*, never *what to do about it* — the same rule events follow everywhere
 else in heca.
+
+---
+
+## The connection — a local socket, detach and attach
+
+The seam above now runs **over a local socket**, not only inside one process, so a session outlives
+its window (P099). It is the same interface carried on a wire; nothing new is invented for it.
+
+- **One socket, local, owner-only.** The server listens on a per-user socket in the runtime folder
+  (`heca/src/server/socket/`). Only the user who owns it can connect; clients from another computer
+  (which need login and encryption) are later work.
+- **The window is a pure client.** It sends `ClientMsg` (attach, an action + `Asker`, input) and
+  receives `ServerMsg` (the attached `SessionContent`, then `Change`s, terminal frames, images,
+  replies) — the serializable wire model (`heca/src/server/wire/`). The client owns no process; it
+  rebuilds its own `Session` projection from the content the server sends
+  (`heca/src/app_state/client_updates.rs`).
+- **Attaching starts the server if none is running.** Plain `heca` tries the socket; if nothing
+  answers it spawns `heca --server` as a detached daemon and waits for it
+  (`heca/src/client/transport.rs`). So the first window a user opens brings the server up without
+  them asking for it.
+- **Detach and reattach.** Closing the window drops the client link; the server keeps the session
+  and its running programs. Running `heca` again reattaches and the panes come back live, with their
+  scrollback. (Verified 2026-10-26: a command left running survived a window close and was still
+  running after reattach.)
+- **Standalone is the same code with no socket between the halves.** `heca --standalone` builds the
+  server and one client in one process (`heca/src/client/local.rs`) and the client talks to it
+  through an in-process link, so there is **one code path**. A standalone session is its own — it
+  does not attach to the background server, and it ends with its window.
+- **A slow client never blocks the server.** The socket ends run on their own reader and writer
+  threads with bounded queues; a client that stalls is dropped, not waited on
+  (`heca/src/server/wire/socket.rs`).
+
+Several windows on one session, the `follow` option and the shared-pane size arbitration
+(`smallest` | `latest` | `largest`, default `latest`) are the next step (T545) and are not wired yet.
 
 ---
 

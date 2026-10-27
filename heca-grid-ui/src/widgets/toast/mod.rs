@@ -43,7 +43,9 @@ use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
 use crate::style::{Align, Direction, Length, Space, Spacing, WidgetSize};
 use crate::widgets::{Flex, Glyph, Icon, IconButton, Label};
+use heca_core::layout::{Point, Rectangle, Size};
 use std::rc::Rc;
+use std::time::Duration;
 
 /// Leading-icon size as a multiple of the resolved font (sits on the title line).
 const ICON_SCALE: f32 = 1.1;
@@ -53,6 +55,9 @@ const ICON_SCALE: f32 = 1.1;
 const GLOW_RADIUS: f32 = 14.0;
 /// Default card width.
 const DEFAULT_WIDTH: f32 = 320.0;
+/// Countdown bar thickness (logical px). A hairline the card owns, like its bracket frame — thin
+/// enough to read as a timer rather than a second control.
+const PROGRESS_HEIGHT: f32 = 3.0;
 
 /// Index of the leading icon / the text column / the × within `base.children`, and of the title /
 /// body / action within that column. The card builds both levels, so it addresses them the way
@@ -96,6 +101,20 @@ pub struct Toast {
     /// The whole-card press flash. The actions and the × are real controls that flash themselves,
     /// so this is only ever the card's own press.
     flash: Flash,
+    /// **Show a countdown bar that depletes over the toast's lifetime** (default off). Opt-in, per
+    /// [`progress`](Toast::progress): the card draws a hairline that empties as the timer runs down,
+    /// so a timed toast shows how long it has left. A sticky toast sets no `countdown` and shows
+    /// none even with this on.
+    progress: bool,
+    /// The lifetime the bar depletes over, in seconds (`None` = no timer, so no bar). Set from the
+    /// host's auto-dismiss duration via [`countdown`](Toast::countdown).
+    countdown_secs: Option<f32>,
+    /// Seconds of un-paused time since the card appeared — the bar's position is `1 - elapsed/total`.
+    countdown_elapsed: f32,
+    /// **Hold the bar while the pointer rests on the stack.** The host owns the hover fact (the
+    /// stack reports it) and the lifetime freeze that goes with it; the bar reads the same signal so
+    /// it stops with the deadline rather than draining under a card the user is reading.
+    countdown_paused: Option<Signal<bool>>,
     // **How it arrives and leaves, and whether it is up, are both on `Base` now** — the same two
     // things every component carries. They were a `Presence` and a `Signal<bool>` of this widget's
     // own, which is what made showing and closing a capability only a card and an overlay had.
@@ -110,7 +129,10 @@ impl Toast {
         let mut base = Base::new();
         base.style.layout.width = Length::Px(DEFAULT_WIDTH);
         base.style.layout.direction = Direction::Row;
-        base.style.layout.align = Align::Start; // icon, text and × all sit on the title line
+        // Centre the row's items vertically: the leading icon, the text column and the × line up on
+        // their shared middle, so a one-line card reads centred instead of pinned to the top when
+        // the × (a larger control) makes the row taller than the text.
+        base.style.layout.align = Align::Center;
         // The card's air is steps of the theme's rhythm, so it scales with the font and a theme can
         // retune it: the padding is a roomy step, the gap between the icon and the text another.
         base.style.layout.padding = Space::Step(Spacing::Md);
@@ -152,6 +174,10 @@ impl Toast {
             on_click: None,
             on_dismiss: None,
             flash: Flash::new(),
+            progress: false,
+            countdown_secs: None,
+            countdown_elapsed: 0.0,
+            countdown_paused: None,
         };
         // A card built and put in a tree is on screen; a caller that wants it to arrive says
         // `.default_open(false)` and then `show()`.
@@ -294,6 +320,56 @@ impl Toast {
         self.dismissible = on;
         self.sync_dismiss();
         self
+    }
+
+    /// **Show a countdown bar that depletes over the toast's lifetime** (default `false`).
+    ///
+    /// A hairline along the card's bottom edge that empties as the timer runs down, so a timed
+    /// toast shows how long it has left. It needs a [`countdown`](Toast::countdown) span to run
+    /// over; with none (a sticky toast) the card shows no bar even when this is on. While the stack
+    /// is held still under the pointer (see [`countdown_paused`](Toast::countdown_paused)) the bar
+    /// pauses with the deadline.
+    #[heca_grid_ui_macros::prop]
+    pub fn progress(mut self, on: bool) -> Self {
+        self.progress = on;
+        self
+    }
+
+    /// **The lifetime the countdown bar depletes over.** Set by the host from its auto-dismiss
+    /// duration; unset means no timer, so no bar. Data, not a live clock — the host owns the timer
+    /// and the bar animates locally over this span, pausing while the stack is held still.
+    #[heca_grid_ui_macros::host_only("a lifetime span the host supplies, not a value static data carries")]
+    pub fn countdown(mut self, lifetime: Duration) -> Self {
+        self.countdown_secs = Some(lifetime.as_secs_f32().max(0.0));
+        self
+    }
+
+    /// **Bind the hold-still signal** the stack reports hover into, so the bar freezes with the
+    /// deadline while the pointer rests on a card and resumes when it leaves.
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
+    pub fn countdown_paused(mut self, paused: Signal<bool>) -> Self {
+        self.countdown_paused = Some(paused);
+        self
+    }
+
+    /// The bar's current fill fraction (`1.0` full → `0.0` empty), or `None` when there is no bar
+    /// to draw (off, or no lifetime).
+    fn countdown_fraction(&self) -> Option<f32> {
+        let total = self.countdown_secs?;
+        if !self.progress {
+            return None;
+        }
+        if total <= 0.0 {
+            return Some(0.0);
+        }
+        Some((1.0 - self.countdown_elapsed / total).clamp(0.0, 1.0))
+    }
+
+    /// Whether the countdown is held still — the pointer is resting on the stack.
+    fn countdown_held(&self) -> bool {
+        self.countdown_paused
+            .map(|p| p.get_untracked())
+            .unwrap_or(false)
     }
 
     /// Make the whole card clickable. It fires for a press the action button and the × did not
@@ -542,6 +618,27 @@ impl Component for Toast {
                 });
             });
 
+            // Countdown bar: a thin capsule **inside** the card, near the bottom, that empties as
+            // the timer runs down. It floats within the card's padding — inset from the rounded
+            // corners on the sides and lifted off the bottom edge by the same margin — so it reads
+            // as part of the toast's content, not a strip laid over its border. A pill (fully
+            // rounded ends); the fill's leading edge is the countdown's front.
+            if let Some(frac) = self.countdown_fraction() {
+                let h = PROGRESS_HEIGHT as f64;
+                let m = card_radius as f64;
+                let x = b.loc.x + m;
+                let full = (b.size.w - m * 2.0).max(0.0);
+                let y = b.loc.y + b.size.h - m - h;
+                let r = PROGRESS_HEIGHT / 2.0;
+                let bar = |cx: &mut PaintCx, w: f64, c: crate::color::Color| {
+                    cx.rect(Rectangle::new(Point::new(x, y), Size::new(w, h)), c, None, r, None);
+                };
+                bar(cx, full, muted);
+                if frac > 0.0 {
+                    bar(cx, full * frac as f64, tone);
+                }
+            }
+
             // The card's own press — `on_click` or the keyboard. The actions and the × flash
             // themselves, so this is never their press.
             let amount = self.flash.amount();
@@ -592,6 +689,17 @@ impl Component for Toast {
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
+        // Drain the countdown bar, unless it is held still under the pointer. It keeps the frame
+        // loop alive while it has time left, so the bar empties smoothly rather than in steps.
+        if let Some(total) = self.countdown_secs
+            && self.progress
+            && total > 0.0
+            && !self.countdown_held()
+            && self.countdown_elapsed < total
+        {
+            self.countdown_elapsed = (self.countdown_elapsed + dt).min(total);
+            animating = true;
+        }
         // When used inline (in-tree), damage just our own rect on a press flash. In a
         // `ToastStack` the toast paints on the overlay layer and the stack owns the
         // damage region, so this mark is simply unobserved there.
@@ -603,3 +711,47 @@ impl Component for Toast {
 }
 
 impl LayoutExt for Toast {}
+
+#[cfg(test)]
+mod countdown_tests {
+    use super::*;
+    use crate::component::Component;
+    use crate::reactive::signal;
+
+    #[test]
+    fn a_timed_toast_depletes_its_bar_and_a_sticky_one_shows_none() {
+        // Progress off by default: no bar even with a lifetime.
+        let off = Toast::info("x").countdown(Duration::from_secs(4));
+        assert_eq!(off.countdown_fraction(), None, "off by default");
+
+        // Progress on + a lifetime: full at the start, draining as time passes.
+        let mut t = Toast::info("x").progress(true).countdown(Duration::from_secs(4));
+        assert_eq!(t.countdown_fraction(), Some(1.0));
+        t.tick(2.0);
+        let half = t.countdown_fraction().expect("a bar");
+        assert!((half - 0.5).abs() < 0.05, "about half after half its life: {half}");
+        t.tick(2.0);
+        assert_eq!(t.countdown_fraction(), Some(0.0), "empty at the end");
+
+        // Progress on but no lifetime (a sticky card): no bar.
+        let sticky = Toast::info("x").progress(true);
+        assert_eq!(sticky.countdown_fraction(), None, "no span, no bar");
+    }
+
+    #[test]
+    fn the_bar_holds_still_while_the_pointer_rests_on_the_stack() {
+        let paused = signal(false);
+        let mut t = Toast::info("x")
+            .progress(true)
+            .countdown(Duration::from_secs(4))
+            .countdown_paused(paused);
+        t.tick(1.0);
+        let before = t.countdown_fraction().unwrap();
+        paused.set(true);
+        t.tick(2.0); // held: no drain
+        assert_eq!(t.countdown_fraction().unwrap(), before, "frozen while held");
+        paused.set(false);
+        t.tick(1.0); // resumes
+        assert!(t.countdown_fraction().unwrap() < before, "resumes draining after release");
+    }
+}

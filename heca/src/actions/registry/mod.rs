@@ -4,6 +4,7 @@
 
 use super::{ActionCatalog, ActionMeta};
 use std::collections::HashMap;
+pub(crate) mod server;
 
 /// Handler signature for all window-manager actions.
 ///
@@ -25,6 +26,7 @@ pub type ActionHandler = fn(&mut crate::app_state::AppState, &crate::input::WmAc
 /// - Handlers are keyed by [`WmActionKind`](crate::input::WmActionKind), so all parameterized
 ///   variants of the same action share one handler (the handler destructures
 ///   the action to extract arguments).
+#[derive(Clone)]
 pub struct ActionRegistry {
     handlers: HashMap<crate::input::WmActionKind, ActionHandler>,
     /// Handlers for **name-keyed** actions registered at runtime by providers (and later WASM
@@ -32,7 +34,7 @@ pub struct ActionRegistry {
     /// enum is closed and a plugin cannot extend it. Their *metadata* lives in the one
     /// [`ActionCatalog`], next to the built-ins; only the handler lives here. One with no handler is declared but
     /// not runnable by the host — its owner is across the plugin boundary.
-    dyn_handlers: HashMap<String, DynHandler>,
+    dyn_handlers: HashMap<String, DynamicHandler>,
     /// Which side each kind of built-in runs on — what `execute` routes by.
     sides: &'static super::sides::Sides,
 }
@@ -46,6 +48,14 @@ pub struct ActionRegistry {
 /// *build/observe* path, but an action handler **is** the sanctioned write path — dispatching an
 /// action is exactly how a provider is supposed to change things.
 pub type DynHandler = std::rc::Rc<dyn Fn(&mut crate::app_state::AppState, &crate::chrome::Intent)>;
+
+pub(crate) type ServerDynHandler = std::rc::Rc<dyn Fn(crate::chrome::SharedChromeState, &crate::chrome::Intent) -> Vec<crate::chrome::Intent>>;
+
+#[derive(Clone)]
+enum DynamicHandler {
+    Window(DynHandler),
+    Server(ServerDynHandler),
+}
 
 /// Why a name-keyed action's id was already taken.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +94,24 @@ pub fn register_dynamic(
     catalog: &mut ActionCatalog,
     meta: ActionMeta,
     handler: Option<DynHandler>,
+) -> Result<ActionHandle, DuplicateAction> {
+    register_handler(registry, catalog, meta, handler.map(DynamicHandler::Window))
+}
+
+pub(crate) fn register_server_dynamic(
+    registry: &mut ActionRegistry,
+    catalog: &mut ActionCatalog,
+    meta: ActionMeta,
+    handler: ServerDynHandler,
+) -> Result<ActionHandle, DuplicateAction> {
+    register_handler(registry, catalog, meta, Some(DynamicHandler::Server(handler)))
+}
+
+fn register_handler(
+    registry: &mut ActionRegistry,
+    catalog: &mut ActionCatalog,
+    meta: ActionMeta,
+    handler: Option<DynamicHandler>,
 ) -> Result<ActionHandle, DuplicateAction> {
     let id = meta.name.clone();
     let mut meta = meta;
@@ -149,8 +177,24 @@ impl ActionRegistry {
         // Clone the `Rc` so the borrow of `self` ends before the handler runs (it takes
         // `&mut AppState`).
         let handler = handler.clone();
-        run_then_follow_up(state, |state| handler(state, intent));
+        run_then_follow_up(state, |state| match handler {
+            DynamicHandler::Window(handler) => handler(state, intent),
+            DynamicHandler::Server(_) => state.client.invoke(intent.clone()),
+        });
         true
+    }
+
+    /// Run a server-owned extension with plain store data, without constructing a window.
+    pub(crate) fn execute_server_dynamic(
+        &self,
+        id: &str,
+        store: crate::chrome::SharedChromeState,
+        intent: &crate::chrome::Intent,
+    ) -> Option<Vec<crate::chrome::Intent>> {
+        match self.dyn_handlers.get(id)? {
+            DynamicHandler::Server(handler) => Some(handler(store, intent)),
+            DynamicHandler::Window(_) => None,
+        }
     }
 
     /// Register the handler for every action of `kind` — all of a parameterized variant's values

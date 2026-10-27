@@ -10,7 +10,7 @@ pub mod terminal;
 pub use fake::FakeBackend;
 pub use snapshot::{
     GraphicsPlacement, HyperlinkSpan, TerminalCursor, TerminalCursorShape, TerminalDamage,
-    TerminalImage, TerminalImageFrame, TerminalRowRange, TerminalSnapshot,
+    TerminalImage, TerminalImageFrame, TerminalRowRange, TerminalSnapshot, WireSnapshot,
 };
 pub use terminal::{PtyError, ShellIntegrationAssets, TerminalBackend, TerminalBackendOptions};
 
@@ -48,7 +48,7 @@ pub enum BackendAlert {
 /// A scrollback-search hit: a run of cells matching the query on one stable row.
 /// `start_col` is inclusive, `end_col` exclusive (the cell after the run), matching
 /// the [`HyperlinkSpan`] column contract.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SearchMatch {
     /// Stable (history-anchored) row index of the match.
     pub stable_row: isize,
@@ -59,7 +59,7 @@ pub struct SearchMatch {
 }
 
 /// Backend-agnostic keyboard modifiers.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BackendModifiers {
     pub ctrl: bool,
     pub shift: bool,
@@ -68,7 +68,7 @@ pub struct BackendModifiers {
 }
 
 /// Backend-agnostic key identifiers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BackendKeyCode {
     Char(char),
     Enter,
@@ -89,14 +89,14 @@ pub enum BackendKeyCode {
 }
 
 /// Structured keyboard event routed to a pane backend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BackendKeyEvent {
     pub code: BackendKeyCode,
     pub modifiers: BackendModifiers,
 }
 
 /// Backend-agnostic mouse buttons and wheel steps.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BackendMouseButton {
     Left,
     Middle,
@@ -109,7 +109,7 @@ pub enum BackendMouseButton {
 }
 
 /// Structured mouse event kind routed to a pane backend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BackendMouseEventKind {
     Press,
     Release,
@@ -117,7 +117,7 @@ pub enum BackendMouseEventKind {
 }
 
 /// Structured mouse event routed to a pane backend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BackendMouseEvent {
     pub kind: BackendMouseEventKind,
     pub col: usize,
@@ -129,7 +129,7 @@ pub struct BackendMouseEvent {
 }
 
 /// Underline decoration style for a terminal cell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TerminalUnderlineStyle {
     None,
     Single,
@@ -146,7 +146,7 @@ impl TerminalUnderlineStyle {
 }
 
 /// A single cell in a terminal grid.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalCell {
     /// Full grapheme/text content for the visible cell anchor.
     pub text: String,
@@ -160,7 +160,7 @@ pub struct TerminalCell {
 }
 
 /// A line of terminal cells.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalLine {
     pub cells: Vec<TerminalCell>,
 }
@@ -255,6 +255,9 @@ pub trait PaneBackend: Send {
     /// Returns true if new data was received and a redraw is needed.
     fn update(&mut self) -> bool;
 
+    /// Nearest pending process-side deadline. Idle backends request no polling timer.
+    fn next_wake(&self) -> Option<std::time::Instant> { None }
+
     /// Get a terminal-specific snapshot of the currently visible state.
     ///
     /// This is the incremental migration path away from the legacy
@@ -265,6 +268,11 @@ pub trait PaneBackend: Send {
     /// cell state and cursor state, but no GPU resources.
     fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
         None
+    }
+
+    /// Capture a client's viewport without changing any other client's scroll position.
+    fn terminal_snapshot_at(&self, offset: usize) -> Option<TerminalSnapshot> {
+        self.terminal_snapshot().filter(|snapshot| snapshot.viewport_offset == offset)
     }
 
     /// Acknowledge terminal damage after a consumer has finished using the
@@ -410,6 +418,12 @@ pub trait PaneBackend: Send {
     /// implement this; others return an empty vec.
     fn search_scrollback(&self, _query: &str, _cols: usize) -> Vec<SearchMatch> {
         Vec::new()
+    }
+
+    /// Search a bounded page of history, keeping the emulator's one search implementation.
+    fn search_stable_range(&self, query: &str, cols: usize, start: isize, end: isize) -> Vec<SearchMatch> {
+        self.search_scrollback(query, cols).into_iter()
+            .filter(|hit| (start..=end).contains(&hit.stable_row)).collect()
     }
 
     /// Whether the hosted application has enabled terminal mouse reporting.

@@ -244,7 +244,7 @@ pub(super) fn report_arg_problems(
 /// Flatten an [`Intent`](crate::chrome::Intent)'s typed args into the `name -> string` map
 /// [`resolve_action`](crate::input::resolve_action) parses, so a declarative intent and a `config.toml`
 /// binding construct a parameterized built-in through **one** code path.
-pub(super) fn intent_args_as_strings(
+pub(crate) fn intent_args_as_strings(
     intent: &ViewIntent,
 ) -> std::collections::HashMap<String, String> {
     use crate::chrome::PropValue;

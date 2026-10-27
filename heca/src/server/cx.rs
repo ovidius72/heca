@@ -9,7 +9,7 @@ use super::{Change, ServerLayout, Terminals};
 /// Plain data about the window that asked — what a server action needs to know that only the
 /// window knows. The server never reads it from a window: with several windows each request
 /// carries its own, and two windows asking at once are two different askers.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Asker {
     /// The pane this window has focused, if any. Focus is per window.
     pub(crate) focused_pane: Option<PaneId>,

@@ -104,7 +104,7 @@ fn retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh() {
         .sticky()
         .draft;
     let fail_id = runtime.push(fail, now).unwrap().notification_id();
-    assert_eq!(runtime.visible_toasts().len(), 1);
+    assert_eq!(runtime.visible_views().len(), 1);
     assert_eq!(
         runtime.next_expiry(),
         None,
@@ -113,21 +113,29 @@ fn retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh() {
 
     // Retry's `dismiss_after`.
     runtime.dismiss_one(fail_id, now);
-    assert!(runtime.visible_toasts().is_empty(), "Retry cleared it");
+    assert!(runtime.visible_views().is_empty(), "Retry cleared it");
 
     // The reload succeeded — success with the same dedup key.
     let ok = Notification::success("Configuration reloaded")
         .dedup_key("config-reload")
         .draft;
     runtime.push(ok, now).unwrap();
-    let v = runtime.visible_toasts();
+    let v = runtime.visible_views();
     assert_eq!(v.len(), 1, "a fresh success card is visible");
     assert_eq!(v[0].title, "Configuration reloaded");
-    assert_eq!(v[0].severity, heca_grid_ui::widgets::ToastSeverity::Success);
+    assert_eq!(v[0].severity, crate::notification::NotificationSeverity::Success);
     assert_eq!(
         runtime.next_expiry(),
         Some(now + std::time::Duration::from_millis(4000)),
         "and it auto-dismisses"
+    );
+    // A toast that auto-dismisses carries its lifetime in the projection, so the stack draws a
+    // countdown bar. This is the real path: a plain `Notification::success(..)` with no explicit
+    // duration gets the configured default applied at push.
+    assert_eq!(
+        v[0].auto_dismiss,
+        Some(std::time::Duration::from_millis(4000)),
+        "the timed toast's lifetime reaches the view for the countdown bar"
     );
 }
 

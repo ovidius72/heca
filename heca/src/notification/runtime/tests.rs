@@ -74,7 +74,7 @@ fn runtime_preserves_an_explicit_lifecycle_even_when_it_matches_the_fallback() {
     runtime.push(NotificationDraft::info("Explicit")
         .lifecycle(NotificationLifecycle::auto(duration).dismissible(false)), now).unwrap();
     assert_eq!(runtime.next_expiry(), Some(now + duration));
-    assert!(!runtime.visible_toasts()[0].dismissible);
+    assert!(!runtime.visible_views()[0].dismissible);
 }
 
 #[test]

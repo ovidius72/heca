@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 mod defaults;
 mod agents;
+mod connection;
 mod enums;
 mod notifications;
 mod schema;
@@ -18,6 +19,7 @@ mod default_tests;
 use schema::declare_settings;
 
 pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, SearchCase};
+pub use connection::ConnectionConfig;
 pub use notifications::{NotificationSystem, NotificationSystemConfig};
 pub use agents::{AgentProgramConfig, AgentSoundsConfig, AgentStatusConfig, AgentStatuses, AgentsConfig};
 
@@ -199,6 +201,8 @@ declare_settings! {
         pub notification_system: NotificationSystemConfig,
         /// Status reporting, pane-row presentation and sounds for terminal agents.
         pub agents: AgentsConfig,
+        /// Limits shared by local client/server connections.
+        pub connection: ConnectionConfig,
         // Destructive-action confirmation moved to the generic `[confirm]` table
         // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
     }

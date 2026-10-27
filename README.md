@@ -129,6 +129,29 @@ Ctrl+B → f   Toggle floating
 
 ---
 
+## Sessions — detach and reattach
+
+heca runs as a background **server** that holds your session — the panes and the programs running
+in them — and a **window** that attaches to it, the way tmux does.
+
+- `heca` — attach to the session. The first time, it starts the background server for you.
+- **Close the window** (e.g. `Meta+Q`) — the window detaches; the server and everything running in
+  it keep going.
+- `heca` again — **reattach**: the same panes come back, still running, with their scrollback.
+- `heca --standalone` — a one-off session that lives only in its window and ends when you close it.
+  It does **not** attach to the background server.
+
+To stop the background server and everything in it — every pane and terminal, like tmux's
+`kill-server` — and detach every window:
+
+```bash
+heca --kill-server
+```
+
+(An in-app command to close a single session is coming with the sessions work.)
+
+---
+
 ## Keyboard Commands
 
 ### Prefix Key

@@ -53,7 +53,7 @@ pub(crate) fn surface_key() -> SurfaceKey {
 }
 
 /// Mount the toast stack once, at startup. Call after `AppState` exists (needs
-/// `state.server.notifications` / `state.notification_pick_open`).
+/// `state.toasts` / `state.notification_pick_open`).
 ///
 /// Wrapped in a [`KeyHintGroup`] bound to `state.notification_pick_open` (the
 /// `notification.pick` action flips that signal) — an **additional**, precise picker over the

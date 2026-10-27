@@ -52,7 +52,7 @@ impl TerminalRenderState {
         let mount = content_rect.and_then(|content_rect| {
             // Read the terminal through the server interface, not by reaching into its backends:
             // the server owns the process and hands back the snapshot and the rows that changed.
-            let (snapshot, damage) = state.server.terminal_view(id, state.scale_factor as f32)?;
+            let (snapshot, damage) = state.client.terminal_view(id, state.scale_factor as f32)?;
             // The surface's own box, padding included: the background fills it while the
             // grid above stays held in by `content_rect`.
             let surface_rect = crate::chrome::panes::terminal::full_box_of(state, id)?;

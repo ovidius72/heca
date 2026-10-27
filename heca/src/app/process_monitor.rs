@@ -9,11 +9,14 @@
 //! `sync_pane_runtime_state` (in `chrome/mod.rs`) then mirrors `Pane.runtime` →
 //! the chrome store and emits the per-field `pane.*.changed` events.
 
-use crate::app::backend_store::BackendStore;
 use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::AppState;
 use crate::chrome::ChromeEvent;
-use heca_core::layout::{PaneId, Session};
+use crate::server::process::{
+    sync_runtime as sync_pane_runtime_from_backends_impl,
+    exit_should_close as pane_exit_should_close,
+    notify_exited as notify_pane_exited,
+};
 
 /// Copy each live pane's backend `runtime()` → its canonical `Pane.runtime`, drain
 /// any one-shot exit codes → emit `pane.exited{code}`, then apply pane-owned
@@ -24,14 +27,14 @@ use heca_core::layout::{PaneId, Session};
 pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
     let bus = state.chrome_state.events();
     for pane in state.session.workspaces.iter().flat_map(|ws| ws.panes()) {
-        if let Some(backend) = state.server.backends.get_mut(pane.id) {
+        if let Some(backend) = state.client.backends.get_mut(pane.id) {
             for agent in backend.take_agent_updates() {
                 state.chrome_state.panes.set_agent(pane.id, agent);
             }
         }
     }
     let exits =
-        sync_pane_runtime_from_backends_impl(&mut state.session, &mut state.server.backends);
+        sync_pane_runtime_from_backends_impl(&mut state.session, &mut state.client.backends);
     let mut panes_to_close = Vec::new();
     for (pane, code) in exits {
         bus.emit(ChromeEvent::PaneExited { pane, code });
@@ -48,58 +51,6 @@ pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
     for pane in panes_to_close {
         close_pane_by_id_anywhere(state, pane);
     }
-}
-
-/// The pane-exited notification producer.
-fn notify_pane_exited(pane: PaneId, code: Option<i32>) {
-    use crate::notification::{Notification, NotificationAction};
-    use heca_view::{Intent, PropValue};
-
-    let focus = NotificationAction::new(
-        "Focus",
-        Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane.0 as i64)),
-    )
-    .dismiss_after(true);
-
-    let notification = match code {
-        Some(0) | None => Notification::info(format!("Pane {} process exited", pane.0)),
-        Some(c) => Notification::warning(format!("Pane {} process exited", pane.0))
-            .body(format!("exit code {c}")),
-    };
-    notification
-        .dedup_key(format!("pane.exited:{}", pane.0))
-        .action(focus)
-        .send();
-}
-
-/// Testable core of [`sync_pane_runtime_from_backends`] — takes the two pieces
-/// the monitor touches directly (session + backends) so unit tests can drive it
-/// without constructing a full GPU/window `AppState`.
-fn sync_pane_runtime_from_backends_impl(
-    session: &mut Session,
-    backends: &mut BackendStore,
-) -> Vec<(PaneId, Option<i32>)> {
-    let mut exits: Vec<(PaneId, Option<i32>)> = Vec::new();
-
-    for pane in session.workspaces.iter_mut().flat_map(|ws| ws.panes_mut()) {
-        if let Some(backend) = backends.get_mut(pane.id) {
-            pane.runtime = backend.runtime();
-            if let Some(code) = backend.take_exit_code() {
-                exits.push((pane.id, Some(code)));
-            }
-        }
-    }
-
-    exits
-}
-
-fn pane_exit_should_close(session: &Session, pane_id: PaneId, code: Option<i32>) -> bool {
-    session
-        .workspaces
-        .iter()
-        .find_map(|ws| ws.find_pane(pane_id))
-        .map(|pane| pane.close_policy.should_close(code))
-        .unwrap_or(false)
 }
 
 #[cfg(test)]

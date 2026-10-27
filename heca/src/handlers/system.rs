@@ -90,18 +90,18 @@ pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) 
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    state.ask_server(crate::server::ServerAction::DismissOne(id));
+    state.client.notify(crate::server::NotificationCommand::DismissOne(id));
 }
 
 /// Dismiss every currently visible notification — no on-screen control; reachable from the
 /// command palette, a keybinding, and RPC.
 pub fn handle_notification_dismiss_all(state: &mut AppState, _action: &WmAction) {
-    state.ask_server(crate::server::ServerAction::DismissAll);
+    state.client.notify(crate::server::NotificationCommand::DismissAll);
 }
 
 /// Dismiss the first eligible visible notification in stable toast order.
 pub fn handle_notification_dismiss_last(state: &mut AppState, _action: &WmAction) {
-    state.ask_server(crate::server::ServerAction::DismissLast);
+    state.client.notify(crate::server::NotificationCommand::DismissLast);
 }
 
 /// Toggle the scoped picker over the visible toast actions/×, in addition to (never instead
@@ -125,7 +125,16 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    let Some((intent, dismiss_after)) = state.server.toast_action(id, key) else {
+    // The real `Intent` rides in the projection the server sent (`NotificationView::action`); the
+    // `ToastSpec` keeps only the key, so this resolves it from the received views, not a server
+    // round-trip.
+    let Some((intent, dismiss_after)) = state
+        .notifications
+        .iter()
+        .find(|view| view.id == id)
+        .and_then(|view| view.action(key))
+        .map(|action| (action.intent.clone(), action.dismiss_after))
+    else {
         return;
     };
     // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
@@ -136,7 +145,7 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     );
     emit.fire_intent(intent);
     if dismiss_after {
-        state.ask_server(crate::server::ServerAction::DismissOne(id));
+        state.client.notify(crate::server::NotificationCommand::DismissOne(id));
     }
 }
 

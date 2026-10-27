@@ -5,6 +5,10 @@ use super::*;
 
 impl TerminalEngine {
     pub(in crate::backend::terminal) fn snapshot(&self, cell_size: (f32, f32)) -> TerminalSnapshot {
+        self.snapshot_at(cell_size, self.viewport_offset)
+    }
+
+    pub(in crate::backend::terminal) fn snapshot_at(&self, cell_size: (f32, f32), offset: usize) -> TerminalSnapshot {
         let (cell_w, cell_h) = cell_size;
         let palette = self.terminal.palette();
         let blank = blank_cell(&palette);
@@ -15,7 +19,7 @@ impl TerminalEngine {
             cells: vec![blank; cols],
         };
         let (lines, scrollback_rows, viewport_offset, mut hyperlinks, graphics, images) =
-            self.visible_lines(cols, rows, &palette, &blank_line);
+            self.visible_lines(cols, rows, &palette, &blank_line, offset);
 
         // Auto-detect plain-text URLs (echo, logs, …) and add them as link spans
         // alongside the explicit OSC 8 ones. OSC 8 wins: a cell already inside an
@@ -49,7 +53,7 @@ impl TerminalEngine {
             viewport_offset,
             at_bottom: viewport_offset == 0,
             scrollback_rows,
-            viewport_top_stable_row: self.visible_top_stable_row(),
+            viewport_top_stable_row: self.terminal.screen().visible_row_to_stable_row(0) - viewport_offset as isize,
             hyperlinks,
             graphics,
             images,
@@ -112,19 +116,21 @@ impl TerminalEngine {
         query: &str,
         cols: usize,
     ) -> Vec<SearchMatch> {
-        if query.is_empty() || cols == 0 {
-            return Vec::new();
-        }
-        let needle: Vec<char> = query.to_lowercase().chars().collect();
         let screen = self.terminal.screen();
         let rows = screen.physical_rows.max(1);
         let visible_count = self.rows.min(rows);
         let max_offset = screen.scrollback_rows().saturating_sub(visible_count);
         let top_stable = screen.visible_row_to_stable_row(0) - max_offset as isize;
         let bottom_stable = screen.visible_row_to_stable_row(rows as i64 - 1);
+        self.search_stable_range(query, cols, top_stable, bottom_stable)
+    }
 
+    pub(in crate::backend::terminal) fn search_stable_range(&self, query: &str, cols: usize, start: isize, end: isize) -> Vec<SearchMatch> {
+        if query.is_empty() || cols == 0 { return Vec::new(); }
+        let needle: Vec<char> = query.to_lowercase().chars().collect();
+        let screen = self.terminal.screen();
         let mut out = Vec::new();
-        for stable in top_stable..=bottom_stable {
+        for stable in start..=end {
             let Some(phys) = screen.stable_row_to_phys(stable) else {
                 continue;
             };
@@ -213,6 +219,7 @@ impl TerminalEngine {
         rows: usize,
         palette: &ColorPalette,
         blank_line: &TerminalLine,
+        requested_offset: usize,
     ) -> (
         Vec<TerminalLine>,
         usize,
@@ -229,7 +236,7 @@ impl TerminalEngine {
         // `update`) keeps the stored offset within bounds, so this normally does
         // nothing. It stays as a belt-and-suspenders guarantee that a snapshot is
         // always visually correct even if a read happens outside the update path.
-        let offset = self.viewport_offset.min(max_offset);
+        let offset = requested_offset.min(max_offset);
         // `total` is the bottom of the live viewport; subtract `offset` to walk
         // `offset` rows up into history, then take `visible_count` rows below.
         let visible_end = total.saturating_sub(offset);

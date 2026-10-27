@@ -262,6 +262,15 @@ impl ToastStack {
             );
         }
         t = t.dismissible(spec.dismissible);
+        // A timed toast shows a countdown bar; a sticky one (no `countdown`) shows none. The stack
+        // turns the library prop on and hands the bar the stack's hold-still signal, so it freezes
+        // with the deadline while the pointer rests on a card.
+        if let Some(lifetime) = spec.countdown {
+            t = t.countdown(lifetime).progress(true);
+            if let Some(hovered) = self.hovered {
+                t = t.countdown_paused(hovered);
+            }
+        }
         if spec.dismissible {
             let cb = self.on_dismiss.clone();
             let id = spec.id;
@@ -537,6 +546,14 @@ impl Component for ToastStack {
 
     fn tick(&mut self, dt: f32) -> bool {
         self.reconcile();
+        // **Publish hover from the framework's own state, every frame — not only on a move the
+        // stack happens to receive.** A move that leaves a card for the content below is delivered
+        // to that content and its ancestors, never to the stack, so `on_event` would never see the
+        // pointer go. But the framework has already cleared the card's `hovered` along the way, so
+        // reading it here is always current. Without this the stack stayed hovered for good once the
+        // pointer left a card downward, and a held countdown never resumed. Done before the cards
+        // tick so a card reads the fresh hover this same frame.
+        self.report_hover(self.on_a_card());
         let mut animating = false;
         for card in self.base.children.iter_mut() {
             animating |= card.tick(dt);

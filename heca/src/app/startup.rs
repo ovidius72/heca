@@ -3,14 +3,15 @@
 //! This module owns first-launch wiring so `main.rs` can focus on lifecycle
 //! control flow rather than GPU/window/session bootstrapping details.
 
-use crate::app::backend_factory::{TerminalSettings, estimate_terminal_grid};
-use crate::app::backend_store::BackendStore;
 use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode};
 use crate::chrome::ChromeConfig;
+#[cfg(test)]
 use crate::pane_name;
 use heca_config::theme::AppConfig;
-use heca_core::layout::{Pane as LayoutPane, PaneId, Session, WindowView};
+use heca_core::layout::WindowView;
+#[cfg(test)]
+use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_grid_ui::install_frame_request;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
@@ -23,6 +24,7 @@ use std::sync::Arc;
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::Window;
 
+#[cfg(test)]
 fn add_initial_pane(session: &mut Session, view: &mut WindowView) -> PaneId {
     let pane_id = PaneId(session.next_id());
     let pane = LayoutPane::new(pane_id, pane_name(pane_id));
@@ -181,6 +183,7 @@ pub(crate) async fn init_state(
     app_config: &AppConfig,
     event_loop: &ActiveEventLoop,
     event_proxy: EventLoopProxy<crate::app::events::AppEvent>,
+    launch_mode: crate::app::cli::LaunchMode,
 ) -> Box<AppState> {
     let redraw_proxy = event_proxy.clone();
     install_frame_request(move || {
@@ -350,12 +353,13 @@ pub(crate) async fn init_state(
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = layout_options_from(app_config);
-    let mut session = Session::new(heca_core::layout::types::SessionId(1), layout_options);
-    let mut view = WindowView::new(viewport_size, scale_factor);
-
-    let pane_id = add_initial_pane(&mut session, &mut view);
-
-    let first_grid = estimate_terminal_grid(pane_area.size.w, pane_area.size.h, terminal_cell_size);
+    let (client, content) = crate::client::ClientState::connect(app_config, crate::server::ServerWaker::new({
+        let proxy = event_proxy.clone();
+        move || { let _ = proxy.send_event(crate::app::events::AppEvent::BackendWake); }
+    }), launch_mode == crate::app::cli::LaunchMode::Standalone).expect("could not attach to the session server");
+    let session = content.rebuild(heca_core::layout::types::SessionId(1), layout_options);
+    let view = WindowView::new(viewport_size, scale_factor);
+    let focused_pane = session.through(&view).active_workspace().and_then(|workspace| workspace.active_pane()).map(|pane| pane.id);
 
     let ws_count = session.workspaces.len();
 
@@ -423,30 +427,6 @@ pub(crate) async fn init_state(
         }
     };
 
-    // What every window shares and none needs a window for. `[settings.notification_system]`
-    // config; the history depth of 50 is still a placeholder pending its own
-    // knob.
-    let mut server = crate::server::ServerState::new(
-        BackendStore::new(),
-        crate::notification::NotificationRuntime::with_capacity(
-            50,
-            std::time::Duration::from_millis(
-                app_config
-                    .config
-                    .settings
-                    .notification_system
-                    .auto_dismiss_ms,
-            ),
-            app_config.config.settings.notification_system.mode,
-            app_config.config.settings.notification_system.max_visible,
-        ),
-        app_config.config.programs.clone(),
-        TerminalSettings::from_config(app_config),
-        Some(event_proxy.clone()),
-    );
-    server
-        .terminals()
-        .start_shell(pane_id, first_grid, terminal_cell_size);
     let mut state = Box::new(AppState {
         window,
         event_proxy,
@@ -465,7 +445,7 @@ pub(crate) async fn init_state(
         blur,
         backdrop,
         background,
-        server,
+        client,
         session,
         view,
         theme: app_config.theme.clone(),
@@ -485,7 +465,7 @@ pub(crate) async fn init_state(
         scale_factor,
         needs_redraw: true,
         status_note: None,
-        focused_pane: Some(pane_id),
+        focused_pane,
         input_mode: InputMode::Normal,
         window_root: crate::chrome::new_window_root(),
         chrome_tree: None,
@@ -529,6 +509,8 @@ pub(crate) async fn init_state(
         current_cursor: winit::window::CursorIcon::Default,
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),
+        notifications: Vec::new(),
+        notification_hover_sent: false,
         toasts: heca_grid_ui::reactive::signal(Vec::new()),
         notification_max_lines: heca_grid_ui::reactive::signal(
             app_config
