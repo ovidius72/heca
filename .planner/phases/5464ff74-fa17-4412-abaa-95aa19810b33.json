@@ -3491,10 +3491,11 @@
       "priority": 53,
       "shortName": "split-heca-src-notification-rs",
       "title": "Split heca/src/notification.rs (3147) — the model, the store and the host seam",
-      "status": "deferred",
-      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. F009's work left one file holding the whole subsystem.\n\nCURRENT STATE, and the jobs in it (line numbers 2026-09-04):\n\n1. **The vocabulary** — `NotificationSourceKind` :60, `NotificationSource` :129, `NotificationLifetime` :197, `NotificationLifecycle` :224, `NotificationSeverity` :316 (which also implements `crate::input::EnumArg`, so it is an action argument as well as a model type). Each with its `Default` and `impl`. The same enum-plus-parser family shape as `input.rs`.\n2. **The draft and the notification itself** — `NotificationDraft`, `NotificationId`, and what a notification *is*.\n3. **The store** — the visible list, expiry, `next_expiry` (read by the frame loop in `app/lifecycle.rs` to decide when to wake), hover suppression, dismissal, the eligibility rules.\n4. **The host seam** — `install_notification_sink` and the emitting helpers the rest of the app calls.\n\nDESIRED STATE. `heca/src/notification/` — `model.rs` (1 and 2), `store.rs` (3), `sink.rs` (4), `mod.rs` re-exporting. The store is the part with real logic and real tests; today it is buried among type definitions.\n\nSTEPS. (1) Move the vocabulary first — self-contained, and its `EnumArg`/`FromStr` impls travel with it. (2) The draft and id. (3) The store, with its tests. (4) The sink. (5) `mod.rs` re-exports; `heca/src/app/lifecycle.rs` (which reads `next_expiry` and `is_hovered`), `heca/src/main.rs` (reload notifications), the chrome's toast surface and `heca/src/handlers.rs` must all keep compiling untouched.\n\nEDGE CASES. `NotificationSeverity` is an action argument (`EnumArg`), so it is referenced from `heca/src/actions.rs`'s descriptors — keep it exported at the same path. The store's expiry interacts with the frame loop's wake decision (`app/lifecycle.rs`), which also now consults `chrome::next_redraw_across_trees`; do not disturb that ordering while moving code.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ Check F009's open work first (`P055(F009)` handoff, `T381`, `P063`) — if any is mid-flight in this file, defer as T468 is.",
-      "descriptionUpdatedAt": "2026-09-04T14:02:30.015Z",
-      "notes": "",
+      "status": "done",
+      "description": "Completed notification module split, public fluent API and approved optional-duration fixes. Commit 6c96195d landed on main via merged PR #298 at 9fb81aee8eaf46cedb95afd27a8c399a3811b419. Explicit duration > config > bundled fallback; sticky does not expire. All T512 code, review and delivery work is finished. See .planner/docs/t512-notification-review.md for tests and findings. T544 C8 server/client projection and transport remain successor work owned by heca-dev2; preserve its dirty worktree when integrating origin/main.\n\n---\n**Completion summary:**\nComplete and landed: PR #298 merged to main at 9fb81aee (verified GitHub and local ff). Original 73 tests preserved; final 78 notification tests, 3 external API tests, Heca all-target suite (1034 passed/3 existing ignored), config 121, clippy -D warnings, doctests, private rustdoc and diff --check passed. Four regression failures and missing API were observed before fixes. F009 decision 861eeaaf records explicit > config > fallback. Code references and review: .planner/docs/t512-notification-review.md. Clean heca-t512 worktree and merged local branch removed. No unfinished T512 work. T544 C8 transport/projection remains heca-dev2 successor work, not completed here.",
+      "descriptionRef": ".planner/docs/t512-notification-review.md",
+      "descriptionUpdatedAt": "2026-10-26T19:13:51.165Z",
+      "notes": "Closed after Antonio confirmed merge. Verified PR #298 MERGED at 9fb81aee8eaf46cedb95afd27a8c399a3811b419; local main fast-forwarded. All four checklist items complete. Removed clean heca-t512 worktree and merged local refactor/t512-notification branch. Source now in main. Tests/review and T544 handoff remain in .planner/docs/t512-notification-review.md. No T544 work claimed: heca-dev2 must preserve its dirty heca-p099-current checkout, integrate origin/main and complete notification C8.",
       "statusLog": [
         {
           "id": "736a6912-1297-48b3-89c1-e32559a024d9-check-001-planned-deferred",
@@ -3503,20 +3504,109 @@
           "toStatus": "deferred",
           "title": "Parked on creation (2026-09-04). Two reasons: its store feeds the frame loop's wake decision in `app/lifecycle.rs`, which P097(F003) changed this session to also consult the widget trees — splitting the notification side while that seam is still moving invites a merge nobody can review. And F009 has open work of its own (T381, P063) that may sit in this file. Resume once P097 lands and F009's open items are settled. Nothing here is a defect.",
           "description": "Parked on creation (2026-09-04). Two reasons: its store feeds the frame loop's wake decision in `app/lifecycle.rs`, which P097(F003) changed this session to also consult the widget trees — splitting the notification side while that seam is still moving invites a merge nobody can review. And F009 has open work of its own (T381, P063) that may sit in this file. Resume once P097 lands and F009's open items are settled. Nothing here is a defect."
+        },
+        {
+          "id": "4d6645a9-4ec1-477e-b8d9-4b0124f40fa7",
+          "date": "2026-10-25T18:19:10.286Z",
+          "fromStatus": "deferred",
+          "toStatus": "in-progress",
+          "title": "deferred → in-progress",
+          "description": ""
+        },
+        {
+          "id": "979d6654-222c-418e-a0a5-1191cd57f61b",
+          "date": "2026-10-26T14:11:54.325Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: T512 is now Codex's separate work (decision 906824be); returning to T544 as its planned return target.\nWhat was being done: T512 notification module split (notification.rs → notification/{model,store,runtime,presentation,sink}/ + action.rs + mod.rs). Move done, 73 tests retained and passing; rule review and behavioral-defect fixes still open.\nResume location: Codex's worktree /Users/antonio/projects/heca-t512, branch refactor/t512-notification. Canonical planner /Users/antonio/projects/heca/.planner.\nHow to resume: T512 is now Codex's work (decision 906824be, 2026-10-26). heca-dev2 does not continue it. Its reviewed result is applied before T544's notification integration. Pending Antonio answer: config defaults as sole source + honor explicit producer durations."
+        },
+        {
+          "id": "97024762-cffa-42ea-b9c3-ce5a70c66a41",
+          "date": "2026-10-26T14:44:56.293Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from Codex's worktree /Users/antonio/projects/heca-t512, branch refactor/t512-notification. Canonical planner /Users/antonio/projects/heca/.planner.. T512 is now Codex's work (decision 906824be, 2026-10-26). heca-dev2 does not continue it. Its reviewed result is applied before T544's notification integration. Pending Antonio answer: config defaults as sole source + honor explicit producer durations."
+        },
+        {
+          "id": "736a6912-1297-48b3-89c1-e32559a024d9-check-005-in-progress-done",
+          "date": "2026-10-26T19:13:51.162Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Complete and landed: PR #298 merged to main at 9fb81aee (verified GitHub and local ff). Original 73 tests preserved; final 78 notification tests, 3 external API tests, Heca all-target suite (1034 passed/3 existing ignored), config 121, clippy -D warnings, doctests, private rustdoc and diff --check passed. Four regression failures and missing API were observed before fixes. F009 decision 861eeaaf records explicit > config > fallback. Code references and review: .planner/docs/t512-notification-review.md. Clean heca-t512 worktree and merged local branch removed. No unfinished T512 work. T544 C8 transport/projection remains heca-dev2 successor work, not completed here."
         }
       ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "736a6912-1297-48b3-89c1-e32559a024d9-check-001-coordinate-approved-notification-order-with-p099-f012-t544-p099-decision-6a40db9e-public-api-access-first-verify-historical-deferral-and-concurrent-ownership-behavior-preserving-split-second-return-to-t544-for-server-wiring",
+          "number": 1,
+          "title": "Coordinate approved notification order with P099(F012)/T544 (P099 decision 6a40db9e): public API access first; verify historical deferral and concurrent ownership; behavior-preserving split second; return to T544 for server wiring.",
+          "checked": true
+        },
+        {
+          "id": "736a6912-1297-48b3-89c1-e32559a024d9-check-002-move-notification-model-store-runtime-presentation-action-and-sink-into-bounded-owner-modules-preserve-all-73-existing-notification-tests-and-unchanged-callers",
+          "number": 2,
+          "title": "Move notification model, store, runtime, presentation, action and sink into bounded owner modules; preserve all 73 existing notification tests and unchanged callers.",
+          "checked": true
+        },
+        {
+          "id": "736a6912-1297-48b3-89c1-e32559a024d9-check-003-review-moved-code-against-agents-md-and-phase-rules-record-violations-and-agree-behavioral-corrections-separately-from-the-move-before-claiming-full-completion",
+          "number": 3,
+          "title": "Review moved code against AGENTS.md and phase rules; record violations and agree behavioral corrections separately from the move before claiming full completion.",
+          "checked": true
+        },
+        {
+          "id": "736a6912-1297-48b3-89c1-e32559a024d9-check-004-implement-optional-public-auto-dismiss-duration-explicit-config-fallback-precedence-and-sticky-behavior-test-red-then-green-and-update-documentation",
+          "number": 4,
+          "title": "Implement optional public auto_dismiss(Duration), explicit/config/fallback precedence and sticky behavior; test red then green and update documentation.",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseHistory": [
+        {
+          "id": "bd377b8b-ee62-48f4-97d4-4716a4ca8bbc",
+          "reason": "T512 is now Codex's separate work (decision 906824be); returning to T544 as its planned return target.",
+          "whatWasBeingDone": "T512 notification module split (notification.rs → notification/{model,store,runtime,presentation,sink}/ + action.rs + mod.rs). Move done, 73 tests retained and passing; rule review and behavioral-defect fixes still open.",
+          "resumeLocation": "Codex's worktree /Users/antonio/projects/heca-t512, branch refactor/t512-notification. Canonical planner /Users/antonio/projects/heca/.planner.",
+          "howToResume": "T512 is now Codex's work (decision 906824be, 2026-10-26). heca-dev2 does not continue it. Its reviewed result is applied before T544's notification integration. Pending Antonio answer: config defaults as sole source + honor explicit producer durations.",
+          "relatedTaskId": "ed677df2-82fe-4abb-a23b-30f90bc40919",
+          "pausedAt": "2026-10-26T14:11:54.325Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-10-25T18:19:10.286Z",
+      "completedAt": "2026-10-26T19:13:51.162Z",
       "createdAt": "2026-09-04T14:02:29.970Z",
-      "updatedAt": "2026-09-04T14:29:16.375Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-10-26T19:14:19.642Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:2ea300d4-a6e1-4f1c-82e5-b4f035927213",
+          "createdAt": "2026-10-26T15:01:05.145Z"
+        },
+        {
+          "sessionId": "mcp-process:1b00a644-d656-4db7-97f5-2e44c79ba158",
+          "createdAt": "2026-10-26T14:45:57.278Z"
+        },
+        {
+          "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
+          "createdAt": "2026-10-26T14:37:17.235Z"
+        },
+        {
+          "sessionId": "mcp-process:6e8788ec-e96d-4bdc-a7c0-5707c50017cf",
+          "createdAt": "2026-10-26T07:48:39.971Z"
+        },
+        {
+          "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+          "createdAt": "2026-10-25T18:19:10.223Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -3915,7 +4005,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-19T15:10:10.939Z",
+  "updatedAt": "2026-10-26T19:14:19.642Z",
   "handoff": "# T468 census splits under way — hint tests split proposed, not yet agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-10-17T10:29:04.837Z\nReason: Antonio asked for a handoff after the appearance split was committed and the next split (the hint library's tests) was proposed. The session's context is long; a cold agent needs the exact resume point, the proposed split, the commits so far and the rules Antonio enforced today.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: P082(F003)/T468 — Split the files that are doing several jobs (in progress; checklist 58/71)\n- Exact resume point: step C45 — `heca-grid-ui/src/hint/tests.rs` (1449 lines, 50 tests). Split PROPOSED to Antonio, **not yet agreed**. Ask him \"is this split OK?\" before moving anything.\n\n### Proposed split for C45 (pure move; every test keeps its name `hint::tests::<section>::<test>`)\nThe file already holds 10 inline `mod` blocks; each becomes its own file under `heca-grid-ui/src/hint/tests/`:\n| file | covers | ~lines (source lines) |\n|---|---|---|\n| tests/mod.rs | description + section list | 15 |\n| declarations.rs | which widgets get a letter: declarations, wrappers, containers, names | 405 (4–411) |\n| actionable.rs | anything actionable is lettered | 45 (412–455) |\n| pick_delivery.rs | a pick is an event: who runs it, listening, stopping | 120 (456–576) |\n| offer.rs | handing a letter by name | 80 (577–657) |\n| clipped_away.rs | rows scrolled out of view lose their letter | 150 (658–807) |\n| by_surface.rs | letters grouped by owning surface | 230 (808–1037) |\n| visibility.rs | widgets squeezed to nothing | 165 (1038–1202) |\n| scoped_pickers.rs | a picker's own scope | 175 (1203–1376) |\n| keyed_walk.rs | writes by name leave hidden parts alone | 35 (1377–1410) |\n| a_pick_is_a_press.rs | picking a field/row gives it the keyboard | 40 (1411–1449) |\nThen review each file (repeated helpers, stale notes), each fix its own checklist step.\n\n## Current and partial state\n- Branch `refactor/split-chrome-mod`, NOT pushed past `9eadf394`. Commits this session (all on Antonio's word): `29bc9e14` overlay split + one-door fixes; `1e2d5b8f` pane letter + `keyboard_to` library setting; `81827a60` extending-heca doc (other agent's fix); `71a8f6d6` event split + review fixes + plugin kit `keyboard_to`/`area`/`column`/`row`/spans; `2bb21691` renderer text split + fixes, AGENTS.md \"stay under 800\"; `5242c439` terminal backend split + fixes + docs on how a terminal process starts; `c81d7bf1` prefix+q releases the dock (goes into the terminal from anywhere); `c8cb985d` appearance split + fixes + terminal named \"terminal\".\n- Census steps left: C45–C57 (16 files ≥ 800 lines; C42–C44 done). Files 601–743 lines are dropped from T468 (accepted decision on T468, list in its notes).\n- Working tree clean except `.planning/STATE.md` (a hook's timestamp — never commit it) and `.DS_Store`.\n- Abandoned on Antonio's call (do not redo): a separate \"type here\" letter on the terminal with its own colour, and changing the sidebar pane row's letter to \"go and type\". Final design: `prefix+/` row letter = look and stay in the sidebar (j/k); `prefix+q` = go into the terminal. The removed work is saved at `/private/tmp/claude-501/-Users-antonio-projects-heca/16da7337-196c-4d78-9a0a-53a9de8c904d/scratchpad/t468/type_here/work.diff` (scratch, may vanish).\n\n## Preservation constraints\n- Antonio's rules: plain short English, no function names in replies, answer a question and WAIT; tell him before any change; end replies with \"For you: …\". Fix in the library, nothing hardcoded, composition/DOM-like builders, one path per rule.\n- Every split: propose the shape → OK → move only (same tests by name, clippy `-p <crates> --all-targets --all-features -D warnings`, `cargo doc --no-deps --document-private-items`) → review → each fix its own checklist step with a test seen red first (pure tidy-ups say so). Commit only on \"commit\"; Rust skill review before commit.\n- Read the phase + task in the planner before starting work (Antonio insisted).\n- Cargo is scoped by `.claude/hooks/cargo-scope.sh`; pass crates with literal `-p` (not via a variable). Full workspace only with `HECA_FULL_WORKSPACE=1` on Antonio's word.\n- Never `git checkout --` / restore a whole `git diff --name-only` list: it once reset the planner file. Back up first; exclude `.planner/`.\n- No GUI launch by the agent; Antonio checks by eye.\n\n## Supporting documents\n- None needed: `.planner/docs/t468-oversized-files.md` and `.planner/docs/oversized-files-2026-09-04.md` hold the original census; T468's checklist names each remaining file.\n\n## Blockers and risks\n- No end-to-end test harness for picks (needs full AppState); pick behaviour is checked by eye.\n- `heca-grid-ui/src/widgets/key_hint.rs` (910) and `hint/tests.rs` are census items; keep edits there small until split.\n- AGENTS.md now says \"aim under 400, stay under 800 — above 800 agree a split\"; older planner notes still say 600 (dated records, left as they are).\n\n## How to resume\n1. `planner-task-show T468 full=true`; read P082 phase. Ask Antonio whether the C45 split above is OK.\n2. On OK: back up the file, record `cargo test -p heca-grid-ui -- --list`, move each `mod` block to its file (dedent 4), keep `use super::*` chains, compare test names, run gates.\n3. Review, propose fixes, wait; then C46 (`heca/src/app/selection_model.rs`, 1424) — propose its split first.",
   "handoffUpdatedAt": "2026-10-17T10:29:04.837Z",
   "handoffAudit": {
@@ -4243,9 +4333,45 @@
       "toStatus": "deferred",
       "title": "in-progress → deferred",
       "description": ""
+    },
+    {
+      "id": "ce5fa46e-6ff5-4c5b-8e50-534447c70d3f",
+      "date": "2026-10-25T18:19:10.427Z",
+      "fromStatus": "deferred",
+      "toStatus": "in-progress",
+      "title": "deferred → in-progress",
+      "description": ""
+    },
+    {
+      "id": "b1ce1776-ec1f-43c1-96d2-d805136112c4",
+      "date": "2026-10-26T19:13:51.233Z",
+      "fromStatus": "in-progress",
+      "toStatus": "deferred",
+      "title": "in-progress → deferred",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:2ea300d4-a6e1-4f1c-82e5-b4f035927213",
+      "createdAt": "2026-10-26T15:01:05.145Z"
+    },
+    {
+      "sessionId": "mcp-process:1b00a644-d656-4db7-97f5-2e44c79ba158",
+      "createdAt": "2026-10-26T14:45:57.278Z"
+    },
+    {
+      "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
+      "createdAt": "2026-10-26T14:37:17.235Z"
+    },
+    {
+      "sessionId": "mcp-process:6e8788ec-e96d-4bdc-a7c0-5707c50017cf",
+      "createdAt": "2026-10-26T07:48:39.971Z"
+    },
+    {
+      "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+      "createdAt": "2026-10-25T18:19:10.223Z"
+    },
     {
       "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
       "createdAt": "2026-10-15T12:39:33.249Z"
@@ -4289,18 +4415,6 @@
     {
       "sessionId": "mcp-process:65b2ab93-5391-4cfe-920d-9ee1153fe084",
       "createdAt": "2026-09-09T06:54:09.290Z"
-    },
-    {
-      "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
-      "createdAt": "2026-09-08T13:36:47.326Z"
-    },
-    {
-      "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
-      "createdAt": "2026-08-27T20:14:32.984Z"
-    },
-    {
-      "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
-      "createdAt": "2026-08-27T09:54:28.651Z"
     }
   ]
 }

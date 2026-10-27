@@ -9,9 +9,9 @@
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
-  "summary": "One contract for agent programs (Claude Code, Codex, pi and OpenCode built in; plugins add more); status from their hooks shown in the pane row; sounds on changes.",
-  "description": "Decisions 13, 19, 20 in `~/projects/heca-pro/docs/decisions.md` (decision 13 now reads \"Claude Code, Codex, pi and OpenCode\", 2026-10-03). Replaces the status-and-sounds part of F008 (`agent-integration/agent-integration-plan.md`, P048 tasks T173 \"Agent status display\" and T175 \"Transition sounds\", both deferred) — reuse its research on hooks, rewrite the design against today's code. Rooms, orchestration and agent-comms are heca-pro, not here.\n\n## Current state\n- `heca-core/src/backend/terminal/osc.rs:4` — the escape-code reader knows only prompt start, command start, pre-exec, program, command finished, cwd.\n- `heca-core/src/runtime.rs:72` — `PaneRuntime` has no agent state. Process status and pane rows: `heca/src/app/process_monitor.rs`, `heca/src/providers/workspaces/pane_row.rs`.\n\n## Goal\n- **One agent contract** any agent program implements: recognise it (by program), start it (with whatever it needs to report status), read its status. Claude Code, Codex, pi and OpenCode are built-in implementations of the same contract a plugin would write — code never branches on a program's name.\n- Status set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more.\n- Status sources: Claude Code hooks printing a notification escape code (added through `--settings`, the user's own settings untouched), Codex's own notification codes, a small pi extension writing to a side channel, OpenCode (below). The reader learns notification codes (OSC 9 / 99 / 777).\n- Agent line in the pane row: name, status, current task — composed from existing widgets, theme-driven.\n- Sounds on status changes, configurable per status (and per project).\n- Status changes are events (DOM-shaped event system) and appear on the socket's event stream.\n\n## OpenCode facts (v2.0.19, from heca-pro, 2026-10-03; details in heca-pro docs/to-check.md items 5 and 6)\n- Per-run set-up without touching the user's config: env `OPENCODE_CONFIG_DIR` (a folder with plugins) or `OPENCODE_CONFIG_CONTENT`, merged over the user's config.\n- Status/events: its local server (default 127.0.0.1:4096) streams events at `GET /event`; plugins get bus events (e.g. `permission.asked`, `tool.execute.before`).\n- Usage: each message stores tokens and cost (`~/.local/share/opencode/opencode.db`, table `message`).\n- Resume: `opencode --session <id>` / `--continue`.\n\n## Preserve\n- Non-agent panes unchanged; process status stays separate from agent status.\n- AGENTS.md § 0; nothing hard-coded.\n\n## Done when\n- Claude Code in a pane shows working → waiting → finished in its pane row and plays the configured sound; the same for Codex, pi and OpenCode; a test agent added through the contract (as a plugin would) works the same.",
-  "descriptionUpdatedAt": "2026-10-03T10:02:43.377Z",
+  "summary": "All four tasks DONE; 29/29 accepted. Claude native Waiting -> Working -> Error verified and explicitly accepted by Antonio for closure; successful Claude response unverified. Changes remain local; PR targets next.",
+  "description": "Decisions 13, 19, 20 in `~/projects/heca-pro/docs/decisions.md` (decision 13 now reads \"Claude Code, Codex, pi and OpenCode\", 2026-10-03). Replaces the status-and-sounds part of F008 (`agent-integration/agent-integration-plan.md`, P048 tasks T173 \"Agent status display\" and T175 \"Transition sounds\", both deferred) — reuse its research on hooks, rewrite the design against today's code. Rooms, orchestration and agent-comms are heca-pro, not here.\n\n## Current state\n- `heca-core/src/backend/terminal/osc.rs:4` — the escape-code reader knows only prompt start, command start, pre-exec, program, command finished, cwd.\n- `heca-core/src/runtime.rs:72` — `PaneRuntime` has no agent state. Process status and pane rows: `heca/src/app/process_monitor.rs`, `heca/src/providers/workspaces/pane_row.rs`.\n\n## Goal\n- **One agent contract** any agent program implements: recognise it (by program), start it (with whatever it needs to report status), read its status. Claude Code, Codex, pi and OpenCode are built-in implementations of the same contract a plugin would write — code never branches on a program's name.\n- Status set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more.\n- Status sources: Claude Code hooks printing a notification escape code (added through `--settings`, the user's own settings untouched), Codex's own notification codes, a small pi extension writing to a side channel, OpenCode (below). The reader learns notification codes (OSC 9 / 99 / 777).\n- Agent line in the pane row: name, status, current task — composed from existing widgets, theme-driven.\n- Sounds on status changes, configurable per status (and per project).\n- Status changes are events (DOM-shaped event system) and appear on the socket's event stream.\n\n## OpenCode facts (v2.0.19, from heca-pro, 2026-10-03; details in heca-pro docs/to-check.md items 5 and 6)\n- Per-run set-up without touching the user's config: env `OPENCODE_CONFIG_DIR` (a folder with plugins) or `OPENCODE_CONFIG_CONTENT`, merged over the user's config.\n- Status/events: its local server (default 127.0.0.1:4096) streams events at `GET /event`; plugins get bus events (e.g. `permission.asked`, `tool.execute.before`).\n- Usage: each message stores tokens and cost (`~/.local/share/opencode/opencode.db`, table `message`).\n- Resume: `opencode --session <id>` / `--continue`.\n\n## Preserve\n- Non-agent panes unchanged; process status stays separate from agent status.\n- AGENTS.md § 0; nothing hard-coded.\n\n## Done when\n- Claude Code in a pane shows working → waiting → finished in its pane row and plays the configured sound; the same for Codex, pi and OpenCode; a test agent added through the contract (as a plugin would) works the same.\n\n## Verified implementation and remaining checks (restored 2026-10-24)\nThe shared contract and composed pane row are implemented and verified (T171/T173). Persistent integrations and the installer CLI are implemented, preserving user settings and native trust. Sound sources/defaults/configuration and background playback are implemented. The accepted persistent-installation decision supersedes the older temporary --settings setup above. Source references, review, native evidence and the remaining native Claude criterion are in .planner/docs/p102-closeout.md. Finish existing P102 work before recovery or other phases. PR targets next; no commit is authorized by this update.\n\nCurrent closeout (2026-10-24): T171, T173 and T175 are DONE. T175 C5 passed with real native Pi and Antonio explicitly hearing the configured sound in the GPU app. T174 remains planned at 12/13; its C2 successful Claude native cycle is the only open check. Total: 28/29. The weekly quota prevented the last Claude success check; do not substitute a fixture or close that criterion without evidence. Current report: .planner/docs/p102-closeout.md. Preserve the current flash behavior. Changes remain local; PR targets next.\n\nFinal acceptance, 2026-10-24: Antonio explicitly accepted the real Claude Waiting -> Working -> Error quota-limited cycle in place of a successful model response. This supersedes the earlier pending-Claude statements above and narrows the original successful-cycle done-when requirement only for Claude. T174 C2 is now accepted; T174 is DONE (13/13). All four P102 tasks are DONE, total 29/29 accepted. Successful Claude response remains unverified; the error cycle and row flash were tested in the GPU app. See .planner/docs/p102-closeout.md and the phase acceptance decision. P099 transport remains separate work. No source changes, commits or push authorized.",
+  "descriptionUpdatedAt": "2026-10-24T06:48:02.915Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -20,7 +20,32 @@
   "risks": [],
   "openQuestions": [],
   "decisions": [],
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "227957d5-d092-4e5d-880a-ea72e37747ed",
+      "title": "Driver-owned artwork and reported session identity",
+      "decision": "Each driver supplies optional portable artwork through AgentDriver::icon and AgentIcon::svg(contents) or AgentIcon::file(path). The shared Image widget renders it and preserves brand colours. AgentState carries optional model, session_id and session_title; the row uses reported identity with pane-name fallback. Omitted metadata is retained only inside the same known driver/session.",
+      "rationale": "Antonio approved this P102 design on 2026-10-22. This record restores the lost phase decision after the main planner reverted.",
+      "implementationNotes": "Use the existing shared Image and composed pane-row widgets. Full declarative harness builder/runtime plugin support remains future T549; this recovery adds no scope.",
+      "acceptedAt": "2026-10-23T23:22:16.929Z"
+    },
+    {
+      "id": "db6feb71-3c67-45cd-9c50-2fba4feb19ca",
+      "title": "Continue P102 without waiting for Claude review",
+      "decision": "Finish the P102 review here without waiting for Claude/Opus availability. Retain explicit native-test limitations. Complete the agreed machine-local installer CLI connection in the P102 worktree using the shared installer. Decide on broader P099 server/attach takeover after P102.",
+      "rationale": "Antonio approved proceeding without Claude/Opus on 2026-10-23. This restores the lost accepted decision; it does not waive any unchecked criterion.",
+      "implementationNotes": "Claude successful completion remains unchecked while quota-blocked. Code and evidence are in heca-p102. PR targets next. Commit/push requires Antonio's request; this recovery does not authorize it.",
+      "acceptedAt": "2026-10-23T23:22:17.008Z"
+    },
+    {
+      "id": "377c9fbd-5e16-4a02-a9a1-3bc2238fa582",
+      "title": "Accept Claude native quota-error cycle for P102 completion",
+      "decision": "For P102 closeout, accept the real Claude Waiting -> Working -> Error quota-limited cycle instead of requiring a successful Claude model response. T174 C2 and the phase completion criterion are satisfied by this revised acceptance, together with the existing Codex, Pi and OpenCode native cycle evidence. Successful Claude completion remains unverified, not represented as passed.",
+      "rationale": "Antonio requested launching Claude despite exhausted credits, personally accepted the workspace trust prompt and confirmed the row flash. The fresh GPU test showed Waiting, Working and Error after a minimal prompt; Claude reported its weekly usage limit. Antonio explicitly agreed this real error test is sufficient to close T174 without waiting for credits.",
+      "implementationNotes": "Supersedes only the successful-Claude-response requirement in T174 C2 and the P102 done-when statement. Keep all other criteria and P099 transport ownership unchanged. Evidence: .planner/docs/p102-closeout.md. No force completion, source change, commit or push is authorized.",
+      "acceptedAt": "2026-10-24T06:48:02.342Z"
+    }
+  ],
   "completionCriteria": [],
   "taskIds": [
     "e276308e-38f6-45be-a3fb-e8c4bec9a6c9",
@@ -37,9 +62,9 @@
       "priority": 1,
       "shortName": "agentdriver-registry",
       "title": "The agent contract — one set of rules every agent program implements (built-ins and plugins alike)",
-      "status": "planned",
-      "description": "Read P102's description first, and `~/projects/heca-pro/docs/decisions.md` 13, 19, 20. Old research (hooks per program): heca `agent-integration/agent-integration-plan.md` §2 — reuse the facts, not the design (its names are out of date).\n\nGoal: one contract any agent program implements — recognise it (from the program running in the pane), start it (with what it needs to report status), read its status. Claude Code, Codex and pi (T174) implement exactly the contract a plugin would. Code never branches on a program's name. Write the line a plugin author would type; no registry ids.\n\nStatus set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more. Agent state lives beside, never merged with, the existing process status (`heca-core/src/runtime.rs:72` `PaneRuntime`).\n\nStatus changes are events in the DOM-shaped event system and appear on the socket's event stream (P099).",
-      "descriptionUpdatedAt": "2026-09-29T19:27:26.622Z",
+      "status": "done",
+      "description": "Read P102's description first, and `~/projects/heca-pro/docs/decisions.md` 13, 19, 20. Old research (hooks per program): heca `agent-integration/agent-integration-plan.md` §2 — reuse the facts, not the design (its names are out of date).\n\nGoal: one contract any agent program implements — recognise it (from the program running in the pane), start it (with what it needs to report status), read its status. Claude Code, Codex and pi (T174) implement exactly the contract a plugin would. Code never branches on a program's name. Write the line a plugin author would type; no registry ids.\n\nStatus set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more. Agent state lives beside, never merged with, the existing process status (`heca-core/src/runtime.rs:72` `PaneRuntime`).\n\nStatus changes are events in the DOM-shaped event system and appear on the socket's event stream (P099).\n\n---\n**Completion summary:**\nRead P102's description first, and `~/projects/heca-pro/docs/decisions.md` 13, 19, 20. Old research (hooks per program): heca `agent-integration/agent-integration-plan.md` §2 — reuse the facts, not the design (its names are out of date).\n\nGoal: one contract any agent program implements — recognise it (from the program running in the pane), start it (with what it needs to report status), read its status. Claude Code, Codex and pi (T174) implement exactly the contract a plugin would. Code never branches on a program's name. Write the line a plugin author would type; no registry ids.\n\nStatus set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more. Agent state lives beside, never merged with, the existing process status (`heca-core/src/runtime.rs:72` `PaneRuntime`).\n\nStatus changes are events in the DOM-shaped event system and appear on the socket's event stream (P099).\n\nVerified closeout, restored 2026-10-24: every checklist item is complete. Implementation, source references, native evidence and review are documented in .planner/docs/p102-closeout.md. 2,320 scoped tests passed, three optional manual tests ignored and one unchanged baseline focus_door scanner false positive explicitly excluded. Scoped Clippy -D warnings passed. Antonio approved the current native UI and the prefix+Enter fix. Claude successful-cycle verification remains the separate open T174 C2. Code remains local/uncommitted on feat/p102-agent; this is no forced closure.",
+      "descriptionUpdatedAt": "2026-10-23T23:22:19.428Z",
       "notes": "",
       "statusLog": [
         {
@@ -57,6 +82,14 @@
           "toStatus": "planned",
           "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
           "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-003-planned-done",
+          "date": "2026-10-23T23:22:19.427Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Read P102's description first, and `~/projects/heca-pro/docs/decisions.md` 13, 19, 20. Old research (hooks per program): heca `agent-integration/agent-integration-plan.md` §2 — reuse the facts, not the design (its names are out of date).\n\nGoal: one contract any agent program implements — recognise it (from the program running in the pane), start it (with what it needs to report status), read its status. Claude Code, Codex and pi (T174) implement exactly the contract a plugin would. Code never branches on a program's name. Write the line a plugin author would type; no registry ids.\n\nStatus set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more. Agent state lives beside, never merged with, the existing process status (`heca-core/src/runtime.rs:72` `PaneRuntime`).\n\nStatus changes are events in the DOM-shaped event system and appear on the socket's event stream (P099).\n\nVerified closeout, restored 2026-10-24: every checklist item is complete. Implementation, source references, native evidence and review are documented in .planner/docs/p102-closeout.md. 2,320 scoped tests passed, three optional manual tests ignored and one unchanged baseline focus_door scanner false positive explicitly excluded. Scoped Clippy -D warnings passed. Antonio approved the current native UI and the prefix+Enter fix. Claude successful-cycle verification remains the separate open T174 C2. Code remains local/uncommitted on feat/p102-agent; this is no forced closure."
         }
       ],
       "decisions": [],
@@ -66,43 +99,43 @@
           "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-001-pre-flight-what-exists-process-monitor-paneruntime-providers-and-where-the-contract-lives-open-heca-plugin-reachable",
           "number": 1,
           "title": "Pre-flight: what exists (process monitor, PaneRuntime, providers) and where the contract lives (open heca, plugin-reachable)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-002-propose-the-contract-the-lines-a-plugin-writes-and-agree-it",
           "number": 2,
           "title": "Propose the contract (the lines a plugin writes) and agree it",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-003-agent-state-beside-process-status-change-events",
           "number": 3,
           "title": "Agent state beside process status; change events",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-004-notification-escape-codes-osc-9-99-777-read-by-the-terminal-code-heca-core-src-backend-terminal-osc-rs-4",
           "number": 4,
           "title": "Notification escape codes (OSC 9/99/777) read by the terminal code (heca-core/src/backend/terminal/osc.rs:4)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-005-side-channel-for-programs-that-report-outside-the-terminal-pi",
           "number": 5,
           "title": "Side channel for programs that report outside the terminal (pi)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-006-a-test-agent-added-through-the-contract-as-a-plugin-would",
           "number": 6,
           "title": "A test agent added through the contract as a plugin would",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-007-docs",
           "number": 7,
           "title": "Docs",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -115,10 +148,10 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-10-23T23:22:19.427Z",
+      "completedAt": "2026-10-23T23:22:19.427Z",
       "createdAt": "2026-07-01T18:15:25.598Z",
-      "updatedAt": "2026-09-29T19:27:26.620Z",
+      "updatedAt": "2026-10-23T23:22:19.427Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -130,9 +163,9 @@
       "priority": 2,
       "shortName": "agent-status-display",
       "title": "Agent line in the pane row — name, status, current task",
-      "status": "planned",
-      "description": "Depends on T171. Component 1 in `~/projects/heca-pro/docs/components.md`.\n\nShow the agent's name, status and current task in the pane row (`heca/src/providers/workspaces/pane_row.rs`) and wherever pane info is shown. Composed from existing widgets (pre-flight: name them — StatusDot, Badge, Item, Label …), colours and icons from the theme, text from wherever the app keeps user-facing text. Non-agent panes unchanged. Placement follows the existing pane-row segments config, never a fixed spot.",
-      "descriptionUpdatedAt": "2026-09-29T19:27:35.840Z",
+      "status": "done",
+      "description": "Depends on T171. Component 1 in `~/projects/heca-pro/docs/components.md`.\n\nShow the agent's name, status and current task in the pane row (`heca/src/providers/workspaces/pane_row.rs`) and wherever pane info is shown. Composed from existing widgets (pre-flight: name them — StatusDot, Badge, Item, Label …), colours and icons from the theme, text from wherever the app keeps user-facing text. Non-agent panes unchanged. Placement follows the existing pane-row segments config, never a fixed spot.\n\n---\n**Completion summary:**\nDepends on T171. Component 1 in `~/projects/heca-pro/docs/components.md`.\n\nShow the agent's name, status and current task in the pane row (`heca/src/providers/workspaces/pane_row.rs`) and wherever pane info is shown. Composed from existing widgets (pre-flight: name them — StatusDot, Badge, Item, Label …), colours and icons from the theme, text from wherever the app keeps user-facing text. Non-agent panes unchanged. Placement follows the existing pane-row segments config, never a fixed spot.\n\nVerified closeout, restored 2026-10-24: every checklist item is complete. Implementation, source references, native evidence and review are documented in .planner/docs/p102-closeout.md. 2,320 scoped tests passed, three optional manual tests ignored and one unchanged baseline focus_door scanner false positive explicitly excluded. Scoped Clippy -D warnings passed. Antonio approved the current native UI and the prefix+Enter fix. Claude successful-cycle verification remains the separate open T174 C2. Code remains local/uncommitted on feat/p102-agent; this is no forced closure.",
+      "descriptionUpdatedAt": "2026-10-23T23:22:19.605Z",
       "notes": "",
       "statusLog": [
         {
@@ -150,6 +183,14 @@
           "toStatus": "planned",
           "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
           "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        },
+        {
+          "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-003-planned-done",
+          "date": "2026-10-23T23:22:19.604Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Depends on T171. Component 1 in `~/projects/heca-pro/docs/components.md`.\n\nShow the agent's name, status and current task in the pane row (`heca/src/providers/workspaces/pane_row.rs`) and wherever pane info is shown. Composed from existing widgets (pre-flight: name them — StatusDot, Badge, Item, Label …), colours and icons from the theme, text from wherever the app keeps user-facing text. Non-agent panes unchanged. Placement follows the existing pane-row segments config, never a fixed spot.\n\nVerified closeout, restored 2026-10-24: every checklist item is complete. Implementation, source references, native evidence and review are documented in .planner/docs/p102-closeout.md. 2,320 scoped tests passed, three optional manual tests ignored and one unchanged baseline focus_door scanner false positive explicitly excluded. Scoped Clippy -D warnings passed. Antonio approved the current native UI and the prefix+Enter fix. Claude successful-cycle verification remains the separate open T174 C2. Code remains local/uncommitted on feat/p102-agent; this is no forced closure."
         }
       ],
       "decisions": [],
@@ -159,25 +200,25 @@
           "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-001-pre-flight-existing-widgets-and-pane-row-segments",
           "number": 1,
           "title": "Pre-flight: existing widgets and pane-row segments",
-          "checked": false
+          "checked": true
         },
         {
           "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-002-agent-segment-in-the-pane-row-theme-driven",
           "number": 2,
           "title": "Agent segment in the pane row, theme-driven",
-          "checked": false
+          "checked": true
         },
         {
           "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-003-status-colours-icons-as-theme-tokens",
           "number": 3,
           "title": "Status colours/icons as theme tokens",
-          "checked": false
+          "checked": true
         },
         {
           "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-004-driven-in-the-gpu-app-with-claude-codex-pi",
           "number": 4,
           "title": "Driven in the GPU app with Claude, Codex, pi",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -190,10 +231,10 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-10-23T23:22:19.604Z",
+      "completedAt": "2026-10-23T23:22:19.604Z",
       "createdAt": "2026-07-01T18:15:25.608Z",
-      "updatedAt": "2026-09-29T19:27:35.838Z",
+      "updatedAt": "2026-10-23T23:22:19.604Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -204,11 +245,11 @@
       "shortId": "QD7QU",
       "priority": 3,
       "shortName": "builtin-agent-drivers",
-      "title": "Claude Code, Codex and pi through the agent contract",
-      "status": "planned",
-      "description": "Depends on T171 (the contract). Read P102's description; hook facts in heca `agent-integration/agent-integration-plan.md` §2.\n\n- **Claude Code:** hooks that print a notification escape code, added with `claude --settings <temp file>` so the user's own settings still load (hook lists add up across settings files). Map hook events to the status set.\n- **Codex:** reads the notification codes Codex already prints (turn complete, permission) — no setup needed for the basic states.\n- **pi:** a small extension heca ships, writing status to the side channel; installed once, never overwriting a user-changed copy.\nEach is a built-in implementation of the same contract a plugin uses; nothing special-cased.",
-      "descriptionUpdatedAt": "2026-09-29T19:27:31.823Z",
-      "notes": "",
+      "title": "Persistent agent integrations - install, inspect, update and uninstall",
+      "status": "done",
+      "description": "Implement explicit, persistent agent integrations through the shared T171 contract. Built-in drivers cover Claude Code, Codex, pi and OpenCode; other programs use the same public registration API. Never branch on program names in the host.\n\nDesign authority: this task's Accepted Decision a1ebcc65-dfe9-456e-b95c-d5c07643a834 replaces the earlier temporary-launch setup described here and in P102. Reuse verified native API facts from agent-integration/agent-integration-plan.md, not its older setup design.\n\n## User flow\nThe user explicitly chooses a program, for example `heca install integration codex`. Provide matching inspect, update and uninstall operations through one shared module. Nothing is installed automatically. The installed integration persists until removed and is inactive outside Heca. Once enabled, it reports for commands typed into existing Heca terminals and for Heca-launched programs. Per-session identity and reporting connections remain temporary; remove the competing per-launch hook/extension installation path.\n\n## Delivery, settings and updates\nBundle integration files with the Heca release. Keep installed files in stable per-user locations appropriate to each program and use Heca's normal config for program/event choices. Preserve existing native settings, hooks and plugins; register and remove only Heca-owned entries. Keep native hook review/trust intact. Record integration versions and owned files/entries; inspection checks the actual installation, including modified or missing files. Update is explicit, preserves choices and detects local edits before replacement. Heca app updates supply newer assets without silently reinstalling integrations. Safe writes and recoverable changes are required. Event selection is separate from installation; sounds belong to T175 and remain off by default.\n\n## Shared implementation and ownership\nThe installer is a machine-local filesystem operation and works without a session server. It must use the existing action/catalog conventions when exposed to app/plugin/RPC callers; it must not become another route for session mutations. A future settings page calls these same operations; building that page is outside this task.\n\nP099/T544 (heca-dev2) owns CLI dispatch in heca/src/app/cli.rs and supplies the registration entry point. P102 owns the handler/shared module and does not edit P099's dispatch file. Coordinate the concrete handler signature before connecting it.\n\nP099 owns heca/src/server/change.rs and T546 event/snapshot transport. P102 supplies serializable AgentState and agent transitions, including clearing state. Reuse the existing agent model, with previous/current values for transitions and current agent state in snapshots. No second wire model or parallel event store. Existing ServerWaker and serde work needs no installation changes.\n\n## Verification and completion\nVerify installation, repeat install, inspection, updates, removal, preservation of unrelated settings, edited files and native trust behavior. Exercise reports inside Heca through each built-in driver and an externally registered driver, and confirm installed integrations stay inactive outside Heca. Retain reusable work from T171 (contract), T173 (status line) and T175 (optional sounds); do not treat the temporary implementation as completion of this rework. Record native provider/account limitations separately from integration failures. Review with Opus before completion. PR targets next under F012 decision fa766c9f-b933-4b97-b626-9453265558a7. Do not commit without Antonio's request.\n\n2026-10-24 recovered closeout: installer CLI is implemented and its four real-host tests pass in feat/p102-agent. P099 remains the owner of broader transport. See .planner/docs/p102-closeout.md. Successful Claude completion remains unverified because of the account quota.\n\n---\n**Completion summary:**\nCompleted persistent integrations and shared install/inspect/update/uninstall operations, actual installer CLI, settings preservation/recovery, built-in and external-driver reporting, documentation and agreed review. Existing evidence: .planner/docs/p102-closeout.md; 2320 scoped tests passed excluding the documented unchanged focus_door scanner baseline, scoped Clippy -D warnings passed, four actual installer CLI tests passed. Fresh native GPU test on 2026-10-24: Claude Code v2.1.310 with installed hooks in target/p102/live-ui/native/.claude showed Waiting -> Working -> Error after \"Reply with exactly OK. Do not use tools or change files.\"; weekly quota reset Oct 26 at 7am Europe/Rome. Antonio accepted native trust, confirmed row flash, and explicitly accepted this real error cycle for closure. The phase Accepted Decision records that C2 acceptance change; checklist now 13/13. Successful Claude response remains unverified and is not claimed. P099 broader socket transport remains separate ownership, not unfinished P102 work. No source edits, commits or push in this closeout. Existing implementation: heca/src/agent/, heca-core/src/agent/, heca/src/app/cli/, heca/tests/integration_cli.rs and heca/tests/agent_launch.rs in /Users/antonio/projects/heca-p102. PR targets next; changes remain local.",
+      "descriptionUpdatedAt": "2026-10-24T06:48:02.730Z",
+      "notes": "Current state, 2026-10-24: DONE, 13/13, under the recorded acceptance of the real Claude quota-error cycle. Successful Claude completion remains unverified. The P102 worktree was removed after its implementation was transferred to /Users/antonio/projects/heca; code remains local/staged, not delivered by a merged P102 PR. Canonical evidence: .planner/docs/p102-closeout.md and target/p102 in the main checkout. Installer CLI is implemented in heca/src/app/cli/ with tests in heca/tests/integration_cli.rs. P099 owns broader socket transport and agent event delivery; this is not an unfinished installer dependency. Earlier task description/status entries are historical checkpoints; old heca-p102 paths and PR-target-next instructions do not describe the current checkout or Antonio's current PR-to-main rule. No implementation or acceptance criteria were changed by this reconciliation.",
       "statusLog": [
         {
           "id": "4174a3e3-e23c-40e2-88bf-b95d4c56fd30",
@@ -225,40 +266,105 @@
           "toStatus": "planned",
           "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
           "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-003-planned-done",
+          "date": "2026-10-24T06:48:02.729Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Completed persistent integrations and shared install/inspect/update/uninstall operations, actual installer CLI, settings preservation/recovery, built-in and external-driver reporting, documentation and agreed review. Existing evidence: .planner/docs/p102-closeout.md; 2320 scoped tests passed excluding the documented unchanged focus_door scanner baseline, scoped Clippy -D warnings passed, four actual installer CLI tests passed. Fresh native GPU test on 2026-10-24: Claude Code v2.1.310 with installed hooks in target/p102/live-ui/native/.claude showed Waiting -> Working -> Error after \"Reply with exactly OK. Do not use tools or change files.\"; weekly quota reset Oct 26 at 7am Europe/Rome. Antonio accepted native trust, confirmed row flash, and explicitly accepted this real error cycle for closure. The phase Accepted Decision records that C2 acceptance change; checklist now 13/13. Successful Claude response remains unverified and is not claimed. P099 broader socket transport remains separate ownership, not unfinished P102 work. No source edits, commits or push in this closeout. Existing implementation: heca/src/agent/, heca-core/src/agent/, heca/src/app/cli/, heca/tests/integration_cli.rs and heca/tests/agent_launch.rs in /Users/antonio/projects/heca-p102. PR targets next; changes remain local."
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "a1ebcc65-dfe9-456e-b95c-d5c07643a834",
+          "title": "Explicit persistent integration installation and P099 ownership boundary",
+          "decision": "Users explicitly install persistent integrations per registered agent program. Nothing is installed automatically. Persistent installation replaces per-launch hook or extension injection; session identity and the reporting connection remain temporary and active only inside Heca. Provide one shared implementation for install, inspect, update and uninstall, callable by the CLI and a future settings page. Preserve user settings, unrelated hooks and plugins, and native trust prompts. Sounds remain optional and off by default. Machine-local installation does not require a running session server; commands that change session state still go through the existing socket/action path. P099/T544 owns CLI dispatch; P102 owns the integration handler and shared operations. P099 owns server/change.rs and T546 transport; P102 supplies the serializable agent state and transition contract.",
+          "rationale": "Antonio agreed to replace temporary launch setup with explicit persistent installation, discussed using the same operations from a future GUI, and requested this task description/checklist update. The 2026-10-21 coordination proposal from heca-dev2 separates CLI and transport ownership from P102 installation work. Existing ServerWaker and serde work is unaffected. Restored after the canonical main planner reverted to an earlier branch snapshot; Antonio requested preserving P085/P035/F003 while recovering completed work.",
+          "implementationNotes": "Ship integration assets with Heca, record installed versions and owned entries/files, inspect actual files, and offer explicit updates without silently rewriting agent settings when Heca itself updates. Preserve user choices and detect edits before replacing owned content. Reuse the existing driver registration path; no closed list or program-name branches in the host. The future settings page is outside T174. P099 adds Change::PaneAgentChanged using the same PaneId, previous and agent fields as P102 ChromeEvent::PaneAgentChanged, with AgentState reused from heca-core; do not create a duplicate wire model. Refer to F012 branch decision fa766c9f-b933-4b97-b626-9453265558a7: PR targets next. This task decision supersedes older temporary-setup examples in T174 and P102 research; it does not change task status or ownership.",
+          "acceptedAt": "2026-10-23T23:22:16.613Z"
+        }
+      ],
       "checklist": [
         {
-          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-001-claude-code-temp-settings-hooks-user-settings-untouched-temp-file-cleaned-on-pane-close",
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-001-pi-shipped-extension-side-channel-safe-install",
           "number": 1,
-          "title": "Claude Code: temp --settings hooks, user settings untouched, temp file cleaned on pane close",
-          "checked": false
-        },
-        {
-          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-002-codex-native-notification-codes-mapped",
-          "number": 2,
-          "title": "Codex: native notification codes mapped",
-          "checked": false
-        },
-        {
-          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-003-pi-shipped-extension-side-channel-safe-install",
-          "number": 3,
           "title": "pi: shipped extension + side channel, safe install",
-          "checked": false
+          "checked": true
         },
         {
-          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-004-each-driven-end-to-end-in-the-app-working-waiting-finished",
-          "number": 4,
-          "title": "Each driven end to end in the app (working → waiting → finished)",
-          "checked": false
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-002-each-native-program-exercised-end-to-end-in-the-app-claude-quota-error-cycle-accepted-by-antonio-waiting-working-error-successful-response-unverified",
+          "number": 2,
+          "title": "Each native program exercised end to end in the app; Claude quota-error cycle accepted by Antonio (Waiting -> Working -> Error), successful response unverified",
+          "checked": true
         },
         {
-          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-005-docs-limits-e-g-org-managed-claude-settings-that-block-hooks",
-          "number": 5,
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-003-docs-limits-e-g-org-managed-claude-settings-that-block-hooks",
+          "number": 3,
           "title": "Docs: limits (e.g. org-managed Claude settings that block hooks)",
-          "checked": false
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-004-define-the-shared-integration-lifecycle-on-the-existing-extensible-driver-registration-path-agree-the-cli-handler-signature-with-p099-t544-without-editing-its-dispatch-file",
+          "number": 4,
+          "title": "Define the shared integration lifecycle on the existing extensible driver registration path; agree the CLI handler signature with P099/T544 without editing its dispatch file.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-005-bundle-versioned-claude-code-codex-pi-and-opencode-integration-assets-and-track-heca-owned-installed-files-and-registration-entries",
+          "number": 5,
+          "title": "Bundle versioned Claude Code, Codex, pi and OpenCode integration assets and track Heca-owned installed files and registration entries.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-006-implement-explicit-repeatable-installation-that-preserves-existing-native-settings-unrelated-hooks-plugins-and-normal-trust-prompts",
+          "number": 6,
+          "title": "Implement explicit, repeatable installation that preserves existing native settings, unrelated hooks/plugins and normal trust prompts.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-007-implement-inspection-of-actual-files-and-registrations-reporting-installed-missing-outdated-and-locally-modified-content",
+          "number": 7,
+          "title": "Implement inspection of actual files and registrations, reporting installed, missing, outdated and locally modified content.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-008-implement-explicit-updates-with-safe-writes-recovery-and-preservation-of-user-event-settings-choices-never-silently-reinstall-during-a-heca-app-update",
+          "number": 8,
+          "title": "Implement explicit updates with safe writes, recovery and preservation of user event/settings choices; never silently reinstall during a Heca app update.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-009-implement-uninstall-that-removes-only-heca-owned-entries-files-and-preserves-unrelated-user-configuration",
+          "number": 9,
+          "title": "Implement uninstall that removes only Heca-owned entries/files and preserves unrelated user configuration.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-010-replace-temporary-per-launch-hook-extension-installation-while-retaining-temporary-terminal-identity-reporting-connections-verify-typed-commands-and-heca-launched-programs-report-only-inside-heca",
+          "number": 10,
+          "title": "Replace temporary per-launch hook/extension installation while retaining temporary terminal identity/reporting connections; verify typed commands and Heca-launched programs report only inside Heca.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-011-use-normal-heca-configuration-for-program-and-event-choices-install-nothing-automatically-and-keep-optional-t175-sounds-off-by-default",
+          "number": 11,
+          "title": "Use normal Heca configuration for program and event choices; install nothing automatically and keep optional T175 sounds off by default.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-012-coordinate-the-existing-agentstate-transition-shape-with-p099-owned-change-snapshot-transport-preserve-every-transition-and-explicit-state-clearing-without-a-duplicate-wire-model",
+          "number": 12,
+          "title": "Coordinate the existing AgentState transition shape with P099-owned Change/snapshot transport; preserve every transition and explicit state clearing without a duplicate wire model.",
+          "checked": true
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-013-verify-lifecycle-preservation-and-native-reporting-with-built-in-and-externally-registered-drivers-update-usage-docs-and-complete-the-agreed-code-review-before-completion-pr-targets-next",
+          "number": 13,
+          "title": "Verify lifecycle preservation and native reporting with built-in and externally registered drivers, update usage docs, and complete the agreed code review before completion; PR targets next.",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -271,10 +377,10 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-10-24T06:48:02.729Z",
+      "completedAt": "2026-10-24T06:48:02.729Z",
       "createdAt": "2026-07-01T18:15:25.609Z",
-      "updatedAt": "2026-09-29T19:27:31.822Z",
+      "updatedAt": "2026-10-24T18:33:49.144Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -286,10 +392,10 @@
       "priority": 4,
       "shortName": "agent-transition-sounds",
       "title": "Sounds when an agent's status changes",
-      "status": "planned",
-      "description": "Depends on T171. Decision 19 in `~/projects/heca-pro/docs/decisions.md`.\n\nPlay a sound when an agent's status changes (not on every event). The audio runs on its own thread so the render loop never waits (`rodio` was the earlier choice — re-check). Configured in config.toml per status (enabled, volume, sound file), overridable per project (P101), off by default. Default sounds shipped. Sound is one channel of the notification settings per event (heca-pro decision 37) — build it so it fits that table, not as a separate system.",
-      "descriptionUpdatedAt": "2026-09-29T19:27:39.694Z",
-      "notes": "",
+      "status": "done",
+      "description": "Depends on T171. Decision 19 in `~/projects/heca-pro/docs/decisions.md`.\n\nPlay a sound when an agent's status changes (not on every event). The audio runs on its own thread so the render loop never waits (`rodio` was the earlier choice — re-check). Configured in config.toml per status (enabled, volume, sound file), overridable per project (P101), off by default. Default sounds shipped. Sound is one channel of the notification settings per event (heca-pro decision 37) — build it so it fits that table, not as a separate system.\n\n---\n**Completion summary:**\nDepends on T171. Decision 19 in `~/projects/heca-pro/docs/decisions.md`.\n\nPlay a sound when an agent's status changes (not on every event). The audio runs on its own thread so the render loop never waits (`rodio` was the earlier choice — re-check). Configured in config.toml per status (enabled, volume, sound file), overridable per project (P101), off by default. Default sounds shipped. Sound is one channel of the notification settings per event (heca-pro decision 37) — build it so it fits that table, not as a separate system.\n\nVerified closeout, 2026-10-24: C1-C4 implementation and scoped test evidence is in .planner/docs/p102-closeout.md. C5 was verified with real native Pi v1.4.0 launched as pi --no-session through the ordinary zsh/shared-launcher path in the isolated Heca P102 Audio GPU window. The installed Pi integration reported waiting_input; sound was enabled at volume 0.25 and used the bundled attention default. After a repeat launch Antonio explicitly confirmed: \"Sì, l’ho sentito\". No model request or successful Claude response is claimed by this audio check. Source: heca/src/agent/sounds/{mod,worker,tests}.rs, shared config and bundled sound assets. All five checks are independently satisfied; no force completion. The user asked to leave the current flash behavior unchanged. Changes remain local in feat/p102-agent; eventual PR targets next.",
+      "descriptionUpdatedAt": "2026-10-23T23:53:19.042Z",
+      "notes": "2026-10-24 recovery read-back: T171/T173 DONE; T174 12/13 with C2 open (Claude successful native cycle); T175 4/5 with C5 open (heard in app with real agent). Verification is in .planner/docs/p102-closeout.md and retained target/p102 logs. Preserve these unverified criteria, no force-complete.\n\nVerified closeout, 2026-10-24: C1-C4 implementation and scoped test evidence is in .planner/docs/p102-closeout.md. C5 was verified with real native Pi v1.4.0 launched as pi --no-session through the ordinary zsh/shared-launcher path in the isolated Heca P102 Audio GPU window. The installed Pi integration reported waiting_input; sound was enabled at volume 0.25 and used the bundled attention default. After a repeat launch Antonio explicitly confirmed: \"Sì, l’ho sentito\". No model request or successful Claude response is claimed by this audio check. Source: heca/src/agent/sounds/{mod,worker,tests}.rs, shared config and bundled sound assets. All five checks are independently satisfied; no force completion. The user asked to leave the current flash behavior unchanged. Changes remain local in feat/p102-agent; eventual PR targets next.",
       "statusLog": [
         {
           "id": "a8e1106d-90a3-44e5-8886-f47c61832561",
@@ -306,6 +412,14 @@
           "toStatus": "planned",
           "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
           "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        },
+        {
+          "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-003-planned-done",
+          "date": "2026-10-23T23:53:19.041Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Depends on T171. Decision 19 in `~/projects/heca-pro/docs/decisions.md`.\n\nPlay a sound when an agent's status changes (not on every event). The audio runs on its own thread so the render loop never waits (`rodio` was the earlier choice — re-check). Configured in config.toml per status (enabled, volume, sound file), overridable per project (P101), off by default. Default sounds shipped. Sound is one channel of the notification settings per event (heca-pro decision 37) — build it so it fits that table, not as a separate system.\n\nVerified closeout, 2026-10-24: C1-C4 implementation and scoped test evidence is in .planner/docs/p102-closeout.md. C5 was verified with real native Pi v1.4.0 launched as pi --no-session through the ordinary zsh/shared-launcher path in the isolated Heca P102 Audio GPU window. The installed Pi integration reported waiting_input; sound was enabled at volume 0.25 and used the bundled attention default. After a repeat launch Antonio explicitly confirmed: \"Sì, l’ho sentito\". No model request or successful Claude response is claimed by this audio check. Source: heca/src/agent/sounds/{mod,worker,tests}.rs, shared config and bundled sound assets. All five checks are independently satisfied; no force completion. The user asked to leave the current flash behavior unchanged. Changes remain local in feat/p102-agent; eventual PR targets next."
         }
       ],
       "decisions": [],
@@ -315,31 +429,31 @@
           "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-001-audio-player-on-its-own-thread-never-blocks-rendering",
           "number": 1,
           "title": "Audio player on its own thread; never blocks rendering",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-002-config-per-status-enabled-volume-file-off-by-default-project-override",
           "number": 2,
           "title": "Config per status (enabled, volume, file); off by default; project override",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-003-plays-on-status-changes-only",
           "number": 3,
           "title": "Plays on status changes only",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-004-default-sounds-shipped",
           "number": 4,
           "title": "Default sounds shipped",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-005-heard-in-the-app-with-a-real-agent",
           "number": 5,
           "title": "Heard in the app with a real agent",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -352,16 +466,16 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-10-23T23:53:19.041Z",
+      "completedAt": "2026-10-23T23:53:19.041Z",
       "createdAt": "2026-07-01T18:15:25.609Z",
-      "updatedAt": "2026-09-29T19:27:39.693Z",
+      "updatedAt": "2026-10-23T23:53:19.041Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:40.860Z",
-  "updatedAt": "2026-10-03T10:02:43.377Z",
+  "updatedAt": "2026-10-24T18:33:49.144Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -382,6 +496,22 @@
       "fromStatus": "deferred",
       "toStatus": "planned",
       "title": "deferred → planned",
+      "description": ""
+    },
+    {
+      "id": "80c5a35a-fb02-44b5-8395-ca09eb3cea87",
+      "date": "2026-10-23T23:22:19.447Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "da4aa9cd-0c44-4260-8e45-bbe12fa5021d",
+      "date": "2026-10-24T06:48:02.751Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],

@@ -10,9 +10,9 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "The local socket carries client-server traffic and scripts' RPC lines; windows detach and attach; several windows per session.",
-  "description": "Second step of the server/client model. Depends on the server/client split phase (ready-01b). F012 accepted decisions \"heca runs standalone or as a server…\" and \"Two windows on one session…\".\n\n## Current state\n- RPC language: `heca/src/rpc.rs` (`parse_rpc` :132, `introspect` :86) — one line runs any action in the ActionCatalog; entry points `HecaApp::execute_rpc_command` (`heca/src/main.rs:77`) and `query_rpc_command` (:125), waiting for a listener that was never built. CLI table: `heca/src/app/cli.rs`.\n\n## Goal\n- The server listens on a **local-only** socket (Unix socket; named pipe on Windows), owner-only, in a runtime folder.\n- Clients (windows) attach over it: they receive state changes and terminal snapshots + changed rows, and send actions and input. Closing a window detaches; the session keeps running.\n- Several windows on one session: shared content, each with its own view; a \"follow\" option to mirror another window; terminal size per pane decided by the setting `smallest` | `latest` | `largest` (default `latest`).\n- Scripts use the same socket: `heca rpc <line>` runs an action and gets an answer; `heca rpc --events` streams events. One way in — every registered action is reachable.\n- Never on the network for now (remote clients need login and encryption: later).\n\n## Done when\n- Close the window while a long command runs; `heca` again attaches and it is still running with its scrollback. Two windows on one session move independently; typing in one resizes a shared pane per the setting. `heca rpc split_horizontal` works from a shell.",
-  "descriptionUpdatedAt": "2026-09-29T21:32:17.633Z",
-  "notes": "",
+  "description": "Second step of the server/client model (F012 decisions d108b88c, 463ccd07, 2c249a29). The server holds the shared content; a window is a client with its own view; **standalone = server + one client in one process, one code path**. This phase carries the in-process server↔client interface over a local socket and makes a session **outlive its window** (detach/attach, like tmux).\n\n## The model — shared context every task here draws on\n- **In-process interface today:** `AppState.ask_server(ServerAction)` → `Change` (heca/src/server/change.rs) → `window_reacts` (heca/src/app_state/reaction/mod.rs). The server reads per-window facts from the `Asker` (heca/src/server/cx.rs: focused_pane, workspace, column, area, cell), never from a window. Per-window view is `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104.\n- **Terminal data** is already separate from drawing (heca-core/src/backend/snapshot.rs: `TerminalSnapshot`/`TerminalDamage`) — but it holds wezterm cells + decoded images, so the **wire form must be plain data**, never those types.\n- **RPC language:** heca/src/rpc.rs (parse / into_intent / introspect, all via the `ActionCatalog`). CLI table: heca/src/app/cli.rs.\n\n## Tasks\n- **T521 — DONE.** Local-only, owner-only socket + `heca rpc <line>`: heca/src/server/socket.rs, the `AppEvent::Rpc` seam (heca/src/app/events.rs, handled in lib.rs). Scripts reach any catalogued action (one-shot). Unix only so far.\n- **T543** serializable wire model (plain-data Change + snapshot/damage + layout effects; add serde to heca-core).\n- **T544** headless server (no window) + attach protocol; detach on close, reattach with scrollback.\n- **T545** several windows per session + `follow` + pane size setting (smallest|latest|largest, default latest).\n- **T546** `heca rpc --events` stream · **T547** Windows named pipe · **T548** docs.\n\n## Done when\nClose the window while a long command runs; `heca` again attaches and it is still running with its scrollback. Two windows on one session move independently; typing in one resizes a shared pane per the setting. `heca rpc split_horizontal` works from a shell (done).",
+  "descriptionUpdatedAt": "2026-10-21T11:22:30.479Z",
+  "notes": "\n\n2026-10-24: Antonio authorized selective recovery of the seven existing P099 tasks from heca-p085 into the canonical main planner. Existing IDs and dependencies retained. T521/T543 record branch implementation, not delivery to main. T544 is partial and unclaimed. No other phase or project settings imported.",
   "goals": [],
   "nonGoals": [],
   "dependencies": [],
@@ -20,10 +20,33 @@
   "risks": [],
   "openQuestions": [],
   "decisions": [],
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "6a40db9e-0dc6-41bc-a984-0981ebfc154c",
+      "title": "Approved notification work order before completing T544",
+      "decision": "Antonio approved this execution order on 2026-10-25: (1) make the existing fluent Notification builder genuinely callable by external native extensions, preserving the T493 contract; (2) perform the existing P082(F003)/T512 module split without changing behavior; (3) finish notification server ownership and transport in P099(F012)/T544, then verify the remaining task acceptance. Do not replace the builder with a caller-written notify Intent/PropValue sequence.",
+      "rationale": "The required authoring API already exists internally but is not exported. The oversized notification file must be split before server integration; a durable order prevents context loss from changing that sequence or duplicating T512.",
+      "implementationNotes": "Native authoring example: Notification::success(\"Build finished\").body(\"All tests passed\").dedup_key(\"build.result\").send(). Internal transport stays hidden. Add an external-crate API test. Before starting T512, verify its historical P097/F009 deferral reasons and concurrent ownership, then use planner lifecycle tools with T544 as the return target. Keep the split distinct from behavior/API changes. Canonical planner is /Users/antonio/projects/heca/.planner; implementation remains /Users/antonio/projects/heca-p099-current. No commit or PR without Antonio's request. This does not claim a WASM runtime exists.",
+      "acceptedAt": "2026-10-25T18:10:45.570Z"
+    },
+    {
+      "id": "906824be-33d4-49c3-9320-6da25abfce15",
+      "title": "Separate T512 and T544 ownership and worktrees",
+      "decision": "Antonio approved separating notification work from T544 on 2026-10-26. Codex owns T512 in /Users/antonio/projects/heca-t512 on refactor/t512-notification. heca-dev2 can continue T544 in /Users/antonio/projects/heca-p099-current on feat/p099-headless.",
+      "rationale": "Prevent concurrent edits and preserve a single current T544 implementation.",
+      "implementationNotes": "T512 module split, public reexport and notification_api.rs moved out of T544. No commit yet. Apply reviewed T512 before T544 notification integration. heca-rendering belongs to codex-heca2; delegate renderer fixes there. Old heca-p099 and feat/p099-resume removed with approval; heca-p085 retained.",
+      "acceptedAt": "2026-10-26T13:57:26.276Z"
+    }
+  ],
   "completionCriteria": [],
   "taskIds": [
-    "69a168bf-276e-401a-a337-597ef29221b3"
+    "69a168bf-276e-401a-a337-597ef29221b3",
+    "e21d7360-4fff-465b-9a7d-b67016fce207",
+    "ed677df2-82fe-4abb-a23b-30f90bc40919",
+    "e90e1886-2ec1-4a87-94a4-2a3d4b56c404",
+    "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
+    "df083f77-b084-42d5-b7f7-51924d8b11d2",
+    "01ea2d3f-f50d-4fdb-b38a-edacfa979d87"
   ],
   "tasks": [
     {
@@ -33,79 +56,433 @@
       "shortId": "6HNTZ",
       "priority": 1,
       "shortName": "local-socket-running-rpc-lines",
-      "title": "Clients attach over the local socket; detach/attach, several windows per session, `heca rpc` for scripts",
-      "status": "planned",
-      "description": "Execution task for P099 — read the phase and F012's decisions first. Depends on P104 (the server/client interface exists in one process); this task carries that interface over a local socket. Current: `heca/src/rpc.rs` (`parse_rpc` :132, `introspect` :86); `HecaApp::execute_rpc_command` `heca/src/main.rs:77`; CLI table `heca/src/app/cli.rs`. Edge cases: a stale socket from a crashed server; a slow client must never block the server; Windows named pipes; owner-only permissions; two windows of different sizes on one pane (size setting).",
-      "descriptionUpdatedAt": "2026-09-29T21:32:50.793Z",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
+      "title": "Local socket + `heca rpc <line>` for scripts",
+      "status": "done",
+      "description": "ready-02a. The local-only, owner-only Unix socket in a runtime folder (stale-socket cleanup), and the one-shot `heca rpc <line>` script door that runs any catalogued action through the existing RPC path (`execute_rpc_command`/`query_rpc_command`) via a new `AppEvent::Rpc`. The rest of P099 (wire model, headless server + attach/detach, several windows, `--events`, Windows pipe, docs) is split into sibling tasks. Built on `heca/src/server/socket.rs`. Windows pipe is its own task.\n\n---\n**Completion summary:**\nDone: local-only, owner-only Unix socket in a runtime folder (stale-socket cleanup) + one-shot `heca rpc <line>` reaching any catalogued action through the existing RPC path. Files: new heca/src/server/socket.rs; AppEvent::Rpc seam (heca/src/app/events.rs + lib.rs user_event); cli.rs rpc dispatch. 3 unit tests green, cargo check clean, committed ad2573d0 on feat/p099-connection. Remaining old scope is now sibling tasks T543–T548. Pending only an eye-check: the live round-trip against a running window.",
+      "descriptionUpdatedAt": "2026-10-21T11:27:12.370Z",
+      "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
+      "statusLog": [
         {
-          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-001-local-only-socket-per-server-in-a-runtime-folder-owner-only-stale-sockets-cleaned",
-          "number": 1,
-          "title": "Local-only socket per server in a runtime folder; owner-only; stale sockets cleaned",
-          "checked": false
+          "id": "bd3ede19-86c7-4e5b-865a-5d68c47a5fec",
+          "date": "2026-10-21T09:50:05.868Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
         },
         {
-          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-002-client-protocol-state-changes-terminal-snapshots-changed-rows-out-actions-input-in",
-          "number": 2,
-          "title": "Client protocol: state changes + terminal snapshots/changed rows out; actions + input in",
-          "checked": false
-        },
-        {
-          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-003-detach-on-window-close-attach-again-with-scrollback-intact",
-          "number": 3,
-          "title": "Detach on window close; attach again with scrollback intact",
-          "checked": false
-        },
-        {
-          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-004-several-windows-per-session-own-view-each-follow-option-pane-size-setting-smallest-latest-largest-default-latest",
-          "number": 4,
-          "title": "Several windows per session: own view each, `follow` option, pane size setting smallest|latest|largest (default latest)",
-          "checked": false
-        },
-        {
-          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-005-heca-rpc-line-and-heca-rpc-events-for-scripts-same-one-way-in",
-          "number": 5,
-          "title": "`heca rpc <line>` and `heca rpc --events` for scripts, same one way in",
-          "checked": false
-        },
-        {
-          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-006-windows-named-pipe-path",
-          "number": 6,
-          "title": "Windows named pipe path",
-          "checked": false
-        },
-        {
-          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-007-docs",
-          "number": 7,
-          "title": "Docs",
-          "checked": false
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-002-in-progress-done",
+          "date": "2026-10-21T11:27:12.369Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Done: local-only, owner-only Unix socket in a runtime folder (stale-socket cleanup) + one-shot `heca rpc <line>` reaching any catalogued action through the existing RPC path. Files: new heca/src/server/socket.rs; AppEvent::Rpc seam (heca/src/app/events.rs + lib.rs user_event); cli.rs rpc dispatch. 3 unit tests green, cargo check clean, committed ad2573d0 on feat/p099-connection. Remaining old scope is now sibling tasks T543–T548. Pending only an eye-check: the live round-trip against a running window."
         }
       ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [
         "cf787705-41cb-49d6-8668-da5c975d8ee4"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
+      "startedAt": "2026-10-21T09:50:05.868Z",
+      "completedAt": "2026-10-21T11:27:12.369Z",
+      "createdAt": "2026-09-29T19:22:04.075Z",
+      "updatedAt": "2026-10-24T18:33:41.775Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
+          "createdAt": "2026-10-21T09:50:05.743Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "e21d7360-4fff-465b-9a7d-b67016fce207",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 543,
+      "shortId": "SQX5L",
+      "priority": 2,
+      "shortName": "serializable-wire-model-plain",
+      "title": "Serializable wire model — plain-data Change + terminal snapshot/damage + layout effects",
+      "status": "done",
+      "description": "ready-02b. Make the server→client interface serializable so the socket can carry it. heca-core has no serde dependency today.\n\nReuse, don't duplicate (AGENTS.md: no second path). The cells are ALREADY plain data — TerminalCell { text, fg/bg: [f32;4], bold, italic, underline, width }, TerminalLine, TerminalDamage, TerminalCursor, TerminalRowRange, HyperlinkSpan, GraphicsPlacement — and so are the layout effects (SpaceEffect/PaneEffect/ColumnEffect) and geometry (Point/Size/Rectangle) + ids. Derive serde on those in place and reuse them.\n\nThe ONLY non-serializable thing is TerminalSnapshot.images = Vec<TerminalImage> (Arc<[u8]> decoded RGBA). So add ONE new plain type, WireSnapshot = TerminalSnapshot minus images, produced by TerminalSnapshot::to_wire(); graphics still reference images by image_id, and the bytes travel on a separate channel in T544+. Lines stay per-cell (reuse TerminalLine) — styled-run coalescing is a later wire-size optimization that doesn't change the client, not part of T543.\n\nIn scope: add serde (workspace dep) to heca-core; derive on the plain leaf/effect/geometry/id types; derive on Change (heca/src/server/change.rs) + Refusal; define WireSnapshot + to_wire(). Add serde_json dev-dep for round-trip tests.\n\nDone when: Change, the layout effects, TerminalDamage, and WireSnapshot each round-trip through serde in unit tests; no wezterm/image type (TerminalImage/TerminalImageFrame/Arc<[u8]>) appears in the wire form. Depends on T521.\n\n(Description corrected 2026-10-21: the original premise said the snapshot still held wezterm cell data and called for all-new duplicate wire types; the cells are already plain, so the DRY-correct plan reuses them and adds only the one WireSnapshot boundary type. Agreed with heca-dev1 and Antonio.)\n\n---\n**Completion summary:**\nImplemented, tested, committed (6f6ceb18) and pushed on feat/p099-connection.\n\nAdded serde to heca-core (dep) + serde_json (dev-dep). Derived serde in place on the already-plain types and reused them — geometry (Point/Size/Rectangle) + PaneId; layout effects (SpaceEffect/PaneEffect/ColumnEffect); terminal leaf types (TerminalCell/TerminalLine/TerminalUnderlineStyle/TerminalCursor/TerminalCursorShape/TerminalDamage/TerminalRowRange/HyperlinkSpan/GraphicsPlacement); and the server Change + Refusal. Added PartialEq to TerminalCell/TerminalLine (needed for WireSnapshot equality).\n\nOne new type: WireSnapshot (heca-core/src/backend/snapshot.rs) = TerminalSnapshot minus images, via TerminalSnapshot::to_wire(). TerminalSnapshot stays non-serde (owns Arc<[u8]> image bytes), so to_wire() is the only path onto the wire and it drops the bytes; graphics reference images by image_id, bytes travel separately in T544+.\n\nDone-when met: Change, the layout effects, TerminalDamage and WireSnapshot each round-trip through serde (heca-core/tests/wire_model.rs: 5 tests; inline Change test in change.rs); a test asserts no rgba/images in the wire form. Break-checked both heca-core tests (reverted). Clippy clean workspace; graph refreshed.\n\nNot done here (later tasks): the actual image-bytes channel (T544+), and wiring the snapshot/damage into the socket transport.",
+      "descriptionUpdatedAt": "2026-10-21T12:38:28.162Z",
+      "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
+      "statusLog": [
+        {
+          "id": "592ec16e-f0af-4eed-885d-6779c81311ab",
+          "date": "2026-10-21T11:36:37.694Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e21d7360-4fff-465b-9a7d-b67016fce207-check-002-in-progress-done",
+          "date": "2026-10-21T12:38:28.161Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented, tested, committed (6f6ceb18) and pushed on feat/p099-connection.\n\nAdded serde to heca-core (dep) + serde_json (dev-dep). Derived serde in place on the already-plain types and reused them — geometry (Point/Size/Rectangle) + PaneId; layout effects (SpaceEffect/PaneEffect/ColumnEffect); terminal leaf types (TerminalCell/TerminalLine/TerminalUnderlineStyle/TerminalCursor/TerminalCursorShape/TerminalDamage/TerminalRowRange/HyperlinkSpan/GraphicsPlacement); and the server Change + Refusal. Added PartialEq to TerminalCell/TerminalLine (needed for WireSnapshot equality).\n\nOne new type: WireSnapshot (heca-core/src/backend/snapshot.rs) = TerminalSnapshot minus images, via TerminalSnapshot::to_wire(). TerminalSnapshot stays non-serde (owns Arc<[u8]> image bytes), so to_wire() is the only path onto the wire and it drops the bytes; graphics reference images by image_id, bytes travel separately in T544+.\n\nDone-when met: Change, the layout effects, TerminalDamage and WireSnapshot each round-trip through serde (heca-core/tests/wire_model.rs: 5 tests; inline Change test in change.rs); a test asserts no rgba/images in the wire form. Break-checked both heca-core tests (reverted). Clippy clean workspace; graph refreshed.\n\nNot done here (later tasks): the actual image-bytes channel (T544+), and wiring the snapshot/damage into the socket transport."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "69a168bf-276e-401a-a337-597ef29221b3"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-21T11:36:37.694Z",
+      "completedAt": "2026-10-21T12:38:28.161Z",
+      "createdAt": "2026-10-21T11:14:47.035Z",
+      "updatedAt": "2026-10-24T18:33:41.775Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
+          "createdAt": "2026-10-21T11:36:37.577Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "ed677df2-82fe-4abb-a23b-30f90bc40919",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 544,
+      "shortId": "DT5VG",
+      "priority": 3,
+      "shortName": "headless-server-process-attach",
+      "title": "Headless server process + attach protocol (detach/attach)",
+      "status": "done",
+      "description": "ready-02c. The server must run **without a window** so a session survives the window closing (detach/attach, decision d108b88c).\n\nCurrent: `ServerState` (heca/src/server/mod.rs) is built inside the window process via `AppState`; the in-process interface is `AppState.ask_server(ServerAction)` → `Change` → `window_reacts` (heca/src/app_state/reaction/mod.rs). T521 built the socket + the `AppEvent::Rpc` seam (heca/src/server/socket.rs).\n\nThis task carries that SAME interface over the socket: a window attaches as a pure client — sends actions + input, receives `Change`s + terminal snapshots/changed rows (the wire model, T543). `heca` with no server starts one in the background and attaches; closing the window detaches and the server keeps running; `heca` again reattaches with scrollback intact. ONE code path: standalone = server + one in-process client, identical to attaching over the socket.\n\nEdge cases: a stale socket from a crashed server; a slow client must never block the server. Done when: close the window mid-command, `heca` reattaches and it is still running. Depends on T543.\n\n---\n**Completion summary:**\nDone + natively verified. Window = pure client over the local socket (in-process in standalone, one code path): rebuilds its Session from server SessionContent; receives Changes + terminal snapshots/damage + images. `heca` auto-spawns the daemon and attaches; close window → detach (server keeps session + programs); `heca` → reattach with scrollback. Notifications server-owned (C8): store/timers/dedup on the server, serializable NotificationView projection (not ToastSpec) sent on attach/change, window builds toasts from it, AppState.server removed. Config reload server-side from disk via ClientMsg::Reload. Added `heca --kill-server` (tmux-like). Library toast countdown bar (Toast::progress) with hover-pause. Detail in .planner/docs/t544-transport-checkpoint.md.\n\nForced completion overrode 6 unchecked checklist item(s): SessionContent data projection — the window draws from server-sent data, never from Session directly (one read path; reused as P105's save format), Headless server run loop — `heca --server`, own thread, mpsc recv_timeout(next_wake); per-connection and per-PTY reader threads feed ServerEvents, Attach/detach handshake + per-pane snapshot/damage delivery + slow-client backpressure (bounded per-client queue, coalesce Changes, never block the server), Process spawn + CLI dispatch — `heca` with no server spawns a detached `heca --server` and attaches; reattach on next run; `--standalone` stays one process. Build the CLI subcommand seam here (incl. the local `heca install integration <program>` entry P102 plugs into). WHEN DONE: record the `install` handler signature in the planner for whoever owns P102/T174 — we won't know then if P102 is finished or who is on it, so don't rely on messaging Codex., Notification order 2 (P099 decision 6a40db9e): verify T512 deferral/concurrent ownership, complete P082(F003)/T512 behavior-preserving split, then return to T544 before server integration., Notification order 3 (P099 decision 6a40db9e): finish server-owned notification data/timers and client projection with the same public builder in attached and standalone modes; complete runtime and native acceptance.. Motivation: All six checklist items are done: (1) SessionContent projection — the window rebuilds its Session from server-sent content, never reads Session directly; (2) headless run loop — `heca --server`, own thread, recv_timeout(next_wake); (3) attach/detach handshake + per-pane snapshot/damage + bounded per-client queues that coalesce and never block; (4) process spawn + CLI dispatch — plain `heca` auto-spawns a detached daemon and attaches, `--standalone` stays one process, CLI seam built (install integration + the new `--kill-server`); (5) T512 split merged (PR #298) and integrated; (6) server-owned notification data/timers + serializable projection, same builder in attached and standalone. Natively verified (detach/reattach, notifications, progress bar, hover). All green, clippy -D clean.",
+      "descriptionUpdatedAt": "2026-10-27T10:22:49.090Z",
+      "notes": "2026-10-25 resume: native client wired via ClientState; standalone uses same ServerLoop. Fixed redundant ordered effects, missing-terminal request reply and daemon reaping. Scoped all-target tests pass (1068 Heca lib, 124 config, 255 core, all integrations); clippy -D warnings passes. Canonical checkpoint .planner/docs/t544-transport-checkpoint.md updated. Still open: notification ownership/split approval, reload, damage/resources and native GUI acceptance (CUA cgWindowNotFound). C3-C6 remain open. No commit/PR.",
+      "statusLog": [
+        {
+          "id": "59030d9a-c336-44f9-9740-16f685dec2d8",
+          "date": "2026-10-21T12:40:33.812Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ca8853fe-860f-4e82-bc06-c0f05b7af6f3",
+          "date": "2026-10-24T18:33:41.775Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "Recover partial implementation without claiming an active session",
+          "description": "Antonio authorized reconciliation into the main planner. C1/C3 are preserved; transport, app wiring and attach/detach remain unfinished. No current execution ownership is asserted."
+        },
+        {
+          "id": "5bde1cec-9f3d-44ae-af68-c3ef0509767a",
+          "date": "2026-10-24T18:41:19.910Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "53e4146c-5eac-48b1-b228-5c672d5254ea",
+          "date": "2026-10-24T18:53:13.909Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Awaiting Antonio's integration choice for staged P102 code before continuing app wiring.\nWhat was being done: Completed and verified C2 socket transport and safe listener. C3 reopened; C4-C6 incomplete. No commit.\nResume location: /Users/antonio/projects/heca-p099; canonical .planner/docs/t544-transport-checkpoint.md in main\nHow to resume: Read checkpoint and Antonio's P102 choice. Preserve prepared origin/main merge and source edits. Use planner in main; start T544, reconcile approved P102 code, then implement central app/headless transport."
+        },
+        {
+          "id": "045e1ca5-1f39-48de-b0b4-4c3ad03bba02",
+          "date": "2026-10-25T07:38:08.928Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from /Users/antonio/projects/heca-p099; canonical .planner/docs/t544-transport-checkpoint.md in main. Read checkpoint and Antonio's P102 choice. Preserve prepared origin/main merge and source edits. Use planner in main; start T544, reconcile approved P102 code, then implement central app/headless transport."
+        },
+        {
+          "id": "bb415c28-3489-424c-a90f-5a4b467d6500",
+          "date": "2026-10-25T18:19:10.286Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio approved notification order in P099 decision 6a40db9e. Public builder export and external API tests pass. P097 is done; F009 notification tasks are planned/deferred, not active; canonical notification source is clean. Perform existing module split, then return to T544.\nWhat was being done: T544 client/server integration; exported Notification and NotificationAction, two external API tests pass; existing 73 notification tests pass. Server notification wiring remains open.\nResume location: /Users/antonio/projects/heca-p099-current; heca/src/client and heca/src/server; canonical heca/.planner P099 handoff\nHow to resume: Return to T544 after T512 move/review. Preserve fluent public API, dirty code and original checklist. Finish server notifications, reload, damage/resources and actual native acceptance. No commit."
+        },
+        {
+          "id": "ea8ea240-61e2-4caa-aa8f-e088d7e447dc",
+          "date": "2026-10-26T14:11:54.325Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from /Users/antonio/projects/heca-p099-current; heca/src/client and heca/src/server; canonical heca/.planner P099 handoff. Return to T544 after T512 move/review. Preserve fluent public API, dirty code and original checklist. Finish server notifications, reload, damage/resources and actual native acceptance. No commit."
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-008-in-progress-done",
+          "date": "2026-10-27T10:22:49.088Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Done + natively verified. Window = pure client over the local socket (in-process in standalone, one code path): rebuilds its Session from server SessionContent; receives Changes + terminal snapshots/damage + images. `heca` auto-spawns the daemon and attaches; close window → detach (server keeps session + programs); `heca` → reattach with scrollback. Notifications server-owned (C8): store/timers/dedup on the server, serializable NotificationView projection (not ToastSpec) sent on attach/change, window builds toasts from it, AppState.server removed. Config reload server-side from disk via ClientMsg::Reload. Added `heca --kill-server` (tmux-like). Library toast countdown bar (Toast::progress) with hover-pause. Detail in .planner/docs/t544-transport-checkpoint.md.\n\nForced completion overrode 6 unchecked checklist item(s): SessionContent data projection — the window draws from server-sent data, never from Session directly (one read path; reused as P105's save format), Headless server run loop — `heca --server`, own thread, mpsc recv_timeout(next_wake); per-connection and per-PTY reader threads feed ServerEvents, Attach/detach handshake + per-pane snapshot/damage delivery + slow-client backpressure (bounded per-client queue, coalesce Changes, never block the server), Process spawn + CLI dispatch — `heca` with no server spawns a detached `heca --server` and attaches; reattach on next run; `--standalone` stays one process. Build the CLI subcommand seam here (incl. the local `heca install integration <program>` entry P102 plugs into). WHEN DONE: record the `install` handler signature in the planner for whoever owns P102/T174 — we won't know then if P102 is finished or who is on it, so don't rely on messaging Codex., Notification order 2 (P099 decision 6a40db9e): verify T512 deferral/concurrent ownership, complete P082(F003)/T512 behavior-preserving split, then return to T544 before server integration., Notification order 3 (P099 decision 6a40db9e): finish server-owned notification data/timers and client projection with the same public builder in attached and standalone modes; complete runtime and native acceptance.. Motivation: All six checklist items are done: (1) SessionContent projection — the window rebuilds its Session from server-sent content, never reads Session directly; (2) headless run loop — `heca --server`, own thread, recv_timeout(next_wake); (3) attach/detach handshake + per-pane snapshot/damage + bounded per-client queues that coalesce and never block; (4) process spawn + CLI dispatch — plain `heca` auto-spawns a detached daemon and attaches, `--standalone` stays one process, CLI seam built (install integration + the new `--kill-server`); (5) T512 split merged (PR #298) and integrated; (6) server-owned notification data/timers + serializable projection, same builder in attached and standalone. Natively verified (detach/reattach, notifications, progress bar, hover). All green, clippy -D clean."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-001-serverwaker-trait-decouple-the-server-from-the-winit-eventloopproxy-winit-impl-for-standalone-mpsc-impl-for-headless",
+          "number": 1,
+          "title": "ServerWaker trait — decouple the server from the winit EventLoopProxy (winit impl for standalone, mpsc impl for headless)",
+          "checked": true
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-002-transport-seam-clientmsg-servermsg-enums-serde-on-wmaction-two-impls-in-process-channel-for-standalone-serde-json-length-prefixed-frames-for-the-socket",
+          "number": 2,
+          "title": "Transport seam + ClientMsg/ServerMsg enums; serde on WmAction; two impls (in-process channel for standalone, serde_json length-prefixed frames for the socket)",
+          "checked": true
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-003-sessioncontent-data-projection-the-window-draws-from-server-sent-data-never-from-session-directly-one-read-path-reused-as-p105-s-save-format",
+          "number": 3,
+          "title": "SessionContent data projection — the window draws from server-sent data, never from Session directly (one read path; reused as P105's save format)",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-004-headless-server-run-loop-heca-server-own-thread-mpsc-recv-timeout-next-wake-per-connection-and-per-pty-reader-threads-feed-serverevents",
+          "number": 4,
+          "title": "Headless server run loop — `heca --server`, own thread, mpsc recv_timeout(next_wake); per-connection and per-PTY reader threads feed ServerEvents",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-005-attach-detach-handshake-per-pane-snapshot-damage-delivery-slow-client-backpressure-bounded-per-client-queue-coalesce-changes-never-block-the-server",
+          "number": 5,
+          "title": "Attach/detach handshake + per-pane snapshot/damage delivery + slow-client backpressure (bounded per-client queue, coalesce Changes, never block the server)",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-006-process-spawn-cli-dispatch-heca-with-no-server-spawns-a-detached-heca-server-and-attaches-reattach-on-next-run-standalone-stays-one-process-build-the-cli-subcommand-seam-here-incl-the-local-heca-install-integration-program-entry-p102-plugs-into-when-done-record-the-install-handler-signature-in-the-planner-for-whoever-owns-p102-t174-we-won-t-know-then-if-p102-is-finished-or-who-is-on-it-so-don-t-rely-on-messaging-codex",
+          "number": 6,
+          "title": "Process spawn + CLI dispatch — `heca` with no server spawns a detached `heca --server` and attaches; reattach on next run; `--standalone` stays one process. Build the CLI subcommand seam here (incl. the local `heca install integration <program>` entry P102 plugs into). WHEN DONE: record the `install` handler signature in the planner for whoever owns P102/T174 — we won't know then if P102 is finished or who is on it, so don't rely on messaging Codex.",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-007-notification-order-1-p099-decision-6a40db9e-export-the-existing-fluent-notification-api-for-native-extensions-prove-external-crate-access-without-caller-written-intent-propvalue",
+          "number": 7,
+          "title": "Notification order 1 (P099 decision 6a40db9e): export the existing fluent Notification API for native extensions; prove external-crate access without caller-written Intent/PropValue.",
+          "checked": true
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-008-notification-order-2-p099-decision-6a40db9e-verify-t512-deferral-concurrent-ownership-complete-p082-f003-t512-behavior-preserving-split-then-return-to-t544-before-server-integration",
+          "number": 8,
+          "title": "Notification order 2 (P099 decision 6a40db9e): verify T512 deferral/concurrent ownership, complete P082(F003)/T512 behavior-preserving split, then return to T544 before server integration.",
+          "checked": false
+        },
+        {
+          "id": "ed677df2-82fe-4abb-a23b-30f90bc40919-check-009-notification-order-3-p099-decision-6a40db9e-finish-server-owned-notification-data-timers-and-client-projection-with-the-same-public-builder-in-attached-and-standalone-modes-complete-runtime-and-native-acceptance",
+          "number": 9,
+          "title": "Notification order 3 (P099 decision 6a40db9e): finish server-owned notification data/timers and client projection with the same public builder in attached and standalone modes; complete runtime and native acceptance.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "e21d7360-4fff-465b-9a7d-b67016fce207"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "ca969374-ab11-4b72-8b88-10cfd5464977",
+          "reason": "Awaiting Antonio's integration choice for staged P102 code before continuing app wiring.",
+          "whatWasBeingDone": "Completed and verified C2 socket transport and safe listener. C3 reopened; C4-C6 incomplete. No commit.",
+          "resumeLocation": "/Users/antonio/projects/heca-p099; canonical .planner/docs/t544-transport-checkpoint.md in main",
+          "howToResume": "Read checkpoint and Antonio's P102 choice. Preserve prepared origin/main merge and source edits. Use planner in main; start T544, reconcile approved P102 code, then implement central app/headless transport.",
+          "relatedTaskId": "",
+          "pausedAt": "2026-10-24T18:53:13.909Z",
+          "pausedBy": ""
+        },
+        {
+          "id": "a81dd601-f767-45d0-b43a-be1a5290559f",
+          "reason": "Antonio approved notification order in P099 decision 6a40db9e. Public builder export and external API tests pass. P097 is done; F009 notification tasks are planned/deferred, not active; canonical notification source is clean. Perform existing module split, then return to T544.",
+          "whatWasBeingDone": "T544 client/server integration; exported Notification and NotificationAction, two external API tests pass; existing 73 notification tests pass. Server notification wiring remains open.",
+          "resumeLocation": "/Users/antonio/projects/heca-p099-current; heca/src/client and heca/src/server; canonical heca/.planner P099 handoff",
+          "howToResume": "Return to T544 after T512 move/review. Preserve fluent public API, dirty code and original checklist. Finish server notifications, reload, damage/resources and actual native acceptance. No commit.",
+          "relatedTaskId": "736a6912-1297-48b3-89c1-e32559a024d9",
+          "pausedAt": "2026-10-25T18:19:10.286Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-10-21T12:40:33.812Z",
+      "completedAt": "2026-10-27T10:22:49.088Z",
+      "createdAt": "2026-10-21T11:14:49.739Z",
+      "updatedAt": "2026-10-27T10:22:49.088Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:11:19.706Z"
+        },
+        {
+          "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+          "createdAt": "2026-10-25T18:17:14.239Z"
+        },
+        {
+          "sessionId": "mcp-process:1a058a80-ca9b-4e11-9f86-fa8f1c7bddb5",
+          "createdAt": "2026-10-25T08:51:16.856Z"
+        },
+        {
+          "sessionId": "mcp-process:5903aca6-3ef1-4dfe-b759-ad62d315de3e",
+          "createdAt": "2026-10-25T07:38:08.816Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:19.733Z"
+        },
+        {
+          "sessionId": "mcp-process:9592fa1e-823c-49fc-adfe-4c6cb7fbee3c",
+          "createdAt": "2026-10-21T12:40:33.702Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 545,
+      "shortId": "YP7Z6",
+      "priority": 4,
+      "shortName": "several-windows-per-session-ow",
+      "title": "Several windows per session — own view each, follow, pane size setting",
+      "status": "planned",
+      "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.",
+      "descriptionUpdatedAt": "2026-10-21T11:21:06.740Z",
+      "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-09-29T19:22:04.075Z",
-      "updatedAt": "2026-09-29T21:33:07.321Z",
+      "createdAt": "2026-10-21T11:14:52.371Z",
+      "updatedAt": "2026-10-24T18:33:41.775Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 546,
+      "shortId": "U5U92",
+      "priority": 5,
+      "shortName": "heca-rpc-events-stream-events",
+      "title": "`heca rpc --events` — stream events to scripts",
+      "status": "planned",
+      "description": "ready-02e. `heca rpc --events` streams the session's events to a script over the socket — the same `Change`s a window reacts to (heca/src/server/change.rs), serialized via the wire model (T543).\n\nExtend the socket client (heca/src/server/socket.rs — a streaming request that stays open and prints each event as a line) and the server side to fan events out to subscribed connections (a subscriber list beside the per-request handling T521 added). Keep it one way in: the events are the existing `Change`s, nothing invented per event.\n\nDone when: `heca rpc --events` in a shell prints events as the session changes (a split made in another window shows up). Depends on T544.",
+      "descriptionUpdatedAt": "2026-10-21T11:21:27.193Z",
+      "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-001-add-change-paneagentchanged-pane-paneid-previous-option-box-agentstate-agent-option-box-agentstate-to-server-change-rs-reusing-heca-core-agent-agentstate-from-p102-snapshots-carry-current-agent-state-an-event-preserves-each-transition-agent-none-clears-needs-p102-s-agentstate-integrated-on-this-branch-next-first",
+          "number": 1,
+          "title": "Add Change::PaneAgentChanged { pane: PaneId, previous: Option<Box<AgentState>>, agent: Option<Box<AgentState>> } to server/change.rs, reusing heca_core::agent::AgentState (from P102). Snapshots carry current agent state; an event preserves each transition; agent: None clears. Needs P102's AgentState integrated on this branch/next first.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:54.116Z",
+      "updatedAt": "2026-10-24T18:33:41.775Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "df083f77-b084-42d5-b7f7-51924d8b11d2",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 547,
+      "shortId": "H6J5Q",
+      "priority": 6,
+      "shortName": "windows-named-pipe-transport",
+      "title": "Windows named-pipe transport",
+      "status": "planned",
+      "description": "ready-02f. The Windows transport for the control socket: a named pipe, owner-only, behind the SAME functions the Unix socket exposes.\n\nToday heca/src/server/socket.rs is `cfg(unix)` (`serve`/`request`/`run_rpc_cli`/`socket_path`, using `std::os::unix::net::UnixListener`/`UnixStream`); lib.rs and cli.rs call it behind `#[cfg(unix)]`. Add a `cfg(windows)` implementation of the same surface (a named pipe under `\\\\.\\pipe\\heca\\…`, owner-only ACL) so lib.rs/cli.rs call it unchanged — one interface, two transports.\n\nDone when: `heca rpc <line>` works on Windows against a running heca. Depends on T521.",
+      "descriptionUpdatedAt": "2026-10-21T11:21:30.965Z",
+      "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "69a168bf-276e-401a-a337-597ef29221b3"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:55.996Z",
+      "updatedAt": "2026-10-24T18:33:41.775Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "01ea2d3f-f50d-4fdb-b38a-edacfa979d87",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 548,
+      "shortId": "S6JQU",
+      "priority": 7,
+      "shortName": "connection-attach-architecture",
+      "title": "Connection / attach architecture docs",
+      "status": "planned",
+      "description": "ready-02g. Document the connection — extend docs/server-client-architecture.md (written in T525, P104): the local-only owner-only socket + runtime folder, `heca rpc <line>` and `--events`, the attach/detach model and the one-code-path (standalone = server + one in-process client), several windows + the pane size setting (`smallest|latest|largest`, default `latest`), and the wire model (plain-data snapshot, no wezterm/image types on the wire). Both audiences, concise, cross-referencing the F012 decisions (d108b88c, 463ccd07, 2c249a29).\n\nDone when the doc matches the shipped behaviour. Depends on T544/T545.",
+      "descriptionUpdatedAt": "2026-10-21T11:21:35.324Z",
+      "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T11:14:57.658Z",
+      "updatedAt": "2026-10-24T18:33:41.775Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-09-29T21:33:23.091Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-10-27T10:22:49.088Z",
+  "handoff": "# Handoff — session shutdown (quit)\n\nCreated at: 2026-10-26T18:59:18.546Z\nUpdated at: 2026-10-26T18:59:18.546Z\nReason: session shutdown (quit)\n\n## Progress snapshot\n- Features: 3/12 done, 6 active\n- Phases: 46/102 done, 17 active/discovery\n- Tasks: 334/533 done, 3 active\n\n## Current focus\n- Feature: `1be8af21-337e-4636-93d9-6bea87368492` — 🧰 Ready for heca-pro — the pieces heca-pro builds on (in-progress)\n- Phase: `5cbe946e-fe06-448c-a764-3840f033da6f` — ready-02: the connection — clients attach to the server over a local socket; RPC, events, detach/attach (in-progress)\n- Task: `ed677df2-82fe-4abb-a23b-30f90bc40919` — Headless server process + attach protocol (detach/attach) (in-progress)\n\n## What was being done\n2026-10-25 resume: native client wired via ClientState; standalone uses same ServerLoop. Fixed redundant ordered effects, missing-terminal request reply and daemon reaping. Scoped all-target tests pass (1068 Heca lib, 124 config, 255 core, all integrations); clippy -D warnings passes. Canonical checkpoint .planner/docs/t544-transport-checkpoint.md updated. Still open: notification ownership/split approval, reload, damage/resources and native GUI acceptance (CUA cgWindowNotFound). C3-C6 remain open. No commit/PR.\n\n## Current Task Statuses (phase 5cbe946e-fe06-448c-a764-3840f033da6f)\n- ✅ `69a168bf-276e-401a-a337-597ef29221b3` — Local socket + `heca rpc <line>` for scripts (done)\n- ✅ `e21d7360-4fff-465b-9a7d-b67016fce207` — Serializable wire model — plain-data Change + terminal snapshot/damage + layout effects (done)\n- 🚧 `ed677df2-82fe-4abb-a23b-30f90bc40919` — Headless server process + attach protocol (detach/attach) (in-progress)\n- 📋 `e90e1886-2ec1-4a87-94a4-2a3d4b56c404` — Several windows per session — own view each, follow, pane size setting (planned)\n- 📋 `73a5a8de-08c1-4b6f-8bdb-336ec26a3da2` — `heca rpc --events` — stream events to scripts (planned)\n- 📋 `df083f77-b084-42d5-b7f7-51924d8b11d2` — Windows named-pipe transport (planned)\n- 📋 `01ea2d3f-f50d-4fdb-b38a-edacfa979d87` — Connection / attach architecture docs (planned)\n\n## How to resume\n1. Open task ed677df2-82fe-4abb-a23b-30f90bc40919 (Headless server process + attach protocol (detach/attach)).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/5cbe946e-fe06-448c-a764-3840f033da6f.json\n- .planner/phases/5464ff74-fa17-4412-abaa-95aa19810b33.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n- Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.\n- F003/P011/T012 (126d0855) is still `blocked`, and its reason needs RE-CHECKING rather than planning around: the 'no chrome surface mounts a ScrollRegion' claim was verified 2026-07-17, and the 2026-07-26 sidebar scroll work may already have discharged it. Its horizontal trigger was settled 2026-07-27 as prefix+Shift+Home/End/PageUp/PageDown — the same four keys as vertical, Shift for the other axis.\n- Unblocked by T009, neither started: F003/P001/T006 (generate widget definitions for JS/Python from `WidgetKind::ALL`, which is a closed list with a coverage guard already walking it) and F003/P011/T006 (the typed builder SDK can now genuinely re-export the model). Also worth checking whether F003/P017/T003's generated property tables are reusable outside the app — they are the natural source for those generated definitions.\n\n## Recent activity\n- 2026-10-23T11:14:19.578Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → planned\n- 2026-10-23T11:14:14.342Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → planned\n- 2026-10-23T11:07:26.889Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → done\n- 2026-10-23T11:06:01.136Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → done\n- 2026-10-23T11:05:42.161Z [task_status] d72fd89e-2ea6-4dd9-b0a6-21beb72991b4: Task d72fd89e-2ea6-4dd9-b0a6-21beb72991b4 → done\n- 2026-09-05T21:15:13.811Z [task_status] bad40d02-be41-4f23-8acc-903c18c40e68: Task bad40d02-be41-4f23-8acc-903c18c40e68 → in-progress\n- 2026-09-04T10:03:13.339Z [task_created] 3a5ca1f3-f626-49d0-b4a0-033f0b64924e: Task created: Notification Text should not be truncated (phase 03b297bb-a915-4712-a6b4-dc688dc7ddc5)\n- 2026-09-01T15:38:54.250Z [task_updated] deef08b2-b838-428d-afce-2151533b5dd4: Task updated: Dismiss All Notifications\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-10-26T18:59:18.578Z",
   "handoffAudit": null,
-  "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffReadAt": "2026-10-25T18:26:10.072Z",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/5cbe946e-fe06-448c-a764-3840f033da6f-2026-10-26T18-59-18-548Z.md",
+      "clearedAt": "2026-10-26T18:59:18.548Z",
+      "reason": "superseded"
+    }
+  ],
   "statusLog": [
     {
       "id": "a66c60c9-6f07-4595-9085-3b22cfe990e6",
@@ -114,7 +491,36 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "f8479ece-a37a-46af-ac32-97b62df07952",
+      "date": "2026-10-24T18:41:19.967Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+      "createdAt": "2026-10-26T14:11:19.706Z"
+    },
+    {
+      "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+      "createdAt": "2026-10-25T18:17:14.239Z"
+    },
+    {
+      "sessionId": "mcp-process:1a058a80-ca9b-4e11-9f86-fa8f1c7bddb5",
+      "createdAt": "2026-10-25T08:51:16.856Z"
+    },
+    {
+      "sessionId": "mcp-process:5903aca6-3ef1-4dfe-b759-ad62d315de3e",
+      "createdAt": "2026-10-25T07:38:08.816Z"
+    },
+    {
+      "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+      "createdAt": "2026-10-24T18:41:19.733Z"
+    }
+  ]
 }

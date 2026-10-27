@@ -94,13 +94,44 @@
       "shortName": "wasm-region-api",
       "title": "Region contribution API for WASM",
       "status": "planned",
-      "description": "Permettere a plugin WASM di contribuire container alle regioni.",
-      "descriptionUpdatedAt": "2026-07-01T18:12:56.212Z",
+      "description": "GOAL\nLet a sandbox/WASM plugin contribute docks through the existing host-owned Provider adapter and perform the SAME startup region operations available to native Heca/library code. This clarifies the existing Region contribution API for WASM task; it does not create another dock manager or widget system.\n\nCANONICAL CONTRACT\nRead docs/widgets.md, Providers and startup regions; docs/plugins.md and docs/extending-heca.md link to that reference. Native code currently uses heca::regions(..), Provider and PlaceDock. The workspace's private DockView is not the extension API. The WASM adapter remains planned until implemented and exercised with a loaded plugin.\n\nSTARTUP PARITY REQUIRED BY ANTONIO, 2026-10-25\nSupport add-at-end, add-at-start, remove-by-placement-id, retaining a selected set of placements, visual ordering including stable ties/order paths, proportional shares and region spacing, with the same outcomes and diagnostics as native startup. Plugin activation/config contributions must be collected before the host finalizes/mounts the startup region list; preserve the defined startup cutoff rather than dropping valid plugin initialization after the queue closes.\n\nThe plugin sends typed serializable descriptions/operations through the host facade. It never transfers a Rust Provider/Component/closure, registers native factories or chooses another owner's namespace. The host adapter associates contributions with the validated plugin identity and keeps component-type identity separate from placement ids and per-mount state. Agree the exact protocol/SDK before implementation. A retain predicate needs a serializable operation or guest-evaluated result; do not pretend a native closure crosses the boundary.\n\nUse the existing native host path for mounting, metadata, layout, events, actions, activation and cleanup. Preserve placement overrides, supported-region constraints, ordered application of startup operations, stable insertion ties and observable unknown-region/id/duplicate-placement behavior. Runtime loading/unloading and discovery remain the existing P022 lifecycle work; startup list calls must not acquire an undocumented runtime mutation meaning. Existing runtime move/reorder actions retain their own path.\n\nVERIFICATION\nRun a real minimal WASM plugin during startup beside a native fixture, then compare final region membership and computed visual order/shares for append, prepend, remove, retain, order/flex and gap. Exercise plugin ownership and two placements of the same component, initialization order, activation/subscription cleanup, invalid region/id and calls after the startup cutoff. Preserve the native region-list tests and public authoring behavior. A protocol schema, registration, native-only test or ViewNode realization alone is not evidence of a working loaded-plugin path.\n\nDEPENDENCIES AND OWNERSHIP\nP022's host-facade design and plugin discovery/loading lifecycle are real prerequisites for the loaded-plugin acceptance. P067/T398 owns shared authoring/metadata/public API checks and the documentation contract; consume its settled interfaces rather than implementing another builder/registry. Exact dependency edges and any phase consolidation are to be agreed in the ongoing planning review. No runtime implementation is started by this clarification.",
+      "descriptionUpdatedAt": "2026-10-25T09:00:36.422Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "610cd5b6-661d-4d05-a7b1-70a34d097a5d-check-001-agree-the-serializable-startup-contribution-region-operation-sdk-against-the-canonical-provider-contract-and-validated-plugin-identity",
+          "number": 1,
+          "title": "Agree the serializable startup contribution/region-operation SDK against the canonical Provider contract and validated plugin identity.",
+          "checked": false
+        },
+        {
+          "id": "610cd5b6-661d-4d05-a7b1-70a34d097a5d-check-002-integrate-plugin-initialization-before-startup-region-finalization-through-the-existing-host-owned-provider-adapter",
+          "number": 2,
+          "title": "Integrate plugin initialization before startup region finalization through the existing host-owned Provider adapter.",
+          "checked": false
+        },
+        {
+          "id": "610cd5b6-661d-4d05-a7b1-70a34d097a5d-check-003-implement-startup-append-prepend-remove-retain-order-flex-gap-parity-with-native-semantics-stable-identities-and-diagnostics",
+          "number": 3,
+          "title": "Implement startup append/prepend/remove/retain/order/flex/gap parity with native semantics, stable identities and diagnostics.",
+          "checked": false
+        },
+        {
+          "id": "610cd5b6-661d-4d05-a7b1-70a34d097a5d-check-004-verify-final-membership-and-computed-order-shares-with-a-real-loaded-wasm-plugin-and-an-equivalent-native-fixture",
+          "number": 4,
+          "title": "Verify final membership and computed order/shares with a real loaded WASM plugin and an equivalent native fixture.",
+          "checked": false
+        },
+        {
+          "id": "610cd5b6-661d-4d05-a7b1-70a34d097a5d-check-005-exercise-startup-cutoff-invalid-duplicate-region-placement-data-and-activation-subscription-cleanup-document-actual-runtime-availability-in-the-canonical-guide",
+          "number": 5,
+          "title": "Exercise startup cutoff, invalid/duplicate region-placement data and activation/subscription cleanup; document actual runtime availability in the canonical guide.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
@@ -108,7 +139,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-01T18:12:56.212Z",
+      "updatedAt": "2026-10-25T09:00:38.105Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -260,7 +291,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-09-28T08:50:22.164Z",
+  "updatedAt": "2026-10-25T09:00:38.105Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

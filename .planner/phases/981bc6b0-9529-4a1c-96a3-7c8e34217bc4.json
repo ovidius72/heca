@@ -38,8 +38,8 @@
       "shortName": "pane-tabbar-slot",
       "title": "Add optional tab bar slot to Pane widget",
       "status": "done",
-      "description": "Tab bar opzionale per pane multi-document.\n\n---\n**Completion summary:**\nDone: a Tabs widget exists (widgets/tabs.rs). Closed while retiring the obsolete pane-shell phase.",
-      "descriptionUpdatedAt": "2026-10-19T15:49:17.575Z",
+      "description": "Tab bar opzionale per pane multi-document.\n\nHistorical closure (retired P040): keep done as explicitly requested by Antonio. This is administrative history, not a claim that the original proposed API/behavior was delivered.\n\nCode verification against updated main, 2026-10-24: The original goal was multiple selectable documents/content views inside a panel. heca-grid-ui Tabs is only a selector strip; updated main workspace gather still constructs one Terminal per pane. No tabbed-panel integration was found.\n\nThe prior completion wording based only on Tabs existence or a header/info-bar slot was insufficient. Do not cite it as proof of implementation or automatically reopen/promote replacement work.\n\nDedicated functional follow-up: P094(F011)/T550 (Design and implement reusable multi-document tabs for managed content). This new planned task owns real selectable document/content views; this historical closure is not evidence that they exist. No historical status is changed by this cross-reference.",
+      "descriptionUpdatedAt": "2026-10-24T12:17:16.173Z",
       "notes": "",
       "statusLog": [
         {
@@ -61,7 +61,7 @@
       "startedAt": "2026-10-19T15:49:17.574Z",
       "completedAt": "2026-10-19T15:49:17.574Z",
       "createdAt": "2026-07-01T18:13:27.646Z",
-      "updatedAt": "2026-10-19T15:49:17.574Z",
+      "updatedAt": "2026-10-24T12:17:16.170Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -110,8 +110,8 @@
       "shortName": "pane-header-slot",
       "title": "Add optional header slot to Pane widget",
       "status": "done",
-      "description": "Header slot con title, status e action buttons.\n\n---\n**Completion summary:**\nDone: the Pane widget carries a header/info-bar slot (widgets/pane/mod.rs). Closed while retiring the obsolete pane-shell phase.",
-      "descriptionUpdatedAt": "2026-10-19T15:49:15.206Z",
+      "description": "Header slot con title, status e action buttons.\n\nHistorical closure (retired P040): keep done as explicitly requested by Antonio. This is administrative history, not a claim that the original proposed API/behavior was delivered.\n\nCode verification against updated main, 2026-10-24: The generic Pane is a frame with ordinary children, not a dedicated public header slot. The app currently composes its header separately; terminal-header ownership and removal of the special app slot belong to P094/T450.\n\nThe prior completion wording based only on Tabs existence or a header/info-bar slot was insufficient. Do not cite it as proof of implementation or automatically reopen/promote replacement work.",
+      "descriptionUpdatedAt": "2026-10-24T07:24:45.407Z",
       "notes": "",
       "statusLog": [
         {
@@ -133,7 +133,7 @@
       "startedAt": "2026-10-19T15:49:15.204Z",
       "completedAt": "2026-10-19T15:49:15.204Z",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-10-19T15:49:15.204Z",
+      "updatedAt": "2026-10-24T07:24:45.405Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -175,7 +175,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-10-19T16:16:57.820Z",
+  "updatedAt": "2026-10-24T12:17:16.170Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

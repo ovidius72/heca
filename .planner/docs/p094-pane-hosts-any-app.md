@@ -1,4 +1,6 @@
-Decided by Antonio, 2026-08-18, in discussion. This phase is the record.
+Decided by Antonio, 2026-08-18; amended with the approved 2026-10-24/25 decisions. This document is the current phase contract.
+
+Current approved ownership (2026-10-25): P067/T517 owns generic parts/templates before P067/T398, which owns the global public API/registry and standalone native Terminal::new("shell")/binding. T450 owns content-composed optional terminal headers; T452 consumes the foundation for open managed creation/lifecycle/restore. T453/T455 audit current float/input geometry, T454 proves a second content and T457 converges the picker. T550 moved intact to P106/F011, dependent on T452. Completed T448/T449/T451/T456 stay done; T360/F012/P022 ownership and I009 IDEA-only status are preserved. The open-content phase decision remains 502849a5-af36-4331-8788-249dd6629c28. Cold-start: P067 and P094 canonical verified handoffs.
 
 ═══ THE ARCHITECTURE ═══
 
@@ -6,27 +8,33 @@ Decided by Antonio, 2026-08-18, in discussion. This phase is the record.
       └─ Pane  — letter, zoom/float/split/remove, and the bounds it was given
            └─ Flex
                 ├─ header (fixed)      ← the CONTENT's, absent for Neovim
-                └─ ScrollRegion        ← the CONTENT scrolls, not the pane
-                     └─ Terminal
+                └─ Terminal            ← owns its viewport, controls and scrollback
 
 Antonio: "the only responsibility of the pane is to draw the key hint letter, zoom in/out,
 float/unfloat, split/unsplit, remove". And: "Terminal should be a reusable component similar to a
 DOM <terminal/> we can put in any container in the app, even in a plugin or in a sidebar."
 
-All content components implement one common trait so any of them can sit in a pane; a plugin author
-can build a pane and use these components.
+Content uses the existing Component contract and ordinary Parent/IntoChildren composition. Native authors place arbitrary Component values directly, including several children or a nested layout. Sandbox plugins compose typed descriptions of host-exposed primitives; they do not pass a native Component implementation across the boundary. Plugin identity handles are acceptable, while native construction uses ordinary constructors. Do not invent a pane-specific replacement widget trait or require arbitrary UI content to implement a terminal backend. Inspect the current lifecycle/restoration seams before adding a small missing contract.
 
 ═══ THE CODE, AS IT SHOULD READ ═══
 
-The terminal's own composition — heca/src/chrome/terminal/mod.rs, the ONLY file here that may
-touch AppState:
+The target authoring shape uses ordinary constructors and children. TerminalHeader is the component T450 extracts; `header` below stands for that component's concrete built widget, not a new public type imposed on callers. T449's Terminal already owns its viewport/scrollback controls, so do not wrap it in a second ScrollRegion:
 
-    Grid::new()
-        .rows([Track::Auto, Track::Fr(1.0)])    // header sizes itself, body takes the rest
-        .gap(Spacing::Sm)
-        .cell(TerminalHeader { pane_id, info, buttons, shortcuts, cb }.build(), 1, 1, 1, 1)
-        .cell(ScrollRegion::new()
-                  .child(Terminal { pane_id, surface, cb }.build()), 1, 2, 1, 1)
+    Pane::new().child(Terminal::new("shell"))
+
+    Pane::new().child(
+        Grid::new()
+            .template_row("auto 1fr")
+            .template_area(["header", "body"])
+            .child(header.area("header"))
+            .child(Terminal::new("shell").area("body"))
+    )
+
+    Pane::new().child(component_a).child(component_b)
+
+    // Arrays/Vec may still contain a common element type.
+
+These are the plain authoring requirements. Standalone constructors/binding belong to P067/T398; managed content creation/restoration is T452 work; the presence of these constructors alone is not proof that columns already host arbitrary content.
 
 THE TREE IS THE CONTENT'S, NOT THE PANE'S — so a content component composes whatever it needs:
 `Flex`, `Grid`, `Surface`, `ScrollRegion`, any of them, nested to any depth. The pane does not care
@@ -35,13 +43,10 @@ two parts with different jobs, where a track template says the whole arrangement
 (`auto` for what sizes itself, `1fr` for what takes the rest). A `Flex` is right for a list of like
 things, a `Surface` for something that is one box. Pick per case.
 
-The one thing that is never right, whichever container is chosen: a parent that COUNTS ITS CHILDREN
-to tell them apart. The pane holds `[header, content]` today and the host asks "does it have two
-children?" to decide whether there is a header, so putting two things in the body makes the first
-look like one. Full rule: docs/widgets.md -> Grid.
+The frame must not count children to infer their roles. That was the earlier defect; current PaneShell already uses named Grid areas but still owns a special optional header. T450 removes that ownership/reservation, not a now-absent child-count branch. Full rule: docs/widgets.md -> Grid.
 
-The pane shell — heca/src/chrome/pane/mod.rs. It composes the grid-ui `Pane` widget for its frame,
-carries its own identity and letter, and holds exactly ONE content child:
+The pane shell — heca/src/chrome/panes/pane/mod.rs. It composes the grid-ui `Pane` widget for its frame,
+carries its own identity and letter, and accepts ordinary one-or-many children or a nested subtree:
 
     Pane::new()
         .border_style(appearance.effective_pane_border_style())
@@ -51,7 +56,7 @@ carries its own identity and letter, and holds exactly ONE content child:
         .child(content)                          // Terminal, Browser, Neovim, Agent, a plugin's
 
 FIVE SPELLING RULES, each one a real trap:
-1. `Flex::column()` / `Flex::row()` — there is no `Flex::new(child)`. And never name a UI box
+1. Use the actual fluent Flex/Grid APIs documented in docs/layout.md; a child is supplied through `.child(..)`. Never name a UI box
    `Column`: `Column` already means a column of panes in heca-core.
    ⚠️ THIS NAMING CONVENTION MUST BE WELL DOCUMENTED — in docs/widgets.md and in AGENTS.md, not
    only here. It is re-derived and re-proposed every time it is not written where a reader looks:
@@ -73,9 +78,7 @@ FIVE SPELLING RULES, each one a real trap:
 3. Properties are STRUCT FIELDS and the constructor is a struct literal (AGENTS.md § 0b-bis rule 2).
    Not `Header::new(title, icon, buttons, active, cb)` — providers/workspaces/pane_card() at eleven
    positional arguments is the counter-example nobody can read.
-4. `Terminal` has NO title and NO icon. Those are the header's facts. A terminal takes what it needs
-   to draw its content and nothing more — which is exactly what lets it mount in a sidebar, where
-   there is no title.
+4. Terminal content owns any optional header/display metadata; Pane has no special title/header reservation. T450 retains main's terminal-title display/rename requirement, with its concrete interaction reviewed before implementation. A headerless terminal remains valid in a sidebar or arbitrary composition.
 5. The icon buttons are NOT hand-listed. They come from the dynamic vector `pane_header_buttons`,
    which is what makes config-added, config-hidden and future plugin-added buttons work with no
    change here. Do not re-introduce a per-action match in a render loop.
@@ -86,11 +89,11 @@ Per AGENTS.md § 0b-bis. heca/src/chrome/expose/ is the worked example to copy �
 testing.rs (mod.rs 733, model.rs 282, expose_grid.rs 327, workspace_row.rs 374, column_card.rs 149,
 pane_card.rs 433, testing.rs 119).
 
-    heca/src/chrome/
+    heca/src/chrome/panes/
       pane/
         mod.rs            host wiring — the ONLY file that may touch AppState
         model.rs          the session reduced to plain data (id, rect, active, zoomed, floating)
-        pane.rs           the shell component: frame + key + letter + one content child
+        pane.rs           the shell component: frame + key + letter + ordinary component children
         testing.rs        #[cfg(test)] fixtures
       terminal/
         mod.rs            host wiring — the ONLY file that may touch AppState
@@ -107,7 +110,7 @@ RULES THAT COME WITH THE SHAPE:
   testable headless.
 - The seams travel as ONE group — a single callbacks struct built once and passed by reference, not
   threaded one argument at a time (expose::ExposeCallbacks is the pattern).
-- Return the CONCRETE widget when the parent still has to size it; box only at the top.
+- Return concrete/ordinary components or an ergonomic opaque component. Public authoring parameters and returns must not expose Box/casts or require storage conversions; internal allocation/type erasure is a framework detail.
 - Sizes are shares. Never take a number out of the data model and multiply it by a scale of your
   own to make it fit: a column is 400 logical px in the session, and `Px(400.0 * zoom)` hands this
   component ownership of every term — the window, the margins, the padding, the gaps, the child
@@ -115,18 +118,14 @@ RULES THAT COME WITH THE SHAPE:
   every window size. `grow` is a share of what is LEFT OVER after the fixed children, so "a share of
   the widest sibling" is a percentage against one denominator, not a grow weight. And a child that
   simply fills its parent says NOTHING AT ALL — unset already stretches, like CSS.
-  ⚠️ SPELLING: written `Length::Pct(0.4)` today. The sizing builders take `Length` by value, so the
-  spellings `Length`'s own serde impl already reads — `"40%"`, `"200px"`, `"auto"`, a bare number —
-  cannot reach them. They become `impl Into<Length>` (plus `Width::Full`/`Half`), after which a call
-  site writes `.width("40%")` or `.width(200)` and `Length::Pct` stops appearing in app code. The
-  wire already speaks these, so this is the native side catching up — no plugin change.
+  Use the current sizing builders and CSS spellings from docs/layout.md (`.width("40%")`, numbers and semantic tokens). T474's completed authoring work is reused, not planned again.
 - One headless test per component, plus the box test: lay it out in a box and assert it never
   exceeds it.
 - It moves to heca/src/components/ only when a SECOND surface needs it — a move, never a copy. That
-  folder is an empty shell today (mod.rs only).
+  rule is about actual second callers, not predicted sharing.
 
 ═══ THE WIDGETS THIS IS BUILT FROM (all documented in docs/widgets.md) ═══
-- `Pane` (heca-grid-ui/src/widgets/pane.rs) — the frame, three modes via PaneFrame:
+- `Pane` (heca-grid-ui/src/widgets/pane/mod.rs) — the frame, three modes via PaneFrame:
   frameless/bordered/bracketed. Width, radius and colour from the theme and [appearance.pane].
   ⚠️ DECIDED: all three modes are BORDER STYLES (none / a continuous line / corner brackets), so the
   builder is named for what it is — `.border_style(..)`, taking the config's `BorderStyle` directly.
@@ -135,11 +134,7 @@ RULES THAT COME WITH THE SHAPE:
   apply_pane_frame` — a six-line host match translating the config enum into `.frameless()` /
   `.bordered()` / `.bracketed()` — DELETES: the library owns the mapping and no caller translates.
 - `Flex` — the arrangement; `.gap`, `.padding`, `.grow`, `.align`. No StyleExt on it by design.
-- ⚠️ DECIDED: `.child_boxed(..)` DELETES, here and in the fifteen other `*_boxed` setters across the
-  library. `Box<dyn Component>` is not itself `Component`, which is the whole reason the twin
-  exists; `.child(..)` takes `impl IntoComponent` covering both, and every `*_boxed` goes at once
-  rather than one widget at a time. Native-only — `child_boxed` is realize's own seam and has no
-  described name, so nothing on the wire changes.
+- T474 removed the public `*_boxed` twin builders. Reuse the ordinary `.child(..)` and slot APIs. P067/T398 removes the remaining public Box-based parameter/return exposure and WidgetKind dispatch, rather than recreating the SDK here. Internal storage may still allocate or erase types.
 - `ScrollRegion` — the viewport the content scrolls inside. Owns wheel, thumb drag, click-in-track
   paging, ensure_visible and the eight Scroll* WidgetIntents. Binds keyboard_target so only the
   focused region answers scroll keys.
@@ -178,35 +173,17 @@ pattern (name the action, never the styling).
   PaneSegment (Location/AppName/GitBranch/GitStatus) = content facts; PaneAction
   (Split/MoveLeft/MoveRight/Close) = pane actions.
 
-═══ NOT TRUE YET — THE FILES THAT CHANGE ═══
-- heca/src/app/terminal_render.rs (1700 lines) — paint_terminal_pane_shell:718 builds a grid-ui Pane
-  fresh each frame and paints it with a DIRECT pane.paint(cx):783; the header is painted directly at
-  :800; title_bar_reserve:626 / pane_title_top_inset:646 reserve the header's height on the pane;
-  stable_tiled_content_rect:654 / stable_floating_content_rect:670 / pane_content_rect:903 compute
-  the content rect by hand; sync_retained_terminal_layers:46, render_terminal_layer_update:399 and
-  blit_retained_terminal_layer:294 are the GPU half that must be preserved.
-- heca/src/app/render.rs — calls the shell from TWO sites, :691 (tiled) and :902 (floating); the
-  48px host letter pass is at :951 (~43 lines, including a second loop for floats).
-- heca/src/chrome/pane_header.rs (1086 lines) — sync_pane_headers:952 builds the retained per-pane
-  bar; build_pane_info_bar:159; pane_info_view:76. state.pane_headers (app_state.rs:710) and
-  state.pane_viewport_widgets (app_state.rs:725) are the two retained per-pane stores.
-- heca/src/chrome/hint.rs — active_hint_targets:534 (the surface stack, layers → chrome → panes),
-  offer_hint_letters:356, target_identity:321, fire_hint, clear_hint_letters. HintSurface::
-  PaneHeader(pane_id) becomes the pane.
-- heca/src/handlers.rs — handle_pane_select:776 (index-based, the defect), assign_letters:816 (pure,
-  already correct, serves both pickers), handle_hint_pick:845.
-- heca/src/app/selection.rs — collect_all_pane_candidates:41 is pure index; PANE_CANDIDATE_LIMIT:9
-  and candidate_letter:17 already read DEFAULT_LETTERS.
-- heca/src/mouse/hit_test.rs:17 — hand-written pane hit test with a hardcoded 40.0 sidebar width.
-  mouse/ is 2644 lines across target.rs, drag.rs, release.rs, interactive.rs, resize.rs.
-- heca-grid-ui/src/scene.rs — ⚠️ THE ENABLING GAP: DrawCommand is ONLY Rect / Brackets / Text /
-  Scanline / PushClip / PopClip. AGENTS.md lists `Custom` and `Gradient` — BOTH ARE STALE, neither
-  exists. Fix that line in AGENTS.md as part of this phase.
-- No PaneKind enum anywhere. AGENTS.md specifies SpawnPane { kind, program, argv, float, width,
-  height } with terminal|browser|nvim_gui as the target shape; nothing implements it.
+═══ CURRENT MAIN AND REMAINING OWNERS — VERIFIED 2026-10-25, 6e3e6d36 ═══
+- chrome/panes/workspace/gather.rs still creates every managed pane with terminal::view_of. The column/floating content path is still terminal-specific; open creation and restoration belong to T452. Browser/Editor are future examples, not an exhaustive list or new browser/editor implementations required here.
+- chrome/panes/pane/shell/mod.rs composes an optional separate header above content. T450 removes this special pane-header slot/reservation and makes the terminal content compose its optional header with ordinary layout. Headerless content and several body children are valid.
+- chrome/panes/pane_header/inputs.rs still reads host pane width; segments.rs already carries HeaderSegment { name, chip, fit } and composes Label::truncate plus Tag segment fitting. Character estimates/truncate_path_left are removed. T450 preserves that delivered fitting and live action/in-place refresh behavior while moving ownership.
+- app/terminal_render/ and chrome/panes/terminal/ already implement the reusable retained terminal surface; preserve completed T449 rendering, process lifetime, focus/input/search/link/selection behavior and scene-order drawing. Do not rebuild this implementation or add another ScrollRegion around it.
+- T453 retains shared-geometry/Search review; Search.terminal is currently read by keyboard_terminal/search and is not dead by assertion. T455 still migrates hint/targets.rs's pane_outer_frames occlusion walk, although the mouse hit-test helpers are gone. Their task/checklist evidence, not the older census, is current authority.
+- T452 follows the accepted open-content decision: no closed PaneKind enum/exhaustive Terminal-Browser-Editor switch; serialized factory identifiers are distinct from ordinary placement. Reuse the P067/T398 registry and the settled server/session authority.
+- T088 is historically done at Antonio's request. The generic Tabs widget is only a selector; multiple selectable content views/documents within a panel are not implemented by that selector. The explicit tab work is now P106(F011)/T550, moved from P094 with the requirement and its T452 dependency; it is not an implicit P094 constructor task.
 
 ═══ THE KEY DESIGN CALL ═══
-Both content kinds collapse to ONE shape: the pane's content child is ALWAYS a component. For a
+Every content implementation is ordinary component composition: one-or-many children or a subtree, without a closed list of content kinds. For a
 browser/agent/plugin it is a real tree (Flex, Grid, ScrollRegion). For the terminal it is a leaf
 that paints one new scene command naming an externally-rendered surface + its rect; the renderer maps
 that id to the texture it already blits. The library stays GPU-free — same split Text already has
@@ -215,7 +192,7 @@ Performance is preserved: retained terminal textures and damage tracking stay as
 terminal cells as ordinary scene commands is REJECTED — cell glyphs are the hottest path in the app.
 
 ═══ DOCS (mandatory, same change) ═══
-docs/widgets.md gets the new scene command and the content trait, with a native AND a declarative
+docs/widgets.md records the actual scene/composition/lifecycle seams, with a native AND a declarative
 example for each; AGENTS.md gets the chrome/<kind>/ structure beside the existing expose example and
 its stale DrawCommand line fixed. Do NOT create new doc files (Antonio, 2026-08-17).
 

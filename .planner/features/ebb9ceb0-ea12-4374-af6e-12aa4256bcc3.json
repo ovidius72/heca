@@ -4,8 +4,8 @@
   "shortId": "",
   "priority": 0,
   "name": "🧩 Pluggable Chrome Architecture",
-  "description": "Pluggable Chrome Architecture — provider/component contract for chrome regions.\n\nCore contract (decided 2026-07-29):\n- **Widgets answer gestures; components declare semantics** — ScrollRegion answers wheel/click/drag/keyboard scrolling; a component declares only what its selection means (rename *this*, delete *this*, restart *this*).\n- **Focus is the mode** — no `InputMode` variant. Chrome focus answers \"where do keys go\". Key routing: prefix → global → focused component's `[keys.<kind>]` layer (swallow if unbound) → focused pane backend.\n- **`perform(id, args, cx)`** — single entry point for all component actions (built-in or declared). `ProviderCx` enforces §2.3 (no `&mut AppState`).\n- **`kind()` vs `id()`** — `kind()` = type (config namespace `[keys.docker]`); `id()` = mount (cursor, scroll, focus per placement).\n- **`nav_key`** — row's one identity: cursor, right-click target, later drag.\n- **Dynamic bindings** — `[keys.<kind>]` table merges per key; `[[keys.<kind>.bind]]` for arg-carrying actions; explicit `unbind` table.\n- **Actions declared via `ActionMeta`** — label, icon, category, `policy`, declared `args`, optional `confirm`. Join same catalog as built-ins; reachable from keys, palette, RPC, context menu.\n- **Central confirm gate** — destructive actions prompt on every surface automatically.\n- **`ActionDispatched` event** — notification at chokepoint (after policy, before execute), not a veto.\n\nCurrent phase: P085 (components declare actions; chrome focus is the mode). P085/T357 emits ContainerSelectionChanged + ActionDispatched. P085/T360 implements per-mount value store + ViewNode.bindings + WorkspacesContainerState migration. P085/T359 seats second container as integration test.\n\nLinked requirements:\n- widget-keys-config: In-widget keys should be customizable\n- available-actions: Context-aware available-actions query",
-  "descriptionUpdatedAt": "2026-10-23T23:11:24.127Z",
+  "description": "Approved coordination, 2026-10-25: P067 is the shared UI authoring foundation. T517 owns generic parts/templates; T398 follows it and owns the open widget registry and plain native/described public APIs, including standalone Terminal::new(\"shell\"). P094 consumes that foundation for pane integration; it does not build a second registry or constructor layer. Native Provider/startup regions are public and centrally documented in docs/widgets.md; actual loaded-WASM startup parity remains P022/T075. Completed model/SDK/realizer history stays done, with current source and test evidence separated from unperformed native/plugin runtime acceptance. Preserve T360 review and F012 integration ownership.\n\nArchitettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.\n\nAuthoring/documentation clarification — Antonio, 2026-10-27: document extension identity, named resource lookup and registrations explicitly in docs/extending-heca.md, with widget-specific details in docs/widgets.md. An Extension declares an owner namespace; it is not a widget memoization mechanism. Current Terminal named lookup creates a declaration on first use and shares the session on later requests; action/layer registration has different semantics. P067/T398 carries the concrete clarification and migration review. The documentation change is WIP in feat/t398-widget-api, not yet merged; this note does not approve a new anonymous-identity/lifecycle design or claim it implemented.\n\nT398 constructor review: see phase accepted decision60dbc375-20fb-4630-b51c-fcccd1a6d387. Antonio selected named get-or-create Terminal::new(\"shell\"); its native implementation/docs are WIP in feat/t398-widget-api, aligned to main1c74bdf3. Registry migration still awaits its own design review.",
+  "descriptionUpdatedAt": "2026-10-27T10:48:01.315Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -42,8 +42,46 @@
     "b4da797f-fbe4-443e-8c8c-68e001f7f48d"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "a40762b7-2ac2-4b90-8997-8de4fbcb6766",
+      "date": "2026-10-25T18:16:45.397Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-10-23T23:11:24.127Z",
-  "sessionInfo": []
+  "updatedAt": "2026-10-27T10:50:51.574Z",
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",
+      "createdAt": "2026-10-27T10:51:56.840Z"
+    },
+    {
+      "sessionId": "mcp-process:2ea300d4-a6e1-4f1c-82e5-b4f035927213",
+      "createdAt": "2026-10-26T15:01:05.145Z"
+    },
+    {
+      "sessionId": "mcp-process:1b00a644-d656-4db7-97f5-2e44c79ba158",
+      "createdAt": "2026-10-26T14:45:57.278Z"
+    },
+    {
+      "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
+      "createdAt": "2026-10-26T14:37:17.235Z"
+    },
+    {
+      "sessionId": "mcp-process:6e8788ec-e96d-4bdc-a7c0-5707c50017cf",
+      "createdAt": "2026-10-26T07:48:39.971Z"
+    },
+    {
+      "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+      "createdAt": "2026-10-25T18:19:10.223Z"
+    },
+    {
+      "sessionId": "mcp-process:9628bbee-d151-47b4-a618-00c378fe80a9",
+      "createdAt": "2026-10-25T18:16:45.150Z"
+    }
+  ]
 }

@@ -13,6 +13,50 @@
       "updatedAt": "2026-07-13T15:30:51.379Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",
+          "createdAt": "2026-10-27T10:51:56.840Z"
+        },
+        {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-26T19:28:50.307Z"
+        },
+        {
+          "sessionId": "mcp-process:2ea300d4-a6e1-4f1c-82e5-b4f035927213",
+          "createdAt": "2026-10-26T15:01:05.145Z"
+        },
+        {
+          "sessionId": "mcp-process:1b00a644-d656-4db7-97f5-2e44c79ba158",
+          "createdAt": "2026-10-26T14:45:57.278Z"
+        },
+        {
+          "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
+          "createdAt": "2026-10-26T14:37:17.235Z"
+        },
+        {
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:09:51.052Z"
+        },
+        {
+          "sessionId": "mcp-process:6e8788ec-e96d-4bdc-a7c0-5707c50017cf",
+          "createdAt": "2026-10-26T07:48:39.971Z"
+        },
+        {
+          "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+          "createdAt": "2026-10-25T18:19:10.223Z"
+        },
+        {
+          "sessionId": "mcp-process:9628bbee-d151-47b4-a618-00c378fe80a9",
+          "createdAt": "2026-10-25T18:16:45.150Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:10.106Z"
+        },
+        {
+          "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+          "createdAt": "2026-10-24T18:23:36.844Z"
+        },
+        {
           "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
           "createdAt": "2026-10-20T11:14:26.047Z"
         },
@@ -31,50 +75,6 @@
         {
           "sessionId": "mcp-process:1869e26a-76ae-4731-b7b9-c4d8d51014bf",
           "createdAt": "2026-10-07T12:59:23.879Z"
-        },
-        {
-          "sessionId": "mcp-process:16a0750d-10c9-4e3d-8dd4-d7e65c9bdb43",
-          "createdAt": "2026-10-03T10:03:17.441Z"
-        },
-        {
-          "sessionId": "mcp-process:f85e584e-0798-420c-8fa3-616087f1bc6a",
-          "createdAt": "2026-10-02T14:21:12.206Z"
-        },
-        {
-          "sessionId": "mcp-process:f95c0d40-0b89-4c6d-9c29-0aad13f56c88",
-          "createdAt": "2026-10-02T08:02:05.392Z"
-        },
-        {
-          "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
-          "createdAt": "2026-10-01T19:58:25.677Z"
-        },
-        {
-          "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
-          "createdAt": "2026-09-30T07:41:02.533Z"
-        },
-        {
-          "sessionId": "mcp-process:13e5681a-0354-42df-9f76-62a3be77d662",
-          "createdAt": "2026-09-29T13:10:45.223Z"
-        },
-        {
-          "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
-          "createdAt": "2026-09-29T13:03:08.673Z"
-        },
-        {
-          "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
-          "createdAt": "2026-09-28T14:38:41.126Z"
-        },
-        {
-          "sessionId": "mcp-process:9ae98be2-2960-4fd5-8897-357dff59f893",
-          "createdAt": "2026-09-28T14:28:42.765Z"
-        },
-        {
-          "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
-          "createdAt": "2026-09-28T08:50:31.585Z"
-        },
-        {
-          "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
-          "createdAt": "2026-09-24T16:02:56.739Z"
         }
       ]
     },
@@ -87,6 +87,22 @@
       "createdAt": "2026-07-13T15:31:52.527Z",
       "updatedAt": "2026-07-13T15:31:52.527Z",
       "sessionInfo": [
+        {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-26T19:28:50.307Z"
+        },
+        {
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:09:51.052Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:10.106Z"
+        },
+        {
+          "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+          "createdAt": "2026-10-24T18:23:36.844Z"
+        },
         {
           "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
           "createdAt": "2026-10-20T11:14:26.047Z"
@@ -149,6 +165,50 @@
       "updatedAt": "2026-07-13T15:33:25.808Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",
+          "createdAt": "2026-10-27T10:51:56.840Z"
+        },
+        {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-26T19:28:50.307Z"
+        },
+        {
+          "sessionId": "mcp-process:2ea300d4-a6e1-4f1c-82e5-b4f035927213",
+          "createdAt": "2026-10-26T15:01:05.145Z"
+        },
+        {
+          "sessionId": "mcp-process:1b00a644-d656-4db7-97f5-2e44c79ba158",
+          "createdAt": "2026-10-26T14:45:57.278Z"
+        },
+        {
+          "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
+          "createdAt": "2026-10-26T14:37:17.235Z"
+        },
+        {
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:09:51.052Z"
+        },
+        {
+          "sessionId": "mcp-process:6e8788ec-e96d-4bdc-a7c0-5707c50017cf",
+          "createdAt": "2026-10-26T07:48:39.971Z"
+        },
+        {
+          "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+          "createdAt": "2026-10-25T18:19:10.223Z"
+        },
+        {
+          "sessionId": "mcp-process:9628bbee-d151-47b4-a618-00c378fe80a9",
+          "createdAt": "2026-10-25T18:16:45.150Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:10.106Z"
+        },
+        {
+          "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+          "createdAt": "2026-10-24T18:23:36.844Z"
+        },
+        {
           "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
           "createdAt": "2026-10-20T11:14:26.047Z"
         },
@@ -167,50 +227,6 @@
         {
           "sessionId": "mcp-process:1869e26a-76ae-4731-b7b9-c4d8d51014bf",
           "createdAt": "2026-10-07T12:59:23.879Z"
-        },
-        {
-          "sessionId": "mcp-process:16a0750d-10c9-4e3d-8dd4-d7e65c9bdb43",
-          "createdAt": "2026-10-03T10:03:17.441Z"
-        },
-        {
-          "sessionId": "mcp-process:f85e584e-0798-420c-8fa3-616087f1bc6a",
-          "createdAt": "2026-10-02T14:21:12.206Z"
-        },
-        {
-          "sessionId": "mcp-process:f95c0d40-0b89-4c6d-9c29-0aad13f56c88",
-          "createdAt": "2026-10-02T08:02:05.392Z"
-        },
-        {
-          "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
-          "createdAt": "2026-10-01T19:58:25.677Z"
-        },
-        {
-          "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
-          "createdAt": "2026-09-30T07:41:02.533Z"
-        },
-        {
-          "sessionId": "mcp-process:13e5681a-0354-42df-9f76-62a3be77d662",
-          "createdAt": "2026-09-29T13:10:45.223Z"
-        },
-        {
-          "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
-          "createdAt": "2026-09-29T13:03:08.673Z"
-        },
-        {
-          "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
-          "createdAt": "2026-09-28T14:38:41.126Z"
-        },
-        {
-          "sessionId": "mcp-process:9ae98be2-2960-4fd5-8897-357dff59f893",
-          "createdAt": "2026-09-28T14:28:42.765Z"
-        },
-        {
-          "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
-          "createdAt": "2026-09-28T08:50:31.585Z"
-        },
-        {
-          "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
-          "createdAt": "2026-09-24T16:02:56.739Z"
         }
       ]
     },
@@ -225,6 +241,22 @@
       "createdAt": "2026-07-13T15:33:50.370Z",
       "updatedAt": "2026-07-13T15:33:50.370Z",
       "sessionInfo": [
+        {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-26T19:28:50.307Z"
+        },
+        {
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:09:51.052Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:10.106Z"
+        },
+        {
+          "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+          "createdAt": "2026-10-24T18:23:36.844Z"
+        },
         {
           "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
           "createdAt": "2026-10-20T11:14:26.047Z"
@@ -272,10 +304,6 @@
         {
           "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
           "createdAt": "2026-09-28T14:36:41.840Z"
-        },
-        {
-          "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
-          "createdAt": "2026-09-28T08:15:17.804Z"
         }
       ]
     },
@@ -288,6 +316,22 @@
       "createdAt": "2026-07-13T15:33:58.204Z",
       "updatedAt": "2026-07-13T15:33:58.204Z",
       "sessionInfo": [
+        {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-26T19:28:50.307Z"
+        },
+        {
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:09:51.052Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:10.106Z"
+        },
+        {
+          "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+          "createdAt": "2026-10-24T18:23:36.844Z"
+        },
         {
           "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
           "createdAt": "2026-10-20T11:14:26.047Z"
@@ -351,6 +395,22 @@
       "updatedAt": "2026-07-13T15:34:04.707Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-26T19:28:50.307Z"
+        },
+        {
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:09:51.052Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:10.106Z"
+        },
+        {
+          "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+          "createdAt": "2026-10-24T18:23:36.844Z"
+        },
+        {
           "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
           "createdAt": "2026-10-20T11:14:26.047Z"
         },
@@ -397,10 +457,35 @@
         {
           "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
           "createdAt": "2026-09-28T14:36:41.840Z"
+        }
+      ]
+    },
+    {
+      "id": "c4382108-0be4-4c1d-b112-871284c543cb",
+      "title": "Reusable multi-document tabs without pane and column proliferation",
+      "description": "Users can keep multiple selectable documents or content views in a reusable tabbed area without creating a new pane and horizontally scrolling column for every opened resource. Tab selection preserves the agreed state of each view, and closing does not silently discard unsaved edits. Browser pages, editor documents, images, terminals and plugin-defined content are examples rather than a closed list.\n\nThe host and UX require agreement before implementation: pane/column tabs, a reusable area in the scrolling layout, or an overlay; opening/reuse, selection, closing, overflow, movement, focus and persistence. Codex's adjacent multi-tab panel is a behavioral reference, not a fixed layout.\n\nImplementation owner: P106(F011)/T550; prerequisite P094(F011)/T452 provides open managed-content composition/lifecycle. T088's administrative closure and the existing Tabs selector are not delivery evidence. Heca-Pro may reuse this generic capability for resources opened from chat; chat-specific placement and behavior are separate design work.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "fc06954a-5bb9-4280-8617-9d433570499f"
+      ],
+      "createdAt": "2026-10-24T12:01:05.906Z",
+      "updatedAt": "2026-10-25T14:00:52.909Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-26T19:28:50.307Z"
         },
         {
-          "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
-          "createdAt": "2026-09-28T08:15:17.804Z"
+          "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+          "createdAt": "2026-10-26T14:09:51.052Z"
+        },
+        {
+          "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+          "createdAt": "2026-10-24T18:41:10.106Z"
+        },
+        {
+          "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+          "createdAt": "2026-10-24T18:23:36.844Z"
         }
       ]
     }

@@ -9,9 +9,9 @@
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
-  "summary": "The server writes each session's layout and panes to JSON and rebuilds them on start.",
-  "description": "F012 accepted decision \"Sessions: palette # mode, CLI flags, … saved as JSON\". Depends on P100 (sessions).\n\n## Current state\n- Nothing about layout is saved today; the layout types (`heca-core/src/layout/session.rs`, `workspace.rs`, `column.rs`) cannot be written to a file.\n- The pattern to reuse: `heca/src/search_state.rs` (T386) — JSON in `dirs::data_dir()/heca/`, a `version` field, atomic write (temp file + rename), `load` never fails (missing / corrupt / future version → empty), saves by itself when a revision counter moves (`persist_if_changed`). Use it, don't write a second one.\n\n## Goal\n- Per session: name, project folder, workspaces, columns, panes (sizes as shares), each pane's program and folder, names, focus.\n- Saved when something changes (revision), and on exit.\n- On server start: rebuild sessions, restart shells in their folders. Running programs cannot be frozen; a hook lets heca-pro resume agents by id.\n- A setting to turn it off; a bad file never stops the server.\n\n## Done when\n- Quit the server with two sessions of several workspaces and panes; start it again: both sessions come back with the same layout and folders.",
-  "descriptionUpdatedAt": "2026-09-29T21:32:11.238Z",
+  "summary": "Versioned session JSON, durable lifecycle and configurable program relaunch/native harness resume from saved launch data.",
+  "description": "F012 sessions persistence; depends on P100's live session lifecycle. Read F012 decisions c205c5f5-cd0a-4212-9fda-8a8c63c98d3d and 2fc26220-2583-4392-bc2f-4724d406a555. T527 owns this work; do not create a competing harness-resume task.\n\n## Current State\nT544 provides serialized session content over the existing transport. Durable session JSON is not implemented. Reuse search_state/state_file persistence: data_dir, versioned JSON, atomic write, tolerant load and save when a revision changes. Keep UI outside heca-core.\n\n## Goal\n- Save session identity, name, project folder, metadata, active/stopped state, workspaces, columns, pane sizes as shares, pane names and last plain-data view/focus.\n- Save each launch's executable, complete structured arguments and working directory. Save registered harness driver identity and the harness's native session ID too.\n- config.toml: resume_programs=true and resume_harness=true by default. These independently govern ordinary program relaunch and harness resume.\n- Rebuild layout on restore. Relaunch enabled categories using original launch data; the harness driver builds its correct CLI resume call with the saved native ID. No universal --sessionId flag or hardcoded harness list.\n- Terminated sessions remain stopped until explicit Restart. Delete removes durable session and Heca-owned restore references; it must not reappear after server restart. P100 owns client dialogs/closure; project files are never deleted.\n- Retain the heca-pro extension hook; ordinary harness restore belongs to open Heca.\n- Save on change and graceful exit. Keep a persistence opt-out; bad, missing or future JSON never prevents startup. No killed process is frozen or recovered with its old PID/scrollback.\n\n## Acceptance\nRestore two sessions with several workspaces/panes and the same layout/folders. Verify exact command/argv round-trip, all four flag combinations, driver-native harness resume, missing ID/API failures without silently starting a new conversation, stopped-session retention, explicit restart and permanent deletion across server restart. Preserve missing-folder handling and notification.\n\n## Fresh Defaults When Resume Is Disabled\nKeep the pane and layout, and initialize that content's ordinary fresh default. A terminal-hosted program or harness becomes the user's normal shell. A browser opens its configured default home page; an editor starts with no files. This applies to every future registered content type through its own default constructor/factory, not a closed Terminal/Browser/Editor match or a universal Terminal substitute.\n\nP094/T452 owns managed-content creation/lifecycle/restore using P067/T398's open factory foundation. T527 consumes that contract and owns session JSON/policy; it does not build a competing registry or full Browser/Editor. Defaults remain owned by each content type's config. Verify a registered custom/nonterminal fixture and distinguish intentional fresh creation under false from failure to resume when true.",
+  "descriptionUpdatedAt": "2026-10-27T14:37:17.929Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -35,8 +35,8 @@
       "shortName": "save-each-session-to-json-and",
       "title": "Save each session to JSON and rebuild it when the server starts",
       "status": "planned",
-      "description": "Execution task for P105 — read the phase first. Reuse `heca/src/search_state.rs` (T386): data_dir, `version`, atomic write, `load` never fails, save when a revision counter moves. Make the layout types writable (heca-core/src/layout/session.rs, workspace.rs, column.rs) without pulling UI into heca-core. Edge cases: a pane whose folder no longer exists (restart in home, tell the user); a future file version (ignore, keep running); two sessions with the same name; a restore hook for heca-pro to resume agents by id.",
-      "descriptionUpdatedAt": "2026-09-29T21:32:42.996Z",
+      "description": "Execution task for P105; depends on completed P100(F012)/T522. Canonical F012 decisions c205c5f5-cd0a-4212-9fda-8a8c63c98d3d (lifecycle) and 2fc26220-2583-4392-bc2f-4724d406a555 (configurable recovery) refine and supersede shell-only restoration.\n\nReuse the existing search-state/state-file persistence pattern: data_dir, JSON version, atomic write, load tolerates missing/corrupt/future files, save on revision changes and before graceful exit. Reuse existing serialized session content where suitable and keep UI out of heca-core.\n\nPersist session identity, name, folder, metadata, active/stopped lifecycle state, layout (workspace/column/pane shares and names), and last plain-data view/focus. Persist each original launch's executable, complete structured arguments and working directory. Harness records additionally carry the registered driver identity and native session ID.\n\nconfig.toml defines two independent booleans, both default true:\n- resume_programs: relaunch recorded ordinary programs with their original commands and arguments.\n- resume_harness: resume registered harnesses from their original launch data plus their saved native session ID using the driver's actual CLI resume API. No hardcoded harness list or universal --sessionId switch.\n\nOn restore, reconstruct layout independently of flags; apply launch policy per category. Never replay shell history or claim that a killed process's memory/PID/scrollback survived. An explicitly terminated session remains stopped across server restarts until the user chooses Restart. The flags must not undo that choice. Delete removes the persisted definition and all Heca-owned restore/last-used references so it cannot return on restart; live client closure is T522's responsibility. Project files remain untouched.\n\nKeep the extension hook so heca-pro can contribute resume metadata, but generic harness recovery is open Heca behavior, not a pro-only path. Missing native IDs, unsupported resume APIs or obsolete launch targets must not silently create a new harness conversation or be reported as successful resume.\n\nAcceptance: round-trip several sessions/layouts and full argv including quoted values; restore eligible active sessions; stopped session stays stopped; explicit restart applies policy; deletion never restores; all four flag combinations; native harness ID preserved and used by driver-specific invocation; ordinary-program and harness categories do not gate each other; missing/corrupt/future JSON and absent folders handled. Existing missing-folder policy: new shell at home and inform the user. When resume is disabled for a category, keep the pane/layout but initialize its registered content at its normal fresh default, not an inactive placeholder: terminal-hosted program/harness becomes the user's normal shell; browser opens its configured default home page; editor opens with no files. Every future content type uses its own default constructor/factory contract, with defaults from its own config. Never hardcode a Terminal/Browser/Editor list or replace unrelated content with Terminal. Reuse the open managed-content creation/lifecycle contract (P094/T452 consuming P067/T398). T527 must not implement Browser/Editor, a second registry or a closed kind match. Test a registered custom/nonterminal content fixture as well as terminal behavior. Fresh defaults under an explicit false flag are intentional; do not confuse them with an enabled-resume failure.",
+      "descriptionUpdatedAt": "2026-10-27T14:36:38.918Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -55,15 +55,15 @@
           "checked": false
         },
         {
-          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-003-restore-on-server-start-layout-names-focus-shells-restarted-in-their-folders",
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-003-restore-layout-names-last-view-relaunch-eligible-programs-harnesses-by-config-while-explicitly-terminated-sessions-remain-stopped",
           "number": 3,
-          "title": "Restore on server start: layout, names, focus, shells restarted in their folders",
+          "title": "Restore layout/names/last view; relaunch eligible programs/harnesses by config while explicitly terminated sessions remain stopped",
           "checked": false
         },
         {
-          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-004-hook-so-heca-pro-can-resume-agents-on-restore",
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-004-registered-harness-native-resume-from-original-launch-data-and-saved-native-session-id-preserve-heca-pro-extension-hook",
           "number": 4,
-          "title": "Hook so heca-pro can resume agents on restore",
+          "title": "Registered harness-native resume from original launch data and saved native session ID; preserve heca-pro extension hook",
           "checked": false
         },
         {
@@ -77,6 +77,36 @@
           "number": 6,
           "title": "Test: round-trip two sessions; corrupt and future-version files",
           "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-007-persist-original-executable-complete-structured-argv-cwd-and-registered-harness-driver-native-session-id-in-versioned-json",
+          "number": 7,
+          "title": "Persist original executable, complete structured argv/cwd and registered harness driver/native session ID in versioned JSON",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-008-config-resume-programs-true-and-resume-harness-true-independent-categories-verify-all-four-combinations",
+          "number": 8,
+          "title": "Config resume_programs=true and resume_harness=true: independent categories; verify all four combinations",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-009-persist-stopped-state-until-explicit-restart-delete-purges-durable-restore-last-used-references-and-never-resurrects-a-session",
+          "number": 9,
+          "title": "Persist stopped state until explicit Restart; Delete purges durable restore/last-used references and never resurrects a session",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-010-driver-specific-resume-preserves-the-native-harness-session-missing-id-unsupported-api-does-not-silently-start-a-fresh-conversation",
+          "number": 10,
+          "title": "Driver-specific resume preserves the native harness session; missing ID/unsupported API does not silently start a fresh conversation",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-011-resume-disabled-preserve-pane-layout-and-create-each-registered-content-s-fresh-default-shell-for-terminal-programs-configured-browser-home-empty-editor-custom-content-fixture-proves-no-closed-type-list",
+          "number": 11,
+          "title": "Resume disabled: preserve pane/layout and create each registered content's fresh default; shell for terminal programs, configured browser home, empty editor; custom content fixture proves no closed type list",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -88,18 +118,27 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-09-29T21:32:42.950Z",
-      "updatedAt": "2026-09-29T21:33:09.025Z",
+      "updatedAt": "2026-10-27T14:36:40.001Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T21:32:11.171Z",
-  "updatedAt": "2026-09-29T21:33:24.131Z",
+  "updatedAt": "2026-10-27T14:37:17.929Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "da876885-ede3-4cc3-98c7-4b7bd3b0fdd0",
+      "date": "2026-10-27T14:14:56.281Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
   "sessionInfo": []
 }

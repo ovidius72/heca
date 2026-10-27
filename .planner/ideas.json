@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 7,
+  "nextIdeaNumber": 11,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -30,6 +30,16 @@
       "promotion": null,
       "createdAt": "2026-09-22T12:30:05.651Z",
       "updatedAt": "2026-09-22T12:30:05.651Z"
+    },
+    {
+      "id": "6b5fbcc6-bcbd-43bb-aa41-17c85b1437c4",
+      "number": 10,
+      "shortId": "FJQHP",
+      "title": "Reusable configurable label segments and action buttons across components",
+      "description": "Captured at Antonio's explicit request as an IDEA ONLY. Implementation is intentionally deferred: this is not approval to implement, promote to a feature/phase/task, or expand P094.\n\nProposal\nProvide reusable components for configured label segments and action buttons that can be composed anywhere: terminal headers, dock views, workspace rows, plugin content, and other surfaces. Register named information/label producers and actions once; each consuming component chooses its own ordered lists through config.toml rather than registration implicitly inserting UI into a universal pane header.\n\nIllustrative configuration from the discussion (provisional names, not an agreed schema):\n[settings.pane]\nlabel_segments = [\"git\", \"...\"]\n\n[settings.dockview]\nlabel_segments = [\"...\"]\naction_buttons = [\"a\", \"b\", \"float\"]\n\n[settings.dockview.ws]\n# Per-component or nested-surface choices.\n\nThe exact configuration root remains open: existing visual settings live under [appearance.*]. Do not migrate or add these keys merely because they are illustrated here.\n\nWhy\nThe current extension hooks pane_button, pane_chip and pane_line contribute to fixed built-in chrome surfaces. P094 makes pane content own its own optional header; browser/editor/plugin content may have no header at all. Reusable information and action components would separate the registered capability from its placement, so a consumer explicitly composes the UI where appropriate.\n\nExisting pieces to reuse\n- ActionCatalog/ActionRegistry remain the authority for actions, icons, labels, shortcuts, arguments and policy; avoid a competing action registry.\n- Tag already renders segmented icon/text labels.\n- ButtonGroup already renders grouped buttons.\n- pane_items/listing.rs already centralizes configured ordering and default extension contributions.\n\nOpen design questions\n- Public registration and composition API; names such as SegmentLabels and ButtonActions were suggestions, not decisions.\n- How a consumer supplies plain context: which pane/workspace/directory a label reads and which target an action acts on, without host-private AppState or caller-maintained plumbing.\n- Applicability and unavailable-data behavior across terminal, browser, editor and arbitrary plugin content; no implicit requirement that a Pane has a header.\n- Per-component configuration scopes, reactivity, configuration reload, and compatibility with existing appearance.pane/title_segments/title_actions and appearance.sidebar/pane_lines.\n- Native, declarative/plugin and RPC reachability through the established shared paths.\n\nRelationship to existing work\nI006 records the narrower original problem of closed pane-action/segment vocabularies; this idea concerns reuse and configurable placement across multiple components, beyond opening that vocabulary. I001 concerns a transient bottom-bar information channel and is separate.\nP094(F011)/T450 owns terminal-header ownership; T452 owns generic pane content/creation; T454 proves a second content kind. This idea does not replace, duplicate, block or authorize changes to those tasks. A small rename of existing terminal-header/sidebar hooks was discussed separately, but is not implementation approval contained in this idea.",
+      "promotion": null,
+      "createdAt": "2026-10-24T07:24:45.631Z",
+      "updatedAt": "2026-10-24T07:24:45.631Z"
     }
   ]
 }

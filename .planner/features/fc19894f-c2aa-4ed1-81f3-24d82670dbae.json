@@ -13,7 +13,16 @@
   "endDate": "",
   "workDone": "",
   "workRemaining": "",
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "861eeaaf-9fbc-4168-a647-2afc1a14912a",
+      "title": "Optional toast duration and precedence",
+      "decision": "Antonio approved an optional fluent Notification::auto_dismiss(Duration). An explicit duration wins; otherwise use settings.notification_system.auto_dismiss_ms, whose fallback comes from config.default.toml. Sticky notifications do not expire.",
+      "rationale": "Keep notification defaults configurable without discarding a producer's explicit duration.",
+      "implementationNotes": "Implement in T512. Preserve the existing Notification builder; do not expose NotificationDraft or require Intent/PropValue calls. T544 owns notification server/client transport and projection separation.",
+      "acceptedAt": "2026-10-26T15:02:31.101Z"
+    }
+  ],
   "phaseIds": [
     "93379c9a-43b7-43eb-8988-be505251fe79",
     "03b297bb-a915-4712-a6b4-dc688dc7ddc5",
@@ -27,6 +36,6 @@
   "dependsOn": [],
   "statusLog": [],
   "createdAt": "2026-07-03T22:49:39.780Z",
-  "updatedAt": "2026-07-03T22:50:20.126Z",
+  "updatedAt": "2026-10-26T15:02:31.101Z",
   "sessionInfo": []
 }

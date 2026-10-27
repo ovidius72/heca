@@ -4,8 +4,8 @@
   "shortId": "",
   "priority": 0,
   "name": "📐 Grid-UI Widget Library",
-  "description": "Espansione della libreria UI GPU-free e signal-driven: scroll/list primitive, pane shell header/tabs, icon widget Nerd Font, showcase coverage con visual regression, bloom/custom draw effects, widget aggiuntivi e cleanup del crate.",
-  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
+  "description": "Approved coordination, 2026-10-25: shared part/template work T517 moved intact from P052 to P067/F003, before T398. P052 retains only T118 structural variant cleanup, T122 delivered lint-alignment verification and T350 delivered flex API/docs/acceptance closeout. These residuals do not gate the shared API chain. Terminal-header ownership is P094/T450 and actual multi-document content tabs are P106/T550 after managed content T452; existing generic Pane/Tabs widgets do not prove those app capabilities. The library scope below remains the reusable primitive foundation.\n\nEspansione della libreria UI GPU-free e signal-driven: scroll/list primitive, pane shell header/tabs, icon widget Nerd Font, showcase coverage con visual regression, bloom/custom draw effects, widget aggiuntivi e cleanup del crate.",
+  "descriptionUpdatedAt": "2026-10-25T14:20:15.293Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -30,8 +30,17 @@
     "9a4fa5f5-62a8-4243-85ab-de8edaed21e8"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "595c9cc4-954d-48bd-af78-d7ec0236eb28",
+      "date": "2026-10-25T09:07:06.934Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-07-13T15:29:44.427Z",
+  "updatedAt": "2026-10-25T14:20:15.293Z",
   "sessionInfo": []
 }

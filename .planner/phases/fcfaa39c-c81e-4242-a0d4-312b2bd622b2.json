@@ -9,9 +9,9 @@
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
-  "summary": "The server holds many sessions; switch in the same window from the palette's `#` mode; CLI to list, attach, create, close.",
-  "description": "Third step of the server/client model. Depends on P099 (the connection). F012 accepted decision \"Sessions: palette # mode, CLI flags, plain heca attaches to the last session, saved as JSON\". Replaces the earlier plan of one process per instance with OS window switching.\n\n## Goal\n- The server holds many sessions, each with a name and a project folder (heca-pro stores its linked feature on it).\n- **Palette `#` mode** beside `:` commands, `@` panes, `$` workspaces: one row per session (name, folder, windows attached, agents running); picking one switches this window; searchable and remembered.\n- **First, fix the palette's mode table** (its own task): today it is written twice in `heca/src/chrome/palette.rs` — `sigil_for` (~370) and the `.mode(...)` calls in `open_command_palette` (~414) — kept equal by hand. One table both read, so the sessions mode (and any plugin's mode) is declared once.\n- Actions: new, rename, close, detach, switch — in the palette, bindable, callable by RPC.\n- CLI (cli.rs flag style): `heca --sessions [--json]`, `--attach <name>`, `--new <name> [folder]`, `--kill <name>`, `--standalone`. Plain `heca`: server running → attach to the last session; none → start the server in the background, restore sessions, attach to the last. `--standalone` = today's behaviour.\n\n## Preserve\n- Text from wherever the app keeps user-facing text; nothing hard-coded. Not blocked by any other feature.\n\n## Done when\n- Two sessions; `#` in the palette lists both and switches in the same window; the CLI lists and attaches; plain `heca` reattaches to the last one.",
-  "descriptionUpdatedAt": "2026-09-29T21:32:23.375Z",
+  "summary": "Named sessions, same-window # switching, GUI/CLI actions, explicit terminate/restart/delete with distinct client behavior.",
+  "description": "Third step of the server/client model. Depends on P099 (the connection). F012 accepted decision \"Sessions: palette # mode, CLI flags, plain heca attaches to the last session, saved as JSON\". Replaces the earlier plan of one process per instance with OS window switching.\n\n## Goal\n- The server holds many sessions, each with a name and a project folder (heca-pro stores its linked feature on it).\n- **Palette `#` mode** beside `:` commands, `@` panes, `$` workspaces: one row per session (name, folder, windows attached, agents running); picking one switches this window; searchable and remembered.\n- P100/T526 already delivered one palette mode table. Reuse it for # and preserve existing mode search history.\n- Actions: new, rename, terminate, restart, delete, detach, switch — in the palette, bindable, callable by RPC.\n- CLI (cli.rs flag style): `heca --sessions [--json]`, `--attach <name>`, `--new <name> [folder]`, `--kill <name>`, `--standalone`. Plain `heca`: server running → attach to the last session; none → start the server in the background, restore sessions, attach to the last. `--standalone` = today's behaviour.\n\n## Preserve\n- Text from wherever the app keeps user-facing text; nothing hard-coded. Not blocked by any other feature.\n\n## Done when\n- Two sessions; `#` in the palette lists both and switches in the same window; the CLI lists and attaches; plain `heca` reattaches to the last one.\n\n## Approved Lifecycle (2026-10-27)\nCanonical ownership: F012 decisions c205c5f5-cd0a-4212-9fda-8a8c63c98d3d and 2fc26220-2583-4392-bc2f-4724d406a555.\n- Terminate stops processes and retains the session definition and stopped state. Clients remain open with Session unavailable and [Restart] [Exit].\n- Restart is an explicit action. A terminated session must not restart just because a server or client reconnects.\n- Delete stops it if active, removes Heca-owned runtime/selection references and closes its attached clients. Other sessions and project files are untouched.\n- Normal GUI launch starts a missing server; existing disconnected windows show the agreed blocking server-unavailable dialog instead of restarting it automatically.\n- --kill <name> is termination, not deletion; permanent-delete CLI spelling is still unspecified.\n- T522 captures original launch executable/arguments/cwd and native harness session/driver identity. P105/T527 persists these and applies resume_programs=true / resume_harness=true through registered harness CLI capabilities.\n- P100 owns live lifecycle and protocol. Persistence, durable deletion and restore after server exit belong to P105; they must not become a circular dependency that prevents T522 completing.\n\nAdditional acceptance: several clients observe the correct termination dialog; explicit restart targets the same session; deletion closes only that session's clients; stale references cannot recreate a deleted session. No T522 implementation or native acceptance is claimed yet.\n\nDisabled resume does not remove or disable a pane: its own registered content starts fresh with its normal configured defaults. Terminal programs/harnesses become a normal shell, browser uses its default home, editor has no open files. This is generic for future registered content; T527 consumes existing managed-content factory/lifecycle ownership, without a closed content-kind list.",
+  "descriptionUpdatedAt": "2026-10-27T14:37:15.040Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -35,11 +35,20 @@
       "priority": 1,
       "shortName": "register-running-instances-and",
       "title": "Sessions in the server: palette `#` mode, session actions, CLI, plain `heca` attaches to the last",
-      "status": "planned",
-      "description": "Execution task for P100 — read the phase and F012's decision \"Sessions: palette # mode…\" first. Depends on P099 (connection) and on the mode-table task in this phase (do that first). Replaces the old OS window-switching plan: no per-OS focus hand-over is needed any more.\n\nEdge cases: two sessions with the same name; closing the session a window is showing (switch that window to another, or ask); the last session closed; `--attach` to a name that does not exist (clear message, offer `--new`).",
-      "descriptionUpdatedAt": "2026-09-29T21:32:46.854Z",
-      "notes": "",
-      "statusLog": [],
+      "status": "in-progress",
+      "description": "Execution task for P100 — read the phase and F012's decision \"Sessions: palette # mode…\" first. Depends on P099 (connection) and on the mode-table task in this phase (do that first). Replaces the old OS window-switching plan: no per-OS focus hand-over is needed any more.\n\nApproved 2026-10-27 (F012 decisions c205c5f5-cd0a-4212-9fda-8a8c63c98d3d and 2fc26220-2583-4392-bc2f-4724d406a555):\n- Keep distinct actions for terminate, restart and delete, alongside new, rename, detach and switch, through the existing catalog, GUI, bindings and RPC.\n- Terminate stops session processes and retains its definition with a stopped state. Affected clients stay open with a blocking Session unavailable dialog and [Restart] [Exit]. Do not switch or restart automatically.\n- Restart is explicit and rebuilds the retained session. Delete stops it if active, removes Heca-owned live references, and closes its attached clients. Do not delete project files or affect another session.\n- --kill <name> is the planned terminate operation, not permanent deletion. It is not implemented yet. Permanent-delete CLI spelling remains unspecified; do not invent it.\n- Capture original executable, structured arguments and working directory; retain registered harness driver identity and the native harness session ID. Never substitute a Heca session ID or PID.\n- config.toml resume_programs=true and resume_harness=true are independent category defaults. P105/T527 owns durable JSON and policy-driven relaunch/resume through each harness's CLI API, not a universal --sessionId.\n- Runtime lifecycle/state/launch capture belong here. Disk persistence, durable deletion and post-server-restart recovery belong to T527, which depends on this task; do not create a circular prerequisite.\n- Preserve one socket/in-process code path, normal GUI auto-start of a missing server, same-window switching, other clients' attachment, and standalone behavior.\n\nEdge cases: duplicate names; unknown attach gives a clear message and offers creation; last session terminated/deleted; several windows on one session; reconnect after server stop; terminated sessions never auto-resurrect. When resume is disabled, preserve the pane and initialize its own registered content's fresh default: a terminal-hosted program/harness becomes a normal shell; a browser uses its configured home page; an editor has no files open. This is an open factory/lifecycle contract for all future content, not a closed enum or a universal Terminal fallback. T527 consumes it; P094/T452 and P067/T398 retain ownership of the shared content factory foundations.",
+      "descriptionUpdatedAt": "2026-10-27T14:36:35.677Z",
+      "notes": "Code: /Users/antonio/projects/heca-p100, feat/p100-sessions, base 1c74bdf3; canonical planner in /Users/antonio/projects/heca. Details: .planner/docs/t522-sessions.md. F012 lifecycle/recovery decisions and P100/P105 task/phase descriptions are reconciled. Both resume flags default true. If false, create that registered content's normal fresh default, generic for future types: terminal shell, configured browser home, editor with no files. P094/T452 and P067/T398 own shared managed-content factory foundations. P100 before P105. Only permanent-delete CLI spelling remains open. No implementation or commit yet.",
+      "statusLog": [
+        {
+          "id": "7598e0aa-7a63-4866-b702-bc51049216a1",
+          "date": "2026-10-27T10:38:34.659Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -56,9 +65,9 @@
           "checked": false
         },
         {
-          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-003-actions-new-rename-close-detach-switch-palette-key-rpc",
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-003-actions-new-rename-terminate-restart-delete-detach-switch-gui-palette-key-rpc",
           "number": 3,
-          "title": "Actions: new, rename, close, detach, switch (palette, key, RPC)",
+          "title": "Actions: new, rename, terminate, restart, delete, detach, switch (GUI palette, key, RPC)",
           "checked": false
         },
         {
@@ -68,9 +77,9 @@
           "checked": false
         },
         {
-          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-005-plain-heca-attach-to-last-start-the-server-and-restore-if-none-runs",
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-005-plain-gui-launch-attach-last-and-start-a-missing-server-t527-supplies-disk-restoration-without-a-circular-task-dependency",
           "number": 5,
-          "title": "Plain `heca`: attach to last; start the server and restore if none runs",
+          "title": "Plain GUI launch: attach last and start a missing server; T527 supplies disk restoration without a circular task dependency",
           "checked": false
         },
         {
@@ -78,21 +87,51 @@
           "number": 6,
           "title": "Docs",
           "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-007-server-unavailable-blocking-dialog-with-close-or-gui-restart-and-reconnect-no-automatic-restart-by-disconnected-windows-reconnect-to-the-intended-session",
+          "number": 7,
+          "title": "Server unavailable: blocking Dialog with Close or GUI Restart and reconnect; no automatic restart by disconnected windows; reconnect to the intended session",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-008-terminate-retains-a-stopped-session-its-clients-show-session-unavailable-restart-exit-no-automatic-restart-or-switch-other-sessions-unaffected",
+          "number": 8,
+          "title": "Terminate retains a stopped session; its clients show Session unavailable [Restart] [Exit]; no automatic restart or switch; other sessions unaffected",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-009-delete-stops-the-session-and-removes-heca-owned-live-references-closes-attached-clients-only-without-deleting-project-files",
+          "number": 9,
+          "title": "Delete stops the session and removes Heca-owned live references; closes attached clients only, without deleting project files",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-010-capture-original-executable-structured-argv-cwd-and-native-harness-driver-session-identity-for-t527-persistence",
+          "number": 10,
+          "title": "Capture original executable, structured argv, cwd and native harness driver/session identity for T527 persistence",
+          "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
         "69a168bf-276e-401a-a337-597ef29221b3",
-        "05d2b3e6-f798-47a9-ad4d-bd501e37b266"
+        "05d2b3e6-f798-47a9-ad4d-bd501e37b266",
+        "ed677df2-82fe-4abb-a23b-30f90bc40919"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-10-27T10:38:34.659Z",
       "completedAt": "",
       "createdAt": "2026-09-29T19:22:07.683Z",
-      "updatedAt": "2026-09-29T21:33:08.617Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-10-27T14:37:23.464Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6b3e3a8f-c279-4651-a154-77ffa8b9f0a1",
+          "createdAt": "2026-10-27T11:18:29.602Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:6b3e3a8f-c279-4651-a154-77ffa8b9f0a1"
     },
     {
       "id": "05d2b3e6-f798-47a9-ad4d-bd501e37b266",
@@ -192,12 +231,33 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:28.041Z",
-  "updatedAt": "2026-10-15T14:09:24.270Z",
+  "updatedAt": "2026-10-27T14:37:23.464Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-10-23T23:44:00.472Z",
   "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/fcfaa39c-c81e-4242-a0d4-312b2bd622b2-2026-10-24T18-33-49-836Z.md",
+      "clearedAt": "2026-10-24T18:33:49.836Z",
+      "reason": "manual"
+    },
+    {
+      "file": "handoff-archive/fcfaa39c-c81e-4242-a0d4-312b2bd622b2-2026-10-23T23-44-00-444Z.md",
+      "clearedAt": "2026-10-23T23:44:00.444Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/fcfaa39c-c81e-4242-a0d4-312b2bd622b2-2026-10-23T23-31-24-110Z.md",
+      "clearedAt": "2026-10-23T23:31:24.110Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/fcfaa39c-c81e-4242-a0d4-312b2bd622b2-2026-10-23T23-31-23-950Z.md",
+      "clearedAt": "2026-10-23T23:31:23.950Z",
+      "reason": "superseded"
+    }
+  ],
   "statusLog": [
     {
       "id": "b34adea2-f855-4950-b7c4-93b867cf65c9",
@@ -217,6 +277,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:6b3e3a8f-c279-4651-a154-77ffa8b9f0a1",
+      "createdAt": "2026-10-27T11:18:29.602Z"
+    },
     {
       "sessionId": "mcp-process:aa08112c-db67-4798-94bb-18f6cfc4c82b",
       "createdAt": "2026-10-15T13:18:24.221Z"

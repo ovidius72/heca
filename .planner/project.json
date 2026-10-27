@@ -7,68 +7,68 @@
     "updatedAt": "2026-09-04T07:43:16.047Z",
     "sessionInfo": [
       {
+        "sessionId": "mcp-process:6b3e3a8f-c279-4651-a154-77ffa8b9f0a1",
+        "createdAt": "2026-10-27T10:36:36.373Z"
+      },
+      {
+        "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",
+        "createdAt": "2026-10-27T08:30:33.942Z"
+      },
+      {
+        "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+        "createdAt": "2026-10-26T19:28:50.307Z"
+      },
+      {
+        "sessionId": "mcp-process:2ea300d4-a6e1-4f1c-82e5-b4f035927213",
+        "createdAt": "2026-10-26T15:00:50.584Z"
+      },
+      {
+        "sessionId": "mcp-process:1b00a644-d656-4db7-97f5-2e44c79ba158",
+        "createdAt": "2026-10-26T14:44:45.758Z"
+      },
+      {
+        "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
+        "createdAt": "2026-10-26T14:36:39.457Z"
+      },
+      {
+        "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
+        "createdAt": "2026-10-26T14:09:51.052Z"
+      },
+      {
+        "sessionId": "mcp-process:6e8788ec-e96d-4bdc-a7c0-5707c50017cf",
+        "createdAt": "2026-10-26T07:48:32.075Z"
+      },
+      {
+        "sessionId": "mcp-process:676bc54d-a25a-443e-8e08-4a3dc62ef0ed",
+        "createdAt": "2026-10-25T18:16:56.986Z"
+      },
+      {
+        "sessionId": "mcp-process:9628bbee-d151-47b4-a618-00c378fe80a9",
+        "createdAt": "2026-10-25T18:16:19.276Z"
+      },
+      {
+        "sessionId": "mcp-process:1a058a80-ca9b-4e11-9f86-fa8f1c7bddb5",
+        "createdAt": "2026-10-25T08:50:59.576Z"
+      },
+      {
+        "sessionId": "mcp-process:5903aca6-3ef1-4dfe-b759-ad62d315de3e",
+        "createdAt": "2026-10-25T07:37:45.129Z"
+      },
+      {
+        "sessionId": "mcp-process:b0754712-0f5d-4e75-bb71-9c4723e858b1",
+        "createdAt": "2026-10-24T18:41:10.934Z"
+      },
+      {
+        "sessionId": "mcp-process:a1b8e395-b388-4eca-99aa-06505790352b",
+        "createdAt": "2026-10-24T18:23:36.844Z"
+      },
+      {
+        "sessionId": "mcp-process:10b10067-4bd5-47bf-8236-29d8d00cb324",
+        "createdAt": "2026-10-24T06:48:02.305Z"
+      },
+      {
         "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
         "createdAt": "2026-10-20T11:14:26.047Z"
-      },
-      {
-        "sessionId": "mcp-process:b2c0351c-2f5e-4ca3-8548-c6b5dee5349f",
-        "createdAt": "2026-10-20T11:13:02.958Z"
-      },
-      {
-        "sessionId": "mcp-process:229d6ac2-aaf9-4cae-974d-20998a6a3871",
-        "createdAt": "2026-10-20T07:19:46.803Z"
-      },
-      {
-        "sessionId": "mcp-process:6119af15-469b-4023-903d-45ae683ff445",
-        "createdAt": "2026-10-17T10:34:57.908Z"
-      },
-      {
-        "sessionId": "mcp-process:697df795-c193-4259-b042-e995517e34a5",
-        "createdAt": "2026-10-16T07:11:56.889Z"
-      },
-      {
-        "sessionId": "mcp-process:aa08112c-db67-4798-94bb-18f6cfc4c82b",
-        "createdAt": "2026-10-15T10:52:18.087Z"
-      },
-      {
-        "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
-        "createdAt": "2026-10-15T09:11:09.673Z"
-      },
-      {
-        "sessionId": "mcp-process:1869e26a-76ae-4731-b7b9-c4d8d51014bf",
-        "createdAt": "2026-10-07T12:59:23.879Z"
-      },
-      {
-        "sessionId": "mcp-process:16a0750d-10c9-4e3d-8dd4-d7e65c9bdb43",
-        "createdAt": "2026-10-03T10:03:17.441Z"
-      },
-      {
-        "sessionId": "mcp-process:f85e584e-0798-420c-8fa3-616087f1bc6a",
-        "createdAt": "2026-10-02T14:23:29.443Z"
-      },
-      {
-        "sessionId": "mcp-process:f95c0d40-0b89-4c6d-9c29-0aad13f56c88",
-        "createdAt": "2026-10-02T08:02:05.392Z"
-      },
-      {
-        "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
-        "createdAt": "2026-10-01T19:58:25.677Z"
-      },
-      {
-        "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
-        "createdAt": "2026-09-30T07:41:02.533Z"
-      },
-      {
-        "sessionId": "mcp-process:13e5681a-0354-42df-9f76-62a3be77d662",
-        "createdAt": "2026-09-29T13:10:45.223Z"
-      },
-      {
-        "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
-        "createdAt": "2026-09-29T07:37:19.128Z"
-      },
-      {
-        "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
-        "createdAt": "2026-09-28T14:38:39.219Z"
       }
     ]
   },
@@ -136,6 +136,14 @@
       "rationale": "Migrated from the legacy project decisions collection.",
       "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
       "acceptedAt": "2026-09-02T07:55:24.685Z"
+    },
+    {
+      "id": "5c7d85c7-b0f5-4ed0-b8ca-2f06f5cbbad4",
+      "title": "Public component authoring APIs expose ordinary constructors and children, without Box or casts",
+      "decision": "Public APIs used to author app, native-extension and described-plugin component trees must use ordinary component constructors, typed builders and child composition. They must not expose Box<dyn Component> as an authoring parameter or return value, require Box::new, trait-object casts, or explicit storage/type-erasure conversions merely to compose components. Allocation and type erasure are internal framework responsibilities. Public APIs and examples must let authors compose concrete components directly.",
+      "rationale": "Antonio explicitly confirmed on 2026-10-24 that Box and casts must be removed from public APIs. This generalizes the existing Pane-specific authoring constraint without changing the decision that pane content is open component composition.",
+      "implementationNotes": "Approved 2026-10-25: apply this ordinary constructor/fluent composition contract to ALL supported public native widgets/components, factories and return boundaries, not Terminal alone. Heterogeneous children may chain .child(a).child(b); shared child/metadata mechanisms and internal allocation are reused. Plugin identity handles remain acceptable; sandbox SDK descriptions and native live components expose equivalent capabilities without sharing runtime objects.\nCentralized implementation: P067(F003)/T517 (moved intact from P052) fixes generic parts/templates first; P067/T398 then owns registry/model migration, public constructors including standalone Terminal::new(\"shell\"), native binding and the exhaustive public-authoring acceptance. No caller boxing/casts/manual conversions or private host contexts.\nP094 retains terminal-header composition (T450), managed creation/lifecycle/restore consuming that API (T452), float/input audits (T453/T455), second-content proof (T454) and picker convergence (T457). Do not make T398 depend back on T452. P106(F011)/T550 now owns real multi-document tabs and retains its T452 task prerequisite; do not block tabs on closure of all P094.\nP052 retains T118/T122/T350 closeouts without duplicating the global API. T253/T305 remain deferred/on-demand; T251/T474/T520 and other completed foundations stay done. T360 review, F012 integration and P022 actual WASM loading/startup parity retain their owners. One canonical Provider/region reference is docs/widgets.md; other guides link there. Planner operations always use /Users/antonio/projects/heca/.planner. Task dependencies, task descriptions and the P067/P094 handoffs record the operational resume sequence; planning changes do not authorize implementation/task-start or claim runtime verification.",
+      "acceptedAt": "2026-10-24T07:22:36.364Z"
     }
   ],
   "nextFeatureNumber": 12,

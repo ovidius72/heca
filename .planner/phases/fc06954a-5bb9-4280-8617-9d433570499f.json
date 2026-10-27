@@ -1,0 +1,111 @@
+{
+  "id": "fc06954a-5bb9-4280-8617-9d433570499f",
+  "featureId": "873f81ba-ce7c-4bcc-90ed-27a25a742285",
+  "number": 106,
+  "shortId": "RQH7S",
+  "priority": 6,
+  "slug": "reusable-multi-document-tabs-for-managed-content",
+  "title": "Reusable multi-document tabs for managed content",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Real selectable content views without a pane and column per resource; consumes T452 after the shared API foundation.",
+  "description": "Approved planning consolidation, 2026-10-25: the existing T550 was moved intact here from P094, preserving its identity, history, checklist and T452 dependency. This phase owns actual reusable multi-document tabs, not the shared public UI API or open managed-pane foundation.\n\nCurrent code: heca-grid-ui/src/widgets/tabs.rs:104 constructs a selector from labels; :119 adds Choice tabs; :154 exposes selection state. heca-grid-ui/src/widgets/pane/mod.rs:57 is a generic frame. These do not manage selectable document/content instances. heca/src/chrome/panes/workspace/gather.rs:66 still constructs terminal content until P094/T452 implements the open managed-content lifecycle.\n\nScope: design with Antonio the tab host/placement, opening/reuse, selection/closing, overflow, movement, focus/KeyHints and resource lifetime/persistence; then compose existing typed widgets with real content views that retain agreed state. Browser/Editor/Terminal/plugin-defined content are examples, never a closed kind enum. Preserve ordinary constructors/builders and no public Box/cast ceremony. Do not add a Browser or IDE engine or Heca-Pro chat work here.\n\nDependency: T550 retains its task dependency on P094(F011)/T452. Do not block this phase on completion of all P094: the native public API is supplied by P067/T398, managed content by T452, and tab functionality is separate. P094 may close its original component-breakout scope without claiming these tabs are delivered.\n\nRequirement c4382108-0be4-4c1d-b112-871284c543cb belongs here after the move. T088 remains historically done and is not implementation evidence. Completion requires at least two real selectable content views, correct preservation/dirty-close/last-tab/overflow/focus/restore behavior and Antonio-driven visual acceptance; a Tabs strip or registry alone is insufficient. Implementation remains planned until explicitly selected.",
+  "descriptionUpdatedAt": "2026-10-25T14:15:38.835Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "0a3593ad-cb4b-4bf4-8bb2-2a381cfb20dc"
+  ],
+  "tasks": [
+    {
+      "id": "0a3593ad-cb4b-4bf4-8bb2-2a381cfb20dc",
+      "phaseId": "fc06954a-5bb9-4280-8617-9d433570499f",
+      "number": 550,
+      "shortId": "JRD3H",
+      "priority": 1,
+      "shortName": "design-and-implement-reusable",
+      "title": "Design and implement reusable multi-document tabs for managed content",
+      "status": "planned",
+      "description": "APPROVED MOVE — 2026-10-25: this existing task now belongs to P106(F011), preserving id, history, checklist and its T452 dependency. P094 owns the open managed-content prerequisite, not tab functionality.\n\nGOAL\nProvide actual selectable document/content views inside a reusable tabbed area, so opening several files or browser pages does not require a new pane and scrolling column for every resource. This is generic Heca content composition. Heca-Pro's conversation/resource workflow is a future consumer, not chat implementation owned here.\n\nCURRENT STATE AND REFERENCES\nP040(F004)/T088 originally requested multi-document pane tabs but was closed administratively. Its historical done status is not evidence of delivery. heca-grid-ui/src/widgets/tabs.rs, Tabs::tab and Tabs::state provide a selector strip; heca-grid-ui/src/widgets/pane/mod.rs, Pane and its Parent implementation provide composition. They do not by themselves manage selectable document instances. heca/src/chrome/panes/workspace/gather.rs, gather currently constructs terminal::view_of content. Resolve these symbols against the current checkout before editing; source locations are discovery hints, not permanent identities.\nRead P094's accepted open-composition decision 502849a5-af36-4331-8788-249dd6629c28 and .planner/docs/p094-pane-hosts-any-app.md. T452 owns the managed-content construction/lifecycle seam. Reuse its completed result rather than implementing another registry or replacing it. P067/T398 owns the global widget registry; Browser and Editor engines remain their respective work.\n\nDESIGN GATE — AGREE WITH ANTONIO BEFORE IMPLEMENTATION\nEvaluate tabs in a pane or column, a reusable adjacent area in the scrolling layout, and an overlay. Codex's adjacent multi-tab resource panel is a behavioral reference, not a fixed right-side layout. Agree the container/placement, opening and reuse rules, tab selection and closing, overflow, movement, focus and KeyHints interaction, and persistence/resource lifetime. No placement or new shortcut is selected by creating this task. Keep this task planned until execution is explicitly selected through the normal lifecycle.\n\nIMPLEMENTATION AFTER DESIGN AGREEMENT\nCompose the existing Tabs selector with arbitrary Component content using the established authoring API. Selecting tabs must switch real content while preserving the agreed per-view state, including drafts, navigation and scroll/focus state where supported. Closing a tab must use the agreed component lifecycle and must not silently discard dirty documents or terminate a process merely because its tab becomes inactive. Support appropriate component/provider cleanup and defined behavior when the last tab closes or a provider is unavailable.\nKeep geometry, input routing, clipping and drawing on their existing owners. Browser, Editor, Terminal, image viewers and plugins are examples, not a closed content-kind enum. Do not require Box/cast/manual type-erasure syntax from authors. Open/select/close operations use the existing action/permission paths and are available through the supported UI and extension interfaces; exact actions are part of the design gate.\n\nVERIFICATION\nExercise at least two real selectable content views in the agreed host and show that opening additional resources does not create a column per resource. Check state retention, dirty-close handling, empty/last-tab behavior, overflow, resize/DPI, focus and events, and supported persistence/restore. Use focused lifecycle/state tests and visual acceptance driven by Antonio. Widget existence alone is not completion evidence.\n\nOWNERSHIP\nThis task tracks the unfulfilled functional goal of T088 and Requirement c4382108-0be4-4c1d-b112-871284c543cb. T088 remains historical; T452 retains its original composition/lifecycle scope. No browser engine selection, Editor implementation, Heca-Pro chat, attachment transport or fixed resource-panel position is authorized here.",
+      "descriptionUpdatedAt": "2026-10-25T13:57:23.970Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "6de15e94-fe2d-4d55-a084-a5a05beecf30",
+          "date": "2026-10-25T13:54:22.666Z",
+          "fromStatus": "planned",
+          "toStatus": "planned",
+          "title": "moved P094(F011)/T550 → P106(F011)/T550",
+          "description": "Moved from P094(F011)/T550 to P106(F011)/T550; status unchanged."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0a3593ad-cb4b-4bf4-8bb2-2a381cfb20dc-check-001-review-existing-content-and-tabs-contracts-agree-placement-and-lifecycle-ux-with-antonio-before-implementation",
+          "number": 1,
+          "title": "Review existing content and Tabs contracts; agree placement and lifecycle UX with Antonio before implementation",
+          "checked": false
+        },
+        {
+          "id": "0a3593ad-cb4b-4bf4-8bb2-2a381cfb20dc-check-002-implement-real-multi-document-selection-using-the-existing-managed-content-and-component-contracts",
+          "number": 2,
+          "title": "Implement real multi-document selection using the existing managed-content and component contracts",
+          "checked": false
+        },
+        {
+          "id": "0a3593ad-cb4b-4bf4-8bb2-2a381cfb20dc-check-003-preserve-agreed-content-state-and-handle-dirty-close-resource-cleanup-and-tab-overflow",
+          "number": 3,
+          "title": "Preserve agreed content state and handle dirty close, resource cleanup and tab overflow",
+          "checked": false
+        },
+        {
+          "id": "0a3593ad-cb4b-4bf4-8bb2-2a381cfb20dc-check-004-verify-focused-behavior-and-complete-visual-acceptance-in-the-agreed-host",
+          "number": 4,
+          "title": "Verify focused behavior and complete visual acceptance in the agreed host",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "7f282428-8598-49de-b593-25e76bef37f8"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-24T12:17:15.583Z",
+      "updatedAt": "2026-10-25T13:57:23.969Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-25T13:54:11.782Z",
+  "updatedAt": "2026-10-25T14:15:38.835Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "a8a35d64-329a-43b9-855d-56dcce0470b3",
+      "date": "2026-10-25T13:54:22.845Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}
