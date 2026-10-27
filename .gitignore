@@ -4,4 +4,7 @@
 book/
 heca-ui/
 .DS_Store
-/graphify-out/cache
+# graphify's knowledge graph is a generated artifact (derived from the code's AST),
+# so it is not versioned — regenerate it with `graphify update .` (see CLAUDE.md).
+/graphify-out/
+graphify.db
