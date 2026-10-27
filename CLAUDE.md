@@ -20,6 +20,8 @@ The planner is the single source of truth for what is being worked on. Load it w
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
+**graphify-out/ is NOT versioned** — it is a generated artifact (derived from the code's AST) and is git-ignored. On a fresh clone it does not exist, so generate it once with `graphify update .` before the query commands below will work.
+
 Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
