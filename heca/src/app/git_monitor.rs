@@ -5,7 +5,6 @@
 //! caches it by repo root, and projects it back onto canonical
 //! `Pane.runtime.git` before the chrome store mirrors runtime state.
 
-use crate::app_state::AppState;
 use heca_core::layout::{PaneId, Session};
 use heca_core::runtime::GitInfo;
 use std::collections::{HashMap, HashSet};
@@ -121,10 +120,6 @@ struct GitSyncContext<'a, P> {
     now: Instant,
     refresh_after: Duration,
     live_roots: &'a mut HashSet<PathBuf>,
-}
-
-pub(crate) fn sync_pane_git_from_cwds(state: &mut AppState) {
-    state.server.refresh_git(&mut state.session, Instant::now());
 }
 
 /// The cache and the real git provider bound together, for [`ServerState::refresh_git`]: the

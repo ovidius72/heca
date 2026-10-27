@@ -25,7 +25,7 @@ pub struct Workspace {
 /// The column is remembered by **identity**, never by number: a number points at whatever column
 /// sits there now, and the column a pane floated out of vanishes when that pane was its last one,
 /// which slides the next column into its place. `position` is only for that case.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FloatOrigin {
     /// The column it floated out of.
     pub column: ColumnId,

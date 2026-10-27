@@ -7,6 +7,35 @@ fn layout_toast(t: &mut heca_grid_ui::Toast) -> f64 {
     t.base().bounds.size.h
 }
 
+/// **A timed toast paints a thin countdown bar at its bottom edge** — only with `progress` on.
+#[test]
+fn a_timed_toast_paints_a_countdown_bar_only_with_progress() {
+    use heca_grid_ui::Toast;
+    use std::time::Duration;
+
+    let mut t = Toast::success("Configuration reloaded")
+        .progress(true)
+        .countdown(Duration::from_secs(4));
+    layout_toast(&mut t);
+    let card = t.base().bounds;
+    let bar = |t: &Toast| {
+        common::paint(t, &Theme::default()).iter().any(|c| {
+            matches!(c, DrawCommand::Rect(r)
+                if (r.rect.size.h - 3.0).abs() < 0.6
+                // In the lower half of the card, but inset from the very bottom edge (it floats
+                // inside the padding, not on the border).
+                && r.rect.loc.y > card.loc.y + card.size.h / 2.0
+                && r.rect.loc.y + r.rect.size.h < card.loc.y + card.size.h)
+        })
+    };
+    assert!(bar(&t), "a progress toast draws a hairline inside its lower edge");
+
+    // The span alone is not enough: the library prop is off by default.
+    let mut off = Toast::success("Configuration reloaded").countdown(Duration::from_secs(4));
+    layout_toast(&mut off);
+    assert!(!bar(&off), "no bar when progress is off (the default)");
+}
+
 #[test]
 fn toast_height_grows_with_body_then_action() {
     use heca_grid_ui::Toast;

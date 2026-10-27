@@ -11,10 +11,8 @@ use heca_core::backend::{
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
-use winit::event_loop::EventLoopProxy;
 
 use crate::app::backend_store::{Program, SpawnError, TerminalSpec};
-use crate::app::events::AppEvent;
 use crate::chrome::panes::terminal::Grid;
 use heca_config::theme::AppConfig;
 use heca_core::layout::Size;
@@ -70,7 +68,9 @@ impl TerminalSettings {
 /// app when its output changes, and the cell size of the window that asked for it.
 pub(crate) struct LaunchSettings<'a> {
     pub(crate) terminal: &'a TerminalSettings,
-    pub(crate) event_proxy: Option<&'a EventLoopProxy<AppEvent>>,
+    /// The callback a terminal calls on new output, to wake the loop that owns the server. `None`
+    /// where there is no loop to wake (a test). Owned so it can cross to the process's reader thread.
+    pub(crate) wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
     pub(crate) cell_size: (f32, f32),
 }
 
@@ -91,7 +91,7 @@ pub(crate) fn launch(
         Program::Shell => {
             let mut options = terminal_backend_options(
                 &settings.terminal.theme,
-                settings.event_proxy,
+                settings.wake_on_output.clone(),
                 settings.terminal.shell_integration,
                 settings.terminal.scrollback,
                 settings.terminal.scroll_animations,
@@ -106,7 +106,7 @@ pub(crate) fn launch(
             // only add noise here.
             let mut options = terminal_backend_options(
                 &settings.terminal.theme,
-                settings.event_proxy,
+                settings.wake_on_output.clone(),
                 false,
                 settings.terminal.scrollback,
                 settings.terminal.scroll_animations,
@@ -170,17 +170,11 @@ pub(crate) fn terminal_palette_defaults(theme: &Theme) -> Option<TerminalPalette
 
 fn terminal_backend_options(
     theme: &Theme,
-    event_proxy: Option<&EventLoopProxy<AppEvent>>,
+    wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
     shell_integration_enabled: bool,
     scrollback_size: usize,
     scroll_animations: bool,
 ) -> TerminalBackendOptions {
-    let wake_on_output = event_proxy.map(|proxy| {
-        let proxy = proxy.clone();
-        Arc::new(move || {
-            let _ = proxy.send_event(AppEvent::BackendWake);
-        }) as Arc<dyn Fn() + Send + Sync>
-    });
     let shell_integration = if shell_integration_enabled {
         shell_integration_assets()
     } else {

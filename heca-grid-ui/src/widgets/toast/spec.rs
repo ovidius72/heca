@@ -7,6 +7,7 @@
 //! widget handle and never a closure.
 
 use crate::widgets::{ButtonVariant, Glyph, ToastSeverity};
+use std::time::Duration;
 
 /// One action offered on a notification — **plain data, never a closure.**
 ///
@@ -73,6 +74,11 @@ pub struct ToastSpec {
     pub actions: Vec<ToastAction>,
     /// Whether the × dismiss affordance is shown.
     pub dismissible: bool,
+    /// **How long this toast lives**, when it auto-dismisses — the span a
+    /// [`progress`](crate::widgets::Toast::progress) bar depletes over. `None` for a toast with no
+    /// timer (sticky); the host leaves it unset and the card shows no bar. It is data, not a live
+    /// clock: the host owns the timer and the card animates the bar locally over this span.
+    pub countdown: Option<Duration>,
 }
 
 impl ToastSpec {
@@ -86,6 +92,7 @@ impl ToastSpec {
             body: None,
             actions: Vec::new(),
             dismissible: true,
+            countdown: None,
         }
     }
     #[heca_grid_ui_macros::prop]
@@ -123,6 +130,15 @@ impl ToastSpec {
     #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
+        self
+    }
+
+    /// **Set the lifetime this toast auto-dismisses over** — the span a
+    /// [`progress`](crate::widgets::Toast::progress) bar depletes across. Leave it unset for a
+    /// toast with no timer (the card then shows no bar even with `progress` on).
+    #[heca_grid_ui_macros::host_only("a lifetime span the host supplies, not a value static data carries")]
+    pub fn countdown(mut self, lifetime: Duration) -> Self {
+        self.countdown = Some(lifetime);
         self
     }
 }

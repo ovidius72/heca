@@ -12,6 +12,6 @@ impl AppState {
         spec: TerminalSpec,
     ) -> Result<Ensured, SpawnError> {
         let cell = self.terminal_cell_size;
-        self.server.terminals().start(owner, spec, cell)
+        self.client.start_terminal(owner, spec, cell)
     }
 }

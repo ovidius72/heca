@@ -98,7 +98,7 @@ pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> Fr
         .terminals
         .keys()
         .copied()
-        .filter(|id| state.server.backends.pane_of(*id).is_none())
+        .filter(|id| state.client.backends.pane_of(*id).is_none())
         .collect();
     unowned.sort_by_key(|id| id.0);
     let mut terminals = Vec::new();
@@ -108,7 +108,7 @@ pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> Fr
             .map(|pane| (pane, v.floating_surface_alpha)),
     );
     for (pane, opacity) in panes {
-        let id = state.server.backends.id_for(pane);
+        let id = state.client.backends.id_for(pane);
         terminals.push(TerminalRenderState::collect(state, id, Some(pane), opacity));
     }
     for id in unowned {

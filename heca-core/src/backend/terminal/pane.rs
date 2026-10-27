@@ -109,6 +109,7 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn update(&mut self) -> bool {
+        let before = self.runtime.clone();
         // Deliver a size the child has not been told about yet — a drag holds them back, and this
         // is what makes sure the last one always lands (see `PTY_RESIZE_MIN_INTERVAL`).
         self.flush_pending_pty_size();
@@ -116,13 +117,21 @@ impl PaneBackend for TerminalBackend {
         self.notice_exit();
         self.refresh_foreground_after(output);
         self.keep_the_view_on_output(output.had_data);
-        output.had_data || output.agent_changed
+        output.had_data || output.agent_changed || self.runtime != before
+    }
+
+    fn next_wake(&self) -> Option<std::time::Instant> {
+        self.pending_pty_size.map(|_| self.last_pty_resize + super::size::PTY_RESIZE_MIN_INTERVAL)
     }
 
     fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
         let snapshot = self.engine.snapshot(self.cell_size());
         snapshot.debug_assert_valid();
         Some(snapshot)
+    }
+
+    fn terminal_snapshot_at(&self, offset: usize) -> Option<TerminalSnapshot> {
+        Some(self.engine.snapshot_at(self.cell_size(), offset))
     }
 
     fn take_terminal_damage(&mut self) -> TerminalDamage {
@@ -251,6 +260,10 @@ impl PaneBackend for TerminalBackend {
 
     fn search_scrollback(&self, query: &str, cols: usize) -> Vec<crate::backend::SearchMatch> {
         self.engine.search_scrollback(query, cols)
+    }
+
+    fn search_stable_range(&self, query: &str, cols: usize, start: isize, end: isize) -> Vec<crate::backend::SearchMatch> {
+        self.engine.search_stable_range(query, cols, start, end)
     }
 }
 

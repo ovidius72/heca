@@ -1,4 +1,5 @@
 use super::*;
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 /// Producer-facing builder for an [`AppNotification`].
@@ -10,7 +11,10 @@ use std::time::Instant;
 /// The router/store supplies the id and creation instant at acceptance time;
 /// this keeps producer code deterministic and prevents a draft from claiming
 /// visibility before the store promotes it.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// Serializable so a window that is a pure client can raise one over the wire: the draft is plain
+/// data (no `Instant`, no closures), and the server stamps the acceptance time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NotificationDraft {
     title: String,
     body: Option<String>,

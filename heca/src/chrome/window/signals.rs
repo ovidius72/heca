@@ -96,7 +96,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     state
         .chrome_state
         .workspaces
-        .set_programs(state.server.programs.clone());
+        .set_programs(state.client.programs.clone());
     // Mirror the in-progress pick (its kind + prompt) into the store so components and
     // plugins can react to the pending action (e.g. a custom prompt overlay).
     let pending_pick = state.input_mode.pending_pick(&state.action_catalog);
@@ -104,7 +104,6 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // Bridge backend-detected runtime → canonical `Pane.runtime` + emit
     // `pane.exited{code}` BEFORE mirroring `Pane.runtime` into the store.
     crate::app::process_monitor::sync_pane_runtime_from_backends(state);
-    crate::app::git_monitor::sync_pane_git_from_cwds(state);
     sync_pane_runtime_state(&state.session, &state.chrome_state.panes)
 }
 

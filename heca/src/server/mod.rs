@@ -16,28 +16,41 @@
 //! `state.server.<part>` — whether the caller is a window or, later, a connection.
 
 mod action;
+mod bootstrap;
 mod change;
 mod cx;
 mod handlers;
 mod layout;
+mod poll;
+pub(crate) mod process;
+/// The local socket clients and scripts reach the server through. Unix for now (Windows named
+/// pipes later).
+#[cfg(unix)]
+pub(crate) mod socket;
+pub(crate) mod run;
+pub(crate) mod runtime;
 mod terminals;
+mod stream;
 #[cfg(test)]
 mod testing;
+mod waker;
+pub(crate) mod wire;
 
 use std::rc::Rc;
 use std::time::Instant;
 
 use heca_config::programs::ProgramsConfig;
 
-pub(crate) use action::{NotificationSettings, ServerAction};
+pub(crate) use action::{NotificationCommand, NotificationSettings, ServerAction};
 pub(crate) use change::{Change, Refusal};
 pub(crate) use cx::{Asker, ServerCx};
 pub(crate) use layout::ServerLayout;
+pub(crate) use poll::BackendPoll;
 pub(crate) use terminals::Terminals;
+pub(crate) use waker::ServerWaker;
 
 use crate::app::backend_factory::{Launch, TerminalSettings, launch, terminal_palette_defaults};
 use crate::app::backend_store::BackendStore;
-use crate::app::events::AppEvent;
 use crate::app::git_monitor::GitRuntimeCache;
 use crate::notification::NotificationRuntime;
 
@@ -47,9 +60,9 @@ pub struct ServerState {
     pub backends: BackendStore,
     /// What the configuration says a terminal process starts with.
     terminal_settings: TerminalSettings,
-    /// How a terminal process wakes the app when its output changes. `None` where there is no loop
+    /// How a terminal process wakes the loop when its output changes. `None` where there is no loop
     /// to wake, as in a test.
-    waker: Option<winit::event_loop::EventLoopProxy<AppEvent>>,
+    waker: Option<ServerWaker>,
     /// How a terminal process is built.
     launch: Launch,
     /// The notification store: queueing, lifecycle, dedup, timers, and the list a window shows.
@@ -139,33 +152,6 @@ impl ServerState {
         }
     }
 
-    /// **What a window draws of a terminal**: its snapshot and the rows that changed since this was
-    /// last asked, at the device `scale` the window draws at. The server owns the backend; the
-    /// window reads through this instead of reaching into [`backends`](Self::backends). `None` for a
-    /// terminal that is gone or has no screen yet.
-    ///
-    /// The window's size reaches the process the other way, as a `TerminalInput::Resize` the window
-    /// emits when its box or font changes — so rows×cols are the window's. When several windows show
-    /// one pane at different sizes the process still has one size, chosen by a setting (decision
-    /// 463ccd07); that arbitration lives on the resize event and is added later (P099), so this read
-    /// stays a pure read and takes no grid.
-    pub(crate) fn terminal_view(
-        &mut self,
-        id: crate::chrome::panes::terminal::TerminalId,
-        scale: f32,
-    ) -> Option<(
-        heca_core::backend::TerminalSnapshot,
-        heca_core::backend::TerminalDamage,
-    )> {
-        let backend = self.backends.get_mut_by_id(id)?;
-        // Keep the device scale current so inline images report physical pixels (crisp on HiDPI).
-        // Cheap: the backend ignores an unchanged scale.
-        backend.set_scale_factor(scale);
-        let snapshot = backend.terminal_snapshot()?;
-        let damage = backend.take_terminal_damage();
-        Some((snapshot, damage))
-    }
-
     /// The terminal processes and what starting one takes, for one request.
     pub(crate) fn terminals(&mut self) -> Terminals<'_> {
         Terminals {
@@ -220,27 +206,19 @@ impl ServerState {
     /// while the stack is held still, because a frozen deadline would only be found not due and
     /// re-armed at the same instant.
     pub(crate) fn next_wake(&self) -> Option<Instant> {
-        match self.notifications.is_hovered() {
+        let notification = match self.notifications.is_hovered() {
             true => None,
             false => self.notifications.next_expiry(),
-        }
+        };
+        [notification, self.backends.next_wake()].into_iter().flatten().min()
     }
 
-    /// **The notifications on show**, as plain data — the list a window draws from. Read it when a
-    /// [`Change::NotificationsChanged`] arrives; the window keeps its own signal over it.
-    pub(crate) fn visible_toasts(&self) -> Vec<heca_grid_ui::widgets::ToastSpec> {
-        self.notifications.visible_toasts()
-    }
-
-    /// What pressing `key` on the notification `id` does, and whether it dismisses after — or
-    /// `None` when that card is not on show.
-    pub(crate) fn toast_action(
-        &self,
-        id: crate::notification::NotificationId,
-        key: &str,
-    ) -> Option<(crate::chrome::Intent, bool)> {
-        self.notifications
-            .action_and_dismiss_after_for_visible(id, key)
+    /// **The notifications on show**, as plain serializable data — the projection the server sends
+    /// a window, which builds its own toasts from it
+    /// ([`toast_spec`](crate::notification::toast_spec)). Sent on attach and whenever
+    /// [`Change::NotificationsChanged`] is produced.
+    pub(crate) fn visible_notifications(&self) -> Vec<crate::notification::NotificationView> {
+        self.notifications.visible_views()
     }
 
     pub(crate) fn new(
@@ -248,7 +226,7 @@ impl ServerState {
         notifications: NotificationRuntime,
         programs: ProgramsConfig,
         terminal_settings: TerminalSettings,
-        waker: Option<winit::event_loop::EventLoopProxy<AppEvent>>,
+        waker: Option<ServerWaker>,
     ) -> Self {
         Self {
             backends,
@@ -273,7 +251,7 @@ mod tests {
     }
 
     fn on_screen(server: &ServerState) -> usize {
-        server.visible_toasts().len()
+        server.visible_notifications().len()
     }
 
     /// **The server's state needs no window.** It is built from plain data, so a test — and later a

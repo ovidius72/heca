@@ -121,12 +121,24 @@ pub(super) fn route_action(
 /// which inspects `FocusPane`'s target. A dynamic action cannot be `FocusPane`, so it takes the
 /// conservative branch (blocked while floating), which is the right default for an action the host
 /// cannot introspect.
-pub(super) fn policy_allows(
+pub(crate) fn policy_allows(
     layout: Layout<'_>,
     domain: Domain,
     source: InteractionSource,
     policy: ActionPolicy,
     action: Option<&WmAction>,
+) -> bool {
+    let active_floating = layout.active_workspace().and_then(|ws| ws.active_float());
+    policy_allows_facts(domain, source, policy, action, active_floating)
+}
+
+/// The policy needs only these view facts, so a server does not construct or retain a window view.
+pub(crate) fn policy_allows_facts(
+    domain: Domain,
+    source: InteractionSource,
+    policy: ActionPolicy,
+    action: Option<&WmAction>,
+    active_floating: Option<heca_core::layout::PaneId>,
 ) -> bool {
     // Nothing but a true global act reaches past something covering the panes — acting on what the
     // user cannot see is the whole reason this domain exists. It replaces the
@@ -160,7 +172,6 @@ pub(super) fn policy_allows(
                 if !floating {
                     return true;
                 }
-                let active_floating = layout.active_workspace().and_then(|ws| ws.active_float());
                 return active_floating == Some(*pane_id);
             }
             // Other source-dependent actions: defer to source when floating.

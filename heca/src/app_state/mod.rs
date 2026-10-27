@@ -23,6 +23,7 @@ use winit::window::Window;
 mod input_mode;
 mod keyboard_terminal;
 mod layout_door;
+mod client_updates;
 mod metrics;
 mod mouse_state;
 pub(crate) mod reaction;

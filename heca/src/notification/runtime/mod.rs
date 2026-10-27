@@ -1,6 +1,5 @@
 use super::*;
 use std::time::Instant;
-use heca_grid_ui::widgets::ToastSpec;
 use heca_view::Intent;
 
 /// The host's notification state and timers, with a retained toast projection.
@@ -10,10 +9,10 @@ use heca_view::Intent;
 /// refreshes the projection after each mutation that can change the visible set.
 pub struct NotificationRuntime {
     store: NotificationStore,
-    /// The cards on show, as plain data — what [`visible_toasts`](Self::visible_toasts) hands a
-    /// window, kept to tell when the set changed. The store owns no signal: a window turns this list
-    /// into whatever it draws.
-    shown: Vec<ToastSpec>,
+    /// The cards on show, as plain serializable data — what [`visible_views`](Self::visible_views)
+    /// hands a window, kept to tell when the set changed. The store owns no signal: a window turns
+    /// this list into whatever it draws.
+    shown: Vec<NotificationView>,
     /// The configured default auto-dismiss delay (`[settings.notification_system]
     /// auto_dismiss_ms`). Applied only when the producer omitted a lifetime.
     /// Explicit durations and sticky lifetimes are unaffected. Re-applied on config reload
@@ -238,10 +237,10 @@ impl NotificationRuntime {
         changed
     }
 
-    /// Push the store's current visible projection into the retained signal, if it changed.
+    /// Push the store's current visible projection into the retained list, if it changed.
     /// Returns whether it did (callers use this to decide whether to request a redraw).
     fn sync_visible_toasts(&mut self) -> bool {
-        let next = self.store.visible_toasts();
+        let next = self.store.visible_views();
         if self.shown == next {
             return false;
         }
@@ -249,9 +248,10 @@ impl NotificationRuntime {
         true
     }
 
-    /// **The cards on show**, in slot order — plain data a window draws from. Read it when the server
-    /// reports [`NotificationsChanged`](crate::server::Change::NotificationsChanged).
-    pub fn visible_toasts(&self) -> Vec<ToastSpec> {
+    /// **The cards on show**, in slot order — plain serializable data the server sends a window.
+    /// The window builds its own `ToastSpec`s from them
+    /// ([`toast_spec`](crate::notification::toast_spec)).
+    pub fn visible_views(&self) -> Vec<NotificationView> {
         self.shown.clone()
     }
 }

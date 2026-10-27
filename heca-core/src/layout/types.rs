@@ -8,14 +8,14 @@ pub const END: usize = usize::MAX;
 pub struct SessionId(pub u64);
 
 /// Unique identifier for a workspace.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct WorkspaceId(pub u64);
 
 /// Unique identifier for a pane.
 // `Ord` so panes can key an ordered map: iteration order is then stable frame to
 // frame, which matters wherever per-pane state is *drawn* (e.g. each pane's
 // scrollback-search bar) and would otherwise wander with hash seeding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct PaneId(pub u64);
 
 impl std::fmt::Display for PaneId {
@@ -25,11 +25,11 @@ impl std::fmt::Display for PaneId {
 }
 
 /// Unique identifier for a column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ColumnId(pub u64);
 
 /// Width of a column.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ColumnWidth {
     /// Proportion of the current view width (0.0 - 1.0).
     Proportion(f64),
@@ -63,7 +63,7 @@ impl SizingMode {
 }
 
 /// 2D position in logical pixels.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
@@ -111,7 +111,7 @@ impl std::ops::SubAssign for Point {
 }
 
 /// 2D size in logical pixels.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Size {
     pub w: f64,
     pub h: f64,
@@ -134,7 +134,7 @@ impl From<Point> for Size {
 }
 
 /// Rectangle in logical pixels.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Rectangle {
     pub loc: Point,
     pub size: Size,

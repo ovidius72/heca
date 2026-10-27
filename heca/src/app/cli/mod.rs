@@ -30,6 +30,13 @@ mod tests;
 use catalog::COMMANDS;
 type Answer = Result<String, String>;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum LaunchMode {
+    #[default]
+    Attached,
+    Standalone,
+}
+
 /// One thing heca can be asked from the command line.
 struct Command {
     /// Command path or flag, as shown in help.
@@ -45,6 +52,8 @@ struct Command {
     args: &'static [ArgDescriptor],
     /// Whether `--json` means anything to it.
     json: bool,
+    /// A window launch mode rather than a command that prints and exits.
+    launch: Option<LaunchMode>,
     /// Runs it, given the checked arguments.
     run: fn(&Invocation) -> Answer,
 }
@@ -94,6 +103,11 @@ fn is_flag(arg: &str) -> bool {
 ///
 /// Returns `true` when it handled the invocation and the caller should not open a window.
 pub(crate) fn run_if_requested(args: &[String]) -> bool {
+    #[cfg(unix)]
+    if let Some(output) = crate::server::socket::run_rpc_cli(args) {
+        print!("{output}");
+        return true;
+    }
     match answer(args) {
         Some(Ok(text)) => { print!("{text}"); true }
         Some(Err(error)) => { eprint!("{error}"); std::process::exit(1) }
@@ -133,7 +147,13 @@ fn answer(args: &[String]) -> Option<Answer> {
     }
     let json = args.iter().any(|arg| arg == JSON_FLAG || arg == JSON_SHORT);
     if json && !cmd.json { return Some(Err(format!("{} does not support --json\n", cmd.name))) }
+    if cmd.launch.is_some() { return None; }
     Some((cmd.run)(&Invocation { args: supplied, json }))
+}
+
+pub(crate) fn launch_mode(args: &[String]) -> LaunchMode {
+    let words: Vec<_> = args.iter().map(String::as_str).collect();
+    COMMANDS.iter().find_map(|command| command.prefix_len(&words).and(command.launch)).unwrap_or_default()
 }
 
 /// Suggest a declared command with the same prefix.

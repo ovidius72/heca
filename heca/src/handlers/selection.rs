@@ -116,7 +116,7 @@ pub(crate) fn set_system_clipboard(text: &str) {
 /// - Does NOT clear the selection after copy — the user clears explicitly.
 /// - Safe no-op when there is no active selection or the owner is unsupported.
 pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
-    let text = {
+    let request = {
         let active = match state.selection.active() {
             Some(a) => a,
             None => return, // No active selection — safe no-op.
@@ -134,7 +134,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
 
         // Get the terminal snapshot for the owning pane.
         let snapshot = match state
-            .server
+            .client
             .backends
             .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())
@@ -143,35 +143,21 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
             None => return, // No snapshot — safe no-op.
         };
 
-        // Extract text using the shared extraction logic.
-        //
-        // Fetch the selection rows by stable-row range so history rows are
-        // copyable even when they are no longer in the visible viewport.
-        let lines = state
-            .server
-            .backends
-            .get_by_id(terminal)
-            .map(|b| b.lines_in_stable_range(start_stable, end_stable, snapshot.cols))
-            .unwrap_or_default();
-
-        match crate::app::terminal_host::selection::extract_selection_text(
-            &state.selection,
-            &lines,
-            start_stable,
-            snapshot.cols,
-            snapshot.default_bg,
-        ) {
-            Some(t) => t,
-            None => return, // Extraction returned nothing — safe no-op.
-        }
+        (terminal, start_stable, end_stable, snapshot.cols, snapshot.default_bg)
     };
+    let selection = state.selection.clone();
+    let (terminal, start, end, cols, background) = request;
+    state.client.read_lines(terminal, start, end, move |lines| {
+        let text = crate::app::terminal_host::selection::extract_selection_text(&selection, &lines, start, cols, background);
+        crate::client::ReadEffect::Clipboard { text, selection }
+    });
+}
 
-    if text.is_empty() {
-        return;
-    }
-
-    // Write to system clipboard.
+pub(crate) fn finish_copy(state: &mut AppState, selection: crate::app::terminal_host::selection::SelectionState, text: Option<String>) {
+    let Some(text) = text.filter(|text| !text.is_empty()) else { return };
     set_system_clipboard(&text);
+    // A delayed response must not clear a selection the user made after this copy request.
+    if state.selection != selection { return; }
 
     // Copying ends the selection, however it was made. Outside selection mode — a mouse selection —
     // that is all; inside it, the caret below stays where the selection ended so the keyboard can

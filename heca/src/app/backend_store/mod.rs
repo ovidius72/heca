@@ -23,7 +23,7 @@ mod target;
 pub(crate) use target::TerminalTarget;
 
 /// What to run in a terminal. Fixed at start: a running terminal's program and folder do not change.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Program {
     /// The user's own shell.
     Shell,
@@ -33,7 +33,7 @@ pub(crate) enum Program {
 }
 
 /// **Everything that decides what a terminal process is**, as plain data.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct TerminalSpec {
     pub(crate) program: Program,
     /// The folder to start in; `None` is heca's own.
@@ -78,7 +78,7 @@ struct Process {
 
 /// **Who a terminal process was started for** — what [`ensure`](BackendStore::ensure) keeps one
 /// process per.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub(crate) enum TerminalOwner {
     /// A pane: closing the pane ends it.
     Pane(PaneId),
@@ -216,6 +216,31 @@ impl BackendStore {
     /// Iterate over all backends mutably (e.g. for per-frame polling).
     pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn PaneBackend>> {
         self.processes.values_mut().map(|p| &mut p.backend)
+    }
+
+    pub(crate) fn owner_of(&self, id: TerminalId) -> Option<&TerminalOwner> {
+        self.by_owner.iter().find_map(|(owner, found)| (*found == id).then_some(owner))
+    }
+
+    pub(crate) fn find_owner(&self, owner: &TerminalOwner) -> Option<TerminalId> {
+        self.by_owner.get(owner).copied()
+    }
+
+    pub(crate) fn owners(&self) -> impl Iterator<Item = (TerminalOwner, TerminalId)> + '_ {
+        self.by_owner.iter().map(|(owner, id)| (owner.clone(), *id))
+    }
+
+    pub(crate) fn next_wake(&self) -> Option<std::time::Instant> {
+        self.processes.values().filter_map(|process| process.backend.next_wake()).min()
+    }
+
+    pub(crate) fn spec_of(&self, id: TerminalId) -> Option<&TerminalSpec> {
+        self.processes.get(&id).map(|process| &process.spec)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.by_owner.clear();
+        self.processes.clear();
     }
 
     /// Collect pane IDs whose backends have exited and should be closed.

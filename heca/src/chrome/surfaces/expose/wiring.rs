@@ -155,7 +155,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<crate::
         crate::chrome::surfaces::layers::HOST_OWNER,
         SURFACE,
     )?;
-    let programs = state.server.programs.clone();
+    let programs = state.client.programs.clone();
     // **Where each pane is, if the user asked for it** — `[appearance.expose] show_cwd`, read here
     // because this is the file that may touch `AppState`. Off ⇒ the model simply carries no folder,
     // and nothing below has a flag to pass on.

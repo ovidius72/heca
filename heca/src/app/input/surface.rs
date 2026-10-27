@@ -128,7 +128,7 @@ pub(crate) fn focused_surface(state: &AppState) -> FocusedSurface {
     let with_panes = heca_grid_ui::keyboard_holder(&state.window_root).is_none()
         || state
             .window_keyboard_terminal()
-            .is_some_and(|id| state.server.backends.pane_of(id).is_some());
+            .is_some_and(|id| state.client.backends.pane_of(id).is_some());
     if with_panes {
         return FocusedSurface::Panes;
     }

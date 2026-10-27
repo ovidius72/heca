@@ -13,7 +13,7 @@ use crate::input::WmAction;
 fn focused_terminal_page_rows(state: &AppState) -> usize {
     state
         .keyboard_terminal()
-        .and_then(|terminal| state.server.backends.get_by_id(terminal))
+        .and_then(|terminal| state.client.backends.get_by_id(terminal))
         .and_then(|b| b.terminal_snapshot())
         .map(|s| s.rows)
         .unwrap_or(crate::app::backend_factory::FALLBACK_TERMINAL_GRID.1)
@@ -66,7 +66,7 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
     // Move caret to the oldest scrollback content row.
     if let Some(terminal) = state.keyboard_terminal()
         && let Some(ref snapshot) = state
-            .server
+            .client
             .backends
             .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())
@@ -95,7 +95,7 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
     }
     if let Some(terminal) = state.keyboard_terminal()
         && let Some(ref snapshot) = state
-            .server
+            .client
             .backends
             .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())

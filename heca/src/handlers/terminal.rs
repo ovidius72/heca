@@ -26,7 +26,7 @@ pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
     }
     let id = match named {
         true => {
-            let backends = &state.server.backends;
+            let backends = &state.client.backends;
             backends
                 .target(*pane_id, *terminal, None)
                 .and_then(|t| backends.terminal_of(t))

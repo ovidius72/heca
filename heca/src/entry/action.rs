@@ -35,12 +35,11 @@ use std::rc::Rc;
 use heca_grid_ui::Handled;
 
 use crate::actions::{
-    ActionCatalog, ActionMeta, ActionRegistry, DuplicateAction, register_dynamic,
+    ActionCatalog, ActionMeta, ActionRegistry, DuplicateAction, register_server_dynamic,
 };
 use crate::app::conflicts::{ActionConflict, Conflicts};
-use crate::app_state::AppState;
 use crate::chrome::{Intent, SharedChromeState, StartupQueue};
-use crate::providers::{ProviderCx, emit_queued};
+use crate::providers::ProviderCx;
 
 /// What an added action does when it runs.
 type Run = dyn Fn(&mut ProviderCx<'_>, &Intent) -> Handled;
@@ -127,11 +126,10 @@ pub(crate) fn register_queued_actions(
                 shadows_builtin: false,
             });
         }
-        let handler = Rc::new(move |state: &mut AppState, intent: &Intent| {
-            let queued = run_once(&*run, state.chrome_state.clone(), intent);
-            emit_queued(state, queued);
+        let handler = Rc::new(move |store: SharedChromeState, intent: &Intent| {
+            run_once(&*run, store, intent)
         });
-        if let Err(duplicate) = register_dynamic(registry, catalog, meta, Some(handler)) {
+        if let Err(duplicate) = register_server_dynamic(registry, catalog, meta, handler) {
             conflicts.action(ActionConflict {
                 id,
                 kept: match duplicate {

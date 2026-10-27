@@ -40,6 +40,33 @@ impl Session {
         session
     }
 
+    /// **Rebuild a session from prebuilt workspaces** — a client reconstructing the shared content
+    /// from [`SessionContent`](super::SessionContent) to draw it. `next_id` is set past every id
+    /// present, so if this copy ever allocates one it cannot collide with the server's ids.
+    pub(crate) fn from_parts(
+        id: SessionId,
+        options: LayoutOptions,
+        workspaces: Vec<Workspace>,
+    ) -> Self {
+        let max_id = workspaces
+            .iter()
+            .flat_map(|ws| {
+                std::iter::once(ws.id.0)
+                    .chain(ws.scrolling.columns.iter().flat_map(|col| {
+                        std::iter::once(col.id.0).chain(col.panes.iter().map(|p| p.id.0))
+                    }))
+                    .chain(ws.floating_panes.iter().map(|f| f.pane.id.0))
+            })
+            .max()
+            .unwrap_or(0);
+        Self {
+            id,
+            workspaces,
+            options,
+            next_id: max_id + 1,
+        }
+    }
+
     pub fn next_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;

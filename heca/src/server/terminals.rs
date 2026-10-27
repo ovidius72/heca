@@ -10,13 +10,12 @@
 use std::path::{Path, PathBuf};
 
 use heca_core::layout::PaneId;
-use winit::event_loop::EventLoopProxy;
 
+use super::ServerWaker;
 use crate::app::backend_factory::{Launch, LaunchSettings, TerminalSettings};
 use crate::app::backend_store::{
     BackendStore, Ensured, Program, SpawnError, TerminalOwner, TerminalSpec,
 };
-use crate::app::events::AppEvent;
 use crate::notification::Notification;
 
 /// The terminal processes and what starting one takes, borrowed from the server for one request.
@@ -25,8 +24,8 @@ pub(crate) struct Terminals<'a> {
     pub(crate) backends: &'a mut BackendStore,
     /// What the configuration says a process starts with.
     pub(crate) settings: &'a TerminalSettings,
-    /// How a process wakes the app when its output changes. `None` where there is no loop to wake.
-    pub(crate) waker: Option<&'a EventLoopProxy<AppEvent>>,
+    /// How a process wakes the loop when its output changes. `None` where there is no loop to wake.
+    pub(crate) waker: Option<&'a ServerWaker>,
     /// How a process is built.
     pub(crate) launch: Launch,
 }
@@ -73,7 +72,7 @@ impl Terminals<'_> {
         }
         let settings = LaunchSettings {
             terminal: self.settings,
-            event_proxy: self.waker,
+            wake_on_output: self.waker.map(ServerWaker::on_output),
             cell_size: cell,
         };
         let launch = self.launch;

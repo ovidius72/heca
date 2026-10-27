@@ -186,6 +186,15 @@ show_top_bar = true    # the tab bar
 show_bottom_bar = true # the status bar
 
 # ─────────────────────────────────────────────────────────────────────────────
+[settings.connection]
+# Per-connection transport limits. Queue overflow must never block the server.
+max_frame_bytes = 16777216
+queue_capacity = 64
+request_timeout_ms = 5000
+connect_retry_ms = 20
+max_image_bytes = 67108864
+max_terminal_cells = 262144
+
 [settings.notification_system]
 # ─────────────────────────────────────────────────────────────────────────────
 # In-app toast notifications (pane created, config reloaded, …).

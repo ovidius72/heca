@@ -26,7 +26,7 @@ impl AppState {
             _ => {}
         }
         self.window_keyboard_terminal()
-            .or_else(|| self.server.backends.identity_of(self.focused_pane?))
+            .or_else(|| self.client.backends.identity_of(self.focused_pane?))
     }
 
     /// **The terminal holding the window's keyboard**, wherever it is placed — asked of the window,
@@ -43,6 +43,6 @@ impl AppState {
     /// The process of the terminal the keyboard acts on ([`keyboard_terminal`](Self::keyboard_terminal)).
     pub fn keyboard_backend_mut(&mut self) -> Option<&mut dyn heca_core::backend::PaneBackend> {
         let terminal = self.keyboard_terminal()?;
-        self.server.backends.get_mut_by_id(terminal)
+        self.client.backends.get_mut_by_id(terminal)
     }
 }

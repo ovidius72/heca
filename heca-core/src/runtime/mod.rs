@@ -12,7 +12,7 @@ use std::path::PathBuf;
 /// closed, so it has no status left to display. The exit *code* is carried by the
 /// `pane.exited{code}` event + `PaneRuntime::exit_code` (for the close-policy on
 /// direct-spawn panes), not by a status.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ProcessStatus {
     #[default]
     Idle,
@@ -36,7 +36,7 @@ impl ProcessStatus {
 }
 
 /// Source/content type hosted by a pane.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ContentKind {
     #[default]
     Terminal,
@@ -69,7 +69,7 @@ impl PaneClosePolicy {
 }
 
 /// Git summary for the pane's current working directory.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct GitInfo {
     pub branch: Option<String>,
     pub ahead: u32,
@@ -81,7 +81,7 @@ pub struct GitInfo {
 }
 
 /// Canonical runtime metadata owned by a pane/backend.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct PaneRuntime {
     pub program: Option<String>,
     pub status: ProcessStatus,

@@ -41,7 +41,7 @@ mod store;
 
 pub use action::register_notify_action;
 pub use model::*;
-pub use presentation::project_visible_toast;
+pub use presentation::{NotificationView, notification_view, toast_spec};
 pub use runtime::NotificationRuntime;
 pub use sink::{Notification, install_notification_sink};
 pub(crate) use sink::raise;

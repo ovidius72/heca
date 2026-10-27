@@ -143,7 +143,7 @@ pub(crate) fn sync_retained_terminal_layers(
 const IMAGE_TEXTURE_MAX_AGE_FRAMES: u64 = 600;
 
 fn retain_live_terminal_layers(state: &mut AppState) {
-    let backends = &state.server.backends;
+    let backends = &state.client.backends;
     state
         .terminal_layers
         .retain(|id, _| backends.is_issued(*id));

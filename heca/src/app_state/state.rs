@@ -59,10 +59,11 @@ pub struct AppState {
     /// panes composite translucently over). Cached; recomputes only on resize
     /// or gradient/blur param change. See `heca-renderer/src/background.rs`.
     pub background: BackgroundLayer,
-    /// **What every window shares and none needs a window for** — the terminal processes, the
-    /// notification store, the git facts kept for panes, the program catalog. See
-    /// [`crate::server`]; the rest of this struct is the window and what it draws.
-    pub server: crate::server::ServerState,
+    /// The connection and data used by this window. Terminal views own no processes. The state
+    /// every window shares — terminal processes, the notification store and its timers, git facts,
+    /// the program catalog — lives on the server this reaches, never in the window (see
+    /// [`crate::server`]).
+    pub client: crate::client::ClientState,
     /// The workspaces, columns and panes — the content every window on this session shares.
     pub session: Session,
     /// What **this window** sees of the session: the workspace shown, the scroll of each
@@ -318,9 +319,17 @@ pub struct AppState {
     /// a card's lifetime is; `NotificationRuntime::set_hovered` decides what it costs, which is
     /// that a card being read must not retire under the cursor reaching for its button.
     pub notification_hovered: heca_grid_ui::reactive::Signal<bool>,
-    /// **The cards the toast stack draws** — this window's signal over the server's list of
-    /// notifications on show, refreshed when the server reports a change
-    /// ([`sync_toasts`](Self::sync_toasts)).
+    /// **The notifications the server last said are on show** — the projection this window received
+    /// ([`crate::notification::NotificationView`]). The source of truth the toast signal is built
+    /// from, and what the action relay resolves a pressed key back to its `Intent` through (the
+    /// `ToastSpec` keeps no intent). The server owns the real queue, timers and dedup.
+    pub(crate) notifications: Vec<crate::notification::NotificationView>,
+    /// The hover state last sent to the server, so the window reports a change once rather than
+    /// every frame. See [`crate::app::lifecycle`].
+    pub(crate) notification_hover_sent: bool,
+    /// **The cards the toast stack draws** — this window's signal, built from the notification
+    /// projection the server sent ([`notifications`](Self::notifications)) by
+    /// [`rebuild_toasts`](Self::rebuild_toasts) whenever a fresh projection arrives.
     pub toasts: heca_grid_ui::reactive::Signal<Vec<heca_grid_ui::widgets::ToastSpec>>,
     /// **The most lines a notification card's title and body may each take** —
     /// `[settings.notification_system] max_lines`, re-applied on reload. Read by the mounted

@@ -91,7 +91,7 @@ fn on_press(
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
-    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
         // The release that pairs with this press is the program's to hear.
         state.terminal_presses.heard(terminal, button);
@@ -117,7 +117,7 @@ fn on_release(
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Release, button, cell, modifiers);
-    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -129,7 +129,7 @@ fn on_resize(
     terminal: crate::chrome::panes::terminal::TerminalId,
     grid: crate::chrome::panes::terminal::Grid,
 ) {
-    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
         backend.set_cell_size(grid.cell_w, grid.cell_h);
         backend.set_size(grid.cols, grid.rows);
         state.needs_redraw = true;
@@ -157,7 +157,7 @@ fn on_move(
             && owner == terminal
             && let Some(cell) = cell
             && let Some(snapshot) = state
-                .server
+                .client
                 .backends
                 .get_by_id(terminal)
                 .and_then(|backend| backend.terminal_snapshot())
@@ -184,7 +184,7 @@ fn on_move(
         cell,
         modifiers,
     );
-    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -240,13 +240,13 @@ pub(crate) fn on_terminal_input(
         // Its grid and its scrollback.
         TerminalInput::Resize(grid) => on_resize(state, terminal, grid),
         TerminalInput::ScrollToBottom => {
-            if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+            if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
                 backend.scroll_to_bottom_animated();
                 state.needs_redraw = true;
             }
         }
         TerminalInput::ScrollTo { rows } => {
-            if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+            if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
                 crate::handlers::scroll_backend_to_offset(backend, rows);
                 state.needs_redraw = true;
             }
@@ -268,7 +268,7 @@ pub(crate) fn on_terminal_input(
         // Its own font size: the same action a key and RPC run, naming this terminal.
         // Its history paged from the keyboard: the same step the scroll keys give a pane.
         TerminalInput::Page(page) => {
-            if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+            if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
                 crate::handlers::page_terminal(backend, page);
                 state.needs_redraw = true;
             }
@@ -295,7 +295,7 @@ pub(crate) fn on_terminal_input(
             modifiers,
         } => on_release(state, terminal, button, cell, modifiers),
         TerminalInput::Move { cell, modifiers } => {
-            let pane = state.server.backends.pane_of(terminal);
+            let pane = state.client.backends.pane_of(terminal);
             on_move(state, terminal, pane, cell, modifiers);
         }
     }

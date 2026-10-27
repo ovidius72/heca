@@ -52,7 +52,7 @@ pub(crate) fn give_focused_pane_the_keyboard(state: &mut AppState) {
     }
     let Some(id) = state
         .focused_pane
-        .and_then(|pane| state.server.backends.identity_of(pane))
+        .and_then(|pane| state.client.backends.identity_of(pane))
     else {
         return;
     };

@@ -7,7 +7,6 @@ use crate::app::mutations::after_config_change;
 use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::{AppState, InputMode};
 use crate::mouse;
-use heca_core::backend::BackendAlert;
 use heca_grid_ui::Component;
 use std::time::{Duration, Instant};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
@@ -25,27 +24,17 @@ pub(crate) struct BackendPollResult {
 }
 
 pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
-    let mut result = BackendPollResult::default();
-    for backend in state.server.backends.values_mut() {
-        let anim = backend.tick_animation();
-        result.terminal_animating |= anim;
-        if backend.update() {
-            result.has_data = true;
-        }
-        for alert in backend.take_alerts() {
-            if matches!(alert, BackendAlert::Bell) {
-                result.bell_any = true;
-            }
-        }
-        // OSC 52: a program asked to set the system clipboard. wezterm already
-        // base64-decoded it; push the text to the OS clipboard.
-        for text in backend.take_clipboard_writes() {
-            crate::handlers::set_system_clipboard(&text);
-        }
+    let poll = state.client.poll_views();
+    let result = BackendPollResult {
+        has_data: poll.has_data,
+        bell_any: poll.bell_any,
+        terminal_animating: poll.terminal_animating,
+        closed_any: !poll.closing_panes.is_empty(),
+    };
+    for text in poll.clipboard_writes {
+        crate::handlers::set_system_clipboard(&text);
     }
-    let closing_panes = state.server.backends.pane_ids_to_close();
-    result.closed_any = !closing_panes.is_empty();
-    for pane_id in closing_panes {
+    for pane_id in poll.closing_panes {
         close_pane_by_id_anywhere(state, pane_id);
     }
 
@@ -123,7 +112,7 @@ pub(crate) const BELL_FLASH_DURATION: Duration = Duration::from_millis(140);
 /// Apply the configured bell policy (`[appearance.terminal]`) for a captured bell:
 /// OS window attention (only while unfocused), an on-screen visual flash, and/or an
 /// audible system beep — each independently toggled. terminal-task-17.
-fn apply_bell_policy(state: &mut AppState) {
+pub(crate) fn apply_bell_policy(state: &mut AppState) {
     let t = &state.appearance.terminal;
     let (attention, visual, audible) = (t.bell_attention, t.bell_visual, t.bell_audible);
     if attention && !state.window_focused {
@@ -209,15 +198,17 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // **The pointer resting on a card holds the whole stack still**, and the time that costs is
     // handed back when it leaves, so a card resumes with what it had left. The stack reports the
     // hover; what it *means* is decided in the runtime, which is where the lifetime lives.
-    let now = Instant::now();
+    // The server owns the clock: it expires cards and hands back a projection on its own turn. The
+    // window only tells it when the pointer settles on or leaves the stack — once per change, not
+    // every frame — and the server decides what that costs.
     use heca_grid_ui::reactive::SignalGet;
     let hovered = state.notification_hovered.get_untracked();
-    let moved = state
-        .server
-        .execute(crate::server::ServerAction::Hover(hovered), now);
-    state.apply(moved);
-    let expired = state.server.tick(now);
-    state.apply(expired);
+    if hovered != state.notification_hover_sent {
+        state.notification_hover_sent = hovered;
+        state
+            .client
+            .notify(crate::server::NotificationCommand::Hover(hovered));
+    }
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
@@ -275,7 +266,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         || terminal_animating
         || image_animating
         || chrome_animating;
-    let toast_expiry = state.server.next_wake();
+    // The server owns the notification deadline; in standalone it reaches here through the
+    // in-process client's local server, and over the socket the daemon wakes the window with the
+    // projection itself, so the client is the one wake source the window needs.
+    let toast_expiry = state.client.next_wake();
     let schedule = next_wake(
         Instant::now(),
         WakeRequests {
