@@ -354,11 +354,20 @@
       "priority": 4,
       "shortName": "several-windows-per-session-ow",
       "title": "Several windows per session — own view each, follow, pane size setting",
-      "status": "planned",
+      "status": "in-progress",
       "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.",
       "descriptionUpdatedAt": "2026-10-21T11:21:06.740Z",
       "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "e71710e6-c1b5-4b3b-b0dd-65303783ff55",
+          "date": "2026-10-27T15:27:22.915Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -368,12 +377,17 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-10-27T15:27:22.915Z",
       "completedAt": "",
       "createdAt": "2026-10-21T11:14:52.371Z",
-      "updatedAt": "2026-10-24T18:33:41.775Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-10-27T15:27:22.915Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+          "createdAt": "2026-10-27T15:27:22.786Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4"
     },
     {
       "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
@@ -471,7 +485,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-10-27T10:22:49.088Z",
+  "updatedAt": "2026-10-27T15:27:22.915Z",
   "handoff": "# Handoff — session shutdown (quit)\n\nCreated at: 2026-10-26T18:59:18.546Z\nUpdated at: 2026-10-26T18:59:18.546Z\nReason: session shutdown (quit)\n\n## Progress snapshot\n- Features: 3/12 done, 6 active\n- Phases: 46/102 done, 17 active/discovery\n- Tasks: 334/533 done, 3 active\n\n## Current focus\n- Feature: `1be8af21-337e-4636-93d9-6bea87368492` — 🧰 Ready for heca-pro — the pieces heca-pro builds on (in-progress)\n- Phase: `5cbe946e-fe06-448c-a764-3840f033da6f` — ready-02: the connection — clients attach to the server over a local socket; RPC, events, detach/attach (in-progress)\n- Task: `ed677df2-82fe-4abb-a23b-30f90bc40919` — Headless server process + attach protocol (detach/attach) (in-progress)\n\n## What was being done\n2026-10-25 resume: native client wired via ClientState; standalone uses same ServerLoop. Fixed redundant ordered effects, missing-terminal request reply and daemon reaping. Scoped all-target tests pass (1068 Heca lib, 124 config, 255 core, all integrations); clippy -D warnings passes. Canonical checkpoint .planner/docs/t544-transport-checkpoint.md updated. Still open: notification ownership/split approval, reload, damage/resources and native GUI acceptance (CUA cgWindowNotFound). C3-C6 remain open. No commit/PR.\n\n## Current Task Statuses (phase 5cbe946e-fe06-448c-a764-3840f033da6f)\n- ✅ `69a168bf-276e-401a-a337-597ef29221b3` — Local socket + `heca rpc <line>` for scripts (done)\n- ✅ `e21d7360-4fff-465b-9a7d-b67016fce207` — Serializable wire model — plain-data Change + terminal snapshot/damage + layout effects (done)\n- 🚧 `ed677df2-82fe-4abb-a23b-30f90bc40919` — Headless server process + attach protocol (detach/attach) (in-progress)\n- 📋 `e90e1886-2ec1-4a87-94a4-2a3d4b56c404` — Several windows per session — own view each, follow, pane size setting (planned)\n- 📋 `73a5a8de-08c1-4b6f-8bdb-336ec26a3da2` — `heca rpc --events` — stream events to scripts (planned)\n- 📋 `df083f77-b084-42d5-b7f7-51924d8b11d2` — Windows named-pipe transport (planned)\n- 📋 `01ea2d3f-f50d-4fdb-b38a-edacfa979d87` — Connection / attach architecture docs (planned)\n\n## How to resume\n1. Open task ed677df2-82fe-4abb-a23b-30f90bc40919 (Headless server process + attach protocol (detach/attach)).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/5cbe946e-fe06-448c-a764-3840f033da6f.json\n- .planner/phases/5464ff74-fa17-4412-abaa-95aa19810b33.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n- Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.\n- F003/P011/T012 (126d0855) is still `blocked`, and its reason needs RE-CHECKING rather than planning around: the 'no chrome surface mounts a ScrollRegion' claim was verified 2026-07-17, and the 2026-07-26 sidebar scroll work may already have discharged it. Its horizontal trigger was settled 2026-07-27 as prefix+Shift+Home/End/PageUp/PageDown — the same four keys as vertical, Shift for the other axis.\n- Unblocked by T009, neither started: F003/P001/T006 (generate widget definitions for JS/Python from `WidgetKind::ALL`, which is a closed list with a coverage guard already walking it) and F003/P011/T006 (the typed builder SDK can now genuinely re-export the model). Also worth checking whether F003/P017/T003's generated property tables are reusable outside the app — they are the natural source for those generated definitions.\n\n## Recent activity\n- 2026-10-23T11:14:19.578Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → planned\n- 2026-10-23T11:14:14.342Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → planned\n- 2026-10-23T11:07:26.889Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → done\n- 2026-10-23T11:06:01.136Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → done\n- 2026-10-23T11:05:42.161Z [task_status] d72fd89e-2ea6-4dd9-b0a6-21beb72991b4: Task d72fd89e-2ea6-4dd9-b0a6-21beb72991b4 → done\n- 2026-09-05T21:15:13.811Z [task_status] bad40d02-be41-4f23-8acc-903c18c40e68: Task bad40d02-be41-4f23-8acc-903c18c40e68 → in-progress\n- 2026-09-04T10:03:13.339Z [task_created] 3a5ca1f3-f626-49d0-b4a0-033f0b64924e: Task created: Notification Text should not be truncated (phase 03b297bb-a915-4712-a6b4-dc688dc7ddc5)\n- 2026-09-01T15:38:54.250Z [task_updated] deef08b2-b838-428d-afce-2151533b5dd4: Task updated: Dismiss All Notifications\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
   "handoffUpdatedAt": "2026-10-26T18:59:18.578Z",
   "handoffAudit": null,
@@ -502,6 +516,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
+      "createdAt": "2026-10-27T15:27:22.786Z"
+    },
     {
       "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
       "createdAt": "2026-10-26T14:11:19.706Z"

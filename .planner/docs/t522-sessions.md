@@ -13,6 +13,18 @@ main through PR #300. T522 is in progress. No implementation is complete yet.
 - No commit or PR without Antonio's request. Keep main's unrelated planner,
   graphify and Codex icon changes, and other agents' worktrees, untouched.
 
+### Worktree Rule And Current Ownership
+
+Antonio's 2026-10-27 rule is recorded in canonical Project Guidelines: each new
+coding task gets a new worktree from current synchronized main, in a folder
+named `heca-feat-[num]`; finish, open a PR, verify merge, then the owning agent
+removes its worktree/folder and merged branch. The current worktrees remain as
+they are. T522 stays in `heca-p100`. Opus owns T545 in `heca-t545`;
+`heca-ui-authoring` belongs to another Codex instance. Do not change their work.
+
+The separate Codex icon correction was merged as PR #302; its worktree and
+branch were removed. It is no longer an outstanding local code change.
+
 ## Preflight
 
 ### Existing Pieces

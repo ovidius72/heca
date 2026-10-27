@@ -3,12 +3,16 @@
   "goal": "Consolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.\nThe gates before any code\n- §0 pre-flight, three written answers, per thing touched: which existing widget does this → if none, which planner task covers it (quote the id) → if neither, it is a proposal, not a commit.\n- §0b widget vs component: if it can be built inside heca-grid-ui, it belongs there. A component only leaves the library because it binds an app concept.\n- §0c the event system is DOM-shaped — capture → target → bubble, keys do bubble, a widget never hit-tests and never forwards, nothing focused means nothing delivered, and a cursor inside a container is not focus. Reach for a handler before an intent, a policy arm or a registry.\n- ⭐⭐ Rule Zero: write the line a plugin author would type. A registry, an id or a crate-private type means the API is missing. HintTargetRegistry, HintTargets, HintTargetId, Base::hint_target, named_press are gone and must not come back.",
   "description": "Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.",
   "projectGuidelines": {
-    "content": "- do not fix at call site. Always try to fix at library (widget/ component) side.\n- use css like syntax for laying down components: Flex, Grid, Surface etc...\n- prefer composition and reusability. DO NOT HARDCODE anything.",
-    "updatedAt": "2026-09-04T07:43:16.047Z",
+    "content": "- do not fix at call site. Always try to fix at library (widget/ component) side.\n- use css like syntax for laying down components: Flex, Grid, Surface etc...\n- prefer composition and reusability. DO NOT HARDCODE anything.\n\n## Worktree Lifecycle (Antonio, 2026-10-27)\n\n- From the next coding activity, start every new task in its own new worktree and branch from the latest synchronized main. Name its folder heca-feat-[num]. Do not reuse another task's worktree or edit application code/assets directly in main.\n- Finish implementation and verification, then open a PR toward main. After the merge is verified, the same agent removes its worktree, folder and merged branch. Do not leave cleanup or an unlanded task to Antonio or another agent.\n- Verify cleanliness, merged content and active use before removing anything. Preserve all other agents' work and shared dirty changes.\n- Leave the current worktrees as they are; do not retroactively rename or remove them to enforce the new naming rule.\n- The canonical shared planner remains /Users/antonio/projects/heca/.planner; use planner tools there rather than independent worktree copies.",
+    "updatedAt": "2026-10-27T15:45:11.025Z",
     "sessionInfo": [
       {
         "sessionId": "mcp-process:6b3e3a8f-c279-4651-a154-77ffa8b9f0a1",
-        "createdAt": "2026-10-27T10:36:36.373Z"
+        "createdAt": "2026-10-27T15:45:12.129Z"
+      },
+      {
+        "sessionId": "mcp-process:36d8322d-4c27-4f10-b762-ca3153fc2231",
+        "createdAt": "2026-10-27T15:21:45.232Z"
       },
       {
         "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",
@@ -65,10 +69,6 @@
       {
         "sessionId": "mcp-process:10b10067-4bd5-47bf-8236-29d8d00cb324",
         "createdAt": "2026-10-24T06:48:02.305Z"
-      },
-      {
-        "sessionId": "mcp-process:f23ae0d3-57d9-4849-af45-37423d55b99d",
-        "createdAt": "2026-10-20T11:14:26.047Z"
       }
     ]
   },
