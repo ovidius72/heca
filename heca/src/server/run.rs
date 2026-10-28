@@ -241,8 +241,9 @@ impl ServerLoop {
                     } else {
                         self.clients[i].attachment = Attachment::Attached;
                         // The attaching (or reattaching) window gets the current notifications so
-                        // its toast stack comes back exactly as the session left it.
-                        let views = self.state.visible_notifications();
+                        // its toast stack comes back exactly as the session left it — only the ones
+                        // meant for it (session-wide plus any addressed to this window).
+                        let views = self.state.visible_notifications_for(self.clients[i].id);
                         if self.clients[i].link.send(ServerMsg::Notifications(views)).is_err() {
                             detached.push(i);
                         }
@@ -302,7 +303,7 @@ impl ServerLoop {
                         detached.push(i);
                         continue;
                     }
-                    self.state.process_input(&owner, input);
+                    self.state.process_input(&owner, self.clients[i].id, input);
                     publish_terminals = true;
                 }
                 ClientMsg::Viewport { owner, offset } => {
@@ -317,7 +318,7 @@ impl ServerLoop {
                     { let _ = request.reply.send(answer); }
                 }
                 ClientMsg::Notify(command) => {
-                    let changes = self.state.execute(command.into_server_action(), now);
+                    let changes = self.state.execute(command.into_server_action(self.clients[i].id), now);
                     detached.extend(self.publish_notifications(&changes));
                 }
                 ClientMsg::Reload => {
@@ -411,7 +412,9 @@ impl ServerLoop {
             }
         }
         let current: std::collections::HashSet<_> = self.state.backends.owners().map(|(owner, _)| owner).collect();
-        for owner in self.known_terminals.difference(&current) {
+        let closed: Vec<_> = self.known_terminals.difference(&current).cloned().collect();
+        for owner in &closed {
+            self.state.terminal_gone(owner);
             for (i, client) in self.clients.iter().enumerate() {
                 if matches!(client.attachment, Attachment::Attached)
                     && client.link.send(ServerMsg::TerminalClosed { owner: owner.clone() }).is_err()
@@ -425,6 +428,7 @@ impl ServerLoop {
         detached.dedup();
         for i in detached.into_iter().rev() {
             let gone = self.clients.remove(i);
+            self.state.client_gone(gone.id);
             self.pending_rpc.retain(|_, request| {
                 if request.client != gone.id { return true; }
                 let _ = request.reply.send("error: attached client disconnected".into());
@@ -456,10 +460,11 @@ impl ServerLoop {
     fn publish_notifications(&self, changes: &[Change]) -> Vec<usize> {
         let mut disconnected = Vec::new();
         if changes.iter().any(|change| matches!(change, Change::NotificationsChanged)) {
-            let views = self.state.visible_notifications();
+            // Each window gets its own projection: the session-wide notifications plus any addressed
+            // to it. A reload toast raised in one window reaches only that window.
             for (i, client) in self.clients.iter().enumerate() {
                 if matches!(client.attachment, Attachment::Attached)
-                    && client.link.send(ServerMsg::Notifications(views.clone())).is_err()
+                    && client.link.send(ServerMsg::Notifications(self.state.visible_notifications_for(client.id))).is_err()
                 {
                     disconnected.push(i);
                 }

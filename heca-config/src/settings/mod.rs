@@ -18,7 +18,7 @@ mod default_tests;
 
 use schema::declare_settings;
 
-pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, SearchCase};
+pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, PaneSize, SearchCase};
 pub use connection::ConnectionConfig;
 pub use notifications::{NotificationSystem, NotificationSystemConfig};
 pub use agents::{AgentProgramConfig, AgentSoundsConfig, AgentStatusConfig, AgentStatuses, AgentsConfig};
@@ -113,6 +113,12 @@ declare_settings! {
         pub always_center_single_column: bool,
         /// When focusing a column re-centres the view: `never` | `on_overflow` | `always`.
         pub center_focused_column: CenterFocusedColumn,
+        /// When several windows show the **same** pane at once, a running terminal still has one size,
+        /// so the windows must agree on it: `smallest` (fits every window) | `latest` (the window last
+        /// typed in — the default) | `largest`. A pane shown by one window always takes that window's
+        /// size. Only rows×cols are shared; each window still draws at its own font/cell size.
+        #[serde(alias = "pane-size")]
+        pub pane_size: PaneSize,
         /// Gap between workspace rows in the exposé, as a fraction of a screen height.
         pub overview_gap: f64,
         /// The scale the exposé **opens from**, relative to its map size — the zoom it animates out of

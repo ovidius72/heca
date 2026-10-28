@@ -351,6 +351,7 @@ fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) 
         Ok(()) => {
             Notification::success("Configuration reloaded")
                 .dedup_key("config-reload")
+                .originator()
                 .send();
         }
         Err(e) => {
@@ -362,6 +363,7 @@ fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) 
                         .dismiss_after(true),
                 )
                 .sticky()
+                .originator()
                 .send();
         }
     }

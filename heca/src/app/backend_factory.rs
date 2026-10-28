@@ -46,6 +46,8 @@ pub(crate) struct TerminalSettings {
     pub(crate) scroll_animations: bool,
     pub(crate) link_detection: bool,
     pub(crate) images: bool,
+    /// How a terminal's size is chosen when several windows show it at once.
+    pub(crate) pane_size: heca_config::settings::PaneSize,
 }
 
 impl TerminalSettings {
@@ -60,6 +62,7 @@ impl TerminalSettings {
             scroll_animations: settings.terminal_scroll_animations,
             link_detection: app_config.config.appearance.terminal.link_detection,
             images: app_config.config.appearance.terminal.images,
+            pane_size: settings.pane_size,
         }
     }
 }

@@ -28,6 +28,7 @@ fn terminal_settings() -> TerminalSettings {
         scroll_animations: false,
         link_detection: false,
         images: false,
+        pane_size: Default::default(),
     }
 }
 

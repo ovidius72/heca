@@ -74,6 +74,15 @@ always_center_single_column = false
 #   "always"      — the focused column is always centered
 center_focused_column = "never"
 
+# When several windows show the SAME pane at once, the one running terminal still has a
+# single size, so the windows must agree on it. This picks which window wins:
+#   "smallest" — the smallest showing window, so the pane fits in every window
+#   "latest"   — the window last typed in (default): the window you work in gets full size
+#   "largest"  — the largest showing window
+# A pane shown by only one window always takes that window's size. Only rows×cols are
+# shared; each window still draws at its own font/cell size.
+pane_size = "latest"
+
 # Gap between workspace rows in the exposé, as a fraction of a screen height.
 overview_gap = 0.1
 

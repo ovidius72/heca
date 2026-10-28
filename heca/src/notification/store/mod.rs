@@ -333,6 +333,17 @@ impl NotificationStore {
         self.visible().filter_map(notification_view).collect()
     }
 
+    /// The visible projection as [`visible_views`](Self::visible_views), but only the notifications
+    /// the window on connection `client` is meant to see — session-wide ones plus any addressed to
+    /// that window ([`Audience`]). Queueing and lifecycle stay session-wide; this filters only what
+    /// each window is sent.
+    pub fn visible_views_for(&self, client: u64) -> Vec<NotificationView> {
+        self.visible()
+            .filter(|notification| notification.audience.allows(client))
+            .filter_map(notification_view)
+            .collect()
+    }
+
     /// Whether the store holds no queued, visible, or retained notification.
     pub fn is_empty(&self) -> bool {
         self.notifications.is_empty()

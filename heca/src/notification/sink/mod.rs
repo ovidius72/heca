@@ -121,6 +121,14 @@ impl Notification {
         self
     }
 
+    /// Show it only in the window that raised it — feedback for that window's own action, rather
+    /// than the session-wide default. Use it for the response to something the user did in this
+    /// window (a config reload, a rename); leave it off for an ambient event every window should see.
+    pub fn originator(mut self) -> Self {
+        self.draft = self.draft.originator();
+        self
+    }
+
     /// Raise it. Posts through the host-installed sink; a no-op if nothing installed it (a
     /// headless test, or a call before startup finishes installing it).
     pub fn send(self) {

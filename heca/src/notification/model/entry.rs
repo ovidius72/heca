@@ -128,6 +128,10 @@ pub struct AppNotification {
     pub created_at: Instant,
     /// Current placement bucket. Mutated by the store; not by the builder.
     pub(in crate::notification) placement: NotificationPlacement,
+    /// Who sees it: the whole session (default) or one window. Set from the draft; the server
+    /// filters delivery by it (`visible_views_for`). Never crosses the wire — the window receives
+    /// only the notifications meant for it.
+    pub audience: Audience,
 }
 
 impl AppNotification {
@@ -154,6 +158,7 @@ impl AppNotification {
             actions: Vec::new(),
             created_at,
             placement: NotificationPlacement::default(),
+            audience: Audience::Session,
         }
     }
 

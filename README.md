@@ -996,6 +996,11 @@ pane_renamed_add_process_name = true  # Renamed pane shows its process name smal
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
+pane_size = "latest"          # When several windows show the SAME pane at once, the one running
+                              # terminal still has a single size, so the windows must agree on it:
+                              # "smallest" (fits every window) | "latest" (the window last typed in,
+                              # the default) | "largest". A pane shown by one window takes that
+                              # window's size. Only rows×cols are shared; each window draws at its own font.
 
 [settings.notification_system]
 mode = "app"                  # "app" (in-app toast stack) | "system" (OS notifications —

@@ -66,6 +66,24 @@ pub enum PaletteSize {
     Large,
 }
 
+/// How big a terminal pane is when **several windows show it at once** at different sizes.
+///
+/// A running terminal has one size (rows×cols), so when two windows show the same pane they must
+/// agree on it — this decides which window wins. A pane shown by only one window always takes that
+/// window's size. The pixel cell size (font) stays each window's own; only rows×cols are arbitrated.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaneSize {
+    /// The smallest showing window's size, so the pane fits in every window that shows it.
+    Smallest,
+    /// The size of the window **last typed in**. **The default** — the window you work in gets the
+    /// full size.
+    #[default]
+    Latest,
+    /// The largest showing window's size.
+    Largest,
+}
+
 /// How a search query's case is treated — the command palette today, and any search surface that
 /// follows it.
 ///
