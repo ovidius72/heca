@@ -19,6 +19,26 @@ fn notification_store_allows_history_to_be_disabled() {
 }
 
 #[test]
+fn a_windowed_notification_reaches_only_its_window() {
+    let now = Instant::now();
+    let mut store = NotificationStore::new(100);
+    store.push(NotificationDraft::new("session-wide"), now).unwrap();
+    store
+        .push(NotificationDraft::new("for window 2").originator().resolve_originator(2), now)
+        .unwrap();
+
+    let titles = |views: Vec<NotificationView>| views.into_iter().map(|v| v.title).collect::<Vec<_>>();
+    // Window 1 sees only the session-wide one; window 2 sees both.
+    assert_eq!(titles(store.visible_views_for(1)), vec!["session-wide".to_string()]);
+    assert_eq!(
+        titles(store.visible_views_for(2)),
+        vec!["session-wide".to_string(), "for window 2".to_string()],
+    );
+    // The session-wide read is unchanged — both are present.
+    assert_eq!(store.visible_views().len(), 2);
+}
+
+#[test]
 fn push_allocates_an_id_and_promotes_into_a_vacant_slot() {
     let now = Instant::now();
     let mut store = NotificationStore::new(100);

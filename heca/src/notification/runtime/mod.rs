@@ -254,6 +254,13 @@ impl NotificationRuntime {
     pub fn visible_views(&self) -> Vec<NotificationView> {
         self.shown.clone()
     }
+
+    /// The cards on show for the window on connection `client`: the session-wide ones plus any
+    /// addressed to that window. The retained `shown` list stays session-wide (queueing and
+    /// lifecycle are a session concept); this reads the store to filter per window at send time.
+    pub fn visible_views_for(&self, client: u64) -> Vec<NotificationView> {
+        self.store.visible_views_for(client)
+    }
 }
 
 #[cfg(test)]

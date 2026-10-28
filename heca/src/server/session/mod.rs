@@ -203,8 +203,9 @@ impl SessionRuntime {
                             panes: self.state.feedback.snapshot(),
                         }).is_err() { detached.push(i); }
                         // The attaching (or reattaching) window gets the current notifications so
-                        // its toast stack comes back exactly as the session left it.
-                        let views = self.state.visible_notifications();
+                        // its toast stack comes back exactly as the session left it — the
+                        // session-wide ones plus any addressed to this window.
+                        let views = self.state.visible_notifications_for(self.clients[i].id);
                         if self.clients[i]
                             .link
                             .send(ServerMsg::Notifications(views))
@@ -326,7 +327,11 @@ impl SessionRuntime {
                     self.clients[i].reply_rpc(request_id, answer);
                 }
                 ClientMsg::Notify(command) => {
-                    let changes = self.state.execute(command.into_server_action(), now);
+                    // The window that asked is the originator, so an originator-only card is
+                    // resolved to this client's id before the store ever sees it.
+                    let changes = self
+                        .state
+                        .execute(command.into_server_action(self.clients[i].id), now);
                     detached.extend(self.publish_notifications(&changes));
                 }
                 ClientMsg::AcknowledgeFeedback { session_id, pane_id, revision } => {
@@ -543,7 +548,10 @@ impl SessionRuntime {
             .owners()
             .map(|(owner, _)| owner)
             .collect();
-        for owner in self.known_terminals.difference(&current) {
+        let closed: Vec<_> = self.known_terminals.difference(&current).cloned().collect();
+        for owner in closed {
+            // Drop the ended terminal's sizing so a later one reusing the owner starts clean.
+            self.state.terminal_gone(&owner);
             for (i, client) in self.clients.iter().enumerate() {
                 if matches!(client.attachment.get(), Attachment::Attached)
                     && client
@@ -573,6 +581,9 @@ impl SessionRuntime {
         detached.dedup();
         for i in detached.into_iter().rev() {
             let gone = self.clients.remove(i);
+            // Forget this window's pane-size claims so a pane it kept small (or was driving under
+            // `latest`) returns to the size the remaining windows ask for.
+            self.state.client_gone(gone.id);
             gone.close();
         }
         for client in &self.clients { client.expire_rpc(now); }

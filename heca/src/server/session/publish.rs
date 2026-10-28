@@ -30,15 +30,18 @@ impl SessionRuntime {
             .iter()
             .any(|change| matches!(change, Change::NotificationsChanged))
         {
-            let views = self.state.visible_notifications();
+            // Each window gets its own projection: the session-wide cards plus the ones addressed
+            // to it. A card raised for one window never reaches the others.
             for (i, client) in self.clients.iter().enumerate() {
-                if matches!(client.attachment.get(), Attachment::Attached)
-                    && client
+                if matches!(client.attachment.get(), Attachment::Attached) {
+                    let views = self.state.visible_notifications_for(client.id);
+                    if client
                         .link
-                        .send(ServerMsg::Notifications(views.clone()))
+                        .send(ServerMsg::Notifications(views))
                         .is_err()
-                {
-                    disconnected.push(i);
+                    {
+                        disconnected.push(i);
+                    }
                 }
             }
         }

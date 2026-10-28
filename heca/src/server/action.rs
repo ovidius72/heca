@@ -70,9 +70,13 @@ pub(crate) enum NotificationCommand {
 impl NotificationCommand {
     /// The [`ServerAction`] this command runs — the server maps it on receipt so the state has one
     /// door whatever asked ([`ServerState::execute`](super::ServerState::execute)).
-    pub(crate) fn into_server_action(self) -> ServerAction {
+    ///
+    /// `originator` is the connection the command arrived on: a raised notification marked
+    /// [`Audience::Originator`](crate::notification::Audience) is resolved to that window here, so
+    /// "show it only in the window that asked" is settled once, at the seam, not at any call site.
+    pub(crate) fn into_server_action(self, originator: u64) -> ServerAction {
         match self {
-            Self::Raise(draft) => ServerAction::Raise(draft),
+            Self::Raise(draft) => ServerAction::Raise(draft.resolve_originator(originator)),
             Self::DismissOne(id) => ServerAction::DismissOne(id),
             Self::DismissLast => ServerAction::DismissLast,
             Self::DismissAll => ServerAction::DismissAll,

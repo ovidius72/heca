@@ -24,6 +24,10 @@ pub struct NotificationDraft {
     explicit_lifetime: bool,
     pub(in crate::notification) dedup_key: Option<String>,
     actions: Vec<NotificationAction>,
+    /// Who sees it. Default [`Audience::Session`]; `#[serde(default)]` so a draft from an older
+    /// client without the field still deserializes as session-wide.
+    #[serde(default)]
+    pub(in crate::notification) audience: Audience,
 }
 
 impl NotificationDraft {
@@ -38,7 +42,25 @@ impl NotificationDraft {
             explicit_lifetime: false,
             dedup_key: None,
             actions: Vec::new(),
+            audience: Audience::Session,
         }
+    }
+
+    /// Show this only in the window that raised it — feedback for that window's own action, not a
+    /// session-wide event. The server resolves it to the originating connection on receipt.
+    pub fn originator(mut self) -> Self {
+        self.audience = Audience::Originator;
+        self
+    }
+
+    /// Return the draft with an [`Audience::Originator`] resolved to `client`; other audiences are
+    /// left as they are. The server's one door for turning "the window that raised it" into the
+    /// connection it arrived on.
+    pub(crate) fn resolve_originator(mut self, client: u64) -> Self {
+        if self.audience == Audience::Originator {
+            self.audience = Audience::Window(client);
+        }
+        self
     }
 
     /// `Self::new(title).severity(NotificationSeverity::Info)` — the domain default, spelled out.
@@ -141,6 +163,7 @@ impl NotificationDraft {
         notification.body = self.body;
         notification.dedup_key = self.dedup_key;
         notification.actions = self.actions;
+        notification.audience = self.audience;
         notification
     }
 }
