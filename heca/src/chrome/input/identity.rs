@@ -137,7 +137,7 @@ pub(crate) fn report_unkeyed_description(source: &str, node: &ViewNode) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use heca_view::{Intent, WidgetKind};
+    use heca_view::{Intent, WidgetId};
 
     /// The reporting is a thin skin over the two walks; what is worth holding here is that it
     /// **says a thing once**, because both callers run on a cadence that would otherwise repeat it.
@@ -155,14 +155,14 @@ mod tests {
     #[test]
     fn a_keyed_description_reports_nothing() {
         SAID.with(|s| s.borrow_mut().clear());
-        let node = ViewNode::new(WidgetKind::VStack)
+        let node = ViewNode::new(WidgetId::VStack)
             .child(
-                ViewNode::new(WidgetKind::Row)
+                ViewNode::new(WidgetId::Row)
                     .key("pane:7")
                     .on_press(Intent::new("focus_pane")),
             )
             .child(
-                ViewNode::new(WidgetKind::Row)
+                ViewNode::new(WidgetId::Row)
                     .key("pane:9")
                     .on_press(Intent::new("focus_pane")),
             );
@@ -174,8 +174,8 @@ mod tests {
     #[test]
     fn an_unkeyed_description_reports_each_item() {
         SAID.with(|s| s.borrow_mut().clear());
-        let row = || ViewNode::new(WidgetKind::Row).on_press(Intent::new("focus_pane"));
-        let node = ViewNode::new(WidgetKind::VStack).child(row()).child(row());
+        let row = || ViewNode::new(WidgetId::Row).on_press(Intent::new("focus_pane"));
+        let node = ViewNode::new(WidgetId::VStack).child(row()).child(row());
         report_unkeyed_description("test", &node);
         SAID.with(|s| assert_eq!(s.borrow().len(), 2));
     }

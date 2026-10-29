@@ -193,7 +193,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `focus_barrier` | `bool` | Whether this widget is the **only** focus target in its subtree — focus traversal visits it but never descends into its children (default `false`). Set by controls that **compose** their content (`Button`, `Item`): a control is one click target, so it must be one Tab stop, whatever it holds. Without it a focusable child (a `Toggle` used as decoration) would take its own Tab stop while being click-dead, since the control consumes the press in its own `event`. Orthogonal to `style.hidden`, which drops a subtree from layout *and* focus. |
 | `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`: `advance` → `true`, click-focus → `false`). **Every widget gates its focus ring on `Base::shows_focus_ring()`** (= `focused && focus_visible` — CSS `:focus-visible` semantics), so a mouse click focuses a widget (Enter/Space work, the caret shows) **without** drawing the ring; only keyboard navigation rings. The ring is also removable app-wide via `[appearance] show_focus_border = false` (theme token `show_focus_border`). |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
-| `children` | `Vec<Box<dyn Component>>` | Child components. |
+| `children` | `Vec<WidgetModel>` | Child components. |
 | `font` | `f32` | **Resolved** font size in logical px, written by the layout pass (see [Font sizing](#font-sizing)). Widgets read **this** for text + measurement, not `style.font_size`. |
 
 ### `Component` trait
@@ -525,15 +525,15 @@ A picker surface — a map, a chooser, a palette of tiles — is a `CardGrid`. *
 any kind, any subtree.** There is no card type to conform to.
 
 ```rust
-ViewNode::new(WidgetKind::CardGrid)
+ViewNode::new(WidgetId::CardGrid)
     .on("activate", Intent::new("docker.open"))     // the chosen card's key arrives as `key`
     .on("move", Intent::new("docker.preview"))      // optional: every cursor move
     .on("dismiss", Intent::new("docker.close"))     // optional: Escape
     .child(
-        ViewNode::new(WidgetKind::Surface)
+        ViewNode::new(WidgetId::Surface)
             .key("nginx")                            // optional — see the `key` rule above
-            .child(ViewNode::new(WidgetKind::Icon).prop("icon", "container"))
-            .child(ViewNode::new(WidgetKind::Label).text("nginx")),
+            .child(ViewNode::new(WidgetId::Icon).prop("icon", "container"))
+            .child(ViewNode::new(WidgetId::Label).text("nginx")),
     )
 ```
 
@@ -888,22 +888,15 @@ takes no argument and there is no event to carry.
 
 | Method | Effect |
 |--------|--------|
-| `.child(impl IntoComponent)` | Append a child — a widget, **or a subtree someone else already built**. |
+| `.child(impl IntoChildren)` | Append a widget, an opaque subtree, or an array/`Vec` of either. Chain calls for different types. |
 
-> **One builder per slot, never two.** `Box<dyn Component>` is not itself a `Component`, and for
-> that single reason every child-taking builder used to come in twos — `child`/`child_boxed`,
-> `body`/`body_boxed`, `leading`/`leading_boxed`, sixteen in all. A caller holding a dynamically
-> built subtree, which is what `realize()` returns from a description, had to know which spelling to
-> reach for; a widget author had to remember to write both; and a new slot that forgot its twin was
-> simply unreachable from the declarative side, with nothing to report it.
->
-> `IntoComponent` is the bound that covers both, and it is implemented for you — a caller never
-> names it. An already-boxed subtree is **handed through, not boxed again**
-> (`an_already_boxed_subtree_is_handed_through_rather_than_wrapped`). Every named slot takes it on
-> the same terms: `Dialog::body`, `DockFrame::header`, `Item::leading`, `Overlay::panel`,
-> `Grid::cell`, `KeyHint::new`.
->
-> **When you add a slot to a widget, take `impl IntoComponent`.** That is the whole rule.
+> **One builder per slot.** Native components and opaque `WidgetModel` trees use the same
+> child builder. Conversion happens inside `IntoComponent` / `IntoChildren`; callers do not
+> allocate, cast or call those conversions. `realize` accepts a typed SDK builder or a `ViewNode`
+> and returns `Result<WidgetModel, RealizeError>`. The owned model retains the native component's
+> node and behavior, with private allocation. Named slots such as `Dialog::body`, `Dialog::action`,
+> `Item::leading`, `Overlay::panel` and `KeyHint::new` accept the same owned trees.
+
 
 <a id="hintable-and-being-pickable"></a>
 **Being pickable** (part of `HintExt`):
@@ -1120,7 +1113,7 @@ them a failure:
 
 **A collection is two or more siblings of the same container**, and each half says that in the
 vocabulary it has: over widgets, two or more that derive the **same name**; over a description, two
-or more of the same **`WidgetKind`**, which is real type information and needs nothing inferred. So
+or more of the same **`WidgetId`**, which is real type information and needs nothing inferred. So
 an `[Icon, Label]` control never trips either one, and three rows always trip both.
 
 **Only what you can act on is reported** — `Base::activatable` natively, a bound `press` in a
@@ -1185,7 +1178,7 @@ The string is **opaque to the library** — nothing here parses it — and must 
 >
 > ```rust
 > // …or, without the typed builder:
-> ViewNode::new(WidgetKind::Row)
+> ViewNode::new(WidgetId::Row)
 >     .prop("key", PropValue::Text(format!("pane:{}", pane.id)))
 >     .on_press(Intent::new("focus_pane"));
 > ```
@@ -2033,7 +2026,7 @@ Surface::new()
         Flex::row()
             .justify(Justify::SpaceBetween)
             .align(Align::Center)
-            .child(Tag::new("~").segment_text(Glyph::Terminal, "zsh"))
+            .child(Tag::new("~").segment_label_with(Label::new("zsh"), Icon::new(Glyph::Terminal)))
             .child(Flex::row().gap(Spacing::Xs).child(close_button)),
     );
 ```
@@ -2089,9 +2082,9 @@ Panel::titled("Containers")
 **Declarative:**
 
 ```rust
-ViewNode::new(WidgetKind::Panel)
+ViewNode::new(WidgetId::Panel)
     .text("Containers")                       // `text` is the heading, as it is for Card/DockFrame
-    .child(ViewNode::new(WidgetKind::Label).text("nginx"));
+    .child(ViewNode::new(WidgetId::Label).text("nginx"));
 ```
 
 The heading is a real `Label` child, created up front and hidden until a title is set — so `title`
@@ -2099,6 +2092,12 @@ works whether it is applied before or after the children, which is what a descri
 properties are applied after children are attached.
 
 ### Pane
+
+The typed described container is `heca_view::build::Pane::new()`. It accepts arbitrary described
+children and nested layouts through `.child(...)`, with `border_style(ViewFrameStyle)`,
+`border_color(...)` and `frosted(...)`. It constructs the same generic frame as the native widget;
+there is no built-in Terminal requirement or automatic header.
+
 
 A generic container for sidebars/panels with three **border styles**
 ([`FrameStyle`](#theme), the theme's own vocabulary — the same one
@@ -2181,8 +2180,19 @@ Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0).paddi
 
 A running shell or command, drawn where you place it — a dock, an overlay, a plugin's panel. It fills
 the box it is put in and sizes its own grid from that box; whoever places it writes no rect, no
-click handling and no drawing pass. It is a **host** widget (it needs the app's terminal processes),
-so a program built on heca reaches it through its extension handle, never by naming the owner half:
+click handling and no drawing pass. It is a **host** widget (it needs the app's terminal processes).
+Native code uses `heca::Terminal::new("shell")` for the app's `heca.shell` session; an extension uses
+its handle for its own namespace. Both **get or create**: the first call creates the declaration,
+and later calls return handles sharing that session. The host starts its process from the declaration.
+See [extension identity and registrations](extending-heca.md#extension-identity-registrations-and-shared-terminals)
+for the distinction between widget construction, named sessions and registered actions/builders.
+
+The typed description uses `heca_view::build::Terminal::new("shell").cwd("/project").title("Shell")`.
+It requires Heca's host registry, which includes the Terminal factory alongside the grid-ui
+factories. An external host registers its own resource implementations. Ownership is supplied by
+the host's `WidgetRegistry::realize_for` context; a serialized `owner` property cannot select
+another plugin's session. Same owner/name reuses T449's native session store; configuration after
+startup never restarts its process. Managed workspace creation and restoration remain P094/T452.
 
 ```rust
 let demo = heca::extension("demo");
@@ -2195,6 +2205,7 @@ demo.terminal("logs").command("tail -f app.log").cwd(dir)
 
 | builder | meaning |
 |---|---|
+| `Terminal::new("short")` | the app's terminal `heca.<short>`, without an extension handle. Same name reuses the session; a different name creates a separate declaration. The name must be nonempty and contain no dot; refused names are reported and start nothing |
 | `extension.terminal("short")` | the terminal `<extension>.<short>`. **The name is the identity and never changes.** Every call with the same name is the same terminal, so building the dock again or opening the overlay again shows the process that was already running |
 | `.command("…")` | run this under the user's shell instead of the shell itself. Fixed when it starts |
 | `.cwd(path)` | start in this folder. Fixed when it starts |
@@ -2332,7 +2343,7 @@ Grid::new()
 **Declarative:**
 
 ```rust
-ViewNode::new(WidgetKind::Grid)
+ViewNode::new(WidgetId::Grid)
     .prop("columns", PropValue::List(vec![           // CSS-like track strings
         PropValue::Text("22px".into()),
         PropValue::Text("1fr".into()),
@@ -2341,13 +2352,13 @@ ViewNode::new(WidgetKind::Grid)
     .prop("rows", PropValue::List(vec![PropValue::Text("auto".into())]))
     .prop("areas", PropValue::List(vec![PropValue::Text("dot title tag".into())]))
     // Placement is a prop on the CHILD: an area name…
-    .child(ViewNode::new(WidgetKind::Icon)
+    .child(ViewNode::new(WidgetId::Icon)
         .prop("icon", PropValue::Glyph("terminal".into()))
         .prop("area", PropValue::Text("dot".into())))
     // …or a CSS line, as native `.column(..)` / `.row(..)` take it (`"2"`, `"1 / -1"`,
     // `"1 / span 2"`), with optional `column_span` / `row_span`. The SDK's typed form is
     // `Label::new("nvim").column("2").row("1")`.
-    .child(ViewNode::new(WidgetKind::Label)
+    .child(ViewNode::new(WidgetId::Label)
         .text("nvim")
         .prop("column", PropValue::Text("2".into()))
         .prop("row", PropValue::Text("1".into())));
@@ -2447,7 +2458,7 @@ Grid::new().align(Align::Center).justify_items(Align::Center)   // dead centre
 **Declarative — the same four knobs are props:**
 
 ```rust
-ViewNode::new(WidgetKind::Grid)
+ViewNode::new(WidgetId::Grid)
     .prop("columns", PropValue::List(vec![
         PropValue::Text("auto".into()),
         PropValue::Text("1fr".into()),
@@ -2457,14 +2468,14 @@ ViewNode::new(WidgetKind::Grid)
     // On the grid: the default placement of every item in its cell.
     .prop("align", PropValue::Align(ViewAlign::Center))            // vertical
     .prop("justify_items", PropValue::Align(ViewAlign::Center))    // horizontal
-    .child(ViewNode::new(WidgetKind::Icon)
+    .child(ViewNode::new(WidgetId::Icon)
         .prop("icon", PropValue::Glyph("terminal".into()))
         .prop("area", PropValue::Text("icon".into())))
-    .child(ViewNode::new(WidgetKind::Label)
+    .child(ViewNode::new(WidgetId::Label)
         .text("zsh")
         .prop("area", PropValue::Text("title".into())))
     // On a child: override the grid, one axis each.
-    .child(ViewNode::new(WidgetKind::StatusDot)
+    .child(ViewNode::new(WidgetId::StatusDot)
         .prop("area", PropValue::Text("status".into()))
         .prop("justify_self", PropValue::Align(ViewAlign::End)));   // hard right in its cell
 ```
@@ -2667,7 +2678,7 @@ without the container knowing those wrappers exist.
 
 ```rust
 // Inside a provider's build seam — the body it returns carries its own part.
-build: Box::new(|ctx, bx| Box::new(my_list(ctx, bx).flex(3.0)) as WidgetModel),
+ContainerContribution::new(self, |ctx, bx| my_list(ctx, bx).flex(3.0))
 ```
 
 ```rust
@@ -2760,12 +2771,12 @@ grid.scroll_to(0.0);      // vertical
 grid.scroll_to_x(40.0);   // horizontal
 ```
 
-**Declarative (`ViewNode`).** `WidgetKind::Scroll` realizes to a `ScrollRegion`
+**Declarative (`ViewNode`).** `WidgetId::Scroll` realizes to a `ScrollRegion`
 with its children attached, and **`axes` is a prop** — a described region can be
 horizontal or two-axis, not just vertical:
 
 ```rust
-ViewNode::new(WidgetKind::Scroll)
+ViewNode::new(WidgetId::Scroll)
     .prop("axes", ViewScrollAxes::Both.into())   // Vertical (default) | Horizontal | Both
     .prop("width", PropValue::Int(300))
     .prop("height", PropValue::Int(180))
@@ -2878,10 +2889,10 @@ let done = row.strikethrough_signal();
 // done.set(true);
 ```
 
-**Declarative** (`WidgetKind::Label`):
+**Declarative** (`WidgetId::Label`):
 
 ```rust
-ViewNode::new(WidgetKind::Label)
+ViewNode::new(WidgetId::Label)
     .text("DONE")
     .prop("bold", PropValue::Bool(true))
     .prop("italic", PropValue::Bool(true))
@@ -2891,8 +2902,8 @@ ViewNode::new(WidgetKind::Label)
 
 Props `realize` reads: `text`, `bold`, `italic`, `underline`, `strikethrough` (all `Bool`, all
 default `false`). The signals are **not** exposed declaratively — a `ViewNode` is static data and
-cannot carry a live signal (same rule as [`ScrollBar`](#scrollbar) being host-only); a plugin author
-re-emits the node with the new value instead.
+cannot carry a live signal; a plugin author re-emits the node with the new value instead.
+Stateful adapters, such as [`ScrollBar`](#scrollbar), bind data to native signals inside the host.
 
 **Preformatted text and shared values.** `.preserve_whitespace(true)` preserves spaces and explicit
 newlines while wrapping (default false); use it for editable text and source excerpts. It is also
@@ -2907,8 +2918,8 @@ let label = Label::new("").with_text_signal(value).wrap(true).preserve_whitespac
 ```
 
 ```rust
-use heca_view::{ViewNode, WidgetKind, PropValue};
-let label = ViewNode::new(WidgetKind::Label).text("two  spaces\nand a newline")
+use heca_view::{ViewNode, WidgetId, PropValue};
+let label = ViewNode::new(WidgetId::Label).text("two  spaces\nand a newline")
     .prop("wrap", PropValue::Bool(true)).prop("preserve_whitespace", PropValue::Bool(true));
 ```
 
@@ -2943,9 +2954,9 @@ turns the second into the first. Both spellings, in both forms:
 
 | | Native (builder API) | Declarative (`ViewNode`) |
 |---|---|---|
-| **Simple** — a label | `Button::destructive("Delete")` | `ViewNode::new(WidgetKind::Button).text("Delete").prop("variant", …Destructive)` |
+| **Simple** — a label | `Button::destructive("Delete")` | `ViewNode::new(WidgetId::Button).text("Delete").prop("variant", …Destructive)` |
 | **Simple + icon** | `Button::destructive("Delete").icon(Glyph::Trash)` | …the same, plus `.prop("icon", PropValue::Glyph("trash".into()))` |
-| **Composed** — any tree | `Button::empty().child(…)` | `ViewNode::new(WidgetKind::Button).child(…)` |
+| **Composed** — any tree | `Button::empty().child(…)` | `ViewNode::new(WidgetId::Button).child(…)` |
 
 ```rust
 // ── 1. SIMPLE (native) ───────────────────────────────────────────────────────────────
@@ -2958,7 +2969,7 @@ Button::destructive("Delete").icon(Glyph::Trash).on_click(|| confirm_delete());
 // ── 2. SIMPLE (declarative) ──────────────────────────────────────────────────────────
 // A CHILDLESS node: the scalar props describe the content, and realize() builds the very
 // same [Icon, Label] children the native sugar does.
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .text("Delete")
     .prop("icon", PropValue::Glyph("trash".into()))
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
@@ -2978,14 +2989,14 @@ Button::empty()
 
 // ── 4. COMPOSED (declarative) ────────────────────────────────────────────────────────
 // The identical tree, as data. Children WIN: with children present, `text`/`icon` are ignored.
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::VStack).prop("gap", PropValue::Int(4))
-        .child(ViewNode::new(WidgetKind::HStack)
-            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
-            .child(ViewNode::new(WidgetKind::Label).text("Delete")))
-        .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
+    .child(ViewNode::new(WidgetId::VStack).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetId::HStack)
+            .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("trash".into())))
+            .child(ViewNode::new(WidgetId::Label).text("Delete")))
+        .child(ViewNode::new(WidgetId::Label).text("Ctrl+D")));
 ```
 
 **Precedence: children win.** A node *with* children is realized as an empty button holding them; a
@@ -3059,21 +3070,21 @@ scalar sugar (`text` + optional `icon`), which produces the identical children.
 
 ```rust
 // Sugar form (childless) — text + icon props.
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .text("Delete")
     .prop("icon", PropValue::Glyph("trash".into()))
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"));
 
 // Composed form — children are the content (the props above are then ignored).
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::VStack).prop("gap", PropValue::Int(4))
-        .child(ViewNode::new(WidgetKind::HStack)
-            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
-            .child(ViewNode::new(WidgetKind::Label).text("Delete")))
-        .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
+    .child(ViewNode::new(WidgetId::VStack).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetId::HStack)
+            .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("trash".into())))
+            .child(ViewNode::new(WidgetId::Label).text("Delete")))
+        .child(ViewNode::new(WidgetId::Label).text("Ctrl+D")));
 ```
 
 Both spellings produce the **same retained tree** — see
@@ -3202,7 +3213,7 @@ is gone and nothing was catching it. The row divides the space instead.
 
 #### Declarative (`ViewNode`)
 
-`WidgetKind::ButtonGroup`. `display` and `variant` are ordinary props; `child` is **host-only**,
+`WidgetId::ButtonGroup`. `display` and `variant` are ordinary props; `child` is **host-only**,
 because a description adds actions through `children` like every other container.
 
 ```rust
@@ -3334,8 +3345,8 @@ let connection = Line::new().arrows(ArrowHeads::End).width("100%");
 ```
 
 ```rust
-use heca_view::{ViewNode, WidgetKind, PropValue};
-let connection = ViewNode::new(WidgetKind::Line)
+use heca_view::{ViewNode, WidgetId, PropValue};
+let connection = ViewNode::new(WidgetId::Line)
     .prop("arrows", PropValue::Text("end".into()))
     .prop("start_y", PropValue::Float(0.0))
     .prop("end_y", PropValue::Float(1.0));
@@ -3368,13 +3379,13 @@ A description puts the parent **first**, followed by the branches. An empty desc
 empty tree. The typed SDK uses the same children through `heca_view::build::TreeLayout`.
 
 ```rust
-use heca_view::{ViewNode, WidgetKind};
-let tree = ViewNode::new(WidgetKind::TreeLayout)
-    .child(ViewNode::new(WidgetKind::Label).text("Root"))
-    .child(ViewNode::new(WidgetKind::Label).text("One"))
-    .child(ViewNode::new(WidgetKind::TreeLayout)
-        .child(ViewNode::new(WidgetKind::Label).text("Two"))
-        .child(ViewNode::new(WidgetKind::Label).text("Nested")));
+use heca_view::{ViewNode, WidgetId};
+let tree = ViewNode::new(WidgetId::TreeLayout)
+    .child(ViewNode::new(WidgetId::Label).text("Root"))
+    .child(ViewNode::new(WidgetId::Label).text("One"))
+    .child(ViewNode::new(WidgetId::TreeLayout)
+        .child(ViewNode::new(WidgetId::Label).text("Two"))
+        .child(ViewNode::new(WidgetId::Label).text("Nested")));
 ```
 
 ### Resizable
@@ -3404,17 +3415,17 @@ let composer = Resizable::new(Input::new().multiline(true))
     .width("100%").min_height(60.0).max_height(240.0);
 ```
 
-Descriptions use `WidgetKind::Resizable`. One child is the content; multiple children are stacked
+Descriptions use `WidgetId::Resizable`. One child is the content; multiple children are stacked
 in a column. `grip` takes a glyph name. Shared layout props set the height limits. There are no
 container-specific events; child controls keep theirs. Typed SDK: `build::Resizable`, with `child`,
 `grip`, and the shared layout setters.
 
 ```rust
-use heca_view::{ViewNode, WidgetKind, PropValue};
-let composer = ViewNode::new(WidgetKind::Resizable)
+use heca_view::{ViewNode, WidgetId, PropValue};
+let composer = ViewNode::new(WidgetId::Resizable)
     .prop("min_height", PropValue::Float(60.0))
     .prop("max_height", PropValue::Float(240.0))
-    .child(ViewNode::new(WidgetKind::Input).prop("multiline", PropValue::Bool(true)));
+    .child(ViewNode::new(WidgetId::Input).prop("multiline", PropValue::Bool(true)));
 ```
 
 ### MessageList
@@ -3452,11 +3463,11 @@ children. `message` is appended before the children. Rich entries are composed c
 does not assign roles, authors or formatting. The typed SDK is `heca_view::build::MessageList`.
 
 ```rust
-use heca_view::{ViewNode, WidgetKind, PropValue};
-let list = ViewNode::new(WidgetKind::MessageList)
+use heca_view::{ViewNode, WidgetId, PropValue};
+let list = ViewNode::new(WidgetId::MessageList)
     .prop("visible_lines", PropValue::Int(6))
     .prop("message", PropValue::Text("Build started".into()))
-    .child(ViewNode::new(WidgetKind::Label).text("A wrapped report")
+    .child(ViewNode::new(WidgetId::Label).text("A wrapped report")
         .prop("wrap", PropValue::Bool(true)));
 ```
 
@@ -3529,13 +3540,13 @@ intent itself, it declares the field and the host resolves the shortcuts. Suppor
 
 ```rust
 // A rename field inside a modal body — pre-filled + submitted under "name".
-ViewNode::new(WidgetKind::Input)
+ViewNode::new(WidgetId::Input)
     .text(current_name)
     .prop("name", PropValue::Text("name".into()))
     .on("change", Intent::new("plugin.rename.changed"));
 
 // An empty filter field that says what to type.
-ViewNode::new(WidgetKind::Input)
+ViewNode::new(WidgetId::Input)
     .prop("placeholder", PropValue::Text("filter containers…".into()));
 ```
 
@@ -3572,15 +3583,15 @@ let composer = Input::new().multiline(true).max_lines(6)
 false. Text, caret, selection and pointer placement use the same resolved font in both modes.
 Ctrl+H, Ctrl+U and Ctrl/Cmd+A keep their configurable bindings.
 
-The described form uses `WidgetKind::Input` with `multiline` (Bool), `max_lines` (Int),
+The described form uses `WidgetId::Input` with `multiline` (Bool), `max_lines` (Int),
 `placeholder_on_focus` (Bool), and `submit`
 (Intent). The submit intent carries the full current text in `args["value"]`. Existing `change`,
 `name`, value and placeholder properties keep their meanings. Typed SDK: `build::Input` has
 `multiline`, `max_lines`, and `on_submit`.
 
 ```rust
-use heca_view::{ViewNode, WidgetKind, PropValue, Intent};
-let composer = ViewNode::new(WidgetKind::Input)
+use heca_view::{ViewNode, WidgetId, PropValue, Intent};
+let composer = ViewNode::new(WidgetId::Input)
     .prop("multiline", PropValue::Bool(true))
     .prop("max_lines", PropValue::Int(6))
     .on("submit", Intent::new("chat.send"));
@@ -3642,14 +3653,14 @@ Tabs::empty()
 **Declarative:**
 
 ```rust
-ViewNode::new(WidgetKind::Tabs)
+ViewNode::new(WidgetId::Tabs)
     .prop("selected", PropValue::Int(1))
     .on("change", Intent::new("show_tab"))
-    .child(ViewNode::new(WidgetKind::Choice).prop("value", PropValue::Text("files".into()))
-        .child(ViewNode::new(WidgetKind::Label).text("FILES")))
-    .child(ViewNode::new(WidgetKind::Choice).prop("value", PropValue::Text("issues".into()))
-        .child(ViewNode::new(WidgetKind::Label).text("ISSUES"))
-        .child(ViewNode::new(WidgetKind::Badge).text("3")));
+    .child(ViewNode::new(WidgetId::Choice).prop("value", PropValue::Text("files".into()))
+        .child(ViewNode::new(WidgetId::Label).text("FILES")))
+    .child(ViewNode::new(WidgetId::Choice).prop("value", PropValue::Text("issues".into()))
+        .child(ViewNode::new(WidgetId::Label).text("ISSUES"))
+        .child(ViewNode::new(WidgetId::Badge).text("3")));
 // The `change` intent fires with args {"value": "issues"} — the tab's value, not an opaque index.
 ```
 
@@ -3703,7 +3714,7 @@ panel, while still looking like an open control. The rows stay *placed children*
   `Select::empty()` — no options, compose them.
 - **Content**: `.option(Choice)` — appends a composed option. Typed to `Choice` on purpose: the
   control keeps the row's `state()` signal so it can flip the selection **in place** (a
-  `Box<dyn Component>` would have erased it), and the rows of a select genuinely *are* options.
+  `WidgetModel` would have erased it), and the rows of a select genuinely *are* options.
 - **Builders**: `.selected(index)` (initial, clamped — call it **after** the options),
   `.font_size(f32)` (else inherits), `.on_change(impl Fn(Action))`, plus `LayoutExt`.
 - **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` —
@@ -3737,21 +3748,21 @@ Select::empty()
 option can compose content exactly like a native one.
 
 ```rust
-ViewNode::new(WidgetKind::Select)
+ViewNode::new(WidgetId::Select)
     .prop("selected", PropValue::Int(1))
     .prop("name", PropValue::Text("level".into())) // form field: chosen VALUE → data["level"]
     .on("change", Intent::new("set_level"))         // optional: also fire an intent live on change
     .child(
-        ViewNode::new(WidgetKind::Choice)
+        ViewNode::new(WidgetId::Choice)
             .prop("value", PropValue::Text("low".into()))
-            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("circle".into())))
-            .child(ViewNode::new(WidgetKind::Label).text("LOW")),
+            .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("circle".into())))
+            .child(ViewNode::new(WidgetId::Label).text("LOW")),
     )
     .child(
-        ViewNode::new(WidgetKind::Choice)
+        ViewNode::new(WidgetId::Choice)
             .prop("value", PropValue::Text("high".into()))
-            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
-            .child(ViewNode::new(WidgetKind::Label).text("HIGH")),
+            .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+            .child(ViewNode::new(WidgetId::Label).text("HIGH")),
     );
 // The `change` intent fires with args {"value": "high"} — the option's value, not an opaque index.
 // With `name` set, submitting the enclosing modal also returns data["level"] = "high" (the value).
@@ -3854,13 +3865,13 @@ Choice::new("high")
 
 ```rust
 // As an option of a Select/Tabs (the usual case — see "Options are children").
-ViewNode::new(WidgetKind::Choice)
+ViewNode::new(WidgetId::Choice)
     .prop("value", PropValue::Text("high".into()))
-    .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
-    .child(ViewNode::new(WidgetKind::Label).text("HIGH"));
+    .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+    .child(ViewNode::new(WidgetId::Label).text("HIGH"));
 
 // Standalone — then it is activatable in its own right, and hintable like any actionable node.
-ViewNode::new(WidgetKind::Choice)
+ViewNode::new(WidgetId::Choice)
     .prop("value", PropValue::Text("high".into()))
     .text("HIGH")                                   // childless sugar → one Label child
     .on_press(Intent::new("set_level"));
@@ -3888,7 +3899,7 @@ The row is a single Tab stop ([`Base.focus_barrier`](#base)) — its slots are c
 independent focus targets.
 
 - **Construct**: `Item::new(label)`.
-- **Builders**: `.leading(impl Component)`, `.trailing(impl Component)`,
+- **Builders**: `.leading(impl IntoComponent)`, `.trailing(impl IntoComponent)`,
   `.leading_bordered(bool)` / `.trailing_bordered(bool)` (chip frame around a slot),
   `.active(bool)`, `.marker(ActiveMarker)`, `.muted(bool)` (section-header look),
   `.font_size(f32)`, `.on_activate(impl Fn() + 'static)`.
@@ -3913,15 +3924,15 @@ let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
 > is **any content plus a value**: use it when the user is **picking one of several alternatives**.
 > Full comparison + rule of thumb: [`Choice` vs `Item`](#choice-vs-item--when-to-use-which).
 
-**Declarative** (`WidgetKind::Item`):
+**Declarative** (`WidgetId::Item`):
 
 ```rust
-ViewNode::new(WidgetKind::Item)
+ViewNode::new(WidgetId::Item)
     .text("main.rs")                                        // the label (the row's middle)
     .on_press(Intent::new("open_file"))
-    .child(ViewNode::new(WidgetKind::StatusDot)
+    .child(ViewNode::new(WidgetId::StatusDot)
         .prop("slot", PropValue::Text("leading".into())))   // ← leading slot
-    .child(ViewNode::new(WidgetKind::Badge)
+    .child(ViewNode::new(WidgetId::Badge)
         .text("M")
         .prop("slot", PropValue::Text("trailing".into()))); // ← trailing slot
 ```
@@ -3971,11 +3982,11 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
 **Declarative:**
 
 ```rust
-ViewNode::new(WidgetKind::Row)
+ViewNode::new(WidgetId::Row)
     .prop("active", PropValue::Bool(selected))
     .on_press(Intent::new("docker.select").arg("id", PropValue::Text(id)))
-    .child(ViewNode::new(WidgetKind::Label).text(name))
-    .child(ViewNode::new(WidgetKind::Badge).text(status));
+    .child(ViewNode::new(WidgetId::Label).text(name))
+    .child(ViewNode::new(WidgetId::Badge).text(status));
 ```
 
 Props `realize` reads: `active`, `nav_selected`, `marker`. Events: `press` — wired to a click, to
@@ -4068,7 +4079,7 @@ Row::new().on_activate(open).child(
 )
 ```
 
-**Declarative** (`WidgetKind::Tile`) — every part is a child, placed by its `slot` prop. A child with
+**Declarative** (`WidgetId::Tile`) — every part is a child, placed by its `slot` prop. A child with
 **no slot is a line** (the default slot); an unknown slot is debug-logged and becomes a line.
 
 ```rust
@@ -4113,21 +4124,25 @@ bar.viewport_extent_signal().set(48.0);  // visible rows / px / items
 bar.offset_signal().set(96.0);           // offset from TOP
 ```
 
-> #### ScrollBar is HOST-ONLY — it is not declarable, on purpose
->
-> Look at the example above: the widget is **driven by live signals** the host writes every frame.
-> A [`ViewNode`](#declarative-ui-model-viewnode) is static, serializable data — it cannot carry a
-> signal, let alone update one — so a declarative `ScrollBar` would render a **dead control**: a
-> thumb that never moves and never reports. `realize` therefore refuses it (and says so in a debug
-> log) rather than producing something that looks right and does nothing.
->
-> **A plugin that needs scrolling uses [`Scroll`](#scrollregion)** (a `ScrollRegion`), which owns its
-> own offset, wheel and keyboard handling — no host wiring required.
->
-> This is a **general rule, not a special case**: *a widget whose state is a live host signal is
-> host-only.* It applies to individual **builders** too — [`DockFrame::rail(..)`](#dockframe) binds a
-> host-owned `RegionMode` signal, so a declarative dock is simply never rail-aware. Apply the same
-> reasoning to any future widget of that shape, instead of inventing a way to fake a signal in data.
+**Described ScrollBar.** The typed SDK exposes the same control through serializable
+`content_extent`, `viewport_extent` and `offset` inputs. The host adapter applies them to the
+native signals through `Component::set_props`; signals themselves stay inside the host.
+
+```rust
+use heca_view::{build, Intent};
+let bar = build::ScrollBar::new()
+    .content_extent(240.0)
+    .viewport_extent(48.0)
+    .offset(96.0)
+    .on_change(Intent::new("example.scroll"));
+```
+
+Dragging emits the declared change intent with its numeric `value`. A `name` property also
+exposes the current offset as a form value. `WidgetRegistry::update_state` updates an existing
+control through the same native props seam, preserving its signal and form reader.
+
+Use [`Scroll`](#scrollregion) when the content itself should own scrolling, clipping and keyboard
+navigation. Use `ScrollBar` when a separate content owner supplies those extents and offset.
 
 ### Badge
 
@@ -4232,11 +4247,11 @@ Separator::vertical().length(24.0);     // a short rule, placed by the container
 
 ```rust
 // A rule between a table header and its body.
-ViewNode::new(WidgetKind::Separator);
+ViewNode::new(WidgetId::Separator);
 
 // A vertical rule of a fixed length. Either property may be set first: the widget recomputes
 // both axes from the pair, so `length` never lands on the axis the rule runs across.
-ViewNode::new(WidgetKind::Separator)
+ViewNode::new(WidgetId::Separator)
     .prop("orientation", ViewOrientation::Vertical.into())
     .prop("length", PropValue::Float(24.0));
 ```
@@ -4267,7 +4282,7 @@ Spinner::new()                              // the default 28px ring
 Spinner::new().width(Length::Px(16.0)).height(Length::Px(16.0))   // a smaller one
 ```
 
-**Declarative (`ViewNode`)** — `WidgetKind::Spinner`, and it reads no props of its own:
+**Declarative (`ViewNode`)** — `WidgetId::Spinner`, and it reads no props of its own:
 
 ```rust
 use heca_view::build::*;
@@ -4374,10 +4389,10 @@ Toast::danger("Build failed")
     .on_dismiss(|| dismiss(id));
 ```
 
-**Declarative** (`WidgetKind::Toast`):
+**Declarative** (`WidgetId::Toast`):
 
 ```rust
-ViewNode::new(WidgetKind::Toast)
+ViewNode::new(WidgetId::Toast)
     .text("Build failed")                                         // the title
     .prop("severity", ViewSeverity::Danger.into())           // Info | Success | Warning | Danger
     .prop("icon", PropValue::Glyph("warning".into()))             // optional; severity picks a default
@@ -4409,18 +4424,18 @@ ViewNode::new(WidgetKind::Toast)
 **Declarative, composed** — a rich body and two actions, each firing its own intent:
 
 ```rust
-ViewNode::new(WidgetKind::Toast)
+ViewNode::new(WidgetId::Toast)
     .text("Build failed")
     .prop("severity", ViewSeverity::Danger.into())
     // No slot named: the body is the DEFAULT slot.
-    .child(ViewNode::new(WidgetKind::VStack)
-        .child(ViewNode::new(WidgetKind::Label).text("3 errors in heca-grid-ui"))
-        .child(ViewNode::new(WidgetKind::Label).text("cargo check exited 1")))
-    .child(ViewNode::new(WidgetKind::Button)
+    .child(ViewNode::new(WidgetId::VStack)
+        .child(ViewNode::new(WidgetId::Label).text("3 errors in heca-grid-ui"))
+        .child(ViewNode::new(WidgetId::Label).text("cargo check exited 1")))
+    .child(ViewNode::new(WidgetId::Button)
         .text("Retry")
         .prop("slot", PropValue::Text("actions".into()))
         .on_press(Intent::new("rebuild")))
-    .child(ViewNode::new(WidgetKind::Button)
+    .child(ViewNode::new(WidgetId::Button)
         .text("View log")
         .prop("variant", PropValue::Variant(ViewVariant::Ghost))
         .prop("slot", PropValue::Text("actions".into()))
@@ -4448,7 +4463,7 @@ let v = bar.state();           // bind reactively, or:
 bar.set(0.8);                  // animate to 80%
 ```
 
-**Declarative (`ViewNode`)** — `WidgetKind::Progress`:
+**Declarative (`ViewNode`)** — `WidgetId::Progress`:
 
 ```rust
 use heca_view::build::*;
@@ -4463,8 +4478,7 @@ Progress::new().value(0.4)
 **The easing is the widget's, not the caller's.** A described tree re-sent with a new `value`
 animates toward it rather than jumping, with nothing declared — which is why there is no
 "animate" property to set. There is no declarative `.set(..)` or `.state()`: both are live host
-signals, and a description has no way to name one (the same reason a
-[`ScrollBar`](#scrollbar) is host-only). A described bar changes by being re-described.
+signals kept inside the host. A described bar changes by being re-described.
 
 ### Gauge
 
@@ -4517,11 +4531,11 @@ realizes it by drawing a pre-blurred copy of the glyph behind itself.
     mechanism [content color](#scene--drawcommand--paintcx-for-building-widgets) already uses.
   - **Never on terminal text.** Cell glyphs are the hottest path in the app; the halo multiplies a
     run's vertex count, so the terminal path hard-codes no glow.
-- **Declarative**: `WidgetKind::Icon`, prop `icon` (a Glyph **name**, e.g. `"trash"`, `"git_branch"`
+- **Declarative**: `WidgetId::Icon`, prop `icon` (a Glyph **name**, e.g. `"trash"`, `"git_branch"`
   — resolved by `glyph_from_name` in `realize.rs`; an unknown name renders no icon, never panics).
 
 ```rust
-ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("git_branch".into()))
+ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("git_branch".into()))
 ```
 - **`Glyph`**: the curated icon set. **`Glyph::ALL` is the authoritative, enumerable list** —
   the showcase (`cargo run -p heca-renderer --example showcase`) renders every glyph by iterating
@@ -4630,7 +4644,7 @@ required. `.alt(text)` supplies an accessible image description; set it for mean
 
 #### Described and typed plugin form
 
-`WidgetKind::Image` has `source` (filename) or `svg` (inline contents), `asset_root`, `fit` (`contain`,
+`WidgetId::Image` has `source` (filename) or `svg` (inline contents), `asset_root`, `fit` (`contain`,
 `cover`, `stretch`), `color` and `alt`. Use one source form. Common layout properties, including
 `aspect_ratio`, use the shared style merge. Optional children with `slot = "loading"` and
 `slot = "error"` are the described equivalents of placeholder/fallback.
@@ -4704,7 +4718,7 @@ NfIcon::new(NfGlyph::Shift).color(theme.colors.accent);
 for &g in NfGlyph::ALL { /* NfIcon::new(g) … */ }
 ```
 
-**Declarative (`ViewNode`)** — `WidgetKind::NfIcon`, with its **own** glyph vocabulary
+**Declarative (`ViewNode`)** — `WidgetId::NfIcon`, with its **own** glyph vocabulary
 (`ViewNfGlyph`) because it is its own font:
 
 ```rust
@@ -4781,7 +4795,7 @@ description carries.
 
 Every text segment reveals its full value in a tooltip, including after live updates.
 `Tag::from_label(Label::new(path).truncate(Ellipsis::Start))` configures the first
-label; `.segment_label(label, leading)` adds another. Labels and leading content
+label; `.segment_label(label)` adds another; `.segment_label_with(label, leading)` adds leading content. Labels and leading content
 accept `.content_tone(Tone)` to follow the current theme.
 `.segment_shrink(false)` keeps the most recently added segment at its natural
 width while neighbouring paths or descriptions shorten.
@@ -4792,15 +4806,15 @@ A bordered metadata chip — git branch / path / filter, hue-configurable and do
 `Flex::row().child(tag)` so it hugs its content instead of stretching.
 
 - **Construct**: `Tag::new(label)`.
-- **Builders**: `.leading(impl Component)` (e.g. an `Icon`), `.segment(impl Component)` /
-  `.segment_text(label, Option<leading>)` (add a divided segment), `.append_to_segment(idx, impl
-  Component)` (append **inside** an existing segment — no new segment, no divider — e.g. a small
+- **Builders**: `.leading(impl IntoComponent)` (e.g. an `Icon`), `.segment(impl IntoComponent)` /
+  `.segment_text(label)` (add a divided segment), `.append_to_segment(idx, impl
+  IntoComponent)` (append **inside** an existing segment — no new segment, no divider — e.g. a small
   dimmed suffix next to a label, as the pane info bar does for a renamed pane's `(process)` label),
   `.color(Color)` (hue).
 
 ```rust
 Tag::new("main").leading(Icon::new(Glyph::GitBranch).size(13.0))
-    .segment_text("5 +152 -12", None).color(theme.warning);
+    .segment_text("5 +152 -12").color(theme.warning);
 ```
 
 ### Visibility
@@ -4894,12 +4908,12 @@ ItemGroup::new("src")
 **Declarative:**
 
 ```rust
-ViewNode::new(WidgetKind::ItemGroup)
+ViewNode::new(WidgetId::ItemGroup)
     .text("src")                                    // the header label
     .prop("expanded", PropValue::Bool(true))
     .on("toggle", Intent::new("fold_group"))        // fires with args {"expanded": false}
-    .child(ViewNode::new(WidgetKind::Item).text("main.rs"))
-    .child(ViewNode::new(WidgetKind::Item).text("lib.rs"));
+    .child(ViewNode::new(WidgetId::Item).text("main.rs"))
+    .child(ViewNode::new(WidgetId::Item).text("lib.rs"));
 ```
 
 Props `realize` reads: `text` (header), `expanded` (Bool, default `true`). Children: the rows (the group's own header is prepended by the widget). Event: **`toggle`** — the intent carries the state it
@@ -4939,11 +4953,11 @@ MarkerGroup::new()
 **Declarative:**
 
 ```rust
-ViewNode::new(WidgetKind::MarkerGroup)
+ViewNode::new(WidgetId::MarkerGroup)
     .prop("active", PropValue::Bool(true))
     .prop("nav_selected", PropValue::Bool(false))
-    .child(ViewNode::new(WidgetKind::Item).text("pane 1"))
-    .child(ViewNode::new(WidgetKind::Item).text("pane 2"));
+    .child(ViewNode::new(WidgetId::Item).text("pane 1"))
+    .child(ViewNode::new(WidgetId::Item).text("pane 2"));
 ```
 
 Props `realize` reads: `active` (Bool), `nav_selected` (Bool). Children: the rows. **No events** — the
@@ -5001,20 +5015,20 @@ let files = DockFrame::new("EXPLORER")
     .child(ItemGroup::new("src").child(Item::new("main.rs")));
 ```
 
-**Declarative** (`WidgetKind::DockFrame`):
+**Declarative** (`WidgetId::DockFrame`):
 
 ```rust
-ViewNode::new(WidgetKind::DockFrame)
+ViewNode::new(WidgetId::DockFrame)
     .text("EXPLORER")                                          // the title
     .prop("expanded", PropValue::Bool(true))
     .prop("frameless", PropValue::Bool(false))
     .prop("active", PropValue::Bool(false))                    // the accent wash
     .prop("nav_selected", PropValue::Bool(false))              // the nav-cursor outline
     .on("toggle", Intent::new("fold_dock"))                    // fires with args {"expanded": …}
-    .child(ViewNode::new(WidgetKind::Badge)
+    .child(ViewNode::new(WidgetId::Badge)
         .text("3")
         .prop("slot", PropValue::Text("header".into())))       // ← the controls slot
-    .child(ViewNode::new(WidgetKind::Item).text("main.rs"));   // ← no slot ⇒ body (the default)
+    .child(ViewNode::new(WidgetId::Item).text("main.rs"));   // ← no slot ⇒ body (the default)
 ```
 
 - **Props**: `text` (title), `expanded` (Bool, default `true`), `frameless`, `active`,
@@ -5024,10 +5038,15 @@ ViewNode::new(WidgetKind::DockFrame)
   The **body is the default slot**, so an unslotted child is body content; an unknown slot name falls
   back to the body and is debug-logged.
 - **`.rail(..)` is host-only** — it binds a host-owned `Signal<RegionMode>`, and static serializable
-  data cannot drive a live signal (the same rule that makes [`ScrollBar`](#scrollbar) host-only). A
-  declarative dock is never rail-aware; the host wires that.
+  data does not carry a Rust signal. This binding stays inside the host; the widget itself is
+  available to descriptions. Shared rail-state binding remains an adapter gap in T398.
 
 ### ChromeRegion
+
+The typed described counterpart is `heca_view::build::ChromeRegion`: `new()` / `vertical()`
+or `horizontal()`, followed by `.child(...)`. Its `mode(ViewRegionMode)`, `expanded_size(...)`
+and `rail_size(...)` reach the native widget. Rust signals remain inside the host.
+
 
 The generic, oriented **chrome shell** that hosts Docks — one widget for all four regions
 (left/right sidebars = vertical; top/bottom bars = horizontal). A dumb, mode-aware container: it
@@ -5086,11 +5105,11 @@ RailCell::new(Icon::new(Glyph::Terminal).color(theme.success).size(22.0))
 RailCell::new(Icon::new(Glyph::Terminal).size(22.0)).on_activate(move || focus_pane(i));
 ```
 
-**Declarative (`ViewNode`).** `WidgetKind::RailCell`, prop `icon` (a Glyph **name**) + `size`,
+**Declarative (`ViewNode`).** `WidgetId::RailCell`, prop `icon` (a Glyph **name**) + `size`,
 event `press`. The resting halo needs no prop — it comes from the cell.
 
 ```rust
-ViewNode::new(WidgetKind::RailCell)
+ViewNode::new(WidgetId::RailCell)
     .prop("icon", PropValue::Glyph("terminal".into()))
     .on_press(Intent::new("focus_pane").arg("pane_id", PropValue::Int(id)));
 ```
@@ -5580,11 +5599,18 @@ let framed = FocusScope::new(my_container).scope_key("my-dock");
 heca_grid_ui::focus_scope(&mut window_root, "my-dock");
 ```
 
-Declaratively there is nothing to author: the ring is read off a live tree, so a described
-`FocusScope` would be a dead frame (the same reason [`ScrollBar`](#scrollbar) is host-only). A plugin
-that wants its container to show focus gets it for free — **heca wraps every mounted container
-itself**, together with its dock-pick keycap. See [chrome-and-ui.md](chrome-and-ui.md) → chrome
-keyboard focus.
+The typed described counterpart builds the same native wrapper. Its ring reads the realized
+live tree and its child receives input through the ordinary dispatcher:
+
+```rust
+use heca_view::build::{FocusScope, Input, Style};
+
+let editor = FocusScope::new(Input::new().placeholder("Notes"))
+    .keeps_keyboard(false);
+```
+
+No per-placement focus registration is required. Heca also wraps mounted docks with a scope
+and dock-pick keycap; see [chrome-and-ui.md](chrome-and-ui.md) → chrome keyboard focus.
 
 ### Keyed
 
@@ -5596,7 +5622,7 @@ differs from the one already shown, so a frame in which nothing changed makes no
 ```rust
 let header = Keyed::new();                       // placed once, with whatever owns it
 // each frame, from whatever knows the facts:
-header.show(shape_key(&facts), || Some(Box::new(build_header(&facts))));
+header.show(shape_key(&facts), || Some(build_header(&facts)));
 header.texts(vec![("hdr.seg:location".into(), facts.cwd())]);
 ```
 
@@ -5743,12 +5769,12 @@ Tooltip::new(
 ).side(TooltipSide::Bottom);
 ```
 
-**Declarative (`ViewNode`).** There is no `WidgetKind::Tooltip`, and there must not be one — for the
+**Declarative (`ViewNode`).** There is no `WidgetId::Tooltip`, and there must not be one — for the
 same reason the wrapper stopped being the native answer. A tooltip is a **declaration on any node**,
 exactly as a [menu](#menus--menuitem-menu-contextmenu) is:
 
 ```rust
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .text("Close")
     .prop("tooltip", PropValue::Text("Close the pane".into()))
     .prop("tooltip_side", PropValue::Text("bottom".into()))  // optional, default "top"
@@ -5767,8 +5793,7 @@ Button::new("Close").tooltip("Close the pane").tooltip_side(ViewTooltipSide::Bot
 | `tooltip_delay` | number | `0.5` | seconds the pointer must rest. An integer is accepted as well as a fraction. Ignored with no `tooltip`. |
 
 There is no declarative `tooltip_signal`: a signal is a live host value, and a description has no way
-to name one — the same reason a `ScrollBar` is host-only. A described tooltip whose words change is
-a re-described node.
+to name one. A described tooltip whose words change is a re-described node.
 
 In the heca app an action button's tip is derived from its `WmAction` centrally (next section),
 never authored per call site.
@@ -5927,7 +5952,7 @@ keyed on it, no declaration outside the tree.
   not focusable, occludes nothing and hit-tests to nothing — while it keeps being drawn. (Counting a
   dissolving map as coverage refused every act on the pane it exists to let you choose.)
 - **Showing and hiding**: `open()` / `hide()` / `toggle()` — on the widget, and on `Component` so a
-  host can drive one it only holds as `Box<dyn Component>`. All three are safe at any time: opening
+  host can drive one it only holds as `WidgetModel`. All three are safe at any time: opening
   something already up is not an arrival, and one already on its way out is not resurrected (those
   rules live in `Presence`, so no caller repeats them).
   ```rust
@@ -5954,7 +5979,7 @@ keyed on it, no declaration outside the tree.
      `expose::register(state)`: the content is structural (a pane opened, a column went), and a
      signal replaces a value, never a child. `register` is the only part that touches `AppState`; it
      gathers the session and calls `expose::map(..)`, which builds the `Overlay` — that returned
-     `Box<dyn Component>` is the layer's **root**.
+     `WidgetModel` is the layer's **root**.
   3. Then `LayerRegistry::show(id)` marks the layer visible and calls `l.root_mut().open()` — the
      `Overlay` from step 2. `hide(id)` calls `root.hide()` and keeps the layer mounted while
      `is_leaving()`.
@@ -5967,7 +5992,7 @@ keyed on it, no declaration outside the tree.
   layout); `.presence()` / `.presence_mut()` (`Component`) — the surface's arrival and exit as one
   value, which is how a host carries a gesture across a **rebuild**: swap the `Presence` into the
   fresh tree and an arrival already played does not play again, while one still in flight carries on.
-- **Declarative kind**: `WidgetKind::Overlay`. Its `children` are the panel — one child *is* the
+- **Declarative kind**: `WidgetId::Overlay`. Its `children` are the panel — one child *is* the
   panel, several are stacked into one. Props: `blocking`, `open`, `animation`. Placement is
   host-only (an anchored overlay carries a host-computed trigger rect).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
@@ -6022,13 +6047,13 @@ keyed on it, no declaration outside the tree.
 ```rust
 // A host-mounted blocking layer around an arbitrary (here: realized) panel.
 let overlay = Overlay::new()
-    .panel(realized_panel)                        // Box<dyn Component> from realize(ViewNode)
+    .panel(realized_panel)                        // opaque tree from realize(...)
     .on_outside_click(move || emit(close_intent)) // host's overlay-close path
     .open(true);
 let visible = overlay.open_signal();
 ```
 
-**Declarative (`ViewNode`).** Host-only — there is no `WidgetKind::Overlay`. A plugin never
+**Declarative (`ViewNode`).** Host-only — there is no `WidgetId::Overlay`. A plugin never
 mounts a layer itself; it submits a spec (e.g. `ModalSpec` with a `ViewNode` body) and the
 **host** builds the layer (`Dialog`/`Overlay`) around the realized content — overlay hosting,
 z-order, and blocking policy stay host-owned (§2.7 of the plugin plan).
@@ -6229,7 +6254,7 @@ the dialog) and `Activate` commits its row.
   The baseline follows the resolved font and uses flex basis with the content's automatic
   minimum, so it respects Overlay's viewport cap. Native callers and plugin/RPC modal requests
   reach the same Dialog implementation; callers do not calculate a width.
-- **Sizing + a scrollable body**: `.panel_size(width: Length, height: Length)` bounds the panel
+- **Sizing + a scrollable body**: the common `.width(..).height(..)` style builders bound the visible panel
   instead of letting it hug its content (an explicit width overrides the baseline;
   `Length::Auto` restores content sizing with the baseline on width, and content sizing on height;
   `Length::Percent` resolves against the **viewport**). This is what makes a long body scrollable: a
@@ -6241,12 +6266,13 @@ the dialog) and `Activate` commits its row.
 
   ```rust
   Dialog::new("Pick a container")
-      .panel_size(Length::Percent(0.5), Length::Percent(0.6))   // 50% × 60% of the viewport
+      .width("50%").height("60%")                      // 50% × 60% of the viewport
       .child(ScrollRegion::new().child(long_list))      // only this scrolls
       .action(Button::secondary("Cancel"))
   ```
   A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the nested-overlay routing above), so overlay-in-scrolled-overlay is supported.
 - **Accessor**: `.open_signal() -> Signal<bool>`.
+- **Typed description**: `heca_view::build::Dialog::new("Items").width("60%").height("70%").child(Label::new("Body")).opened(true)` uses the same native panel, focus and input. `.on_dismiss(Intent::new("cancel"))` closes the described dialog and reports the intent; an in-place `opened: true` update reopens it.
 
 ```rust
 let dialog = Dialog::new("Delete pane?")
@@ -6293,26 +6319,26 @@ open_modal(
     state,
     ModalSpec {
         title: "Rename pane".into(),
-        body: ViewNode::new(WidgetKind::VStack)
+        body: ViewNode::new(WidgetId::VStack)
             .prop("gap", PropValue::Int(8))
-            .child(ViewNode::new(WidgetKind::Label).text("New name"))
+            .child(ViewNode::new(WidgetId::Label).text("New name"))
             .child(
-                ViewNode::new(WidgetKind::Input)
+                ViewNode::new(WidgetId::Input)
                     .text(current_name)
                     .prop("name", PropValue::Text("name".into())), // → data["name"] (Text)
             )
             // A named Select is a form field too: its chosen option's *value* comes back.
             .child(
-                ViewNode::new(WidgetKind::Select)
+                ViewNode::new(WidgetId::Select)
                     .prop("name", PropValue::Text("scope".into())) // → data["scope"] (Text)
                     .prop("selected", PropValue::Int(0))
                     .child(
-                        ViewNode::new(WidgetKind::Choice)
+                        ViewNode::new(WidgetId::Choice)
                             .prop("value", PropValue::Text("pane".into()))
                             .text("This pane"),
                     )
                     .child(
-                        ViewNode::new(WidgetKind::Choice)
+                        ViewNode::new(WidgetId::Choice)
                             .prop("value", PropValue::Text("column".into()))
                             .text("Whole column"),
                     ),
@@ -6415,13 +6441,29 @@ Keep existing scope names unchanged so saved searches still belong to the same l
 
 #### Declarative hosts
 
-There is no `WidgetKind::CommandPalette`: command callbacks and the app's live row sources belong
-to the native host. A described node opens Heca's palette through the existing action:
+A plugin can describe its own palette with typed constructors. Commands carry intents; the host
+binds them to the native command callbacks, modes, query field and keyboard behavior:
 
 ```rust
-use heca_view::{Intent, PropValue, ViewNode, WidgetKind};
+use heca_view::{build::{Command, CommandPalette}, Intent};
 
-let button = ViewNode::new(WidgetKind::Button)
+let palette = CommandPalette::new()
+    .mode('@', "editors")
+    .command(Command::new("Neovim", Intent::new("demo.open_editor")).mode("editors"))
+    .query("nv")
+    .opened(true);
+```
+
+A named palette includes its live query in `FormBindings`. In-place `opened` updates reuse that
+native input; accepting a command clears the query as native acceptance does. `Command` is entry
+data consumed by the palette, not a stand-alone widget.
+
+To open Heca's existing application palette instead, dispatch its existing action:
+
+```rust
+use heca_view::{Intent, PropValue, ViewNode, WidgetId};
+
+let button = ViewNode::new(WidgetId::Button)
     .text("Find a pane")
     .on_press(Intent::new("command_palette")
         .arg("mode", PropValue::Text("pane".into()))
@@ -6453,7 +6495,7 @@ row.context_menu(my_menu)
 
 ```rust
 // Described — one field on ANY node, entries carrying Intents
-ViewNode::new(WidgetKind::Row)
+ViewNode::new(WidgetId::Row)
     .menu([DropdownItem::with_intent("stop", "Stop", Intent::new("docker.stop").arg("id", id))])
 ```
 
@@ -6520,7 +6562,7 @@ test. The design was the bug.
 same precedence `Button` has.
 
 `child` takes a `Fn() -> impl Component` rather than a widget **value** because a menu can be shown
-more than once, and a widget subtree is owned (`Box<dyn Component>`): handed over once, it is gone.
+more than once, and a widget subtree is owned (`WidgetModel`): handed over once, it is gone.
 A *builder* can run again, which is what makes the whole chain — `MenuItem`, `Menu`, `ContextMenu` —
 `Clone`, so one menu value can be declared on several rows and captured by handlers. It also means
 the rows are built **at the moment the menu opens**, so `enabled(is_custom_name)` is an answer about
@@ -6638,6 +6680,14 @@ pane" and the command palette's `close` cannot drift apart.
 
 ### ToastStack
 
+The typed described counterpart is `heca_view::build::ToastStack::new().item(ToastSpec::new(1,
+"Build failed").action("retry", "Retry"))`. The host adapter owns the native queue signals and
+reconciles cards by the numeric id, including updates through `WidgetRegistry::update_state`.
+`on_action` emits the supplied intent plus `toast_id` (decimal text, preserving all `u64` ids)
+and `action`; `on_dismiss` adds `toast_id`. The host owns removal and deadlines, as on the native
+path. These bridge tests do not demonstrate a loaded WASM plugin.
+
+
 An overlay that arranges a **host-supplied** set of notifications into a corner stack. **Presentation
 only** — it owns no queue, lifetimes, auto-dismiss timers, or dedup; that's the app's job. The host
 owns a `Signal<Vec<ToastSpec>>` (its render list); the stack reconciles cached [`Toast`](#toast)
@@ -6714,7 +6764,7 @@ toasts.update(|v| v.push(
 
 ---
 
-Dialog panels use the theme’s `[dialog] max_width_em` cap (40 font units) and remain bounded by narrow windows. `.panel_max_width(Length::Px(...))` overrides that cap. The composed Overlay preserves explicit panel maximum dimensions.
+Dialog panels use the theme’s `[dialog] max_width_em` cap (40 font units) and remain bounded by narrow windows. The common `.max_width(..)` overrides that cap. Legacy `.panel_size(width, height)` and `.panel_max_width(width)` remain compatibility aliases. Width, height and constraints belong to the visible panel; the modal scrim and input coverage still fill the viewport. The composed Overlay preserves explicit panel maximum dimensions.
 
 ## Providers and startup regions
 
@@ -6770,9 +6820,25 @@ one component have different ids, so their focus, cursor and scroll state remain
 `on_activate` hook returns `ProviderHandles`; dropping those handles releases the subscriptions. The host owns its
 mounting, frame, layout and event delivery.
 
-The current `ContainerContribution` build hook still exposes boxed native subtrees. The compiling
-example shows that existing API; the public-authoring refactor is removing that requirement. Adding
-a dock through `regions` itself needs no manual boxing or host registry handle.
+Build the contribution with `ContainerContribution::new(self, |ctx, build| widget)` inside the
+provider's `build_contribution` method. Its metadata comes from the provider methods above;
+the closure returns an ordinary component or layout, and allocation stays inside Heca:
+
+```rust
+fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
+    Contribution::Container(ContainerContribution::new(self, |_ctx, _build| {
+        Flex::column()
+            .child(Label::new("No notes yet"))
+            .child(Terminal::new("scratch").title("Scratch shell").grow(1.0))
+    }))
+}
+```
+
+A plugin-owned terminal uses the extension handle described in [Terminal](#terminal), preserving
+its owner namespace. Both constructor forms are ordinary children. A named layer likewise accepts
+a plain factory: `demo.layer("detail").view(|cx| Overlay::new().panel(content(cx)))`.
+No author boxing, cast or host registry handle is needed for either factory. The complete
+compiling example is [`extend_heca.rs`](../heca/examples/extend_heca.rs).
 
 At runtime, already mounted docks can be moved and reordered through registered actions such as
 `chrome.container.move_to_region`, `chrome.container.reorder_before` and
@@ -6806,7 +6872,7 @@ is how a plugin declares UI (it can't ship Rust widgets), and the ergonomic nati
 
 | Part | What it is |
 |------|-----------|
-| `kind` | which widget (`WidgetKind`: `VStack`/`HStack`/`Row`/`Label`/`Button`/`Input`/…) |
+| `kind` | which widget (`WidgetId`: `VStack`/`HStack`/`Row`/`Label`/`Button`/`Input`/…) |
 | `props` | this node's **own** values (`name → PropValue`) — **per node, not inherited** |
 | `events` | this node's **own** `event → Intent` bindings (`press` / `change`) — an action **id**, never a closure (keeps it serializable) |
 | `children` | a **`Vec<ViewNode>`**, each a full node with its *own* props/events/children |
@@ -6873,7 +6939,7 @@ just asks for a destructive dialog (`ModalSpec::danger`).
 Values read the way you would write them:
 
 ```rust
-ViewNode::new(WidgetKind::VStack)
+ViewNode::new(WidgetId::VStack)
     .prop("padding", PropValue::Int(12))                     // px
     .prop("width",   PropValue::Text("50%".into()))          // "auto" | 240 | "50%"
     .prop("justify", PropValue::Text("space_between".into())) // enums by name, snake_case
@@ -6958,7 +7024,7 @@ Two more props are read for **every** kind, for the same reason the style halves
 Row::new().key(pane.id).hintable(false).on_press(Intent::new("focus_pane"))
 
 // Raw node:
-ViewNode::new(WidgetKind::Row)
+ViewNode::new(WidgetId::Row)
     .prop("key", PropValue::Text("pane:7".into()))
     .prop("hintable", PropValue::Bool(false))
     .on_press(Intent::new("focus_pane"));
@@ -7060,12 +7126,18 @@ kind** — they describe a node inside its parent (see [Grid → aligning items]
 list-shaped is a [`Grid`](#grid)'s track templates (`columns` / `rows` / `areas`), and that is what
 it exists for.
 
-**Coverage**: every `WidgetKind` realizes to its widget. The one exception is `ScrollBar`, which is
-**host-only by design** — its state is live host signals (`content_extent` / `viewport_extent` /
-`offset`), and static serializable data fundamentally cannot drive a signal, so a declarative one
-would render a dead control. A plugin uses [`Scroll`](#scrollregion) (a `ScrollRegion`), which owns
-its own offset. Same rule applies to any *individual builder* that binds a host signal — e.g.
-`DockFrame::rail(..)`.
+**Coverage and support** come from the host's registered widget definitions, using open
+`WidgetId` values. Native Rust children use the existing `Component` trait. Neither path has a
+closed enum of permitted content. The full native/described audit remains in P067/T398: registration
+alone does not prove that every capability works. [`ScrollBar`](#scrollbar), for example, has a
+live native state adapter for described extents and offset; its signals stay inside the host.
+
+**Malformed data is different from an unsupported widget.** A wrong value, such as
+`axes = "sideways"`, is diagnosed with its node path and keeps the native default. Valid properties,
+children and siblings remain. A semantic control diagnoses and omits a child it cannot use.
+Unknown widget identifiers or incompatible schema versions stop realization before factories run,
+with an explicit error instead of an empty placeholder. See
+[widget-architecture.md](widget-architecture.md#support-and-invalid-data-are-different).
 
 ### Named child slots (the `slot` prop)
 
@@ -7074,13 +7146,13 @@ and a body, an [`Item`](#item) has a leading and a trailing slot. `ViewNode.chil
 `Vec`, so the **child says where it goes**, with a `slot` prop:
 
 ```rust
-ViewNode::new(WidgetKind::DockFrame)
+ViewNode::new(WidgetId::DockFrame)
     .text("EXPLORER")
-    .child(ViewNode::new(WidgetKind::Badge)
+    .child(ViewNode::new(WidgetId::Badge)
         .text("3")
         .prop("slot", PropValue::Text("header".into())))   // ← the controls slot
-    .child(ViewNode::new(WidgetKind::Item).text("src"))    // ← no slot ⇒ the body (default)
-    .child(ViewNode::new(WidgetKind::Item).text("tests"));
+    .child(ViewNode::new(WidgetId::Item).text("src"))    // ← no slot ⇒ the body (default)
+    .child(ViewNode::new(WidgetId::Item).text("tests"));
 ```
 
 This needs **zero** model surgery — no `slots: Map<..>` on the node, no second child vector, and the
@@ -7105,16 +7177,16 @@ An option is **a node with a value and arbitrary content**, and a picker's optio
 compose an icon and a label exactly like a native one:
 
 ```rust
-ViewNode::new(WidgetKind::Select)
+ViewNode::new(WidgetId::Select)
     .prop("selected", PropValue::Int(1))
     .on("change", Intent::new("set_level"))
-    .child(ViewNode::new(WidgetKind::Choice)
+    .child(ViewNode::new(WidgetId::Choice)
         .prop("value", PropValue::Text("low".into()))
-        .child(ViewNode::new(WidgetKind::Label).text("LOW")))
-    .child(ViewNode::new(WidgetKind::Choice)
+        .child(ViewNode::new(WidgetId::Label).text("LOW")))
+    .child(ViewNode::new(WidgetId::Choice)
         .prop("value", PropValue::Text("high".into()))
-        .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
-        .child(ViewNode::new(WidgetKind::Label).text("HIGH")));
+        .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+        .child(ViewNode::new(WidgetId::Label).text("HIGH")));
 ```
 
 **The chosen value comes back, not an index.** The widgets track a selected index — they are
@@ -7131,16 +7203,16 @@ that is **not** a `Choice` is ignored rather than realized into a broken option.
 
 ```rust
 // A labelled input + a primary button. Each node carries ITS OWN props/events.
-ViewNode::new(WidgetKind::VStack)
+ViewNode::new(WidgetId::VStack)
     .prop("gap", PropValue::Int(8))                                  // ← the COLUMN's prop
-    .child(ViewNode::new(WidgetKind::Label).text("New name"))
+    .child(ViewNode::new(WidgetId::Label).text("New name"))
     .child(
-        ViewNode::new(WidgetKind::Input)
+        ViewNode::new(WidgetId::Input)
             .text("current")
             .prop("name", PropValue::Text("name".into())),          // ← the INPUT's props (form field)
     )
     .child(
-        ViewNode::new(WidgetKind::Button)
+        ViewNode::new(WidgetId::Button)
             .text("Rename")
             .prop("variant", PropValue::Variant(ViewVariant::Primary)) // ← the BUTTON's prop
             .on_press(Intent::new("rename")),                          // ← the BUTTON's event → action id
@@ -7149,10 +7221,8 @@ ViewNode::new(WidgetKind::VStack)
 
 - **Internal code** authors this directly (as above) and hands it to `realize` / `open_modal`.
 - **Plugins** author the *same* nodes and ship them serialized (JSON); behaviour is the `Intent`
-  action ids, so no closures cross the boundary. A typed SwiftUI-style builder
-  (`VStack::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
-- **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
-  `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
+  action ids, so no closures cross the boundary. Use the typed SwiftUI-style builders in `heca_view::build`, for example `VStack::new().gap(8).child(Label::new("Hello"))`. Raw `ViewNode` remains the serialization model.
+- **Extending the vocabulary is host-side** (never a plugin): register one `WidgetDefinition` with its factory and generated metadata before startup, plus its showcase demo and reference entry. No enum variant or dispatcher arm is needed. Plugins compose descriptions from host-supported identifiers.
 
 #### Arguments — what an `Intent` may carry
 
@@ -7228,7 +7298,7 @@ binding uses — so these three produce an identical `WmAction`.
 
 ```rust
 // From a widget:
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .text("Send to right sidebar")
     .on_press(
         Intent::new("chrome.container.move_to_region")
@@ -7325,7 +7395,7 @@ unregister_dynamic(registry, catalog, &handle.0);
 Now any widget can fire it, and the call site looks no different from a built-in:
 
 ```rust
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .text("Restart")
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(
@@ -7613,7 +7683,7 @@ Declarative form — a plugin authors the same thing as a grouped property, beca
 four values and a scalar channel could not carry it:
 
 ```rust
-ViewNode::new(WidgetKind::Card).prop(
+ViewNode::new(WidgetId::Card).prop(
     "placement",
     PropValue::Map([
         ("left".into(),   PropValue::Text("25%".into())),
@@ -7745,3 +7815,23 @@ for the hovered target and `cx.drag_ghost(chip_rect, label)` at the cursor.
 > (panes, columns, Docker, agents, git, notes) without change — see
 > `dnd-framework-refactor-plan.md`. Never put app concepts (pane/workspace/column)
 > into the `drag` module.
+
+### Registry and public authoring checks
+
+Ordinary native construction needs only `Component` and the standard child builders. A host that
+supports an additional serialized widget registers its factory once before startup with
+`heca::register_widget(WidgetDefinition::new("vendor.readout", |node, _cx| {
+    Ok(Label::new(node.props.get("text").and_then(heca_view::PropValue::as_text).unwrap_or("")))
+}))`. Duplicate identifiers and registration after startup return errors. The application uses
+that same registry for its actual described trees. The SDK remains independent of the renderer.
+
+Native constructor coverage is executable in `heca/tests/public_authoring.rs`; it compares the
+exports against construction examples, including mixed nested children and standalone Terminal.
+`plain_authoring.rs` checks public factory signatures and shipped consumers for exposed storage
+or required conversions. The bridge additionally checks native property metadata, typed setters,
+wire compatibility, focus/input, clipping, menus/hints and stateful adapters.
+
+`heca_view::build::Keyed` uses the native lazy cache. Its optional `content_key` controls when the
+child is recreated; `texts` updates keyed labels on the retained tree. `WidgetRegistry::update`
+receives the same host emitter/form context for newly created children. `update_for` also carries
+the trusted owner. Pure native-state inputs use `update_state`. No declared widget key is required.

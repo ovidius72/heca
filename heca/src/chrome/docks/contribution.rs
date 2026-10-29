@@ -16,7 +16,7 @@
 use heca_core::layout::Rectangle;
 
 use crate::chrome::{ChromeSignals, DragItemRegistry, RegionId};
-use crate::providers::ChromeCtx;
+use crate::providers::{ChromeCtx, Provider};
 
 /// Stable string identity of a mounted container (equals its provider's `id()`).
 pub type ContainerId = String;
@@ -24,15 +24,15 @@ pub type ContainerId = String;
 /// A built container body — a host-understood `heca-grid-ui` widget subtree. The
 /// host owns render/focus/clip/overlays (§2.6); the provider only *builds* this
 /// model on (re)mount.
-pub type WidgetModel = Box<dyn heca_grid_ui::Component>;
+pub type WidgetModel = heca_grid_ui::WidgetModel;
 
 /// The render seam itself: a container's body builder. Reads the frame's inputs from
 /// [`ChromeCtx`] and registers its host ids in
-/// [`BuildCx`]. See [`ContainerContribution::build`].
-pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel>;
+/// [`BuildCx`]. Authors provide a concrete component through [`ContainerContribution::new`].
+pub(crate) type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel>;
 
 /// The **mutable half** of the render seam: the host's per-build registries, handed
-/// to [`ContainerContribution::build`] alongside the read-only
+/// to [`ContainerContribution::new`]'s builder alongside the read-only
 /// [`ChromeCtx`].
 ///
 /// A container body is not just widgets — building it *allocates host ids*: a drag
@@ -45,7 +45,7 @@ pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel
 /// They are passed as an explicit `&mut` parameter rather than hidden behind interior
 /// mutability in `ChromeCtx`: it keeps the plugin-facing context a pure read/observe
 /// facade, turns a double-borrow into a compile error instead of a runtime panic, and
-/// matches how [`realize`](crate::chrome::realize) already threads the same registries.
+/// matches how [`realize`](heca_view_realize::realize) already threads the same registries.
 pub struct BuildCx<'a> {
     /// The **mount id** of the container being built.
     ///
@@ -176,7 +176,7 @@ pub enum Contribution {
 /// A context menu is not a mounted body, and a provider wants *both* (a Docker container in the
 /// sidebar **and** a "Restart" entry on its rows). Making it a `Contribution` variant would force a
 /// provider to choose one or the other. So it is its own hook,
-/// [`Provider::context_menus`](crate::providers::Provider::context_menus), which returns as many as
+/// [`Provider::context_menus`], which returns as many as
 /// the provider likes — across as many paths as it likes.
 pub struct ContextMenuContribution {
     /// Where these entries appear — a dotted `ContextPath`:
@@ -215,7 +215,44 @@ pub struct ContainerContribution {
     /// It reads its inputs from [`ChromeCtx`] (state
     /// selectors, the workspace projection, theme, intent emitter) and registers its
     /// drag/hint/signal ids in [`BuildCx`].
-    pub build: BuildBody,
+    pub(crate) build: BuildBody,
+}
+
+impl ContainerContribution {
+    /// Build this provider's mounted body from an ordinary component or layout.
+    /// Placement metadata comes from the provider; allocation and type erasure stay internal.
+    ///
+    /// ```
+    /// use heca::{ContainerContribution, Contribution, Provider, Terminal};
+    /// use heca_grid_ui::builders::Parent;
+    /// use heca_grid_ui::{Flex, Label};
+    ///
+    /// fn contribution(provider: &impl Provider) -> Contribution {
+    ///     Contribution::Container(ContainerContribution::new(provider, |_ctx, _build| {
+    ///         Flex::column()
+    ///             .child(Label::new("Console"))
+    ///             .child(Terminal::new("shell"))
+    ///     }))
+    /// }
+    /// ```
+    pub fn new<P, C>(
+        provider: &P,
+        build: impl Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> C + 'static,
+    ) -> Self
+    where
+        P: Provider + ?Sized,
+        C: heca_grid_ui::builders::IntoComponent + 'static,
+    {
+        Self {
+            id: provider.id().to_string(),
+            title: provider.title().to_string(),
+            supported_regions: provider.supported_regions(),
+            default_region: provider.default_region(),
+            movable: provider.movable(),
+            collapsible: provider.collapsible(),
+            build: Box::new(move |ctx, cx| build(ctx, cx).into_component()),
+        }
+    }
 }
 
 /// Placeholder: a clustered action-button group for a bar region. Fleshed out

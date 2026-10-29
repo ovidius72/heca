@@ -23,7 +23,7 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use heca_view::build;
-use heca_view::{Intent, PropValue, ViewGlyph, ViewNode};
+use heca_view::{Intent, PropValue, ViewGlyph};
 use heca_view_realize::{FormBindings, IntentEmitter, realize};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};

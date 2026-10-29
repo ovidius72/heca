@@ -80,7 +80,7 @@ fn a_carry_has_one_layout_whatever_the_pointer_does() {
     window
         .base_mut()
         .children
-        .push(Box::new(workspace(seams())));
+        .push(heca_grid_ui::WidgetModel::new(workspace(seams())));
     let mut frames = Vec::new();
     let render = |window: &mut Flex, open: bool| {
         let model = model_of(&session, open);

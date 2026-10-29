@@ -60,9 +60,9 @@ mod tests {
     use heca_core::layout::Size;
 
     /// Force bounds on a widget (layout doesn't run in these unit tests).
-    fn at(mut w: impl Component + 'static, y: f64, h: f64) -> Box<dyn Component> {
+    fn at(mut w: impl Component + 'static, y: f64, h: f64) -> crate::WidgetModel {
         w.base_mut().bounds = Rectangle::new(Point::new(0.0, y), Size::new(100.0, h));
-        Box::new(w)
+        crate::WidgetModel::new(w)
     }
 
     fn tree() -> Flex {
@@ -123,7 +123,7 @@ mod tests {
         group = group.child(at(Surface::new().key("pane:7"), 10.0, 20.0));
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        root.base_mut().children.push(Box::new(group));
+        root.base_mut().children.push(crate::WidgetModel::new(group));
 
         assert_eq!(
             key_at(&root, Point::new(5.0, 15.0)),

@@ -7,7 +7,7 @@
 //! `chrome::active_hint_targets` composes both — built-ins + registered layers — into one
 //! ordered stack and applies the single visibility rule.
 //!
-//! The registry + its ordering, and both content arms: a native `Box<dyn Component>` tree the
+//! The registry + its ordering, and both content arms: a native `heca_grid_ui::WidgetModel` tree the
 //! host built, or a [`ViewNode`] description realized through the one bridge.
 //!
 //! **This stack is four files**: the registry here, [what a layer is](layer), [where it sits and
@@ -22,7 +22,6 @@ mod order;
 
 pub(crate) use layer::{DynamicLayer, HOST_OWNER, LayerId, LayerKind, layer_name};
 
-use heca_grid_ui::Component;
 use heca_view::ViewNode;
 
 /// The key string a surface is known by — its name, or `surface:<n>` for one nobody named.
@@ -99,7 +98,7 @@ impl LayerRegistry {
         &mut self,
         parent: Option<LayerId>,
         kind: LayerKind,
-        root: Box<dyn Component>,
+        root: heca_grid_ui::WidgetModel,
         window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
         let id = self.reserve_id();
@@ -158,7 +157,7 @@ impl LayerRegistry {
         parent: Option<LayerId>,
         kind: LayerKind,
         node: ViewNode,
-        realized: Box<dyn Component>,
+        realized: heca_grid_ui::WidgetModel,
         window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
         match name {
@@ -198,7 +197,7 @@ impl LayerRegistry {
         name: String,
         parent: Option<LayerId>,
         kind: LayerKind,
-        root: Box<dyn Component>,
+        root: heca_grid_ui::WidgetModel,
         window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
         // **A re-registration keeps the layer's PLACE in the stack.** It is the same layer with
@@ -545,7 +544,7 @@ impl LayerRegistry {
         id: LayerId,
         parent: Option<LayerId>,
         kind: LayerKind,
-        root: Box<dyn Component>,
+        root: heca_grid_ui::WidgetModel,
         window: &mut heca_grid_ui::widgets::Flex,
     ) {
         self.layers.push(DynamicLayer {

@@ -3,10 +3,10 @@ use std::rc::Rc;
 use heca_grid_ui::reactive::SignalGet;
 // The fixed value sets are used by the tests, not by the mapper: a widget's own enum parses the
 // name, so `realize` never names these types.
-use heca_grid_ui::{Justify, LayoutExt, Length, SetProp};
+use heca_grid_ui::{Justify, LayoutExt, Length};
 use heca_view::{
     ViewLabelSide, ViewMarker, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewTextAlign,
-    ViewVariant, WidgetKind,
+    ViewVariant, WidgetId,
 };
 
 use super::*;
@@ -43,19 +43,19 @@ fn hints(root: &dyn Component) -> Vec<Vec<usize>> {
 /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
 /// buttons (Cancel / Delete), each carrying a `"press"` intent.
 fn confirm_tree() -> ViewNode {
-    ViewNode::new(WidgetKind::VStack)
+    ViewNode::new(WidgetId::VStack)
         .prop("gap", PropValue::Int(8))
-        .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
+        .child(ViewNode::new(WidgetId::Label).text("Delete pane?"))
         .child(
-            ViewNode::new(WidgetKind::HStack)
+            ViewNode::new(WidgetId::HStack)
                 .child(
-                    ViewNode::new(WidgetKind::Button)
+                    ViewNode::new(WidgetId::Button)
                         .text("Cancel")
                         .prop("variant", PropValue::Variant(ViewVariant::Secondary))
                         .on_press(Intent::new("confirm_cancel")),
                 )
                 .child(
-                    ViewNode::new(WidgetKind::Button)
+                    ViewNode::new(WidgetId::Button)
                         .text("Delete")
                         .prop("variant", PropValue::Variant(ViewVariant::Destructive))
                         .on_press(Intent::new("confirm_ok")),
@@ -78,124 +78,130 @@ fn recording_emitter() -> (IntentEmitter, Rc<std::cell::RefCell<Vec<Intent>>>) {
 
 /// A representative node for `kind` — enough of one that a correct arm produces a *live* widget.
 ///
-/// The match is **exhaustive on purpose**: adding a `WidgetKind` without adding an arm to
+/// The match is **exhaustive on purpose**: adding a `WidgetId` without adding an arm to
 /// `realize` cannot compile past this point, so the coverage test below fires instead of the new
 /// kind silently rendering an empty container. That failure mode is exactly what this guards —
 /// it is invisible in review and invisible at runtime.
-fn sample_node(kind: WidgetKind) -> ViewNode {
-    let node = ViewNode::new(kind);
-    match kind {
-        WidgetKind::Image => node.prop("svg", PropValue::Text("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16'/></svg>".into()))
+fn sample_node(kind: WidgetId) -> ViewNode {
+    let node = ViewNode::new(kind.clone());
+    match kind.as_str() {
+        "dialog" => node.text("Title").prop("opened", true.into()).child(ViewNode::new("label").text("Body")),
+        "command_palette" => node.prop("opened", true.into()).child(ViewNode::new("command").text("Run").on_press(Intent::new("run"))),
+        "toast_stack" => node.child(ViewNode::new("toast").key("1").text("Ready")),
+        "image" => node.prop("svg", PropValue::Text("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16'/></svg>".into()))
             .prop("width", 16.0.into()).prop("height", 16.0.into())
-            .child(ViewNode::new(WidgetKind::Label).text("loading").prop("slot", PropValue::Text("loading".into()))),
+            .child(ViewNode::new("label").text("loading").prop("slot", PropValue::Text("loading".into()))),
         // Containers: give them a child, which a correct arm attaches.
-        WidgetKind::TreeLayout
-        | WidgetKind::MessageList
-        | WidgetKind::Resizable
-        | WidgetKind::VStack
-        | WidgetKind::HStack
-        | WidgetKind::CardGrid
-        | WidgetKind::Card
-        | WidgetKind::Scroll
-        | WidgetKind::Panel
-        | WidgetKind::Surface
-        | WidgetKind::Grid
-        | WidgetKind::MarkerGroup
-        | WidgetKind::ItemGroup
-        | WidgetKind::DockFrame
-        | WidgetKind::Overlay => node
+        "tree_layout"
+        | "message_list"
+        | "resizable"
+        | "v_stack"
+        | "h_stack"
+        | "card_grid"
+        | "card"
+        | "scroll"
+        | "panel"
+        | "surface"
+        | "grid"
+        | "marker_group"
+        | "item_group"
+        | "dock_frame"
+        | "overlay" => node
             .text("TITLE")
-            .child(ViewNode::new(WidgetKind::Label).text("child")),
+            .child(ViewNode::new("label").text("child")),
 
         // Option pickers: their children are `Choice` nodes.
-        WidgetKind::Select | WidgetKind::Tabs => node.child(
-            ViewNode::new(WidgetKind::Choice)
+        "select" | "tabs" => node.child(
+            ViewNode::new("choice")
                 .prop("value", PropValue::Text("a".into()))
                 .text("A"),
         ),
-        WidgetKind::Choice => node.prop("value", PropValue::Text("a".into())).text("A"),
+        "choice" => node.prop("value", PropValue::Text("a".into())).text("A"),
 
         // The interactive row: a container that is also a control, so it needs both a child
         // and a press intent — without the intent it is deliberately inert (no focus, no
         // hover), which would read as "realized to nothing" here.
-        WidgetKind::Row => node
-            .child(ViewNode::new(WidgetKind::Label).text("row"))
+        "row" => node
+            .child(ViewNode::new("label").text("row"))
             .on_press(Intent::new("noop")),
 
         // A slotted row: the label is a prop, the slots are children.
-        WidgetKind::Item => node.text("row").child(
-            ViewNode::new(WidgetKind::StatusDot)
+        "item" => node.text("row").child(
+            ViewNode::new("status_dot")
                 .prop("slot", PropValue::Text("leading".into())),
         ),
 
         // Leaves that carry text.
-        WidgetKind::Label
-        | WidgetKind::Button
-        | WidgetKind::Badge
-        | WidgetKind::BadgeButton
-        | WidgetKind::Tag
-        | WidgetKind::Alert
-        | WidgetKind::Toast
-        | WidgetKind::Input
-        | WidgetKind::Checkbox => node.text("TEXT"),
+        "label"
+        | "button"
+        | "badge"
+        | "badge_button"
+        | "tag"
+        | "alert"
+        | "toast"
+        | "input"
+        | "checkbox" => node.text("TEXT"),
 
         // Leaves that carry a glyph.
-        WidgetKind::Icon | WidgetKind::IconButton | WidgetKind::RailCell => {
+        "icon" | "icon_button" | "rail_cell" => {
             node.prop("icon", PropValue::Glyph("terminal".into()))
         }
 
         // Leaves with their own state.
-        WidgetKind::Toggle => node.prop("on", PropValue::Bool(true)),
-        WidgetKind::Gauge => node.prop("value", PropValue::Float(0.5)),
-        WidgetKind::Progress => node.prop("value", PropValue::Float(0.5)),
-        WidgetKind::NfIcon => node.prop("glyph", PropValue::Text("command".into())),
+        "toggle" => node.prop("on", PropValue::Bool(true)),
+        "gauge" => node.prop("value", PropValue::Float(0.5)),
+        "progress" => node.prop("value", PropValue::Float(0.5)),
+        "nf_icon" => node.prop("glyph", PropValue::Text("command".into())),
         // Its children are buttons and nothing else, and each needs the pair the group reads:
         // the words for its menu row and hover bubble, the icon for when there is no room.
-        WidgetKind::Tile => node.child(
-            ViewNode::new(WidgetKind::Label)
+        "tile" => node.child(
+            ViewNode::new("label")
                 .text("title")
                 .prop("slot", PropValue::Text("title".into())),
         ),
-        WidgetKind::ButtonGroup => node.child(
-            ViewNode::new(WidgetKind::Button)
+        "button_group" => node.child(
+            ViewNode::new("button")
                 .text("Close")
                 .prop("icon", PropValue::Glyph("close".into()))
                 .on_press(Intent::new("noop")),
         ),
         // It has no properties at all: it paints from the clock, and a root node has no
         // container to take a size from, so give it the one every other leaf gets implicitly.
-        WidgetKind::Spinner => node
+        "spinner" => node
             .prop("width", PropValue::Float(28.0))
             .prop("height", PropValue::Float(28.0)),
-        WidgetKind::Line => node.prop("width", PropValue::Float(100.0)).prop("height", PropValue::Float(20.0)),
-        WidgetKind::StatusDot => node,
-        WidgetKind::Splitter => node
+        "line" => node.prop("width", PropValue::Float(100.0)).prop("height", PropValue::Float(20.0)),
+        "status_dot" => node,
+        "splitter" => node
             .prop("line", PropValue::Bool(true))
             .prop("width", PropValue::Float(8.0))
             .prop("height", PropValue::Float(120.0)),
-        WidgetKind::LandingSlot => node
+        "landing_slot" => node
             .prop("label", PropValue::Text("a".into()))
             .prop("filled", PropValue::Bool(true)),
 
         // A rule normally stretches to its container; as a root it has none, so give it a
         // span — and take the chance to drive both of its properties, in the order that would
         // have been wrong before the widget started recomputing from the pair.
-        WidgetKind::Separator => node
+        "separator" => node
             .prop("length", PropValue::Float(120.0))
             .prop("orientation", PropValue::Text("vertical".into())),
 
         // A picker: its children are what it letters, and one of them must be pickable for
         // the picker to be worth anything — so the sample carries a hint, not a press.
-        WidgetKind::KeyHintGroup => node
+        "key_hint_group" => node
             .prop("opens_on", PropValue::Text("sample.pick".into()))
             .child(
-                ViewNode::new(WidgetKind::Label)
+                ViewNode::new("label")
                     .text("target")
                     .on_hint(Intent::new("noop")),
             ),
 
-        // Host-only — see the coverage test.
-        WidgetKind::ScrollBar => node,
+        // Live state is supplied through the typed native adapter.
+        "scroll_bar" => node.prop("content_extent", 1000.0.into()).prop("viewport_extent", 100.0.into()).prop("offset", 50.0.into()).prop("height", 120.0.into()),
+        "pane" | "focus_scope" | "chrome_region" | "keyed" => node
+            .child(ViewNode::new("button").text("Content").on("press", Intent::new("noop"))),
+        _ => panic!("missing behavioral sample for {kind}"),
     }
 }
 
@@ -218,3 +224,9 @@ mod forms;
 mod layout;
 mod generated;
 mod composed;
+
+fn registered_ids() -> Vec<WidgetId> {
+    WidgetRegistry::builtins().expect("valid built-in definitions").definitions()
+        .filter(|definition| !definition.metadata().declaration)
+        .map(|definition| definition.metadata().id.clone()).collect()
+}

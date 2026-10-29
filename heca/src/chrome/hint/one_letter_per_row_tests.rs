@@ -101,8 +101,8 @@ fn pick_in_two_docks(lower_dock_scrolled: f32) {
     .expect("two docks are seated");
 
     // The screenshot's sidebar: 580 wide, 1290 tall.
-    let mut root: Box<dyn Component> =
-        Box::new(Flex::column().width(580.0).height(1290.0).child(body));
+    let mut root: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::column().width(580.0).height(1290.0).child(body));
     LayoutEngine::new().compute(root.as_mut(), Size::new(580.0, 1290.0));
 
     // `prefix+q` offers pane 4 the letter `c`, by the pane's name — the same call the app makes.

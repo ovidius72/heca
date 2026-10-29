@@ -61,7 +61,7 @@ pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
         .terminals
         .entry(id)
         .or_insert_with(|| {
-            let terminal = Terminal::new();
+            let terminal = Terminal::unbound();
             terminal.attach(id);
             terminal.bind(seams(proxy, Some(pane_id), id));
             terminal

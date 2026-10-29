@@ -34,7 +34,7 @@ fn open_rename_dialog(state: &mut AppState, target: RenameTarget, current_name: 
         danger: false,
         dismissible: true,
     };
-    crate::chrome::open_modal(state, spec, move |state, registry, result| {
+    let _ = crate::chrome::open_modal(state, spec, move |state, registry, result| {
         if let crate::chrome::ModalResult::Action { id, data } = result
             && id == "ok"
         {

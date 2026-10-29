@@ -40,7 +40,7 @@ fn the_workspace_places_what_the_model_says() {
 /// **A pane that is still there keeps its widget; one that left goes; one that arrived is built.**
 #[test]
 fn panes_come_and_go_while_the_others_keep_their_widget() {
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams()));
     assert!(ws.set_props(&two_columns_and_a_float()));
     // A mark only this instance of the pane carries.
     ws.base_mut().children[0].base_mut().children[0]
@@ -87,7 +87,7 @@ fn panes_come_and_go_while_the_others_keep_their_widget() {
 /// A model of another type is refused rather than ignored.
 #[test]
 fn the_workspace_refuses_props_that_are_not_its_model() {
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams()));
     assert!(!ws.set_props(&"not a model"));
 }
 

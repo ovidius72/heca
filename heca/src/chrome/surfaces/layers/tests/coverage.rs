@@ -130,7 +130,7 @@ fn a_menu_seated_as_a_surface_keeps_its_own_height() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        declaring(Box::new(menu), true, true),
+        declaring(heca_grid_ui::WidgetModel::new(menu), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -166,7 +166,7 @@ fn a_layer_seated_as_a_surface_still_fills_the_window() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        declaring(Box::new(fading_root_open()), true, true),
+        declaring(heca_grid_ui::WidgetModel::new(fading_root_open()), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -223,7 +223,7 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     crate::chrome::place_surface(
         &mut window,
         "heca.notifications",
-        Box::new(KeyHintGroup::new(ToastStack::new(signal(Vec::new())))),
+        heca_grid_ui::WidgetModel::new(KeyHintGroup::new(ToastStack::new(signal(Vec::new())))),
     );
     LayoutEngine::new().compute(&mut window, viewport);
 

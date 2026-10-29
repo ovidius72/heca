@@ -1,6 +1,6 @@
 //! A whole composed surface, not one kind at a time.
 
-use heca_view::{ViewEvent, WidgetKind};
+use heca_view::{ViewEvent, WidgetId};
 
 use super::*;
 
@@ -78,7 +78,7 @@ fn a_composed_described_surface_swallows_only_what_it_declared_it_would() {
             &Theme::default(),
             &(Rc::new(|_| {}) as IntentEmitter),
             &mut FormBindings::default(),
-        )
+        ).expect("valid described test widget")
     };
 
     let mut blocking = realized(&described_confirm());
@@ -124,7 +124,7 @@ fn a_described_dialog_is_spaced_by_the_same_recipe_a_native_one_is() {
         &Theme::default(),
         &(Rc::new(|_| {}) as IntentEmitter),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     // The overlay's single child is the panel.
     let panel = surface.base().children[0].as_ref();
     let layout = &panel.base().style.layout;
@@ -168,7 +168,7 @@ fn a_described_dialog_is_spaced_by_the_same_recipe_a_native_one_is() {
 /// later had to find that out and copy it. It is on `Base` now, so the answer is the same for
 /// a `Select`, a `Button`, a `DockFrame` and a `Tabs` as for a dialog.
 ///
-/// **It walks `WidgetKind::ALL` rather than a list typed out here.** A hand-written list is the
+/// **It walks `WidgetId::ALL` rather than a list typed out here.** A hand-written list is the
 /// same hardcoding one level up: it passes for the widgets someone remembered and says nothing
 /// about the one added next month. Adding a variant without adding it to `ALL` is already a
 /// compile error, so a new widget is covered by this the day it exists, and its author never
@@ -179,13 +179,13 @@ fn every_widget_kind_can_be_shown_and_closed() {
 
     let theme = Theme::default();
     let mut deaf: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         let mut w = realize(
-            &sample_node(kind),
+            &sample_node(kind.clone()),
             &theme,
             &noop_emitter(),
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
 
         if w.presence().is_none() {
             deaf.push(format!("{kind:?}: has no arrival or exit at all"));
@@ -231,7 +231,7 @@ fn a_described_splitter_reports_its_drag_as_an_intent_with_the_distance() {
     use heca_grid_ui::{Event, LayoutEngine, Point, PointerButton};
 
     let (emit, fired) = recording_emitter();
-    let node = ViewNode::new(WidgetKind::Splitter)
+    let node = ViewNode::new(WidgetId::Splitter)
         .prop("orientation", PropValue::Text("vertical".into()))
         .prop("width", PropValue::Float(8.0))
         .prop("height", PropValue::Float(100.0))
@@ -241,7 +241,7 @@ fn a_described_splitter_reports_its_drag_as_an_intent_with_the_distance() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     LayoutEngine::new().compute(widget.as_mut(), Size::new(200.0, 100.0));
 
     let at = |x: f64| Point::new(x, 50.0);

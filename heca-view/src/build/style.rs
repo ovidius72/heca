@@ -303,7 +303,7 @@ pub trait Style: Sized {
     /// which takes the node out of the layout so its neighbours close up. This keeps the box.
     ///
     /// Between them there is nothing left for a `Visibility` wrapper to do in a described tree, and
-    /// so there is no `WidgetKind` for one.
+    /// so there is no `WidgetId` for one.
     fn visible(self, visible: bool) -> Self {
         self.prop("visible", visible)
     }

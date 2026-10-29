@@ -46,8 +46,8 @@
 //! [`MenuItem::child`] takes any widget subtree instead, and **children win when both are given** —
 //! the same precedence [`Button`](super::Button) already has.
 //!
-//! `child` takes a `Fn() -> impl Component` rather than a widget value because a menu can be shown
-//! more than once, and a widget subtree is owned ([`Box<dyn Component>`](crate::component::Component)):
+//! `child` takes a `Fn() -> impl IntoComponent` rather than a widget value because a menu can be shown
+//! more than once, and a widget subtree is owned ([`crate::WidgetModel`]):
 //! handed over once, it is gone. A **builder** can run again, which is what makes the whole chain —
 //! [`MenuItem`], [`Menu`], [`ContextMenu`] — [`Clone`], so one menu value can be declared on several
 //! rows and captured by handlers. It also means the rows are built **at the moment the menu opens**,

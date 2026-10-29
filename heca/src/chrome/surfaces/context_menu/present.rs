@@ -55,7 +55,7 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
         id.0,
         parent,
         LayerKind::OnDemand,
-        Box::new(panel),
+        heca_grid_ui::WidgetModel::new(panel),
         &mut state.window_root,
     );
 }

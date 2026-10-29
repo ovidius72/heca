@@ -93,7 +93,7 @@ fn carrying_window_of(model: WorkspaceModel) -> (Flex, Drops) {
         sink.borrow_mut().push((d.source, d.target, d.side));
     });
     let mut window = crate::chrome::new_window_root();
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams()));
     assert!(ws.set_props(&model));
     window.base_mut().children.push(ws);
     crate::chrome::seat_chrome(

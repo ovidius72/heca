@@ -1,7 +1,7 @@
 use heca_view::build::{Parent as _, Style as _};
 use super::*;
 
-pub(super) fn described_tree() -> ViewNode {
+pub(super) fn described_tree() -> build::Panel {
     // Written through the typed builders rather than as a bag of properties. The
     // difference is what does not compile: `Label::new(..).title(..)` is an error because a label
     // has no title, and `Separator::new().orientation(..)` will not take a misspelt word.
@@ -21,7 +21,7 @@ pub(super) fn described_tree() -> ViewNode {
                 // **A tooltip is a declaration, not a box around the row**. It is
                 // universal like `.key(..)`, so a described node says it exactly as its native twin
                 // below does — hover either and the same bubble appears, on the same side, after
-                // the same rest. There is no `WidgetKind::Tooltip` to construct and anchor.
+                // the same rest. There is no `WidgetId::Tooltip` to construct and anchor.
                 .tooltip("Running · 3 days")
                 .tooltip_side(heca_view::ViewTooltipSide::Bottom)
                 // **Where the letter goes is a declaration too**. A wide list row
@@ -75,7 +75,7 @@ pub(super) fn described_tree() -> ViewNode {
                         .on_press(Intent::new("showcase.split")),
                 ),
         )
-        .into_node()
+
 }
 
 /// The same four widgets built by hand, to compare against [`described_tree`] with the eye.
@@ -138,12 +138,10 @@ pub(super) fn described_vs_native(theme: &Theme) -> Flex {
         );
     });
     let mut forms = FormBindings::default();
-    let described = realize(&described_tree(), theme, &emit, &mut forms);
+    let described = realize(&described_tree(), theme, &emit, &mut forms)
+        .expect("the compiled showcase fixture must match the library registry");
 
-    // `Box<dyn Component>` is not `Component`, so it cannot go through `child()` — push it the way
-    // the mapper itself does.
-    let mut row = Flex::row().gap(28.0).align("start");
-    row.base_mut().children.push(described);
-    row.base_mut().children.push(Box::new(native_twin(theme)));
-    row
+    Flex::row().gap(28.0).align("start")
+        .child(described)
+        .child(native_twin(theme))
 }

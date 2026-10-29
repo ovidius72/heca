@@ -30,11 +30,11 @@ use (`Widget` → `Element`/`RenderObject`).
    ViewNode                     the DESCRIPTION   (heca-view — its OWN crate, serde and nothing else)
    { kind, props, events, children }              pure data · serde · no closures · no signals
         │
-        │   realize(&ViewNode, theme, emit, forms) -> Box<dyn Component>
+        │   realize(&ViewNode, theme, emit, forms) -> Result<WidgetModel, RealizeError>
         │   the ONE bridge     (heca-view-realize — its OWN crate, BELOW the app)
         ▼
    Component tree               the LIVE WIDGETS  (heca-grid-ui — the LIBRARY crate)
-   Base + children: Vec<Box<dyn Component>>       builder API · closures · signals
+   Base + children: Vec<WidgetModel>       builder API · closures · signals
         │
         ▼
    taffy layout → paint → Scene → heca-renderer → GPU
@@ -55,8 +55,8 @@ type, so the compiler refuses what the widget cannot do (`Label::new(..).title(.
 adds no capability — it is ergonomics and type-safety over the same data, exactly as Flutter's typed
 `Widget` classes lower to `Element`/`RenderObject`.
 
-**Layer 1 — `ViewNode` (description).** A serializable node: `kind` (the closed `WidgetKind`
-vocabulary), `props` (scalars, semantic enums, and appearance — a colour is a hex literal or a
+**Layer 1 — `ViewNode` (description).** A serializable node: `kind` (an open `WidgetId`
+resolved by the host registry), `props` (scalars, semantic enums, and appearance — a colour is a hex literal or a
 theme token **name**, resolved by `realize` against the theme the tree is built with), `events`
 (`press` / `hint` / `change` / `toggle` / `action` / `dismiss` → an `Intent` = action id + args,
 **never a closure**), and `children` (`Vec<ViewNode>`, recursive). This is what a WASM plugin ships
@@ -64,7 +64,7 @@ over the boundary, what RPC can send, and what native code authors when it wants
 (modals, menus, panels).
 
 **Layer 2 — the widgets (`heca-grid-ui`).** Real retained components: embed `Base`, hold
-`children: Vec<Box<dyn Component>>`, own paint/event/tick, expose a builder API with **closures**
+`children: Vec<WidgetModel>`, own paint/event/tick, expose a builder API with **closures**
 (`.on_click(move || …)`) and **signals** (`.state()`, `.text_signal()`). The native chrome
 (sidebar, pane headers) is built directly here.
 
@@ -74,8 +74,26 @@ neither layer has to. Both authoring paths converge on the **same retained tree*
 It used to own a third thing — a **hint registry** — and that is gone (F004/P084/T399, 2026-08-11).
 A pickable node now writes its own `hint` behaviour into the widget's `Base::hint` slot, and the
 framework collects the declarations out of the laid-out tree. There is no sink to hand in, nothing
-to un-register, and nothing a plugin cannot reach. **When a bridge grows a registry parameter, that
-is the smell**: it means the capability behind it is host-private.
+to un-register, and nothing a plugin cannot reach. This is separate from the widget-definition
+registry: the host populates that once with implementations and metadata. Placing a widget
+never requires registering input, hints or a surface.
+
+### Support and invalid data are different
+
+Native Rust composition accepts the existing `Component` contract. A widget does not need to
+be added to a closed enum to become a child. Described trees carry an open `WidgetId` instead
+of a Rust object, so the host registry resolves that identifier to its concrete implementation.
+Heca must supply adapters for the full supported widget inventory; live state is not a reason
+to make a widget permanently unavailable to descriptions.
+
+Malformed data does not make a known widget unsupported. For example, `scroll` is supported,
+but `axes = "sideways"` is not a valid direction. The bridge diagnoses the property and its
+node path, ignores that input and lets the native default apply. Valid properties, descendants
+and siblings remain. A semantic control diagnoses and omits an unacceptable child while
+keeping its valid options. Unknown widget identifiers and incompatible schema versions remain
+blocking errors, checked before factories acquire resources. Neither case produces an empty
+placeholder. Hosts can route recoverable diagnostics with `WidgetRegistry::on_diagnostic`;
+the default is stderr, and Heca uses its existing author-warning channel with deduplication.
 
 ---
 
@@ -135,12 +153,11 @@ closed enum (`Icon | Label`); that is a narrow patch against a general problem. 
 intrinsic semantic color (`Badge::danger`, `StatusDot::online`) keep it; unstyled text/glyphs
 inherit the parent's state color.
 
-**A realized subtree goes in through the slot's own builder.** `realize` returns
-`Box<dyn Component>`, which is not itself `Component` — so every child-taking builder used to come
-in twos, sixteen of them, and a caller had to know which spelling to reach for. They take
-`impl IntoComponent` now, which covers a widget and a box alike and hands an already-boxed subtree
-through rather than wrapping it again. **A new slot takes `impl IntoComponent`; do not add a
-seventeenth `*_boxed`.**
+**A realized subtree goes in through the slot's own builder.** `realize` returns an opaque
+`WidgetModel`, with allocation kept private. Child builders accept both native components and
+models through `IntoComponent` / `IntoChildren`; callers do not box, cast or call a conversion.
+Typed SDK builders are accepted directly at the realization entry point. A model retains the
+original component node, including its input, layout, presence and state behavior.
 
 ---
 
@@ -162,12 +179,12 @@ Button::new("Delete")
 **Declarative — the raw node** (what that lowers to, and what crosses the wire):
 
 ```rust
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::HStack)
-        .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
-        .child(ViewNode::new(WidgetKind::Label).text("Delete")))
+    .child(ViewNode::new(WidgetId::HStack)
+        .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("trash".into())))
+        .child(ViewNode::new(WidgetId::Label).text("Delete")))
 ```
 
 **Native builder** (chrome, sidebar, pane headers — needs closures/signals):
@@ -180,9 +197,10 @@ Button::destructive("Delete")
 
 `realize` turns the first into the second. **Same widget, same retained tree.**
 
-Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widget in
-`heca-grid-ui`, its `realize` arm, its showcase demo, its `docs/widgets.md` entry. Plugins only
-*compose* existing kinds; they never invent a rendering primitive.
+Adding a described implementation is **host-side** work: one `WidgetDefinition` connects its
+identifier, factory and metadata. There is no closed widget enum or parallel realization switch.
+Native components remain open through `Component`; sandbox plugins compose implementations
+registered by their host. In Heca, `heca::register_widget` adds a definition before startup; the app keeps one registry including its Terminal factory. Duplicate or late registrations return errors. Showcase and widget documentation accompany supported library additions.
 
 ---
 
@@ -193,10 +211,10 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | Should `heca-grid-ui` own `ViewNode`? | **No.** | Inverts the crate graph; and `ViewNode` can't carry the closures/signals native chrome needs. |
 | Can a widget constructor take a `ViewNode` (`Button::new(ViewNode)`)? | **No.** | Same reason. The library never sees the app's model. |
 | Is `realize` the only ViewNode→widget path? | **Yes.** | One bridge, in `heca-view-realize`, owns theme + intent wiring. (It was app-side until F003/P017/T009 moved it below the app; it never owned a *second* path.) |
-| Does the bridge need a registry handed in (hints, ids, sinks)? | **No — and a new one is a bug.** | F004/P084/T399 deleted the last of them. A capability a described node cannot express without host plumbing is a capability a plugin only has a second-class version of. |
+| Does placing a widget require input/hint registration? | **No.** | The tree owns routing and hints. The host's widget-definition registry resolves serialized identifiers at bootstrap; it is not per-placement input plumbing. |
 | Does a plugin author write raw `ViewNode`? | **They may, but the typed SDK is the surface.** | `heca-view::build` — one type per kind, so the compiler refuses what the widget cannot do. Same relationship Flutter's typed `Widget`s have to `Element`. |
 | Do widgets hold children, or hand-draw content? | **Children.** | The rule in §3. Hand-drawn content is a refactor target. |
-| Can any component go inside a widget's slot? | **Yes.** | Slots are `impl Component`. Never narrow to a closed enum. |
+| Can any component go inside a widget's slot? | **Yes.** | Slots accept `impl IntoComponent`: a native component or an opaque runtime tree. Never narrow to a closed enum. |
 | How does a realized subtree get into a widget? | **The slot's own builder.** | Slots take `impl IntoComponent`; the `*_boxed` twins are deleted. |
 | Does behaviour cross the plugin boundary as a callback? | **No — an `Intent`** (action id + args). | Keeps the model serializable; click, KeyHint pick, and RPC all fire the same intent. |
 | Is styling a prop? | **Yes — changed 2026-07-26, built 2026-07-27.** | The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name). The old "No" is dead — do not restore it. All of `Visual` is settable; a token name resolves against the theme the tree is built with. |
@@ -207,9 +225,9 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 
 | Concern | File |
 |---|---|
-| `ViewNode` / `WidgetKind` / `PropValue` / `Intent` | `heca-view/src/` (`kind.rs`, `node.rs`, `value.rs`, `scalars/`) |
+| `ViewNode` / `WidgetId` / `PropValue` / `Intent` | `heca-view/src/` (`kind.rs`, `node.rs`, `value.rs`, `scalars/`) |
 | The typed SDK a plugin author writes | `heca-view/src/build/` |
-| `realize(&ViewNode, theme, emit, forms) -> Box<dyn Component>` | `heca-view-realize/src/lib.rs` |
+| `realize(&ViewNode, theme, emit, forms) -> Result<WidgetModel, RealizeError>` | `heca-view-realize/src/lib.rs` |
 | Overlay: `ModalSpec` → `Dialog` (a realized subtree entering a slot) | `heca/src/chrome/surfaces/overlay/` |
 | The widgets | `heca-grid-ui/src/widgets/` |
 | `Base` / `Component` / `PaintCx` | `heca-grid-ui/src/component/` |
@@ -234,8 +252,8 @@ fails the build when a widget grows a property the SDK cannot set.
 - **Generated type definitions** for plugins in *other* languages, from the same widget list —
   **F003/P001/T006**. The Rust author is served; a JS or Python author is not, and that is the gap
   between "a plugin can do this" and "anyone can write a plugin".
-- **Every widget buildable from a description, with no host-only exceptions** — **F004/P084/T398**.
-  The rule is already written (a widget whose state is a live host signal is host-only, §5); the
-  audit that proves the list is *only* those is not done.
+- **Every widget buildable from a description, with no permanent host-only exceptions** —
+  **F003/P067/T398**. Live state stays inside the host and is reached through typed data adapters.
+  The full inventory audit is still in progress; registry membership alone does not prove parity.
 - **The WASM boundary itself** — **F003/P022**. Everything above is the authoring model; nothing
   yet loads a plugin.

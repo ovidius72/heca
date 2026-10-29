@@ -58,7 +58,7 @@ impl Button {
     #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.glyph = Some(glyph);
-        self.base.children.insert(0, Box::new(Icon::new(glyph)));
+        self.base.children.insert(0, crate::WidgetModel::new(Icon::new(glyph)));
         self
     }
 
@@ -90,7 +90,7 @@ impl Button {
     }
 
     /// Append an already-boxed component — the seam for a subtree built by a mapper
-    /// (`realize(&ViewNode)` returns `Box<dyn Component>`, which is not itself `Component` and so
+    /// (`realize(&ViewNode)` returns `crate::WidgetModel`, which is not itself `Component` and so
     /// goes through the same builder). Mirrors [`Dialog::body`](crate::widgets::Dialog::body).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     /// Convenience constructors, one per variant.

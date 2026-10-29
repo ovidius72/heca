@@ -71,31 +71,46 @@ impl Dialog {
             .unwrap_or_else(|| Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0)))
     }
 
-    /// Compose the readable width cap with the room supplied by Overlay.
+    /// Resolve caller-owned panel style without replacing its original dimensions/limits.
     fn constrain_panel_width(&mut self) -> bool {
         let overlay = self.base.children[0].base();
-        let available = (overlay.bounds.size.w as f32
+        let panel = overlay.children[0].base();
+        let font = panel.font;
+        let available_w = (overlay.bounds.size.w as f32
             - overlay.style.layout.pad_left(overlay.font)
             - overlay.style.layout.pad_right(overlay.font)).max(0.0);
-        let requested = self.panel_max_width.unwrap_or(crate::Length::Em(
-            self.base.dialog_style.max_width_em,
-        ));
-        let resolve = |requested| match requested {
-            crate::Length::Em(em) => em * self.base.font,
+        let available_h = (overlay.bounds.size.h as f32
+            - overlay.style.layout.pad_top(overlay.font)
+            - overlay.style.layout.pad_bottom(overlay.font)).max(0.0);
+        let resolve = |length, available| match length {
+            crate::Length::Em(em) => em * font,
             crate::Length::Px(px) => px,
             crate::Length::Percent(fraction) => available * fraction,
             crate::Length::Auto => available,
         };
-        let maximum = resolve(requested);
-        let maximum = if overlay.bounds.size.w > 0.0 { maximum.min(available) } else { maximum };
-        let floor = resolve(Self::BASELINE_WIDTH).min(maximum);
-        let panel = &mut self.base.children[0].base_mut().children[0].base_mut().style.layout;
-        let minimum = Some(if panel.width == crate::Length::Auto {
-            crate::Length::Px(floor)
+        let mut style = self.authored_style;
+        if !style.layout.size_explicit { style.layout.size = panel.style.layout.size; }
+        let requested = style.layout.max_width.unwrap_or(crate::Length::Em(self.base.dialog_style.max_width_em));
+        let maximum = resolve(requested, available_w);
+        let maximum = if overlay.bounds.size.w > 0.0 { maximum.min(available_w) } else { maximum };
+        let minimum = style.layout.min_width.unwrap_or(if style.layout.width == crate::Length::Auto {
+            Self::BASELINE_WIDTH
         } else { crate::Length::Auto });
-        let changed = panel.max_width != Some(crate::Length::Px(maximum)) || panel.min_width != minimum;
-        panel.max_width = Some(crate::Length::Px(maximum));
-        panel.min_width = minimum;
+        style.layout.min_width = Some(crate::Length::Px(resolve(minimum, available_w).min(maximum)));
+        if minimum == crate::Length::Auto { style.layout.min_width = Some(crate::Length::Auto); }
+        style.layout.max_width = Some(crate::Length::Px(maximum));
+        if overlay.bounds.size.h > 0.0 {
+            let limit = style.layout.max_height.map_or(available_h, |height| resolve(height, available_h).min(available_h));
+            style.layout.max_height = Some(crate::Length::Px(limit));
+            if let Some(minimum) = style.layout.min_height {
+                style.layout.min_height = Some(crate::Length::Px(resolve(minimum, available_h).min(limit)));
+            }
+        } else {
+            style.layout.max_height.get_or_insert(crate::Length::Percent(1.0));
+        }
+        let panel = &mut self.base.children[0].base_mut().children[0].base_mut().style;
+        let changed = *panel != style;
+        *panel = style;
         changed
     }
 }
@@ -107,6 +122,8 @@ impl Component for Dialog {
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
     }
+    fn authored_style(&self) -> &crate::style::Style { &self.authored_style }
+    fn authored_style_mut(&mut self) -> &mut crate::style::Style { &mut self.authored_style }
 
     fn remeasure(&mut self) {
         self.constrain_panel_width();

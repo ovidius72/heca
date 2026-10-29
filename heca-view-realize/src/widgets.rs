@@ -2,13 +2,13 @@
 //! toggles.
 
 use heca_grid_ui::{
-    Action, Button, Choice, Component, Flex, Grid, LayoutExt, Row as GridRow, SignalData, Theme,
+    Action, Button, Choice, Component, Flex, Grid, LayoutExt, Row as GridRow, SignalData,
     Track,
 };
 use heca_grid_ui::widgets::{CardGrid, GridCell};
-use heca_view::{PropValue, ViewEvent, ViewNode, WidgetKind};
+use heca_view::{PropValue, ViewEvent, ViewNode, WidgetId};
 
-use crate::{FormBindings, IntentEmitter, realize};
+use crate::{IntentEmitter, RealizeCx, RealizeError, RealizeErrorKind};
 use crate::intents::press_intent;
 use crate::props::{
     glyph_prop, size_prop, text_of, value_prop, value_string, variant_prop,
@@ -17,23 +17,17 @@ use crate::style::with_props;
 
 /// Realize a container node onto a base [`Flex`] (row or column), applying layout props and
 /// recursively realizing + attaching children.
-pub(crate) fn realize_flex(
-    node: &ViewNode,
-    theme: &Theme,
-    mut flex: Flex,
-    emit: &IntentEmitter,
-    forms: &mut FormBindings,
-) -> Box<dyn Component> {
+pub(crate) fn realize_flex(node: &ViewNode, mut flex: Flex, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
     // `gap`, `align` and every other layout property are applied generically by
     // `merge_layout_props` in `realize`, for every kind — not read per-arm here.
-    for child in &node.children {
-        // `child()` takes an `impl Component` and boxes it; a `Box<dyn Component>` isn't
+    for index in 0..node.children.len() {
+        // `child()` takes an `impl Component` and boxes it; a `heca_grid_ui::WidgetModel` isn't
         // `Component`, so push the already-boxed child directly.
         flex.base_mut()
             .children
-            .push(realize(child, theme, emit, forms));
+            .push(cx.child(node, index)?);
     }
-    Box::new(flex)
+    Ok(heca_grid_ui::WidgetModel::new(flex))
 }
 
 /// Realize a [`Button`], wiring its `"press"` intent to both a click handler and a hint
@@ -48,13 +42,8 @@ pub(crate) fn realize_flex(
 /// (`text` → a bold `Label`, plus an optional leading `icon`), which is the common case and what
 /// every existing caller writes. The sugar produces exactly the children the explicit form
 /// would — there is one content model underneath.
-pub(crate) fn realize_button(
-    node: &ViewNode,
-    theme: &Theme,
-    emit: &IntentEmitter,
-    forms: &mut FormBindings,
-) -> Box<dyn Component> {
-    Box::new(button_of(node, theme, emit, forms))
+pub(crate) fn realize_button(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    Ok(heca_grid_ui::WidgetModel::new(button_of(node, cx)?))
 }
 
 /// The same button, **typed** — what a container holding `Button`s needs.
@@ -66,12 +55,8 @@ pub(crate) fn realize_button(
 /// Split out rather than written twice: a second button-building path is exactly the drift this
 /// project forbids, and the group's buttons must be the buttons a description asked for, down to
 /// the press intent and the composed-children precedence.
-pub(crate) fn button_of(
-    node: &ViewNode,
-    theme: &Theme,
-    emit: &IntentEmitter,
-    forms: &mut FormBindings,
-) -> Button {
+pub(crate) fn button_of(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Button, RealizeError> {
+    let emit = cx.emit;
     let mut button = if node.children.is_empty() {
         // Sugar: the scalar props describe the content.
         let mut b = Button::new(text_of(node));
@@ -93,20 +78,20 @@ pub(crate) fn button_of(
         let emit = emit.clone();
         button = button.on_click(move || emit(carrier.clone()));
     }
-    // Attach the composed content. (`Box<dyn Component>` isn't `Component`, so it can't go through
+    // Attach the composed content. (`heca_grid_ui::WidgetModel` isn't `Component`, so it can't go through
     // `Parent::child`; push it the way every other container here does.)
-    for child in &node.children {
+    for index in 0..node.children.len() {
         button
             .base_mut()
             .children
-            .push(realize(child, theme, emit, forms));
+            .push(cx.child(node, index)?);
     }
-    button
+    Ok(button)
 }
 
 /// Realize one [`Choice`] — an option: a **value** plus composed content.
 ///
-/// Typed to `Choice` (not `Box<dyn Component>`) because that is what `Select::option` / `Tabs::tab`
+/// Typed to `Choice` (not `heca_grid_ui::WidgetModel`) because that is what `Select::option` / `Tabs::tab`
 /// take: those containers keep the option's state signals to drive selection in place, which a
 /// boxed component would have erased.
 ///
@@ -114,12 +99,7 @@ pub(crate) fn button_of(
 /// the `text` sugar (→ one `Label` child, exactly the child the explicit form would build). The
 /// `value` prop is what the option *means*, independently of what it shows; with no `value`, the
 /// text stands in for it, so `Choice { text: "HIGH" }` behaves like the native `Choice::labeled`.
-pub(crate) fn realize_choice(
-    node: &ViewNode,
-    theme: &Theme,
-    emit: &IntentEmitter,
-    forms: &mut FormBindings,
-) -> Choice {
+pub(crate) fn realize_choice(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Choice, RealizeError> {
     let value = value_prop(node)
         .map(|v| value_string(&v))
         .unwrap_or_else(|| text_of(node));
@@ -129,40 +109,30 @@ pub(crate) fn realize_choice(
     } else {
         Choice::new(value)
     };
-    for child in &node.children {
+    for index in 0..node.children.len() {
         choice
             .base_mut()
             .children
-            .push(realize(child, theme, emit, forms));
+            .push(cx.child(node, index)?);
     }
-    choice
+    Ok(choice)
 }
 
 /// Realize the `Choice` children of a `Select`/`Tabs`, in order.
 ///
 /// A child of another kind is **ignored** (with a debug log): `realize` is total for untrusted
 /// input, and the options of an option-picker are options.
-pub(crate) fn realize_options(
-    node: &ViewNode,
-    theme: &Theme,
-    emit: &IntentEmitter,
-    forms: &mut FormBindings,
-) -> Vec<Choice> {
-    node.children
-        .iter()
-        .filter(|child| {
-            let is_choice = child.kind == WidgetKind::Choice;
-            #[cfg(debug_assertions)]
-            if !is_choice {
-                eprintln!(
-                    "[heca] realize: {:?} is not a valid option of a {:?} — ignored (options are Choice nodes)",
-                    child.kind, node.kind
-                );
-            }
-            is_choice
-        })
-        .map(|child| realize_choice(child, theme, emit, forms))
-        .collect()
+pub(crate) fn realize_options(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Vec<Choice>, RealizeError> {
+    let mut options = Vec::new();
+    for (index, child) in node.children.iter().enumerate() {
+        if child.kind != WidgetId::Choice {
+            return Err(RealizeError::new(RealizeErrorKind::InvalidChild {
+                widget: node.kind.clone(), index, detail: "options must be Choice nodes".into(),
+            }));
+        }
+        options.push(cx.typed_child(node, index, realize_choice)?);
+    }
+    Ok(options)
 }
 
 /// The change handler for an option picker (`Select`/`Tabs`) — **this is where the chosen value
@@ -181,7 +151,7 @@ pub(crate) fn option_change(node: &ViewNode, emit: &IntentEmitter) -> Option<imp
     let values: Vec<Option<PropValue>> = node
         .children
         .iter()
-        .filter(|child| child.kind == WidgetKind::Choice)
+        .filter(|child| child.kind == WidgetId::Choice)
         .map(value_prop)
         .collect();
     let emit = emit.clone();
@@ -224,19 +194,16 @@ pub(crate) fn option_change(node: &ViewNode, emit: &IntentEmitter) -> Option<imp
 /// moves its cursor with. A card that is already a `Row` keeps its own behaviour: the wrapper is
 /// transparent to layout and passes focus and drag straight through, the same trade the exposé's
 /// own cards make.
-pub(crate) fn realize_card_grid(
-    node: &ViewNode,
-    theme: &Theme,
-    emit: &IntentEmitter,
-    forms: &mut FormBindings,
-) -> Box<dyn Component> {
+pub(crate) fn realize_card_grid(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    let theme = cx.theme;
+    let emit = cx.emit;
     use heca_grid_ui::builders::Parent as _;
     let mut grid = with_props(CardGrid::new(), node, theme);
     let mut columns: Vec<Vec<GridCell>> = Vec::new();
     let mut layout = Flex::row();
     let mut derived: Vec<String> = Vec::new();
-    for child in &node.children {
-        let body = realize(child, theme, emit, forms);
+    for (index, child) in node.children.iter().enumerate() {
+        let body = cx.child(node, index)?;
         // **A card never has to be named** — `key` is optional everywhere in this library, so it is
         // optional here. Gating on it is the mistake `.draggable()` made: silently dead on every
         // widget nobody had reason to name, and an internal rule an author had to learn before
@@ -289,15 +256,10 @@ pub(crate) fn realize_card_grid(
         let (intent, emit) = (intent.clone(), emit.clone());
         grid = grid.on_dismiss(move || emit(intent.clone()));
     }
-    Box::new(grid)
+    Ok(heca_grid_ui::WidgetModel::new(grid))
 }
 
-pub(crate) fn realize_grid(
-    node: &ViewNode,
-    theme: &Theme,
-    emit: &IntentEmitter,
-    forms: &mut FormBindings,
-) -> Box<dyn Component> {
+pub(crate) fn realize_grid(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
     let mut grid = Grid::new();
     if let Some(columns) = track_list(node, "columns") {
         grid = grid.template_column(columns);
@@ -317,11 +279,11 @@ pub(crate) fn realize_grid(
     // and the spans are properties of the CHILD — CSS's `grid-area` and `grid-column`/`grid-row` —
     // so the grid only holds them. A name is resolved during layout, against whichever template
     // ends up holding the child.
-    for child in &node.children {
-        let realized = placed(realize(child, theme, emit, forms), child);
+    for (index, child) in node.children.iter().enumerate() {
+        let realized = placed(cx.child(node, index)?, child);
         grid.base_mut().children.push(realized);
     }
-    Box::new(grid)
+    Ok(heca_grid_ui::WidgetModel::new(grid))
 }
 
 /// **Where a described child sits in its grid**, said through the native placement builders — one
@@ -331,7 +293,7 @@ pub(crate) fn realize_grid(
 /// a CSS line (`"2"`, `"1 / -1"`, `"1 / span 2"`) or a number, and `column_span` / `row_span` a
 /// count, `"span 2"` or `"all"`. The older `col` / `col_span` spellings are still read, so no
 /// description already sent breaks.
-fn placed(mut child: Box<dyn Component>, node: &ViewNode) -> Box<dyn Component> {
+fn placed(mut child: heca_grid_ui::WidgetModel, node: &ViewNode) -> heca_grid_ui::WidgetModel {
     use heca_grid_ui::builders::PlaceExt;
     use heca_grid_ui::style::{GridLine, Span};
     let line = |key: &str| match node.props.get(key)? {

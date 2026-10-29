@@ -10,7 +10,7 @@ use std::time::Duration;
 /// The server owns the queue, lifecycle, timers and dedup; a window draws from this. It carries
 /// only presentation data: the id, mapped-later severity, title/body, dismissibility, and the
 /// actions (each a name-keyed [`heca_view::Intent`] with a label and variant). It deliberately
-/// does **not** carry the grid-ui [`ToastSpec`](heca_grid_ui::widgets::ToastSpec): a widget type
+/// does **not** carry the grid-ui [`ToastSpec`]: a widget type
 /// has no business in serialized state, so the seam is this plain value and the window turns it
 /// into a `ToastSpec` for itself ([`toast_spec`]).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

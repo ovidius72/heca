@@ -91,7 +91,7 @@ impl DockView<'_> {
 /// contribution just to read its metadata — not an error, so it does not panic.
 pub(super) fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     let (Some(theme), Some(emit)) = (ctx.theme(), ctx.emit_intent()) else {
-        return Box::new(Flex::column());
+        return heca_grid_ui::WidgetModel::new(Flex::column());
     };
     let state = ctx.state();
     // **This component's model and catalog come from its own state** — the shared
@@ -134,7 +134,7 @@ pub(super) fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetMod
         signals: bx.signals,
         drag: bx.drag,
     };
-    Box::new(
+    heca_grid_ui::WidgetModel::new(
         DockView {
             tree: &tree,
             scroll,

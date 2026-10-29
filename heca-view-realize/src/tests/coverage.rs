@@ -1,6 +1,5 @@
 //! Vocabulary coverage — the guard that keeps the mapper from rotting.
 
-use heca_view::WidgetKind;
 
 use super::*;
 
@@ -16,16 +15,16 @@ use super::*;
 ///
 /// So the list is derived from the library's own exports, and every widget must be one of:
 ///
-/// - a [`WidgetKind`] of the same name — it can be described;
+/// - a [`WidgetId`] of the same name — it can be described;
 /// - a **declaration** on any node rather than a thing you place (a tooltip, a menu, a hint
 ///   letter, visibility) — the wrapper survives for regions that are not widgets, but nobody
 ///   needs to name it to get the behaviour;
-/// - **host-only by design**, with the reason.
+/// - **an adapter still pending in T398**, recorded explicitly until implemented.
 ///
 /// Anything else is a widget a description cannot ask for, and this says so by name.
 #[test]
 fn every_library_widget_is_describable_or_deliberately_not() {
-    /// Widgets with no `WidgetKind`, each with why. An entry is a deliberate decision, not a
+    /// Widgets with no `WidgetId`, each with why. An entry is a deliberate decision, not a
     /// place to park an omission — read the three categories in the doc above before adding one.
     const NO_KIND: &[(&str, &str)] = &[
         // ── Declarations: the behaviour is on every node, so nothing needs naming ──
@@ -42,22 +41,6 @@ fn every_library_widget_is_describable_or_deliberately_not() {
             "Visibility",
             "two declarations on any node: visible, hidden",
         ),
-        // ── Host-only by design ──
-        (
-            "ChromeRegion",
-            "host-only: a region of the window, which the host owns",
-        ),
-        ("Pane", "host-only: the app's own concept, not a primitive"),
-        ("PaneFrame", "host-only: the frame of the above"),
-        (
-            "FocusScope",
-            "host-only: focus containment the host arranges",
-        ),
-        (
-            "ScrollBar",
-            "host-only: live host signals; realize refuses it",
-        ),
-        ("ToastStack", "host-only: it holds a queue the host drives"),
         // ── Not widgets: parts, values and helpers that happen to be exported ──
         ("ImageFit", "a value set on Image.fit, not a widget"),
         ("ImageState", "observable image load state, not a widget"),
@@ -82,10 +65,6 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         ("ScrollRegion", "described as `Scroll`"),
         ("ProgressBar", "described as `Progress`"),
         // ── Native code composes these; a description has no use for them ──
-        (
-            "Keyed",
-            "a list that keeps its rows by name across rebuilds; a description already reconciles by key",
-        ),
         // ── Opened through the host API, not placed in a tree ──
         //
         // `docs/chrome-and-ui.md` § 3.5 is the agreed plugin contract: a plugin opens these
@@ -93,8 +72,6 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         // `app.actions.dispatch(..)`. They are not kinds a plugin constructs — it would then
         // own the scrim, the open state and the dismissal, and get the chosen button back
         // without the form data beside it. `Dialog` stays a widget **native** code composes.
-        ("Dialog", "opened via app.overlay.openModal (§3.5)"),
-        ("CommandPalette", "opened via the host API (§3.5)"),
     ];
 
     let exports = std::fs::read_to_string(
@@ -127,7 +104,8 @@ fn every_library_widget_is_describable_or_deliberately_not() {
     // not widgets. They are told apart by being named in a kind's properties rather than by a
     // list here, which would be one more thing to keep in step.
     let kinds: std::collections::BTreeSet<String> =
-        WidgetKind::ALL.iter().map(|k| format!("{k:?}")).collect();
+        WidgetRegistry::builtins().expect("library definitions").definitions()
+            .map(|definition| definition.metadata().native_name.to_string()).collect();
 
     let unreachable: Vec<&String> = published
         .iter()
@@ -137,7 +115,7 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         .collect();
     assert!(
         unreachable.is_empty(),
-        "these library widgets have no `WidgetKind` and no recorded reason, so a plugin can \
+        "these library widgets have no `WidgetId` and no recorded reason, so a plugin can \
          neither name them nor find out why: {unreachable:#?}\n\nAdd a kind, or add the name \
          to NO_KIND with which of the three categories it is in.",
     );
@@ -179,28 +157,24 @@ const VALUE_TYPES: &[&str] = &[
     "NamedAnimation",
 ];
 
-/// **Every `WidgetKind` realizes to a live widget** — one that either holds the children it was
+/// **Every `WidgetId` realizes to a live widget** — one that either holds the children it was
 /// given or paints something. The fallback (an empty `Flex`) does neither, so a kind with no arm
 /// fails here loudly instead of rendering nothing and being noticed months later by a plugin
 /// author.
 ///
-/// The single exception is `ScrollBar`, which is **host-only by design**: its state is live host
-/// signals (`content_extent` / `viewport_extent` / `offset`), and static serializable data
-/// fundamentally cannot drive a signal — a declarative one would render a dead control. The test
-/// asserts it realizes to *nothing*, so that decision is pinned rather than merely documented.
 #[test]
-fn every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones() {
+fn every_registered_widget_realizes_to_a_live_widget() {
     use heca_core::layout::Size;
     use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
 
     let theme = Theme::default();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         let mut widget = realize(
-            &sample_node(kind),
+            &sample_node(kind.clone()),
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         LayoutEngine::new().compute(widget.as_mut(), Size::new(400.0, 200.0));
         let mut scene = Scene::new();
         {
@@ -209,18 +183,6 @@ fn every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones() {
         }
         let alive = !widget.base().children.is_empty() || !scene.is_empty();
 
-        if kind == WidgetKind::ScrollBar {
-            assert!(
-                !alive,
-                "ScrollBar is host-only: it must NOT realize (its state is a live host signal — \
-                 a plugin uses Scroll instead)",
-            );
-        } else {
-            assert!(
-                alive,
-                "{kind:?} realized to nothing — it needs a `realize` arm (or, if its state is a \
-                 live host signal, to be documented as host-only like ScrollBar)",
-            );
-        }
+        assert!(alive, "{kind:?} realized to nothing: its registered factory must produce a live widget");
     }
 }

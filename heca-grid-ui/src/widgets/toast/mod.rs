@@ -68,10 +68,10 @@ const DISMISS: usize = 2;
 /// **An unfilled slot is removed from layout, not merely empty.** A zero-sized placeholder still
 /// costs the row's gap, which is how a card with no leading icon started its text a gap further in
 /// than a card with one. `hidden` is the engine's `display: none`.
-fn empty_slot() -> Box<dyn Component> {
+fn empty_slot() -> crate::WidgetModel {
     let mut slot = Flex::empty();
     slot.base_mut().set_hidden(true);
-    Box::new(slot)
+    crate::WidgetModel::new(slot)
 }
 
 /// Within the column: the title, then the two slots a builder fills in later.
@@ -158,7 +158,7 @@ impl Toast {
             .child(empty_slot()); // ACTION
 
         base.children.push(empty_slot()); // ICON
-        base.children.push(Box::new(column));
+        base.children.push(crate::WidgetModel::new(column));
         base.children.push(empty_slot()); // DISMISS
 
         let mut toast = Self {
@@ -278,7 +278,7 @@ impl Toast {
         let action = action.into_component();
         if !self.has_actions {
             self.has_actions = true;
-            self.column_mut()[ACTION] = Box::new(
+            self.column_mut()[ACTION] = crate::WidgetModel::new(
                 Flex::row()
                     .gap(Spacing::Sm)
                     // The row hugs its buttons — a column would otherwise stretch it edge to edge
@@ -489,7 +489,7 @@ impl Toast {
 
     /// The text column's own children — the card built both levels, so it addresses them
     /// directly rather than searching for them.
-    fn column_mut(&mut self) -> &mut Vec<Box<dyn Component>> {
+    fn column_mut(&mut self) -> &mut Vec<crate::WidgetModel> {
         &mut self.base.children[COLUMN].base_mut().children
     }
 
@@ -506,7 +506,7 @@ impl Toast {
             // change with nothing to keep in step by hand.
             let mut icon = Icon::new(glyph);
             icon.base_mut().style.visual.font_scale = ICON_SCALE;
-            Box::new(icon)
+            crate::WidgetModel::new(icon)
         } else {
             empty_slot()
         };
@@ -518,7 +518,7 @@ impl Toast {
     fn sync_dismiss(&mut self) {
         self.base.children[DISMISS] = if self.dismissible {
             let dismiss = self.on_dismiss.clone();
-            Box::new(IconButton::new(Icon::new(Glyph::Close)).on_click(move || {
+            crate::WidgetModel::new(IconButton::new(Icon::new(Glyph::Close)).on_click(move || {
                 if let Some(f) = &dismiss {
                     f();
                 }

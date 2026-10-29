@@ -34,7 +34,7 @@ type Log = Rc<RefCell<Vec<&'static str>>>;
 
 /// The shape `chrome/mod.rs` builds: a `FocusScope` wrapper around a dock body of rows. The
 /// wrapper answers "focus me", each row answers "move the cursor to me".
-fn dock(log: &Log) -> Box<dyn Component> {
+fn dock(log: &Log) -> heca_grid_ui::WidgetModel {
     let body = Flex::column()
         .width(Length::Px(200.0))
         .height(Length::Px(300.0))
@@ -49,7 +49,7 @@ fn dock(log: &Log) -> Box<dyn Component> {
         });
 
     let log = log.clone();
-    Box::new(FocusScope::new(body).on_click(move |_| log.borrow_mut().push("container")))
+    heca_grid_ui::WidgetModel::new(FocusScope::new(body).on_click(move |_| log.borrow_mut().push("container")))
 }
 
 /// Click at `at`, through the same entry point the app uses.
@@ -110,7 +110,7 @@ fn a_right_click_behaves_exactly_as_a_left_click_does() {
                 .height(Length::Px(30.0))
                 .on_right_click(move |_| log.borrow_mut().push("row"))
         });
-    let mut host: Box<dyn Component> = Box::new(FocusScope::new(body).on_right_click({
+    let mut host: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(FocusScope::new(body).on_right_click({
         let log = log.clone();
         move |_| log.borrow_mut().push("container")
     }));

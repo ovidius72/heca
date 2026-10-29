@@ -12,6 +12,29 @@ use super::Terminal;
 use crate::app::backend_store::Program;
 
 impl Terminal {
+    /// **Get or create a named terminal in the app's namespace**, without an extension handle.
+    ///
+    /// `new("shell")` declares `heca.shell` the first time; later calls and clones share its
+    /// session. The host starts the process from its declaration. Configure [`command`](Self::command)
+    /// and [`cwd`](Self::cwd) before that happens; rebuilding its UI never restarts it.
+    /// Extensions use [`Extension::terminal`](crate::Extension::terminal) for their own namespace.
+    ///
+    /// The name must be nonempty and contain no dot. A refused name is reported and returns an
+    /// unbound terminal that starts nothing, like a refused extension declaration.
+    ///
+    /// ```
+    /// use heca::Terminal;
+    /// let shell = Terminal::new("shell").title("Console");
+    /// let again = Terminal::new("shell");
+    /// assert_eq!(again.shown_title().as_deref(), Some("Console"));
+    /// ```
+    pub fn new(name: impl AsRef<str>) -> Self {
+        match crate::entry::qualified_name(crate::chrome::HOST_OWNER, "terminal", name.as_ref()) {
+            Some(name) => Self::declared(name),
+            None => Self::unbound(),
+        }
+    }
+
     /// **A terminal an extension places by name** — the one every handle of that name shares, so a
     /// dock built twice, or an overlay opened again, shows the same running process. Reached through
     /// `extension("demo").terminal("shell")`, never by naming the owner half yourself.

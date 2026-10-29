@@ -20,7 +20,7 @@ fn tops(root: &dyn Component) -> Vec<f64> {
 /// the letter picker still walk children as they were added.
 #[test]
 fn order_moves_where_a_child_is_laid_out_and_not_where_it_is_in_the_tree() {
-    let mut root: Box<dyn Component> = Box::new(Flex::column().child([
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().child([
         block().key("a"),               // 0
         block().key("b").order(-1),     // first
         block().key("c").order([0, 5]), // after every plain 0, before 1
@@ -49,7 +49,7 @@ fn order_moves_where_a_child_is_laid_out_and_not_where_it_is_in_the_tree() {
 /// Nobody says anything → exactly the order added, so every existing tree is unchanged.
 #[test]
 fn a_parent_where_nobody_says_an_order_lays_out_as_added() {
-    let mut root: Box<dyn Component> = Box::new(Flex::column().child([block(), block(), block()]));
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().child([block(), block(), block()]));
     LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 1000.0));
     assert_eq!(tops(root.as_ref()), vec![0.0, 100.0, 200.0]);
 }
@@ -58,8 +58,8 @@ fn a_parent_where_nobody_says_an_order_lays_out_as_added() {
 /// itself (CSS).
 #[test]
 fn in_a_grid_a_placed_child_stays_where_it_said() {
-    let mut root: Box<dyn Component> =
-        Box::new(Grid::new().template_row("100px 100px 100px").child([
+    let mut root: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Grid::new().template_row("100px 100px 100px").child([
             block().key("placed").row(1).order(9),
             block().key("late").order(1),
             block().key("early").order(-1),

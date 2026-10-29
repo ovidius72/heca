@@ -1,6 +1,6 @@
 //! Spacing from the theme, accents, and tooltips.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -28,7 +28,7 @@ fn a_described_tree_spaces_itself_from_the_theme() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let layout = &w.base().style.layout;
     use heca_grid_ui::style::Space;
     assert_eq!(
@@ -50,7 +50,7 @@ fn a_described_tree_spaces_itself_from_the_theme() {
 fn the_retired_spacing_names_still_reach_the_setting_that_replaced_them() {
     use heca_grid_ui::style::{Space, Spacing};
 
-    let node = ViewNode::new(WidgetKind::VStack)
+    let node = ViewNode::new(WidgetId::VStack)
         .prop("gap_spacing", PropValue::Text("xs".into()))
         .prop("pad_spacing_x", PropValue::Text("md".into()))
         .prop("pad_spacing_y", PropValue::Text("lg".into()));
@@ -60,7 +60,7 @@ fn the_retired_spacing_names_still_reach_the_setting_that_replaced_them() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let l = w.base().style.layout;
     assert_eq!(
         l.gap,
@@ -77,13 +77,13 @@ fn one_described_name_reads_a_number_and_a_step() {
     use heca_grid_ui::style::{Space, Spacing};
 
     let of = |v: PropValue| {
-        let node = ViewNode::new(WidgetKind::VStack).prop("gap", v);
+        let node = ViewNode::new(WidgetId::VStack).prop("gap", v);
         realize(
             &node,
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        )
+        ).expect("valid described test widget")
         .base()
         .style
         .layout
@@ -110,11 +110,11 @@ fn one_described_name_reads_a_number_and_a_step() {
 #[test]
 fn a_described_node_publishes_an_accent_to_its_subtree() {
     let theme = Theme::default();
-    let node = ViewNode::new(WidgetKind::Surface)
+    let node = ViewNode::new(WidgetId::Surface)
         .prop("accent", PropValue::Color("danger".into()))
-        .child(ViewNode::new(WidgetKind::Button).text("Delete"));
+        .child(ViewNode::new(WidgetId::Button).text("Delete"));
 
-    let w = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default());
+    let w = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
     assert_eq!(
         w.base().style.visual.accent,
         Some(theme.colors.danger),
@@ -144,9 +144,9 @@ fn a_described_node_publishes_an_accent_to_its_subtree() {
 #[test]
 fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
     let mut missing: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         let (emit, _fired) = recording_emitter();
-        let node = sample_node(kind)
+        let node = sample_node(kind.clone())
             .prop("tooltip", PropValue::Text("Close the pane".into()))
             .prop("tooltip_side", PropValue::Text("bottom".into()))
             .prop("tooltip_delay", PropValue::Int(2));
@@ -155,7 +155,7 @@ fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         match &widget.base().tooltip {
             None => missing.push(format!("{kind:?} (no tooltip on the realized widget)")),
             Some(tip) => {
@@ -184,9 +184,9 @@ fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
 #[test]
 fn a_quick_tooltip_declared_on_any_kind_takes_the_librarys_quick_delay() {
     let mut wrong: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         let (emit, _fired) = recording_emitter();
-        let node = sample_node(kind)
+        let node = sample_node(kind.clone())
             .prop("tooltip", PropValue::Text("Close the pane".into()))
             .prop("tooltip_quick", PropValue::Bool(true));
         let widget = realize(
@@ -194,7 +194,7 @@ fn a_quick_tooltip_declared_on_any_kind_takes_the_librarys_quick_delay() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         match &widget.base().tooltip {
             Some(tip)
                 if (tip.delay - heca_grid_ui::widgets::tooltip::QUICK_DELAY).abs()

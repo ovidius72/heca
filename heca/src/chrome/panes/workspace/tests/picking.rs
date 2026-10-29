@@ -122,7 +122,7 @@ fn a_panes_letter_takes_the_keyboard_out_of_a_dock() {
     window
         .base_mut()
         .children
-        .push(Box::new(Flex::column().child(Terminal::new())));
+        .push(heca_grid_ui::WidgetModel::new(Flex::column().child(Terminal::unbound())));
     window.base_mut().children.push(ws);
     let docked = vec![0, 0];
     assert!(
@@ -169,5 +169,5 @@ fn a_pane_asked_for_by_name_wears_the_letter() {
 #[test]
 fn a_terminal_is_named_for_what_it_is() {
     use heca_grid_ui::Component as _;
-    assert_eq!(Terminal::new().text_summary().as_deref(), Some("terminal"));
+    assert_eq!(Terminal::unbound().text_summary().as_deref(), Some("terminal"));
 }

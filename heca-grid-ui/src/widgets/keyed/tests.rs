@@ -6,10 +6,10 @@ use crate::widgets::{Flex, Label};
 use heca_core::layout::Size;
 
 /// Content the way a caller builds it: a strip holding a label addressed by its `key`.
-fn content() -> (Box<dyn Component>, Signal<String>) {
+fn content() -> (crate::WidgetModel, Signal<String>) {
     let label = Label::new("old").key("word");
     let text = label.text_signal();
-    (Box::new(Flex::row().child(label)), text)
+    (crate::WidgetModel::new(Flex::row().child(label)), text)
 }
 
 /// The node placed in a tree, once, the way its owner places it.
@@ -24,7 +24,7 @@ fn lay_out(root: &mut Flex) {
     LayoutEngine::new().compute(root, Size::new(300.0, 100.0));
 }
 
-fn built_by(count: &Cell<u32>) -> impl FnOnce() -> Option<Box<dyn Component>> + '_ {
+fn built_by(count: &Cell<u32>) -> impl FnOnce() -> Option<crate::WidgetModel> + '_ {
     move || {
         count.set(count.get() + 1);
         Some(content().0)
@@ -93,7 +93,7 @@ fn a_changed_word_is_written_without_a_rebuild() {
     let signal = text.borrow().expect("built");
     assert_eq!(signal.get_untracked(), "one");
 
-    let rebuilt = keyed.show("a", || unreachable!("the key did not change"));
+    let rebuilt = keyed.show("a", || -> Option<Label> { unreachable!("the key did not change") });
     keyed.texts(vec![("word".into(), "two".into())]);
     lay_out(&mut root);
 
@@ -145,7 +145,7 @@ fn a_build_that_makes_nothing_is_not_asked_again() {
     for _ in 0..3 {
         keyed.show("none", || {
             asked.set(asked.get() + 1);
-            None
+            None::<Label>
         });
     }
     assert_eq!(asked.get(), 1);

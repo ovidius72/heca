@@ -16,8 +16,8 @@ use crate::scene::{ArrowHeads, LineCmd};
 /// or events. Endpoints are shares of the layout box, clamped to `0..=1`.
 ///
 /// ```ignore
-/// use heca_view::{ViewNode, WidgetKind, PropValue};
-/// let arrow = ViewNode::new(WidgetKind::Line)
+/// use heca_view::{ViewNode, WidgetId, PropValue};
+/// let arrow = ViewNode::new(WidgetId::Line)
 ///     .prop("arrows", PropValue::Text("end".into()))
 ///     .prop("start_y", PropValue::Float(0.0))
 ///     .prop("end_y", PropValue::Float(1.0));

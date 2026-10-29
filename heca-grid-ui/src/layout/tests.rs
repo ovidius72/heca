@@ -341,7 +341,7 @@ fn nodes_follow_the_components_that_come_and_go() {
 
     root.base_mut()
         .children
-        .push(Box::new(Flex::row().child(Label::new("again"))));
+        .push(crate::WidgetModel::new(Flex::row().child(Label::new("again"))));
     let updated = compute(&mut root);
     assert_eq!(live(&root), all, "and a new one joined");
     assert!(updated > 0);
@@ -394,7 +394,7 @@ fn a_component_moved_under_a_new_parent_can_be_dropped_later() {
         root.base_mut().children.clear();
         root.base_mut()
             .children
-            .push(Box::new(Flex::row().child(moved)));
+            .push(crate::WidgetModel::new(Flex::row().child(moved)));
         engine.compute(&mut root, size);
         assert_eq!(live(&root), 3, "root, the new row and the moved label");
 

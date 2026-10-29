@@ -17,12 +17,12 @@ fn flush(scene: &Scene, drawn: &mut Drawn) {
 /// did not draw is not placed, whatever it was the frame before.
 #[test]
 fn a_terminal_is_placed_where_the_scene_that_held_it_drew_it() {
-    let docked = Terminal::new();
+    let docked = Terminal::unbound();
     docked.attach(TerminalId(2));
-    let pane = Terminal::new();
+    let pane = Terminal::unbound();
     pane.attach(TerminalId(1));
 
-    let root = header_above(Box::new(docked.clone()), 33.0, 308.0, 720.0);
+    let root = header_above(heca_grid_ui::WidgetModel::new(docked.clone()), 33.0, 308.0, 720.0);
     let chrome = painted(root.as_ref());
     let mut drawn = Drawn::default();
     flush(&chrome, &mut drawn);

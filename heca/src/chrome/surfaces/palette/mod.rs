@@ -198,7 +198,7 @@ pub(crate) fn open_command_palette(
         id.0,
         parent,
         LayerKind::OnDemand,
-        Box::new(palette),
+        heca_grid_ui::WidgetModel::new(palette),
         &mut state.window_root,
     );
 

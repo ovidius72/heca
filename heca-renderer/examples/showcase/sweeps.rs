@@ -78,7 +78,7 @@
 
     /// **The catalog stays inside its window, at every width**.
     ///
-    /// The same invariant `heca-view-realize` asks of every `WidgetKind`, asked here of the real
+    /// The same invariant `heca-view-realize` asks of every `WidgetId`, asked here of the real
     /// thing: the showcase is every widget in a **real composition**, with real text, which is
     /// where the failures actually live — a synthetic sample of a `Card` says `TITLE`, while the
     /// catalog's says what a card's title really looks like.
