@@ -92,6 +92,7 @@ pub struct ToastStack {
     slots: Vec<Slot>,
 }
 
+#[heca_grid_ui_macros::props]
 impl ToastStack {
     /// A new stack bound to the host's `items` signal (the render list it owns).
     pub fn new(items: Signal<Vec<ToastSpec>>) -> Self {
@@ -195,6 +196,7 @@ impl ToastStack {
     /// **Hover is asked of the framework, never re-derived**: it is marked along the hit-test
     /// target's ancestor chain before a move is delivered, so this accounts for which card is on
     /// top and what is clipped away — neither of which a private `bounds.contains(pos)` could know.
+    #[heca_grid_ui_macros::host_only("reports native pointer state to a host signal")]
     pub fn hovered_signal(mut self, hovered: Signal<bool>) -> Self {
         self.hovered = Some(hovered);
         self
@@ -312,7 +314,7 @@ impl ToastStack {
                     id: spec.id,
                     leaving: false,
                 });
-                self.base.children.push(Box::new(card));
+                self.base.children.push(crate::WidgetModel::new(card));
                 // A new card has to be measured and placed before it can arrive.
                 self.base.mark_needs_layout();
             }
@@ -337,7 +339,7 @@ impl ToastStack {
         }
         if order.iter().enumerate().any(|(at, from)| at != *from) {
             let mut slots: Vec<Option<Slot>> = self.slots.drain(..).map(Some).collect();
-            let mut cards: Vec<Option<Box<dyn Component>>> =
+            let mut cards: Vec<Option<crate::WidgetModel>> =
                 self.base.children.drain(..).map(Some).collect();
             for from in order {
                 self.slots
@@ -428,6 +430,8 @@ impl Component for ToastStack {
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
     }
+
+    fn remeasure(&mut self) { self.reconcile(); }
 
     /// Overlay-active while it has cards, so a host gives it input first — and passes everything
     /// through that misses them.

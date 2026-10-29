@@ -9,7 +9,7 @@ use heca_core::layout::LayoutOptions;
 fn built(
     start: Option<PaneId>,
 ) -> (
-    Box<dyn Component>,
+    heca_grid_ui::WidgetModel,
     std::rc::Rc<std::cell::RefCell<Vec<String>>>,
 ) {
     let s = session();

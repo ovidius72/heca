@@ -512,24 +512,13 @@ mod tests {
         }
         /// A body built from **nothing but the shared context** — one label, no model, no catalog.
         fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
-            Contribution::Container(crate::chrome::ContainerContribution {
-                id: self.id().to_string(),
-                title: self.title().to_string(),
-                supported_regions: self.supported_regions(),
-                default_region: self.default_region(),
-                movable: self.movable(),
-                collapsible: self.collapsible(),
-                build: Box::new(
-                    |ctx: &ChromeCtx<'_>, _bx: &mut crate::chrome::BuildCx<'_>| {
-                        // The theme is there for anyone; nothing else is needed to render a number.
-                        let _theme = ctx
-                            .theme()
-                            .expect("a render pass carries the frame's theme");
-                        Box::new(heca_grid_ui::widgets::Label::new("42"))
-                            as crate::chrome::WidgetModel
-                    },
-                ),
-            })
+            Contribution::Container(crate::chrome::ContainerContribution::new(self,
+                |ctx: &ChromeCtx<'_>, _bx: &mut crate::chrome::BuildCx<'_>| {
+                    // The theme is there for anyone; nothing else is needed to render a number.
+                    let _theme = ctx.theme().expect("a render pass carries the frame's theme");
+                    heca_grid_ui::widgets::Label::new("42")
+                },
+            ))
         }
     }
 

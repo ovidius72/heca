@@ -76,7 +76,7 @@ mod tests {
     use crate::chrome::surfaces::expose::testing::{callbacks, card_of, lay_out, theme};
     use heca_grid_ui::style::Length;
 
-    fn column(heights: &[f64]) -> Box<dyn heca_grid_ui::Component> {
+    fn column(heights: &[f64]) -> heca_grid_ui::WidgetModel {
         let (cb, _sink) = callbacks();
         let theme = theme();
         let col = ExposeColumn {

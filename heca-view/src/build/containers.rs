@@ -1,6 +1,6 @@
 use super::{Parent, Style};
 use crate::{
-    PropValue, ViewAnimation, ViewMarker, ViewNode, ViewRevealAlign, ViewScrollAxes, WidgetKind,
+    PropValue, ViewAnimation, ViewMarker, ViewNode, ViewRevealAlign, ViewScrollAxes, WidgetId,
 };
 
 builder!(
@@ -334,6 +334,10 @@ impl Overlay {
     pub fn frosted(self, on: bool) -> Self {
         self.prop("frosted", PropValue::Bool(on))
     }
+}
+
+impl CardGrid {
+    pub fn selected(self, key: impl Into<String>) -> Self { self.prop("selected", key.into()) }
 }
 
 impl MessageList {

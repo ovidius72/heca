@@ -170,8 +170,8 @@ impl DockFrame {
         // Inset content from the brackets and space the title bar off the body.
         base.style.layout.padding = (CONTENT_PAD).into();
         base.style.layout.gap = (HEADER_BODY_GAP).into();
-        base.children.push(Box::new(header));
-        base.children.push(Box::new(body));
+        base.children.push(crate::WidgetModel::new(header));
+        base.children.push(crate::WidgetModel::new(body));
         Self {
             base,
             expanded,
@@ -330,8 +330,8 @@ impl DockFrame {
             .row(1)
             .row_span(crate::style::Span::All);
         match self.part_mut(RAIL_AREA) {
-            Some(slot) => *slot = Box::new(icon),
-            None => self.base.children.push(Box::new(icon)),
+            Some(slot) => *slot = crate::WidgetModel::new(icon),
+            None => self.base.children.push(crate::WidgetModel::new(icon)),
         }
         self.sync();
         self
@@ -367,7 +367,7 @@ impl DockFrame {
     }
 
     /// Only this frame's template owns its parts; a component in the header may own the same names.
-    fn part_mut(&mut self, name: &str) -> Option<&mut Box<dyn Component>> {
+    fn part_mut(&mut self, name: &str) -> Option<&mut crate::WidgetModel> {
         if matches!(name, TOGGLE_AREA | CONTROLS_AREA) {
             self.base.child_in_area(HEADER_AREA)?.base_mut().child_in_area(name)
         } else {

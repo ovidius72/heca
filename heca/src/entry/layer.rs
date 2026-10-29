@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use heca_grid_ui::theme::Theme as GuiTheme;
+use heca_grid_ui::builders::IntoComponent;
 
 use crate::app_state::AppState;
 use crate::chrome::{ChromeIntentEmitter, StartupQueue, WidgetModel};
@@ -77,14 +78,26 @@ thread_local! {
 }
 
 impl LayerBuilder {
-    /// **What it shows.** Queues it; the host registers it as it starts, hidden.
-    pub fn view(self, build: impl Fn(&LayerCx<'_>) -> WidgetModel + 'static) {
+    /// **What it shows.** Return an ordinary widget or layout; no boxing or cast is required.
+    /// Queues it; the host registers it as it starts, hidden.
+    ///
+    /// ```
+    /// use heca_grid_ui::builders::Parent;
+    /// use heca_grid_ui::{Label, Overlay, Pane};
+    ///
+    /// let demo = heca::extension("layer_example");
+    /// demo.layer("details").view(|_cx| {
+    ///     Overlay::new().panel(Pane::new().child(Label::new("Details")))
+    /// });
+    /// ```
+    pub fn view<C: IntoComponent + 'static>(self, build: impl Fn(&LayerCx<'_>) -> C + 'static) {
         // A refused layer carries no name and was already reported where it was refused.
         let name = self.name;
         if name.is_empty() {
             return;
         }
-        if let Err((name, _)) = QUEUE.with(|q| q.add((name, Rc::new(build)))) {
+        let build: Rc<Build> = Rc::new(move |cx| build(cx).into_component());
+        if let Err((name, _)) = QUEUE.with(|q| q.add((name, build))) {
             crate::chrome::warn_author(format!(
                 "[heca] layer '{name}' was added after the app started, so it does nothing — add \
                  it before `heca::run()`"
@@ -138,10 +151,37 @@ mod tests {
         QUEUE.with(StartupQueue::reset);
         let demo = super::super::extension("demo");
         demo.layer("planner")
-            .view(|_| unreachable!("only built when shown"));
-        demo.layer("a.b").view(|_| unreachable!("refused"));
+            .view(|_| heca_grid_ui::Label::new("Only built when shown"));
+        demo.layer("a.b").view(|_| heca_grid_ui::Label::new("Refused"));
         let names: Vec<String> =
             QUEUE.with(|q| q.peek(|items| items.iter().map(|(n, _)| n.clone()).collect()));
         assert_eq!(names, ["demo.planner"]);
+    }
+
+    #[test]
+    fn a_plain_component_factory_builds_fresh_content_without_author_storage_conversions() {
+        use std::cell::Cell;
+        use heca_grid_ui::builders::Parent;
+        use heca_grid_ui::{Flex, Label};
+
+        super::super::extension::reset();
+        QUEUE.with(StartupQueue::reset);
+        let calls = Rc::new(Cell::new(0));
+        let count = calls.clone();
+        super::super::extension("plain_layer").layer("content").view(move |_| {
+            count.set(count.get() + 1);
+            Flex::column().child(Label::new(format!("Build {}", count.get())))
+        });
+        assert_eq!(calls.get(), 0, "startup declares the builder rather than running it");
+        let build = QUEUE.with(|queue| queue.peek(|items| items[0].1.clone()));
+        let theme = GuiTheme::default();
+        let emit = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let store = crate::chrome::SharedChromeState::new(240.0, 240.0);
+        let cx = LayerCx { theme: &theme, emit: &emit, state: StateView::over(&store) };
+        let first = build(&cx);
+        let second = build(&cx);
+        assert_eq!(first.base().children[0].text_summary().as_deref(), Some("Build 1"));
+        assert_eq!(second.base().children[0].text_summary().as_deref(), Some("Build 2"));
+        assert_eq!(calls.get(), 2);
     }
 }

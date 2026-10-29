@@ -12,6 +12,7 @@ use heca_grid_ui::scene::{DrawCommand, HostDraw, Scene};
 use heca_grid_ui::theme::Theme;
 
 mod controls;
+mod declarations;
 mod drawn;
 mod grid;
 mod handle;
@@ -63,14 +64,14 @@ fn chip(scene: &Scene) -> Option<Rectangle> {
 
 /// A clicked terminal with an owner listening, ready to be typed into.
 fn focused_terminal() -> (
-    Box<dyn heca_grid_ui::Component>,
+    heca_grid_ui::WidgetModel,
     Rc<RefCell<Vec<TerminalInput>>>,
 ) {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     let at = heca_grid_ui::Point::new(45.0, 61.0);
     heca_grid_ui::dispatch(

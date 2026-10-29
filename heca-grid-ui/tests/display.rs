@@ -159,7 +159,7 @@ fn a_separators_length_and_orientation_can_be_set_in_either_order() {
 /// children it happens on** — which is what a description needs, since properties are applied after
 /// children are attached.
 ///
-/// There was once no `Panel` widget at all: `WidgetKind::Panel` realized to a bare
+/// There was once no `Panel` widget at all: `WidgetId::Panel` realized to a bare
 /// `Surface`, so the published examples showed `Panel::new().title("…")` against something with no
 /// title, and no reader could tell.
 #[test]
@@ -424,11 +424,11 @@ fn tag_lays_out_leading_and_label_and_hugs_content() {
 
 #[test]
 fn tag_with_multiple_segments_lays_them_in_a_row() {
-    use heca_grid_ui::{Component, Glyph, Icon, Tag};
-    let leading: Option<Box<dyn Component>> = Some(Box::new(Icon::new(Glyph::File).size(13.0)));
+    use heca_grid_ui::{Component, Glyph, Icon, Label, Tag};
+    let leading = Icon::new(Glyph::File).size(13.0);
     let mut tag = Tag::new("main")
         .leading(Icon::new(Glyph::GitBranch).size(13.0))
-        .segment_text("5 +152 -12", leading);
+        .segment_label_with(Label::new("5 +152 -12"), leading);
     LayoutEngine::new().compute(&mut tag, Size::new(400.0, 40.0));
 
     assert_eq!(tag.base().children.len(), 2, "two segments");

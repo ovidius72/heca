@@ -1,6 +1,6 @@
 //! Driver-supplied identity and reported work status, following one pane's facts.
 
-use heca_grid_ui::{Component, Image, Tone, builders::{LayoutExt, Parent, PlaceExt, ToneExt, TooltipExt}};
+use heca_grid_ui::{Image, Tone, builders::{LayoutExt, Parent, PlaceExt, ToneExt, TooltipExt}};
 use heca_grid_ui::image::ImageSource;
 use heca_grid_ui::prop::PropName;
 use heca_grid_ui::reactive::{create_effect, signal, SignalGet};
@@ -12,7 +12,7 @@ use crate::chrome::panes::pane_items::LineCx;
 use crate::components::PaneName;
 use super::pane_row::{META_INDENT, set_if_changed};
 
-pub(super) fn build(cx: &LineCx<'_>) -> Box<dyn Component> {
+pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let initial = (cx.facts)();
     let primary = text(cx, true);
     let primary_text = primary.text_signal();
@@ -93,7 +93,7 @@ pub(super) fn build(cx: &LineCx<'_>) -> Box<dyn Component> {
         set_if_changed(task_text, agent.task.unwrap_or_default());
         set_if_changed(tooltip, agent.detail.unwrap_or_default());
     });
-    Box::new(row)
+    row
 }
 
 fn text(cx: &LineCx<'_>, bold: bool) -> Label {

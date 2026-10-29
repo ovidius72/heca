@@ -74,7 +74,7 @@ pub use builders::{
 };
 pub use color::Color;
 pub use component::{
-    Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, area, area_slot,
+    Base, Component, WidgetModel, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, area, area_slot,
     collect_damage, deliver, dispatch, frame_served, holds_keyboard, install_frame_request,
     needs_layout, overlay_occluded_at, paint_child, request_frame, frame_waker, FrameWake, shift_subtree,
 };
@@ -136,7 +136,7 @@ pub mod prelude {
         StyleExt, ToneExt, TooltipExt, FlashExt,
     };
     pub use crate::color::Color;
-    pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
+    pub use crate::component::{Component, WidgetModel, Event, GridKey, Handled, Modifiers, WidgetIntent};
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
     pub use crate::focus::FocusManager;
     pub use crate::hint::{

@@ -2,7 +2,7 @@
 fn a_fraction_holds_its_share_however_tall_its_content() {
     use heca_grid_ui::builders::{LayoutExt, Parent, PlaceExt};
     use heca_grid_ui::widgets::{Flex, Grid};
-    use heca_grid_ui::{Component, LayoutEngine, Size};
+    use heca_grid_ui::{LayoutEngine, Size};
 
     // Two rows, the first holding far more than its share.
     let tall = |n: usize| {
@@ -12,7 +12,7 @@ fn a_fraction_holds_its_share_however_tall_its_content() {
         }
         f
     };
-    let mut root: Box<dyn Component> = Box::new(
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Grid::new()
             .template_row("1fr 1fr")
             .height(heca_grid_ui::Length::Percent(1.0))
@@ -60,7 +60,7 @@ fn a_fraction_holds_its_share_however_tall_its_content() {
 fn a_grid_with_no_template_splits_its_children_evenly() {
     use heca_grid_ui::builders::{LayoutExt, Parent};
     use heca_grid_ui::widgets::{Flex, Grid};
-    use heca_grid_ui::{Component, LayoutEngine, Size};
+    use heca_grid_ui::{LayoutEngine, Size};
 
     let tall = |n: usize| {
         let mut f = Flex::column();
@@ -69,7 +69,7 @@ fn a_grid_with_no_template_splits_its_children_evenly() {
         }
         f
     };
-    let mut root: Box<dyn Component> = Box::new(
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Grid::new()
             .height(heca_grid_ui::Length::Percent(1.0))
             .width(heca_grid_ui::Length::Percent(1.0))
@@ -110,10 +110,10 @@ fn a_grid_with_no_template_splits_its_children_evenly() {
 fn a_child_placed_past_the_template_gets_its_own_row() {
     use heca_grid_ui::builders::{LayoutExt, Parent, PlaceExt};
     use heca_grid_ui::widgets::{Flex, Grid};
-    use heca_grid_ui::{Component, LayoutEngine, Size};
+    use heca_grid_ui::{LayoutEngine, Size};
 
     let block = || Flex::column().child(Flex::column().height(100.0));
-    let mut root: Box<dyn Component> = Box::new(
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Grid::new()
             .template_row("1fr 1fr")
             .height(heca_grid_ui::Length::Percent(1.0))
@@ -145,10 +145,10 @@ fn a_child_placed_past_the_template_gets_its_own_row() {
 fn flex_parts_split_a_row_whatever_each_child_holds() {
     use heca_grid_ui::builders::{LayoutExt, Parent};
     use heca_grid_ui::widgets::Flex;
-    use heca_grid_ui::{Component, LayoutEngine, Size};
+    use heca_grid_ui::{LayoutEngine, Size};
 
     let wide = |w: f32| Flex::row().child(Flex::row().width(w));
-    let mut root: Box<dyn Component> = Box::new(
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Flex::row()
             .width(heca_grid_ui::Length::Percent(1.0))
             .height(heca_grid_ui::Length::Percent(1.0))

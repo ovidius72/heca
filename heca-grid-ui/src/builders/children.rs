@@ -3,39 +3,31 @@
 
 use crate::component::Component;
 
-/// Components that contain children.
-/// **Anything that can be a child** — a widget, or a subtree someone else already built.
+/// Anything that can be a child: a concrete native component or an owned runtime tree.
 ///
-/// A `Box<dyn Component>` is not itself a [`Component`], which is the whole reason every
-/// child-taking builder used to come in twos: `child` / `child_boxed`, `body` / `body_boxed`,
-/// `leading` / `leading_boxed`, sixteen of them. A caller with a dynamically built subtree — what
-/// the host's `realize()` returns from a `ViewNode`, or a chrome provider's render seam — had to
-/// know which spelling to reach for, and a widget author had to remember to write both.
-///
-/// One bound covers both, so there is one builder per slot and nothing to remember. Implemented
-/// for every `Component` and for `Box<dyn Component>`; nothing else needs an impl, and a caller
-/// never names this trait.
+/// Ordinary child and factory builders perform this conversion internally. Authors use the
+/// same builder for a widget and a [`WidgetModel`](crate::WidgetModel), without storage casts.
 pub trait IntoComponent {
-    /// The subtree, boxed exactly once.
-    fn into_component(self) -> Box<dyn Component>;
+    /// The owned subtree.
+    fn into_component(self) -> crate::WidgetModel;
 }
 
 impl<C: Component + 'static> IntoComponent for C {
-    fn into_component(self) -> Box<dyn Component> {
-        Box::new(self)
+    fn into_component(self) -> crate::WidgetModel {
+        self.into()
     }
 }
 
-impl IntoComponent for Box<dyn Component> {
-    /// Already boxed — handed straight through, so a realized subtree costs no second allocation.
-    fn into_component(self) -> Box<dyn Component> {
+impl IntoComponent for crate::WidgetModel {
+    /// An existing model passes through without an additional allocation.
+    fn into_component(self) -> crate::WidgetModel {
         self
     }
 }
 
 /// **One child or many, through one builder.**
 ///
-/// A widget, an already-boxed subtree, or a `Vec`/array of either. It exists so that every place
+/// A widget, an opaque subtree, or a `Vec`/array of either. It exists so that every place
 /// that takes children takes them in whichever shape the caller happens to hold — `.child(row)` and
 /// `.child(rows)` are the same door, and nobody has to find out that a plural spelling exists.
 ///
@@ -43,25 +35,18 @@ impl IntoComponent for Box<dyn Component> {
 /// treats as a defect: the tests exercise one, the caller reaches for whichever name they saw
 /// first, and the two drift.
 pub trait IntoChildren {
-    /// The subtree(s), each boxed exactly once.
-    fn into_children(self) -> Vec<Box<dyn Component>>;
+    /// The owned subtrees.
+    fn into_children(self) -> Vec<crate::WidgetModel>;
 }
 
-impl<C: Component + 'static> IntoChildren for C {
-    fn into_children(self) -> Vec<Box<dyn Component>> {
-        vec![Box::new(self)]
-    }
-}
-
-impl IntoChildren for Box<dyn Component> {
-    /// Already boxed — handed straight through, so a realized subtree costs no second allocation.
-    fn into_children(self) -> Vec<Box<dyn Component>> {
-        vec![self]
+impl<C: IntoComponent> IntoChildren for C {
+    fn into_children(self) -> Vec<crate::WidgetModel> {
+        vec![self.into_component()]
     }
 }
 
 impl<T: IntoComponent> IntoChildren for Vec<T> {
-    fn into_children(self) -> Vec<Box<dyn Component>> {
+    fn into_children(self) -> Vec<crate::WidgetModel> {
         self.into_iter()
             .map(IntoComponent::into_component)
             .collect()
@@ -69,7 +54,7 @@ impl<T: IntoComponent> IntoChildren for Vec<T> {
 }
 
 impl<T: IntoComponent, const N: usize> IntoChildren for [T; N] {
-    fn into_children(self) -> Vec<Box<dyn Component>> {
+    fn into_children(self) -> Vec<crate::WidgetModel> {
         self.into_iter()
             .map(IntoComponent::into_component)
             .collect()
@@ -77,7 +62,7 @@ impl<T: IntoComponent, const N: usize> IntoChildren for [T; N] {
 }
 
 pub trait Parent: Component + Sized {
-    /// **Append a child, or several** — a widget, an already-boxed subtree, or a `Vec`/array of
+    /// **Append a child, or several** — a widget, an opaque subtree, or a `Vec`/array of
     /// them; see [`IntoChildren`].
     ///
     /// ```ignore

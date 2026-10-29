@@ -129,15 +129,7 @@ impl Provider for WorkspacesContainerProvider {
     }
 
     fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
-        Contribution::Container(ContainerContribution {
-            id: self.id().to_string(),
-            title: self.title().to_string(),
-            supported_regions: self.supported_regions(),
-            default_region: self.default_region(),
-            movable: self.movable(),
-            collapsible: self.collapsible(),
-            build: Box::new(build_body),
-        })
+        Contribution::Container(ContainerContribution::new(self, build_body))
     }
 
     /// What only this component can do: act on **its own** cursor.

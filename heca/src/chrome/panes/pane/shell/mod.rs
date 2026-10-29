@@ -51,7 +51,7 @@ pub(crate) struct PaneShell<'a> {
     /// It takes everything the header leaves, which is what puts the header in a strip at the top
     /// instead of in the middle of the pane. It is the header's sibling, so a header built again
     /// for a new shape leaves it the node it was.
-    pub(crate) content: Option<Box<dyn heca_grid_ui::Component>>,
+    pub(crate) content: Option<heca_grid_ui::WidgetModel>,
 }
 
 /// **The pane's two rows, named.** The parts say which one they are and the host asks by name —
@@ -183,9 +183,9 @@ impl PaneShell<'_> {
         // two children, so is the first one a header?" — put a second thing in the body and the
         // first was mistaken for one. A part is in the area it named, and a missing part is a
         // missing row.
-        let content: Box<dyn heca_grid_ui::Component> = match self.content {
+        let content: heca_grid_ui::WidgetModel = match self.content {
             Some(content) => content,
-            None => Box::new(heca_grid_ui::widgets::Flex::column().grow(1.0)),
+            None => heca_grid_ui::WidgetModel::new(heca_grid_ui::widgets::Flex::column().grow(1.0)),
         };
         let body = match &self.header {
             Some(header) => heca_grid_ui::widgets::Grid::new()

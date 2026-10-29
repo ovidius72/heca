@@ -32,7 +32,7 @@
         for &h in child_heights {
             let mut child = crate::widgets::Flex::column();
             child.base_mut().bounds = Rectangle::new(Point::new(0.0, y), Size::new(200.0, h));
-            r.base.children.push(Box::new(child));
+            r.base.children.push(crate::WidgetModel::new(child));
             y += h;
         }
         r
@@ -47,7 +47,7 @@
         for &w in child_widths {
             let mut child = crate::widgets::Flex::column();
             child.base_mut().bounds = Rectangle::new(Point::new(x, 0.0), Size::new(w, 100.0));
-            r.base.children.push(Box::new(child));
+            r.base.children.push(crate::WidgetModel::new(child));
             x += w;
         }
         r

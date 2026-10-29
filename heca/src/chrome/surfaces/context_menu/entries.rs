@@ -54,7 +54,7 @@ pub(crate) fn menu_from_items(
         &|id| catalog.icon(id),
         &|intent| {
             let emit = emit.clone();
-            Box::new(move || emit.fire_intent(intent.clone()))
+            move || emit.fire_intent(intent.clone())
         },
     )
 }

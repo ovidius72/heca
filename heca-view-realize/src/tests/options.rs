@@ -1,6 +1,6 @@
 //! Options: choice, select and tabs.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -8,17 +8,17 @@ use super::*;
 
 /// An option node: a `value` plus composed content.
 fn option_node(value: &str, label: &str) -> ViewNode {
-    ViewNode::new(WidgetKind::Choice)
+    ViewNode::new(WidgetId::Choice)
         .prop("value", PropValue::Text(value.into()))
-        .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("circle".into())))
-        .child(ViewNode::new(WidgetKind::Label).text(label))
+        .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("circle".into())))
+        .child(ViewNode::new(WidgetId::Label).text(label))
 }
 
 /// A `Select`'s options are its **children** — not a list of strings in a prop — so each one
 /// composes its own content (here an icon + a label), exactly like a native `Choice`.
 #[test]
 fn select_node_realizes_its_choice_children_as_options() {
-    let node = ViewNode::new(WidgetKind::Select)
+    let node = ViewNode::new(WidgetId::Select)
         .prop("selected", PropValue::Int(1))
         .child(option_node("low", "LOW"))
         .child(option_node("high", "HIGH"));
@@ -28,7 +28,7 @@ fn select_node_realizes_its_choice_children_as_options() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let options = &select.base().children;
     assert_eq!(options.len(), 2, "one option per Choice child");
     assert_eq!(
@@ -57,7 +57,7 @@ fn the_change_intent_carries_the_chosen_options_value_not_its_index() {
     let sink = fired.clone();
     let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
-    let node = ViewNode::new(WidgetKind::Select)
+    let node = ViewNode::new(WidgetId::Select)
         .on("change", Intent::new("set_level"))
         .child(option_node("low", "LOW"))
         .child(option_node("high", "HIGH"));
@@ -66,7 +66,7 @@ fn the_change_intent_carries_the_chosen_options_value_not_its_index() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     LayoutEngine::new().compute(select.as_mut(), Size::new(400.0, 300.0));
 
     // Open the dropdown, then click the second option where it actually is (its real bounds).
@@ -111,7 +111,7 @@ fn tabs_node_realizes_choice_children_and_reports_the_chosen_value() {
     let sink = fired.clone();
     let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
-    let node = ViewNode::new(WidgetKind::Tabs)
+    let node = ViewNode::new(WidgetId::Tabs)
         .on("change", Intent::new("show_tab"))
         .child(option_node("files", "FILES"))
         .child(option_node("issues", "ISSUES"));
@@ -120,7 +120,7 @@ fn tabs_node_realizes_choice_children_and_reports_the_chosen_value() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
     assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
@@ -143,7 +143,7 @@ fn tabs_node_realizes_choice_children_and_reports_the_chosen_value() {
 /// child the composed form would build. Same precedence rule as `Button`: children win.
 #[test]
 fn childless_choice_node_desugars_its_text_to_a_label_child() {
-    let node = ViewNode::new(WidgetKind::Choice)
+    let node = ViewNode::new(WidgetId::Choice)
         .prop("value", PropValue::Text("high".into()))
         .text("HIGH");
     let choice = realize(
@@ -151,7 +151,7 @@ fn childless_choice_node_desugars_its_text_to_a_label_child() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(
         choice.base().children.len(),
         1,
@@ -160,23 +160,21 @@ fn childless_choice_node_desugars_its_text_to_a_label_child() {
     assert_eq!(choice.text_summary().as_deref(), Some("HIGH"));
 }
 
-/// A stray non-`Choice` child of an option picker is **ignored**, not realized into a broken
-/// option and not a panic: `realize` is total for untrusted plugin/RPC input.
+/// Invalid option content is diagnosed without losing the valid options around it.
 #[test]
-fn a_non_choice_child_of_a_select_is_ignored() {
-    let node = ViewNode::new(WidgetKind::Select)
+fn a_non_choice_child_of_a_select_is_reported() {
+    let node = ViewNode::new(WidgetId::Select)
         .child(option_node("low", "LOW"))
-        .child(ViewNode::new(WidgetKind::Button).text("I am not an option"))
+        .child(ViewNode::new(WidgetId::Button).text("I am not an option"))
         .child(option_node("high", "HIGH"));
     let select = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
-    assert_eq!(
-        select.base().children.len(),
-        2,
-        "only the two Choice children became options",
-    );
+    ).expect("valid options survive malformed content");
+    let options = &select.base().children;
+    assert_eq!(options.len(), 2);
+    assert_eq!(options[0].text_summary().as_deref(), Some("LOW"));
+    assert_eq!(options[1].text_summary().as_deref(), Some("HIGH"));
 }

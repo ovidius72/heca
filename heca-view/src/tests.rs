@@ -29,14 +29,14 @@ fn a_menu_entry_reads_its_order_under_either_name() {
 // ── The identity rule, declarative half: a `press` in a collection needs a `key` ──────────
 
 fn row(action: &str) -> ViewNode {
-    ViewNode::new(WidgetKind::Row).on_press(Intent::new(action))
+    ViewNode::new(WidgetId::Row).on_press(Intent::new(action))
 }
 
 /// The case this exists for: rows built by iterating, none of them keyed. Every one is
 /// reported, because every one loses its cursor position and its letter on the next rebuild.
 #[test]
 fn every_unkeyed_pressable_row_of_a_collection_is_reported() {
-    let tree = ViewNode::new(WidgetKind::VStack)
+    let tree = ViewNode::new(WidgetId::VStack)
         .child(row("focus_pane"))
         .child(row("focus_pane"))
         .child(row("focus_pane"));
@@ -45,7 +45,7 @@ fn every_unkeyed_pressable_row_of_a_collection_is_reported() {
     assert_eq!(found.len(), 3);
     assert_eq!(found[0].path, vec![0]);
     assert_eq!(found[2].path, vec![2]);
-    assert_eq!(found[0].kind, WidgetKind::Row);
+    assert_eq!(found[0].kind, WidgetId::Row);
     assert_eq!(found[0].action, "focus_pane");
     assert_eq!(
         found[0].siblings, 3,
@@ -56,21 +56,21 @@ fn every_unkeyed_pressable_row_of_a_collection_is_reported() {
 /// Keying the items is the fix, and it is the only thing the report ever asks for.
 #[test]
 fn keyed_items_are_never_reported() {
-    let tree = ViewNode::new(WidgetKind::VStack)
+    let tree = ViewNode::new(WidgetId::VStack)
         .child(row("focus_pane").key("pane:7"))
         .child(row("focus_pane").key("pane:9"));
 
     assert_eq!(unkeyed_collection_items(&tree), vec![]);
 }
 
-/// A composed control is not a collection: `WidgetKind` says so by construction, with nothing
+/// A composed control is not a collection: `WidgetId` says so by construction, with nothing
 /// to infer about what the author meant.
 #[test]
 fn a_composed_control_is_not_a_collection() {
-    let tree = ViewNode::new(WidgetKind::Choice)
+    let tree = ViewNode::new(WidgetId::Choice)
         .on_press(Intent::new("set_level"))
-        .child(ViewNode::new(WidgetKind::Icon))
-        .child(ViewNode::new(WidgetKind::Label).text("HIGH"));
+        .child(ViewNode::new(WidgetId::Icon))
+        .child(ViewNode::new(WidgetId::Label).text("HIGH"));
 
     assert_eq!(unkeyed_collection_items(&tree), vec![]);
 }
@@ -79,10 +79,10 @@ fn a_composed_control_is_not_a_collection() {
 /// a remembered letter are kept on — decorative siblings have none of those to lose.
 #[test]
 fn a_collection_with_nothing_to_press_is_not_reported() {
-    let tree = ViewNode::new(WidgetKind::VStack)
-        .child(ViewNode::new(WidgetKind::Label).text("one"))
-        .child(ViewNode::new(WidgetKind::Label).text("two"))
-        .child(ViewNode::new(WidgetKind::Label).text("three"));
+    let tree = ViewNode::new(WidgetId::VStack)
+        .child(ViewNode::new(WidgetId::Label).text("one"))
+        .child(ViewNode::new(WidgetId::Label).text("two"))
+        .child(ViewNode::new(WidgetId::Label).text("three"));
 
     assert_eq!(unkeyed_collection_items(&tree), vec![]);
 }
@@ -91,10 +91,10 @@ fn a_collection_with_nothing_to_press_is_not_reported() {
 /// needs no key and must never be asked for one.
 #[test]
 fn a_lone_pressable_child_is_not_a_collection() {
-    let tree = ViewNode::new(WidgetKind::HStack)
-        .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
+    let tree = ViewNode::new(WidgetId::HStack)
+        .child(ViewNode::new(WidgetId::Label).text("Delete pane?"))
         .child(
-            ViewNode::new(WidgetKind::Button)
+            ViewNode::new(WidgetId::Button)
                 .text("OK")
                 .on_press(Intent::new("confirm_ok")),
         );
@@ -107,14 +107,14 @@ fn a_lone_pressable_child_is_not_a_collection() {
 /// is a key naming the action.
 #[test]
 fn a_pair_of_buttons_is_a_collection_of_two() {
-    let tree = ViewNode::new(WidgetKind::HStack)
+    let tree = ViewNode::new(WidgetId::HStack)
         .child(
-            ViewNode::new(WidgetKind::Button)
+            ViewNode::new(WidgetId::Button)
                 .text("Cancel")
                 .on_press(Intent::new("cancel")),
         )
         .child(
-            ViewNode::new(WidgetKind::Button)
+            ViewNode::new(WidgetId::Button)
                 .text("OK")
                 .on_press(Intent::new("confirm_ok")),
         );
@@ -129,8 +129,8 @@ fn a_pair_of_buttons_is_a_collection_of_two() {
 /// list, and its path says where to look.
 #[test]
 fn a_nested_collection_is_reported_with_its_path() {
-    let tree = ViewNode::new(WidgetKind::VStack).child(
-        ViewNode::new(WidgetKind::Card)
+    let tree = ViewNode::new(WidgetId::VStack).child(
+        ViewNode::new(WidgetId::Card)
             .child(row("open"))
             .child(row("open")),
     );
@@ -144,10 +144,10 @@ fn a_nested_collection_is_reported_with_its_path() {
 /// Siblings of **different** kinds are not one collection, however many of them there are.
 #[test]
 fn different_kinds_are_not_one_collection() {
-    let tree = ViewNode::new(WidgetKind::HStack)
-        .child(ViewNode::new(WidgetKind::Button).on_press(Intent::new("a")))
-        .child(ViewNode::new(WidgetKind::Row).on_press(Intent::new("b")))
-        .child(ViewNode::new(WidgetKind::Item).on_press(Intent::new("c")));
+    let tree = ViewNode::new(WidgetId::HStack)
+        .child(ViewNode::new(WidgetId::Button).on_press(Intent::new("a")))
+        .child(ViewNode::new(WidgetId::Row).on_press(Intent::new("b")))
+        .child(ViewNode::new(WidgetId::Item).on_press(Intent::new("c")));
 
     assert_eq!(unkeyed_collection_items(&tree), vec![]);
 }
@@ -156,30 +156,30 @@ fn different_kinds_are_not_one_collection() {
 /// realize side; here we only hold that the node carries it and reads it back.
 #[test]
 fn a_key_is_an_ordinary_prop_read_back_by_name() {
-    let node = ViewNode::new(WidgetKind::Row).key("pane:7");
+    let node = ViewNode::new(WidgetId::Row).key("pane:7");
     assert_eq!(node.declared_key(), Some("pane:7"));
     assert_eq!(
         node.props.get("key"),
         Some(&PropValue::Text("pane:7".into()))
     );
-    assert_eq!(ViewNode::new(WidgetKind::Row).declared_key(), None);
+    assert_eq!(ViewNode::new(WidgetId::Row).declared_key(), None);
 }
 
 /// A small confirm-dialog-shaped tree: a column with a message + two action buttons.
 fn confirm_tree() -> ViewNode {
-    ViewNode::new(WidgetKind::VStack)
+    ViewNode::new(WidgetId::VStack)
         .prop("gap", PropValue::Int(8))
-        .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
+        .child(ViewNode::new(WidgetId::Label).text("Delete pane?"))
         .child(
-            ViewNode::new(WidgetKind::HStack)
+            ViewNode::new(WidgetId::HStack)
                 .child(
-                    ViewNode::new(WidgetKind::Button)
+                    ViewNode::new(WidgetId::Button)
                         .text("Cancel")
                         .prop("variant", PropValue::Variant(ViewVariant::Secondary))
                         .on_press(Intent::new("confirm_cancel")),
                 )
                 .child(
-                    ViewNode::new(WidgetKind::Button)
+                    ViewNode::new(WidgetId::Button)
                         .text("Delete")
                         .prop("variant", PropValue::Variant(ViewVariant::Destructive))
                         .prop("size", PropValue::Size(ViewSize::Normal))
@@ -188,38 +188,24 @@ fn confirm_tree() -> ViewNode {
         )
 }
 
-/// `ALL` must list the whole vocabulary, in declaration order — the realize **coverage guard**
-/// walks it, and a guard is only as good as the list it walks. The enum and `ALL` come from one
-/// list; this fails if that ever stops being so.
+/// Arbitrary widget names survive the same JSON field as built-in names.
 #[test]
-fn all_lists_every_widget_kind() {
-    for (i, kind) in WidgetKind::ALL.iter().enumerate() {
-        assert_eq!(
-            kind.ordinal(),
-            i,
-            "{kind:?} is out of order in ALL (or missing from it)",
-        );
-    }
-    let highest = WidgetKind::ALL
-        .iter()
-        .map(|k| k.ordinal())
-        .max()
-        .expect("the vocabulary is not empty");
-    assert_eq!(
-        WidgetKind::ALL.len(),
-        highest + 1,
-        "a variant exists that ALL does not list",
-    );
+fn custom_widget_names_roundtrip_without_an_enum_change() {
+    let node = ViewNode::new("example.custom_control").text("Hello");
+    let encoded = serde_json::to_string(&node).expect("serializable node");
+    assert!(encoded.contains("example.custom_control"));
+    assert_eq!(serde_json::from_str::<ViewNode>(&encoded).expect("open node"), node);
 }
+
 
 #[test]
 fn actionable_reflects_click_binding() {
-    let btn = ViewNode::new(WidgetKind::Button)
+    let btn = ViewNode::new(WidgetId::Button)
         .text("OK")
         .on_press(Intent::new("ok"));
     assert!(btn.is_actionable());
     assert_eq!(btn.intent("press").unwrap().action, "ok");
-    assert!(!ViewNode::new(WidgetKind::Label).text("hi").is_actionable());
+    assert!(!ViewNode::new(WidgetId::Label).text("hi").is_actionable());
 }
 
 #[test]
@@ -232,7 +218,7 @@ fn json_round_trips_wasm_ready() {
         "ViewNode must round-trip through JSON (WASM boundary)"
     );
     // Spot-check the shape survived.
-    assert_eq!(back.kind, WidgetKind::VStack);
+    assert_eq!(back.kind, WidgetId::VStack);
     assert_eq!(back.children.len(), 2);
     assert!(back.children[1].children[1].is_actionable());
 }
@@ -241,7 +227,7 @@ fn json_round_trips_wasm_ready() {
 /// templates ride on — must survive the WASM boundary intact.
 #[test]
 fn every_prop_value_round_trips_including_lists() {
-    let node = ViewNode::new(WidgetKind::Grid)
+    let node = ViewNode::new(WidgetId::Grid)
         .prop(
             "columns",
             PropValue::List(vec![
@@ -273,7 +259,7 @@ fn every_prop_value_round_trips_including_lists() {
 
 #[test]
 fn empty_maps_are_omitted_in_json() {
-    let json = serde_json::to_string(&ViewNode::new(WidgetKind::Label).text("x")).unwrap();
+    let json = serde_json::to_string(&ViewNode::new(WidgetId::Label).text("x")).unwrap();
     assert!(!json.contains("events"), "empty events omitted: {json}");
     assert!(!json.contains("children"), "empty children omitted: {json}");
 }
@@ -379,7 +365,7 @@ fn an_unreadable_spacing_is_reported_when_asked_and_is_no_space_otherwise() {
 /// renamed or added event is one edit, not a search for string literals in three crates.
 #[test]
 fn an_event_is_bound_and_read_by_the_one_vocabulary() {
-    let node = ViewNode::new(WidgetKind::Row).on(ViewEvent::Press, Intent::new("open"));
+    let node = ViewNode::new(WidgetId::Row).on(ViewEvent::Press, Intent::new("open"));
 
     assert_eq!(
         node.intent(ViewEvent::Press).map(|i| i.action.as_str()),

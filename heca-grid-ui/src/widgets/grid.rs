@@ -209,10 +209,10 @@ mod tests {
     #[test]
     fn a_child_names_its_own_area_and_is_placed_at_layout() {
         use crate::widgets::Label;
-        use crate::{Component, LayoutEngine};
+        use crate::{LayoutEngine};
         use heca_core::layout::Size;
 
-        let mut grid: Box<dyn Component> = Box::new(
+        let mut grid: crate::WidgetModel = crate::WidgetModel::new(
             Grid::new()
                 .template_column("40px 100px")
                 .template_row("20px 20px")

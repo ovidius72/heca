@@ -1,5 +1,5 @@
 use heca_grid_ui::Component;
-use heca_view::{PropValue, WidgetKind};
+use heca_view::{PropValue, WidgetId};
 
 use super::modal::build_modal_root;
 use super::spec::{ModalAction, ModalSpec, OverlayId};
@@ -14,7 +14,7 @@ fn noop_emit() -> ChromeIntentEmitter {
 #[test]
 fn message_spec_wraps_body_in_a_label() {
     let spec = ModalSpec::message("Delete pane?", "This cannot be undone.");
-    assert_eq!(spec.body.kind, WidgetKind::Label);
+    assert_eq!(spec.body.kind, WidgetId::Label);
     assert_eq!(
         spec.body.props.get("text").and_then(PropValue::as_text),
         Some("This cannot be undone."),
@@ -33,7 +33,7 @@ fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
             .action(ModalAction::new("trust", "Trust"));
         let root = build_modal_root(&spec,
             OverlayId(crate::chrome::LayerRegistry::default().reserve_id()), &theme,
-            &noop_emit(), &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default());
+            &noop_emit(), &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default()).expect("valid modal fixture");
         let mut root = Flex::column().width(Length::FULL).height(Length::FULL).child(root);
         // Advance the normal arrival before inspecting what the dialog actually paints.
         root.tick(1.0);
@@ -41,13 +41,14 @@ fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
         let dialog = &root.base().children[0];
         let overlay = &dialog.base().children[0];
         let panel = &overlay.base().children[0];
-        for child in &panel.base().children {
+        let layout = heca_grid_ui::area(dialog.as_ref(), "dialog-layout").expect("dialog layout");
+        for child in &layout.base().children {
             let bounds = child.base().bounds;
             assert!(bounds.loc.y + bounds.size.h <= panel.base().bounds.loc.y + panel.base().bounds.size.h + 1.0,
                 "dialog child escapes panel at {width}px: panel {:?}; child {:?}", panel.base().bounds, bounds);
         }
         assert!(panel.base().bounds.size.w <= f64::from(theme.font_size * theme.colors.dialog.max_width_em) + 1.0);
-        let body = panel.base().children[1].base().bounds;
+        let body = heca_grid_ui::area(dialog.as_ref(), "dialog-body").expect("dialog body").base().bounds;
         let lines: Vec<_> = scene.iter().filter_map(|cmd| match cmd {
             DrawCommand::Text(text) if text.rect.loc.y >= body.loc.y
                 && text.rect.loc.y < body.loc.y + body.size.h => Some(text),
@@ -91,7 +92,7 @@ fn each_action_button_declares_the_submit_its_click_would_fire() {
         &emit,
         &shortcuts,
         &mut FormBindings::default(),
-    );
+    ).expect("valid modal fixture");
 
     let targets = heca_grid_ui::collect_hints(root.as_ref());
     assert_eq!(targets.len(), 2, "two actions → two pick targets");
@@ -108,16 +109,12 @@ fn each_action_button_declares_the_submit_its_click_would_fire() {
         );
     }
 
-    // Structure: the Dialog root composes a base Overlay (the blocking layer) whose
-    // single child is the panel holding [title, body, action-row(2)].
-    let overlay = &root.base().children[0];
-    let panel = &overlay.base().children[0];
-    assert_eq!(panel.base().children.len(), 3, "title + body + action row");
-    assert_eq!(
-        panel.base().children[2].base().children.len(),
-        2,
-        "two buttons"
-    );
+    let layout = heca_grid_ui::area(root.as_ref(), "dialog-layout").expect("dialog layout");
+    assert_eq!(layout.base().children.len(), 3, "title + body + action row");
+    assert!(heca_grid_ui::area(root.as_ref(), "dialog-title").is_some());
+    assert!(heca_grid_ui::area(root.as_ref(), "dialog-body").is_some());
+    let actions = heca_grid_ui::area(root.as_ref(), "dialog-actions").expect("dialog actions");
+    assert_eq!(actions.base().children.len(), 2, "two buttons");
 }
 
 /// **A modal's action button is one pick target, not two** (docs/hint-architecture.md § 5a).
@@ -149,7 +146,7 @@ fn a_modal_button_is_one_pick_target_not_two() {
         &emit,
         &shortcuts,
         &mut FormBindings::default(),
-    );
+    ).expect("valid modal fixture");
 
     let targets = heca_grid_ui::collect_hints(root.as_ref());
     assert_eq!(

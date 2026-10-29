@@ -5,8 +5,6 @@ use crate::{Intent, PropValue, ViewEvent};
 // on a `Separator` would be a setter that silently does nothing. The hint is not here — it is on
 // every kind, as `Style::on_hint`.
 //
-// `ScrollBar` is absent from this table and from the SDK entirely: host-only, its state is live
-// host signals, and `realize` refuses it outright rather than render a dead control.
 with_event!(
     Row { on_press => Press }
     Button { on_press => Press }
@@ -17,6 +15,7 @@ with_event!(
     Choice { on_press => Press }
     Input { on_change => Change, on_submit => Submit }
     Toggle { on_change => Change }
+    ScrollBar { on_change => Change }
     Checkbox { on_change => Change }
     Select { on_change => Change }
     Tabs { on_change => Change }

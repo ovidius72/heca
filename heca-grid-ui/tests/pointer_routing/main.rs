@@ -97,10 +97,10 @@ fn mv(root: &mut dyn Component, pos: Point) {
 type Seen = Rc<RefCell<Vec<String>>>;
 
 /// Two probes side by side, laid out: `[0]` at x 0..100, `[1]` at x 100..200, both 0..50 tall.
-fn two_probes() -> (Box<dyn Component>, Seen, Seen) {
+fn two_probes() -> (heca_grid_ui::WidgetModel, Seen, Seen) {
     let (a, seen_a) = Probe::new(100.0, 50.0);
     let (b, seen_b) = Probe::new(100.0, 50.0);
-    let mut root: Box<dyn Component> = Box::new(Flex::row().child(a).child(b));
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::row().child(a).child(b));
     LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 50.0));
     (root, seen_a, seen_b)
 }

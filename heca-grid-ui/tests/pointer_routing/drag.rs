@@ -10,12 +10,12 @@ fn hold(root: &mut dyn Component, meta: bool) {
 }
 
 /// A 100 × 50 source that can be picked up only while Cmd is held, laid out at the origin.
-fn gated() -> (Box<dyn Component>, Seen) {
+fn gated() -> (heca_grid_ui::WidgetModel, Seen) {
     let (mut probe, seen) = Probe::new(100.0, 50.0);
     probe.base.draggable = true;
     probe.base.key = Some("item".into());
     probe.base.drag_gate = Some(Rc::new(|m: Modifiers| m.meta));
-    let mut root: Box<dyn Component> = Box::new(Flex::row().child(probe));
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::row().child(probe));
     LayoutEngine::new().compute(root.as_mut(), Size::new(100.0, 50.0));
     (root, seen)
 }
@@ -83,7 +83,7 @@ fn a_drop_target_that_accepts_the_kind_hears_the_drag_begin_and_end() {
     let (mut refuses, refuses_seen) = Probe::new(100.0, 50.0);
     refuses.base.drop_target = true;
     refuses.base.accepts = vec!["column".into()];
-    let mut root: Box<dyn Component> = Box::new(
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Flex::row()
             .child(source)
             .child(takes)

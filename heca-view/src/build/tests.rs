@@ -1,5 +1,5 @@
 use super::*;
-use crate::{Intent, PropValue, ViewEvent, ViewNode, WidgetKind};
+use crate::{Intent, PropValue, ViewEvent, ViewNode, WidgetId};
 
 #[test]
 fn marker_and_tag_properties_reach_the_described_tree() {
@@ -18,10 +18,10 @@ fn a_built_tree_is_an_ordinary_view_node() {
         .child(Label::new("nginx").bold(true))
         .into_node();
 
-    let by_hand = ViewNode::new(WidgetKind::VStack)
+    let by_hand = ViewNode::new(WidgetId::VStack)
         .prop("gap", PropValue::Float(8.0))
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("nginx")
                 .prop("bold", PropValue::Bool(true)),
         );
@@ -121,73 +121,73 @@ fn a_builder_with_text_and_one_without_convert_the_same_way() {
     assert_eq!(ViewNode::from(plain.clone()), plain.into_node());
 }
 
-/// **Every kind of the vocabulary has a builder that can be given a hint** — or is named here with
-/// its reason. The match is exhaustive, so a kind added to `WidgetKind` does not compile here until
-/// someone writes its builder or its exemption: a kind cannot be left without one unnoticed.
+/// The legacy typed builders preserve their hint capability through the identifier migration.
+/// Current host registrations are audited in heca-view-realize, where implementations exist;
+/// this serialization-only crate does not maintain the host inventory.
 ///
 /// The hint is one method on `Style`, so a builder made any other way than the builder macros
 /// would have none; this is what would say so.
 #[test]
 fn every_kind_has_a_builder_that_can_be_given_a_hint() {
     /// The builder for `kind` as a node, or `None` where the SDK has none — with the reason.
-    fn builder(kind: WidgetKind) -> Option<ViewNode> {
-        use WidgetKind as K;
-        Some(match kind {
-            K::Image => Image::new().svg(r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#).on_hint(Intent::new("pick")).into_node(),
-            K::VStack => VStack::new().on_hint(Intent::new("pick")).into_node(),
-            K::HStack => HStack::new().on_hint(Intent::new("pick")).into_node(),
-            K::Row => Row::new().on_hint(Intent::new("pick")).into_node(),
-            K::TreeLayout => TreeLayout::new().on_hint(Intent::new("pick")).into_node(),
-            K::MessageList => MessageList::new().on_hint(Intent::new("pick")).into_node(),
-            K::Resizable => Resizable::new().on_hint(Intent::new("pick")).into_node(),
-            K::Line => Line::new().on_hint(Intent::new("pick")).into_node(),
-            K::Grid => Grid::new().on_hint(Intent::new("pick")).into_node(),
-            K::Card => Card::new("x").on_hint(Intent::new("pick")).into_node(),
-            K::Scroll => Scroll::new().on_hint(Intent::new("pick")).into_node(),
-            K::Panel => Panel::new().on_hint(Intent::new("pick")).into_node(),
-            K::Surface => Surface::new().on_hint(Intent::new("pick")).into_node(),
-            K::ItemGroup => ItemGroup::new().on_hint(Intent::new("pick")).into_node(),
-            K::DockFrame => DockFrame::new().on_hint(Intent::new("pick")).into_node(),
-            K::Overlay => Overlay::new().on_hint(Intent::new("pick")).into_node(),
-            K::MarkerGroup => MarkerGroup::new().on_hint(Intent::new("pick")).into_node(),
-            K::Tabs => Tabs::new().on_hint(Intent::new("pick")).into_node(),
-            K::Choice => Choice::new().on_hint(Intent::new("pick")).into_node(),
-            K::KeyHintGroup => KeyHintGroup::new().on_hint(Intent::new("pick")).into_node(),
-            K::Label => Label::new("x").on_hint(Intent::new("pick")).into_node(),
-            K::Button => Button::new().on_hint(Intent::new("pick")).into_node(),
-            K::IconButton => IconButton::new().on_hint(Intent::new("pick")).into_node(),
-            K::Badge => Badge::new("x").on_hint(Intent::new("pick")).into_node(),
-            K::BadgeButton => BadgeButton::new("x")
+    fn builder(kind: WidgetId) -> Option<ViewNode> {
+        Some(match kind.as_str() {
+            "image" => Image::new().svg(r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#).on_hint(Intent::new("pick")).into_node(),
+            "v_stack" => VStack::new().on_hint(Intent::new("pick")).into_node(),
+            "h_stack" => HStack::new().on_hint(Intent::new("pick")).into_node(),
+            "row" => Row::new().on_hint(Intent::new("pick")).into_node(),
+            "tree_layout" => TreeLayout::new().on_hint(Intent::new("pick")).into_node(),
+            "message_list" => MessageList::new().on_hint(Intent::new("pick")).into_node(),
+            "resizable" => Resizable::new().on_hint(Intent::new("pick")).into_node(),
+            "line" => Line::new().on_hint(Intent::new("pick")).into_node(),
+            "grid" => Grid::new().on_hint(Intent::new("pick")).into_node(),
+            "card" => Card::new("x").on_hint(Intent::new("pick")).into_node(),
+            "scroll" => Scroll::new().on_hint(Intent::new("pick")).into_node(),
+            "panel" => Panel::new().on_hint(Intent::new("pick")).into_node(),
+            "surface" => Surface::new().on_hint(Intent::new("pick")).into_node(),
+            "item_group" => ItemGroup::new().on_hint(Intent::new("pick")).into_node(),
+            "dock_frame" => DockFrame::new().on_hint(Intent::new("pick")).into_node(),
+            "overlay" => Overlay::new().on_hint(Intent::new("pick")).into_node(),
+            "marker_group" => MarkerGroup::new().on_hint(Intent::new("pick")).into_node(),
+            "tabs" => Tabs::new().on_hint(Intent::new("pick")).into_node(),
+            "choice" => Choice::new().on_hint(Intent::new("pick")).into_node(),
+            "key_hint_group" => KeyHintGroup::new().on_hint(Intent::new("pick")).into_node(),
+            "label" => Label::new("x").on_hint(Intent::new("pick")).into_node(),
+            "button" => Button::new().on_hint(Intent::new("pick")).into_node(),
+            "icon_button" => IconButton::new().on_hint(Intent::new("pick")).into_node(),
+            "badge" => Badge::new("x").on_hint(Intent::new("pick")).into_node(),
+            "badge_button" => BadgeButton::new("x")
                 .on_hint(Intent::new("pick"))
                 .into_node(),
-            K::Tag => Tag::new("x").on_hint(Intent::new("pick")).into_node(),
-            K::Icon => Icon::new().on_hint(Intent::new("pick")).into_node(),
-            K::Input => Input::new().on_hint(Intent::new("pick")).into_node(),
-            K::Select => Select::new().on_hint(Intent::new("pick")).into_node(),
-            K::Toggle => Toggle::new().on_hint(Intent::new("pick")).into_node(),
-            K::Checkbox => Checkbox::new().on_hint(Intent::new("pick")).into_node(),
-            K::StatusDot => StatusDot::new().on_hint(Intent::new("pick")).into_node(),
-            K::Gauge => Gauge::new().on_hint(Intent::new("pick")).into_node(),
+            "tag" => Tag::new("x").on_hint(Intent::new("pick")).into_node(),
+            "icon" => Icon::new().on_hint(Intent::new("pick")).into_node(),
+            "input" => Input::new().on_hint(Intent::new("pick")).into_node(),
+            "select" => Select::new().on_hint(Intent::new("pick")).into_node(),
+            "toggle" => Toggle::new().on_hint(Intent::new("pick")).into_node(),
+            "checkbox" => Checkbox::new().on_hint(Intent::new("pick")).into_node(),
+            "status_dot" => StatusDot::new().on_hint(Intent::new("pick")).into_node(),
+            "gauge" => Gauge::new().on_hint(Intent::new("pick")).into_node(),
             // Host-only: its state is live host signals, and `realize` refuses it outright.
-            K::ScrollBar => return None,
-            K::Alert => Alert::new().on_hint(Intent::new("pick")).into_node(),
-            K::Toast => Toast::new().on_hint(Intent::new("pick")).into_node(),
-            K::RailCell => RailCell::new().on_hint(Intent::new("pick")).into_node(),
-            K::Item => Item::new().on_hint(Intent::new("pick")).into_node(),
-            K::Separator => Separator::new().on_hint(Intent::new("pick")).into_node(),
-            K::Splitter => Splitter::new().on_hint(Intent::new("pick")).into_node(),
-            K::LandingSlot => LandingSlot::new().on_hint(Intent::new("pick")).into_node(),
-            K::CardGrid => CardGrid::new().on_hint(Intent::new("pick")).into_node(),
-            K::Spinner => Spinner::new().on_hint(Intent::new("pick")).into_node(),
-            K::Progress => Progress::new().on_hint(Intent::new("pick")).into_node(),
-            K::NfIcon => NfIcon::new().on_hint(Intent::new("pick")).into_node(),
-            K::ButtonGroup => ButtonGroup::new().on_hint(Intent::new("pick")).into_node(),
-            K::Tile => Tile::new().on_hint(Intent::new("pick")).into_node(),
+            "scroll_bar" => ScrollBar::new().content_extent(100.0).viewport_extent(10.0).on_hint(Intent::new("pick")).into_node(),
+            "alert" => Alert::new().on_hint(Intent::new("pick")).into_node(),
+            "toast" => Toast::new().on_hint(Intent::new("pick")).into_node(),
+            "rail_cell" => RailCell::new().on_hint(Intent::new("pick")).into_node(),
+            "item" => Item::new().on_hint(Intent::new("pick")).into_node(),
+            "separator" => Separator::new().on_hint(Intent::new("pick")).into_node(),
+            "splitter" => Splitter::new().on_hint(Intent::new("pick")).into_node(),
+            "landing_slot" => LandingSlot::new().on_hint(Intent::new("pick")).into_node(),
+            "card_grid" => CardGrid::new().on_hint(Intent::new("pick")).into_node(),
+            "spinner" => Spinner::new().on_hint(Intent::new("pick")).into_node(),
+            "progress" => Progress::new().on_hint(Intent::new("pick")).into_node(),
+            "nf_icon" => NfIcon::new().on_hint(Intent::new("pick")).into_node(),
+            "button_group" => ButtonGroup::new().on_hint(Intent::new("pick")).into_node(),
+            "tile" => Tile::new().on_hint(Intent::new("pick")).into_node(),
+            _ => return None,
         })
     }
 
-    for &kind in WidgetKind::ALL {
-        let Some(node) = builder(kind) else { continue };
+    for kind in crate::kind::legacy_wire_ids() {
+        let Some(node) = builder(kind.clone()) else { continue };
         assert_eq!(
             node.kind, kind,
             "the builder for {kind:?} builds another kind"

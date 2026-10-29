@@ -37,7 +37,7 @@
 //! # Staying honest
 //!
 //! `every_widget_property_is_reachable_from_the_sdk` in `heca-view-realize` walks
-//! [`WidgetKind::ALL`](crate::WidgetKind::ALL) against each widget's generated `PROP_NAMES` and
+//! the actual registered definitions against each widget's generated `PROP_NAMES` and
 //! fails when a property has no builder here. It fails **closed**: a new property must reach the
 //! SDK, or someone must name an exception and say why. Without it this file becomes the
 //! hand-written list that falls behind, which is the defect this whole phase exists to remove.
@@ -49,6 +49,9 @@
 #[macro_use]
 mod macros;
 mod containers;
+mod composition;
+mod surfaces;
+mod terminal;
 mod controls;
 mod display;
 mod events;
@@ -57,6 +60,9 @@ mod style;
 mod tests;
 
 pub use containers::*;
+pub use composition::*;
+pub use surfaces::*;
+pub use terminal::Terminal;
 pub use controls::*;
 pub use display::*;
 pub use macros::Parent;

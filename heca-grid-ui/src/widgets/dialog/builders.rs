@@ -34,9 +34,9 @@ impl Dialog {
         }
         // Surface owns the panel box; Grid arranges its content inside that box.
         let panel = Surface::new()
-            .min_width(Self::BASELINE_WIDTH)
             .padding(DIALOG_PAD)
             .child(layout);
+        let authored_style = panel.base().style;
 
         // The base Overlay owns the layer presentation: blocking (scrim + swallow),
         // viewport centering, drop shadow, panel fill, bracket reticle. Its open
@@ -57,14 +57,14 @@ impl Dialog {
             .lock(true)
             .panel(panel)
             .open_when(base.open);
-        base.children.push(Box::new(overlay));
+        base.children.push(crate::WidgetModel::new(overlay));
 
         Self {
             base,
+            authored_style,
             dismissible: true,
             on_dismiss: None,
             danger: false,
-            panel_max_width: None,
         }
     }
 
@@ -89,19 +89,16 @@ impl Dialog {
     #[heca_grid_ui_macros::host_only(
         "takes more than one value, which a single property cannot carry"
     )]
-    pub fn panel_size(mut self, width: Length, height: Length) -> Self {
-        let style = &mut self.panel_mut().style.layout;
-        style.width = width;
-        style.height = height;
-        style.flex_basis = None;
-        self
+    pub fn panel_size(self, width: Length, height: Length) -> Self {
+        let mut dialog = self.width(width).height(height);
+        dialog.authored_style.layout.flex_basis = None;
+        dialog
     }
 
     /// Override the theme's readable width cap. The viewport still limits narrow windows.
     #[heca_grid_ui_macros::prop]
-    pub fn panel_max_width(mut self, width: Length) -> Self {
-        self.panel_max_width = Some(width);
-        self
+    pub fn panel_max_width(self, width: Length) -> Self {
+        self.max_width(width)
     }
 
     /// Append one or many body components, independently of action-builder order.
@@ -121,7 +118,7 @@ impl Dialog {
             let before_actions = layout.children.iter().position(|part| {
                 part.base().grid_area.as_deref() == Some(ACTIONS_AREA)
             }).unwrap_or(layout.children.len());
-            layout.children.insert(before_actions, Box::new(body));
+            layout.children.insert(before_actions, crate::WidgetModel::new(body));
         }
         self.part_mut(BODY_AREA)
             .expect("the body was just created")
@@ -200,16 +197,16 @@ impl Dialog {
     /// wired with its `on_click` + hint target). Buttons live in a right-aligned row along
     /// the panel bottom, in call order.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn action(mut self, button: impl Component + 'static) -> Self {
+    pub fn action(mut self, button: impl crate::builders::IntoComponent) -> Self {
         if self.part_mut(ACTIONS_AREA).is_none() {
             // Lazily create the right-aligned action row on first use.
             let row = Flex::row().gap(DIALOG_BTN_GAP).justify("end").area(ACTIONS_AREA);
-            self.layout_mut().base_mut().children.push(Box::new(row));
+            self.layout_mut().base_mut().children.push(crate::WidgetModel::new(row));
         }
         self.part_mut(ACTIONS_AREA).expect("the action row was just created")
             .base_mut()
             .children
-            .push(Box::new(button));
+            .push(button.into_component());
         self.sync_template();
         self
     }
@@ -289,7 +286,7 @@ impl Dialog {
         "a live signal; a description carries a starting value, `open`"
     )]
     pub fn open_when(mut self, open: Signal<bool>) -> Self {
-        let overlay = std::mem::replace(&mut self.base.children[0], Box::new(Flex::column()));
+        let overlay = std::mem::replace(&mut self.base.children[0], crate::WidgetModel::new(Flex::column()));
         self.base.children[0] = overlay;
         self.base.open = open;
         self.base.children[0].follow_open(open);
@@ -317,11 +314,11 @@ impl Dialog {
     }
 
     /// Search only this panel's parts: a nested dialog may use the same area names.
-    pub(super) fn part_mut(&mut self, name: &str) -> Option<&mut Box<dyn Component>> {
+    pub(super) fn part_mut(&mut self, name: &str) -> Option<&mut crate::WidgetModel> {
         self.layout_mut().base_mut().child_in_area(name)
     }
 
-    fn layout_mut(&mut self) -> &mut Box<dyn Component> {
+    fn layout_mut(&mut self) -> &mut crate::WidgetModel {
         self.panel_mut().child_in_area(LAYOUT_AREA)
             .expect("the panel owns its layout")
     }
@@ -340,6 +337,6 @@ impl Dialog {
         }
         let mut panel = Grid::new().template_column("1fr").template_row(rows).template_area(areas);
         std::mem::swap(panel.base_mut(), slot.base_mut());
-        *slot = Box::new(panel);
+        *slot = crate::WidgetModel::new(panel);
     }
 }

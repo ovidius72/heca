@@ -3,7 +3,7 @@
 //! This is the **app-wide** UI description: any UI — native chrome, overlays, and plugin
 //! panels — can be expressed as a tree of `ViewNode`s and turned into retained grid-ui
 //! `Component`s by the mapper `realize()` in `heca-view-realize`.
-//! It is **generic** (its [`WidgetKind`] covers the whole grid-ui vocabulary) and fully
+//! It is **generic** (its [`WidgetId`] is an open name resolved by the host) and fully
 //! **serializable** (serde), so the exact same model authored in Rust is what a WASM plugin
 //! ships over the boundary.
 //!
@@ -17,8 +17,8 @@
 //! actionable node pickable by `prefix+/` for free, and `on_hint` says what a pick does when that
 //! differs from a click.
 //!
-//! Adding a widget = one [`WidgetKind`] variant + one arm in `realize`. Nothing here holds
-//! layout or paint logic — this is pure description.
+//! A host adds a widget through one factory/metadata definition in `heca-view-realize`.
+//! No model enum changes are required. Nothing here holds layout or paint logic.
 //!
 //! Consumed by `realize`, the Modal `body` and plugins. Everything
 //! here is `pub`: it is the published vocabulary, so there is nothing to mark dead.

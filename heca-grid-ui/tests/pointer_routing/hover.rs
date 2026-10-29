@@ -25,7 +25,7 @@ fn consuming_a_press_does_not_suppress_a_neighbours_leave() {
     let (a, seen_a) = Probe::new(100.0, 50.0);
     let (b, seen_b) = Probe::new(100.0, 50.0);
     let b = b.consuming(EventKind::PointerDown);
-    let mut root: Box<dyn Component> = Box::new(Flex::row().child(a).child(b));
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::row().child(a).child(b));
     LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 50.0));
 
     mv(root.as_mut(), LEFT);

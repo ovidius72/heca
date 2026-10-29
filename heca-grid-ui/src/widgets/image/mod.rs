@@ -47,7 +47,7 @@ impl Image {
         let color = signal(None);
         let mut base = Base::container();
         base.style.layout.direction = crate::style::Direction::Column;
-        base.children.push(Box::new(Picture::new(image, fit, color)));
+        base.children.push(crate::WidgetModel::new(Picture::new(image, fit, color)));
         Self {
             base, source: signal(source), root: std::env::current_dir().unwrap_or_default(),
             requested: None, handle: None, image, state: signal(ImageState::Loading),
@@ -131,14 +131,14 @@ impl Component for Image {
 impl LayoutExt for Image {}
 
 // Absolute slots do not change the picture's box; they remain real layout/event children.
-fn slot(view: impl crate::builders::IntoComponent, error: bool, state: Signal<ImageState>) -> Box<dyn Component> {
+fn slot(view: impl crate::builders::IntoComponent, error: bool, state: Signal<ImageState>) -> crate::WidgetModel {
     let slot = Visibility::new(Flex::column().at_rect(0, 0, Length::FULL, Length::FULL).child(view.into_component()), !error);
     let visible = slot.visible_signal();
     create_effect(move |_| {
         let show = matches!((error, state.get()), (false, ImageState::Loading) | (true, ImageState::Failed(_)));
         if visible.get_untracked() != show { visible.set(show); }
     });
-    Box::new(slot)
+    crate::WidgetModel::new(slot)
 }
 
 /// The replaced picture is a real leaf; loading/error views are siblings above it. This keeps

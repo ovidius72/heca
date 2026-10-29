@@ -20,7 +20,7 @@
 //! ```ignore
 //! let header = Keyed::new();                 // placed once, with the pane that owns it
 //! // …each frame, from whatever knows the facts:
-//! header.show(shape_key(&facts), || Some(Box::new(build_header(&facts))));
+//! header.show(shape_key(&facts), || Some(build_header(&facts)));
 //! header.texts(vec![("hdr.seg:location".into(), facts.cwd())]);
 //! ```
 
@@ -37,7 +37,7 @@ struct State {
     /// The key of the content most recently built, or `None` when the node now placed has none.
     key: RefCell<Option<String>>,
     /// Content built and not yet taken by the node.
-    pending: RefCell<Option<Box<dyn Component>>>,
+    pending: RefCell<Option<crate::WidgetModel>>,
     /// Words to write, by the key of the widget that shows each.
     texts: RefCell<Vec<(String, String)>>,
     /// Whether the words changed since the node wrote them.
@@ -66,16 +66,16 @@ impl Keyed {
 
     /// **Show the content `key` stands for.** `build` makes it, and is called only when `key` is not
     /// the one already shown; `None` from it shows nothing. Returns whether it built.
-    pub fn show(
+    pub fn show<C: crate::builders::IntoComponent>(
         &self,
         key: impl Into<String>,
-        build: impl FnOnce() -> Option<Box<dyn Component>>,
+        build: impl FnOnce() -> Option<C>,
     ) -> bool {
         let key = key.into();
         if self.state.key.borrow().as_deref() == Some(key.as_str()) {
             return false;
         }
-        *self.state.pending.borrow_mut() = build();
+        *self.state.pending.borrow_mut() = build().map(crate::builders::IntoComponent::into_component);
         *self.state.key.borrow_mut() = Some(key);
         // The words belong to the tree just built, so they are written onto it too.
         self.state.texts_dirty.set(true);

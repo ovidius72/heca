@@ -4,7 +4,7 @@ use super::*;
 
 impl Base {
     /// A part owned by this container, without crossing into a nested component's template.
-    pub(crate) fn child_in_area(&mut self, name: &str) -> Option<&mut Box<dyn Component>> {
+    pub(crate) fn child_in_area(&mut self, name: &str) -> Option<&mut crate::WidgetModel> {
         self.children.iter_mut().find(|child| child.base().grid_area.as_deref() == Some(name))
     }
 

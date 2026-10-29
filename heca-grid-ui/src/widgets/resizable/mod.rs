@@ -24,11 +24,11 @@ mod grip;
 /// Described children form the content (several children are stacked in a column).
 ///
 /// ```ignore
-/// use heca_view::{ViewNode, WidgetKind, PropValue};
-/// let editor = ViewNode::new(WidgetKind::Resizable)
+/// use heca_view::{ViewNode, WidgetId, PropValue};
+/// let editor = ViewNode::new(WidgetId::Resizable)
 ///     .prop("min_height", PropValue::Float(60.0))
 ///     .prop("max_height", PropValue::Float(240.0))
-///     .child(ViewNode::new(WidgetKind::Input).prop("multiline", PropValue::Bool(true)));
+///     .child(ViewNode::new(WidgetId::Input).prop("multiline", PropValue::Bool(true)));
 /// ```
 pub struct Resizable {
     grid: Grid,
@@ -67,7 +67,7 @@ impl Resizable {
     /// Replace the default diagonal corner strokes with an icon. Colors and size follow the theme.
     #[heca_grid_ui_macros::prop]
     pub fn grip(mut self, glyph: Glyph) -> Self {
-        self.grid.base_mut().children[1].base_mut().children[0] = Box::new(Icon::new(glyph).row(1).column(1));
+        self.grid.base_mut().children[1].base_mut().children[0] = crate::WidgetModel::new(Icon::new(glyph).row(1).column(1));
         self
     }
 

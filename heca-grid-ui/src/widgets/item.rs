@@ -116,9 +116,9 @@ impl Item {
         let label = Label::new(label).align(TextAlign::Start).grow(1.0);
         let text = label.text_signal();
         let label_bold = label.bold_signal();
-        base.children.push(Box::new(Flex::empty()));
-        base.children.push(Box::new(label));
-        base.children.push(Box::new(Flex::empty()));
+        base.children.push(crate::WidgetModel::new(Flex::empty()));
+        base.children.push(crate::WidgetModel::new(label));
+        base.children.push(crate::WidgetModel::new(Flex::empty()));
 
         Self {
             base,

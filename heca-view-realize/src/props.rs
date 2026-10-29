@@ -1,7 +1,7 @@
 //! Reading a node's props: text, numbers, values, names, glyphs, variants and sizes.
 
 use heca_grid_ui::{ButtonVariant, Glyph, WidgetSize};
-use heca_view::{PropValue, ViewNode, WidgetKind};
+use heca_view::{PropValue, ViewNode, WidgetId};
 
 use crate::vocab::{map_size, map_variant};
 
@@ -47,7 +47,7 @@ pub(crate) fn value_string(value: &PropValue) -> String {
 pub(crate) fn option_values(node: &ViewNode) -> Vec<String> {
     node.children
         .iter()
-        .filter(|c| c.kind == WidgetKind::Choice)
+        .filter(|c| c.kind == WidgetId::Choice)
         .map(|c| {
             value_prop(c)
                 .map(|v| value_string(&v))

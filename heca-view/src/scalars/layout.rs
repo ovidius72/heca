@@ -4,6 +4,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::PropValue;
 
+value_set! {
+    /// The native status dot's semantic state.
+    pub enum ViewDotStatus {
+        Online => "online",
+        Warning => "warning",
+        Error => "error",
+        Offline => "offline",
+    }
+    /// Generic pane frame decoration, independent of the pane's content.
+    pub enum ViewFrameStyle {
+        None => "none",
+        Bordered => "bordered",
+        Bracketed => "bracketed",
+    }
+    /// Display mode of a generic chrome region.
+    pub enum ViewRegionMode {
+        Expanded => "expanded",
+        CollapsedRail => "collapsed_rail",
+        Hidden => "hidden",
+    }
+}
+
 /// Semantic cross-axis alignment — mirrors grid-ui `Align` (the plan's `align` prop enum).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -238,7 +260,7 @@ impl From<ViewOrder> for PropValue {
 }
 
 value_set! {
-    /// How a [`ButtonGroup`](crate::WidgetKind::ButtonGroup) shows its actions — mirrors grid-ui
+    /// How a [`ButtonGroup`](crate::WidgetId::ButtonGroup) shows its actions — mirrors grid-ui
     /// `Display`.
     ///
     /// Whatever does not fit collapses into a ⋮ menu whichever of these is chosen; this only decides

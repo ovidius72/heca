@@ -1,6 +1,6 @@
 //! Picking, verbs and menus declared on any kind.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -26,7 +26,7 @@ fn a_plugin_can_make_anything_pickable_from_the_sdk() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(
         hints(widget.as_ref()),
         vec![Vec::<usize>::new()],
@@ -44,7 +44,7 @@ fn a_plugin_can_make_anything_pickable_from_the_sdk() {
 ///
 /// The rule `components/mod.rs` already states for anything sized by its container — *lay it out
 /// in a box and assert it never exceeds it* — asked of the **whole vocabulary** rather than one
-/// composition at a time. It walks `WidgetKind::ALL`, so a kind added next month is covered
+/// composition at a time. It walks `WidgetId::ALL`, so a kind added next month is covered
 /// with nobody remembering, and a plugin's tree is covered by construction: it is built from
 /// these kinds.
 ///
@@ -64,7 +64,7 @@ fn no_kind_paints_outside_the_box_it_is_given() {
 
     let theme = Theme::default();
     let mut escapes: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         // Down to 32px. **A box is never narrower than its own padding** — that is the box
         // model, not a defect: a card padded 13 a side has a 26px floor, and asking it to fit
         // in 24 is asking it to have no box at all. Every escape this sweep exists for still
@@ -73,9 +73,10 @@ fn no_kind_paints_outside_the_box_it_is_given() {
         for box_w in [400.0f64, 120.0, 60.0, 32.0] {
             // A parent that hands it a definite width: a kind sized as a share has nothing to
             // be a share *of* at the root of a layout.
-            let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
+            let node = ViewNode::new(WidgetId::VStack).child(sample_node(kind.clone()));
             let mut root =
-                realize(&node, &theme, &noop_emitter(), &mut FormBindings::default());
+                realize(&node, &theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
+            root.tick(0.3);
             root.base_mut().style.layout.width = heca_grid_ui::Length::Px(box_w as f32);
             LayoutEngine::new().compute(root.as_mut(), Size::new(box_w, 200.0));
 
@@ -125,19 +126,17 @@ fn no_kind_with_content_renders_as_nothing() {
 
     let theme = Theme::default();
     let mut silent: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
-        if kind == WidgetKind::ScrollBar {
-            continue; // host-only: `realize` refuses it outright, by design
-        }
-        if kind == WidgetKind::Overlay {
+    for kind in registered_ids() {
+        if kind == WidgetId::Overlay {
             // A **closed** surface draws nothing, and a described `Overlay` starts closed
             // unless it says `opened`. That is the widget working, not a silent one.
             continue;
         }
-        let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
-        let mut root = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default());
+        let node = ViewNode::new(WidgetId::VStack).child(sample_node(kind.clone()));
+        let mut root = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
         root.base_mut().style.layout.width = heca_grid_ui::Length::Px(400.0);
         LayoutEngine::new().compute(root.as_mut(), Size::new(400.0, 200.0));
+        root.tick(0.3);
 
         let mut scene = Scene::new();
         {
@@ -177,7 +176,7 @@ fn a_plugin_can_own_a_picker_from_the_sdk() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
 
     // 1. The verb is on screen, so the host's `[[keys.surface]] pick = "s"` can reach it —
     //    by name, with no path to go stale when the tree is rebuilt.
@@ -232,7 +231,7 @@ fn a_described_node_answers_to_the_verb_it_declares() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert!(heca_grid_ui::fire_action(panel.as_ref(), "mypanel.reload"));
     assert_eq!(
         fired
@@ -265,7 +264,7 @@ fn a_verb_that_fires_its_own_name_is_refused() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert!(
         heca_grid_ui::collect_actions(panel.as_ref()).is_empty(),
         "a self-naming verb is not declared at all, so nothing can reach it",
@@ -294,7 +293,7 @@ fn a_described_pick_lands_on_the_node_it_named_and_not_its_container() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let inner = hints(widget.as_ref())
         .into_iter()
         .find(|p| !p.is_empty())
@@ -325,9 +324,9 @@ fn a_described_pick_lands_on_the_node_it_named_and_not_its_container() {
 #[test]
 fn a_menu_declared_on_any_kind_lands_on_the_node_itself() {
     let mut missing: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         let (emit, _fired) = recording_emitter();
-        let node = sample_node(kind).menu([heca_view::DropdownItem::with_intent(
+        let node = sample_node(kind.clone()).menu([heca_view::DropdownItem::with_intent(
             "close",
             "Close",
             Intent::new("plugin.close"),
@@ -337,7 +336,7 @@ fn a_menu_declared_on_any_kind_lands_on_the_node_itself() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         if widget.base().context_menu.is_none() {
             missing.push(format!("{kind:?}"));
         }

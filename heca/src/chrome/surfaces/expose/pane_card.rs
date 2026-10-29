@@ -473,7 +473,7 @@ mod tests {
 
     /// Build one card on its own — the whole point of the component being one.
     type Built = (
-        Box<dyn heca_grid_ui::Component>,
+        heca_grid_ui::WidgetModel,
         heca_grid_ui::reactive::Signal<bool>,
         crate::chrome::surfaces::expose::testing::Sink,
     );
