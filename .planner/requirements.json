@@ -13,8 +13,12 @@
       "updatedAt": "2026-07-13T15:30:51.379Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:768e3b80-32e0-48ab-9733-01238db93a65",
+          "createdAt": "2026-10-29T08:37:45.662Z"
+        },
+        {
           "sessionId": "mcp-process:36d8322d-4c27-4f10-b762-ca3153fc2231",
-          "createdAt": "2026-10-27T15:21:55.207Z"
+          "createdAt": "2026-10-27T19:28:02.641Z"
         },
         {
           "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",
@@ -71,10 +75,6 @@
         {
           "sessionId": "mcp-process:697df795-c193-4259-b042-e995517e34a5",
           "createdAt": "2026-10-16T07:11:56.889Z"
-        },
-        {
-          "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
-          "createdAt": "2026-10-15T12:39:33.249Z"
         }
       ]
     },
@@ -165,8 +165,12 @@
       "updatedAt": "2026-07-13T15:33:25.808Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:768e3b80-32e0-48ab-9733-01238db93a65",
+          "createdAt": "2026-10-29T08:37:45.662Z"
+        },
+        {
           "sessionId": "mcp-process:36d8322d-4c27-4f10-b762-ca3153fc2231",
-          "createdAt": "2026-10-27T15:21:55.207Z"
+          "createdAt": "2026-10-27T19:28:02.641Z"
         },
         {
           "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",
@@ -223,10 +227,6 @@
         {
           "sessionId": "mcp-process:697df795-c193-4259-b042-e995517e34a5",
           "createdAt": "2026-10-16T07:11:56.889Z"
-        },
-        {
-          "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
-          "createdAt": "2026-10-15T12:39:33.249Z"
         }
       ]
     },

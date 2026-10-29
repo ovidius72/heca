@@ -10,8 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "The local socket carries client-server traffic and scripts' RPC lines; windows detach and attach; several windows per session.",
-  "description": "Second step of the server/client model (F012 decisions d108b88c, 463ccd07, 2c249a29). The server holds the shared content; a window is a client with its own view; **standalone = server + one client in one process, one code path**. This phase carries the in-process server↔client interface over a local socket and makes a session **outlive its window** (detach/attach, like tmux).\n\n## The model — shared context every task here draws on\n- **In-process interface today:** `AppState.ask_server(ServerAction)` → `Change` (heca/src/server/change.rs) → `window_reacts` (heca/src/app_state/reaction/mod.rs). The server reads per-window facts from the `Asker` (heca/src/server/cx.rs: focused_pane, workspace, column, area, cell), never from a window. Per-window view is `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104.\n- **Terminal data** is already separate from drawing (heca-core/src/backend/snapshot.rs: `TerminalSnapshot`/`TerminalDamage`) — but it holds wezterm cells + decoded images, so the **wire form must be plain data**, never those types.\n- **RPC language:** heca/src/rpc.rs (parse / into_intent / introspect, all via the `ActionCatalog`). CLI table: heca/src/app/cli.rs.\n\n## Tasks\n- **T521 — DONE.** Local-only, owner-only socket + `heca rpc <line>`: heca/src/server/socket.rs, the `AppEvent::Rpc` seam (heca/src/app/events.rs, handled in lib.rs). Scripts reach any catalogued action (one-shot). Unix only so far.\n- **T543** serializable wire model (plain-data Change + snapshot/damage + layout effects; add serde to heca-core).\n- **T544** headless server (no window) + attach protocol; detach on close, reattach with scrollback.\n- **T545** several windows per session + `follow` + pane size setting (smallest|latest|largest, default latest).\n- **T546** `heca rpc --events` stream · **T547** Windows named pipe · **T548** docs.\n\n## Done when\nClose the window while a long command runs; `heca` again attaches and it is still running with its scrollback. Two windows on one session move independently; typing in one resizes a shared pane per the setting. `heca rpc split_horizontal` works from a shell (done).",
-  "descriptionUpdatedAt": "2026-10-21T11:22:30.479Z",
+  "description": "Second step of the server/client model (F012 decisions d108b88c, 463ccd07, 2c249a29). The server holds the shared content; a window is a client with its own view; **standalone = server + one client in one process, one code path**. This phase carries the in-process server↔client interface over a local socket and makes a session **outlive its window** (detach/attach, like tmux).\n\n## The model — shared context every task here draws on\n- **In-process interface today:** `AppState.ask_server(ServerAction)` → `Change` (heca/src/server/change.rs) → `window_reacts` (heca/src/app_state/reaction/mod.rs). The server reads per-window facts from the `Asker` (heca/src/server/cx.rs: focused_pane, workspace, column, area, cell), never from a window. Per-window view is `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104.\n- **Terminal data** is already separate from drawing (heca-core/src/backend/snapshot.rs: `TerminalSnapshot`/`TerminalDamage`) — but it holds wezterm cells + decoded images, so the **wire form must be plain data**, never those types.\n- **RPC language:** heca/src/rpc.rs (parse / into_intent / introspect, all via the `ActionCatalog`). CLI table: heca/src/app/cli.rs.\n\n## Tasks\n- **T521 — DONE.** Local-only, owner-only socket + `heca rpc <line>`: heca/src/server/socket.rs, the `AppEvent::Rpc` seam (heca/src/app/events.rs, handled in lib.rs). Scripts reach any catalogued action (one-shot). Unix only so far.\n- **T543** serializable wire model (plain-data Change + snapshot/damage + layout effects; add serde to heca-core).\n- **T544** headless server (no window) + attach protocol; detach on close, reattach with scrollback.\n- **T545** several windows per session + `follow` + pane size setting (smallest|latest|largest, default latest).\n- **T546** `heca rpc --events` stream · **T547** Windows named pipe · **T548** docs.\n\n## Done when\nClose the window while a long command runs; `heca` again attaches and it is still running with its scrollback. Two windows on one session move independently; typing in one resizes a shared pane per the setting. `heca rpc split_horizontal` works from a shell (done).\n\nProtocol ownership: F012 decision 2534270c-efd4-46ed-91ee-ddcd620b69b6. T522 owns session-select/attach. T545 owns sizing/follow/titles within a selected session. Both use one server-assigned Connection.id, one receive/pump stamping point and the existing ClientMsg/ServerMsg protocol; no duplicate client identity.",
+  "descriptionUpdatedAt": "2026-10-27T19:25:19.623Z",
   "notes": "\n\n2026-10-24: Antonio authorized selective recovery of the seven existing P099 tasks from heca-p085 into the canonical main planner. Existing IDs and dependencies retained. T521/T543 record branch implementation, not delivery to main. T544 is partial and unclaimed. No other phase or project settings imported.",
   "goals": [],
   "nonGoals": [],
@@ -46,7 +46,8 @@
     "e90e1886-2ec1-4a87-94a4-2a3d4b56c404",
     "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
     "df083f77-b084-42d5-b7f7-51924d8b11d2",
-    "01ea2d3f-f50d-4fdb-b38a-edacfa979d87"
+    "01ea2d3f-f50d-4fdb-b38a-edacfa979d87",
+    "2131024e-11f3-47cb-a244-6575acb4e29f"
   ],
   "tasks": [
     {
@@ -355,8 +356,8 @@
       "shortName": "several-windows-per-session-ow",
       "title": "Several windows per session — own view each, follow, pane size setting",
       "status": "in-progress",
-      "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.",
-      "descriptionUpdatedAt": "2026-10-21T11:21:06.740Z",
+      "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.\n\n## Protocol Agreement With T522\nCanonical F012 decision 2534270c-efd4-46ed-91ee-ddcd620b69b6 (Antonio + Opus, 2026-10-27).\nT522 owns session selection and attach/handshake shape; T545 does not add another handshake or choose a session. Work within the selected session and reuse its Connection.id, assigned by the server once and stamped onto incoming messages at the single receive/pump point. Use that same ID for owner/client/grid arbitration, latest typing client, follow and titles. Do not add a second client identity or protocol; consume the shared ClientMsg/ServerMsg extension and coordinate concrete field changes with T522 before integration.",
+      "descriptionUpdatedAt": "2026-10-27T19:25:15.995Z",
       "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
       "statusLog": [
         {
@@ -369,8 +370,66 @@
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
+      "acceptedDecisions": [
+        {
+          "id": "e36aba0c-6457-422e-8126-402411fb233c",
+          "title": "T522/T545 concrete attach, window directory and follow contract",
+          "decision": "Connection.id is the sole client/window identity, assigned once per physical connection by the server at the single receive/pump point. Switching sessions on that connection preserves the id; a new connection receives a new id. T522 owns selection, attach, and per-session presentation ordinal allocation. T545 owns size arbitration, client-side title formatting, the session window directory, title reports, and follow. The user selects a follow target by its displayed title; the stored/transmitted target is Connection.id, so renaming does not break follow. Both tasks extend the same ClientMsg/ServerMsg protocol. Merge T522 before T545's attach-dependent follow/title integration; T545 follow/title integration (C4/C5) waits for T522 merged into main, without sharing an intermediate T522 branch. T545 consumes the T522 attach fields and owns WindowInfo/Windows, client title reporting, title formatting and follow. Merge attach-dependent integration after T522; do not add another session handshake or ordinal counter.",
+          "rationale": "Confirmed with Opus on 2026-10-28; extends F012 Accepted Decision 2534270c-efd4-46ed-91ee-ddcd620b69b6 and keeps both agents on one protocol.",
+          "implementationNotes": "T522/T545 concrete agreement confirmed with Opus on 2026-10-28. This is an integration contract, not a claim of merged implementation. On Opus's reported main base af4fff24, Attached has content only. SessionInfo/session selection are unmerged T522 work in /Users/antonio/projects/heca-p100 on feat/p100-sessions.\n\nFinal T522 data shape: SessionInfo { id: heca_core::layout::SessionId, name: String, folder: Option<std::path::PathBuf>, label: Option<String>, status: SessionStatus, windows: usize, agents: usize }. SessionId already exists as SessionId(pub u64); SessionStatus is Active or Terminated. Reuse session.id and session.folder without duplicate identities or path fields.\n\nT522 will deliver ServerMsg::Attached { session: SessionInfo, client_id: u64, window_ordinal: u64, content: SessionContent }. SessionInfo is already in the T522 worktree; client_id/window_ordinal are still pending there when this agreement is recorded. Preserve server::run::ServerLoop as the owner-loop entry with session state isolated.\n\nT522 assigns ordinals from 1 using one per-session server-owned counter when a connection joins that session. Ordinals are presentation numbers, not client identities. They remain stable for that attachment; gaps are allowed, and leaving does not renumber others. Restart/republication of Attached for the same attached client/session must preserve its ordinal. A session switch preserves Connection.id but obtains the destination session's ordinal. No promise of cross-server-restart identity persistence is introduced.\n\nT545 formats each window title client-side from folder and ordinal; ordinal 1 has no suffix, ordinal > 1 has the agreed #k suffix. Formatting/text comes from the owning configuration. T545 owns the shared WindowInfo { id: u64, ordinal: u64, title: String }, ServerMsg::Windows { session_id: SessionId, windows: Vec<WindowInfo> }, and a ClientMsg reporting the sender window's title. The server attributes reports to the stamped Connection.id and selected session, never to a caller-selected window id. Handle stale reports across a session switch without publishing them into the wrong session.\n\nT545 publishes a session-scoped window snapshot after Attached and on join, leave, and title change; a session switch updates both old and new session membership. Follow resolves the displayed title to the authoritative id and retains that id across renames. T522 supplies attachment lifecycle hooks and metadata; T545 owns directory/title/follow behavior. Neither adds another handshake, identity, or transport.\n\nAntonio's integration constraint, 2026-10-28: do not share or base T545 on the unmerged T522 branch. Complete/review T522 and merge it into main first; T545 C4/C5 then starts from that merged main. Opus checked main af4fff24 and reports no clean independent follow/title implementation slice there, so do not tell him C4/C5 can proceed before the T522 attach fields land. Earlier size-arbitration work is separate. No task status, whole-task dependency, or ownership change is implied.",
+          "acceptedAt": "2026-10-28T12:16:09.560Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-001-c1-pane-size-setting-panesize-enum-exported-settingsconfig-field-terminalsettings-pane-size-from-config-reloadable",
+          "number": 1,
+          "title": "C1 — pane_size setting: PaneSize enum exported, SettingsConfig field, TerminalSettings.pane_size from_config, reloadable",
+          "checked": true
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-002-c2-server-side-grid-arbitration-smallest-latest-largest-keyed-by-connection-id-applied-only-when-the-winning-grid-changes",
+          "number": 2,
+          "title": "C2 — server-side grid arbitration (smallest|latest|largest) keyed by Connection.id, applied only when the winning grid changes",
+          "checked": true
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-003-c3-independent-per-window-view-each-window-keeps-its-own-windowview-scrollview-moves-independently",
+          "number": 3,
+          "title": "C3 — independent per-window view: each window keeps its own WindowView/ScrollView, moves independently",
+          "checked": true
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-004-c4-follow-one-window-mirrors-another-window-s-view-targeted-by-title",
+          "number": 4,
+          "title": "C4 — follow: one window mirrors another window's view, targeted by title",
+          "checked": false
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-005-c5-window-title-path-k-from-the-2nd-window-on-the-same-instance-synced-to-p100-naming",
+          "number": 5,
+          "title": "C5 — window title = path + ' #k' from the 2nd window on the same instance (synced to P100 naming)",
+          "checked": false
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-006-c6-document-pane-size-in-config-default-toml-readme",
+          "number": 6,
+          "title": "C6 — document pane_size in config.default.toml + README",
+          "checked": true
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-007-c7-verify-in-gpu-app-two-windows-move-independently-typing-in-one-resizes-a-shared-pane-per-the-setting",
+          "number": 7,
+          "title": "C7 — verify in GPU app: two windows move independently; typing in one resizes a shared pane per the setting",
+          "checked": true
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-008-c8-notifications-have-an-audience-originator-window-vs-whole-session-reload-feedback-goes-only-to-the-window-that-triggered-it-tag-by-client-id-reuses-t522-attach-identity",
+          "number": 8,
+          "title": "C8 — notifications have an audience: originator window vs whole session; reload feedback goes only to the window that triggered it (tag by client_id; reuses T522 attach identity)",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [
         "ed677df2-82fe-4abb-a23b-30f90bc40919"
@@ -380,7 +439,7 @@
       "startedAt": "2026-10-27T15:27:22.915Z",
       "completedAt": "",
       "createdAt": "2026-10-21T11:14:52.371Z",
-      "updatedAt": "2026-10-27T15:27:22.915Z",
+      "updatedAt": "2026-10-28T18:10:00.379Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
@@ -482,14 +541,332 @@
       "updatedAt": "2026-10-24T18:33:41.775Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "2131024e-11f3-47cb-a244-6575acb4e29f",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 551,
+      "shortId": "9X3DW",
+      "priority": 8,
+      "shortName": "share-pane-feedback-acknowledg",
+      "title": "Share pane feedback acknowledgement across clients and remove shell-command flashing",
+      "status": "canceled",
+      "description": "Antonio explicitly assigned this correction to Codex on 2026-10-28 after reviewing the T398 proposal. Own the complete feedback repair in a fresh sibling worktree from latest main; preserve T522 as the return target and do not take over T398 widget authoring or T545 follow/title/sizing.\n\nCurrent code: heca/src/providers/workspaces/feedback/mod.rs:55 derives per-client FlashHandle transitions from ProcessStatus and agent state, repeating background flashes until each window focuses separately. heca/src/chrome/state/pane_runtime.rs:13 creates a local handle. heca/src/server/run.rs:212 already owns the shared Session and the single ClientMsg/ServerMsg path; heca-core PaneBackend::take_agent_updates and the existing process reconciliation deliver agent transitions. Reuse those and FlashHandle::trigger/clear; do not put UI animation or WindowView state on the server.\n\nImplement a session-owned feedback projection per PaneId with feedback_revision, seen_through_revision and the originating semantic status. Pending iff feedback_revision > seen_through_revision. Only significant reports from enabled registered integrations and configuration produce revisions, never ordinary shell ProcessStatus, redraw, metadata changes, configuration replay, attach/reconnect or retransmission. Keep the vocabulary open: no driver-name branches in dock or closed program lists. Configure feedback selection in its owning agent configuration; initialization/work/tool/compaction/subagent/interruption are silent by default, meaningful attention/turn completion/turn failure eligible. Do not invent unavailable harness events or treat every recoverable tool error as terminal agent failure.\n\nClient acknowledgement travels over the existing wire protocol, server-scoped to the sender's selected session. Apply only valid observed revisions with monotonic seen-through semantics: stale ack(42) cannot consume 43; repeated acks are harmless, future revisions and missing/foreign panes do not clear real feedback. Broadcast shared updates and include current pending/seen state on attach, so all windows stop together and new clients never replay acknowledged feedback. Acknowledgement does not change the reported agent status.\n\nEffective input focus means OS-active window plus the actual input-focused pane, not merely WindowView selection under a CommandPalette/modal or while a dock owns input. Already effectively focused panes automatically acknowledge new feedback. Use existing input/focus owners, not sidebar-specific hit-testing or event forwarding. Background eligible events receive one finite theme-owned pulse; active pane gets no pulse. Never repeat indefinitely. Dock reconstruction/theme changes preserve the revision cursor rather than triggering anew.\n\nCorrect README.md:1300 obsolete CLI-not-wired statement. Explain explicit install/inspect/update/uninstall, per-driver reporting off until installed/enabled, first install enables the driver, updates/repeat install preserve user choices, sounds independent. All changes remain uncommitted until Antonio asks.\n\nPre-flight: reuse PaneRuntime/AgentState transitions, ServerLoop/shared wire, existing focus routing and local FlashHandle. This is application session state, not a new UI widget or second agent registry. Tests: quiet ls/git status/false in active and background panes; two-client ack propagation; stale/repeat/future ack; connect before/after ack; no new revision on metadata/theme/rebuild; active/overlay/dock focus; custom driver/config policy; same state retained after acknowledgement; finite pulse only. Native two-window acceptance is required separately from automated tests.",
+      "descriptionUpdatedAt": "2026-10-28T12:54:45.769Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "b0b1667f-6a15-478e-a65b-f2b1eadc85e0",
+          "date": "2026-10-28T12:55:39.234Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "2131024e-11f3-47cb-a244-6575acb4e29f-check-002-in-progress-canceled",
+          "date": "2026-10-28T12:57:04.630Z",
+          "fromStatus": "in-progress",
+          "toStatus": "canceled",
+          "title": "Antonio immediately instructed that the feedback repair must be done within existing T522 in heca-p100, with no separate task/worktree. No source changes were made in T551. Its empty worktree and branch were removed; preserve this cancellation record rather than treating the correction as completed.",
+          "description": "Antonio immediately instructed that the feedback repair must be done within existing T522 in heca-p100, with no separate task/worktree. No source changes were made in T551. Its empty worktree and branch were removed; preserve this cancellation record rather than treating the correction as completed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2131024e-11f3-47cb-a244-6575acb4e29f-check-001-remove-processstatus-driven-flash-generation-for-ordinary-shell-commands-in-active-and-background-panes",
+          "number": 1,
+          "title": "Remove ProcessStatus-driven flash generation for ordinary shell commands in active and background panes",
+          "checked": false
+        },
+        {
+          "id": "2131024e-11f3-47cb-a244-6575acb4e29f-check-002-add-configurable-significant-feedback-policy-using-enabled-integration-reports-and-open-status-ids",
+          "number": 2,
+          "title": "Add configurable significant-feedback policy using enabled integration reports and open status ids",
+          "checked": false
+        },
+        {
+          "id": "2131024e-11f3-47cb-a244-6575acb4e29f-check-003-own-feedback-revisions-and-monotonic-acknowledgement-in-the-server-session-and-existing-protocol-including-attach-snapshots",
+          "number": 3,
+          "title": "Own feedback revisions and monotonic acknowledgement in the server session and existing protocol, including attach snapshots",
+          "checked": false
+        },
+        {
+          "id": "2131024e-11f3-47cb-a244-6575acb4e29f-check-004-use-effective-input-focus-for-automatic-acknowledgement-and-finite-client-side-pulses-without-rebuild-replay",
+          "number": 4,
+          "title": "Use effective input focus for automatic acknowledgement and finite client-side pulses without rebuild/replay",
+          "checked": false
+        },
+        {
+          "id": "2131024e-11f3-47cb-a244-6575acb4e29f-check-005-verify-multi-client-acknowledgement-races-reconnect-focus-overlay-and-shell-regressions-with-automated-tests",
+          "number": 5,
+          "title": "Verify multi-client acknowledgement, races, reconnect, focus/overlay and shell regressions with automated tests",
+          "checked": false
+        },
+        {
+          "id": "2131024e-11f3-47cb-a244-6575acb4e29f-check-006-update-integration-feedback-documentation-and-verify-native-two-window-behavior",
+          "number": 6,
+          "title": "Update integration/feedback documentation and verify native two-window behavior",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-28T12:55:39.234Z",
+      "completedAt": "",
+      "createdAt": "2026-10-28T12:54:45.725Z",
+      "updatedAt": "2026-10-28T12:57:04.630Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:bcb34529-16fd-4db9-8c7a-60dfd3a99ed0",
+          "createdAt": "2026-10-28T12:55:39.181Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-10-27T15:27:22.915Z",
-  "handoff": "# Handoff — session shutdown (quit)\n\nCreated at: 2026-10-26T18:59:18.546Z\nUpdated at: 2026-10-26T18:59:18.546Z\nReason: session shutdown (quit)\n\n## Progress snapshot\n- Features: 3/12 done, 6 active\n- Phases: 46/102 done, 17 active/discovery\n- Tasks: 334/533 done, 3 active\n\n## Current focus\n- Feature: `1be8af21-337e-4636-93d9-6bea87368492` — 🧰 Ready for heca-pro — the pieces heca-pro builds on (in-progress)\n- Phase: `5cbe946e-fe06-448c-a764-3840f033da6f` — ready-02: the connection — clients attach to the server over a local socket; RPC, events, detach/attach (in-progress)\n- Task: `ed677df2-82fe-4abb-a23b-30f90bc40919` — Headless server process + attach protocol (detach/attach) (in-progress)\n\n## What was being done\n2026-10-25 resume: native client wired via ClientState; standalone uses same ServerLoop. Fixed redundant ordered effects, missing-terminal request reply and daemon reaping. Scoped all-target tests pass (1068 Heca lib, 124 config, 255 core, all integrations); clippy -D warnings passes. Canonical checkpoint .planner/docs/t544-transport-checkpoint.md updated. Still open: notification ownership/split approval, reload, damage/resources and native GUI acceptance (CUA cgWindowNotFound). C3-C6 remain open. No commit/PR.\n\n## Current Task Statuses (phase 5cbe946e-fe06-448c-a764-3840f033da6f)\n- ✅ `69a168bf-276e-401a-a337-597ef29221b3` — Local socket + `heca rpc <line>` for scripts (done)\n- ✅ `e21d7360-4fff-465b-9a7d-b67016fce207` — Serializable wire model — plain-data Change + terminal snapshot/damage + layout effects (done)\n- 🚧 `ed677df2-82fe-4abb-a23b-30f90bc40919` — Headless server process + attach protocol (detach/attach) (in-progress)\n- 📋 `e90e1886-2ec1-4a87-94a4-2a3d4b56c404` — Several windows per session — own view each, follow, pane size setting (planned)\n- 📋 `73a5a8de-08c1-4b6f-8bdb-336ec26a3da2` — `heca rpc --events` — stream events to scripts (planned)\n- 📋 `df083f77-b084-42d5-b7f7-51924d8b11d2` — Windows named-pipe transport (planned)\n- 📋 `01ea2d3f-f50d-4fdb-b38a-edacfa979d87` — Connection / attach architecture docs (planned)\n\n## How to resume\n1. Open task ed677df2-82fe-4abb-a23b-30f90bc40919 (Headless server process + attach protocol (detach/attach)).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/5cbe946e-fe06-448c-a764-3840f033da6f.json\n- .planner/phases/5464ff74-fa17-4412-abaa-95aa19810b33.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n- Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.\n- F003/P011/T012 (126d0855) is still `blocked`, and its reason needs RE-CHECKING rather than planning around: the 'no chrome surface mounts a ScrollRegion' claim was verified 2026-07-17, and the 2026-07-26 sidebar scroll work may already have discharged it. Its horizontal trigger was settled 2026-07-27 as prefix+Shift+Home/End/PageUp/PageDown — the same four keys as vertical, Shift for the other axis.\n- Unblocked by T009, neither started: F003/P001/T006 (generate widget definitions for JS/Python from `WidgetKind::ALL`, which is a closed list with a coverage guard already walking it) and F003/P011/T006 (the typed builder SDK can now genuinely re-export the model). Also worth checking whether F003/P017/T003's generated property tables are reusable outside the app — they are the natural source for those generated definitions.\n\n## Recent activity\n- 2026-10-23T11:14:19.578Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → planned\n- 2026-10-23T11:14:14.342Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → planned\n- 2026-10-23T11:07:26.889Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → done\n- 2026-10-23T11:06:01.136Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → done\n- 2026-10-23T11:05:42.161Z [task_status] d72fd89e-2ea6-4dd9-b0a6-21beb72991b4: Task d72fd89e-2ea6-4dd9-b0a6-21beb72991b4 → done\n- 2026-09-05T21:15:13.811Z [task_status] bad40d02-be41-4f23-8acc-903c18c40e68: Task bad40d02-be41-4f23-8acc-903c18c40e68 → in-progress\n- 2026-09-04T10:03:13.339Z [task_created] 3a5ca1f3-f626-49d0-b4a0-033f0b64924e: Task created: Notification Text should not be truncated (phase 03b297bb-a915-4712-a6b4-dc688dc7ddc5)\n- 2026-09-01T15:38:54.250Z [task_updated] deef08b2-b838-428d-afce-2151533b5dd4: Task updated: Dismiss All Notifications\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
-  "handoffUpdatedAt": "2026-10-26T18:59:18.578Z",
-  "handoffAudit": null,
-  "handoffReadAt": "2026-10-25T18:26:10.072Z",
+  "updatedAt": "2026-10-28T18:10:00.379Z",
+  "handoff": "# T545 — several windows per session: independent views, follow, pane-size arbitration\n\nCreated at: 2026-10-26T18:59:18.546Z\nUpdated at: 2026-10-27T19:18:34.860Z\nReason: T545 design is fully agreed with Antonio (2026-10-27) but no code is written yet; a cold agent needs the decisions, the resize code path, and the P100 naming it must stay in sync with before implementing.\n\n## Current focus\n- Feature: F012 — Ready for heca-pro — the pieces heca-pro builds on\n- Phase: P099(F012) — ready-02: the connection (clients attach to the server over a local socket; RPC, events, detach/attach)\n- Task: P099(F012)/T545 — \"Several windows per session — own view each, follow, pane size setting\" (in-progress)\n- Exact resume point: design agreed, **no code written**. Worktree `/Users/antonio/projects/heca-t545`, branch `feat/t545-multiwindow` (from main af4fff24). Draft only: `PaneSize` enum in `heca-config/src/settings/enums.rs` and the \"One task, one worktree\" rule in `AGENTS.md` — both uncommitted.\n\n## Current and partial state\nDecisions agreed with Antonio 2026-10-27 (all design, nothing contentious left):\n\n- **Independent windows are the default.** Each window attaches to the same session (shared content) but keeps its own view — its own `WindowView`/`ScrollView`. Antonio wants this explicitly because two monitors at different resolutions caused display problems, and watching a different pane in each window is useful. A window does NOT follow another by default.\n- **Pane-size arbitration only when two windows show the SAME pane.** A running terminal has one size (rows×cols), so when two windows display the same pane they must agree. Setting `PaneSize = smallest | latest | largest`, default **latest** (the window last typed in wins). A pane shown by one window always takes that window's size. Only rows×cols are arbitrated; the pixel cell size (font) stays each window's own.\n- **follow** = a window mirrors another window's view, targeted by the other window's **title**.\n- **Window title** = the project `path` (e.g. `~/projects/heca`), plus a ` #k` suffix from the **second** window onward on the same instance. The suffix is what lets `follow` name a window.\n- **Instance naming (owned by P100, synced here):** default instance name `heca #n`, `#n` a progressive counter only to tell anonymous defaults apart; a real unique name (create/rename) drops the `#n`. Full create-session + naming design in `.planner/docs/p100-session-create.md`.\n\nCode analysis done (resume path):\n- Resize flows `ClientMsg::Terminal(Resize{cols,rows,cell,scale})` → `ServerState::process_input` at `heca/src/server/stream.rs:22`, which today applies the last grid directly (`set_cell_size` / `set_scale_factor` / `set_size`).\n- For arbitration: keep a per-terminal map (owner → client → requested grid) plus the last-typed client id; thread the client id (`Connection.id` from the run.rs pump) into `process_input`; recompute `set_size` via the `PaneSize` policy. Cell/font stays per-window.\n- `PaneSize` enum drafted in `heca-config/src/settings/enums.rs` (snake_case, default `Latest`). Still TODO: a `SettingsConfig` field + defaults + `config.default.toml` + README.\n\n## Preservation constraints\n- Standalone = server + one in-process client = ONE code path (decision 463ccd07). Several windows must not fork a second path; a window is just another client of the same `ServerLoop`.\n- Library/widget-side only, CSS-like composition, nothing hardcoded (Antonio's standing rule). The arbitration lives in the server policy, not sprawled across call sites.\n- Naming stays single-sourced: the window-title suffix is built in T545 but the instance-name rule belongs to P100 — do not re-decide it here.\n- **Commit the \"One task, one worktree\" AGENTS.md rule together with T545's code, not as a separate PR.** No commit/PR without Antonio's explicit word.\n\n## Supporting documents\n- `.planner/docs/p100-session-create.md` — the create-session (CLI `heca --new [path] [--name <name>]` + palette \"Create Session\" with fuzzy path) and default instance-naming design; the window-title section there is the contract T545 renders.\n\n## Blockers and risks\n- None blocking. Antonio has NOT yet said \"write code\" for T545 — await explicit go before implementing.\n- Risk: the window-title/`follow` mechanism and P100's instance naming can drift. Keep both pointing at `p100-session-create.md`.\n\n## How to resume\n1. Open task P099(F012)/T545; confirm it is in-progress.\n2. Read `.planner/docs/p100-session-create.md` for the naming/title contract.\n3. Work in worktree `/Users/antonio/projects/heca-t545` (branch `feat/t545-multiwindow`).\n4. Implement in order: (a) pane-size arbitration at `heca/src/server/stream.rs:22` — per-terminal client→grid map + last-typed client, policy from `PaneSize`; finish the `SettingsConfig` field/defaults/config.default.toml/README for the drafted enum; (b) independent per-window view (each window its own `WindowView`/`ScrollView`); (c) `follow` by window title; (d) window title = path + ` #k` from the 2nd window, synced to P100.\n5. Verify by running the GPU app (Antonio tests by eye — unit green is not enough for layout/view). Commit the AGENTS.md worktree rule with T545. No commit/PR until Antonio asks.",
+  "handoffUpdatedAt": "2026-10-27T19:18:34.860Z",
+  "handoffAudit": {
+    "version": 1,
+    "entries": [
+      {
+        "category": "exact-focus-resume-point",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "first-resume-action",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "partial-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "remaining-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "decisions-rationale",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "rejected-alternatives",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "files-symbols",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "branch-worktree",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "commands-tools",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "pending-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "runtime-limitations-workarounds",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "blockers-risks",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "user-visible-behavior",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "operator-actions",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "project-operating-notes",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "conversation-only-facts",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      }
+    ],
+    "coldStartInventory": {
+      "version": 1,
+      "sourceReviews": [
+        {
+          "source": "conversation",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "planner-entities",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "working-tree",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "verification-runtime",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "peer-agent-output",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        }
+      ],
+      "entries": [
+        {
+          "category": "files",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "symbols",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "working-tree-ownership",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "negative-state",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "commands-tools",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "runtime-wiring",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "preservation-constraints",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "verification-evidence",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "related-planned-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "user-visible-behavior",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "operator-actions",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "blockers-risks",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "remaining-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "ordered-resume-steps",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        }
+      ]
+    },
+    "supportingDocuments": [],
+    "contentHash": "53bc94071a230ace805f0766b095cebea7f38d62fcb42fcf6363312982bd999e",
+    "contentLength": 5229,
+    "verifiedAt": "2026-10-27T19:18:34.860Z",
+    "resumeReadyAt": "2026-10-27T19:18:43.009Z",
+    "readBackSourceReviews": [
+      {
+        "source": "conversation",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "planner-entities",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "working-tree",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "verification-runtime",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "peer-agent-output",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      }
+    ]
+  },
+  "handoffReadAt": "2026-10-27T19:18:43.009Z",
   "handoffHistory": [
     {
       "file": "handoff-archive/5cbe946e-fe06-448c-a764-3840f033da6f-2026-10-26T18-59-18-548Z.md",
@@ -516,6 +893,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:bcb34529-16fd-4db9-8c7a-60dfd3a99ed0",
+      "createdAt": "2026-10-28T12:55:39.181Z"
+    },
     {
       "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
       "createdAt": "2026-10-27T15:27:22.786Z"
