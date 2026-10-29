@@ -24,18 +24,24 @@ use std::collections::HashMap;
 mod catalog;
 mod integrations;
 mod queries;
+mod sessions;
 #[cfg(test)]
 mod tests;
 
 use catalog::COMMANDS;
 type Answer = Result<String, String>;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum LaunchMode {
     #[default]
     Attached,
     Standalone,
+    Session(String),
+    New { path: Option<String>, name: Option<String> },
 }
+
+#[derive(Clone, Copy)]
+enum LaunchKind { Standalone, Session, New }
 
 /// One thing heca can be asked from the command line.
 struct Command {
@@ -50,10 +56,12 @@ struct Command {
     /// **What it takes, as data.** Positional: the words after the flag are matched to these in
     /// order. Declared with the same type an action's arguments use, and checked the same way.
     args: &'static [ArgDescriptor],
+    /// Named value options, checked by the same argument declarations as positionals.
+    options: &'static [ArgDescriptor],
     /// Whether `--json` means anything to it.
     json: bool,
     /// A window launch mode rather than a command that prints and exits.
-    launch: Option<LaunchMode>,
+    launch: Option<LaunchKind>,
     /// Runs it, given the checked arguments.
     run: fn(&Invocation) -> Answer,
 }
@@ -118,42 +126,71 @@ pub(crate) fn run_if_requested(args: &[String]) -> bool {
 /// **The whole of the command line, as a function of its arguments** — so every rule below is
 /// testable without a process. `None` means "no command was asked for; open the window".
 fn answer(args: &[String]) -> Option<Answer> {
-    if args.is_empty() { return None }
+    let (cmd, invocation) = match parse(args)? {
+        Ok(parsed) => parsed,
+        Err(answer) => return Some(answer),
+    };
+    if cmd.launch.is_some() {
+        return (cmd.run)(&invocation).err().map(Err);
+    }
+    Some((cmd.run)(&invocation))
+}
+
+fn parse(args: &[String]) -> Option<Result<(&'static Command, Invocation), Answer>> {
+    if args.is_empty() { return None; }
     let words: Vec<_> = args.iter().map(String::as_str)
         .filter(|word| *word != JSON_FLAG && *word != JSON_SHORT).collect();
     let Some((cmd, consumed)) = COMMANDS.iter()
         .find_map(|cmd| cmd.prefix_len(&words).map(|len| (cmd, len))) else {
         let unknown = words.first().copied().unwrap_or(JSON_FLAG);
         let hint = nearest_command(unknown).map(|name| format!(" — did you mean '{name}'?")).unwrap_or_default();
-        return Some(Err(format!("unknown command '{unknown}'{hint}\n\nRun `heca --help` for the list.\n")));
+        return Some(Err(Err(format!("unknown command '{unknown}'{hint}\n\nRun `heca --help` for the list.\n"))));
     };
     let positional = &words[consumed..];
     if positional.iter().any(|arg| *arg == "--help" || *arg == "-h") {
-        return Some(Ok(format!("{}\n{}\n", usage_of(cmd), cmd.about)));
+        return Some(Err(Ok(format!("{}\n{}\n", usage_of(cmd), cmd.about))));
     }
-    if let Some(flag) = positional.iter().find(|arg| is_flag(arg)) {
-        return Some(Err(format!("{}: unknown option '{flag}'\n\n{}\n", cmd.name, usage_of(cmd))));
+    let mut supplied = HashMap::new();
+    let mut values = Vec::new();
+    let mut it = positional.iter().copied();
+    while let Some(word) = it.next() {
+        if !is_flag(word) { values.push(word); continue; }
+        let Some(option) = cmd.options.iter().find(|option| word.strip_prefix("--") == Some(option.name)) else {
+            return Some(Err(Err(format!("{}: unknown option '{word}'\n\n{}\n", cmd.name, usage_of(cmd)))));
+        };
+        let Some(value) = it.next().filter(|value| !is_flag(value)) else {
+            return Some(Err(Err(format!("{}: {word} needs a value\n", cmd.name))));
+        };
+        if supplied.insert(option.name.to_owned(), value.to_owned()).is_some() {
+            return Some(Err(Err(format!("{}: {word} was supplied twice\n", cmd.name))));
+        }
     }
-    if positional.len() > cmd.args.len() {
-        return Some(Err(format!("{} takes {} argument(s), got {}\n\n{}\n",
-            cmd.name, cmd.args.len(), positional.len(), usage_of(cmd))));
+    if values.len() > cmd.args.len() {
+        return Some(Err(Err(format!("{} takes {} argument(s), got {}\n\n{}\n",
+            cmd.name, cmd.args.len(), values.len(), usage_of(cmd)))));
     }
-    let specs: Vec<ArgSpec> = cmd.args.iter().map(ArgSpec::from_descriptor).collect();
-    let supplied = specs.iter().zip(positional).map(|(spec, value)| (spec.name.clone(), (*value).into())).collect();
+    supplied.extend(cmd.args.iter().zip(values).map(|(spec, value)| (spec.name.to_owned(), value.to_owned())));
+    let specs: Vec<ArgSpec> = cmd.args.iter().chain(cmd.options).map(ArgSpec::from_descriptor).collect();
     let problems = check_args(&specs, &supplied);
     if !problems.is_empty() {
         let listed = problems.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
-        return Some(Err(format!("{}: {listed}\n\n{}\n", cmd.name, usage_of(cmd))));
+        return Some(Err(Err(format!("{}: {listed}\n\n{}\n", cmd.name, usage_of(cmd)))));
     }
     let json = args.iter().any(|arg| arg == JSON_FLAG || arg == JSON_SHORT);
-    if json && !cmd.json { return Some(Err(format!("{} does not support --json\n", cmd.name))) }
-    if cmd.launch.is_some() { return None; }
-    Some((cmd.run)(&Invocation { args: supplied, json }))
+    if json && !cmd.json { return Some(Err(Err(format!("{} does not support --json\n", cmd.name)))); }
+    Some(Ok((cmd, Invocation { args: supplied, json })))
 }
 
 pub(crate) fn launch_mode(args: &[String]) -> LaunchMode {
-    let words: Vec<_> = args.iter().map(String::as_str).collect();
-    COMMANDS.iter().find_map(|command| command.prefix_len(&words).and(command.launch)).unwrap_or_default()
+    let Some(Ok((command, invocation))) = parse(args) else { return LaunchMode::Attached; };
+    match command.launch {
+        Some(LaunchKind::Standalone) => LaunchMode::Standalone,
+        Some(LaunchKind::Session) => LaunchMode::Session(invocation.get("name").unwrap_or_default().to_owned()),
+        Some(LaunchKind::New) => LaunchMode::New {
+            path: invocation.get("path").map(str::to_owned), name: invocation.get("name").map(str::to_owned),
+        },
+        None => LaunchMode::Attached,
+    }
 }
 
 /// Suggest a declared command with the same prefix.
@@ -184,6 +221,7 @@ fn usage_of(cmd: &Command) -> String {
     if cmd.json {
         usage.push_str(" [--json]");
     }
+    for option in cmd.options { usage.push_str(&format!(" [--{} <{}>]", option.name, option.name)); }
     usage
 }
 
@@ -207,7 +245,7 @@ fn help() -> String {
     for (c, usage) in COMMANDS.iter().zip(&usages) {
         out.push_str(&format!("  {usage:<width$}  {}\n", c.about));
         // An argument's own description, where it has more to say than its name.
-        for a in c.args {
+        for a in c.args.iter().chain(c.options) {
             out.push_str(&format!(
                 "  {:<width$}    {}: {}\n",
                 "", a.name, a.description

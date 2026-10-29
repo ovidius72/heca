@@ -53,6 +53,8 @@ pub(crate) fn pane_entries(
                     None => ws_name.clone(),
                 },
                 icon: Some(info.icon),
+                description_path: false,
+                detail: None,
                 shortcuts: Vec::new(),
                 intent: InteractionIntent::FocusPane { pane_id: pane.id },
             });
@@ -87,6 +89,8 @@ pub(crate) fn workspace_entries(
                 n => format!("{n} columns"),
             },
             icon: Some(Glyph::Cards),
+            description_path: false,
+            detail: None,
             shortcuts: Vec::new(),
             intent: InteractionIntent::ActivateAction(WmAction::FocusWorkspace { ws_idx }),
         })

@@ -198,7 +198,12 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ── Global: true app-level action, allowed even when Floating ──
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
-        WmAction::ReloadConfig => ActionPolicy::Global,
+        WmAction::ReloadConfig
+        | WmAction::ListSessions
+        | WmAction::CreateSession { .. } | WmAction::RenameSessionTo { .. }
+        | WmAction::TerminateSession { .. } | WmAction::RestartSession { .. }
+        | WmAction::DeleteSession { .. } | WmAction::NewSession | WmAction::RenameSession
+        | WmAction::SwitchSession { .. } | WmAction::DetachSession | WmAction::ReconnectSession => ActionPolicy::Global,
         // Dismissing/picking a notification touches no layout and no pane — a toast can be up
         // over a floating pane just as easily as a tiled one, and must stay reachable.
         WmAction::NotificationDismissOne { .. }

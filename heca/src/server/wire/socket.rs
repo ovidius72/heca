@@ -3,7 +3,7 @@
 use std::io;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 
 use serde::{Serialize, de::DeserializeOwned};
@@ -18,13 +18,28 @@ pub(crate) type SocketServer = SocketPeer<ServerMsg, ClientMsg>;
 
 type Failure = Arc<Mutex<Option<(io::ErrorKind, String)>>>;
 
+enum WriteRequest<T> { Message(T), Flush(mpsc::SyncSender<()>) }
+
+impl<T: queue::Message> queue::Message for WriteRequest<T> {
+    fn is_boundary(&self) -> bool {
+        match self { Self::Message(message) => message.is_boundary(), Self::Flush(_) => true }
+    }
+    fn replaces(&self, older: &Self) -> bool {
+        match (self, older) {
+            (Self::Message(new), Self::Message(old)) => new.replaces(old),
+            _ => false,
+        }
+    }
+}
+
 /// A typed end of the same protocol carried by the in-process pair.
 pub(crate) struct SocketPeer<Outgoing, Incoming> {
-    outgoing: Option<queue::Sender<Outgoing>>,
+    outgoing: Option<queue::Sender<WriteRequest<Outgoing>>>,
     incoming: queue::Receiver<Incoming>,
     failure: Failure,
     stream: UnixStream,
     workers: Vec<JoinHandle<()>>,
+    flush_timeout: std::time::Duration,
 }
 
 impl<Outgoing, Incoming> SocketPeer<Outgoing, Incoming>
@@ -33,7 +48,7 @@ where
     Incoming: DeserializeOwned + queue::Message + Send + 'static,
 {
     pub(crate) fn new(stream: UnixStream, limits: TransportLimits, wake: ServerWaker) -> io::Result<Self> {
-        let (outgoing, outbound) = queue::channel(limits.queue_capacity);
+        let (outgoing, outbound) = queue::channel::<WriteRequest<Outgoing>>(limits.queue_capacity);
         let (inbound, incoming) = queue::channel(limits.queue_capacity);
         let failure: Failure = Arc::default();
         let mut reader = stream.try_clone()?;
@@ -59,7 +74,10 @@ where
             .spawn(move || {
                 let result = (|| {
                     while let Some(message) = outbound.recv()? {
-                        frame::write(&mut writer, &message, limits.max_frame_bytes)?;
+                        match message {
+                            WriteRequest::Message(message) => frame::write(&mut writer, &message, limits.max_frame_bytes)?,
+                            WriteRequest::Flush(done) => { let _ = done.send(()); }
+                        }
                     }
                     Ok(())
                 })();
@@ -80,13 +98,23 @@ where
             failure,
             stream,
             workers: vec![read_worker, write_worker],
+            flush_timeout: std::time::Duration::from_millis(limits.request_timeout_ms.get()),
         })
     }
 
     fn send_message(&self, message: Outgoing) -> io::Result<()> {
         self.connection_status()?;
         self.outgoing.as_ref().expect("sender lives until drop")
-            .send(message)
+            .send(WriteRequest::Message(message))
+    }
+
+    fn flush_messages(&self) -> io::Result<()> {
+        self.connection_status()?;
+        let (done, written) = mpsc::sync_channel(1);
+        self.outgoing.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "connection closed"))?
+            .send(WriteRequest::Flush(done))?;
+        written.recv_timeout(self.flush_timeout).map_err(|error| io::Error::new(
+            if matches!(error, mpsc::RecvTimeoutError::Timeout) { io::ErrorKind::TimedOut } else { io::ErrorKind::BrokenPipe }, error))
     }
 
     fn poll_message(&self) -> io::Result<Option<Incoming>> {
@@ -130,6 +158,7 @@ impl<Outgoing, Incoming> Drop for SocketPeer<Outgoing, Incoming> {
 
 impl ClientLink for SocketClient {
     fn send(&self, message: ClientMsg) -> io::Result<()> { self.send_message(message) }
+    fn flush(&self) -> io::Result<()> { self.flush_messages() }
     fn poll(&self) -> io::Result<Option<ServerMsg>> { self.poll_message() }
 }
 

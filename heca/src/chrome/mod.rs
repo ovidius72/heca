@@ -56,7 +56,6 @@ pub use state::events::{
     ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection,
 };
 pub use state::{PaneRuntimeStore, SharedChromeState, WorkspacesContainerState};
-pub(crate) use state::PaneRuntimeSignals;
 
 // ── surfaces ──
 pub use surfaces::context_menu::MenuBuild;
@@ -75,8 +74,9 @@ pub use surfaces::overlay::OverlayId;
 pub(crate) use surfaces::overlay::{
     ModalAction, ModalResult, ModalSpec, OverlayHost, collect_form as collect_overlay_form,
     content_covered, open_modal, resolve as resolve_overlay, top_modal,
+    discard_overlays,
 };
-pub(crate) use surfaces::palette::open_command_palette;
+pub(crate) use surfaces::palette::{open_command_palette, open_session_folder};
 
 // ── window ──
 pub use window::division::ChromeConfig;

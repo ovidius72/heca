@@ -40,6 +40,7 @@ pub(crate) fn estimate_terminal_grid(
 #[derive(Clone, Debug)]
 pub(crate) struct TerminalSettings {
     pub(crate) agents: Option<heca_core::agent::AgentOptions>,
+    pub(crate) agent_feedback: heca_config::settings::AgentsConfig,
     pub(crate) theme: Theme,
     pub(crate) shell_integration: bool,
     pub(crate) scrollback: usize,
@@ -54,6 +55,7 @@ impl TerminalSettings {
         let settings = &app_config.config.settings;
         Self {
             agents: crate::agent::options(&settings.agents),
+            agent_feedback: settings.agents.clone(),
             theme: app_config.theme.clone(),
             shell_integration: settings.shell_integration,
             scrollback: settings.terminal_scrollback_lines,
@@ -88,6 +90,14 @@ pub(crate) fn launch(
 ) -> Result<Box<dyn PaneBackend>, SpawnError> {
     let (cols, rows) = spec.grid;
     let mut backend = match &spec.program {
+        Program::Recorded(process) => {
+            let mut options = terminal_backend_options(&settings.terminal.theme,
+                settings.wake_on_output.clone(), false, settings.terminal.scrollback, settings.terminal.scroll_animations);
+            options.cwd = process.cwd.clone();
+            options.agents = settings.terminal.agents.clone();
+            TerminalBackend::with_process(cols, rows, settings.cell_size.0, settings.cell_size.1, process, options)
+                .map(|backend| Box::new(backend) as Box<dyn PaneBackend>).map_err(|error| SpawnError(error.to_string()))?
+        }
         Program::Shell => {
             let mut options = terminal_backend_options(
                 &settings.terminal.theme,

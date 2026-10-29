@@ -7,6 +7,10 @@ mod transport;
 mod images;
 mod reads;
 mod local;
+mod feedback;
+mod sessions;
+#[cfg(test)]
+mod tests;
 pub(crate) use reads::ReadEffect;
 
 use std::{collections::HashMap, io, rc::Rc, sync::mpsc, time::Instant};
@@ -30,6 +34,9 @@ struct Pending { action: WmAction, name: String, before: Before }
 
 #[derive(Default)]
 pub(crate) struct Update {
+    pub(crate) session_attached: bool,
+    pub(crate) session_terminated: bool,
+    pub(crate) session_deleted: bool,
     pub(crate) content: Option<SessionContent>,
     /// The notifications on show, when the server sent a fresh projection this poll. The window
     /// builds its own toasts from it; `None` means the set did not change.
@@ -45,6 +52,13 @@ pub(crate) struct Update {
 }
 
 pub struct ClientState {
+    /// The server-assigned physical connection identity, shared by all client/session operations.
+    pub client_id: u64,
+    /// This connection's stable display ordinal within the selected session.
+    pub window_ordinal: u64,
+    feedback: feedback::FeedbackView,
+    pub(crate) session: crate::server::sessions::SessionInfo,
+    pub(crate) sessions: Vec<crate::server::sessions::SessionInfo>,
     /// Client-side terminal views only, never emulators or process handles.
     pub backends: BackendStore,
     pub programs: Rc<ProgramsConfig>,
@@ -59,14 +73,18 @@ pub struct ClientState {
     image_limit: usize,
     reads: reads::Reads,
     failed: bool,
+    switching: bool,
+    pending_selection: Option<String>,
+    wake: ServerWaker,
+    connection: heca_config::settings::ConnectionConfig,
 }
 
 impl ClientState {
-    pub(crate) fn connect(config: &AppConfig, wake: ServerWaker, standalone: bool) -> io::Result<(Self, SessionContent)> {
+    pub(crate) fn connect(config: &AppConfig, wake: ServerWaker, launch: crate::app::cli::LaunchMode) -> io::Result<(Self, SessionContent)> {
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
         let app_wake = wake.clone();
         let wake = ServerWaker::new(move || { app_wake.wake(); let _ = ready_tx.try_send(()); });
-        let (link, mut local): (Box<dyn ClientLink>, _) = if standalone || !cfg!(unix) {
+        let (link, mut local): (Box<dyn ClientLink>, _) = if launch == crate::app::cli::LaunchMode::Standalone || !cfg!(unix) {
             let mut server = local::LocalServer::new(config, wake.clone())?;
             let (client, link) = in_process_with_limits(wake.clone(), wake.clone(), config.config.settings.connection);
             server.add_client(link);
@@ -74,21 +92,32 @@ impl ClientState {
         } else {
             (transport::connect(config.config.settings.connection, wake.clone())?, None)
         };
-        link.send(ClientMsg::Attach)?;
-        let deadline = Instant::now() + std::time::Duration::from_millis(config.config.settings.connection.request_timeout_ms.get());
-        let content = loop {
-            if let Some(server) = &mut local { server.pump(); }
-            if let Some(message) = link.poll()? {
-                if let ServerMsg::Attached { content } = message { break content; }
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "server did not acknowledge attach"));
+        let target = match launch {
+            crate::app::cli::LaunchMode::Session(name) => ClientMsg::AttachTo { name },
+            crate::app::cli::LaunchMode::New { path, name } => {
+                let folder = crate::server::sessions::resolve_folder(path.as_deref(), &std::env::current_dir()?)?;
+                link.send(ClientMsg::Session { request_id: 1, command: crate::server::sessions::SessionCommand::Create { folder, name, label: None } })?;
+                match crate::server::wire::await_message(link.as_ref(), &ready_rx, config.config.settings.connection,
+                    || { if let Some(server) = &mut local { server.pump(); } })? {
+                    ServerMsg::Sessions { result: Ok(crate::server::sessions::SessionReply::Updated(info)), .. } => ClientMsg::AttachTo { name: info.name },
+                    ServerMsg::Sessions { result: Err(error), .. } => return Err(io::Error::other(error)),
+                    _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected session create reply")),
+                }
             }
-            ready_rx.recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                .map_err(|error| io::Error::new(io::ErrorKind::TimedOut, error))?;
+            _ => ClientMsg::Attach,
         };
-        let (outbox, requests) = outbox::channel(config.config.settings.connection.queue_capacity.get(), wake);
-        Ok((Self { backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
+        link.send(target)?;
+        let (session, client_id, window_ordinal, content) = match crate::server::wire::await_message(link.as_ref(), &ready_rx,
+            config.config.settings.connection, || { if let Some(server) = &mut local { server.pump(); } })? {
+            ServerMsg::Attached { session, client_id, window_ordinal, content } => (session, client_id, window_ordinal, content),
+            ServerMsg::Sessions { result: Err(error), .. } => return Err(io::Error::other(error)),
+            _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "server did not acknowledge attach")),
+        };
+        let (outbox, requests) = outbox::channel(config.config.settings.connection.queue_capacity.get(), wake.clone());
+        Ok((Self { client_id, window_ordinal, feedback: Default::default(), session, sessions: Vec::new(), backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
             link, local, data: Default::default(), outbox, requests, pending: HashMap::new(), next_request: 1,
-            images: Default::default(), image_limit: config.config.settings.connection.max_image_bytes.get(), reads: Default::default(), failed: false }, content))
+            images: Default::default(), image_limit: config.config.settings.connection.max_image_bytes.get(), reads: Default::default(), failed: false,
+            switching: false, pending_selection: None, wake, connection: config.config.settings.connection }, content))
     }
 
     pub(crate) fn start_terminal(&mut self, owner: impl Into<TerminalOwner>, spec: TerminalSpec, cell: (f32, f32)) -> Result<Ensured, SpawnError> {
@@ -108,6 +137,7 @@ impl ClientState {
     }
 
     pub(crate) fn act(&mut self, action: WmAction, asker: Asker, name: String, before: Before) {
+        if self.switching { return; }
         let request_id = self.next_request;
         self.next_request += 1;
         let terminal = match &action {
@@ -128,13 +158,62 @@ impl ClientState {
 
     fn poll_connected(&mut self) -> io::Result<Update> {
         self.outbox.check()?;
-        while let Ok(message) = self.requests.try_recv() { self.link.send(message)?; }
+        while let Ok(message) = self.requests.try_recv() {
+            if !self.switching || matches!(message, ClientMsg::RpcReply { .. }) { self.link.send(message)?; }
+        }
+        if let Some(name) = self.pending_selection.take() { self.link.send(ClientMsg::AttachTo { name })?; }
         if let Some(server) = &mut self.local { server.pump(); }
         let mut update = Update::default();
         while let Some(message) = self.link.poll()? {
             match message {
-                ServerMsg::Attached { content } | ServerMsg::Content { content } => update.content = Some(content),
+                ServerMsg::Attached { session, client_id, window_ordinal, content } => {
+                    update = Update::default();
+                    if session.id != self.session.id { self.feedback = Default::default(); }
+                    self.reset_projection();
+                    self.session = session;
+                    self.client_id = client_id;
+                    self.window_ordinal = window_ordinal;
+                    update.content = Some(content);
+                    update.session_attached = true;
+                }
+                ServerMsg::Content { content } => update.content = Some(content),
+                ServerMsg::Sessions { request_id, result } => match result {
+                    Ok(crate::server::sessions::SessionReply::List(sessions)) => {
+                        if self.pending.get(&request_id).is_some_and(|pending| matches!(pending.action, WmAction::ListSessions)) {
+                            update.intents.push(crate::chrome::Intent::new("command_palette")
+                                .arg("mode", crate::chrome::PropValue::Text("session".into())));
+                        }
+                        if let Some(current) = sessions.iter().find(|session| session.id == self.session.id) { self.session = current.clone(); }
+                        self.sessions = sessions;
+                    }
+                    Ok(crate::server::sessions::SessionReply::Updated(session)) => {
+                        if self.pending.get(&request_id).is_some_and(|pending| matches!(pending.action, WmAction::CreateSession { .. })) {
+                            self.switch_session(session.name.clone())?;
+                        }
+                        if session.id == self.session.id { self.session = session; }
+                    }
+                    Ok(crate::server::sessions::SessionReply::Deleted(_)) => {},
+                    Err(error) => { self.switching = false; update.errors.push(error); },
+                },
+                ServerMsg::SessionTerminated { session } => {
+                    self.session = session;
+                    self.pending.clear();
+                    update.session_terminated = true;
+                }
+                ServerMsg::SessionDeleted { .. } => { self.pending.clear(); update.session_deleted = true; },
                 ServerMsg::Notifications(views) => update.notifications = Some(views),
+                ServerMsg::Feedback { session_id, panes } => {
+                    if session_id == self.session.id {
+                        self.feedback.receive(panes);
+                        update.effects.has_data = true;
+                    }
+                }
+                ServerMsg::FeedbackSound { session_id, pane_id, revision } => {
+                    if session_id == self.session.id {
+                        self.feedback.grant_sound(pane_id, revision);
+                        update.effects.has_data = true;
+                    }
+                }
                 ServerMsg::Changed(change) => update.changes.push(change),
                 ServerMsg::Refused(reason) => update.changes.push(Change::Refused(reason)),
                 ServerMsg::Reply { request_id, changes } => {
@@ -274,5 +353,12 @@ impl ClientState {
 }
 
 impl Drop for ClientState {
-    fn drop(&mut self) { let _ = self.link.send(ClientMsg::Detach); }
+    fn drop(&mut self) {
+        // A close action can end the window before the next poll flushes its RPC answer.
+        while let Ok(message) = self.requests.try_recv() {
+            if matches!(message, ClientMsg::RpcReply { .. }) { let _ = self.link.send(message); }
+        }
+        let _ = self.link.send(ClientMsg::Detach);
+        let _ = self.link.flush();
+    }
 }

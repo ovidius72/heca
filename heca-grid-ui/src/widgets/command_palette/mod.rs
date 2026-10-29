@@ -35,7 +35,7 @@
 //! query field. Those paths live in `geometry`, `paint` and `component`; mode declarations
 //! and named prefill live in `modes`.
 
-use crate::builders::{LayoutExt, Parent};
+use crate::builders::{LayoutExt, Parent, TooltipExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
@@ -57,6 +57,7 @@ mod metrics;
 mod modes;
 mod paint;
 mod search;
+mod source;
 
 pub use command::Command;
 use metrics::*;
@@ -65,6 +66,7 @@ use metrics::*;
 pub struct CommandPalette {
     base: Base,
     commands: Vec<Command>,
+    source: Option<source::CandidateSource>,
     /// Sigil → scope, in declaration order; **the first declared is the default mode**, the one a
     /// query with no sigil is in.
     ///
@@ -131,6 +133,7 @@ impl CommandPalette {
         Self {
             base,
             commands: Vec::new(),
+            source: None,
             modes: Vec::new(),
             named_prefill: None,
             query,
@@ -174,6 +177,11 @@ impl CommandPalette {
     /// and the rest is panel chrome, not text.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn command(mut self, c: Command) -> Self {
+        self.push_command(c);
+        self
+    }
+
+    fn push_command(&mut self, c: Command) {
         let title = Label::new(c.label.clone()).truncate(Ellipsis::End);
         self.title_marks.push(title.marks_signal());
         // The row's text signal, kept so a host can rename a row **in place**. The label is a
@@ -186,15 +194,20 @@ impl CommandPalette {
             // Cut by default, reflowed while selected — `sync_wrap` flips it. Because the height is
             // measured, the reflow moves every row below it.
             let d = Label::new(desc.clone())
-                .truncate(Ellipsis::End)
+                .truncate(if c.description_path { Ellipsis::Start } else { Ellipsis::End })
                 .wrap(false)
                 .muted(true);
-            *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
+            if !c.description_path {
+                *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
+            }
+            let d = if c.description_path { d.tooltip(desc.clone()) } else { d };
             column = column.child(d);
+        }
+        if let Some(detail) = &c.detail {
+            column = column.child(Label::new(detail.clone()).truncate(Ellipsis::End).wrap(false).muted(true));
         }
         self.base.children.insert(self.commands.len(), Box::new(column));
         self.commands.push(c);
-        self
     }
     /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
     /// rows it shows**, and nothing else — the text stays at reading size at every size, which is why
@@ -228,6 +241,7 @@ impl CommandPalette {
     pub fn query(mut self, text: impl Into<String>) -> Self {
         self.named_prefill = None;
         self.query.set(text.into());
+        self.refresh_source();
         // Mark, place the selection and reflow now, so this does not depend on being called before
         // `open` — properties are order-independent, and a mode set after it would otherwise paint
         // the wrong list once.

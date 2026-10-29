@@ -40,6 +40,8 @@ pub enum RpcError {
     NotRunnable(String),
     /// Called without the arguments it declares as required — `describe-action <name>` lists them.
     MissingArgs(String),
+    /// The action ran, but its owner rejected the requested operation.
+    Failed(String),
 }
 
 impl std::fmt::Display for RpcError {
@@ -67,6 +69,7 @@ impl std::fmt::Display for RpcError {
                 "action '{name}' needs arguments it was not given — see 'describe-action {name}'"
             ),
             RpcError::NotInitialized => write!(f, "app not initialized"),
+            RpcError::Failed(message) => write!(f, "{message}"),
         }
     }
 }

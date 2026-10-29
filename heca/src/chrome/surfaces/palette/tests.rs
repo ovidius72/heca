@@ -94,6 +94,7 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
     let shortcuts = crate::chrome::ActionShortcuts::default();
     let programs = heca_config::programs::ProgramsConfig::default();
     let sources = modes::RowSources {
+        sessions: &[],
         catalog: &catalog,
         owners: &owners,
         shortcuts: &shortcuts,

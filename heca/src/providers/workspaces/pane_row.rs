@@ -243,7 +243,6 @@ impl PaneRow<'_> {
             // Click / Enter / Space run the row's declared click.
             .on_activate(press)
             .child(content);
-        super::feedback::bind(runtime_signals, pane_id, ws_state.agent_statuses, ws_state.selection.active_pane);
         // **Every state that moves with focus, published in the same breath as its initial value.**
         // See this module's note: a bool read at build time freezes, because the tree does not
         // rebuild on a focus change.

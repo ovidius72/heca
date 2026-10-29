@@ -1,5 +1,28 @@
 use super::*;
 
+#[test]
+fn a_path_stays_on_one_line_and_details_have_their_own_line_at_every_width() {
+    let path = "/Users/example/projects/a-very-long-worktree/target/native/projects/A";
+    for width in [360.0, 900.0, 1600.0] {
+        let viewport = Size::new(width, 800.0);
+        let mut palette = CommandPalette::new()
+            .command(Command::new("Project A", || {}).path(path).detail("2 windows / 1 agent"))
+            .default_open(true);
+        LayoutEngine::new().compute(&mut palette, viewport);
+        let scene = common::paint_in(&palette, &Theme::default(), viewport);
+        let text = scene.iter().filter_map(|command| match command {
+            DrawCommand::Text(text) => Some(text), _ => None,
+        }).collect::<Vec<_>>();
+        let title = text.iter().find(|text| text.text == "Project A").unwrap();
+        let paths = text.iter().filter(|text| text.text.ends_with("projects/A")).collect::<Vec<_>>();
+        assert_eq!(paths.len(), 1, "path must not wrap at {width}px: {text:?}");
+        let details = text.iter().find(|text| text.text == "2 windows / 1 agent").unwrap();
+        assert!(paths[0].rect.loc.y >= title.rect.loc.y + title.rect.size.h - 1.0);
+        assert!(details.rect.loc.y >= paths[0].rect.loc.y + paths[0].rect.size.h - 1.0);
+        assert!(paths[0].rect.loc.x + paths[0].rect.size.w <= width);
+    }
+}
+
 /// A description is a **second line under its label**, and it makes every row two lines high — the
 /// measured thing, because a row-height rule that only the paint knows would misplace every click.
 #[test]

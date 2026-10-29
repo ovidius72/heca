@@ -9,7 +9,7 @@ fn reports(root: &std::path::Path) -> Reports {
     let endpoint = root.join("reports");
     fs::write(&endpoint, []).unwrap();
     Reports { endpoint: Some(endpoint), events: [(
-        "Stop".into(), AgentState::new("example", "Example", AgentStatus::new("finished")),
+        "Stop".into(), AgentState::new("example", "Example", AgentStatus::new("finished")).event("Stop"),
     )].into(), limit: 4096 }
 }
 
@@ -25,6 +25,7 @@ fn native_payload_forwards_only_metadata_and_cannot_override_the_configured_repo
     let report: AgentState = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(report.driver, "example");
     assert_eq!(report.status.as_str(), "finished");
+    assert_eq!(report.event.as_deref(), Some("Stop"));
     assert_eq!(report.model.as_deref(), Some("native-model"));
     assert_eq!(report.session_id.as_deref(), Some("session-a"));
     assert_eq!(report.session_title.as_deref(), Some("My session"));

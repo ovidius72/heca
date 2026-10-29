@@ -9,6 +9,11 @@ use crate::backend::{
 use crate::runtime::PaneRuntime;
 
 impl PaneBackend for TerminalBackend {
+    fn process_launch(&self) -> Option<crate::backend::ProcessLaunch> {
+        if let Some(launch) = &self.command_launch { return Some(launch.clone()); }
+        if self.auto_close_on_exit && self.runtime.status == crate::runtime::ProcessStatus::Running { return None; }
+        Some(self.pty.launch.clone())
+    }
     fn reload_agent_config(&mut self, options: Option<crate::agent::AgentOptions>) -> Result<(), crate::agent::AgentError> {
         self.configure_agents(options)
     }
@@ -52,7 +57,9 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn take_alerts(&mut self) -> Vec<BackendAlert> {
-        self.engine.take_alerts()
+        let mut alerts = std::mem::take(&mut self.pending_alerts);
+        alerts.extend(self.engine.take_alerts());
+        alerts
     }
 
     fn take_clipboard_writes(&mut self) -> Vec<String> {

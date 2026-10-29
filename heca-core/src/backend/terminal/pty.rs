@@ -79,6 +79,7 @@ impl std::error::Error for PtyError {
 
 /// Cross-platform PTY handle with buffered output delivery.
 pub(super) struct PtyHandle {
+    pub(super) launch: crate::backend::ProcessLaunch,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     master: Box<dyn portable_pty::MasterPty + Send>,
     writer: SharedWriter,
@@ -112,6 +113,20 @@ pub(super) struct PtyLaunchOptions<'a> {
 }
 
 impl PtyHandle {
+    pub(super) fn command_launch(&self, command: &str, cwd: Option<&Path>) -> Result<crate::backend::ProcessLaunch, PtyError> {
+        process_launch(&command_for_spawned_command(&self.shell, command, cwd), cwd)
+    }
+
+    pub(super) fn new_with_process(cols: usize, rows: usize, cell_px: (f32, f32),
+        wake: Option<WakeCallback>, process: &crate::backend::ProcessLaunch) -> Result<Self, PtyError> {
+        check_cwd(process.cwd.as_deref())?;
+        let mut command = CommandBuilder::new(&process.executable);
+        command.args(&process.arguments);
+        if let Some(cwd) = &process.cwd { command.cwd(cwd); }
+        let pair = native_pty_system().openpty(pty_size(cols, rows, cell_px))
+            .map_err(|error| PtyError::new(PtyOperation::OpenPty, error))?;
+        Self::spawn_with_command_builder(pair, process.executable.display().to_string(), command, process.clone(), wake)
+    }
     pub(super) fn new_with_shell(
         cols: usize,
         rows: usize,
@@ -130,8 +145,9 @@ impl PtyHandle {
             .map(str::to_string)
             .unwrap_or_else(default_shell);
         let mut cmd = command_for_shell(&shell, options.shell_integration, options.env_clear, options.env, options.cwd);
+        let original = command_for_shell(&shell, None, options.env_clear, options.env, options.cwd);
         if let Some(agents) = options.agents { cmd.env("HECA_AGENT_BIN", agents.bin()); }
-        Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
+        Self::spawn_with_command_builder(pair, shell, cmd, process_launch(&original, options.cwd)?, wake_on_output)
     }
 
     pub(super) fn new_with_command(
@@ -156,13 +172,15 @@ impl PtyHandle {
             .unwrap_or_else(default_shell);
         let prepared = options.agents.map(|agents| agent_command(&shell, &agents.bin(), command));
         let cmd = command_for_spawned_command(&shell, prepared.as_deref().unwrap_or(command), options.cwd);
-        Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
+        let original = command_for_spawned_command(&shell, command, options.cwd);
+        Self::spawn_with_command_builder(pair, shell, cmd, process_launch(&original, options.cwd)?, wake_on_output)
     }
 
     fn spawn_with_command_builder(
         pair: portable_pty::PtyPair,
         shell: String,
         mut cmd: CommandBuilder,
+        launch: crate::backend::ProcessLaunch,
         wake_on_output: Option<WakeCallback>,
     ) -> Result<Self, PtyError> {
         cmd.env("TERM", "xterm-256color");
@@ -227,6 +245,7 @@ impl PtyHandle {
         });
 
         Ok(Self {
+            launch,
             child,
             master: pair.master,
             writer,
@@ -284,6 +303,14 @@ impl PtyHandle {
     pub(super) fn try_wait(&mut self) -> std::io::Result<Option<portable_pty::ExitStatus>> {
         self.child.try_wait()
     }
+}
+
+fn process_launch(command: &CommandBuilder, cwd: Option<&Path>) -> Result<crate::backend::ProcessLaunch, PtyError> {
+    let [executable, arguments @ ..] = command.get_argv().as_slice() else {
+        return Err(PtyError::new(PtyOperation::Spawn, anyhow::anyhow!("missing executable")));
+    };
+    let cwd = cwd.map(Path::to_owned).or_else(|| std::env::current_dir().ok());
+    Ok(crate::backend::ProcessLaunch { executable: executable.into(), arguments: arguments.to_vec(), cwd })
 }
 
 fn command_for_shell(

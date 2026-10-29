@@ -192,6 +192,9 @@ fn terminal_backend_command_spawn_runs_and_stays_open_for_policy() {
         "command backend should capture the exit code"
     );
     assert_eq!(backend.runtime().status, ProcessStatus::Error);
+    assert_eq!(backend.take_alerts(), vec![crate::backend::BackendAlert::ProcessCompleted { exit_code: 7 }]);
+    let _ = backend.update();
+    assert!(backend.take_alerts().is_empty());
     assert!(
         terminal_text(&backend).contains("phase6-ok"),
         "command backend should render command output"

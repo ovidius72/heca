@@ -33,6 +33,8 @@ mod actions;
 mod model;
 mod modes;
 mod targets;
+mod sessions;
+pub(crate) use sessions::open_session_folder;
 
 use actions::{entries, group_of};
 use model::{OwnerInfo, PaletteEntry};
@@ -107,7 +109,9 @@ pub(crate) fn open_command_palette(
             heca_config::settings::PaletteSize::Normal => heca_grid_ui::WidgetSize::Normal,
             heca_config::settings::PaletteSize::Large => heca_grid_ui::WidgetSize::Large,
         });
+    let session_rows = sessions::entries(&state.client.sessions, state.client.session.id, &state.settings.session_text);
     let sources = modes::RowSources {
+        sessions: &session_rows,
         catalog: &state.action_catalog,
         owners: &owners,
         shortcuts: &state.action_shortcuts,
@@ -123,6 +127,8 @@ pub(crate) fn open_command_palette(
             .current(row.current)
             .preselect(row.preselect)
             .description(row.description.clone());
+        if row.description_path { command = command.path(row.description.clone()); }
+        if let Some(detail) = &row.detail { command = command.detail(detail.clone()); }
         // The identity past choices are counted against — **not** the row's id. For an action they
         // are the same string; for a pane they are not, and assuming they were is what would file
         // a habit under a number that means something different tomorrow. An entry without one

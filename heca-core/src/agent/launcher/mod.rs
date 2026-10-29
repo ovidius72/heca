@@ -27,6 +27,8 @@ fn request_path(directory: &Path) -> io::Result<PathBuf> {
 
 #[derive(Serialize, Deserialize)]
 struct LaunchRequest {
+    executable: PathBuf,
+    arguments: Vec<std::ffi::OsString>,
     program: String,
     cwd: PathBuf,
     environment: BTreeMap<String, String>,

@@ -18,6 +18,8 @@ use std::io;
 
 mod frame;
 mod queue;
+mod wait;
+pub(crate) use wait::await_message;
 pub(crate) mod terminal;
 pub(crate) mod image;
 #[cfg(unix)]
@@ -33,6 +35,9 @@ use crate::input::WmAction;
 pub(crate) enum ClientMsg {
     /// Attach to the session; the server replies with [`ServerMsg::Attached`].
     Attach,
+    /// Select one existing session on a new connection. The ordinary Attach selects the last one.
+    AttachTo { name: String },
+    Session { request_id: u64, command: super::sessions::SessionCommand },
     /// Detach — the window is going away; the session and its programs keep running.
     Detach,
     /// Run a server action, carrying this window's own view facts (the server holds no per-client
@@ -53,6 +58,10 @@ pub(crate) enum ClientMsg {
     /// Raise/dismiss/hover a notification — the server owns the queue, timers and dedup and sends
     /// back a [`ServerMsg::Notifications`] projection.
     Notify(crate::server::NotificationCommand),
+    AcknowledgeFeedback { session_id: heca_core::layout::SessionId,
+        pane_id: heca_core::layout::PaneId, revision: u64 },
+    RequestFeedbackSound { session_id: heca_core::layout::SessionId,
+        pane_id: heca_core::layout::PaneId, revision: u64 },
     /// Config changed on disk (`prefix+Shift+r`): the server re-reads it and re-applies its own
     /// terminal and notification settings. The window never hands settings over — it keeps only
     /// its own view-side config.
@@ -69,7 +78,11 @@ pub(crate) enum ClientMsg {
 pub(crate) enum ServerMsg {
     /// The whole shared content, on attach — the client rebuilds a `Session` from it to draw
     /// ([`SessionContent::rebuild`]).
-    Attached { content: SessionContent },
+    Attached { session: super::sessions::SessionInfo, client_id: u64,
+        window_ordinal: u64, content: SessionContent },
+    Sessions { request_id: u64, result: Result<super::sessions::SessionReply, String> },
+    SessionTerminated { session: super::sessions::SessionInfo },
+    SessionDeleted { id: heca_core::layout::SessionId },
     /// Something changed in the shared content; the client reacts to it for itself.
     Changed(Change),
     /// The server refused an action, and why.
@@ -82,6 +95,10 @@ pub(crate) enum ServerMsg {
     /// from them. Sent on attach and whenever the visible set changes; a newer one replaces a
     /// still-queued older one (it is a whole snapshot).
     Notifications(Vec<crate::notification::NotificationView>),
+    Feedback { session_id: heca_core::layout::SessionId,
+        panes: Vec<super::feedback::PaneFeedback> },
+    FeedbackSound { session_id: heca_core::layout::SessionId,
+        pane_id: heca_core::layout::PaneId, revision: u64 },
     Reply { request_id: u64, changes: Vec<Change> },
     Rpc { request_id: u64, line: String },
     Dispatch { intents: Vec<crate::chrome::Intent> },
@@ -98,6 +115,8 @@ pub(crate) enum ServerMsg {
 pub(crate) trait ClientLink: Send {
     /// Send a message to the server.
     fn send(&self, msg: ClientMsg) -> io::Result<()>;
+    /// Finish queued writes before closing. In-process links deliver synchronously.
+    fn flush(&self) -> io::Result<()> { Ok(()) }
     /// Take the next message from the server, if one is waiting. Never blocks.
     fn poll(&self) -> io::Result<Option<ServerMsg>>;
 }

@@ -311,7 +311,7 @@ fn toml_value(text: &str) -> toml::Value {
 fn project_sound_controls_override_sources_without_losing_other_status_defaults() {
     use crate::sound::{Sound, SoundSource};
     let user = deep_merge(embedded_base(), toml_value(
-        "[settings.agents.sounds]\nenabled = true\n[settings.agents.statuses.finished.sound]\nvolume = 0.3",
+        "[settings]\nnotification_sound = true\n[settings.agents.statuses.finished.sound]\nvolume = 0.3",
     ));
     let project = toml_value(
         "[settings.agents.statuses.finished.sound]\nsource = '/project/completed.mp3'\n\
@@ -319,7 +319,7 @@ fn project_sound_controls_override_sources_without_losing_other_status_defaults(
     );
     let config = layered(user, Some((PathBuf::from(".heca/config.toml"), project))).unwrap();
     let agents = &config.settings.agents;
-    assert!(agents.sounds.enabled);
+    assert!(config.settings.notification_sound);
     assert_eq!(agents.statuses["finished"].sound, Some(Sound::load("/project/completed.mp3").volume(0.3)));
     assert_eq!(agents.statuses["waiting_permission"].sound, Some(Sound::asset("locked").enabled(false)));
     assert_eq!(agents.statuses["error"].sound.as_ref().unwrap().source, SoundSource::Asset("error".into()));

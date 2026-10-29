@@ -15,6 +15,20 @@
 
 # ─────────────────────────────────────────────────────────────────────────────
 [settings]
+# Pane-feedback flashing time: a non-negative integer in milliseconds, without quotes.
+# Default 8000 = 8 seconds TOTAL, including pauses, not the duration of each pulse.
+# 0 = repeat until acknowledged; it does NOT disable flashing. A positive value
+# stops the animation at that timeout or earlier when the pane is acknowledged.
+# Timeout does not mark feedback seen. Cadence/colours come from the theme;
+# the flash uses the pane row's configured radius, not a separate flash radius.
+# Separate from toast auto-dismiss and the terminal bell. See README: Pane Feedback Settings.
+notification_flash = 8000
+# Pane-feedback audio: TOML boolean true or false, without quotes; default true.
+# true = one configured sound per new background event, not per pulse or window.
+# false = mute feedback audio only; flashing and process/agent status are unchanged.
+# Applies to shell/editor completions as well as enabled integration events.
+# Per-status mute/source/volume and audio-device availability still apply.
+notification_sound = true
 
 # Command palette size: "small" (560px, 6 rows), "normal" (700px, 8 rows) or
 # "large" (1000px, 12 rows). Width and row count only — the text is the same size at
@@ -44,6 +58,11 @@ search_history = true
 # kept to order the list. Both are per surface, not totals.
 search_history_size = 50
 search_usage_size = 500
+# Unnamed sessions receive a distinct display name. A user name replaces it.
+session_name_format = "heca #{number}"
+# These settings independently govern ordinary program relaunch and harness resume.
+resume_programs = true
+resume_harness = true
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Color theme by name. Built-ins: "grid_tron" (default), "grid_ares", "mocha",
@@ -186,6 +205,18 @@ show_top_bar = true    # the tab bar
 show_bottom_bar = true # the status bar
 
 # ─────────────────────────────────────────────────────────────────────────────
+[settings.session_text]
+unavailable = "Session unavailable"
+terminated = "This session has been terminated and is not available."
+server_unavailable = "The server is no longer available."
+restart = "Restart"
+exit = "Exit"
+cancel = "Cancel"
+accept = "OK"
+folder_placeholder = "Project folder (optional)"
+create_folder = "Create folder: {path}"
+counts = "{windows} windows / {agents} agents"
+
 [settings.connection]
 # Per-connection transport limits. Queue overflow must never block the server.
 max_frame_bytes = 16777216
@@ -229,13 +260,13 @@ channel_capacity = 256
 launch_timeout_ms = 5000
 
 [settings.agents.sounds]
-# Enable the bundled defaults or choose files/assets per status. Project config may override it.
-enabled = false
+# Feedback volume and queue size. The shared enable switch is settings.notification_sound.
 volume = 0.7
 queue_capacity = 32
 
 [settings.agents.programs.claude]
 enabled = false
+feedback_events = ["PermissionRequest", "Notification:permission_prompt", "Notification:idle_prompt", "Stop", "StopFailure"]
 name = "Claude Code"
 executables = ["claude"]
 [settings.agents.programs.claude.reports]
@@ -256,6 +287,7 @@ Stop = "finished"
 
 [settings.agents.programs.codex]
 enabled = false
+feedback_events = ["PermissionRequest", "Stop"]
 name = "Codex"
 executables = ["codex"]
 [settings.agents.programs.codex.reports]
@@ -273,6 +305,7 @@ Interrupt = "waiting_input"
 
 [settings.agents.programs.pi]
 enabled = false
+feedback_events = ["agent_settled:completed", "agent_settled:error", "session_compact_failed"]
 name = "pi"
 executables = ["pi"]
 [settings.agents.programs.pi.reports]
@@ -287,6 +320,7 @@ session_compact_failed = "error"
 
 [settings.agents.programs.opencode]
 enabled = false
+feedback_events = ["permission.asked", "session.execution.succeeded", "session.execution.failed"]
 name = "OpenCode"
 executables = ["opencode"]
 [settings.agents.programs.opencode.reports]
@@ -334,6 +368,7 @@ tone = "accent"
 label = "Success"
 icon = "check_circle"
 tone = "success"
+sound = { source = "asset:completed" }
 
 # ─────────────────────────────────────────────────────────────────────────────
 [confirm]

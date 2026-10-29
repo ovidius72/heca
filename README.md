@@ -134,7 +134,12 @@ Ctrl+B → f   Toggle floating
 heca runs as a background **server** that holds your session — the panes and the programs running
 in them — and a **window** that attaches to it, the way tmux does.
 
-- `heca` — attach to the session. The first time, it starts the background server for you.
+- `heca` — attach to the last session. The first time, it starts the background server for you.
+- `heca --sessions [--json]` — list names, folders, attached windows, running agents and lifecycle state.
+- `heca --attach <name>` — open a window on an existing session.
+- `heca --new [path] [--name <name>]` — create a session. The folder defaults to the caller's
+  current folder; relative paths resolve there, and missing folders are created. An omitted name
+  uses `[settings] session_name_format` (default `heca #{number}`). Names are unique.
 - **Close the window** (e.g. `Meta+Q`) — the window detaches; the server and everything running in
   it keep going.
 - `heca` again — **reattach**: the same panes come back, still running, with their scrollback.
@@ -148,7 +153,44 @@ To stop the background server and everything in it — every pane and terminal, 
 heca --kill-server
 ```
 
-(An in-app command to close a single session is coming with the sessions work.)
+The command palette's `#` mode lists sessions and switches this window only. The New Session
+action uses fuzzy folder completion: relative paths start at the focused pane's folder (or home),
+and a missing folder requires choosing the explicit Create folder row. An empty folder chooses home.
+Session rows keep the name, abbreviated path and window/agent counts on separate lines. The full
+path is available in its tooltip.
+
+The attach response carries `session` (`SessionInfo`), `client_id`, `window_ordinal` and `content`.
+`session.id` is the existing `SessionId`; `session.folder` is the optional project path. Client IDs
+identify physical connections and remain unchanged when switching sessions. Display ordinals start
+at one within each session, permit gaps and remain stable through a restart of that session.
+Window-title formatting and follow consume these values in T545; this task does not provide a
+second title or follow implementation.
+
+Session actions use the same catalog as keys, plugins and RPC:
+`list_sessions`, `create_session`, `rename_session_to`, `terminate_session`, `restart_session`, `delete_session`,
+`switch_session`, and `detach_session`. `new_session` and `rename_session` open the GUI prompts.
+Use `heca --describe-action <action>` for arguments. For example:
+
+```bash
+heca --new ~/projects/demo --name demo
+heca rpc list_sessions
+heca rpc rename_session_to session=demo name=work
+heca --kill work
+heca rpc restart_session session=work
+heca rpc delete_session session=work
+```
+
+Terminate (`--kill <name>`) stops the processes but keeps the session definition. Its windows stay
+open with Restart and Exit. Delete removes the definition and closes only its windows; project
+files are never removed. Server loss also leaves windows open for an explicit reconnect or exit;
+disconnected windows do not restart the server automatically.
+
+`resume_programs` and `resume_harness` are independent `[settings]` switches, both defaulting to
+true. Disabled categories start fresh in the retained pane. Original process argv/cwd and native
+harness session IDs are recorded separately. Native harness resume construction and durable JSON
+recovery are P105/T527 work; unavailable launch/resume data is an error, never a silent new
+conversation. A killed server's sessions cannot be recovered from disk until that work lands.
+Session dialog text is configurable under `[settings.session_text]`.
 
 ---
 
@@ -1297,7 +1339,7 @@ normal Heca configuration and registered drivers. It provides `list`, `inspect` 
 `IntegrationOperation::{Install, Update, Uninstall}`. Construction installs nothing and returns invalid
 configuration to the caller. The future settings page will use the same operations.
 
-The command-line entry is not wired yet: P099/T544 supplies it using these agreed commands:
+The command-line entry uses the same installation service:
 
 - `heca install|update|uninstall integration <program> [--json]`
 - `heca inspect integration <program> [--json]`
@@ -1308,6 +1350,29 @@ and registrations. Updates are explicit and preserve reporting choices. Heca ref
 modified integration files; an interrupted write is recovered before another installation change.
 Uninstall removes owned files and registrations, restores native feature settings, and disables the
 program in Heca. No installation server or separate download is required.
+
+The first `install integration <program>` enables that program's reporting. Updating or installing
+it again preserves any later choice to disable it. This setting controls reporting to Heca, not
+whether the agent program can run. The master reporting switch and the sound switch are separate.
+
+Pane feedback includes success and failure when a shell command or directly launched program
+finishes, including editors. It has no program allowlist or minimum-duration threshold. Each
+enabled integration's optional `feedback_events` also selects native attention events. Work/tool
+progress, startup, compaction, subagent activity and voluntary interruptions are silent by default.
+A background pane repeats soft, theme-controlled pulses until acknowledged or until
+`[settings] notification_flash` milliseconds have elapsed (default `8000`, eight seconds).
+`0` has no timeout. A pane with actual
+input focus in the active OS window gets none. The timeout stops the animation, not the pending
+feedback; acknowledgement is still a separate shared operation.
+
+The server session owns feedback revisions and acknowledgement. Focusing the pane in any active
+window acknowledges the observed revision for every window, without changing the agent's status.
+A palette, dialog or focused dock prevents that acknowledgement. New windows receive the current
+pending state and do not replay acknowledged events. A late acknowledgement cannot consume a newer
+event. Completion feedback does not require a reporting integration. Richer program-specific
+attention events still require one; an executable name alone cannot identify an editor's question.
+Commands inside an interactive terminal use the configured shell-integration hooks; directly
+launched programs also report their process exit without those hooks.
 
 Program and event choices are separate from installation:
 
@@ -1341,12 +1406,38 @@ name to status id). Built-in and added drivers use the same contract. Status ids
 drivers and project settings can introduce their own.
 Added drivers keep their declared name and executables unless those fields are overridden.
 
-Sounds are off by default. Set `[settings.agents.sounds] enabled = true` and a sound file on the
-statuses you want to hear:
+### Pane Feedback Settings
+
+These keys belong directly in `[settings]`. They apply to shell commands, editor/program exits
+and the configured attention events of enabled integrations, not just to agents.
+
+| Setting | Default | Accepted Values | Behaviour |
+| --- | --- | --- | --- |
+| `notification_flash` | `8000` | Non-negative TOML integer, in milliseconds | Maximum **total** flashing time, including pauses. Positive values stop the flash at the deadline or earlier on acknowledgement. `0` repeats until acknowledged; it does **not** disable flashing. |
+| `notification_sound` | `true` | TOML boolean `true` or `false` | `true` permits one configured sound for each new background feedback event. `false` mutes feedback sounds without disabling flashes, reporting or status updates. |
+
+Write both values without quotes. For example, `8000` is eight seconds; `8` is eight
+milliseconds. Negative or fractional durations, strings such as `"8000"`, boolean durations,
+and sound values such as `1`, `"true"` or `"false"` are invalid.
+
+The pane with actual input focus in the active window does not flash or play a feedback sound;
+it acknowledges the event for every window attached to that session. A selected pane in an
+inactive window, or behind a palette/dialog/focused dock, is not input-focused. Timing expiry
+only stops the flash: it does not acknowledge the event or change the program's status. A newly
+attached window can still show pending feedback.
+
+The theme's `[flash] duration_s` and `pause_s` control each pulse's cadence, in **seconds**;
+`notification_flash` controls the total time, in **milliseconds**. It does not change colours,
+rounding, toast dismissal (`notification_system.auto_dismiss_ms`) or terminal-bell settings.
+
+The following example uses the defaults and customises one status sound:
 
 ```toml
+[settings]
+notification_flash = 8000
+notification_sound = true
+
 [settings.agents.sounds]
-enabled = true
 volume = 0.7
 queue_capacity = 32
 
@@ -1354,9 +1445,23 @@ queue_capacity = 32
 sound = "/path/to/finished.wav"
 ```
 
-A trusted project's `.heca/config.toml` can override the same keys through the normal config loader.
-Playback happens on status transitions, on a background worker. Repeated reports and task-title changes
-do not repeat a sound. A missing sound file or audio device does not interrupt the terminal.
+Precedence is embedded defaults, then user `config.toml`, then a **trusted** project's
+`.heca/config.toml`. Each layer replaces only the keys it supplies: omitted keys inherit,
+while explicit `0` and `false` are preserved. An untrusted project's overrides are ignored.
+The old `[settings.agents.sounds] enabled` key has been replaced by `[settings] notification_sound`;
+volume, queue size and per-status sound settings keep their existing paths shown above.
+
+Use the config-reload action after editing. A changed flash timeout applies to existing repeating
+flashes without resetting their original start time. If the new deadline has already passed, the
+flash stops; `0` removes the deadline while the event remains pending. Muting applies to future
+playback; a sound already playing may finish. Enabling sound does not replay old feedback.
+
+Playback happens once for a new, unobserved feedback event, on a background worker. The server
+grants playback to at most one client per revision, so several windows do not duplicate the sound.
+Each completion is a new event even when its status matches the previous one. Acknowledged events,
+repeated animation pulses, retransmissions and task-title changes do not repeat a sound. Success
+and error have bundled defaults; the same status table accepts custom sounds. A missing sound file
+or audio device does not interrupt the terminal.
 Volume is limited to `0.0`–`1.0`; the sound queue holds at least one entry.
 Supported sound files are WAV, Ogg Vorbis, MP3 and FLAC.
 

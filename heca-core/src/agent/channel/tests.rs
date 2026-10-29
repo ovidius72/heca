@@ -36,6 +36,7 @@ fn a_coalesced_event_naming_another_child_still_processes_the_launch_queue() {
     fs::create_dir(root.join("run")).unwrap();
     fs::write(root.join("run.request.json"), serde_json::to_vec(&serde_json::json!({
         "program":"demo-agent", "cwd":root, "environment":{"DEMO_CONFIG":"current"},
+        "executable":"/opt/tools/demo-agent", "arguments":[],
     })).unwrap()).unwrap();
     let mut drivers = AgentDrivers::new();
     drivers.register(ExternalDriver::new("demo")).unwrap();

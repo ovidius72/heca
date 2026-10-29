@@ -160,6 +160,7 @@ impl CommandPalette {
     /// cursor here would make a second step back start again from the newest entry, so walking the
     /// history would be impossible past its first step.
     pub(super) fn on_query_replaced(&mut self) {
+        self.refresh_source();
         self.named_prefill = None;
         self.selected = 0;
         self.scroll = 0;

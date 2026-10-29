@@ -6,6 +6,8 @@
 pub mod fake;
 pub mod snapshot;
 pub mod terminal;
+mod launch;
+pub use launch::ProcessLaunch;
 
 pub use fake::FakeBackend;
 pub use snapshot::{
@@ -43,6 +45,8 @@ pub enum PaneType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendAlert {
     Bell,
+    /// A command or directly launched program finished. Drained once, not a runtime snapshot.
+    ProcessCompleted { exit_code: i32 },
 }
 
 /// A scrollback-search hit: a run of cells matching the query on one stable row.
@@ -190,6 +194,8 @@ pub const DEFAULT_CELL_SIZE: (f32, f32) = (8.4, 14.0);
 /// Each pane (terminal, neovim, browser) implements this trait.
 /// The layout engine is agnostic to the backend type.
 pub trait PaneBackend: Send {
+    /// Original launch inputs, when this backend owns a process.
+    fn process_launch(&self) -> Option<ProcessLaunch> { None }
     /// What kind of pane this is.
     fn pane_type(&self) -> PaneType;
 

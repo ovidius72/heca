@@ -149,6 +149,13 @@ pub enum ChromeEvent {
         previous: Option<Box<heca_core::agent::AgentState>>,
         agent: Option<Box<heca_core::agent::AgentState>>,
     },
+    /// One server-granted, unobserved feedback sound, not every animation pulse.
+    PaneFeedback {
+        session: heca_core::layout::SessionId,
+        pane: PaneId,
+        revision: u64,
+        status: String,
+    },
     PaneCwdChanged {
         pane: PaneId,
     },
@@ -232,6 +239,7 @@ impl ChromeEvent {
             ChromeEvent::PaneProcessChanged { .. } => "pane.process.changed",
             ChromeEvent::PaneStatusChanged { .. } => "pane.status.changed",
             ChromeEvent::PaneAgentChanged { .. } => "pane.agent.changed",
+            ChromeEvent::PaneFeedback { .. } => "pane.feedback",
             ChromeEvent::PaneCwdChanged { .. } => "pane.cwd.changed",
             ChromeEvent::PaneGitChanged { .. } => "pane.git.changed",
             ChromeEvent::PaneCustomNameChanged { .. } => "pane.name.changed",

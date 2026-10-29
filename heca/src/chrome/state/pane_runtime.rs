@@ -13,8 +13,6 @@ use super::*;
 pub(crate) struct PaneRuntimeSignals {
     /// Visual feedback belongs to this pane, surviving row rebuilds and dock moves.
     pub(crate) flash: heca_grid_ui::FlashHandle,
-    /// One observer per pane, independent of how many rows display it.
-    pub(crate) feedback_bound: Signal<bool>,
     /// Raw foreground program name, verbatim (e.g. `"nvim"`); `None` until detected.
     pub(crate) program: Signal<Option<String>>,
     /// High-level foreground-process lifecycle status.
@@ -45,7 +43,6 @@ impl PaneRuntimeSignals {
     fn new(runtime: &PaneRuntime) -> Self {
         Self {
             flash: heca_grid_ui::FlashHandle::new(),
-            feedback_bound: signal(false),
             program: signal(runtime.program.clone()),
             status: signal(runtime.status.clone()),
             cwd: signal(runtime.cwd.clone()),
@@ -105,6 +102,14 @@ pub struct PaneRuntimeStore {
 }
 
 impl PaneRuntimeStore {
+    pub(crate) fn play_feedback(&self, session: heca_core::layout::SessionId, pane: PaneId, revision: u64, status: String) {
+        self.events.emit(ChromeEvent::PaneFeedback { session, pane, revision, status });
+    }
+
+    pub(crate) fn clear_feedback(&self) {
+        for pane in self.panes.get_untracked().values() { pane.flash.clear(); }
+    }
+
     pub(super) fn new(events: ChromeEventBus) -> Self {
         let sounds = std::rc::Rc::new(crate::agent::sounds::AgentSounds::new(&events));
         Self {
@@ -114,8 +119,8 @@ impl PaneRuntimeStore {
         }
     }
 
-    pub(crate) fn configure_agents(&self, config: &heca_config::settings::AgentsConfig) {
-        self.sounds.configure(config);
+    pub(crate) fn configure_sounds(&self, config: &heca_config::settings::AgentsConfig, notification_sound: bool) {
+        self.sounds.configure(config, notification_sound);
     }
 
     /// Look at one pane's signals, if the store has met it.

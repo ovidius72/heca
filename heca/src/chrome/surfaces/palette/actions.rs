@@ -53,6 +53,8 @@ pub(crate) fn entries(
                     preselect: false,
                     label,
                     description: meta.description.clone(),
+                    description_path: false,
+                    detail: None,
                     // Through the catalog, not off the meta: the catalog answers with the action's
                     // own glyph *or its category's*, so no row is ever blank and the palette makes
                     // no decision of its own about iconography.

@@ -2,6 +2,9 @@
 
 use super::*;
 
+#[derive(Clone, Copy)]
+pub(crate) enum ReloadReason { Explicit, Session }
+
 /// **A menu a widget asked to open, waiting for the host to mount it.**
 ///
 /// The menu itself, where it goes, and **who it is about** — the declaring widget's own identity,
@@ -70,6 +73,7 @@ pub struct AppState {
     /// workspace, the window's size. Reach both through [`layout`](Self::layout) and
     /// [`layout_mut`](Self::layout_mut).
     pub(crate) view: WindowView,
+    pub(crate) session_dialog: Option<crate::chrome::OverlayId>,
     pub theme: Theme,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
@@ -304,7 +308,7 @@ pub struct AppState {
     pub pending_drops: std::rc::Rc<std::cell::RefCell<Vec<heca_grid_ui::drag::Dropped>>>,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
-    pub pending_reload: bool,
+    pub(crate) pending_reload: Option<ReloadReason>,
     /// Whether the application window is currently focused.
     pub window_focused: bool,
     /// The OS cursor currently set on the window. Tracked so the cursor policy only

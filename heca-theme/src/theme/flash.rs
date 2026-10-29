@@ -28,7 +28,7 @@ pub struct FlashStyle {
 
 impl Default for FlashStyle {
     fn default() -> Self {
-        Self { enabled: true, duration_s: 0.65, pause_s: 0.45, pulses: 3, frames_per_second: 30,
+        Self { enabled: true, duration_s: 2.0, pause_s: 1.0, pulses: 3, frames_per_second: 30,
             border_width_em: 0.12, border_alpha: 235, fill_alpha: 18,
             glow_radius_em: 0.65, glow_strength: 0.45 }
     }

@@ -22,6 +22,16 @@ pub enum ProcessStatus {
 }
 
 impl ProcessStatus {
+    /// Stable status identifier shared with configured presentation tables.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Running => "running",
+            Self::Success => "success",
+            Self::Error => "error",
+        }
+    }
+
     /// **What an exit code says about a program**: `0` is success, anything else an error.
     ///
     /// The one reading of an exit code — the shell's report of a finished command, the pane's own

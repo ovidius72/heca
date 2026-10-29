@@ -20,6 +20,18 @@ use heca_core::runtime::PaneClosePolicy;
 #[derive(Clone, Debug, PartialEq, strum::EnumDiscriminants, serde::Serialize, serde::Deserialize)]
 #[strum_discriminants(name(WmActionKind), derive(Hash, strum::EnumIter))]
 pub enum WmAction {
+    // Session lifecycle is shared; selection and prompts belong to this window.
+    ListSessions,
+    CreateSession { folder: String, name: Option<String>, label: Option<String> },
+    RenameSessionTo { session: Option<String>, name: String },
+    TerminateSession { session: Option<String> },
+    RestartSession { session: Option<String> },
+    DeleteSession { session: Option<String> },
+    NewSession,
+    RenameSession,
+    SwitchSession { name: String },
+    DetachSession,
+    ReconnectSession,
     // ── Navigation (unit) ──
     FocusLeft,
     FocusRight,

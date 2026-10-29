@@ -32,9 +32,11 @@ fn the_same_protocol_crosses_a_real_socket() {
     client.send(ClientMsg::Attach).unwrap();
     assert!(matches!(wait(|| server.poll()).unwrap(), ClientMsg::Attach));
     let content = Session::new(SessionId(1), LayoutOptions::default()).content();
-    server.send(ServerMsg::Attached { content: content.clone() }).unwrap();
+    let session = crate::server::sessions::SessionInfo::unnamed(SessionId(1),
+        &heca_config::settings::SettingsConfig::default().session_name_format, None);
+    server.send(ServerMsg::Attached { session, client_id: 1, window_ordinal: 1, content: content.clone() }).unwrap();
     match wait(|| client.poll()).unwrap() {
-        ServerMsg::Attached { content: received } => assert_eq!(received, content),
+        ServerMsg::Attached { content: received, .. } => assert_eq!(received, content),
         other => panic!("unexpected reply: {other:?}"),
     }
     server.send(ServerMsg::Changed(Change::LayoutChanged)).unwrap();
@@ -51,6 +53,25 @@ fn dropping_a_socket_peer_closes_and_joins_its_workers() {
     drop(client);
     assert!(wait(|| server.poll()).is_err());
     assert!(server.send(ServerMsg::Changed(Change::LayoutChanged)).is_err());
+}
+
+#[test]
+fn flushing_before_drop_writes_the_rpc_answer_and_detach_in_order() {
+    for _ in 0..16 {
+        let (a, mut reader) = UnixStream::pair().unwrap();
+        reader.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        let client = SocketClient::new(a, limits(), wake()).unwrap();
+        client.send(ClientMsg::RpcReply { request_id: 17, answer: "ok".into() }).unwrap();
+        client.send(ClientMsg::Detach).unwrap();
+        client.flush().unwrap();
+        drop(client);
+
+        assert!(matches!(frame::read::<ClientMsg>(&mut reader, limits().max_frame_bytes).unwrap(),
+            Some(ClientMsg::RpcReply { request_id: 17, answer }) if answer == "ok"));
+        assert!(matches!(frame::read::<ClientMsg>(&mut reader, limits().max_frame_bytes).unwrap(),
+            Some(ClientMsg::Detach)));
+        assert!(frame::read::<ClientMsg>(&mut reader, limits().max_frame_bytes).unwrap().is_none());
+    }
 }
 
 #[test]

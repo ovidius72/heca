@@ -11,6 +11,10 @@ use heca_config::theme::{AppConfig, ModifierKey};
 pub struct WindowSettings {
     /// Agent labels and sound policy from the shared configuration loader.
     pub agents: heca_config::settings::AgentsConfig,
+    /// Pane-feedback flashing duration in milliseconds; zero has no timeout.
+    pub notification_flash: u64,
+    pub notification_sound: bool,
+    pub session_text: heca_config::settings::SessionText,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether a dragged pane scrolls the view when it nears the content edge.
@@ -53,6 +57,9 @@ impl WindowSettings {
         let settings = &app_config.config.settings;
         Self {
             agents: settings.agents.clone(),
+            notification_flash: settings.notification_flash,
+            notification_sound: settings.notification_sound,
+            session_text: settings.session_text.clone(),
             mouse_enabled: settings.mouse,
             auto_scroll_edge: settings.auto_scroll_edge,
             edge_scroll_distance: settings.edge_scroll_distance,

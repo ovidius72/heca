@@ -44,7 +44,7 @@ pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
-    state.pending_reload = true;
+    state.pending_reload = Some(crate::app_state::ReloadReason::Explicit);
 }
 
 /// Give chrome keyboard focus to a dock — by id, or by letter.

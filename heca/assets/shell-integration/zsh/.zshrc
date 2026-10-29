@@ -62,6 +62,7 @@ heca_preexec() {
   local prog
   prog="$(heca__command_name "$1")"
   [[ -n "$prog" ]] && heca__osc "133;E;$(heca__urlencode "$prog")"
+  heca__osc "133;F;$(heca__urlencode "$1")"
 }
 
 typeset -ga precmd_functions

@@ -98,3 +98,45 @@ fn invalid_explicit_settings_remain_errors() {
         assert!(config_from_layers(&layered).is_err(), "{value}");
     }
 }
+
+#[test]
+fn session_resume_switches_default_on_and_are_independent() {
+    let defaults = SettingsConfig::default();
+    assert!(defaults.resume_programs && defaults.resume_harness);
+    assert_eq!(defaults.session_name_format, "heca #{number}");
+    for programs in [false, true] {
+        for harnesses in [false, true] {
+            let config = config_from_layers(&format!(
+                "[settings]\nresume_programs={programs}\nresume_harness={harnesses}"
+            )).unwrap();
+            assert_eq!((config.settings.resume_programs, config.settings.resume_harness), (programs, harnesses));
+        }
+    }
+}
+
+#[test]
+fn pane_feedback_timeout_accepts_zero_or_milliseconds_but_not_invalid_values() {
+    assert_eq!(SettingsConfig::default().notification_flash, 8000);
+    assert!(SettingsConfig::default().notification_sound);
+    for milliseconds in [0, 1500, 30000] {
+        let config = config_from_layers(&format!("[settings]\nnotification_flash={milliseconds}")).unwrap();
+        assert_eq!(config.settings.notification_flash, milliseconds);
+    }
+    for value in ["-1", "'forever'", "'8000'", "1.5", "true", "false"] {
+        assert!(config_from_layers(&format!("[settings]\nnotification_flash={value}")).is_err());
+    }
+}
+
+#[test]
+fn feedback_sound_is_a_generic_setting_independent_of_agent_reporting() {
+    for enabled in [true, false] {
+        let config = config_from_layers(&format!(
+            "[settings]\nnotification_sound={enabled}\n[settings.agents]\nenabled=false"
+        )).unwrap();
+        assert_eq!(config.settings.notification_sound, enabled);
+        assert!(!config.settings.agents.enabled);
+    }
+    for value in ["'yes'", "'true'", "'false'", "0", "1"] {
+        assert!(config_from_layers(&format!("[settings]\nnotification_sound={value}")).is_err());
+    }
+}

@@ -43,6 +43,7 @@ heca__command_name() {
 
 heca__prompt_command() {
   local exit_status="${1:-0}"
+  HECA_IN_PROMPT_COMMAND=1
   if [ "${HECA_HAVE_PREEXEC:-0}" -eq 1 ] 2>/dev/null; then
     heca__osc "133;D;$exit_status"
   fi
@@ -50,12 +51,21 @@ heca__prompt_command() {
   heca__emit_cwd
   HECA_HAVE_PREEXEC=0
   HECA_LAST_COMMAND=""
+  if [ -n "$HECA_OLD_PROMPT_COMMAND" ]; then
+    eval "$HECA_OLD_PROMPT_COMMAND"
+  fi
+  HECA_IN_PROMPT_COMMAND=0
   return "$exit_status"
 }
 
 heca__preexec() {
   [ "${HECA_IN_PROMPT_COMMAND:-0}" -eq 1 ] 2>/dev/null && return
   local cmd="${BASH_COMMAND:-}"
+  case "$cmd" in heca__prompt_command*) return ;; esac
+  local caller
+  for caller in "${FUNCNAME[@]:1}"; do
+    [ "$caller" = heca__prompt_command ] && return
+  done
   [ -z "$cmd" ] && return
   [ "$cmd" = "${HECA_LAST_COMMAND:-}" ] && return
   HECA_LAST_COMMAND="$cmd"
@@ -65,12 +75,10 @@ heca__preexec() {
   local prog
   prog="$(heca__command_name "$cmd")"
   [ -n "$prog" ] && heca__osc "133;E;$(heca__urlencode "$prog")"
+  heca__osc "133;F;$(heca__urlencode "$cmd")"
 }
 
 HECA_OLD_PROMPT_COMMAND="${PROMPT_COMMAND:-}"
+HECA_IN_PROMPT_COMMAND=1
+PROMPT_COMMAND='heca__prompt_command "$?"'
 trap 'heca__preexec' DEBUG
-if [ -n "$HECA_OLD_PROMPT_COMMAND" ]; then
-  PROMPT_COMMAND='__heca_status=$?; HECA_IN_PROMPT_COMMAND=1; heca__prompt_command "$__heca_status"; HECA_IN_PROMPT_COMMAND=0; eval "$HECA_OLD_PROMPT_COMMAND"'
-else
-  PROMPT_COMMAND='__heca_status=$?; HECA_IN_PROMPT_COMMAND=1; heca__prompt_command "$__heca_status"; HECA_IN_PROMPT_COMMAND=0'
-fi

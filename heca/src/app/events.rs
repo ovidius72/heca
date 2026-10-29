@@ -21,6 +21,7 @@ use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 #[derive(Clone, Debug)]
 pub enum AppEvent {
+    CloseWindow,
     BackendWake,
     RequestRedraw,
     ChromeIntent {

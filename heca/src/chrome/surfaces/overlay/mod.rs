@@ -23,7 +23,7 @@ mod spec;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use host::{OverlayHost, collect_form, content_covered, resolve, top_modal};
+pub(crate) use host::{OverlayHost, collect_form, content_covered, discard_overlays, resolve, top_modal};
 pub(crate) use modal::open_modal;
 pub use spec::OverlayId;
 pub(crate) use spec::{ModalAction, ModalResult, ModalSpec};

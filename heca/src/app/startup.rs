@@ -356,8 +356,8 @@ pub(crate) async fn init_state(
     let (client, content) = crate::client::ClientState::connect(app_config, crate::server::ServerWaker::new({
         let proxy = event_proxy.clone();
         move || { let _ = proxy.send_event(crate::app::events::AppEvent::BackendWake); }
-    }), launch_mode == crate::app::cli::LaunchMode::Standalone).expect("could not attach to the session server");
-    let session = content.rebuild(heca_core::layout::types::SessionId(1), layout_options);
+    }), launch_mode).expect("could not attach to the session server");
+    let session = content.rebuild(client.session.id, layout_options);
     let view = WindowView::new(viewport_size, scale_factor);
     let focused_pane = session.through(&view).active_workspace().and_then(|workspace| workspace.active_pane()).map(|pane| pane.id);
 
@@ -427,6 +427,7 @@ pub(crate) async fn init_state(
         }
     };
 
+    let window_focused = window.has_focus();
     let mut state = Box::new(AppState {
         window,
         event_proxy,
@@ -448,6 +449,7 @@ pub(crate) async fn init_state(
         client,
         session,
         view,
+        session_dialog: None,
         theme: app_config.theme.clone(),
         appearance,
         settings: crate::app_state::WindowSettings::from_config(app_config),
@@ -504,8 +506,8 @@ pub(crate) async fn init_state(
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
         pending_menus: pending_menus.clone(),
         pending_drops: pending_drops.clone(),
-        pending_reload: false,
-        window_focused: true,
+        pending_reload: Some(crate::app_state::ReloadReason::Session),
+        window_focused,
         current_cursor: winit::window::CursorIcon::Default,
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),
@@ -540,6 +542,9 @@ pub(crate) async fn init_state(
     // from the very first frame. Re-registering is the rebuild path when the session's shape
     // changes; see `chrome::surfaces::expose::register`.
     crate::chrome::register_expose(&mut state);
+    if state.client.session.status == crate::server::sessions::SessionStatus::Terminated {
+        crate::handlers::session_unavailable(&mut state, false);
+    }
     state
 }
 

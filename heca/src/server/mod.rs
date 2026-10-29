@@ -22,6 +22,7 @@ mod cx;
 mod handlers;
 mod layout;
 mod poll;
+pub(crate) mod feedback;
 pub(crate) mod process;
 /// The local socket clients and scripts reach the server through. Unix for now (Windows named
 /// pipes later).
@@ -31,6 +32,9 @@ pub(crate) mod run;
 pub(crate) mod runtime;
 mod terminals;
 mod stream;
+mod session;
+mod connection;
+pub(crate) mod sessions;
 #[cfg(test)]
 mod testing;
 mod waker;
@@ -56,6 +60,7 @@ use crate::notification::NotificationRuntime;
 
 /// The state every window of a session shares. Built without a window.
 pub struct ServerState {
+    pub(crate) feedback: feedback::Feedback,
     /// The terminal processes — the one owner of them (`BackendStore::ensure` is the one door in).
     pub backends: BackendStore,
     /// What the configuration says a terminal process starts with.
@@ -126,7 +131,7 @@ impl ServerState {
 
     /// Whether the server runs this kind of action — it has been moved here from the window.
     pub(crate) fn runs(kind: crate::input::WmActionKind) -> bool {
-        handlers::handler_for(kind).is_some()
+        handlers::handler_for(kind).is_some() || sessions::owns(kind)
     }
 
     /// **Run a built-in action on the server** for `asker`, on `session`, and say what changed.
@@ -229,6 +234,7 @@ impl ServerState {
         waker: Option<ServerWaker>,
     ) -> Self {
         Self {
+            feedback: Default::default(),
             backends,
             terminal_settings,
             waker,

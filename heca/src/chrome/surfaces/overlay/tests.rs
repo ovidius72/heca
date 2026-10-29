@@ -41,13 +41,14 @@ fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
         let dialog = &root.base().children[0];
         let overlay = &dialog.base().children[0];
         let panel = &overlay.base().children[0];
-        for child in &panel.base().children {
+        let layout = heca_grid_ui::area(dialog.as_ref(), "dialog-layout").expect("named dialog layout");
+        for child in &layout.base().children {
             let bounds = child.base().bounds;
             assert!(bounds.loc.y + bounds.size.h <= panel.base().bounds.loc.y + panel.base().bounds.size.h + 1.0,
                 "dialog child escapes panel at {width}px: panel {:?}; child {:?}", panel.base().bounds, bounds);
         }
         assert!(panel.base().bounds.size.w <= f64::from(theme.font_size * theme.colors.dialog.max_width_em) + 1.0);
-        let body = panel.base().children[1].base().bounds;
+        let body = heca_grid_ui::area(dialog.as_ref(), "dialog-body").expect("named dialog body").base().bounds;
         let lines: Vec<_> = scene.iter().filter_map(|cmd| match cmd {
             DrawCommand::Text(text) if text.rect.loc.y >= body.loc.y
                 && text.rect.loc.y < body.loc.y + body.size.h => Some(text),
@@ -108,13 +109,11 @@ fn each_action_button_declares_the_submit_its_click_would_fire() {
         );
     }
 
-    // Structure: the Dialog root composes a base Overlay (the blocking layer) whose
-    // single child is the panel holding [title, body, action-row(2)].
-    let overlay = &root.base().children[0];
-    let panel = &overlay.base().children[0];
-    assert_eq!(panel.base().children.len(), 3, "title + body + action row");
+    assert!(heca_grid_ui::area(root.as_ref(), "dialog-title").is_some());
+    assert!(heca_grid_ui::area(root.as_ref(), "dialog-body").is_some());
+    let actions = heca_grid_ui::area(root.as_ref(), "dialog-actions").expect("named action row");
     assert_eq!(
-        panel.base().children[2].base().children.len(),
+        actions.base().children.len(),
         2,
         "two buttons"
     );

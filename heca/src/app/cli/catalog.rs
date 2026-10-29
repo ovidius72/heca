@@ -2,7 +2,7 @@
 
 use crate::agent::integration::IntegrationOperation;
 use crate::args::{ArgDescriptor, ArgKind};
-use super::{Command, LaunchMode, help, integrations, queries};
+use super::{Command, LaunchKind, help, integrations, queries, sessions};
 
 const PROGRAM: &[ArgDescriptor] = &[ArgDescriptor::required(
     "program", ArgKind::Text, "Registered program id; use `heca list integrations` to find it.",
@@ -10,9 +10,33 @@ const PROGRAM: &[ArgDescriptor] = &[ArgDescriptor::required(
 
 pub(super) const COMMANDS: &[Command] = &[
     Command {
+        name: "--sessions", short: None,
+        about: "List the server's sessions.",
+        args: &[], options: &[], json: true, launch: None, run: sessions::list,
+    },
+    Command {
+        name: "--attach", short: None,
+        about: "Open a window attached to a named session.",
+        args: &[ArgDescriptor::required("name", ArgKind::Text, "Session name.")],
+        options: &[], json: false, launch: Some(LaunchKind::Session), run: sessions::check_attach,
+    },
+    Command {
+        name: "--new", short: None,
+        about: "Create a session in a folder and open its window.",
+        args: &[ArgDescriptor::optional("path", ArgKind::Text, "Project folder; default the current folder. Created if missing.")],
+        options: &[ArgDescriptor::optional("name", ArgKind::Text, "Optional unique session name.")],
+        json: false, launch: Some(LaunchKind::New), run: |_| Ok(String::new()),
+    },
+    Command {
+        name: "--kill", short: None,
+        about: "Terminate a session, retaining its definition for explicit restart.",
+        args: &[ArgDescriptor::required("name", ArgKind::Text, "Session name.")],
+        options: &[], json: false, launch: None, run: sessions::terminate,
+    },
+    Command {
         name: "--standalone", short: None,
         about: "Run the server and window in one process; end the session with the window.",
-        args: &[], json: false, launch: Some(LaunchMode::Standalone),
+        args: &[], options: &[], json: false, launch: Some(LaunchKind::Standalone),
         run: |_| Ok(String::new()),
     },
     #[cfg(unix)]
@@ -20,7 +44,7 @@ pub(super) const COMMANDS: &[Command] = &[
         name: "--server", short: None,
         about: "Run the session server without a window.",
         args: &[ArgDescriptor::optional("socket", ArgKind::Text, "Override the local socket path.")],
-        json: false, launch: None,
+        options: &[], json: false, launch: None,
         run: |inv| crate::server::runtime::serve(inv.get("socket").map(std::path::Path::new))
             .map(|()| String::new()).map_err(|error| format!("server: {error}\n")),
     },
@@ -28,7 +52,7 @@ pub(super) const COMMANDS: &[Command] = &[
     Command {
         name: "--kill-server", short: None,
         about: "Stop the running session server, and with it every pane and terminal.",
-        args: &[], json: false, launch: None,
+        args: &[], options: &[], json: false, launch: None,
         run: |_| Ok(crate::server::socket::kill_server()),
     },
     Command {
@@ -36,7 +60,7 @@ pub(super) const COMMANDS: &[Command] = &[
         short: Some("-h"),
         about: "List these commands and exit.",
         args: &[],
-        json: false, launch: None,
+        options: &[], json: false, launch: None,
         run: |_| Ok(help()),
     },
     Command {
@@ -44,7 +68,7 @@ pub(super) const COMMANDS: &[Command] = &[
         short: Some("-k"),
         about: "Every binding name and the key it resolves to, across all layers.",
         args: &[],
-        json: true, launch: None,
+        options: &[], json: true, launch: None,
         run: |inv| Ok(queries::run_keys_show(inv)),
     },
     Command {
@@ -56,7 +80,7 @@ pub(super) const COMMANDS: &[Command] = &[
             ArgKind::Text,
             "A folder inside the project; default the current one.",
         )],
-        json: false, launch: None,
+        options: &[], json: false, launch: None,
         run: |inv| Ok(queries::run_trust(inv, true)),
     },
     Command {
@@ -68,7 +92,7 @@ pub(super) const COMMANDS: &[Command] = &[
             ArgKind::Text,
             "A folder inside the project; default the current one.",
         )],
-        json: false, launch: None,
+        options: &[], json: false, launch: None,
         run: |inv| Ok(queries::run_trust(inv, false)),
     },
     Command {
@@ -76,7 +100,7 @@ pub(super) const COMMANDS: &[Command] = &[
         short: None,
         about: "Every setting your files and the project's .heca/config.toml set, and the file each came from.",
         args: &[],
-        json: false, launch: None,
+        options: &[], json: false, launch: None,
         run: |_| Ok(queries::run_show_config()),
     },
     Command {
@@ -84,7 +108,7 @@ pub(super) const COMMANDS: &[Command] = &[
         short: Some("-a"),
         about: "Every action heca knows, with its category and whether it takes arguments.",
         args: &[],
-        json: true, launch: None,
+        options: &[], json: true, launch: None,
         run: |inv| Ok(queries::run_list_actions(inv)),
     },
     Command {
@@ -96,35 +120,35 @@ pub(super) const COMMANDS: &[Command] = &[
             ArgKind::Text,
             "The action to describe. `--list-actions` prints them all.",
         )],
-        json: true, launch: None,
+        options: &[], json: true, launch: None,
         run: |inv| Ok(queries::run_describe_action(inv)),
     },
     Command {
         name: "install integration", short: None,
         about: "Install a program's reporting integration and enable it.",
-        args: PROGRAM, json: true, launch: None,
+        args: PROGRAM, options: &[], json: true, launch: None,
         run: |inv| integrations::apply(inv, IntegrationOperation::Install),
     },
     Command {
         name: "update integration", short: None,
         about: "Update an installed integration, preserving your reporting choices.",
-        args: PROGRAM, json: true, launch: None,
+        args: PROGRAM, options: &[], json: true, launch: None,
         run: |inv| integrations::apply(inv, IntegrationOperation::Update),
     },
     Command {
         name: "uninstall integration", short: None,
         about: "Remove only this integration's owned files and entries.",
-        args: PROGRAM, json: true, launch: None,
+        args: PROGRAM, options: &[], json: true, launch: None,
         run: |inv| integrations::apply(inv, IntegrationOperation::Uninstall),
     },
     Command {
         name: "inspect integration", short: None,
         about: "Check a program's integration without changing it.",
-        args: PROGRAM, json: true, launch: None, run: integrations::inspect,
+        args: PROGRAM, options: &[], json: true, launch: None, run: integrations::inspect,
     },
     Command {
         name: "list integrations", short: None,
         about: "List registered integrations and their installation status.",
-        args: &[], json: true, launch: None, run: integrations::list,
+        args: &[], options: &[], json: true, launch: None, run: integrations::list,
     },
 ];

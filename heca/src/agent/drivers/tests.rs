@@ -38,6 +38,19 @@ fn claude_defaults_report_completion_on_stop_rather_than_session_exit() {
 }
 
 #[test]
+fn reporting_maps_preserve_native_event_identity_and_configure_feedback_separately() {
+    let config = enabled();
+    let driver = super::claude::configured(&config).unwrap();
+    let reports = driver.report_map();
+    assert_eq!(reports["Stop"].event.as_deref(), Some("Stop"));
+    assert_eq!(reports["PreToolUse"].event.as_deref(), Some("PreToolUse"));
+    let policy = config.programs["claude"].feedback_events.as_ref().unwrap();
+    assert!(policy.contains(&"Stop".to_owned()));
+    assert!(!policy.contains(&"PreToolUse".to_owned()));
+    assert!(!policy.contains(&"SessionStart".to_owned()));
+}
+
+#[test]
 fn the_builtins_use_one_contract_with_configured_names_and_open_statuses() {
     let mut config = enabled();
     config.programs.get_mut("claude").unwrap().name = Some("My Claude".into());

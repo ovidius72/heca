@@ -53,6 +53,7 @@ impl ShellLaunch<'_> {
 pub(super) enum LaunchTarget<'a> {
     Shell(ShellLaunch<'a>),
     Command(&'a str),
+    Process(&'a crate::backend::ProcessLaunch),
 }
 
 /// Optional terminal-backend spawn behavior layered on top of the required
@@ -111,6 +112,11 @@ impl Default for TerminalBackendOptions {
 }
 
 impl TerminalBackend {
+    /// Start recorded executable/argv data without reconstructing a command line.
+    pub fn with_process(cols: usize, rows: usize, cell_w: f32, cell_h: f32,
+        process: &crate::backend::ProcessLaunch, options: TerminalBackendOptions) -> Result<Self, PtyError> {
+        Self::with_launch_target(cols, rows, (cell_w, cell_h), options, LaunchTarget::Process(process))
+    }
     /// **Start a shell**, `cols` × `rows` cells of `cell_w` × `cell_h` logical px, as `options`
     /// say.
     pub fn with_options(
@@ -162,6 +168,9 @@ impl TerminalBackend {
         }).transpose().map_err(PtyError::agent_setup)?;
         let agent_wake = wake_on_output.clone();
         let (pty, auto_close_on_exit) = match launch {
+            LaunchTarget::Process(process) => (
+                PtyHandle::new_with_process(cols, rows, cell_size, wake_on_output, process)?, false,
+            ),
             LaunchTarget::Shell(shell) => {
                 let pty = PtyHandle::new_with_shell(
                     cols,
@@ -214,6 +223,9 @@ impl TerminalBackend {
             .checked_sub(process::FOREGROUND_DEBOUNCE)
             .unwrap_or_else(Instant::now);
         Ok(Self {
+            command_launch: None,
+            command_active: false,
+            pending_alerts: Vec::new(),
             agent_session,
             agent_wake,
             last_agent_notification: None,

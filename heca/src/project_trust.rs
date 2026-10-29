@@ -31,7 +31,11 @@ const HASH_ARG: &str = "hash";
 /// Raise the notification if the project file here is untrusted. Called at startup and on every
 /// reload, so an ignored file is announced every time, not once ever.
 pub(crate) fn notify_if_untrusted() {
-    let Ok(Some(project)) = heca_config::loader::read_project() else {
+    notify_if_untrusted_in(None);
+}
+
+pub(crate) fn notify_if_untrusted_in(folder: Option<&std::path::Path>) {
+    let Ok(Some(project)) = folder.map_or_else(heca_config::loader::read_project, heca_config::loader::read_project_in) else {
         return;
     };
     if let Some(notice) = notice_for(&project) {

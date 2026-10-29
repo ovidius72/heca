@@ -90,6 +90,7 @@ impl HecaApp {
                 Ok(update) => state.receive_client(update),
                 Err(error) => {
                     state.status_note = Some(format!("Session connection lost: {error}"));
+                    crate::handlers::session_unavailable(state, true);
                     state.mark_full_redraw();
                     state.window.request_redraw();
                     Vec::new()
@@ -216,7 +217,8 @@ impl HecaApp {
             return Ok(());
         };
         {
-            let new_config = match heca_config::loader::AppConfig::try_load() {
+            let loaded = state.client.session.folder.as_deref().map_or_else(AppConfig::try_load, AppConfig::try_load_for);
+            let new_config = match loaded {
                 Ok(cfg) => cfg,
                 Err(e) => {
                     eprintln!("[heca] reload failed: {e}");
@@ -259,7 +261,7 @@ impl HecaApp {
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance.clone();
             state.settings = crate::app_state::WindowSettings::from_config(&self.app_config);
-            crate::project_trust::notify_if_untrusted();
+            crate::project_trust::notify_if_untrusted_in(state.client.session.folder.as_deref());
             crate::chrome::panes::pane_items::report_pane_items(state);
             // The layout's own options, by the one mapping startup uses too.
             state
@@ -334,7 +336,7 @@ impl HecaApp {
     }
 
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
-        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone(), self.launch_mode).await
+        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone(), self.launch_mode.clone()).await
     }
 }
 
@@ -402,7 +404,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut self.registry,
                 &mut state.action_catalog,
             );
-            crate::project_trust::notify_if_untrusted();
+            crate::project_trust::notify_if_untrusted_in(state.client.session.folder.as_deref());
             // What the pane headers are asked to show, now that every action a button names exists:
             // a name nothing provides, and an added item the user's own list leaves out.
             crate::chrome::panes::pane_items::report_pane_items(&state);
@@ -443,16 +445,15 @@ impl ApplicationHandler<AppEvent> for HecaApp {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.receive_server();
         // Config reload requested via keybinding — do it before borrowing state.
-        let needs_reload = self
-            .state
-            .as_ref()
-            .map(|s| s.pending_reload)
-            .unwrap_or(false);
-        if needs_reload {
-            if let Some(state) = self.state.as_mut() {
-                state.pending_reload = false;
+        let reload = self.state.as_mut().and_then(|state| state.pending_reload.take());
+        if let Some(reason) = reload {
+            let result = self.reload_config();
+            match reason {
+                crate::app_state::ReloadReason::Explicit => notify_reload_outcome(result),
+                crate::app_state::ReloadReason::Session => {
+                    if let Err(error) = result && let Some(state) = &mut self.state { state.status_note = Some(error.to_string()); }
+                }
             }
-            notify_reload_outcome(self.reload_config());
         }
 
         if let Some(ref mut state) = self.state {
@@ -460,12 +461,13 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         }
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         self.receive_server();
         let Some(state) = self.state.as_mut() else {
             return;
         };
         match event {
+            AppEvent::CloseWindow => event_loop.exit(),
             AppEvent::BackendWake => {
                 let backend_poll = poll_backends(state);
                 let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
