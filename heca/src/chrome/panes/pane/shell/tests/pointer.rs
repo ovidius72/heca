@@ -207,12 +207,12 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
 fn a_pane_types_into_what_it_holds_however_deep() {
     use heca_grid_ui::builders::Parent;
     let (cb, picked) = recording_callbacks();
-    let held = crate::chrome::panes::terminal::Terminal::new();
+    let held = crate::chrome::panes::terminal::Terminal::unbound();
     let mut pane = PaneShell {
         model: &model(5),
         cb: &cb,
         header: None,
-        content: Some(Box::new(
+        content: Some(heca_grid_ui::WidgetModel::new(
             heca_grid_ui::widgets::Flex::column()
                 .child(heca_grid_ui::widgets::Flex::row().child(held)),
         )),

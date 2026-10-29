@@ -206,7 +206,7 @@ impl ButtonGroup {
         self.strip_mut()
             .base_mut()
             .children
-            .insert(at, Box::new(button));
+            .insert(at, crate::WidgetModel::new(button));
         // **Built in the mode it will be shown in.** Otherwise the first layout is of buttons with
         // their words, whatever the mode says, and the first decision is made from an arrangement
         // that was never going to be drawn — which is how a group pinned to icons collapsed itself
@@ -324,7 +324,7 @@ impl Component for ButtonGroup {
         // While the words are up, remember how far the row reached — read off the last button the
         // layout placed, so it is the layout's answer and not a sum of parts.
         if self.words.get() {
-            let shown_kids: Vec<&Box<dyn Component>> = self
+            let shown_kids: Vec<&crate::WidgetModel> = self
                 .strip()
                 .base()
                 .children
@@ -521,7 +521,7 @@ impl ButtonGroup {
         });
         // Nothing is declared about picking it. It is a button: a letter reaches it for that
         // reason alone, and picking it runs this same click.
-        self.base.children.push(Box::new(trigger));
+        self.base.children.push(crate::WidgetModel::new(trigger));
     }
 
     fn set_trigger(&mut self, needed: bool) {

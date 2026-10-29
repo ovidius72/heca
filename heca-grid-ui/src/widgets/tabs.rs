@@ -58,7 +58,7 @@ const GLOW_INTENSITY: f32 = 0.12;
 pub struct Tabs {
     base: Base,
     /// Selected-state signal of each tab, captured when the [`Choice`] is added (afterwards the tabs
-    /// are `Box<dyn Component>` and their type — with this signal — is out of reach). Keeping them
+    /// are `crate::WidgetModel` and their type — with this signal — is out of reach). Keeping them
     /// is what lets the strip flip the selection **in place**, with no rebuild.
     tab_states: Vec<Signal<bool>>,
     /// Hover-state signal of each tab, same story: the strip resolves the hover from the tabs'
@@ -113,13 +113,13 @@ impl Tabs {
     /// Append a composed tab.
     ///
     /// Typed to [`Choice`] on purpose — the strip keeps the tab's selected/hover
-    /// [signals](Choice::state) so it can drive them in place, and a `Box<dyn Component>` would have
+    /// [signals](Choice::state) so it can drive them in place, and a `crate::WidgetModel` would have
     /// thrown them away. It is also the contract: the segments of a tab strip **are** options.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn tab(mut self, choice: Choice) -> Self {
         self.tab_states.push(choice.state());
         self.hover_states.push(choice.hovered());
-        self.base.children.push(Box::new(choice));
+        self.base.children.push(crate::WidgetModel::new(choice));
         self.sync_tab_states();
         self
     }

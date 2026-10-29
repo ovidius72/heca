@@ -205,7 +205,7 @@ impl ContextMenu {
     fn realize(&mut self) {
         self.assign_quick_picks();
         let font = self.base.font;
-        let rows: Vec<Box<dyn Component>> =
+        let rows: Vec<crate::WidgetModel> =
             self.menu.items.iter().map(|i| i.build_row(font)).collect();
         self.base.children = rows;
         self.selected = self.enabled_from(0, true).unwrap_or(0);

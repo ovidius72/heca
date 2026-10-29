@@ -22,7 +22,7 @@ pub(super) fn of(name: String) -> Terminal {
         if let Some(terminal) = table.get(&name) {
             return terminal.clone();
         }
-        let terminal = Terminal::new();
+        let terminal = Terminal::unbound();
         terminal.declare(name.clone());
         table.insert(name, terminal.clone());
         terminal
@@ -76,7 +76,7 @@ mod tests {
             of("demo.logs".into()).shown_title().as_deref(),
             Some("demo.logs")
         );
-        assert_eq!(Terminal::new().shown_title(), None, "a pane's has none");
+        assert_eq!(Terminal::unbound().shown_title(), None, "a pane's has none");
     }
 
     #[test]

@@ -333,7 +333,7 @@ SwiftUI's `View`) that the host **realizes** into that existing retained tree.
 
 ```
 struct ViewNode {
-    kind:     WidgetKind,               // closed enum of host-known widgets:
+    kind:     WidgetId,               // closed enum of host-known widgets:
                                         //   containers: Column|Row|Grid|Card|Scroll|Panel
                                         //   leaves:     Label|Button|Badge|Icon|Input|Toggle|StatusDot|…
     props:    PropMap,                  // serializable scalars + semantic enums (variant, size, align…)
@@ -363,7 +363,7 @@ each via `.child(...)`. Because the retained tree already exists, the mapper onl
 **translates**; it never reimplements layout, paint, focus, or clipping.
 
 **Vocabulary is closed to plugins, extensible by the host.** Adding a new
-`WidgetKind` (e.g. `Table`) is host-side work — the widget in `heca-grid-ui`, its
+`WidgetId` (e.g. `Table`) is host-side work — the widget in `heca-grid-ui`, its
 showcase demo + `docs/widgets.md`, and a mapper arm — **never** something a plugin
 invents. Until a first-class `Table` exists, a table is *composed* from the
 existing building blocks (`Grid`/`Flex` + `Row` + `Label`/`Badge` + `Scroll`).
@@ -1572,7 +1572,7 @@ are the one exception — see the note at the top of Part II.)
 |---|---|
 | "Styling is not a free prop… colors come from the Theme, never from raw values passed by the plugin" (§3, rule C) | **Reversed 2026-07-26.** The theme is the default; code may override it with a string. Part I R2. |
 | "Behaviour is an Intent — never a closure" | Still true on the wire. A plugin in TypeScript may *write* a function; its kit stores it and sends a reference. Part I R4. |
-| "Adding a `WidgetKind` is host-side work — the widget, a mapper arm, the docs" | Still true that plugins cannot invent widgets. It does **not** require a fixed enum — a host-filled registry satisfies the same rule in one step. Part I R5. |
+| "Adding a `WidgetId` is host-side work — the widget, a mapper arm, the docs" | Still true that plugins cannot invent widgets. It does **not** require a fixed enum — a host-filled registry satisfies the same rule in one step. Part I R5. |
 | "Until a first-class `Table` exists, a table is composed" | Still true. **F003/P011/T007** deferred 2026-07-26: no consumer. |
 | Collapsed icon rail, `RailCell` per item, rail flavours (§15) | **Dropped 2026-07-11.** A region is Expanded or Hidden. `RailCell` and `KeyHint` still ship; nothing mounts a rail. See the planner (F003/P020). |
 | "G1–G8" task ids (§19 references them) | **Removed 2026-07-26.** All eight were built. Only G7 ever had a planner id (**P019(F004)**, gridui-01). |

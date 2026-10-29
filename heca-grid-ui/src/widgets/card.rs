@@ -26,7 +26,7 @@ impl Card {
         base.style.layout.padding = (18.0).into();
         base.style.layout.gap = (10.0).into();
         base.children
-            .push(Box::new(Label::new(title).font_scale(TITLE_SCALE)));
+            .push(crate::WidgetModel::new(Label::new(title).font_scale(TITLE_SCALE)));
         Self { base }
     }
 }

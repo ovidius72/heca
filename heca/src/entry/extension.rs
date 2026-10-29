@@ -105,7 +105,7 @@ impl Extension {
     pub fn terminal(&self, short: &str) -> crate::Terminal {
         match self.full("terminal", short) {
             Some(name) => crate::Terminal::declared(name),
-            None => crate::Terminal::new(),
+            None => crate::Terminal::unbound(),
         }
     }
 
@@ -165,15 +165,20 @@ impl Extension {
     /// name is what a refused item carries, and what its `run`/`view` recognise and drop.
     pub(crate) fn full(&self, what: &str, short: &str) -> Option<String> {
         let owner = self.name.as_deref()?;
-        if short.is_empty() || short.contains('.') {
-            warn_author(format!(
-                "[heca] {what} '{short}' of extension '{owner}' is refused: the short name must \
-                 be non-empty and have no dot (the extension name is the part before the dot)"
-            ));
-            return None;
-        }
-        Some(format!("{owner}.{short}"))
+        qualified_name(owner, what, short)
     }
+}
+
+/// One naming rule for extension items and native resources in the app's own namespace.
+pub(crate) fn qualified_name(owner: &str, what: &str, short: &str) -> Option<String> {
+    if short.is_empty() || short.contains('.') {
+        warn_author(format!(
+            "[heca] {what} '{short}' of '{owner}' is refused: the short name must \
+             be non-empty and have no dot (the owner is the part before the dot)"
+        ));
+        return None;
+    }
+    Some(format!("{owner}.{short}"))
 }
 
 /// Whether `owner` is an extension this program declared — what lets an item's name be believed.

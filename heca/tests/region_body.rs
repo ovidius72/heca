@@ -24,7 +24,7 @@ fn two_containers_under_a_template_take_half_the_region_each() {
     let grid = grid.child([dock(), dock()]);
 
     // The sidebar shell: a full-height column holding the body.
-    let mut shell: Box<dyn Component> = Box::new(
+    let mut shell: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Flex::column()
             .height(heca_grid_ui::Length::Percent(1.0))
             .child(grid),

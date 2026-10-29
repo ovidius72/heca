@@ -294,7 +294,7 @@ impl Parent for Choice {}
 ///
 /// Containers must resolve picks from the children's real bounds — never from row arithmetic — so
 /// that what is drawn and what is clickable can never disagree.
-pub fn choice_at(children: &[Box<dyn Component>], pos: Point) -> Option<usize> {
+pub fn choice_at(children: &[crate::WidgetModel], pos: Point) -> Option<usize> {
     children
         .iter()
         .position(|c| c.base().bounds.contains(pos) && c.base().visible.get_untracked())

@@ -69,7 +69,7 @@ const SCRIM_REACH: f64 = 1.0e9;
 /// bracket reticle.
 ///
 /// Build with [`Overlay::new`], hand it the panel via [`panel`](Overlay::panel) (or
-/// a mapper-produced `Box<dyn Component>` goes through the same builder), and raise it
+/// a mapper-produced `crate::WidgetModel` goes through the same builder), and raise it
 /// with [`show`](Component::show) / [`close`](Overlay::close) / [`toggle`](Overlay::toggle) — or
 /// bind
 /// [`open_signal`](Overlay::open_signal), which a composing widget does.
@@ -222,7 +222,7 @@ impl Overlay {
     }
 
     /// Like [`panel`](Overlay::panel) but takes an already-boxed component —
-    /// for a panel produced by a mapper returning `Box<dyn Component>` (e.g.
+    /// for a panel produced by a mapper returning `crate::WidgetModel` (e.g.
     /// `heca`'s `realize(ViewNode)`).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     /// Give the panel an explicit size instead of letting it hug its content.

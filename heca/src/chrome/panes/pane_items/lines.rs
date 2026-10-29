@@ -12,7 +12,6 @@
 
 use std::rc::Rc;
 
-use heca_grid_ui::Component;
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::Glyph;
 
@@ -46,7 +45,7 @@ pub(crate) struct LineCx<'a> {
 }
 
 /// How a line is built for one pane.
-pub(crate) type BuildLine = dyn Fn(&LineCx<'_>) -> Box<dyn Component>;
+pub(crate) type BuildLine = dyn Fn(&LineCx<'_>) -> heca_grid_ui::WidgetModel;
 
 /// One line, by name.
 pub(crate) struct PaneLineDef {

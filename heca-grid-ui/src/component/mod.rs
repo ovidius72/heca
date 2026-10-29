@@ -9,6 +9,7 @@
 mod base;
 mod behavior;
 mod dispatch;
+mod model;
 mod paint_cx;
 mod paint_walk;
 #[cfg(test)]
@@ -17,6 +18,7 @@ mod tree;
 
 pub use base::Base;
 pub use behavior::Component;
+pub use model::WidgetModel;
 pub use dispatch::*;
 pub use paint_cx::PaintCx;
 pub use paint_walk::*;

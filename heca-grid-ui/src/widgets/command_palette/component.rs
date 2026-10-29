@@ -133,7 +133,7 @@ impl Component for CommandPalette {
         if !self.is_open() { return Handled::No; }
         self.sync_query();
         match ev {
-            Event::Widget(WidgetIntent::Dismiss) => { self.close(); Handled::Yes }
+            Event::Widget(WidgetIntent::Dismiss) => { self.dismiss(); Handled::Yes }
             Event::Widget(WidgetIntent::Activate) => { self.run_selected(); Handled::Yes }
             Event::Widget(WidgetIntent::MenuDown) => { self.select_next(); Handled::Yes }
             Event::Widget(WidgetIntent::MenuUp) => { self.select_prev(); Handled::Yes }
@@ -147,7 +147,7 @@ impl Component for CommandPalette {
                 }
                 Handled::Yes
             }
-            Event::PointerDownOutside(_) => { self.close(); Handled::No }
+            Event::PointerDownOutside(_) => { self.dismiss(); Handled::No }
             _ => Handled::No,
         }
     }

@@ -1,6 +1,6 @@
 //! Named child slots, and the toast.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use crate::vocab::severity_prop;
 use super::*;
@@ -13,23 +13,23 @@ use super::*;
 /// `DockFrame` has a **default** slot (the body), so an unslotted child lands there.
 #[test]
 fn dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body() {
-    let node = ViewNode::new(WidgetKind::DockFrame)
+    let node = ViewNode::new(WidgetId::DockFrame)
         .text("EXPLORER")
         .prop("frameless", PropValue::Bool(true))
         .child(
-            ViewNode::new(WidgetKind::Badge)
+            ViewNode::new(WidgetId::Badge)
                 .text("3")
                 .prop("slot", PropValue::Text("header".into())),
         )
-        .child(ViewNode::new(WidgetKind::Item).text("src"))
-        .child(ViewNode::new(WidgetKind::Item).text("tests"));
+        .child(ViewNode::new(WidgetId::Item).text("src"))
+        .child(ViewNode::new(WidgetId::Item).text("tests"));
 
     let dock = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     // The widget's own shape: children[0] = header row [toggle, CONTROLS], children[1] = body.
     let header_controls = &dock.base().children[0].base().children[1];
     assert_eq!(
@@ -48,13 +48,13 @@ fn dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body() {
 fn legacy_dock_header_slots_match_the_native_named_area_layout() {
     use heca_grid_ui::{Badge, DockFrame, Item, LayoutEngine, Parent, Size};
 
-    let node = ViewNode::new(WidgetKind::DockFrame).text("EXPLORER")
+    let node = ViewNode::new(WidgetId::DockFrame).text("EXPLORER")
         .prop("frameless", PropValue::Bool(true))
-        .child(ViewNode::new(WidgetKind::Badge).text("3")
+        .child(ViewNode::new(WidgetId::Badge).text("3")
             .prop("slot", PropValue::Text("header".into())))
-        .child(ViewNode::new(WidgetKind::Item).text("src"))
-        .child(ViewNode::new(WidgetKind::Item).text("tests"));
-    let mut described = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        .child(ViewNode::new(WidgetId::Item).text("src"))
+        .child(ViewNode::new(WidgetId::Item).text("tests"));
+    let mut described = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
     let mut native = Parent::child(
         DockFrame::new("EXPLORER").frameless(true).header(Badge::new("3")),
         [Item::new("src"), Item::new("tests")],
@@ -77,21 +77,21 @@ fn legacy_dock_header_slots_match_the_native_named_area_layout() {
 #[test]
 fn tile_routes_each_part_by_its_slot_and_the_rest_become_lines() {
     let slot = |s: &str| PropValue::Text(s.into());
-    let node = ViewNode::new(WidgetKind::Tile)
+    let node = ViewNode::new(WidgetId::Tile)
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("T")
                 .prop("slot", slot("title")),
         )
-        .child(ViewNode::new(WidgetKind::Label).text("line one"))
-        .child(ViewNode::new(WidgetKind::StatusDot).prop("slot", slot("status")))
-        .child(ViewNode::new(WidgetKind::Label).text("line two"));
+        .child(ViewNode::new(WidgetId::Label).text("line one"))
+        .child(ViewNode::new(WidgetId::StatusDot).prop("slot", slot("status")))
+        .child(ViewNode::new(WidgetId::Label).text("line two"));
     let w = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let parts = &w.base().children;
     assert_eq!(parts.len(), 3, "the head and two lines");
     assert_eq!(parts[1].text_summary().as_deref(), Some("line one"));
@@ -114,20 +114,20 @@ fn tile_routes_each_part_by_its_slot_and_the_rest_become_lines() {
 
 #[test]
 fn item_routes_leading_and_trailing_slots_and_ignores_the_rest() {
-    let node = ViewNode::new(WidgetKind::Item)
+    let node = ViewNode::new(WidgetId::Item)
         .text("main.rs")
         .child(
-            ViewNode::new(WidgetKind::StatusDot)
+            ViewNode::new(WidgetId::StatusDot)
                 .prop("slot", PropValue::Text("leading".into())),
         )
         .child(
-            ViewNode::new(WidgetKind::Badge)
+            ViewNode::new(WidgetId::Badge)
                 .text("M")
                 .prop("slot", PropValue::Text("trailing".into())),
         )
-        .child(ViewNode::new(WidgetKind::Label).text("nowhere")) // no slot → ignored
+        .child(ViewNode::new(WidgetId::Label).text("nowhere")) // no slot → ignored
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("also nowhere")
                 .prop("slot", PropValue::Text("bogus".into())), // unknown → ignored
         );
@@ -137,7 +137,7 @@ fn item_routes_leading_and_trailing_slots_and_ignores_the_rest() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     // The widget's own shape: [LEADING, LABEL, TRAILING].
     let slots = &item.base().children;
     assert_eq!(
@@ -166,7 +166,7 @@ fn toast_node_realizes_its_props_and_three_intents() {
     let sink = fired.clone();
     let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
-    let node = ViewNode::new(WidgetKind::Toast)
+    let node = ViewNode::new(WidgetId::Toast)
         .text("Build failed")
         .prop("severity", PropValue::Text("danger".into()))
         .prop(
@@ -182,11 +182,11 @@ fn toast_node_realizes_its_props_and_three_intents() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(toast.base().children.len(), 3, "icon, text column, dismiss");
 
     // An unknown severity degrades to the widget's default rather than erroring.
-    let bogus = ViewNode::new(WidgetKind::Toast)
+    let bogus = ViewNode::new(WidgetId::Toast)
         .text("x")
         .prop("severity", PropValue::Text("catastrophic".into()));
     assert_eq!(severity_prop(&bogus), heca_grid_ui::ToastSeverity::Info);
@@ -194,7 +194,7 @@ fn toast_node_realizes_its_props_and_three_intents() {
 }
 
 /// The card's text column: `[title, body, actions]`.
-fn toast_column(toast: &dyn Component) -> &[Box<dyn Component>] {
+fn toast_column(toast: &dyn Component) -> &[heca_grid_ui::WidgetModel] {
     &toast.base().children[1].base().children
 }
 
@@ -212,18 +212,18 @@ fn a_described_toast_takes_a_body_and_several_actions() {
     let sink = fired.clone();
     let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
-    let node = ViewNode::new(WidgetKind::Toast)
+    let node = ViewNode::new(WidgetId::Toast)
         .text("Build failed")
         // No slot named: the body is the DEFAULT slot.
-        .child(ViewNode::new(WidgetKind::Label).text("3 errors"))
+        .child(ViewNode::new(WidgetId::Label).text("3 errors"))
         .child(
-            ViewNode::new(WidgetKind::Button)
+            ViewNode::new(WidgetId::Button)
                 .text("Retry")
                 .prop("slot", PropValue::Text("actions".into()))
                 .on_press(Intent::new("rebuild")),
         )
         .child(
-            ViewNode::new(WidgetKind::Button)
+            ViewNode::new(WidgetId::Button)
                 .text("View log")
                 .prop("slot", PropValue::Text("actions".into()))
                 .on_press(Intent::new("open_log")),
@@ -234,7 +234,7 @@ fn a_described_toast_takes_a_body_and_several_actions() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let column = toast_column(toast.as_ref());
     assert_eq!(
         column[1].text_summary().as_deref(),
@@ -253,7 +253,7 @@ fn a_described_toast_takes_a_body_and_several_actions() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         heca_grid_ui::LayoutEngine::new()
             .base_font(14.0)
             .compute(a.as_mut(), heca_core::layout::Size::new(200.0, 60.0));
@@ -279,14 +279,14 @@ fn a_described_toast_takes_a_body_and_several_actions() {
 /// `Button`'s children win over its `text`/`icon`.
 #[test]
 fn a_described_toasts_children_win_over_its_text_props() {
-    let node = ViewNode::new(WidgetKind::Toast)
+    let node = ViewNode::new(WidgetId::Toast)
         .text("Build failed")
         .prop("body_text", PropValue::Text("the sugar body".into()))
         .prop("action_text", PropValue::Text("SUGAR".into()))
         .on("action", Intent::new("rebuild"))
-        .child(ViewNode::new(WidgetKind::Label).text("the composed body"))
+        .child(ViewNode::new(WidgetId::Label).text("the composed body"))
         .child(
-            ViewNode::new(WidgetKind::Button)
+            ViewNode::new(WidgetId::Button)
                 .text("Composed")
                 .prop("slot", PropValue::Text("actions".into()))
                 .on_press(Intent::new("composed")),
@@ -297,7 +297,7 @@ fn a_described_toasts_children_win_over_its_text_props() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let column = toast_column(toast.as_ref());
     assert_eq!(
         column[1].text_summary().as_deref(),
@@ -317,8 +317,8 @@ fn a_described_toasts_children_win_over_its_text_props() {
 /// untrusted input, so a plugin's typo costs it a misplaced child, never a panic.
 #[test]
 fn a_described_toasts_unknown_slot_falls_back_to_the_body() {
-    let node = ViewNode::new(WidgetKind::Toast).text("t").child(
-        ViewNode::new(WidgetKind::Label)
+    let node = ViewNode::new(WidgetId::Toast).text("t").child(
+        ViewNode::new(WidgetId::Label)
             .text("typo")
             .prop("slot", PropValue::Text("bodyy".into())),
     );
@@ -327,7 +327,7 @@ fn a_described_toasts_unknown_slot_falls_back_to_the_body() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(
         toast_column(toast.as_ref())[1].text_summary().as_deref(),
         Some("typo"),

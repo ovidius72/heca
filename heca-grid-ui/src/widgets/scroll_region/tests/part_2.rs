@@ -135,13 +135,13 @@ use super::*;
         inner.base.bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 50.0));
         let mut tall = crate::widgets::Flex::column();
         tall.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 200.0));
-        inner.base.children.push(Box::new(tall));
+        inner.base.children.push(crate::WidgetModel::new(tall));
         let inner_offset = inner.scroll_offset();
-        outer.base.children.push(Box::new(inner));
+        outer.base.children.push(crate::WidgetModel::new(inner));
         // Filler that makes the OUTER content overflow too.
         let mut filler = crate::widgets::Flex::column();
         filler.base_mut().bounds = Rectangle::new(Point::new(0.0, 50.0), Size::new(200.0, 250.0));
-        outer.base.children.push(Box::new(filler));
+        outer.base.children.push(crate::WidgetModel::new(filler));
 
         // The wheel is routed by position now: over the inner region, it is the inner region's.
         let pos = Point::new(10.0, 10.0);
@@ -173,7 +173,7 @@ use super::*;
         r.base.bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         let mut child = crate::widgets::Flex::column();
         child.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(300.0, 500.0));
-        r.base.children.push(Box::new(child));
+        r.base.children.push(crate::WidgetModel::new(child));
         assert!(
             r.thumb_rect().is_none(),
             "vertical axis disabled → no vertical thumb"
@@ -300,8 +300,8 @@ use super::*;
         let first_nav = first.nav_state();
         first.base_mut().bounds = r.base.children[0].base().bounds;
         last.base_mut().bounds = r.base.children[2].base().bounds;
-        r.base.children[0] = Box::new(first);
-        r.base.children[2] = Box::new(last);
+        r.base.children[0] = crate::WidgetModel::new(first);
+        r.base.children[2] = crate::WidgetModel::new(last);
         r.follow_revealed();
         r.scroll_to(100.0);
 
@@ -320,8 +320,8 @@ use super::*;
         let (first_nav, last_nav) = (first.nav_state(), last.nav_state());
         first.base_mut().bounds = r.base.children[0].base().bounds;
         last.base_mut().bounds = r.base.children[2].base().bounds;
-        r.base.children[0] = Box::new(first);
-        r.base.children[2] = Box::new(last);
+        r.base.children[0] = crate::WidgetModel::new(first);
+        r.base.children[2] = crate::WidgetModel::new(last);
         r.follow_revealed();
         r.scroll_to(100.0);
         first_nav.set(false);
@@ -340,7 +340,7 @@ use super::*;
         let mut r = region_with_children(&[40.0, 400.0, 40.0]);
         let mut row = crate::widgets::Row::new().nav_selected(true);
         row.base_mut().bounds = r.base.children[2].base().bounds;
-        r.base.children[2] = Box::new(row);
+        r.base.children[2] = crate::WidgetModel::new(row);
         r.follow_revealed();
         r.scroll_to(100.0);
 

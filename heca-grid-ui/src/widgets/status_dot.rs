@@ -16,7 +16,8 @@ const GLOW_RADIUS: f32 = 8.0;
 const GLOW_INTENSITY: f32 = 0.18;
 
 /// Semantic status, mapped to theme tokens at paint time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, heca_grid_ui_macros::PropName)]
+#[serde(rename_all = "snake_case")]
 pub enum DotStatus {
     /// Healthy / connected (success color).
     #[default]

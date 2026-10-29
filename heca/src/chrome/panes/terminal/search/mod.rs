@@ -218,8 +218,8 @@ impl SearchBar {
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = "center".into();
         base.style.layout.gap = Spacing::Sm.into();
-        base.children.push(Box::new(field));
-        base.children.push(Box::new(chip));
+        base.children.push(heca_grid_ui::WidgetModel::new(field));
+        base.children.push(heca_grid_ui::WidgetModel::new(chip));
         base.visible.set(shared.search.is_open());
         // Out of the flow, every edge left to the terminal, and told to end at the bottom: it
         // lands in the corner opposite the scrollback chip, taking no room and moving nothing.

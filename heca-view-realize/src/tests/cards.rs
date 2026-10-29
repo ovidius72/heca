@@ -1,6 +1,6 @@
 //! Card grids and hints written into any kind.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use crate::props::glyph_from_name;
 use super::*;
@@ -27,11 +27,11 @@ fn an_unnamed_card_is_still_reported_by_the_grid() {
     let (emit, fired) = recording_emitter();
 
     let card = |name: &str| {
-        ViewNode::new(WidgetKind::Surface)
-            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Text("box".into())))
-            .child(ViewNode::new(WidgetKind::Label).text(name))
+        ViewNode::new(WidgetId::Surface)
+            .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Text("terminal".into())))
+            .child(ViewNode::new(WidgetId::Label).text(name))
     };
-    let node = ViewNode::new(WidgetKind::CardGrid)
+    let node = ViewNode::new(WidgetId::CardGrid)
         .on("activate", Intent::new("docker.open"))
         .child(card("nginx"))
         .child(card("redis"));
@@ -43,7 +43,7 @@ fn an_unnamed_card_is_still_reported_by_the_grid() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     // Keys reach the focus owner and nowhere else, so a test that activates says who is
     // holding the keyboard — exactly as a real surface has to.
     grid.base().focus(false);
@@ -73,9 +73,9 @@ fn a_described_grid_walks_its_cards_the_way_it_draws_them() {
     use heca_grid_ui::event::{Event, WidgetIntent};
 
     let card = |name: &str| {
-        ViewNode::new(WidgetKind::Surface).child(ViewNode::new(WidgetKind::Label).text(name))
+        ViewNode::new(WidgetId::Surface).child(ViewNode::new(WidgetId::Label).text(name))
     };
-    let node = ViewNode::new(WidgetKind::CardGrid)
+    let node = ViewNode::new(WidgetId::CardGrid)
         .on("activate", Intent::new("docker.open"))
         .child(card("nginx"))
         .child(card("redis"))
@@ -88,7 +88,7 @@ fn a_described_grid_walks_its_cards_the_way_it_draws_them() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         grid.base().focus(false);
         for _ in 0..steps {
             heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
@@ -119,23 +119,18 @@ fn a_described_grid_walks_its_cards_the_way_it_draws_them() {
 /// found by the picker. `on_hint` is on `HintExt`, so natively *every*
 /// widget can be told what a pick does to it; this holds the described side to the same reach.
 ///
-/// `ScrollBar` is the one exception, and the same one everywhere else: it is host-only, its
-/// state is a live host signal, and `realize` refuses it rather than producing a dead control.
 #[test]
 fn a_hint_written_into_any_kind_is_found_by_the_picker() {
     let mut unreachable: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
-        if kind == WidgetKind::ScrollBar {
-            continue;
-        }
+    for kind in registered_ids() {
         let (emit, fired) = recording_emitter();
-        let node = sample_node(kind).on_hint(Intent::new("picked"));
+        let node = sample_node(kind.clone()).on_hint(Intent::new("picked"));
         let mut widget = realize(
             &node,
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         if !heca_grid_ui::fire_hint(widget.as_mut(), &[]) {
             unreachable.push(format!(
                 "{kind:?} (no hint declaration on the realized widget)"

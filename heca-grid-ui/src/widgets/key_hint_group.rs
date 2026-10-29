@@ -104,7 +104,7 @@ impl KeyHintGroup {
         Self::wrap(child.into_component())
     }
 
-    fn wrap(child: Box<dyn Component>) -> Self {
+    fn wrap(child: crate::WidgetModel) -> Self {
         let mut base = Base::container();
         // Hug the child and stay a column, so a stretching parent reaches the subtree unchanged —
         // the same transparency `KeyHint` and `FocusScope` need, for the same reason.

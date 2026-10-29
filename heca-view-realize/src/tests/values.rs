@@ -1,7 +1,7 @@
 //! Glyph names, fixed value sets, and values nested in objects.
 
 use heca_grid_ui::{NfGlyph, ScrollRegion};
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use crate::style::with_props;
 use super::*;
@@ -67,13 +67,13 @@ fn every_glyph_name_has_a_mirror() {
 #[test]
 fn a_mirrored_glyph_reaches_the_icon() {
     let painted = |g: heca_view::ViewGlyph| {
-        let node = ViewNode::new(WidgetKind::Icon).prop("glyph", g.into());
+        let node = ViewNode::new(WidgetId::Icon).prop("glyph", g.into());
         let w = realize(
             &node,
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         let mut scene = heca_grid_ui::Scene::new();
         let theme = Theme::default();
         {
@@ -95,13 +95,13 @@ fn a_mirrored_glyph_reaches_the_icon() {
     // correct — and matching names cannot catch that, because the two lists agree by name while
     // the codepoints behind them are a separate mapping.
     let nf_painted = |g: heca_view::ViewNfGlyph| {
-        let node = ViewNode::new(WidgetKind::NfIcon).prop("glyph", g.into());
+        let node = ViewNode::new(WidgetId::NfIcon).prop("glyph", g.into());
         let w = realize(
             &node,
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         let mut scene = heca_grid_ui::Scene::new();
         let theme = Theme::default();
         {
@@ -135,7 +135,7 @@ fn every_fixed_value_set_reaches_its_widget() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        )
+        ).expect("valid described test widget")
     };
     let theme = Theme::default();
     let painted = |node: &ViewNode| {
@@ -153,7 +153,7 @@ fn every_fixed_value_set_reaches_its_widget() {
     // Orientation shows up in layout: a vertical rule is tall and thin, a horizontal one wide
     // and thin, so the property is visible in the box rather than merely stored.
     let rule = |o: ViewOrientation| {
-        let n = ViewNode::new(WidgetKind::Separator)
+        let n = ViewNode::new(WidgetId::Separator)
             .prop("orientation", o.into())
             .prop("length", PropValue::Float(40.0));
         let w = realize_one(&n);
@@ -168,7 +168,7 @@ fn every_fixed_value_set_reaches_its_widget() {
     // Axes are the region's own state, not a `Layout` field, so ask the widget — the same way
     // `a_scroll_regions_axes_are_authorable` does.
     let region = |a: ViewScrollAxes| {
-        let node = ViewNode::new(WidgetKind::Scroll).prop("axes", a.into());
+        let node = ViewNode::new(WidgetId::Scroll).prop("axes", a.into());
         with_props(ScrollRegion::new(), &node, &Theme::default()).clone_axes()
     };
     assert_ne!(
@@ -179,7 +179,7 @@ fn every_fixed_value_set_reaches_its_widget() {
 
     let toast = |s: ViewSeverity| {
         painted(
-            &ViewNode::new(WidgetKind::Toast)
+            &ViewNode::new(WidgetId::Toast)
                 .text("Build failed")
                 .prop("severity", s.into()),
         )
@@ -192,10 +192,10 @@ fn every_fixed_value_set_reaches_its_widget() {
 
     let row = |m: ViewMarker| {
         painted(
-            &ViewNode::new(WidgetKind::Row)
+            &ViewNode::new(WidgetId::Row)
                 .prop("active", PropValue::Bool(true))
                 .prop("marker", m.into())
-                .child(ViewNode::new(WidgetKind::Label).text("x")),
+                .child(ViewNode::new(WidgetId::Label).text("x")),
         )
     };
     assert_ne!(
@@ -206,7 +206,7 @@ fn every_fixed_value_set_reaches_its_widget() {
 
     let label = |a: ViewTextAlign| {
         painted(
-            &ViewNode::new(WidgetKind::Label)
+            &ViewNode::new(WidgetId::Label)
                 .text("STATUS")
                 .prop("align", a.into()),
         )
@@ -226,10 +226,10 @@ fn every_fixed_value_set_reaches_its_widget() {
     // remeasure.
     let cut = |mode: heca_view::ViewEllipsis| {
         painted(
-            &ViewNode::new(WidgetKind::HStack)
+            &ViewNode::new(WidgetId::HStack)
                 .prop("width", PropValue::Int(60))
                 .child(
-                    ViewNode::new(WidgetKind::Label)
+                    ViewNode::new(WidgetId::Label)
                         .text("projects/heca/src/widgets")
                         .prop("truncate", mode.into()),
                 ),
@@ -243,7 +243,7 @@ fn every_fixed_value_set_reaches_its_widget() {
 
     let checkbox = |side: ViewLabelSide| {
         painted(
-            &ViewNode::new(WidgetKind::Checkbox)
+            &ViewNode::new(WidgetId::Checkbox)
                 .prop("label", PropValue::Text("Enable".into()))
                 .prop("label_side", side.into()),
         )
@@ -263,14 +263,14 @@ fn every_fixed_value_set_reaches_its_widget() {
 #[test]
 fn a_token_nested_in_an_object_resolves_against_the_theme() {
     let bordered = |theme: &Theme| {
-        let node = ViewNode::new(WidgetKind::Surface).prop(
+        let node = ViewNode::new(WidgetId::Surface).prop(
             "border",
             PropValue::Map(PropMap::from([
                 ("color".into(), PropValue::Color("accent".into())),
                 ("width".into(), PropValue::Float(1.0)),
             ])),
         );
-        realize(&node, theme, &noop_emitter(), &mut FormBindings::default())
+        realize(&node, theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget")
             .base()
             .style
             .visual
@@ -301,7 +301,7 @@ fn a_token_nested_in_an_object_resolves_against_the_theme() {
 /// totality rule the flat case has, now that values nest.
 #[test]
 fn a_bad_member_of_an_object_does_not_discard_the_rest() {
-    let node = ViewNode::new(WidgetKind::Surface)
+    let node = ViewNode::new(WidgetId::Surface)
         .prop(
             "border",
             PropValue::Map(PropMap::from([
@@ -315,7 +315,7 @@ fn a_bad_member_of_an_object_does_not_discard_the_rest() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(
         w.base().style.visual.radius,
         5.0,
@@ -331,7 +331,7 @@ fn a_bad_member_of_an_object_does_not_discard_the_rest() {
 /// properties on the same node still apply.
 #[test]
 fn a_bad_colour_does_not_discard_its_neighbours() {
-    let node = ViewNode::new(WidgetKind::Surface)
+    let node = ViewNode::new(WidgetId::Surface)
         .prop("fill", PropValue::Color("not-a-colour".into()))
         .prop("radius", PropValue::Float(7.0));
     let w = realize(
@@ -339,7 +339,7 @@ fn a_bad_colour_does_not_discard_its_neighbours() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(
         w.base().style.visual.radius,
         7.0,

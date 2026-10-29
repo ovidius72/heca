@@ -43,11 +43,12 @@ impl PropInput {
     /// The number, or a number written as text (`"12"`), so a description that carries everything
     /// as strings still works.
     pub fn as_f32(&self) -> Option<f32> {
-        match self {
+        let number = match self {
             PropInput::Number(n) => Some(*n as f32),
             PropInput::Text(t) => t.trim().parse::<f32>().ok(),
             PropInput::Bool(_) => None,
-        }
+        };
+        number.filter(|value| value.is_finite())
     }
 
     pub fn as_text(&self) -> Option<&str> {
@@ -75,6 +76,9 @@ pub trait SetProp: Sized {
 
     /// Apply a property. Unknown key or unusable value ⇒ unchanged.
     fn set_prop(self, key: &str, value: &PropInput) -> Self;
+
+    /// Validate through the same generated conversion as the native builder.
+    fn accepts_prop(key: &str, value: &PropInput) -> bool;
 
     /// Apply every property the caller can supply.
     ///

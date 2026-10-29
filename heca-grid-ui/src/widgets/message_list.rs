@@ -6,7 +6,7 @@ use crate::builders::{IntoComponent};
 
 /// A producer for a mounted message list. Retain it before moving the list into a tree.
 #[derive(Clone)]
-pub struct MessageFeed(Rc<RefCell<Vec<Box<dyn Component>>>>);
+pub struct MessageFeed(Rc<RefCell<Vec<crate::WidgetModel>>>);
 
 impl MessageFeed {
     /// Append arbitrary content. Existing entries and their local state are preserved.
@@ -40,10 +40,10 @@ impl MessageFeed {
 /// (before the children). There are no list-specific events. Controls in entries retain theirs.
 ///
 /// ```ignore
-/// use heca_view::{ViewNode, WidgetKind, PropValue};
-/// let messages = ViewNode::new(WidgetKind::MessageList)
+/// use heca_view::{ViewNode, WidgetId, PropValue};
+/// let messages = ViewNode::new(WidgetId::MessageList)
 ///     .prop("visible_lines", PropValue::Int(6))
-///     .child(ViewNode::new(WidgetKind::Label).text("First entry"));
+///     .child(ViewNode::new(WidgetId::Label).text("First entry"));
 /// ```
 pub struct MessageList {
     base: Base,
@@ -57,7 +57,7 @@ impl MessageList {
     pub fn new() -> Self {
         let mut base = Base::container();
         base.style.layout.gap = "sm".into();
-        base.children.push(Box::new(ScrollRegion::new().follow_bottom(true)
+        base.children.push(crate::WidgetModel::new(ScrollRegion::new().follow_bottom(true)
             .width("100%").height("100%")));
         Self { base, feed: MessageFeed(Rc::default()), visible_lines: None }
     }

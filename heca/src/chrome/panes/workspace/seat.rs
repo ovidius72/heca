@@ -46,7 +46,7 @@ pub(crate) fn seat_workspace(state: &mut AppState) {
                 .window_root
                 .base_mut()
                 .children
-                .insert(0, Box::new(workspace(seams)));
+                .insert(0, heca_grid_ui::WidgetModel::new(workspace(seams)));
             0
         }
     };

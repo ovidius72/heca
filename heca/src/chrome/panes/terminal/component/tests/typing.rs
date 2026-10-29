@@ -94,10 +94,10 @@ fn the_paging_keys_reach_the_program_in_the_terminal() {
 fn a_terminal_that_does_not_hold_the_keyboard_hears_no_typing() {
     use heca_grid_ui::GridKey;
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
 
     let taken = heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("x".into()));
     assert_eq!(taken, Handled::No);
@@ -118,9 +118,9 @@ fn a_terminal_that_does_not_hold_the_keyboard_hears_no_typing() {
 /// bubbles on to whatever is behind it.
 #[test]
 fn a_terminal_nobody_listens_to_takes_nothing() {
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     let at = heca_grid_ui::Point::new(45.0, 61.0);
     heca_grid_ui::dispatch(

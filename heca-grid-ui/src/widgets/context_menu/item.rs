@@ -1,6 +1,5 @@
 use super::{ICON_GAP, KEYCAP_FONT_SCALE, KEYCAP_INSET, ROW_PAD_X, ROW_PAD_Y, SHORTCUT_GAP};
 use crate::builders::{LayoutExt, Parent};
-use crate::component::Component;
 use crate::widgets::key_hint::keycap_size;
 use crate::widgets::{Glyph, Icon, Label};
 use std::rc::Rc;
@@ -33,7 +32,7 @@ pub struct MenuItem {
     icon: Option<Glyph>,
     /// A builder for composed content. `Rc` so the item stays [`Clone`]; a `Fn` so it can run once
     /// per open.
-    content: Option<Rc<dyn Fn() -> Box<dyn Component>>>,
+    content: Option<Rc<dyn Fn() -> crate::WidgetModel>>,
     pub(super) key: Option<char>,
     pub(super) shortcut: Option<String>,
     pub(super) danger: bool,
@@ -87,8 +86,8 @@ impl MenuItem {
     #[heca_grid_ui_macros::host_only(
         "a subtree builder — composed content crosses as ViewNode children"
     )]
-    pub fn child<C: Component + 'static>(mut self, f: impl Fn() -> C + 'static) -> Self {
-        self.content = Some(Rc::new(move || Box::new(f()) as Box<dyn Component>));
+    pub fn child<C: crate::builders::IntoComponent + 'static>(mut self, f: impl Fn() -> C + 'static) -> Self {
+        self.content = Some(Rc::new(move || f().into_component()));
         self
     }
 
@@ -180,8 +179,8 @@ impl MenuItem {
     /// **Children win over sugar** — the same precedence [`Button`](crate::widgets::Button) has. The row box
     /// itself carries the padding and the trailing reservation, so composed content is laid out in
     /// the space that is actually free.
-    pub(super) fn build_row(&self, font: f32) -> Box<dyn Component> {
-        let inner: Box<dyn Component> = match &self.content {
+    pub(super) fn build_row(&self, font: f32) -> crate::WidgetModel {
+        let inner: crate::WidgetModel = match &self.content {
             Some(build) => build(),
             None => {
                 let mut row = crate::widgets::container()
@@ -194,10 +193,10 @@ impl MenuItem {
                 if let Some(l) = &self.label {
                     row = row.child(Label::new(l));
                 }
-                Box::new(row)
+                crate::WidgetModel::new(row)
             }
         };
-        Box::new(
+        crate::WidgetModel::new(
             crate::widgets::container()
                 .direction("row")
                 .align("center")

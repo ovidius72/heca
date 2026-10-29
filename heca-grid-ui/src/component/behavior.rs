@@ -10,6 +10,17 @@ pub trait Component {
     /// Mutably borrow this component's base.
     fn base_mut(&mut self) -> &mut Base;
 
+    /// Style addressed by ordinary builders and described properties. Composed surfaces
+    /// can expose their visible panel while keeping a viewport-sized runtime/input root.
+    fn authored_style(&self) -> &crate::style::Style {
+        &self.base().style
+    }
+
+    /// Mutable counterpart of [`authored_style`](Self::authored_style).
+    fn authored_style_mut(&mut self) -> &mut crate::style::Style {
+        &mut self.base_mut().style
+    }
+
     /// **Hand this widget new props**: the facts its owner holds, for it to show without being
     /// rebuilt. `true` when it took them; `false` when it declares no
     /// [`on_props`](crate::builders::IdentityExt::on_props) or declares one for another type.

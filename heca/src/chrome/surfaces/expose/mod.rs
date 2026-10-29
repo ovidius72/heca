@@ -59,7 +59,6 @@ mod testing;
 mod tests;
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::Component;
 use heca_grid_ui::animation::Animation;
 use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Length, Spacing};
@@ -107,7 +106,7 @@ pub(crate) fn map(
     // The pane a back-and-forth binding would return to — plain data, resolved by `register` from
     // the same field `prefix+i` reads.
     previous: Option<PaneId>,
-) -> Box<dyn Component> {
+) -> heca_grid_ui::WidgetModel {
     let cb = callbacks(emit, keys.clone());
 
     let grid = ExposeGrid {
@@ -134,7 +133,7 @@ pub(crate) fn map(
         .width(Length::FULL)
         .height(Length::FULL);
 
-    Box::new(
+    heca_grid_ui::WidgetModel::new(
         Overlay::new()
             .blocking(true)
             // **The session stays there underneath, legibly out of focus.** A flat fill made the

@@ -75,6 +75,8 @@ const LAYOUT_AREA: &str = "dialog-layout";
 /// right-aligned [`Flex`](crate::widgets::Flex) row of the caller's [`Button`](super::Button)s.
 pub struct Dialog {
     base: Base,
+    /// Caller-owned panel style, retained separately from resolved viewport constraints.
+    authored_style: crate::style::Style,
     /// When `false`, Esc / scrim clicks are swallowed but don't dismiss — a forced-decision
     /// dialog (the user must pick a button). Default `true`.
     dismissible: bool,
@@ -84,7 +86,6 @@ pub struct Dialog {
     on_dismiss: Option<Box<dyn Fn()>>,
     /// Set by [`danger`](Dialog::danger).
     danger: bool,
-    panel_max_width: Option<crate::style::Length>,
 }
 
 impl LayoutExt for Dialog {}

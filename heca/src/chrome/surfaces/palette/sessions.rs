@@ -147,7 +147,7 @@ pub(crate) fn open_session_folder(state: &mut AppState) {
         id.0,
         state.layers.current(),
         LayerKind::OnDemand,
-        Box::new(palette),
+        heca_grid_ui::WidgetModel::new(palette),
         &mut state.window_root,
     );
     state.overlays.on_resolve(id, |_, _, _| {});

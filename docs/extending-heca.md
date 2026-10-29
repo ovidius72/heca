@@ -25,6 +25,54 @@ fn main() {
 removing and ordering them from native Heca/library code, plus the sandbox-plugin startup parity
 requirement and current availability.
 
+## Extension identity, registrations and shared terminals
+
+`heca::extension("demo")` **declares the extension's identity** and returns its handle. It creates
+no terminal or widget. Declare it once; pass or clone that handle wherever it is needed. Calling
+`heca::extension("demo")` again does not retrieve the first handle: duplicate declarations are
+refused. Its items use qualified names such as `demo.shell` or `demo.build`, so different extensions
+can use the same short name without sharing an item accidentally.
+
+The handle's methods have different jobs; a shared namespace does not give them all the same
+creation or lifetime behavior:
+
+| call | what it does |
+|---|---|
+| `Label::new("Notes")`, `Pane::new("console")` | construct UI components to put in a tree; they do not look up an extension-wide instance by that text |
+| `Terminal::new("shell")` | get or create the app's named terminal `heca.shell`, without an extension handle |
+| `demo.terminal("shell")` | **get or create** the named terminal declaration; repeated calls return handles sharing that terminal's session |
+| `demo.action("build")…run(handler)` | register a named action and its handler; it does not retrieve an existing widget or execute the action |
+| `demo.layer("console").view(build)` | register a named surface builder; the host calls the builder again when rebuilding that surface, rather than retaining one cached widget tree |
+
+For terminals, the first call creates the declaration and the returned component handle; the host
+starts the shell or command from that declaration. The native constructor and extension method
+share this behavior, with separate owner namespaces:
+
+```rust
+let demo = heca::extension("demo"); // identity only; no shell is created
+let a = demo.terminal("shell");    // first call: declares demo.shell
+let b = demo.terminal("shell");    // another handle sharing a's session
+let c = demo.terminal("logs");     // a different name: a separate terminal
+let another_view = a.clone();      // also shares a's session; no new process
+let native = heca::Terminal::new("shell"); // heca.shell, separate from demo.shell
+```
+
+The name identifies the session; `.title(...)` only changes its display title. Configure
+`.command(...)` and `.cwd(...)` before the process starts. Applying those builders to an already
+running terminal does not restart it or change that process's command or working directory.
+Rebuilding a dock or reopening a layer can therefore construct fresh UI components while
+`demo.terminal("shell")` or `Terminal::new("shell")` reconnects to the same respective session.
+Hiding or removing that UI does not end the named terminal; a killed terminal stays ended when
+requested again under the same owner and name.
+See the canonical [Terminal reference](widgets.md#terminal) for builders, input and lifetime rules,
+and [Terminal processes](#terminal-processes) for host startup and managed-pane ownership.
+
+This is named lookup and sharing, rather than a per-component memoized reference: different UI
+components asking for `demo.shell` share it. Ordinary widgets still have their own identity and
+state; they do not require an extension handle merely to be constructed or placed in a tree.
+These calls describe the native extension API; see [the plugin guide](plugins.md) for the
+described/sandbox path and its current availability.
+
 ## Providers and docks at startup
 
 The canonical [Provider and region API reference](widgets.md#providers-and-startup-regions) explains
@@ -44,8 +92,10 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
   `[appearance.pane] title_actions`, `title_segments` and `[appearance.sidebar] pane_lines`: while a
   list is still heca's own, what you added shows after it; once the user writes their own list only
   their list counts, and they are told **once** that an unlisted item exists.
-- **Before `run()`.** Every door queues; the app takes the queues once, as it starts. A call after
-  that is said and dropped.
+- **Register before `run()`.** Startup registrations (actions, layer builders, decorations,
+  drivers and Provider/region changes) must be made before the app takes their queues; late
+  additions are reported and dropped. A registered dock or layer may subsequently call
+  `demo.terminal("shell")` while building its content to get or create its named terminal.
 - **Words are an English fallback** (`.label(..)`, `.description(..)`) until the app-wide text system
   lands.
 
@@ -61,6 +111,13 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
 | a terminal agent driver | `demo.agent_driver(MyDriver::new())` | terminal owner | implements `heca::agent::AgentDriver`; scoped as `demo.<driver id>` and used by the same launch/report path as built-in drivers |
+
+Dock and layer factories return ordinary components. For a dock, implement
+`Provider::build_contribution` with `ContainerContribution::new(self, |cx, build| widget)`;
+for a named layer use `demo.layer("details").view(|cx| widget)`. Neither needs author-side boxing,
+casts or storage conversions. The complete compiling program is
+[`extend_heca.rs`](../heca/examples/extend_heca.rs); the shared reference is
+[Providers and startup regions](widgets.md#providers-and-startup-regions).
 
 ## Terminal agent drivers
 

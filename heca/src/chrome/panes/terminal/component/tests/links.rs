@@ -26,13 +26,13 @@ type Said = Rc<RefCell<Vec<TerminalInput>>>;
 type Opened = Rc<RefCell<Vec<String>>>;
 
 /// A terminal with one link, an owner listening, and the intents the tree posts.
-fn with_a_link() -> (Terminal, Box<dyn heca_grid_ui::Component>, Said, Opened) {
+fn with_a_link() -> (Terminal, heca_grid_ui::WidgetModel, Said, Opened) {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&scrolled(0));
     t.show_links(&[span(3, 4, 9, "https://example.com")]);
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     t.place(Some(Rectangle::new(
         heca_grid_ui::Point::new(0.0, 0.0),

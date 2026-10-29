@@ -31,11 +31,21 @@ macro_rules! builder_impls {
                 b.0
             }
         }
+
+        impl AsRef<ViewNode> for $name {
+            fn as_ref(&self) -> &ViewNode { &self.0 }
+        }
     };
 }
 
 macro_rules! builder {
     ($(#[$m:meta])* $name:ident => $kind:ident) => {
+        builder!(@id $(#[$m])* $name => WidgetId::$kind);
+    };
+    ($(#[$m:meta])* $name:ident => $id:literal) => {
+        builder!(@id $(#[$m])* $name => $id);
+    };
+    (@id $(#[$m:meta])* $name:ident => $id:expr) => {
         $(#[$m])*
         #[derive(Debug, Clone, PartialEq)]
         pub struct $name(pub(super) ViewNode);
@@ -43,7 +53,7 @@ macro_rules! builder {
         impl $name {
             /// A new node of this kind.
             pub fn new() -> Self {
-                Self(ViewNode::new(WidgetKind::$kind))
+                Self(ViewNode::new($id))
             }
         }
 
@@ -68,7 +78,7 @@ macro_rules! builder_text {
         impl $name {
             /// A new node of this kind, showing `text`.
             pub fn new(text: impl Into<String>) -> Self {
-                Self(ViewNode::new(WidgetKind::$kind).text(text))
+                Self(ViewNode::new(WidgetId::$kind).text(text))
             }
         }
 

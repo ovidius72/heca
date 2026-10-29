@@ -1,6 +1,6 @@
 //! Capabilities every kind carries.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -104,14 +104,14 @@ fn hiding_the_ink_and_collapsing_the_box_are_separately_declarable_on_any_kind()
     use heca_grid_ui::reactive::SignalGet as _;
 
     let mut wrong: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         let (emit, _fired) = recording_emitter();
         let realized = |node: &ViewNode| {
-            realize(node, &Theme::default(), &emit, &mut FormBindings::default())
+            realize(node, &Theme::default(), &emit, &mut FormBindings::default()).expect("valid described test widget")
         };
 
         // `visible: false` — the ink goes, the box stays.
-        let w = realized(&sample_node(kind).prop("visible", PropValue::Bool(false)));
+        let w = realized(&sample_node(kind.clone()).prop("visible", PropValue::Bool(false)));
         if w.base().visible.get_untracked() {
             wrong.push(format!("{kind:?} (`visible: false`, still draws)"));
         }
@@ -120,7 +120,7 @@ fn hiding_the_ink_and_collapsing_the_box_are_separately_declarable_on_any_kind()
         }
 
         // `hidden: true` — out of the layout entirely, and the ink flag untouched.
-        let h = realized(&sample_node(kind).prop("hidden", PropValue::Bool(true)));
+        let h = realized(&sample_node(kind.clone()).prop("hidden", PropValue::Bool(true)));
         if !h.base().is_hidden() {
             wrong.push(format!("{kind:?} (`hidden`, still takes space)"));
         }
@@ -129,7 +129,7 @@ fn hiding_the_ink_and_collapsing_the_box_are_separately_declarable_on_any_kind()
         }
 
         // Nothing declared changes neither.
-        let plain = realized(&sample_node(kind));
+        let plain = realized(&sample_node(kind.clone()));
         if !plain.base().visible.get_untracked() || plain.base().is_hidden() {
             wrong.push(format!("{kind:?} (declared neither, not shown)"));
         }
@@ -157,25 +157,22 @@ fn hiding_the_ink_and_collapsing_the_box_are_separately_declarable_on_any_kind()
 fn a_described_action_row_carries_its_actions_into_the_overflow_menu() {
     let (emit, fired) = recording_emitter();
     let action = |name: &str, icon: &str| {
-        ViewNode::new(WidgetKind::Button)
+        ViewNode::new(WidgetId::Button)
             .text(name)
             .prop("icon", PropValue::Glyph(icon.into()))
             .on_press(Intent::new(format!("pane.{}", name.to_lowercase())))
     };
-    let node = ViewNode::new(WidgetKind::ButtonGroup)
+    let node = ViewNode::new(WidgetId::ButtonGroup)
         .prop("display", PropValue::Text("icon_only".into()))
         .child(action("Close", "close"))
-        .child(action("Split", "square_split_horizontal"))
-        // Not a button: the group has no label, glyph or click to read out of it, so it is
-        // skipped rather than wrapped into an action that does nothing.
-        .child(ViewNode::new(WidgetKind::Label).text("not an action"));
+        .child(action("Split", "square_split_horizontal"));
 
     let mut group = realize(
         &node,
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(
         group.base().children.len(),
         3,
@@ -215,15 +212,15 @@ fn a_described_action_row_carries_its_actions_into_the_overflow_menu() {
 #[test]
 fn where_a_letter_sits_is_declarable_on_any_kind() {
     let mut missing: Vec<String> = Vec::new();
-    for &kind in WidgetKind::ALL {
+    for kind in registered_ids() {
         let (emit, _fired) = recording_emitter();
-        let node = sample_node(kind)
+        let node = sample_node(kind.clone())
             .prop("hint_placement", PropValue::Text("center_right".into()))
             .prop("hint_size", PropValue::Int(18))
             .prop("hint_offset_y", PropValue::Float(4.0))
             .prop("hint_color", PropValue::Color("danger".into()));
         let theme = Theme::default();
-        let widget = realize(&node, &theme, &emit, &mut FormBindings::default());
+        let widget = realize(&node, &theme, &emit, &mut FormBindings::default()).expect("valid described test widget");
         let style = widget.base().hint_style;
         if style.placement != heca_grid_ui::widgets::HintPlacement::CenterRight {
             missing.push(format!("{kind:?} (placement ignored)"));

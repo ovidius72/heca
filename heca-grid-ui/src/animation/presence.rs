@@ -1,6 +1,6 @@
 //! [`Presence`] — whether a surface is up, and the animation carrying it there and away.
 
-use super::{Animate, AnimationFrame};
+use super::{AnimationFrame, AnimationModel};
 
 /// **Where a surface is in its coming and going.**
 ///
@@ -31,7 +31,7 @@ pub struct Presence {
     /// Whether the surface is up, as this has acted on it.
     open: bool,
     /// How it arrives and leaves. `None` ⇒ it cuts.
-    animation: Option<Box<dyn Animate>>,
+    animation: Option<AnimationModel>,
     /// **An exit is playing and has not been settled yet.**
     ///
     /// Set when [`leave`](Self::leave) starts a gesture that will take frames, cleared by the
@@ -48,7 +48,7 @@ impl Presence {
     }
 
     /// Declare how this surface arrives and leaves, or `None` to cut. Replaces whatever it had.
-    pub fn set_animation(&mut self, animation: Option<Box<dyn Animate>>) {
+    pub fn set_animation(&mut self, animation: Option<AnimationModel>) {
         self.animation = animation;
     }
 
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn entering_an_open_surface_replays_nothing() {
         let mut p = Presence::new();
-        p.set_animation(Some(Box::new(Fade::new().seconds(0.2))));
+        p.set_animation(Some(AnimationModel::new(Fade::new().seconds(0.2))));
         p.enter();
         p.tick(0.05);
         p.tick(0.05);
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn entering_a_leaving_surface_does_not_cancel_its_exit() {
         let mut p = Presence::new();
-        p.set_animation(Some(Box::new(Fade::new().seconds(0.2))));
+        p.set_animation(Some(AnimationModel::new(Fade::new().seconds(0.2))));
         p.enter();
         while p.tick(0.05) {}
 
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn an_animated_exit_reports_finishing_once() {
         let mut p = Presence::new();
-        p.set_animation(Some(Box::new(Fade::new().seconds(0.2))));
+        p.set_animation(Some(AnimationModel::new(Fade::new().seconds(0.2))));
         p.enter();
         assert!(!p.take_finished_exit(), "nothing has left yet");
 
@@ -262,7 +262,7 @@ mod tests {
         assert!(!p.take_finished_exit());
 
         let mut animated = Presence::new();
-        animated.set_animation(Some(Box::new(Fade::new().seconds(0.2))));
+        animated.set_animation(Some(AnimationModel::new(Fade::new().seconds(0.2))));
         animated.tick(1.0);
         assert!(!animated.take_finished_exit());
     }

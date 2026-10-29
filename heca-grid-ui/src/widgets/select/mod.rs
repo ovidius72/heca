@@ -97,7 +97,7 @@ const EMPTY_W: f32 = 120.0;
 pub struct Select {
     base: Base,
     /// Selected-state signal of each option row, captured when the [`Choice`](crate::widgets::Choice) is added (the rows
-    /// are `Box<dyn Component>` afterwards, so their type — and this signal — is out of reach).
+    /// are `crate::WidgetModel` afterwards, so their type — and this signal — is out of reach).
     /// Keeping the signals is what lets the control flip a row's selection **in place**, with no
     /// rebuild.
     option_states: Vec<Signal<bool>>,

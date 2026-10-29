@@ -47,7 +47,7 @@ pub(crate) fn handle_rename_session(state: &mut AppState, _: &WmAction) {
         danger: false,
         dismissible: true,
     };
-    crate::chrome::open_modal(state, spec, |state, registry, result| {
+    let _ = crate::chrome::open_modal(state, spec, |state, registry, result| {
         if let ModalResult::Action { id, data } = result
             && id == "ok"
             && let Some(name) = data.get("name").and_then(PropValue::as_text)
@@ -94,5 +94,5 @@ pub(crate) fn session_unavailable(state: &mut AppState, server_lost: bool) {
             }
         }
     });
-    state.session_dialog = Some(id);
+    state.session_dialog = id.ok();
 }

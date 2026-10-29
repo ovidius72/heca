@@ -41,7 +41,7 @@ pub(crate) fn rebuild_named_layer(state: &mut crate::app_state::AppState, name: 
 pub(crate) fn register_named_layer(
     state: &mut crate::app_state::AppState,
     name: &str,
-    build: impl FnOnce(&ChromeIntentEmitter) -> Box<dyn heca_grid_ui::Component>,
+    build: impl FnOnce(&ChromeIntentEmitter) -> heca_grid_ui::WidgetModel,
 ) -> LayerId {
     let id = state.layers.slot_for_name(name);
     let emit = layer_emitter(&state.event_proxy, surface_key_of(Some(name), id));
@@ -96,7 +96,7 @@ mod tests {
             .frosted(frosted)
             .panel(Flex::row())
             .default_open(true);
-        place_surface(&mut root, "surface:1", Box::new(surface));
+        place_surface(&mut root, "surface:1", heca_grid_ui::WidgetModel::new(surface));
         let scene = paint_chrome_root(&mut root, 1000.0, 800.0, &theme);
         backdrops(&scene)
     }

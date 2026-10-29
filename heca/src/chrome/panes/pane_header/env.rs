@@ -69,8 +69,8 @@ impl PaneHeader {
     }
 
     /// The node to seat in the pane. A clone is the same node.
-    pub(crate) fn seat(&self) -> Box<dyn Component> {
-        Box::new(self.node.clone())
+    pub(crate) fn seat(&self) -> heca_grid_ui::WidgetModel {
+        heca_grid_ui::WidgetModel::new(self.node.clone())
     }
 
     /// Teach `pane` to show the facts it is handed in this header.
@@ -143,6 +143,6 @@ fn show_pane_header(
         // The identity rule's warning half: each control carries a key naming which pane's
         // control it is, and this says so if that ever goes.
         crate::chrome::input::identity::report_ambiguous_widgets("pane-header", &root);
-        Some(Box::new(root) as Box<dyn Component>)
+        Some(heca_grid_ui::WidgetModel::new(root))
     });
 }

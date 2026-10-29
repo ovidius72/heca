@@ -62,10 +62,10 @@ pub struct Tile {
 
 /// An empty, hidden place for a slot nobody has filled. Hidden is `display: none`, so an unfilled
 /// slot takes no room and no gap.
-fn placeholder() -> Box<dyn Component> {
+fn placeholder() -> crate::WidgetModel {
     let mut empty = Flex::row();
     empty.base_mut().set_hidden(true);
-    Box::new(empty)
+    crate::WidgetModel::new(empty)
 }
 
 #[heca_grid_ui_macros::props]
@@ -92,7 +92,7 @@ impl Tile {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
         base.style.layout.gap = Spacing::Xs.into();
-        base.children.push(Box::new(head));
+        base.children.push(crate::WidgetModel::new(head));
         Self { base }
     }
 
@@ -149,11 +149,11 @@ impl Tile {
         self.base.children[HEAD].base_mut()
     }
 
-    fn put_in_head(&mut self, at: usize, part: Box<dyn Component>) {
+    fn put_in_head(&mut self, at: usize, part: crate::WidgetModel) {
         self.head().children[at] = part;
     }
 
-    fn put_in_text(&mut self, at: usize, part: Box<dyn Component>) {
+    fn put_in_text(&mut self, at: usize, part: crate::WidgetModel) {
         self.head().children[TEXT].base_mut().children[at] = part;
     }
 }

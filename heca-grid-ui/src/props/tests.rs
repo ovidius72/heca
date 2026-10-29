@@ -33,7 +33,7 @@ fn a_widget_builds_its_own_children_from_the_props_it_is_handed() {
     let mut widget = Flex::column().on_props(|count: &usize, base| {
         base.children.clear();
         for _ in 0..*count {
-            base.children.push(Box::new(Flex::row()));
+            base.children.push(crate::WidgetModel::new(Flex::row()));
         }
     });
     assert!(widget.set_props(&3_usize));

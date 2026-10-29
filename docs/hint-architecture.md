@@ -524,7 +524,7 @@ cross the boundary, so the declarative spelling is not a nicety, it is the featu
 `realize` wires it to `on_hint` firing the intent — the same two-spellings-one-slot pattern `press`
 and `change` already use. Both converge on `Base::hint`: one door, no second path to drift.
 
-**7. `KeyHintGroup` gets a `WidgetKind`, and `on_action` its declarative form.** ✅ **DONE —
+**7. `KeyHintGroup` gets a `WidgetId`, and `on_action` its declarative form.** ✅ **DONE —
 F003/P082/T436.** Otherwise a plugin can contribute *targets* but still cannot own a *picker* — the
 gap just closed for native code and left open for everyone else.
 

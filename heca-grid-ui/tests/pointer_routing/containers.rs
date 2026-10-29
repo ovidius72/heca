@@ -7,7 +7,7 @@ use super::*;
 /// receive the whole vocabulary, and the container above it has to see what its subtree did.
 #[test]
 fn every_routing_container_passes_the_whole_vocabulary_through() {
-    fn probe_in(wrap: impl FnOnce(Probe) -> Box<dyn Component>) -> Vec<String> {
+    fn probe_in(wrap: impl FnOnce(Probe) -> heca_grid_ui::WidgetModel) -> Vec<String> {
         let (probe, seen) = Probe::new(100.0, 50.0);
         let mut root = wrap(probe);
         LayoutEngine::new().compute(root.as_mut(), Size::new(400.0, 300.0));
@@ -31,15 +31,15 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
     }
 
     let cases: Vec<(&str, Vec<String>)> = vec![
-        ("FocusScope", probe_in(|p| Box::new(FocusScope::new(p)))),
+        ("FocusScope", probe_in(|p| heca_grid_ui::WidgetModel::new(FocusScope::new(p)))),
         (
             "DockFrame",
-            probe_in(|p| Box::new(DockFrame::new("DOCK").child(p))),
+            probe_in(|p| heca_grid_ui::WidgetModel::new(DockFrame::new("DOCK").child(p))),
         ),
         (
             "Overlay",
             probe_in(|p| {
-                Box::new(
+                heca_grid_ui::WidgetModel::new(
                     Overlay::new()
                         .panel(Flex::column().child(p))
                         .default_open(true),
@@ -48,7 +48,7 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
         ),
         (
             "Dialog",
-            probe_in(|p| Box::new(Dialog::new("T").body(p).default_open(true))),
+            probe_in(|p| heca_grid_ui::WidgetModel::new(Dialog::new("T").body(p).default_open(true))),
         ),
     ];
     for (name, seen) in cases {

@@ -1,7 +1,7 @@
 //! The generated surface, end to end.
 
 use heca_grid_ui::{Input, ScrollRegion};
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use crate::props::text_of;
 use crate::style::with_props;
@@ -15,7 +15,7 @@ use super::*;
 /// twice, including the command palette — yet a description could not say it.
 #[test]
 fn a_description_can_now_set_an_inputs_placeholder() {
-    let node = ViewNode::new(WidgetKind::Input)
+    let node = ViewNode::new(WidgetId::Input)
         .text("current")
         .prop("placeholder", PropValue::Text("type to filter…".into()));
 
@@ -32,7 +32,7 @@ fn a_description_can_now_set_an_inputs_placeholder() {
 /// root is `.both()` — but every declarative region was vertical, forever.
 #[test]
 fn a_description_can_now_ask_for_a_two_axis_scroll_region() {
-    let both = ViewNode::new(WidgetKind::Scroll).prop("axes", PropValue::Text("both".into()));
+    let both = ViewNode::new(WidgetId::Scroll).prop("axes", PropValue::Text("both".into()));
     assert_eq!(
         with_props(ScrollRegion::new(), &both, &Theme::default()).clone_axes(),
         heca_grid_ui::ScrollAxes::Both,
@@ -40,7 +40,7 @@ fn a_description_can_now_ask_for_a_two_axis_scroll_region() {
     assert_eq!(
         with_props(
             ScrollRegion::new(),
-            &ViewNode::new(WidgetKind::Scroll),
+            &ViewNode::new(WidgetId::Scroll),
             &Theme::default()
         )
         .clone_axes(),
@@ -53,7 +53,7 @@ fn a_description_can_now_ask_for_a_two_axis_scroll_region() {
 /// widget both leave the widget alone, and the good property on the same node still lands.
 #[test]
 fn the_generated_surface_ignores_what_it_cannot_use() {
-    let node = ViewNode::new(WidgetKind::Scroll)
+    let node = ViewNode::new(WidgetId::Scroll)
         .prop("axes", PropValue::Text("sideways".into()))
         .prop(
             "placeholder",
@@ -71,7 +71,7 @@ fn the_generated_surface_ignores_what_it_cannot_use() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(
         w.base().style.layout.gap,
         heca_grid_ui::style::Space::Px(6.0),
@@ -81,7 +81,7 @@ fn the_generated_surface_ignores_what_it_cannot_use() {
 
 /// The two tests above read the widget through `with_props`, which is the surface but not the
 /// path a real description takes. These two go through **`realize` itself** and read the result
-/// the only way a `Box<dyn Component>` allows — by painting it — so the arm is proven to wire
+/// the only way a `heca_grid_ui::WidgetModel` allows — by painting it — so the arm is proven to wire
 /// the surface, not just the surface proven to exist.
 ///
 /// An empty input paints its placeholder, so the text is in the scene when the arm passed it on
@@ -97,7 +97,7 @@ fn a_realized_input_paints_the_placeholder_it_was_given() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         LayoutEngine::new().compute(widget.as_mut(), Size::new(240.0, 40.0));
         let theme = Theme::default();
         let mut scene = Scene::new();
@@ -115,14 +115,14 @@ fn a_realized_input_paints_the_placeholder_it_was_given() {
     };
 
     // No value, so the placeholder is what shows.
-    let with = ViewNode::new(WidgetKind::Input)
+    let with = ViewNode::new(WidgetId::Input)
         .prop("placeholder", PropValue::Text("type to filter…".into()));
     assert!(
         runs(&with).contains(&"type to filter…".to_string()),
         "the realized input paints the placeholder it was described with",
     );
     assert!(
-        !runs(&ViewNode::new(WidgetKind::Input)).contains(&"type to filter…".to_string()),
+        !runs(&ViewNode::new(WidgetId::Input)).contains(&"type to filter…".to_string()),
         "and it is the property that put it there, not the widget's own default",
     );
 }
@@ -136,20 +136,20 @@ fn a_realized_two_axis_region_is_the_native_one() {
     use heca_grid_ui::{LayoutEngine, PaintCx, Parent, Scene, ScrollAxes, Theme};
 
     // Content wider AND taller than the viewport, so both axes overflow and both bars draw.
-    let content = ViewNode::new(WidgetKind::VStack)
+    let content = ViewNode::new(WidgetId::VStack)
         .prop("width", PropValue::Int(400))
         .prop("height", PropValue::Int(300))
-        .child(ViewNode::new(WidgetKind::Label).text("content"));
+        .child(ViewNode::new(WidgetId::Label).text("content"));
     let realized_content = || {
         realize(
             &content,
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        )
+        ).expect("valid described test widget")
     };
 
-    let paint = |mut widget: Box<dyn Component>| {
+    let paint = |mut widget: heca_grid_ui::WidgetModel| {
         LayoutEngine::new().compute(widget.as_mut(), Size::new(120.0, 80.0));
         let theme = Theme::default();
         let mut scene = Scene::new();
@@ -161,7 +161,7 @@ fn a_realized_two_axis_region_is_the_native_one() {
     };
 
     let described = |axes: Option<&str>| {
-        let mut node = ViewNode::new(WidgetKind::Scroll)
+        let mut node = ViewNode::new(WidgetId::Scroll)
             .prop("width", PropValue::Int(120))
             .prop("height", PropValue::Int(80))
             .child(content.clone());
@@ -173,11 +173,11 @@ fn a_realized_two_axis_region_is_the_native_one() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ))
+        ).expect("valid described test widget"))
     };
 
     let native = |axes: ScrollAxes| {
-        paint(Box::new(
+        paint(heca_grid_ui::WidgetModel::new(
             ScrollRegion::new()
                 .axes(axes)
                 .width(Length::Px(120.0))
@@ -217,14 +217,14 @@ fn a_realized_two_axis_region_consumes_a_horizontal_wheel() {
     use heca_grid_ui::{Event, Handled, LayoutEngine};
 
     let horizontal_wheel = |axes: Option<&str>| {
-        let mut node = ViewNode::new(WidgetKind::Scroll)
+        let mut node = ViewNode::new(WidgetId::Scroll)
             .prop("width", PropValue::Int(120))
             .prop("height", PropValue::Int(80))
             .child(
-                ViewNode::new(WidgetKind::VStack)
+                ViewNode::new(WidgetId::VStack)
                     .prop("width", PropValue::Int(400))
                     .prop("height", PropValue::Int(300))
-                    .child(ViewNode::new(WidgetKind::Label).text("content")),
+                    .child(ViewNode::new(WidgetId::Label).text("content")),
             );
         if let Some(axes) = axes {
             node = node.prop("axes", PropValue::Text(axes.into()));
@@ -234,7 +234,7 @@ fn a_realized_two_axis_region_consumes_a_horizontal_wheel() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         LayoutEngine::new().compute(region.as_mut(), Size::new(120.0, 80.0));
         // The wheel is hover-gated (`Event::Scroll` carries no position), so hover it first.
         heca_grid_ui::dispatch(

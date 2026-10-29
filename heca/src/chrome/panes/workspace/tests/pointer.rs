@@ -18,7 +18,7 @@ fn dragging_an_edge_resizes_the_neighbours_it_sits_between() {
         let posted = posted.clone();
         Rc::new(move |col, pane, px| posted.borrow_mut().push(format!("pane {col}/{pane} {px}")))
     };
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams));
     assert!(ws.set_props(&two_columns()));
     let mut window = Flex::column().width(800.0).height(600.0);
     window.base_mut().children.push(ws);
@@ -81,7 +81,7 @@ fn the_outer_edges_resize_the_first_and_last_column() {
         let posted = posted.clone();
         Rc::new(move |col, share| posted.borrow_mut().push(format!("col {col} {share:.4}")))
     };
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams));
     assert!(ws.set_props(&two_columns()));
     let mut window = Flex::column().width(800.0).height(600.0);
     window.base_mut().children.push(ws);
@@ -133,7 +133,7 @@ fn a_press_on_a_pane_reaches_the_pane_under_the_chrome() {
     });
 
     let mut window = crate::chrome::new_window_root();
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams()));
     assert!(ws.set_props(&two_columns_and_a_float()));
     window.base_mut().children.push(ws);
     crate::chrome::seat_chrome(
@@ -179,7 +179,7 @@ fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press()
     let overlay_clicks = clicks.clone();
 
     let mut window = crate::chrome::new_window_root();
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams()));
     assert!(ws.set_props(&two_columns_and_a_float()));
     window.base_mut().children.push(ws);
 
@@ -206,7 +206,7 @@ fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press()
     crate::chrome::place_surface(
         &mut window,
         "plugin.overlay",
-        Box::new(
+        heca_grid_ui::WidgetModel::new(
             Flex::row().width(Length::FULL).height(Length::FULL).child(
                 Flex::row()
                     .at_rect(680.0, 300.0, 100.0, 40.0)
@@ -238,11 +238,11 @@ fn every_layout_container_over_the_panes_leaves_them_their_presses() {
     use heca_grid_ui::event::{Event, PointerButton};
     use heca_grid_ui::widgets::{Grid, KeyHintGroup, Surface, Visibility};
 
-    type Wrap = fn(Flex) -> Box<dyn Component>;
+    type Wrap = fn(Flex) -> heca_grid_ui::WidgetModel;
     let wrappers: [(&str, Wrap); 5] = [
-        ("Flex", |inner| Box::new(inner)),
+        ("Flex", |inner| heca_grid_ui::WidgetModel::new(inner)),
         ("Grid", |inner| {
-            Box::new(
+            heca_grid_ui::WidgetModel::new(
                 Grid::new()
                     .width(Length::FULL)
                     .height(Length::FULL)
@@ -250,15 +250,15 @@ fn every_layout_container_over_the_panes_leaves_them_their_presses() {
             )
         }),
         ("Surface", |inner| {
-            Box::new(
+            heca_grid_ui::WidgetModel::new(
                 Surface::column()
                     .width(Length::FULL)
                     .height(Length::FULL)
                     .child(inner),
             )
         }),
-        ("Visibility", |inner| Box::new(Visibility::new(inner, true))),
-        ("KeyHintGroup", |inner| Box::new(KeyHintGroup::new(inner))),
+        ("Visibility", |inner| heca_grid_ui::WidgetModel::new(Visibility::new(inner, true))),
+        ("KeyHintGroup", |inner| heca_grid_ui::WidgetModel::new(KeyHintGroup::new(inner))),
     ];
 
     for (name, wrap) in wrappers {
@@ -270,7 +270,7 @@ fn every_layout_container_over_the_panes_leaves_them_their_presses() {
         let item_clicks = clicks.clone();
 
         let mut window = crate::chrome::new_window_root();
-        let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+        let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams()));
         assert!(ws.set_props(&two_columns_and_a_float()));
         window.base_mut().children.push(ws);
         let inner = Flex::row().width(Length::FULL).height(Length::FULL).child(
@@ -327,7 +327,7 @@ fn a_float_answers_its_press_and_the_edges_beside_it_do_nothing() {
         Rc::new(move |col, _| seen.borrow_mut().push(format!("resize col {col}")))
     };
     let mut window = crate::chrome::new_window_root();
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams));
     assert!(ws.set_props(&two_columns_and_a_float()));
     window.base_mut().children.push(ws);
     crate::chrome::seat_chrome(

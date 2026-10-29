@@ -1,7 +1,7 @@
 use super::Style;
 use crate::{
     PropValue, ViewEllipsis, ViewGlyph, ViewNode, ViewOrientation, ViewSeverity, ViewTextAlign,
-    ViewVariant, WidgetKind,
+    WidgetId,
 };
 
 builder_text!(
@@ -18,6 +18,7 @@ builder_text!(
     /// A coloured tag.
     Tag => Tag
 );
+impl super::Parent for Tag {}
 
 builder!(
     /// An icon.
@@ -28,6 +29,9 @@ builder!(
     /// A small state dot.
     StatusDot => StatusDot
 );
+impl StatusDot {
+    pub fn status(self, status: crate::ViewDotStatus) -> Self { self.prop("status", status) }
+}
 
 builder!(
     /// A value meter.
@@ -139,8 +143,8 @@ impl Label {
 
 impl Badge {
     /// Which visual variant.
-    pub fn variant(self, v: ViewVariant) -> Self {
-        self.prop("variant", v)
+    pub fn variant(self, v: impl Into<crate::ViewBadgeVariant>) -> Self {
+        self.prop("variant", v.into())
     }
 }
 
@@ -214,6 +218,7 @@ impl Alert {
     pub fn severity(self, s: ViewSeverity) -> Self {
         self.prop("variant", s)
     }
+    pub fn variant(self, variant: ViewSeverity) -> Self { self.prop("variant", variant) }
     /// The supporting line under the title.
     pub fn body(self, text: impl Into<String>) -> Self {
         self.prop("body", PropValue::Text(text.into()))
@@ -221,6 +226,13 @@ impl Alert {
 }
 
 impl Toast {
+    /// Countdown presentation; the host owns queue lifetime and removal.
+    pub fn countdown_ms(self, millis: u32) -> Self { self.prop("countdown_ms", i64::from(millis)) }
+    /// Show the host-driven countdown bar over this toast's lifetime.
+    pub fn progress(self, on: bool) -> Self {
+        self.prop("progress", PropValue::Bool(on))
+    }
+
     /// How serious the message is.
     pub fn severity(self, s: ViewSeverity) -> Self {
         self.prop("severity", s)

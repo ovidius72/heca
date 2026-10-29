@@ -2,13 +2,13 @@ use crate::builders::*;
 use crate::component::Component;
 use crate::widgets::{Flex, Label};
 
-fn subtree() -> Box<dyn Component> {
-    Box::new(Label::new("realized"))
+fn subtree() -> crate::WidgetModel {
+    crate::WidgetModel::new(Label::new("realized"))
 }
 
 /// **A widget and an already-built subtree go through the SAME builder.**
 ///
-/// `Box<dyn Component>` is not itself a `Component`, and for that one reason every
+/// `crate::WidgetModel` is not itself a `Component`, and for that one reason every
 /// child-taking builder came in twos — `child`/`child_boxed`, `body`/`body_boxed`,
 /// `leading`/`leading_boxed`, sixteen in all. A caller holding a dynamically built subtree,
 /// which is what `realize()` returns from a description, had to know which spelling to reach

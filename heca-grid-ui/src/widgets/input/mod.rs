@@ -60,8 +60,8 @@ mod content;
 /// carry the full value. The shared `max_height` layout prop accepts pixels or percentages.
 ///
 /// ```ignore
-/// use heca_view::{ViewNode, WidgetKind, PropValue, Intent};
-/// let input = ViewNode::new(WidgetKind::Input)
+/// use heca_view::{ViewNode, WidgetId, PropValue, Intent};
+/// let input = ViewNode::new(WidgetId::Input)
 ///     .prop("multiline", PropValue::Bool(true))
 ///     .prop("max_lines", PropValue::Int(6))
 ///     .prop("max_height", PropValue::Float(180.0))

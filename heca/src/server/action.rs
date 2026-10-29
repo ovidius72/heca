@@ -49,7 +49,7 @@ pub(crate) enum ServerAction {
 
 /// **A window's notification request, carried over the wire.**
 ///
-/// The serializable subset of [`ServerAction`] a pure client sends ([`ClientMsg::Notify`]). It
+/// The serializable subset of [`ServerAction`] a pure client sends ([`ClientMsg::Notify`](crate::server::wire::ClientMsg::Notify)). It
 /// leaves out `Configure`/`ConfigureTerminals`, which a window never hands over: the server reads
 /// its own settings from disk on a [`ClientMsg::Reload`](crate::server::wire::ClientMsg::Reload),
 /// so the window's whole `Theme` never crosses the wire.

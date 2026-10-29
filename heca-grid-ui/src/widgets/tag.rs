@@ -70,7 +70,7 @@ impl Tag {
         base.style.layout.gap = (SEG_GAP).into();
         let label = label.font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
-        base.children.push(Box::new(segment().tooltip_signal(label_signal).tooltip_quick(true).child(label)));
+        base.children.push(crate::WidgetModel::new(segment().tooltip_signal(label_signal).tooltip_quick(true).child(label)));
         Self {
             base,
             color: None,
@@ -81,19 +81,19 @@ impl Tag {
     /// Set the leading slot of the **first** segment — typically an
     /// [`Icon`](super::Icon).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn leading(mut self, c: impl Component + 'static) -> Self {
+    pub fn leading(mut self, c: impl crate::builders::IntoComponent) -> Self {
         self.base.children[0]
             .base_mut()
             .children
-            .insert(0, Box::new(c));
+            .insert(0, c.into_component());
         self
     }
 
     /// Append a segment (its own composed content, e.g. a row of `Icon`/`Label`).
     /// A thin divider is drawn before it.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn segment(mut self, c: impl Component + 'static) -> Self {
-        self.base.children.push(Box::new(c));
+    pub fn segment(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        self.base.children.push(c.into_component());
         self
     }
 
@@ -111,22 +111,18 @@ impl Tag {
     /// right next to that segment's existing content — e.g. a small dimmed suffix after a label.
     /// Out-of-range `idx` is a no-op.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn append_to_segment(mut self, idx: usize, c: impl Component + 'static) -> Self {
+    pub fn append_to_segment(mut self, idx: usize, c: impl crate::builders::IntoComponent) -> Self {
         if let Some(seg) = self.base.children.get_mut(idx) {
-            seg.base_mut().children.push(Box::new(c));
+            seg.base_mut().children.push(c.into_component());
         }
         self
     }
 
-    /// Append a `label` segment with an optional leading icon — a convenience over
-    /// [`segment`](Tag::segment) for the common icon-plus-text section.
+    /// Append a text segment. Use [`segment_label_with`](Self::segment_label_with) to
+    /// compose leading content beside a configured label.
     #[heca_grid_ui_macros::host_only("not authorable as a single scalar property")]
-    pub fn segment_text(
-        self,
-        label: impl Into<String>,
-        leading: Option<Box<dyn Component>>,
-    ) -> Self {
-        self.segment_text_keyed(label, leading, None)
+    pub fn segment_text(self, label: impl Into<String>) -> Self {
+        self.segment_text_keyed(label, None)
     }
 
     /// The same, **naming the words** so a host can change them later without rebuilding the tag
@@ -136,7 +132,6 @@ impl Tag {
     pub fn segment_text_keyed(
         self,
         label: impl Into<String>,
-        leading: Option<Box<dyn Component>>,
         key: Option<&str>,
     ) -> Self {
         use crate::builders::IdentityExt as _;
@@ -144,20 +139,20 @@ impl Tag {
         if let Some(k) = key {
             text = text.key(k);
         }
-        self.segment_label(text, leading)
+        self.segment_label(text)
     }
 
-    /// Append a configured label and optional leading content. The segment's tooltip follows
+    /// Append a configured label. The segment's tooltip follows
     /// the label's full value, even when its visible text is shortened or updated in place.
     #[heca_grid_ui_macros::host_only("composed label content")]
-    pub fn segment_label(self, label: Label, leading: Option<Box<dyn Component>>) -> Self {
-        let label = label.font_scale(FONT_SCALE);
-        let text = label.text_signal();
-        let mut seg = segment().tooltip_signal(text).tooltip_quick(true).child(label);
-        if let Some(icon) = leading {
-            seg.base_mut().children.insert(0, icon);
-        }
-        self.segment(seg)
+    pub fn segment_label(self, label: Label) -> Self {
+        self.label_segment(label, None)
+    }
+
+    /// Append a configured label and ordinary leading content, with automatic conversion.
+    #[heca_grid_ui_macros::host_only("composed label and leading content")]
+    pub fn segment_label_with(self, label: Label, leading: impl crate::builders::IntoComponent) -> Self {
+        self.label_segment(label, Some(leading.into_component()))
     }
 
     /// Pill hue for the fill, border and dividers (default: the theme muted token).
@@ -170,6 +165,18 @@ impl Tag {
     /// The reactive signal for the first segment's text label.
     pub fn label_signal(&self) -> Signal<String> {
         self.label
+    }
+}
+
+impl Tag {
+    fn label_segment(self, label: Label, leading: Option<crate::WidgetModel>) -> Self {
+        let label = label.font_scale(FONT_SCALE);
+        let text = label.text_signal();
+        let mut seg = segment().tooltip_signal(text).tooltip_quick(true).child(label);
+        if let Some(icon) = leading {
+            seg.base_mut().children.insert(0, icon);
+        }
+        self.segment(seg)
     }
 }
 

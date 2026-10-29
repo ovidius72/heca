@@ -21,11 +21,11 @@ use crate::scene::{ArrowHeads, LineCmd};
 /// Without children the tree is empty. No tree-specific events or identifiers are required.
 ///
 /// ```ignore
-/// use heca_view::{ViewNode, WidgetKind};
-/// let tree = ViewNode::new(WidgetKind::TreeLayout)
-///     .child(ViewNode::new(WidgetKind::Label).text("root"))
-///     .child(ViewNode::new(WidgetKind::Label).text("one"))
-///     .child(ViewNode::new(WidgetKind::Label).text("two"));
+/// use heca_view::{ViewNode, WidgetId};
+/// let tree = ViewNode::new(WidgetId::TreeLayout)
+///     .child(ViewNode::new(WidgetId::Label).text("root"))
+///     .child(ViewNode::new(WidgetId::Label).text("one"))
+///     .child(ViewNode::new(WidgetId::Label).text("two"));
 /// ```
 pub struct TreeLayout { base: Base }
 
@@ -38,7 +38,7 @@ impl TreeLayout {
             .child(Flex::row().gap("md").align("start"));
         let mut base = Base::container();
         base.style.layout.gap = "lg".into();
-        base.children.push(Box::new(grid));
+        base.children.push(crate::WidgetModel::new(grid));
         Self { base }
     }
 
@@ -46,7 +46,7 @@ impl TreeLayout {
     #[heca_grid_ui_macros::host_only("composed content crosses as children")]
     pub fn branch(mut self, child: impl IntoComponent) -> Self {
         let branch = Flex::column().align("center").flex(1.0).min_width(0.0).child(child.into_component());
-        self.base.children[0].base_mut().children[1].base_mut().children.push(Box::new(branch));
+        self.base.children[0].base_mut().children[1].base_mut().children.push(crate::WidgetModel::new(branch));
         self
     }
 }

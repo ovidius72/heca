@@ -23,19 +23,12 @@
 //! opaque id back to a `pub(crate)` app enum — two doors onto one feature, and the plugin-facing
 //! one was the second-class half.
 //!
-//! Adding a widget = one [`WidgetKind`](heca_view::WidgetKind) arm here (+ its variant in the model).
+//! A host registers a widget through one [`WidgetDefinition`], which supplies its factory and
+//! generated metadata. [`WidgetRegistry`] resolves open identifiers, including host extensions.
 //!
-//! # Coverage
-//! **Every `WidgetKind` realizes to a live widget.** The one exception is `ScrollBar`, which is
-//! **host-only by design**: its state is live host signals (`content_extent` / `viewport_extent` /
-//! `offset`), and static, serializable data fundamentally cannot drive a signal — a declarative one
-//! would render a dead control. A plugin that needs scrolling uses `Scroll` (a `ScrollRegion`),
-//! which owns its own offset. The same rule applies to an individual *builder* that binds a host
-//! signal (e.g. `DockFrame::rail`): **a widget whose state is a live host signal is host-only.**
-//!
-//! This is enforced, not merely stated: `every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones`
-//! walks [`WidgetKind::ALL`](heca_view::WidgetKind::ALL) and fails if a kind produces neither children
-//! nor paint — so a new kind added without an arm cannot silently render an empty container.
+//! Coverage walks the actual registrations rather than a closed model inventory. Live controls
+//! use typed serialized inputs and the existing native props seam; signals and closures remain
+//! inside the host. Unknown identifiers and unsupported schema versions return [`RealizeError`].
 //!
 
 use std::rc::Rc;
@@ -46,7 +39,6 @@ use heca_grid_ui::{Component, Glyph, Theme};
 use heca_view::{Intent, PropMap, PropValue, ViewNode};
 
 use crate::intents::hint_intent;
-use crate::kinds::realize_kind;
 use crate::style::{merge_style_half, resolve_color};
 use crate::vocab::{hint_placement, hint_tone, tooltip_side};
 
@@ -98,12 +90,6 @@ impl FormBindings {
     }
 }
 
-/// Realize a [`ViewNode`] (and its subtree) into a retained grid-ui component.
-///
-/// Returns a `Box<dyn Component>` because the produced widget type depends on the runtime
-/// [`kind`](heca_view::WidgetKind). NB: `Box<dyn Component>` is **not** itself `Component`, so a
-/// container can't take it via `Parent::child` (which boxes an `impl Component`); realized
-/// children are pushed straight onto `base_mut().children` (the `Vec<Box<dyn Component>>`).
 /// **Entries into a menu — the one conversion, for both authoring paths**.
 ///
 /// A menu entry is data carrying an [`Intent`]; this is what turns a list of them into the widget.
@@ -114,13 +100,13 @@ impl FormBindings {
 /// `icon_for` is passed in because resolving an entry's glyph from its id is the *host's*
 /// judgement — the app asks its action catalog, and a caller with no catalog passes `|_| None`.
 /// That is the only thing the two callers do differently.
-pub fn menu_from_items(
+pub fn menu_from_items<F: Fn() + 'static>(
     title: &str,
     description: &str,
     name: &str,
     items: Vec<heca_view::DropdownItem>,
     icon_for: &dyn Fn(&str) -> Option<Glyph>,
-    on_choose: &dyn Fn(Intent) -> Box<dyn Fn()>,
+    on_choose: &impl Fn(Intent) -> F,
 ) -> Menu {
     let mut menu = Menu::new(title, description);
     if !name.is_empty() {
@@ -141,13 +127,26 @@ pub fn menu_from_items(
     menu
 }
 
+/// Build a described tree using the library registry. Invalid property values keep the
+/// native default and are diagnosed on stderr; unknown widget identifiers and unsupported
+/// versions are returned as errors before any factory runs. A host can route diagnostics
+/// through its existing reporting channel with [`WidgetRegistry::on_diagnostic`].
 pub fn realize(
-    node: &ViewNode,
+    node: &impl AsRef<ViewNode>,
     theme: &Theme,
     emit: &IntentEmitter,
     forms: &mut FormBindings,
-) -> Box<dyn Component> {
-    let mut realized = realize_kind(node, theme, emit, forms);
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    WidgetRegistry::builtins()?.realize(node.as_ref(), theme, emit, forms)
+}
+
+pub(crate) fn apply_common_props(
+    realized: &mut dyn Component,
+    node: &ViewNode,
+    theme: &Theme,
+    emit: &IntentEmitter,
+    _forms: &mut FormBindings,
+) {
     // Style belongs to every kind, so it is read once here rather than in each arm — and it is read
     // *generically*, by name against each half's own fields. There is deliberately no list of
     // property names in this file: add a field to `Layout` or `Visual` and a description can set
@@ -155,14 +154,17 @@ pub fn realize(
     //
     // Both halves: the theme is the default, not a wall. `Visual` used to be
     // unserializable precisely so appearance could not be reached — that is the rule this replaced.
-    let base = realized.base_mut();
-    let layout = base.style.layout;
-    if let Some(merged) = merge_style_half(node, theme, layout) {
-        base.style.layout = merged;
+    let style = realized.authored_style_mut();
+    if let Some(merged) = merge_style_half(node, theme, style.layout) {
+        style.layout = merged;
     }
-    let visual = base.style.visual;
-    if let Some(merged) = merge_style_half(node, theme, visual) {
-        base.style.visual = merged;
+    if let Some(merged) = merge_style_half(node, theme, style.visual) {
+        style.visual = merged;
+    }
+    // Presence collapses the authored component as a whole, including a modal root.
+    // Its visible panel may own dimensions, but cannot keep intercepting a hidden surface.
+    if let Some(hidden) = node.props.get("hidden").and_then(PropValue::as_bool) {
+        realized.base_mut().style.layout.hidden = hidden;
     }
     // **The menu this node opens**, read once here for every kind — like style and like the hint
     // below it.
@@ -190,7 +192,7 @@ pub fn realize(
             &|_| None,
             &|intent| {
                 let emit = emit.clone();
-                Box::new(move || emit(intent.clone()))
+                move || emit(intent.clone())
             },
         );
         // **Set on the node itself, exactly as the native builder does** — not wrapped around it.
@@ -373,11 +375,11 @@ pub fn realize(
                 run: Box::new(move || emit(run.clone())),
             });
     }
-    realized
 }
 
 mod intents;
-mod kinds;
+mod registry;
+pub use registry::{RealizeCx, RealizeError, RealizeErrorKind, WidgetDefinition, WidgetMetadata, WidgetRegistry};
 mod props;
 mod style;
 mod vocab;

@@ -64,8 +64,8 @@ impl Content {
         let placeholder = Label::new("");
         let grid = Grid::new().template_row("auto").template_column("1fr")
             .child(label.row(1).column(1)).child(placeholder.row(1).column(1));
-        base.children.push(Box::new(grid));
-        base.children.push(Box::new(Caret { base: Base::new(), view: view.clone() }));
+        base.children.push(crate::WidgetModel::new(grid));
+        base.children.push(crate::WidgetModel::new(Caret { base: Base::new(), view: view.clone() }));
         Self { base, view, wrap }
     }
 }

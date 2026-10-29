@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetKind};
+use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetId};
 
 /// A declarative widget node — one element of the serializable UI tree that both native code and
 /// plugins author, and that `realize` turns into a retained grid-ui
@@ -10,7 +10,7 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 ///
 /// # The model (SwiftUI/Flutter-style)
 /// A node is **five things, all owned by *this* node**:
-/// - [`kind`](Self::kind) — which widget it is ([`WidgetKind`]).
+/// - [`kind`](Self::kind) — which widget it is ([`WidgetId`]).
 /// - [`props`](Self::props) — its **own** styling/content values ([`PropMap`] = `name → PropValue`).
 ///   Props are **per node**: `.prop("gap", …)` on a `Column` styles *the column*, not its children.
 ///   (That's why the props next to `.child(…)` calls look like "sibling" props — they belong to the
@@ -29,16 +29,16 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 /// one and `.child([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().child([a, b])`.
 ///
 /// ```ignore
-/// ViewNode::new(WidgetKind::VStack)
+/// ViewNode::new(WidgetId::VStack)
 ///     .prop("gap", PropValue::Int(8))                       // ← the COLUMN's prop
-///     .child(ViewNode::new(WidgetKind::Label).text("New name"))
+///     .child(ViewNode::new(WidgetId::Label).text("New name"))
 ///     .child(
-///         ViewNode::new(WidgetKind::Input)
+///         ViewNode::new(WidgetId::Input)
 ///             .text("current")
 ///             .prop("name", PropValue::Text("name".into())),  // ← the INPUT's props
 ///     )
 ///     .child(
-///         ViewNode::new(WidgetKind::Button)
+///         ViewNode::new(WidgetId::Button)
 ///             .text("Rename")
 ///             .prop("variant", PropValue::Variant(ViewVariant::Primary)) // ← the BUTTON's prop
 ///             .on_press(Intent::new("rename")),                          // ← the BUTTON's event
@@ -135,13 +135,13 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 /// compose an icon + a label exactly like a native one:
 ///
 /// ```ignore
-/// ViewNode::new(WidgetKind::Select)
+/// ViewNode::new(WidgetId::Select)
 ///     .prop("selected", PropValue::Int(1))
 ///     .on(ViewEvent::Change, Intent::new("set_level"))
-///     .child(ViewNode::new(WidgetKind::Choice)
+///     .child(ViewNode::new(WidgetId::Choice)
 ///         .prop("value", PropValue::Text("high".into()))
-///         .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
-///         .child(ViewNode::new(WidgetKind::Label).text("HIGH")));
+///         .child(ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+///         .child(ViewNode::new(WidgetId::Label).text("HIGH")));
 /// ```
 ///
 /// The widgets track a selected **index**, but an index is meaningless to a plugin and breaks when
@@ -159,16 +159,19 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 /// ignored. An unknown slot name is debug-logged and falls back to the default (or is ignored),
 /// never a panic.
 ///
-/// **Coverage**: every kind realizes to its widget except `ScrollBar`, which is **host-only** by
-/// design (its state is live host signals, which static data cannot drive — use `Scroll`). The same
-/// applies to individual builders that bind a host signal, e.g. `DockFrame::rail(..)`.
+/// **Coverage** enumerates the host's registered definitions. Live controls such as `ScrollBar`
+/// receive serialized inputs through a host adapter to their native props/signals; no signal
+/// or Rust closure crosses the description boundary.
 ///
 /// > Human-facing catalog version: `docs/widgets.md` → "Declarative UI model (`ViewNode`)". Keep
-/// > both this rustdoc and that section in sync when adding a `WidgetKind` or a `realize` arm.
+/// > both this rustdoc and that section in sync when adding a registered implementation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ViewNode {
-    /// Which widget this node is — selects the `realize` arm + the props it reads.
-    pub kind: WidgetKind,
+    /// Which registered implementation should realize this node.
+    pub kind: WidgetId,
+    /// Version of this widget's described contract. Omitted legacy descriptions use version 1.
+    #[serde(default = "default_schema_version", skip_serializing_if = "is_default_schema_version")]
+    pub schema_version: u32,
     /// This node's **own** styling/content values (`name → PropValue`), ordered for deterministic
     /// (de)serialisation. Per-node: never inherited by children. See the "Props & events by kind"
     /// table above for what each `kind` reads.
@@ -241,13 +244,17 @@ impl<N: Into<ViewNode>, const K: usize> IntoNodes for [N; K] {
     }
 }
 
+impl AsRef<ViewNode> for ViewNode {
+    fn as_ref(&self) -> &ViewNode { self }
+}
+
 impl ViewNode {
     /// **Open this menu when the node is right-clicked** — the described spelling of
     /// `MenuExt::context_menu`, and available on every kind for the same reason it is on every
     /// widget.
     ///
     /// ```ignore
-    /// ViewNode::new(WidgetKind::Row)
+    /// ViewNode::new(WidgetId::Row)
     ///     .menu([
     ///         DropdownItem::with_intent("close", "Close", Intent::new("docker.stop").arg("id", id)),
     ///         DropdownItem::new("rename", "Rename").danger(false),
@@ -263,15 +270,22 @@ impl ViewNode {
 
     /// A new node of `kind` with no props/events/children. These are the minimal constructors;
     /// the typed builders are in [`build`](crate::build).
-    pub fn new(kind: WidgetKind) -> Self {
+    pub fn new(kind: impl Into<WidgetId>) -> Self {
         Self {
-            kind,
+            kind: kind.into(),
+            schema_version: default_schema_version(),
             props: PropMap::new(),
             events: Events::new(),
             menu: Vec::new(),
             actions: Events::new(),
             children: Vec::new(),
         }
+    }
+
+    /// Request a widget contract version; the host validates it against the registered factory.
+    pub fn schema_version(mut self, version: u32) -> Self {
+        self.schema_version = version;
+        self
     }
 
     /// Set a property **on this node** (per-node — not inherited by children). Which keys a node
@@ -389,7 +403,7 @@ pub struct UnkeyedItem {
     pub path: Vec<usize>,
     /// Which widget it is — and, because the siblings it clashes with are the same kind, what the
     /// collection is made of.
-    pub kind: WidgetKind,
+    pub kind: WidgetId,
     /// The action its `press` names. An author recognises their own tree by this long before they
     /// recognise a path.
     pub action: String,
@@ -408,8 +422,8 @@ pub struct UnkeyedItem {
 /// rebuild, and nothing anywhere says why.
 ///
 /// **A collection is two or more direct children of one container with the same
-/// [`WidgetKind`].** That mirrors the native condition — two or more unkeyed children deriving the
-/// same name — with the stronger signal a description happens to carry: `WidgetKind` is real type
+/// [`WidgetId`].** That mirrors the native condition — two or more unkeyed children deriving the
+/// same name — with the stronger signal a description happens to carry: `WidgetId` is real type
 /// information, so `[Icon, Label]` is a composed control by construction and `[Row, Row, Row]` is a
 /// list by construction, with nothing to infer about the author's intent.
 ///
@@ -440,11 +454,11 @@ pub fn unkeyed_collection_items(root: &ViewNode) -> Vec<UnkeyedItem> {
 
 fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedItem>) {
     // How many direct children share each kind — the collections this container holds.
-    let mut counts: Vec<(WidgetKind, usize)> = Vec::new();
+    let mut counts: Vec<(WidgetId, usize)> = Vec::new();
     for child in &node.children {
         match counts.iter_mut().find(|(k, _)| *k == child.kind) {
             Some((_, n)) => *n += 1,
-            None => counts.push((child.kind, 1)),
+            None => counts.push((child.kind.clone(), 1)),
         }
     }
 
@@ -461,7 +475,7 @@ fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedIte
         {
             out.push(UnkeyedItem {
                 path: path.clone(),
-                kind: child.kind,
+                kind: child.kind.clone(),
                 action: intent.action.clone(),
                 siblings,
             });
@@ -470,3 +484,6 @@ fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedIte
         path.pop();
     }
 }
+
+fn default_schema_version() -> u32 { 1 }
+fn is_default_schema_version(version: &u32) -> bool { *version == default_schema_version() }

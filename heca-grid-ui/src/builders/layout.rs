@@ -16,18 +16,18 @@ pub trait LayoutExt: Component + Sized {
     /// ([`Layout::size_explicit`](crate::style::Layout::size_explicit)), which both pins this
     /// widget's variant and makes **it** the one its own children inherit.
     fn size(mut self, size: WidgetSize) -> Self {
-        self.base_mut().style.layout.set_size(size);
+        self.authored_style_mut().layout.set_size(size);
         self
     }
     /// Preferred width / height. Automatic dimensions follow it; two fixed dimensions win.
     /// Non-finite or non-positive values remove the preference.
     fn aspect_ratio(mut self, ratio: f32) -> Self {
-        self.base_mut().style.layout.aspect_ratio = (ratio.is_finite() && ratio > 0.0).then_some(ratio);
+        self.authored_style_mut().layout.aspect_ratio = (ratio.is_finite() && ratio > 0.0).then_some(ratio);
         self
     }
     /// Main-axis direction.
     fn direction(mut self, d: impl Into<Direction>) -> Self {
-        self.base_mut().style.layout.direction = d.into();
+        self.authored_style_mut().layout.direction = d.into();
         self
     }
     /// **Space between children** — a number of pixels, or a step of the theme's rhythm.
@@ -46,17 +46,17 @@ pub trait LayoutExt: Component + Sized {
     /// docs said prefer the token and the token was used 8 times against this one's 112, because
     /// advice loses to whichever name is shorter.
     fn gap(mut self, v: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.gap = v.into();
+        self.authored_style_mut().layout.gap = v.into();
         self
     }
     /// Outer margin on all sides — a number of pixels or a step, like [`gap`](Self::gap).
     fn margin(mut self, m: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.margin = m.into();
+        self.authored_style_mut().layout.margin = m.into();
         self
     }
     /// Outer margin split per axis: `x` left+right, `y` top+bottom.
     fn margin_xy(mut self, x: f32, y: f32) -> Self {
-        let s = &mut self.base_mut().style.layout;
+        let s = &mut self.authored_style_mut().layout;
         s.margin_left = Some(x.into());
         s.margin_right = Some(x.into());
         s.margin_top = Some(y.into());
@@ -65,12 +65,12 @@ pub trait LayoutExt: Component + Sized {
     }
     /// Horizontal outer margin (left+right) only.
     fn margin_x(mut self, v: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.margin_x = Some(v.into());
+        self.authored_style_mut().layout.margin_x = Some(v.into());
         self
     }
     /// Vertical outer margin (top+bottom) only — a rule breathing away from what it separates.
     fn margin_y(mut self, v: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.margin_y = Some(v.into());
+        self.authored_style_mut().layout.margin_y = Some(v.into());
         self
     }
     /// **Place this widget at a rect of its parent**, instead of letting it flow with its siblings.
@@ -112,7 +112,7 @@ pub trait LayoutExt: Component + Sized {
         width: impl Into<crate::style::Length>,
         height: impl Into<crate::style::Length>,
     ) -> Self {
-        self.base_mut().style.layout.placement = Some(crate::style::Placement {
+        self.authored_style_mut().layout.placement = Some(crate::style::Placement {
             left: left.into(),
             top: top.into(),
             width: width.into(),
@@ -122,32 +122,32 @@ pub trait LayoutExt: Component + Sized {
     }
     /// Left outer margin only.
     fn margin_left(mut self, v: impl Into<crate::style::Length>) -> Self {
-        self.base_mut().style.layout.margin_left = Some(v.into());
+        self.authored_style_mut().layout.margin_left = Some(v.into());
         self
     }
     /// Right outer margin only.
     fn margin_right(mut self, v: impl Into<crate::style::Length>) -> Self {
-        self.base_mut().style.layout.margin_right = Some(v.into());
+        self.authored_style_mut().layout.margin_right = Some(v.into());
         self
     }
     /// Top outer margin only.
     fn margin_top(mut self, v: impl Into<crate::style::Length>) -> Self {
-        self.base_mut().style.layout.margin_top = Some(v.into());
+        self.authored_style_mut().layout.margin_top = Some(v.into());
         self
     }
     /// Bottom outer margin only.
     fn margin_bottom(mut self, v: impl Into<crate::style::Length>) -> Self {
-        self.base_mut().style.layout.margin_bottom = Some(v.into());
+        self.authored_style_mut().layout.margin_bottom = Some(v.into());
         self
     }
     /// Main-axis distribution.
     fn justify(mut self, j: impl Into<Justify>) -> Self {
-        self.base_mut().style.layout.justify = j.into();
+        self.authored_style_mut().layout.justify = j.into();
         self
     }
     /// Cross-axis alignment of this component's **children**.
     fn align(mut self, a: impl Into<Align>) -> Self {
-        self.base_mut().style.layout.align = a.into();
+        self.authored_style_mut().layout.align = a.into();
         self
     }
     /// Cross-axis alignment of **this** component inside its parent (CSS `align-self`),
@@ -155,7 +155,7 @@ pub trait LayoutExt: Component + Sized {
     /// [`Align::Start`] to keep an `Auto`-sized widget hugging its content instead of
     /// stretching to fill the parent.
     fn align_self(mut self, a: impl Into<Align>) -> Self {
-        self.base_mut().style.layout.align_self = Some(a.into());
+        self.authored_style_mut().layout.align_self = Some(a.into());
         self
     }
     /// **Grid only** — how this grid's items sit **horizontally inside their cells**
@@ -165,18 +165,18 @@ pub trait LayoutExt: Component + Sized {
     /// which distributes the whole *track set* inside the container and leaves the items where
     /// they are. The vertical counterpart is [`align`](Self::align).
     fn justify_items(mut self, a: impl Into<Align>) -> Self {
-        self.base_mut().style.layout.justify_items = Some(a.into());
+        self.authored_style_mut().layout.justify_items = Some(a.into());
         self
     }
     /// **Grid only** — horizontal placement of **this** item inside its own cell (CSS
     /// `justify-self`), overriding the grid's [`justify_items`](Self::justify_items) for it alone.
     fn justify_self(mut self, a: impl Into<Align>) -> Self {
-        self.base_mut().style.layout.justify_self = Some(a.into());
+        self.authored_style_mut().layout.justify_self = Some(a.into());
         self
     }
     /// **Inner padding on all sides** — pixels or a step, exactly as [`gap`](LayoutExt::gap).
     fn padding(mut self, p: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.padding = p.into();
+        self.authored_style_mut().layout.padding = p.into();
         self
     }
     /// **Inner padding per axis**: `x` left+right, `y` top+bottom. Pixels or a step, each.
@@ -186,7 +186,7 @@ pub trait LayoutExt: Component + Sized {
         y: impl Into<crate::style::Space>,
     ) -> Self {
         {
-            let l = &mut self.base_mut().style.layout;
+            let l = &mut self.authored_style_mut().layout;
             l.padding_x = Some(x.into());
             l.padding_y = Some(y.into());
         }
@@ -198,13 +198,13 @@ pub trait LayoutExt: Component + Sized {
     /// There was no pixel form of this: `pad_x` took only a token, so a caller wanting a measured
     /// horizontal inset had to reach for `padding_xy` and restate the vertical one.
     fn padding_x(mut self, p: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.padding_x = Some(p.into());
+        self.authored_style_mut().layout.padding_x = Some(p.into());
         self
     }
 
     /// **Inner padding top+bottom** — see [`padding_x`](LayoutExt::padding_x).
     fn padding_y(mut self, p: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.padding_y = Some(p.into());
+        self.authored_style_mut().layout.padding_y = Some(p.into());
         self
     }
 
@@ -214,22 +214,22 @@ pub trait LayoutExt: Component + Sized {
     /// should not move because this one needed room. A `ScrollRegion` keeping its content clear of
     /// its scrollbar is the case that asked for it.
     fn padding_left(mut self, p: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.padding_left = Some(p.into());
+        self.authored_style_mut().layout.padding_left = Some(p.into());
         self
     }
     /// Inner padding on the right only — see [`padding_left`](Self::padding_left).
     fn padding_right(mut self, p: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.padding_right = Some(p.into());
+        self.authored_style_mut().layout.padding_right = Some(p.into());
         self
     }
     /// Inner padding on the top only — see [`padding_left`](Self::padding_left).
     fn padding_top(mut self, p: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.padding_top = Some(p.into());
+        self.authored_style_mut().layout.padding_top = Some(p.into());
         self
     }
     /// Inner padding on the bottom only — see [`padding_left`](Self::padding_left).
     fn padding_bottom(mut self, p: impl Into<crate::style::Space>) -> Self {
-        self.base_mut().style.layout.padding_bottom = Some(p.into());
+        self.authored_style_mut().layout.padding_bottom = Some(p.into());
         self
     }
     /// Width along the main/cross axis, in any of the spellings a size is written in:
@@ -241,12 +241,12 @@ pub trait LayoutExt: Component + Sized {
     /// as CSS `align-items: stretch` does — so `.width(Length::FULL)` on a child that fills says
     /// nothing, and is better left off.
     fn width(mut self, w: impl Into<Length>) -> Self {
-        self.base_mut().style.layout.width = w.into();
+        self.authored_style_mut().layout.width = w.into();
         self
     }
     /// Height along the main/cross axis — the same spellings as [`width`](LayoutExt::width).
     fn height(mut self, h: impl Into<Length>) -> Self {
-        self.base_mut().style.layout.height = h.into();
+        self.authored_style_mut().layout.height = h.into();
         self
     }
     /// Flex grow factor (share of remaining space).
@@ -261,32 +261,32 @@ pub trait LayoutExt: Component + Sized {
     /// nonsense. Turn it on for a row of *peers* — a set of action buttons, a tag list — where
     /// the alternative when the box gets narrow is squeezing every one of them to an ellipsis.
     fn wrap(mut self, wrap: bool) -> Self {
-        self.base_mut().style.layout.wrap = wrap;
+        self.authored_style_mut().layout.wrap = wrap;
         self
     }
 
     fn shrink(mut self, s: f32) -> Self {
-        self.base_mut().style.layout.flex_shrink = Some(s);
+        self.authored_style_mut().layout.flex_shrink = Some(s);
         self
     }
 
     /// Floor for the height — a row that must stay legible however many share the space.
     /// Same spellings as [`width`](LayoutExt::width).
     fn min_height(mut self, h: impl Into<Length>) -> Self {
-        self.base_mut().style.layout.min_height = Some(h.into());
+        self.authored_style_mut().layout.min_height = Some(h.into());
         self
     }
 
     /// Floor for the width. Same spellings as [`width`](LayoutExt::width).
     fn min_width(mut self, w: impl Into<Length>) -> Self {
-        self.base_mut().style.layout.min_width = Some(w.into());
+        self.authored_style_mut().layout.min_width = Some(w.into());
         self
     }
 
     /// Ceiling for the height — a box that may not grow past it however tall its content is.
     /// Same spellings as [`width`](LayoutExt::width).
     fn max_height(mut self, h: impl Into<Length>) -> Self {
-        self.base_mut().style.layout.max_height = Some(h.into());
+        self.authored_style_mut().layout.max_height = Some(h.into());
         self
     }
 
@@ -297,12 +297,12 @@ pub trait LayoutExt: Component + Sized {
     /// is the child's problem — a [`Label`](crate::widgets::Label) with
     /// [`truncate`](crate::widgets::Label::truncate) cuts, anything else overflows.
     fn max_width(mut self, w: impl Into<Length>) -> Self {
-        self.base_mut().style.layout.max_width = Some(w.into());
+        self.authored_style_mut().layout.max_width = Some(w.into());
         self
     }
 
     fn grow(mut self, g: f32) -> Self {
-        self.base_mut().style.layout.flex_grow = g;
+        self.authored_style_mut().layout.flex_grow = g;
         self
     }
 
@@ -336,7 +336,7 @@ pub trait LayoutExt: Component + Sized {
     /// Declarative form: the `flex` property, `{"flex": 3}`. Stored in
     /// [`Layout::flex`](crate::style::Layout::flex), applied during layout against the real parent.
     fn flex(mut self, parts: f32) -> Self {
-        self.base_mut().style.layout.flex = Some(parts);
+        self.authored_style_mut().layout.flex = Some(parts);
         self
     }
 
@@ -362,7 +362,7 @@ pub trait LayoutExt: Component + Sized {
     ///
     /// Declarative form: the `order` property — `{"order": 3}` or `{"order": [0, 5]}`.
     fn order(mut self, order: impl Into<crate::order::Order>) -> Self {
-        self.base_mut().style.layout.order = Some(order.into());
+        self.authored_style_mut().layout.order = Some(order.into());
         self
     }
 
@@ -373,7 +373,7 @@ pub trait LayoutExt: Component + Sized {
     /// Reach for this rather than `.height(0.0)`: a zero *height* says the box is zero, which is a
     /// different answer to anything measuring the container's content.
     fn basis(mut self, b: impl Into<crate::style::Length>) -> Self {
-        self.base_mut().style.layout.flex_basis = Some(b.into());
+        self.authored_style_mut().layout.flex_basis = Some(b.into());
         self
     }
     /// Disable the widget: dimmed, non-interactive, skipped by focus traversal.

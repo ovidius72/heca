@@ -96,17 +96,15 @@ many times a second, which stays ours.
 
 ### What is missing, and where it is tracked
 
-- **Other languages.** Generated type definitions from the same closed `WidgetKind::ALL` list. Today a Rust author gets editor help and a JavaScript or Python author gets
+- **Other languages.** Generated type definitions from the host registry metadata. Today a Rust author gets editor help and a JavaScript or Python author gets
   nothing. That is the gap between "a plugin *can* do this" and "anyone can write a plugin".
-- **The vocabulary's own holes.** 13 of 46 widgets have no described form, and a context menu has no
-  described declaration. ⚠️ A menu is a **declaration
-  attached to a node**, the way a press or a hint is, never a widget kind an author assembles and
-  positions. The native side already proves the shape — one builder on any widget, no id, no path,
-  no anchor.
-- **The proof.** Rebuild one of our own overlays using only what a plugin can write. ⚠️ Its text still names `LayerContent`; read it as
-  "the described path". Until this lands, "a plugin can add an overlay" is an intention, not a fact.
-- **No host-only exceptions.** The rule is compile-enforced per builder; the audit proving the
-  host-only list is *only* the legitimate cases has not been done.
+- **Widget access.** T398 supplies an open host registry, typed constructors and native state
+  adapters, including Dialog, CommandPalette, ToastStack, ScrollBar and Terminal in Heca's host.
+  Menus, hints, visibility and tooltips remain declarations on any node. See the canonical
+  [widget reference](widgets.md#registry-and-public-authoring-checks) for the executable coverage
+  and ownership contract. Native signals, closures and resource stores stay inside the host;
+  descriptions carry data and intents. These tests prove the authoring/realization path, while
+  loaded sandbox execution is separate acceptance in P022/T075.
 - **The boundary itself.** Loading someone else's code, the event bus, region contributions and
   action registration across it — , which says outright it has no real spec yet and needs
   a discovery pass before it can be planned. It is the least defined thing in the feature.
@@ -197,7 +195,7 @@ Two ways exist to build a screen and they produce the same widgets:
 Button::destructive("Restart").on_click(move || restart(id))
 
 // A description — plain data, so it can be sent anywhere.
-ViewNode::new(WidgetKind::Button)
+ViewNode::new(WidgetId::Button)
     .text("Restart")
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("docker.restart").arg("id", id))
@@ -418,7 +416,7 @@ Panel::new()
 
 `Panel` is a **titled section container** — a plugin's slice of a region. It is quiet by default
 (no frame of its own, lighter padding than a `Card`); give it a `fill` or a `border` when it should
-stand apart. The heading used to be fiction: `WidgetKind::Panel` realized to a plain `Surface`,
+stand apart. The heading used to be fiction: `WidgetId::Panel` realized to a plain `Surface`,
 which has no title, so this example described something that could not be built. 
 made `Panel` a real widget.
 

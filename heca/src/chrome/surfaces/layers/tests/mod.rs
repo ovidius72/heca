@@ -1,6 +1,7 @@
 //! The layer stack's own tests: what is on screen, what is in charge, and what order they read.
 
 use super::*;
+use heca_grid_ui::Component;
 use heca_grid_ui::animation::Animation;
 use heca_grid_ui::widgets::{Flex, Overlay};
 
@@ -22,18 +23,18 @@ fn frame(reg: &mut LayerRegistry, window: &mut heca_grid_ui::widgets::Flex, dt: 
 }
 
 /// A layer whose surface declares nothing: it appears and goes between two frames.
-fn empty_root() -> Box<dyn Component> {
-    Box::new(Flex::row())
+fn empty_root() -> heca_grid_ui::WidgetModel {
+    heca_grid_ui::WidgetModel::new(Flex::row())
 }
 
 /// **A surface that declares what it is** — the two things an overlay says about the application
 /// underneath it, said the way a plugin author says them: one builder each, on the widget.
 /// The registry is told neither.
 fn declaring(
-    mut root: Box<dyn Component>,
+    mut root: heca_grid_ui::WidgetModel,
     captures_keyboard: bool,
     lock: bool,
-) -> Box<dyn Component> {
+) -> heca_grid_ui::WidgetModel {
     // **Taking the keyboard is read from the tree**, not declared — a surface that wants keys holds
     // focus. These fixtures are bare `Flex`es with no focus of their own, so they override it; a
     // real overlay writes nothing and answers by being open.
@@ -44,13 +45,13 @@ fn declaring(
 
 /// **A real layer root**: a surface that names its own gesture, exactly as the exposé and a
 /// plugin's panel do — one builder on the widget, nothing said to the registry.
-fn fading_root() -> Box<dyn Component> {
-    Box::new(Overlay::new().panel(Flex::row()).animation(Animation::Fade))
+fn fading_root() -> heca_grid_ui::WidgetModel {
+    heca_grid_ui::WidgetModel::new(Overlay::new().panel(Flex::row()).animation(Animation::Fade))
 }
 
 /// The same, for a surface that arrives by pulling back — the exposé's own gesture.
-fn zooming_root() -> Box<dyn Component> {
-    Box::new(
+fn zooming_root() -> heca_grid_ui::WidgetModel {
+    heca_grid_ui::WidgetModel::new(
         Overlay::new()
             .panel(Flex::row())
             .animation(Animation::Zoom.from(1.3)),

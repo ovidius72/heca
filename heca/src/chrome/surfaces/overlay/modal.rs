@@ -16,7 +16,7 @@ pub(crate) fn open_modal(
     state: &mut AppState,
     spec: ModalSpec,
     completion: impl FnOnce(&mut AppState, &ActionRegistry, ModalResult) + 'static,
-) -> OverlayId {
+) -> Result<OverlayId, heca_view_realize::RealizeError> {
     // Reserve the id first so the action buttons can carry it (they're built before the layer
     // is inserted).
     let id = OverlayId(state.layers.reserve_id());
@@ -40,7 +40,7 @@ pub(crate) fn open_modal(
         &emit,
         &state.action_shortcuts,
         &mut forms,
-    );
+    ).inspect_err(report_view_error)?;
     // **Nothing about the surface is said here.** A `Dialog` locks what is behind it because it is
     // a dialog, and an open layer holds focus, which IS how it takes the keyboard. Both travel with
     // the widget, so this path cannot disagree with a dialog raised any other way.
@@ -55,7 +55,7 @@ pub(crate) fn open_modal(
     state.overlays.completions.insert(id, Box::new(completion));
     state.overlays.forms.insert(id, forms);
     state.needs_redraw = true;
-    id
+    Ok(id)
 }
 
 /// Open a layer whose content is a **description** — the plugin / config / RPC path.
@@ -83,7 +83,7 @@ pub(crate) fn open_view_layer(
     kind: LayerKind,
     lock: bool,
     node: ViewNode,
-) -> LayerId {
+) -> Result<LayerId, heca_view_realize::RealizeError> {
     // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
     // — a plugin's panel is judged by *which* surface acted, exactly as the exposé is.
     let id = state.layers.reserve_id();
@@ -94,7 +94,8 @@ pub(crate) fn open_view_layer(
     // The identity rule's declarative half, said once per description rather than per realize —
     // this node is realized again on every theme reload.
     crate::chrome::input::identity::report_unkeyed_description("view layer", &node);
-    let mut realized = crate::chrome::realize(&node, &theme, &view_emit, &mut forms);
+    let mut realized = crate::chrome::realize(&node, &theme, &view_emit, &mut forms)
+        .inspect_err(report_view_error)?;
     // **The surface declares what it obscures, on itself.** A described overlay says it the same
     // way a native one does, so the two authoring paths produce the same tree.
     // A described overlay declares coverage the same way a native one does. Whether it takes
@@ -110,7 +111,7 @@ pub(crate) fn open_view_layer(
         &mut state.window_root,
     );
     state.needs_redraw = true;
-    id
+    Ok(id)
 }
 
 /// Build the realized `Dialog` tree for a modal. Each action becomes a real `Button` wired the
@@ -125,10 +126,10 @@ pub(super) fn build_modal_root(
     emit: &ChromeIntentEmitter,
     shortcuts: &crate::chrome::ActionShortcuts,
     forms: &mut FormBindings,
-) -> Box<dyn Component> {
+) -> Result<heca_grid_ui::WidgetModel, heca_view_realize::RealizeError> {
     // One sink for the body's click and its `prefix+/` pick alike.
     crate::chrome::input::identity::report_unkeyed_description("modal body", &spec.body);
-    let body = crate::chrome::realize(&spec.body, theme, &emit.intent_sink(), forms);
+    let body = crate::chrome::realize(&spec.body, theme, &emit.intent_sink(), forms)?;
     let mut dialog = Dialog::new(spec.title.clone())
         .child(body)
         .danger(spec.danger);
@@ -163,10 +164,17 @@ pub(super) fn build_modal_root(
     }
     // Esc / scrim dismissal flows through the same emitter as the buttons, resolved to
     // `ModalResult::Dismissed` in `dispatch_intent`.
-    Box::new(
+    Ok(heca_grid_ui::WidgetModel::new(
         dialog
             .dismissible(spec.dismissible)
             .on_dismiss(id.closer(emit))
             .default_open(true),
-    )
+    ))
+}
+
+/// Failed descriptions leave no mounted placeholder or pending confirmation behind.
+fn report_view_error(error: &heca_view_realize::RealizeError) {
+    crate::notification::Notification::warning(format!("Could not render UI: {error}"))
+        .dedup_key(format!("view.realize:{error}"))
+        .send();
 }

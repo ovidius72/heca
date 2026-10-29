@@ -252,16 +252,16 @@ pub struct Tooltip {
 #[heca_grid_ui_macros::props]
 impl Tooltip {
     /// Wrap `child`, showing `text` on hover.
-    pub fn new(child: impl Component + 'static, text: impl Into<String>) -> Self {
-        Self::wrap(Box::new(child), Tip::new(text))
+    pub fn new(child: impl crate::builders::IntoComponent, text: impl Into<String>) -> Self {
+        Self::wrap(child.into_component(), Tip::new(text))
     }
 
     /// Wrap `child`, showing reactive `text` on hover.
-    pub fn new_signal(child: impl Component + 'static, text: Signal<String>) -> Self {
-        Self::wrap(Box::new(child), Tip::from_signal(text))
+    pub fn new_signal(child: impl crate::builders::IntoComponent, text: Signal<String>) -> Self {
+        Self::wrap(child.into_component(), Tip::from_signal(text))
     }
 
-    fn wrap(child: Box<dyn Component>, tip: Tip) -> Self {
+    fn wrap(child: crate::WidgetModel, tip: Tip) -> Self {
         let mut base = Base::container();
         // Hug the child so the wrapper's bounds match it — the anchor is the wrapper's box, and
         // hover is already true here whenever it is true on the child (the CSS rule: a control is

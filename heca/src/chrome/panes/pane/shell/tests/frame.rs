@@ -30,7 +30,7 @@ fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
         model: &m,
         cb: &cb,
         header: None,
-        content: Some(Box::new(
+        content: Some(heca_grid_ui::WidgetModel::new(
             Flex::column().child([Flex::column().height(20.0), Flex::column().height(20.0)]),
         )),
     }
@@ -51,7 +51,7 @@ fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
         model: &m,
         cb: &cb,
         header: Some(crate::chrome::PaneHeader::showing(|_, _| {})),
-        content: Some(Box::new(Flex::column())),
+        content: Some(heca_grid_ui::WidgetModel::new(Flex::column())),
     }
     .build();
     LayoutEngine::new().compute(&mut with_header, Size::new(200.0, 200.0));
@@ -297,10 +297,10 @@ fn a_header_that_changes_shape_leaves_what_the_pane_holds_alone() {
         header: Some(PaneHeader::showing(|input, node| {
             let shape = format!("chips of {}", input.pane().0);
             node.show(shape.clone(), move || {
-                Some(Box::new(Label::new(shape)) as Box<dyn Component>)
+                Some(heca_grid_ui::WidgetModel::new(Label::new(shape)))
             });
         })),
-        content: Some(Box::new(crate::chrome::panes::terminal::Terminal::new())),
+        content: Some(heca_grid_ui::WidgetModel::new(crate::chrome::panes::terminal::Terminal::unbound())),
     }
     .build();
     assert!(pane.set_props(&PaneHeaderInput::for_test(PaneId(1))));
@@ -355,7 +355,7 @@ fn what_a_pane_holds_is_drawn_under_the_panes_round_corners() {
         model: &m,
         cb: &cb,
         header: None,
-        content: Some(Box::new(Screen { base })),
+        content: Some(heca_grid_ui::WidgetModel::new(Screen { base })),
     }
     .build();
     size_to(&mut pane, 400.0, 300.0);

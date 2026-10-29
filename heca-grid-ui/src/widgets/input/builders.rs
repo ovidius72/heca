@@ -14,7 +14,7 @@ impl Input {
         let region = crate::ScrollRegion::new().horizontal().padding_y("none").child(content);
         view.borrow_mut().offset_x = region.scroll_offset_x();
         view.borrow_mut().offset_y = region.scroll_offset();
-        base.children.push(Box::new(region));
+        base.children.push(crate::WidgetModel::new(region));
         Self { base, text, placeholder: String::new(), placeholder_on_focus: false, seen_text: String::new(), cursor: 0, anchor: None,
             blink_origin: Instant::now(), last_caret: std::cell::Cell::new(false),
             multiline: false, max_lines: None, view, on_change: None, on_submit: None }
@@ -120,7 +120,7 @@ impl Input {
         let region = region.padding_y("none");
         self.view.borrow_mut().offset_x = region.scroll_offset_x();
         self.view.borrow_mut().offset_y = region.scroll_offset();
-        self.base.children.push(Box::new(region.child(content::Content::new(self.view.clone()))));
+        self.base.children.push(crate::WidgetModel::new(region.child(content::Content::new(self.view.clone()))));
         self
     }
 

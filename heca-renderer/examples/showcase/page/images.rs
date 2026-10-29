@@ -9,9 +9,10 @@ pub(super) fn build(theme: &Theme) -> Flex {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/showcase").to_string_lossy().into_owned();
     let described = build::Image::load("image.svg").asset_root(root.clone())
         .fit(ViewImageFit::Cover).width_pct(1.0).aspect_ratio(1.0)
-        .alt("Described SVG, cover").into_node();
+        .alt("Described SVG, cover");
     let emit: heca_view_realize::IntentEmitter = Rc::new(|_| {});
-    let described = heca_view_realize::realize(&described, theme, &emit, &mut Default::default());
+    let described = heca_view_realize::realize(&described, theme, &emit, &mut Default::default())
+        .expect("the compiled image fixture must match the library registry");
     Flex::column().gap("sm")
         .child(Label::new("Image — SVG / PNG / JPEG · shared loader and layout").bold(true))
         .child(Grid::new().template_column("1fr 1fr 1fr 1fr").gap("md")

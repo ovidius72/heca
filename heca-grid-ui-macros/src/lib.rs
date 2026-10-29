@@ -46,6 +46,7 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let self_ty = &input.self_ty;
 
     let mut applies = Vec::new();
+    let mut validates = Vec::new();
     let mut exposed = Vec::new();
     let mut host_only = Vec::new();
 
@@ -119,6 +120,7 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 None => self,
             },
         };
+        validates.push(quote! { #key => (#conversion).is_some(), });
         exposed.push(key);
         applies.push(arm);
     }
@@ -132,6 +134,10 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             fn set_prop(self, key: &str, value: &::heca_grid_ui::PropInput) -> Self {
                 match key { #(#applies)* _ => self }
+            }
+
+            fn accepts_prop(key: &str, value: &::heca_grid_ui::PropInput) -> bool {
+                match key { #(#validates)* _ => false }
             }
         }
     };

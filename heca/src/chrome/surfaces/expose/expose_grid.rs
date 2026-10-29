@@ -152,7 +152,7 @@ mod tests {
         }
     }
 
-    fn grid(rows: &[ExposeWorkspace], w: f64, h: f64) -> Box<dyn heca_grid_ui::Component> {
+    fn grid(rows: &[ExposeWorkspace], w: f64, h: f64) -> heca_grid_ui::WidgetModel {
         let (cb, _sink) = callbacks();
         let theme = theme();
         let g = ExposeGrid {

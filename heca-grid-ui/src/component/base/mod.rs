@@ -89,7 +89,7 @@ pub struct Base {
     /// [`LayoutExt::tab_index`](crate::builders::LayoutExt::tab_index).
     pub tab_index: Option<i32>,
     /// Child components, laid out by this component's flex container.
-    pub children: Vec<Box<dyn Component>>,
+    pub children: Vec<crate::WidgetModel>,
     /// This widget **can be dragged**, and what is dragged is [`key`](Self::key) — the identity it
     /// already declares about itself. Universal opt-in via
     /// [`DragExt::draggable`](crate::builders::DragExt::draggable); resolved generically

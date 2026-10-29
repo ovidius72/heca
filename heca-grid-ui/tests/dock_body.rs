@@ -20,7 +20,7 @@ fn a_dock_body_takes_what_the_title_leaves_and_scrolls_the_rest() {
     };
 
     // Two docks sharing the sidebar, exactly as the region templates them.
-    let mut root: Box<dyn Component> = Box::new(
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Grid::new()
             .template_row("1fr 1fr")
             .height(heca_grid_ui::Length::Percent(1.0))

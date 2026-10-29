@@ -371,9 +371,9 @@ mod tests {
     use heca_core::layout::{Point, Rectangle, Size};
 
     /// Force bounds on a widget for hit-testing (layout doesn't run in unit tests).
-    fn at(mut w: impl Component + 'static, x: f64, y: f64, w_: f64, h_: f64) -> Box<dyn Component> {
+    fn at(mut w: impl Component + 'static, x: f64, y: f64, w_: f64, h_: f64) -> crate::WidgetModel {
         w.base_mut().bounds = Rectangle::new(Point::new(x, y), Size::new(w_, h_));
-        Box::new(w)
+        crate::WidgetModel::new(w)
     }
 
     #[test]
@@ -415,7 +415,7 @@ mod tests {
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
         let mut outer = Surface::new().key("col:1").drop_target();
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        outer.base_mut().children.push(Box::new(inner));
+        outer.base_mut().children.push(crate::WidgetModel::new(inner));
 
         assert_eq!(
             resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.key),
@@ -437,7 +437,7 @@ mod tests {
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
         let mut outer = Surface::new().key("col:1").drop_target();
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        outer.base_mut().children.push(Box::new(inner));
+        outer.base_mut().children.push(crate::WidgetModel::new(inner));
 
         let accept = |key: &str| key != "pane:2";
         assert_eq!(
@@ -465,8 +465,8 @@ mod tests {
         a.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
         let mut b = Surface::new().key("row:b").drop_target();
         b.base_mut().bounds = Rectangle::new(Point::new(0.0, 40.0), Size::new(100.0, 40.0));
-        root.base_mut().children.push(Box::new(a));
-        root.base_mut().children.push(Box::new(b));
+        root.base_mut().children.push(crate::WidgetModel::new(a));
+        root.base_mut().children.push(crate::WidgetModel::new(b));
 
         let at = |y: f64| Point::new(50.0, y);
         dispatch(&mut root, &Event::pointer_moved(at(60.0)));
@@ -503,7 +503,7 @@ mod tests {
             .draggable_as("column")
             .accepts_beside(["column"]);
         col.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 60.0));
-        ws.base_mut().children.push(Box::new(col));
+        ws.base_mut().children.push(crate::WidgetModel::new(col));
 
         // Not dragging: the column is the nearest target under the point.
         assert_eq!(
@@ -565,7 +565,7 @@ mod tests {
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         let mut inner = Surface::new().key("pane:2").accepts(["pane"]);
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
-        outer.base_mut().children.push(Box::new(inner));
+        outer.base_mut().children.push(crate::WidgetModel::new(inner));
 
         // Dragging a column over the pane card lands on the column that contains it.
         assert_eq!(
@@ -603,11 +603,11 @@ mod tests {
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 80.0));
         let mut a = Surface::new().key("row:a").draggable();
         a.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
-        a.base_mut().children.push(Box::new(Label::new("A")));
+        a.base_mut().children.push(crate::WidgetModel::new(Label::new("A")));
         let mut b = Surface::new().key("row:b").drop_target();
         b.base_mut().bounds = Rectangle::new(Point::new(0.0, 40.0), Size::new(100.0, 40.0));
-        root.base_mut().children.push(Box::new(a));
-        root.base_mut().children.push(Box::new(b));
+        root.base_mut().children.push(crate::WidgetModel::new(a));
+        root.base_mut().children.push(crate::WidgetModel::new(b));
 
         let at = |x: f64, y: f64| Point::new(x, y);
         dispatch(
@@ -643,8 +643,8 @@ mod tests {
         row.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
         row.base_mut()
             .children
-            .push(Box::new(Label::new("Containers")));
-        root.base_mut().children.push(Box::new(row));
+            .push(crate::WidgetModel::new(Label::new("Containers")));
+        root.base_mut().children.push(crate::WidgetModel::new(row));
 
         assert!(
             source_at(&root, Point::new(50.0, 20.0)).is_some(),

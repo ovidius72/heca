@@ -38,10 +38,10 @@ use crate::nav::child_name;
 ///
 /// Returns `true` when anything was added, removed or moved, so a caller can ask for the layout
 /// pass those need and skip it when the frame changed nothing.
-pub fn reconcile_children(
+pub fn reconcile_children<C: crate::builders::IntoComponent>(
     parent: &mut dyn Component,
     wanted: &[String],
-    build: impl FnMut(&str) -> Box<dyn Component>,
+    mut build: impl FnMut(&str) -> C,
 ) -> bool {
     // **Ask who each child is before moving any of them.** A derived identity is counted among the
     // siblings that share its name, so it is only meaningful while the tree still stands as it was.
@@ -50,7 +50,7 @@ pub fn reconcile_children(
         .collect();
     let wanted: Vec<(String, Option<String>)> =
         wanted.iter().map(|name| (name.clone(), None)).collect();
-    reconcile_named(parent.base_mut(), names, &wanted, build)
+    reconcile_named(parent.base_mut(), names, &wanted, |name| build(name).into_component())
 }
 
 /// [`reconcile_children`] for a widget that has only its own [`Base`] — a props handler places its
@@ -63,10 +63,10 @@ pub fn reconcile_children(
 /// what each was built from — the child carries it. Children are matched by the `key` they
 /// declared, so every one must declare it: it is what a widget that decides its own children writes
 /// anyway, and one that did not is rebuilt on every pass.
-pub fn reconcile_keyed(
+pub fn reconcile_keyed<C: crate::builders::IntoComponent>(
     base: &mut Base,
     wanted: &[(String, String)],
-    mut build: impl FnMut(&str) -> Box<dyn Component>,
+    mut build: impl FnMut(&str) -> C,
 ) -> bool {
     let names = base
         .children
@@ -78,7 +78,7 @@ pub fn reconcile_keyed(
         .map(|(name, version)| (name.clone(), Some(version.clone())))
         .collect();
     reconcile_named(base, names, &wanted, |name| {
-        let mut child = build(name);
+        let mut child = build(name).into_component();
         child.base_mut().built_from = wanted
             .iter()
             .find(|(n, _)| n == name)
@@ -93,7 +93,7 @@ fn reconcile_named(
     parent: &mut Base,
     names: Vec<Option<String>>,
     wanted: &[(String, Option<String>)],
-    mut build: impl FnMut(&str) -> Box<dyn Component>,
+    mut build: impl FnMut(&str) -> crate::WidgetModel,
 ) -> bool {
     let versions: Vec<Option<String>> = parent
         .children
@@ -102,7 +102,7 @@ fn reconcile_named(
         .collect();
     // Take the children out so each can be put back at most once — `Option` makes that true by
     // construction rather than by care.
-    let mut held: Vec<Option<Box<dyn Component>>> = parent.children.drain(..).map(Some).collect();
+    let mut held: Vec<Option<crate::WidgetModel>> = parent.children.drain(..).map(Some).collect();
     let mut changed = held.len() != wanted.len();
 
     for (at, (name, version)) in wanted.iter().enumerate() {
@@ -139,8 +139,8 @@ mod tests {
     use crate::builders::{IdentityExt, Parent};
     use crate::widgets::Flex;
 
-    fn build(key: &str) -> Box<dyn Component> {
-        Box::new(Flex::column().key(key))
+    fn build(key: &str) -> crate::WidgetModel {
+        crate::WidgetModel::new(Flex::column().key(key))
     }
 
     fn keys(parent: &dyn Component) -> Vec<String> {
@@ -263,7 +263,7 @@ mod tests {
 
         // Ask for them in the other order, supplying no key anywhere.
         let wanted = vec![names[1].clone(), names[0].clone()];
-        reconcile_children(&mut parent, &wanted, |_| Box::new(Flex::column()));
+        reconcile_children(&mut parent, &wanted, |_| Flex::column());
 
         assert!(
             parent.base().children[0].base().style.layout.hidden,
@@ -294,7 +294,7 @@ mod tests {
         // Mark the last one, then ask for them reversed.
         parent.base_mut().children[2].base_mut().set_hidden(true);
         let wanted: Vec<String> = names.iter().rev().cloned().collect();
-        reconcile_children(&mut parent, &wanted, |_| Box::new(Flex::column()));
+        reconcile_children(&mut parent, &wanted, |_| Flex::column());
 
         assert_eq!(
             parent.base().children.len(),

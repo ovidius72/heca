@@ -82,7 +82,7 @@ example, not by the library or the app binary).
 - single `lib.rs` — derives for `prop` / `props` / `PropName`
 
 ### `heca-view` (leaf)
-- `lib` — `ViewNode` / `WidgetKind` / `PropValue` / `Intent` (deliberately
+- `lib` — `ViewNode` / `WidgetId` / `PropValue` / `Intent` (deliberately
   serde-only, so plugins can describe UI without pulling in the renderer)
 - `build` — builder helpers
 
@@ -111,7 +111,7 @@ Core modules:
 
 ### `heca-view-realize`
 - single `lib.rs` — `realize(&ViewNode) -> Box<dyn Component>`, one arm per
-  `WidgetKind`. This is the half of the declarative path that needs the widget
+  `WidgetId`. This is the half of the declarative path that needs the widget
   library, which is why it lives here and not in `heca-view`.
 
 ### `heca-renderer`

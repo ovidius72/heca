@@ -37,18 +37,18 @@ fn viewport() -> Viewport {
 /// A terminal in a 300 × 200 box whose owner is listening, and what it says.
 fn placed() -> (
     Terminal,
-    Box<dyn heca_grid_ui::Component>,
+    heca_grid_ui::WidgetModel,
     std::rc::Rc<RefCell<Vec<TerminalInput>>>,
 ) {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&viewport());
-    let root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     (t, root, said)
 }
 
-fn frame(root: &mut Box<dyn heca_grid_ui::Component>) {
+fn frame(root: &mut heca_grid_ui::WidgetModel) {
     root.tick(0.0);
     LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(300.0, 200.0));
 }
@@ -159,7 +159,7 @@ fn a_terminal_paints_the_matches_it_was_shown() {
 /// one; the same one again changes nothing the user can see, so it asks for nothing.
 #[test]
 fn showing_the_same_result_twice_asks_for_no_frame() {
-    let t = Terminal::new();
+    let t = Terminal::unbound();
 
     assert!(
         t.show_matches(vec![found(1, 0, 2)], Some(0)),
@@ -230,10 +230,10 @@ fn the_bar_sits_at_the_terminals_bottom_right() {
 #[test]
 fn a_terminal_far_from_the_origin_gets_its_bar_in_its_own_corner() {
     let (seams, _said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&viewport());
-    let mut root = super::super::testing::header_above(Box::new(t.clone()), 80.0, 300.0, 300.0);
+    let mut root = super::super::testing::header_above(heca_grid_ui::WidgetModel::new(t.clone()), 80.0, 300.0, 300.0);
     t.find();
     root.tick(0.0);
     LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(300.0, 300.0));
@@ -497,7 +497,7 @@ fn a_new_strength_asks_for_a_frame_only_while_matches_are_shown() {
 /// Next and previous wrap around the matches, and the terminal says which one it is on.
 #[test]
 fn stepping_wraps_around_the_matches() {
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.show_matches(
         vec![found(1, 0, 1), found(2, 0, 1), found(3, 0, 1)],
         Some(2),
@@ -522,7 +522,7 @@ fn stepping_wraps_around_the_matches() {
 /// With nothing found there is nowhere to go, and nothing to redraw.
 #[test]
 fn stepping_with_no_matches_goes_nowhere() {
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     assert!(!t.step_match(true));
     assert_eq!(t.current_match(), None);
 }

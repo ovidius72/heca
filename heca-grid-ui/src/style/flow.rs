@@ -48,7 +48,7 @@ pub enum Align {
 /// (`1.25×` the base font) with a tight cluster padding, for icon buttons that sit in a
 /// pane/info-bar header and must read a touch larger than the body text.
 /// Set per widget via [`LayoutExt::size`](crate::builders::LayoutExt::size).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, heca_grid_ui_macros::PropName)]
 #[serde(rename_all = "snake_case")]
 pub enum WidgetSize {
     /// **Supporting text** — a line of metadata under a name (`0.72×`): a step below `Small`, which

@@ -97,7 +97,8 @@ pub(crate) use window::window_root::{
 // the app has one path to it.
 pub(crate) use heca_view::{Intent, PropMap, PropValue};
 // Turns a described tree into widgets; it lives below this crate so the showcase can use it too.
-pub(crate) use heca_view_realize::{FormBindings, IntentEmitter, realize};
+pub(crate) use heca_view_realize::{FormBindings, IntentEmitter};
+pub(crate) use window::realize::realize;
 
 use heca_core::layout::types::{Point, Rectangle, Size};
 

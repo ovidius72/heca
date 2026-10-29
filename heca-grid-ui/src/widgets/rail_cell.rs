@@ -57,7 +57,7 @@ impl RailCell {
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Center;
         base.style.layout.justify = Justify::Center;
-        base.children.push(Box::new(icon));
+        base.children.push(crate::WidgetModel::new(icon));
         let mut cell = Self {
             base,
             name,

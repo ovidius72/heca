@@ -11,7 +11,7 @@ fn a_rule_separates_containers_without_taking_a_share() {
     use heca_core::layout::Size as CoreSize;
     use heca_grid_ui::LayoutEngine;
 
-    let body = || -> WidgetModel { Box::new(Flex::column().height(40.0)) };
+    let body = || -> WidgetModel { heca_grid_ui::WidgetModel::new(Flex::column().height(40.0)) };
     let mut stack = Flex::column().gap(8.0).grow(1.0);
     {
         let layout = &mut stack.base_mut().style.layout;
@@ -70,7 +70,7 @@ fn shares_divide_the_region_even_with_content_taller_than_it() {
         for _ in 0..20 {
             inner = inner.child(Flex::column().height(60.0));
         }
-        Box::new(heca_grid_ui::ScrollRegion::new().child(inner))
+        heca_grid_ui::WidgetModel::new(heca_grid_ui::ScrollRegion::new().child(inner))
     };
 
     let mut stack = Flex::column().gap(8.0).grow(1.0);
@@ -117,7 +117,7 @@ fn shares_divide_the_region_even_with_content_taller_than_it() {
 #[test]
 fn a_dock_says_its_own_size_and_the_region_honours_it() {
     use crate::chrome::Contribution;
-    use crate::chrome::{BuildCx, ContainerContribution, RegionSet, WidgetModel};
+    use crate::chrome::{BuildCx, ContainerContribution, RegionSet};
     use crate::providers::{ChromeCtx, Provider};
     use heca_grid_ui::{LayoutEngine, Size};
 
@@ -137,15 +137,8 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
         }
         fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
             let (parts, order) = (self.1, self.2);
-            Contribution::Container(ContainerContribution {
-                id: self.id().to_string(),
-                title: self.title().to_string(),
-                supported_regions: self.supported_regions(),
-                default_region: self.default_region(),
-                movable: self.movable(),
-                collapsible: self.collapsible(),
-                // The dock's size, said by the dock: one builder on the body, nothing else.
-                build: Box::new(move |_: &ChromeCtx<'_>, _: &mut BuildCx<'_>| {
+            Contribution::Container(ContainerContribution::new(self,
+                move |_: &ChromeCtx<'_>, _: &mut BuildCx<'_>| {
                     // A body far taller than any part, so only `.flex` can explain the split.
                     let mut body = Flex::column().flex(parts);
                     if let Some(order) = order {
@@ -154,9 +147,9 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
                     for _ in 0..20 {
                         body = body.child(Flex::column().height(100.0));
                     }
-                    Box::new(body) as WidgetModel
-                }),
-            })
+                    body
+                },
+            ))
         }
     }
 
@@ -180,8 +173,8 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
     )
     .expect("two docks are seated, so the region has a body");
 
-    let mut region: Box<dyn heca_grid_ui::Component> =
-        Box::new(Flex::column().width(200.0).height(400.0).child(body));
+    let mut region: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::column().width(200.0).height(400.0).child(body));
     LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
 
     // The column holds [big, rule, small]; the rule is a sibling and asks for no part.
@@ -222,8 +215,8 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
         &mut super::DragItemRegistry::default(),
     )
     .expect("two docks are seated");
-    let mut region: Box<dyn heca_grid_ui::Component> =
-        Box::new(Flex::column().width(200.0).height(400.0).child(body));
+    let mut region: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::column().width(200.0).height(400.0).child(body));
     LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
     let heights: Vec<f64> = region.base().children[0]
         .base()
@@ -255,8 +248,8 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
         &mut super::DragItemRegistry::default(),
     )
     .expect("two docks are seated");
-    let mut region: Box<dyn heca_grid_ui::Component> =
-        Box::new(Flex::column().width(200.0).height(400.0).child(body));
+    let mut region: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::column().width(200.0).height(400.0).child(body));
     LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
     let heights: Vec<f64> = region.base().children[0]
         .base()
@@ -289,7 +282,7 @@ fn the_focus_wrappers_do_not_disturb_the_shares() {
         for _ in 0..20 {
             inner = inner.child(Flex::column().height(60.0));
         }
-        Box::new(heca_grid_ui::ScrollRegion::new().grow(1.0).child(inner))
+        heca_grid_ui::WidgetModel::new(heca_grid_ui::ScrollRegion::new().grow(1.0).child(inner))
     };
     // The wrapping `focus_and_pick` applies, without needing a render context for it.
     let wrapped = || -> WidgetModel {
@@ -297,7 +290,7 @@ fn the_focus_wrappers_do_not_disturb_the_shares() {
         pass_box_down(body.as_mut());
         let mut picked = KeyHint::new(body);
         pass_box_down(&mut picked);
-        Box::new(FocusScope::new(picked))
+        heca_grid_ui::WidgetModel::new(FocusScope::new(picked))
     };
 
     let mut stack = Flex::column().gap(8.0).grow(1.0);
@@ -350,9 +343,9 @@ fn a_content_sized_container_keeps_its_height_through_the_wrappers() {
     use heca_grid_ui::LayoutEngine;
     use heca_grid_ui::widgets::{FocusScope, KeyHint};
 
-    let body: WidgetModel = Box::new(Flex::column().height(120.0));
+    let body: WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().height(120.0));
     // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
-    let wrapped: WidgetModel = Box::new(FocusScope::new(KeyHint::new(body)));
+    let wrapped: WidgetModel = heca_grid_ui::WidgetModel::new(FocusScope::new(KeyHint::new(body)));
     let mut region = Flex::column().height(600.0).child(with_flex(wrapped, 0.0));
     LayoutEngine::new().compute(&mut region, CoreSize::new(300.0, 600.0));
 

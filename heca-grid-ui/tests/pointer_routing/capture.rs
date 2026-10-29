@@ -10,7 +10,7 @@ fn a_widget_that_takes_the_press_hears_the_rest_of_the_gesture() {
     let (a, seen_a) = Probe::new(100.0, 50.0);
     let a = a.consuming(EventKind::PointerDown);
     let (b, seen_b) = Probe::new(100.0, 50.0);
-    let mut root: Box<dyn Component> = Box::new(Flex::row().child(a).child(b));
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::row().child(a).child(b));
     LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 50.0));
 
     press_at(root.as_mut(), LEFT, PointerButton::Left);

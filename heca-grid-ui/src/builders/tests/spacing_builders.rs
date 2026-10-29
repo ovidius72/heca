@@ -201,7 +201,7 @@ fn any_parent_takes_one_child_or_several() {
 fn a_share_divides_the_whole_box_by_weight_not_just_the_leftover() {
     use crate::style::Length;
     use crate::widgets::{Flex, Label};
-    use crate::{Component, LayoutEngine};
+    use crate::{LayoutEngine};
     use heca_core::layout::Size;
 
     // Unequal content is what tells the two apart: one item holds three lines, the other one.
@@ -217,7 +217,7 @@ fn a_share_divides_the_whole_box_by_weight_not_just_the_leftover() {
             let f = Flex::column().grow(w).shrink(1.0).child(content(lines));
             if basis { f.basis(0.0) } else { f }
         };
-        let mut root: Box<dyn Component> = Box::new(
+        let mut root: crate::WidgetModel = crate::WidgetModel::new(
             Flex::column()
                 .height(Length::Percent(1.0))
                 .child([item(2.0, 3), item(1.0, 1)]),
@@ -253,10 +253,10 @@ fn a_share_divides_the_whole_box_by_weight_not_just_the_leftover() {
 fn a_child_says_where_it_goes_and_a_span_of_all_follows_the_template() {
     use crate::style::{GridCell, Span};
     use crate::widgets::{Grid, Label};
-    use crate::{Component, LayoutEngine};
+    use crate::{LayoutEngine};
     use heca_core::layout::Size;
 
-    let mut grid: Box<dyn Component> = Box::new(
+    let mut grid: crate::WidgetModel = crate::WidgetModel::new(
         Grid::new()
             .template_column("auto 1fr auto")
             .template_row("auto 1fr")
@@ -287,7 +287,7 @@ fn a_child_says_where_it_goes_and_a_span_of_all_follows_the_template() {
     );
 
     // And it follows the template rather than a number frozen at build time.
-    let mut wider: Box<dyn Component> = Box::new(
+    let mut wider: crate::WidgetModel = crate::WidgetModel::new(
         Grid::new()
             .template_column("repeat(5, 1fr)")
             .child(Label::new("body").column("1 / -1")),

@@ -198,7 +198,7 @@ mod tests {
         }
     }
 
-    fn row(ws: &ExposeWorkspace, widest: f64, w: f64, h: f64) -> Box<dyn heca_grid_ui::Component> {
+    fn row(ws: &ExposeWorkspace, widest: f64, w: f64, h: f64) -> heca_grid_ui::WidgetModel {
         let (cb, _sink) = callbacks();
         let theme = theme();
         let (row, _cells) = WorkspaceRow {

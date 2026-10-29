@@ -106,7 +106,7 @@ fn a_widget_that_draws_its_own_children_is_still_cut() {
     let mut screen = Screen { base: Base::new() };
     screen.base.style.layout.width = crate::Length::Px(300.0);
     screen.base.style.layout.height = crate::Length::Px(300.0);
-    own.base.children.push(Box::new(screen));
+    own.base.children.push(crate::WidgetModel::new(screen));
     let mut root = Flex::column().child(own);
     LayoutEngine::new().compute(&mut root, Size::new(400.0, 400.0));
 

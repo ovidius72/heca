@@ -33,7 +33,7 @@ pub(crate) const CHROME_KEY: &str = "heca.chrome";
 /// beside it paints and hit-tests above it: child order is z-order in one tree, which is what
 /// replaces the layer stack's separate sort (`docs/surface-compositor.md` § 0.6).
 pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
-    let chrome = Box::new(chrome.key(CHROME_KEY));
+    let chrome = heca_grid_ui::WidgetModel::new(chrome.key(CHROME_KEY));
     let children = &mut root.base_mut().children;
     match children
         .iter()
@@ -71,7 +71,7 @@ pub(crate) fn surface_node(root: &Flex, id: LayerId) -> Option<&dyn Component> {
 
 /// The same, mutably — for a caller that must drive the surface (open it, tick it, fire a pick in
 /// it) rather than only read it.
-pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut Box<dyn Component>> {
+pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut heca_grid_ui::WidgetModel> {
     let key = surface_slot(id);
     root.base_mut()
         .children
@@ -99,7 +99,7 @@ pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
 ///
 /// Re-placing under the same `key` **replaces** that surface, so a rebuild is a swap rather than a
 /// second copy accumulating behind the first.
-pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Component>) {
+pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: heca_grid_ui::WidgetModel) {
     let mut surface = surface;
     // **The slot, not the author's name.** `key` is left alone, so a surface that named itself
     // (`.key("confirm.close")`) can still be pointed at once it is on screen.

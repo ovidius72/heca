@@ -60,7 +60,7 @@ impl KeyHint {
         Self::wrap(child.into_component())
     }
 
-    fn wrap(child: Box<dyn Component>) -> Self {
+    fn wrap(child: crate::WidgetModel) -> Self {
         let mut base = Base::new();
         // Hug the child so the wrapper's bounds match it (overlay positions off them).
         base.style.layout.width = Length::Auto;

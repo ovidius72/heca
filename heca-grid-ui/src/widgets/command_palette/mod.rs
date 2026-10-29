@@ -87,6 +87,7 @@ pub struct CommandPalette {
     /// `[settings] command_palette_size`.
     panel_size: WidgetSize,
     open: Signal<bool>,
+    on_dismiss: Option<Box<dyn Fn()>>,
     viewport: Cell<Size>,
     /// Panel rect cached at paint, so the caret blink can damage just the panel
     /// (the palette paints on the overlay layer, away from its layout `bounds`).
@@ -115,6 +116,7 @@ pub struct CommandPalette {
     desc_wrap: Vec<Option<Signal<bool>>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl CommandPalette {
     /// A new, empty (closed) palette.
     pub fn new() -> Self {
@@ -129,7 +131,7 @@ impl CommandPalette {
         let placeholder = String::from("Type a command…");
         let query_field = Self::query_field(open, query_changed, String::new(), placeholder.clone());
         let query = query_field.text();
-        base.children.push(Box::new(query_field));
+        base.children.push(crate::WidgetModel::new(query_field));
         Self {
             base,
             commands: Vec::new(),
@@ -143,6 +145,7 @@ impl CommandPalette {
             placeholder,
             panel_size: WidgetSize::Normal,
             open,
+            on_dismiss: None,
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             search: SearchModel::detached("command"),
@@ -206,7 +209,7 @@ impl CommandPalette {
         if let Some(detail) = &c.detail {
             column = column.child(Label::new(detail.clone()).truncate(Ellipsis::End).wrap(false).muted(true));
         }
-        self.base.children.insert(self.commands.len(), Box::new(column));
+        self.base.children.insert(self.commands.len(), crate::WidgetModel::new(column));
         self.commands.push(c);
     }
     /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
@@ -228,7 +231,7 @@ impl CommandPalette {
         self.placeholder = text.into();
         let field = Self::query_field(self.open, self.query_changed, self.query_text(), self.placeholder.clone());
         self.query = field.text();
-        *self.base.children.last_mut().expect("palette owns a query child") = Box::new(field);
+        *self.base.children.last_mut().expect("palette owns a query child") = crate::WidgetModel::new(field);
         self
     }
 
@@ -276,6 +279,30 @@ impl CommandPalette {
     /// The open-state signal — the host binds a trigger (e.g. Ctrl+K) to it.
     pub fn open_signal(&self) -> Signal<bool> {
         self.open
+    }
+
+    /// Live query, also used by a host's named form reader.
+    pub fn query_signal(&self) -> Signal<String> { self.query }
+
+    /// Update the query as an edit, retaining the input and resetting its selection/history cursor.
+    /// History recall uses its own native path, so recalling does not restart history browsing.
+    pub fn query_writer(&self) -> impl Fn(String) + 'static {
+        let query = self.query;
+        let changed = self.query_changed;
+        move |text| {
+            if query.get_untracked() != text { query.set(text); changed.set(true); }
+        }
+    }
+
+    /// Observe user cancellation. Accepting a command closes without a dismissal callback.
+    #[heca_grid_ui_macros::host_only("an intent callback in a description")]
+    pub fn on_dismiss(mut self, callback: impl Fn() + 'static) -> Self {
+        self.on_dismiss = Some(Box::new(callback)); self
+    }
+
+    fn dismiss(&mut self) {
+        self.close();
+        if let Some(callback) = &self.on_dismiss { callback(); }
     }
 
     /// Each row's title signal, in the order the commands were added — for a host whose rows track

@@ -1,5 +1,5 @@
 use super::{Parent, Style};
-use crate::{PropValue, ViewGlyph, ViewLabelSide, ViewMarker, ViewNode, ViewVariant, WidgetKind};
+use crate::{PropValue, ViewGlyph, ViewLabelSide, ViewMarker, ViewNode, ViewVariant, WidgetId};
 
 builder!(
     /// A theme-driven segment, optionally with arrowheads.
@@ -51,6 +51,17 @@ builder!(
     /// A checkbox with a label.
     Checkbox => Checkbox
 );
+
+builder!(
+    /// A live viewport control, driven by serializable extents and offset.
+    ScrollBar => ScrollBar
+);
+
+impl ScrollBar {
+    pub fn content_extent(self, value: f32) -> Self { self.prop("content_extent", value) }
+    pub fn viewport_extent(self, value: f32) -> Self { self.prop("viewport_extent", value) }
+    pub fn offset(self, value: f32) -> Self { self.prop("offset", value) }
+}
 
 builder!(
     /// **A row of actions that gets out of its own way.** Its children are [`Button`]s.

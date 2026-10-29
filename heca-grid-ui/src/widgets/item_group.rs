@@ -49,7 +49,7 @@ impl ItemGroup {
 
         let mut base = Base::container();
         base.style.layout.direction = Direction::Column;
-        base.children.push(Box::new(header));
+        base.children.push(crate::WidgetModel::new(header));
         Self {
             base,
             expanded,
@@ -76,8 +76,8 @@ impl ItemGroup {
 
     /// Append a group row (folds away when collapsed).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn child(mut self, c: impl Component + 'static) -> Self {
-        self.base.children.push(Box::new(c));
+    pub fn child(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        self.base.children.push(c.into_component());
         self
     }
 

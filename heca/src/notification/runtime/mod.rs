@@ -250,7 +250,7 @@ impl NotificationRuntime {
 
     /// **The cards on show**, in slot order — plain serializable data the server sends a window.
     /// The window builds its own `ToastSpec`s from them
-    /// ([`toast_spec`](crate::notification::toast_spec)).
+    /// ([`toast_spec`]).
     pub fn visible_views(&self) -> Vec<NotificationView> {
         self.shown.clone()
     }

@@ -33,7 +33,7 @@ fn child_tops(parent: &dyn Component) -> Vec<(f64, f64)> {
 /// what this costs when it goes wrong.
 #[test]
 fn a_container_told_where_its_children_go_keeps_the_space_between_them() {
-    let mut parent: Box<dyn Component> = Box::new(
+    let mut parent: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Flex::column().width(400.0).height(400.0).child(
             SLOTS
                 .iter()
@@ -66,7 +66,7 @@ fn a_container_told_where_its_children_go_keeps_the_space_between_them() {
 /// person can see what the test above is protecting against rather than take it on trust.
 #[test]
 fn stacking_the_same_children_closes_the_gaps() {
-    let mut parent: Box<dyn Component> = Box::new(
+    let mut parent: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Flex::column().width(400.0).height(400.0).child(
             SLOTS
                 .iter()
@@ -97,7 +97,7 @@ fn a_parents_walk_paints_each_child_exactly_once() {
         Color::new(0, 255, 0, 255),
         Color::new(0, 0, 255, 255),
     ];
-    let mut parent: Box<dyn Component> = Box::new(
+    let mut parent: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Flex::column().width(400.0).height(400.0).child(
             SLOTS
                 .iter()

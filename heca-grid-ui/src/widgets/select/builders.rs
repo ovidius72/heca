@@ -55,12 +55,12 @@ impl Select {
     /// Append a composed option.
     ///
     /// Typed to [`Choice`] on purpose: the control keeps the row's selected-state
-    /// [`Signal`](Choice::state) so it can drive the selection in place, and a `Box<dyn Component>`
+    /// [`Signal`](Choice::state) so it can drive the selection in place, and a `crate::WidgetModel`
     /// would have thrown that away. It is also the contract — the rows of a select **are** options.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn option(mut self, choice: Choice) -> Self {
         self.option_states.push(choice.state());
-        self.base.children.push(Box::new(choice));
+        self.base.children.push(crate::WidgetModel::new(choice));
         self.sync_option_states();
         self
     }

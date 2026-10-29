@@ -74,8 +74,8 @@ pub(super) fn actions(sink: &Sink) -> Vec<(String, Vec<(String, i64)>)> {
 }
 
 /// Lay a component out in a box of the given size and hand back the laid-out tree.
-pub(super) fn lay_out<T: Component + 'static>(node: T, w: f64, h: f64) -> Box<dyn Component> {
-    let mut root: Box<dyn Component> = Box::new(node);
+pub(super) fn lay_out<T: Component + 'static>(node: T, w: f64, h: f64) -> heca_grid_ui::WidgetModel {
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(node);
     heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(w, h));
     root
 }

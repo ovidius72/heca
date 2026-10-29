@@ -63,7 +63,7 @@ fn raise_confirm(
             b
         })
         .collect();
-    crate::chrome::open_modal(state, modal, move |state, registry, result| {
+    let _ = crate::chrome::open_modal(state, modal, move |state, registry, result| {
         // Back to Normal, always: chrome focus is not a mode and the container still has the
         // keyboard if it had it before.
         state.input_mode = InputMode::Normal;

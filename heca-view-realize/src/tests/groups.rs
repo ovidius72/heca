@@ -1,6 +1,6 @@
 //! Groups: item groups and marker groups.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -13,18 +13,18 @@ fn item_group_node_realizes_its_header_and_rows() {
     use heca_core::layout::Size;
     use heca_grid_ui::LayoutEngine;
 
-    let node = ViewNode::new(WidgetKind::ItemGroup)
+    let node = ViewNode::new(WidgetId::ItemGroup)
         .text("EXPLORER")
         .prop("expanded", PropValue::Bool(false))
-        .child(ViewNode::new(WidgetKind::Item).text("src"))
-        .child(ViewNode::new(WidgetKind::Item).text("tests"));
+        .child(ViewNode::new(WidgetId::Item).text("src"))
+        .child(ViewNode::new(WidgetId::Item).text("tests"));
 
     let mut group = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     // The group applies its expanded state during layout (`remeasure`), like the native widget.
     LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
     assert_eq!(
@@ -58,16 +58,16 @@ fn the_toggle_intent_carries_the_new_expanded_state() {
     let sink = fired.clone();
     let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
-    let node = ViewNode::new(WidgetKind::ItemGroup)
+    let node = ViewNode::new(WidgetId::ItemGroup)
         .text("EXPLORER")
         .on("toggle", Intent::new("fold_group"))
-        .child(ViewNode::new(WidgetKind::Item).text("src"));
+        .child(ViewNode::new(WidgetId::Item).text("src"));
     let mut group = realize(
         &node,
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
 
     // Click the header (it starts expanded) → it collapses.
@@ -98,18 +98,18 @@ fn the_toggle_intent_carries_the_new_expanded_state() {
 /// their own intents).
 #[test]
 fn marker_group_node_realizes_its_rows_and_flags() {
-    let node = ViewNode::new(WidgetKind::MarkerGroup)
+    let node = ViewNode::new(WidgetId::MarkerGroup)
         .prop("active", PropValue::Bool(true))
         .prop("nav_selected", PropValue::Bool(true))
-        .child(ViewNode::new(WidgetKind::Item).text("pane 1"))
-        .child(ViewNode::new(WidgetKind::Item).text("pane 2"));
+        .child(ViewNode::new(WidgetId::Item).text("pane 1"))
+        .child(ViewNode::new(WidgetId::Item).text("pane 2"));
 
     let markers = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(markers.base().children.len(), 2, "the two realized rows");
     assert!(
         hints(markers.as_ref()).is_empty(),
