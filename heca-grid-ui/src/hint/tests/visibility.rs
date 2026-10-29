@@ -9,14 +9,14 @@ use crate::widgets::{Flex, Surface};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// A clickable widget laid out at `x`,`y` with size `w`x`h`.
-fn target_at(x: f64, y: f64, w: f64, h: f64) -> Box<dyn Component> {
+fn target_at(x: f64, y: f64, w: f64, h: f64) -> crate::WidgetModel {
     let mut s = Surface::new().on_click(|_| {});
     s.base_mut().bounds = Rectangle::new(Point::new(x, y), Size::new(w, h));
-    Box::new(s)
+    crate::WidgetModel::new(s)
 }
 
 /// A laid-out page holding one target — so each test below reads as its assertion.
-fn page_with(child: Box<dyn Component>) -> Flex {
+fn page_with(child: crate::WidgetModel) -> Flex {
     let mut root = Flex::column();
     root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(600.0, 800.0));
     root.base_mut().children.push(child);
@@ -75,7 +75,7 @@ fn a_target_that_has_not_been_laid_out_keeps_its_candidacy() {
 fn a_letter_is_not_handed_to_a_squeezed_view_by_name() {
     let mut row = Surface::new().key("pane:7").on_click(|_| {});
     row.base_mut().bounds = Rectangle::new(Point::new(318.0, 40.0), Size::new(0.0, 728.0));
-    let root = page_with(Box::new(row));
+    let root = page_with(crate::WidgetModel::new(row));
 
     assert!(
         !offer_hint_by_key(&root, "pane:7", Some("a".into())),
@@ -107,8 +107,8 @@ fn a_squeezed_view_loses_its_letter_and_the_other_views_keep_it() {
 
     let mut root = Flex::column();
     root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(600.0, 800.0));
-    root.base_mut().children.push(Box::new(pane));
-    root.base_mut().children.push(Box::new(row));
+    root.base_mut().children.push(crate::WidgetModel::new(pane));
+    root.base_mut().children.push(crate::WidgetModel::new(row));
 
     assert!(
         offer_hint_by_key(&root, "pane:7", Some("a".into())),
@@ -139,7 +139,7 @@ fn a_squeezed_view_loses_its_letter_and_the_other_views_keep_it() {
 fn a_squeezed_view_still_gives_its_letter_back() {
     let mut row = Surface::new().key("pane:7").on_click(|_| {});
     row.base_mut().bounds = Rectangle::new(Point::new(318.0, 40.0), Size::new(386.0, 728.0));
-    let mut root = page_with(Box::new(row));
+    let mut root = page_with(crate::WidgetModel::new(row));
 
     assert!(offer_hint_by_key(&root, "pane:7", Some("a".into())));
     // …and now the window narrows and the pane is squeezed away.

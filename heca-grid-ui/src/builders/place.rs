@@ -14,11 +14,8 @@ const DEFAULT_CELL: crate::style::GridCell = crate::style::GridCell {
 /// **Where an item goes in the grid that holds it** — CSS's `grid-column`, `grid-row` and
 /// `grid-area`, said by the item about itself.
 ///
-/// Its own trait rather than part of [`LayoutExt`](super::LayoutExt) for one reason: **a boxed
-/// subtree has to be placeable too.** `Box<dyn Component>` is not itself `Component`, so it gets
-/// none of the `Sized` builder traits — and a realized plugin tree is *always* boxed. A capability
-/// a plugin cannot reach is the thing this library treats as missing, so placement is implemented
-/// for both.
+/// Both a concrete component and an opaque [`WidgetModel`](crate::WidgetModel) can name their
+/// place in a parent grid. The model retains the original component's base and placement.
 pub trait PlaceExt {
     /// The base this placement is written into.
     fn placement_base(&mut self) -> &mut crate::component::Base;
@@ -121,7 +118,7 @@ impl<C: Component + Sized> PlaceExt for C {
     }
 }
 
-impl PlaceExt for Box<dyn Component> {
+impl PlaceExt for crate::WidgetModel {
     fn placement_base(&mut self) -> &mut crate::component::Base {
         (**self).base_mut()
     }

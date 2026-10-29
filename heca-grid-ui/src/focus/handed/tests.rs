@@ -40,8 +40,8 @@ fn frame(header: impl Component + 'static, inside: impl Component + 'static) -> 
         .template_row("auto 1fr")
         .template_area(["header", "content"])
         .child([
-            Box::new(Flex::row().area("header").child(header)) as Box<dyn Component>,
-            Box::new(Flex::column().area("content").child(Flex::row().child(inside))),
+            crate::WidgetModel::new(Flex::row().area("header").child(header)),
+            crate::WidgetModel::new(Flex::column().area("content").child(Flex::row().child(inside))),
         ])
 }
 

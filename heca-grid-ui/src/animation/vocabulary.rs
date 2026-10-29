@@ -46,14 +46,14 @@ pub enum Animation {
     /// gesture. See [`ZoomFade`].
     ZoomFade,
     /// An animation this library has never heard of. Build it with [`of`](Animation::of).
-    Custom(Box<dyn Animate>),
+    Custom(super::AnimationModel),
 }
 
 impl Animation {
     /// **An animation of your own** — any type implementing [`Animate`], passed where a built-in
     /// would be. This is the whole extension story: no registration, no name, no host change.
     pub fn of(animation: impl Animate + 'static) -> Self {
-        Self::Custom(Box::new(animation))
+        Self::Custom(super::AnimationModel::new(animation))
     }
 
     /// **How far away it starts**, for the built-ins that travel: below `1.0` grows in from
@@ -85,13 +85,13 @@ impl Animation {
     ///
     /// An absence, not a do-nothing object: a surface with no animation is never mid-gesture, so
     /// nothing waits for it and nothing anywhere has a case for it.
-    pub fn build(self) -> Option<Box<dyn Animate>> {
+    pub fn build(self) -> Option<super::AnimationModel> {
         match self {
             Self::None => Option::None,
-            Self::Fade => Some(Box::new(Fade::new())),
-            Self::Zoom => Some(Box::new(Zoom::new())),
-            Self::Slide => Some(Box::new(Slide::new())),
-            Self::ZoomFade => Some(Box::new(ZoomFade::new())),
+            Self::Fade => Some(super::AnimationModel::new(Fade::new())),
+            Self::Zoom => Some(super::AnimationModel::new(Zoom::new())),
+            Self::Slide => Some(super::AnimationModel::new(Slide::new())),
+            Self::ZoomFade => Some(super::AnimationModel::new(ZoomFade::new())),
             Self::Custom(animation) => Some(animation),
         }
     }

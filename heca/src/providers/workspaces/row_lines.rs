@@ -9,7 +9,6 @@
 
 use std::rc::Rc;
 
-use heca_grid_ui::Component;
 use heca_grid_ui::builders::{LayoutExt, Parent, TooltipExt};
 use heca_grid_ui::reactive::{create_effect, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
@@ -20,9 +19,9 @@ use crate::chrome::panes::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLi
 
 /// The built-in lines; configuration chooses their order and visibility.
 pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
-    let own = |name: &str, build: fn(&LineCx<'_>) -> Box<dyn Component>| PaneLineDef {
+    let own = |name: &str, build: fn(&LineCx<'_>) -> Visibility| PaneLineDef {
         name: name.to_string(),
-        build: Rc::new(build),
+        build: Rc::new(move |cx| heca_grid_ui::WidgetModel::new(build(cx))),
         from_extension: false,
     };
     vec![own("cwd", cwd_line), own("git", git_line), own("agent", super::agent_line::build)]
@@ -32,7 +31,7 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
 /// shares (`components::FolderLine`). Shown while the pane has a directory, read inside this line's own
 /// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
 /// pane_lines`, and nothing else.
-fn cwd_line(cx: &LineCx<'_>) -> Box<dyn Component> {
+fn cwd_line(cx: &LineCx<'_>) -> Visibility {
     let line = crate::components::FolderLine {
         path: None,
         show: false,
@@ -55,12 +54,12 @@ fn cwd_line(cx: &LineCx<'_>) -> Box<dyn Component> {
         );
         set_if_changed(visible, cwd.is_some());
     });
-    Box::new(line.widget)
+    line.widget
 }
 
 /// **The git state**: branch (cut for a narrow sidebar, the full name on hover) and the counts of
 /// added, modified and deleted files. Absent outside a repository; a count of nothing is absent.
-fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
+fn git_line(cx: &LineCx<'_>) -> Visibility {
     let theme = cx.theme;
     // **Cut from the front by the row's own box**, so the tail — the meaningful end of a branch,
     // `…security-upgrade` — survives, and how much fits is whatever the sidebar is wide enough for.
@@ -153,7 +152,7 @@ fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
             set_if_changed(text, value.unwrap_or_default());
         }
     });
-    Box::new(row)
+    row
 }
 
 /// **A line another crate added**: an icon and some text, shown while `produce` has something to
@@ -185,7 +184,7 @@ pub(crate) fn text_line(produce: Rc<ProduceLine>) -> Rc<BuildLine> {
             }
             None => set_if_changed(visible, false),
         });
-        Box::new(row) as Box<dyn Component>
+        heca_grid_ui::WidgetModel::new(row)
     })
 }
 
@@ -222,8 +221,8 @@ mod tests {
             agent_statuses: signal(Rc::new(heca_config::settings::AgentsConfig::default().statuses)),
         });
         // Visibility is applied at layout, so each check lays the row out first.
-        let mut root: Box<dyn Component> = Box::new(Flex::column().child(line));
-        let hidden = |root: &mut Box<dyn Component>| {
+        let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().child(line));
+        let hidden = |root: &mut heca_grid_ui::WidgetModel| {
             heca_grid_ui::LayoutEngine::new()
                 .compute(root.as_mut(), heca_grid_ui::Size::new(300.0, 100.0));
             root.base().children[0].base().style.layout.hidden

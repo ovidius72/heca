@@ -38,7 +38,8 @@ pub use chrome::{
     BuildCx, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
-pub use entry::{Extension, LayerBuilder, LayerCx, extension};
+pub use entry::{Extension, LayerBuilder, LayerCx, extension, register_widget};
+pub use heca_view_realize::WidgetDefinition;
 pub use heca_view::{Intent, PropMap, PropValue};
 pub use notification::{Notification, NotificationAction};
 pub use providers::{ChromeCtx, Provider, ProviderCx, ProviderHandles};
@@ -370,6 +371,7 @@ fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) 
 impl ApplicationHandler<AppEvent> for HecaApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
+            crate::entry::widgets::freeze();
             let mut state = pollster::block_on(self.init_state(event_loop));
             // Every mounted component's **declared** actions join the one catalog and registry here
             // — after the host has its providers, before any input can reach them. This is the host

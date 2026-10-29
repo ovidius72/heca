@@ -294,11 +294,11 @@ fn the_pointer_reaches_an_unfocused_scope() {
 
 #[test]
 fn a_boxed_subtree_can_be_wrapped() {
-    // What a chrome provider's render seam returns: a `Box<dyn Component>`, which is not itself
+    // What a chrome provider's render seam returns: a `crate::WidgetModel`, which is not itself
     // `Component`, so it cannot go through `new`.
     let inner = child();
     inner.base().focus(true);
-    let body: Box<dyn Component> = Box::new(inner);
+    let body: crate::WidgetModel = crate::WidgetModel::new(inner);
     let mut ring = FocusScope::new(body);
     let theme = Theme::default();
     assert!(!painted(&mut ring, &theme).is_empty());

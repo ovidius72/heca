@@ -1,6 +1,6 @@
 //! Described keys, the picker opt-out, and clickable rows.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -11,7 +11,7 @@ use super::*;
 #[test]
 fn a_described_key_lands_in_the_widgets_own_slot() {
     let emit: IntentEmitter = Rc::new(|_| {});
-    let node = ViewNode::new(WidgetKind::Row)
+    let node = ViewNode::new(WidgetId::Row)
         .key("pane:7")
         .on_press(Intent::new("focus_pane"));
 
@@ -20,7 +20,7 @@ fn a_described_key_lands_in_the_widgets_own_slot() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(row.base().key.as_deref(), Some("pane:7"));
 }
 
@@ -30,20 +30,20 @@ fn a_described_key_lands_in_the_widgets_own_slot() {
 fn every_kind_carries_a_described_key() {
     let emit: IntentEmitter = Rc::new(|_| {});
     for kind in [
-        WidgetKind::Row,
-        WidgetKind::Item,
-        WidgetKind::Button,
-        WidgetKind::Card,
-        WidgetKind::Label,
-        WidgetKind::VStack,
+        WidgetId::Row,
+        WidgetId::Item,
+        WidgetId::Button,
+        WidgetId::Card,
+        WidgetId::Label,
+        WidgetId::VStack,
     ] {
-        let node = ViewNode::new(kind).key("k");
+        let node = ViewNode::new(kind.clone()).key("k");
         let w = realize(
             &node,
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         assert_eq!(
             w.base().key.as_deref(),
             Some("k"),
@@ -57,13 +57,13 @@ fn every_kind_carries_a_described_key() {
 #[test]
 fn a_node_with_no_key_declares_none() {
     let emit: IntentEmitter = Rc::new(|_| {});
-    let node = ViewNode::new(WidgetKind::Row).on_press(Intent::new("focus_pane"));
+    let node = ViewNode::new(WidgetId::Row).on_press(Intent::new("focus_pane"));
     let row = realize(
         &node,
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(row.base().key, None);
 }
 
@@ -72,7 +72,7 @@ fn a_node_with_no_key_declares_none() {
 #[test]
 fn a_node_can_keep_itself_out_of_the_picker() {
     let emit: IntentEmitter = Rc::new(|_| {});
-    let node = ViewNode::new(WidgetKind::Button)
+    let node = ViewNode::new(WidgetId::Button)
         .text("×")
         .prop("hintable", PropValue::Bool(false))
         .on_press(Intent::new("close"));
@@ -82,15 +82,15 @@ fn a_node_can_keep_itself_out_of_the_picker() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert!(!w.base().hintable);
     assert!(
         realize(
-            &ViewNode::new(WidgetKind::Button).on_press(Intent::new("close")),
+            &ViewNode::new(WidgetId::Button).on_press(Intent::new("close")),
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        )
+        ).expect("valid described test widget")
         .base()
         .hintable,
         "the default is pickable — a node says only \"not me\"",
@@ -102,13 +102,13 @@ fn a_node_can_keep_itself_out_of_the_picker() {
 #[test]
 fn a_node_can_hand_its_keyboard_to_a_part() {
     let emit: IntentEmitter = Rc::new(|_| {});
-    let node = ViewNode::new(WidgetKind::Grid).prop("keyboard_to", PropValue::Text("body".into()));
+    let node = ViewNode::new(WidgetId::Grid).prop("keyboard_to", PropValue::Text("body".into()));
     let w = realize(
         &node,
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(w.base().keyboard_to.as_deref(), Some("body"));
 }
 
@@ -116,7 +116,7 @@ fn a_node_can_hand_its_keyboard_to_a_part() {
 /// press Enter on it and the same intent fires; it takes one hint target so `prefix+/` reaches
 /// it; and it holds whatever content it was given.
 ///
-/// Before the rename, `WidgetKind::Row` meant `Flex::row()` — a plain box with no focus, no
+/// Before the rename, `WidgetId::Row` meant `Flex::row()` — a plain box with no focus, no
 /// hover and no activation — so none of this was reachable from a description at all, and
 /// `docs/chrome-and-ui.md` shipped an example that assumed otherwise.
 #[test]
@@ -129,18 +129,18 @@ fn a_described_row_is_clickable_and_keyboard_activatable() {
     let sink = fired.clone();
     let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
-    let node = ViewNode::new(WidgetKind::Row)
+    let node = ViewNode::new(WidgetId::Row)
         .prop("active", PropValue::Bool(true))
         .on_press(Intent::new("docker.select").arg("id", PropValue::Text("web".into())))
-        .child(ViewNode::new(WidgetKind::Label).text("nginx"))
-        .child(ViewNode::new(WidgetKind::Badge).text("UP"));
+        .child(ViewNode::new(WidgetId::Label).text("nginx"))
+        .child(ViewNode::new(WidgetId::Badge).text("UP"));
 
     let mut row = realize(
         &node,
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     LayoutEngine::new().compute(row.as_mut(), Size::new(400.0, 40.0));
 
     assert_eq!(
@@ -195,14 +195,14 @@ fn a_described_row_is_clickable_and_keyboard_activatable() {
 /// A described row that nothing can activate should not pretend to be a control.
 #[test]
 fn a_described_row_without_a_press_intent_is_inert() {
-    let node = ViewNode::new(WidgetKind::Row)
-        .child(ViewNode::new(WidgetKind::Label).text("just content"));
+    let node = ViewNode::new(WidgetId::Row)
+        .child(ViewNode::new(WidgetId::Label).text("just content"));
     let row = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert!(!row.base().focusable);
     assert!(hints(row.as_ref()).is_empty());
     assert_eq!(row.base().children.len(), 1, "it still holds its content");
@@ -213,13 +213,13 @@ fn a_described_row_without_a_press_intent_is_inert() {
 /// plugin/RPC input.
 #[test]
 fn deferred_kind_is_empty_not_panic() {
-    let node = ViewNode::new(WidgetKind::Grid);
+    let node = ViewNode::new(WidgetId::Grid);
     let realized = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(realized.base().children.len(), 0);
     assert!(
         hints(realized.as_ref()).is_empty(),

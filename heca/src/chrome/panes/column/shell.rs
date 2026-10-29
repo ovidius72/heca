@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::widgets::Flex;
-use heca_grid_ui::{Component, HintExt, IdentityExt, LayoutExt, Parent};
+use heca_grid_ui::{HintExt, IdentityExt, LayoutExt, Parent};
 
 use super::model::ColumnShellModel;
 use crate::chrome::panes::pane::{PaneCallbacks, PaneShell, PaneShellModel};
@@ -43,7 +43,7 @@ pub(crate) struct ColumnShell<'a> {
     pub(crate) header_env: Option<std::rc::Rc<crate::chrome::HeaderEnv>>,
     /// **What each pane runs**, by pane — the terminal today, anything else tomorrow. Carried down
     /// exactly as the header's environment is: the column does not know what it is.
-    pub(crate) contents: HashMap<PaneId, Box<dyn Component>>,
+    pub(crate) contents: HashMap<PaneId, heca_grid_ui::WidgetModel>,
 }
 
 /// **Build one pane, placed where the layout engine put it.**
@@ -60,8 +60,8 @@ pub(crate) fn pane_child(
     column: &ColumnShellModel,
     cb: &PaneCallbacks,
     header: Option<crate::chrome::PaneHeader>,
-    content: Option<Box<dyn Component>>,
-) -> Box<dyn Component> {
+    content: Option<heca_grid_ui::WidgetModel>,
+) -> heca_grid_ui::WidgetModel {
     let shell = PaneShell {
         model,
         cb,
@@ -69,7 +69,7 @@ pub(crate) fn pane_child(
         content,
     }
     .build();
-    Box::new(shell.at_rect(model.x - column.x, model.y - column.y, model.w, model.h))
+    heca_grid_ui::WidgetModel::new(shell.at_rect(model.x - column.x, model.y - column.y, model.w, model.h))
 }
 
 impl ColumnShell<'_> {

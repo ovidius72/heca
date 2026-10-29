@@ -282,7 +282,7 @@ use super::*;
         let mut row = crate::widgets::Row::new();
         row.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(40.0, 40.0));
         row.nav_state().set(true);
-        r.base.children.push(Box::new(row));
+        r.base.children.push(crate::WidgetModel::new(row));
         r.follow_revealed();
         assert!(
             r.scroll_offset.get_untracked().abs() < 1e-6,

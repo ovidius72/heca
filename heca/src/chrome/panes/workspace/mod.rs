@@ -114,7 +114,7 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
             return pick_mark(mark, name);
         }
         if let Some((edge, _)) = edges.iter().find(|(edge, _)| edge.name() == name) {
-            return Box::new(build_edge(seams, working, *edge).key(name));
+            return heca_grid_ui::WidgetModel::new(build_edge(seams, working, *edge).key(name));
         }
         if crate::chrome::slot_of_key(name).is_some() || crate::chrome::row_of_key(name).is_some() {
             let slot = LandingSlot::new()
@@ -124,7 +124,7 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
                 Some(place) => slot.line(edge_line(place)),
                 None => slot,
             };
-            return Box::new(slot.key(name));
+            return heca_grid_ui::WidgetModel::new(slot.key(name));
         }
         match model
             .columns
@@ -138,7 +138,7 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
                 .find(|p| crate::chrome::pane_key(p.pane_id) == name)
             {
                 Some(pane) => build_float(seams, model, pane),
-                None => Box::new(Flex::column()),
+                None => heca_grid_ui::WidgetModel::new(Flex::column()),
             },
         }
     });
@@ -230,13 +230,13 @@ fn pick_column_key(col: heca_core::layout::ColumnId) -> String {
 
 /// A mark of the open pick, built: an empty place with its letter, or an outline round a column. It
 /// decorates — a press goes through to what is under it.
-fn pick_mark(mark: &PickMark, name: &str) -> Box<dyn Component> {
+fn pick_mark(mark: &PickMark, name: &str) -> heca_grid_ui::WidgetModel {
     let slot = match mark {
         PickMark::Gap { letter, .. } => LandingSlot::new().edge(true).label(letter.to_string()),
         PickMark::Row { letter, .. } => LandingSlot::new().edge(true).label(letter.to_string()),
         PickMark::Column(_) => LandingSlot::new().filled(true),
     };
-    Box::new(slot.pointer_transparent(true).key(name))
+    heca_grid_ui::WidgetModel::new(slot.pointer_transparent(true).key(name))
 }
 
 /// Where a pick mark sits, in window coordinates.
@@ -287,7 +287,7 @@ fn build_column(
     seams: &WorkspaceSeams,
     model: &WorkspaceModel,
     column: &ColumnShellModel,
-) -> Box<dyn Component> {
+) -> heca_grid_ui::WidgetModel {
     let contents = column
         .panes
         .iter()
@@ -295,10 +295,10 @@ fn build_column(
             model
                 .panes
                 .get(&p.pane_id)
-                .map(|e| (p.pane_id, Box::new(e.content.clone()) as Box<dyn Component>))
+                .map(|e| (p.pane_id, heca_grid_ui::WidgetModel::new(e.content.clone())))
         })
         .collect();
-    Box::new(
+    heca_grid_ui::WidgetModel::new(
         ColumnShell {
             model: column,
             cb: &seams.column,
@@ -315,8 +315,8 @@ fn build_float(
     seams: &WorkspaceSeams,
     model: &WorkspaceModel,
     pane: &PaneShellModel,
-) -> Box<dyn Component> {
-    Box::new(
+) -> heca_grid_ui::WidgetModel {
+    heca_grid_ui::WidgetModel::new(
         PaneShell {
             model: pane,
             cb: &seams.pane,
@@ -327,11 +327,11 @@ fn build_float(
     )
 }
 
-fn content_of(model: &WorkspaceModel, pane: PaneId) -> Option<Box<dyn Component>> {
+fn content_of(model: &WorkspaceModel, pane: PaneId) -> Option<heca_grid_ui::WidgetModel> {
     model
         .panes
         .get(&pane)
-        .map(|e| Box::new(e.content.clone()) as Box<dyn Component>)
+        .map(|e| heca_grid_ui::WidgetModel::new(e.content.clone()))
 }
 
 /// A column that is still here: reconcile its panes, then place it and them.
@@ -350,7 +350,7 @@ fn place_column(
         .collect();
     reconcile::reconcile_children(child, &column.child_keys(), |key| {
         let Some(pane) = by_key.get(key).copied() else {
-            return Box::new(Flex::column());
+            return heca_grid_ui::WidgetModel::new(Flex::column());
         };
         crate::chrome::panes::column::shell::pane_child(
             pane,

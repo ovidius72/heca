@@ -104,7 +104,7 @@ fn focus_and_pick(
         }
         None => FocusScope::new(picked),
     };
-    Box::new(
+    heca_grid_ui::WidgetModel::new(
         focus_scope
             // **The dock's own letter belongs to the dock pick, not the ordinary one.** Clicking
             // this wrapper focuses the container, which is what makes it actionable and therefore
@@ -200,7 +200,7 @@ pub(in crate::chrome) fn build_region_content(
             // natural 1px and the docks divide what is left exactly as they asked. Its colour comes
             // from the theme's border token, so it follows a reload.
             let count = bodies.len();
-            Some(Box::new(bodies.into_iter().enumerate().fold(
+            Some(heca_grid_ui::WidgetModel::new(bodies.into_iter().enumerate().fold(
                 stack,
                 |col, (i, body)| {
                     let col = if i > 0 && i < count {
@@ -225,7 +225,7 @@ pub(in crate::chrome) fn build_region_content(
 /// the shell knows nothing about workspaces. A region with no provider mounted passes
 /// `None` and renders as an empty frame.
 ///
-/// The body is a [`Box<dyn Component>`](heca_grid_ui::Component) — a provider's render
+/// The body is a [`heca_grid_ui::WidgetModel`](heca_grid_ui::Component) — a provider's render
 /// seam returns a built subtree, not a concrete widget type — which is why it is mounted
 /// as a boxed child rather than through `Parent::child`.
 #[allow(clippy::too_many_arguments)]

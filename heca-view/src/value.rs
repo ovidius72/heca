@@ -82,7 +82,7 @@ pub enum PropValue {
     /// Deliberately rare. The option-shaped widgets (`Select` / `Tabs`) do **not** use it — their
     /// options are **children**, because an option is a node with a value and content, not a string
     /// (see the "Options are children" section). What is genuinely list-shaped is a
-    /// [`Grid`](crate::WidgetKind::Grid)'s **track templates**: `columns` / `rows` (CSS-like
+    /// [`Grid`](crate::WidgetId::Grid)'s **track templates**: `columns` / `rows` (CSS-like
     /// strings — `"1fr"`, `"22px"`, `"auto"`) and `areas` (one string per grid row). That is what
     /// this exists for.
     List(Vec<PropValue>),

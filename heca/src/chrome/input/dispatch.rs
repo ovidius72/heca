@@ -267,9 +267,9 @@ mod surface_pointer_tests {
     }
 
     /// A pane's header: one button with a tooltip, filling the box.
-    fn header() -> Box<dyn Component> {
+    fn header() -> heca_grid_ui::WidgetModel {
         let button = Button::new("Close").tooltip("Close the pane");
-        Box::new(Flex::row().width(heca_grid_ui::Length::FULL).child(button))
+        heca_grid_ui::WidgetModel::new(Flex::row().width(heca_grid_ui::Length::FULL).child(button))
     }
 
     fn hovered(root: &dyn Component) -> bool {
@@ -300,7 +300,7 @@ mod surface_pointer_tests {
         crate::chrome::place_surface(
             &mut window,
             "surface:1",
-            Box::new(
+            heca_grid_ui::WidgetModel::new(
                 Overlay::new()
                     .panel(Label::new("A note"))
                     .default_open(true),

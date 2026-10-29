@@ -8,7 +8,7 @@ use super::*;
 fn the_handle_runs_and_kills_by_id() {
     let told: Rc<RefCell<Vec<(u64, TerminalCommand)>>> = Rc::default();
     let seen = told.clone();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(Seams {
         scroll: ScrollIntents {
             to_bottom: Box::new(|| {}),
@@ -46,10 +46,10 @@ fn the_handle_runs_and_kills_by_id() {
 /// node on screen, so it is never the answer.
 #[test]
 fn the_window_says_whether_a_terminal_on_screen_holds_the_keyboard() {
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(recording().0);
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     t.place(Some(root.base().bounds));
     assert_ne!(
@@ -78,13 +78,13 @@ fn the_window_says_whether_a_terminal_on_screen_holds_the_keyboard() {
 /// one, which may be before its first frame.
 #[test]
 fn a_terminal_told_to_take_the_keyboard_takes_it_on_screen_or_once_drawn() {
-    let other = Terminal::new();
-    let t = Terminal::new();
+    let other = Terminal::unbound();
+    let t = Terminal::unbound();
     for terminal in [&other, &t] {
         terminal.bind(recording().0);
         terminal.show(&scrolled(0));
     }
-    let mut root = laid_out_in(Box::new(other.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(other.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     other.place(Some(root.base().bounds));
     other.take_keyboard(root.as_mut());
@@ -97,7 +97,7 @@ fn a_terminal_told_to_take_the_keyboard_takes_it_on_screen_or_once_drawn() {
     // Not drawn yet: it takes the keyboard when it is.
     t.take_keyboard(root.as_mut());
     assert_eq!(heca_grid_ui::keyboard_holder(root.as_ref()), other.node());
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     heca_grid_ui::settle_focus(root.as_mut());
     t.place(Some(root.base().bounds));

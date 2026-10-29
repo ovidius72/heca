@@ -31,8 +31,8 @@ pub struct Terminal {
 }
 
 impl Terminal {
-    /// A terminal. What it runs, and what it is called, arrive with the process it shows.
-    pub(crate) fn new() -> Self {
+    /// An unbound visual handle; the server or declaration store supplies its process.
+    pub(crate) fn unbound() -> Self {
         Self::of(Rc::new(Shared {
             id: Cell::new(None),
             size: Cell::new(None),
@@ -74,7 +74,7 @@ impl Terminal {
         base.children.extend(layers);
         // **So is its search**: the bar over the picture, drawn by the same walk, hearing the same
         // keyboard. Declared after the controls, so it is on top of them.
-        base.children.push(Box::new(SearchBar::new(shared.clone())));
+        base.children.push(heca_grid_ui::WidgetModel::new(SearchBar::new(shared.clone())));
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
         let me = shared.clone();

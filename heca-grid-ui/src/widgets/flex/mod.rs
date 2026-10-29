@@ -170,7 +170,7 @@ mod tests {
         use crate::builders::{LayoutExt, Parent};
         use crate::style::{Justify, Length};
         use crate::widgets::{Flex, Label};
-        use crate::{Component, LayoutEngine};
+        use crate::{LayoutEngine};
         use heca_core::layout::Size;
 
         // A card: a share of its column with its label centred inside it.
@@ -190,7 +190,7 @@ mod tests {
             f.width(Length::Percent(0.5))
         };
 
-        let mut root: Box<dyn Component> = Box::new(
+        let mut root: crate::WidgetModel = crate::WidgetModel::new(
             Flex::row()
                 .width(Length::Percent(1.0))
                 .height(Length::Percent(1.0))

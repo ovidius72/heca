@@ -7,10 +7,10 @@ use super::*;
 #[test]
 fn a_terminal_reports_its_grid_only_when_it_changes() {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&scrolled(0)); // cells are 10 x 20
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let first = grids(&said);
     assert_eq!(first.len(), 1, "{first:?}");
     assert_eq!((first[0].cols, first[0].rows), (30, 10));
@@ -38,9 +38,9 @@ fn a_terminal_reports_its_grid_only_when_it_changes() {
 /// Nobody listening, nothing is lost: the grid is said as soon as someone binds.
 #[test]
 fn a_grid_nobody_heard_is_said_when_someone_listens() {
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let (seams, said) = recording();
     t.bind(seams);
     heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 200.0));
@@ -51,8 +51,8 @@ fn a_grid_nobody_heard_is_said_when_someone_listens() {
 #[test]
 fn no_grid_is_asked_for_before_the_cell_size_is_known() {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
-    let _root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let _root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     assert!(grids(&said).is_empty());
 }

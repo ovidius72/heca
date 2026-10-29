@@ -16,7 +16,7 @@ use heca::{
 };
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::widgets::{Flex, Glyph, Label, Overlay};
-use heca_grid_ui::{Component, Handled};
+use heca_grid_ui::Handled;
 
 /// A dock with a list of notes. `id` is its name in this placement; a second `Notes::new("..")` is a
 /// second placement of the same dock.
@@ -52,25 +52,13 @@ impl Provider for Notes {
     }
 
     fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
-        Contribution::Container(ContainerContribution {
-            id: self.id().to_string(),
-            title: self.title().to_string(),
-            supported_regions: self.supported_regions(),
-            default_region: self.default_region(),
-            movable: self.movable(),
-            collapsible: self.collapsible(),
-            build: Box::new({
-                let demo = self.demo.clone();
-                move |_ctx, _build| {
-                    Box::new(
-                        Flex::column()
-                            .child(Label::new("No notes yet"))
-                            // The same terminal every time this dock is built: `demo.shell`.
-                            .child(demo.terminal("shell").title("Scratch shell").grow(1.0)),
-                    ) as Box<dyn Component>
-                }
-            }),
-        })
+        let demo = self.demo.clone();
+        Contribution::Container(ContainerContribution::new(self, move |_ctx, _build| {
+            Flex::column()
+                .child(Label::new("No notes yet"))
+                // The same terminal every time this dock is built: `demo.shell`.
+                .child(demo.terminal("shell").title("Scratch shell").grow(1.0))
+        }))
     }
 }
 
@@ -122,11 +110,9 @@ fn main() {
 
     // The overlay. Built again each time it is opened, so what it shows is current.
     demo.layer("detail").view(|_cx| {
-        Box::new(
-            Overlay::new()
-                .panel(Flex::column().child(Label::new("A note")))
-                .default_open(false),
-        )
+        Overlay::new()
+            .panel(Flex::column().child(Label::new("A note")))
+            .default_open(false)
     });
 
     heca::run();

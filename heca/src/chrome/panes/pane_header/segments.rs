@@ -61,7 +61,7 @@ pub(crate) fn build_pane_info_bar(
         // child labels. Both answer `set_text`.
         tag = Some(match tag.take() {
             None => Tag::from_label(label).leading(leading),
-            Some(existing) => existing.segment_label(label, Some(Box::new(leading))),
+            Some(existing) => existing.segment_label_with(label, leading),
         }.segment_shrink(fit != crate::chrome::panes::pane_items::Fit::Keep));
     }
     tag

@@ -28,6 +28,11 @@ pub enum ViewVariant {
 }
 
 value_set! {
+    /// A Badge's native visual vocabulary.
+    pub enum ViewBadgeVariant {
+        Accent => "accent", Neutral => "neutral", Success => "success",
+        Warning => "warning", Danger => "danger", Outline => "outline",
+    }
     /// How a surface arrives and leaves — mirrors grid-ui `NamedAnimation` (`Overlay`).
     ///
     /// The **built-ins**, which is all a description can name: a live animation is a Rust type, and a
@@ -43,6 +48,17 @@ value_set! {
         ZoomFade => "zoom_fade",
     }
 }
+
+impl From<ViewVariant> for ViewBadgeVariant {
+    fn from(variant: ViewVariant) -> Self {
+        match variant {
+            ViewVariant::Primary => Self::Accent, ViewVariant::Secondary => Self::Neutral,
+            ViewVariant::Ghost | ViewVariant::Outline | ViewVariant::Link => Self::Outline,
+            ViewVariant::Destructive => Self::Danger,
+        }
+    }
+}
+
 
 value_set! {
     /// How serious a message is — mirrors both grid-ui `ToastSeverity` **and** `AlertVariant`, which

@@ -61,6 +61,8 @@ mod presence;
 mod sequence;
 mod slide;
 mod vocabulary;
+mod model;
+pub use model::AnimationModel;
 mod zoom;
 mod zoom_fade;
 

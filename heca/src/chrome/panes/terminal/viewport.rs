@@ -121,7 +121,7 @@ impl Controls {
     /// Returns the widgets to put under the terminal, which lays them out: the bar flows to its
     /// right edge at its full height, and the chip is taken out of the flow and left at the
     /// container's own top-right corner — a layout, not a measurement.
-    pub(super) fn build(intents: &IntentSlot) -> (Self, [Box<dyn Component>; 2]) {
+    pub(super) fn build(intents: &IntentSlot) -> (Self, [heca_grid_ui::WidgetModel; 2]) {
         let to_bottom = intents.clone();
         let mut badge = BadgeButton::accent("0 lines above").on_click(move || {
             if let Some(i) = to_bottom.borrow().as_ref() {
@@ -159,7 +159,7 @@ impl Controls {
         // Out of the flow, with every edge left to the container: it lands where a lone child
         // would, which for a row that ends at the right is the right edge, at the top.
         let badge = badge.at_rect(Length::Auto, Length::Auto, Length::Auto, Length::Auto);
-        let layers: [Box<dyn Component>; 2] = [Box::new(bar), Box::new(badge)];
+        let layers: [heca_grid_ui::WidgetModel; 2] = [heca_grid_ui::WidgetModel::new(bar), heca_grid_ui::WidgetModel::new(badge)];
         (controls, layers)
     }
 

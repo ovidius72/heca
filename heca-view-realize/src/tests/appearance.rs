@@ -1,7 +1,7 @@
 //! Appearance is overridable; the theme is the default.
 
 use heca_grid_ui::Flex;
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -11,7 +11,7 @@ use super::*;
 /// font size all arrive through the same generic merge as `Layout`.
 #[test]
 fn a_description_can_override_the_whole_of_visual() {
-    let node = ViewNode::new(WidgetKind::Surface)
+    let node = ViewNode::new(WidgetId::Surface)
         .prop("fill", PropValue::Color("#ff8800".into()))
         .prop("radius", PropValue::Float(12.0))
         .prop("font_size", PropValue::Float(18.0));
@@ -20,7 +20,7 @@ fn a_description_can_override_the_whole_of_visual() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let visual = w.base().style.visual;
     assert_eq!(
         visual.fill,
@@ -35,17 +35,17 @@ fn a_description_can_override_the_whole_of_visual() {
 #[test]
 fn an_unset_appearance_field_is_left_alone() {
     let plain = realize(
-        &ViewNode::new(WidgetKind::Surface),
+        &ViewNode::new(WidgetId::Surface),
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let one_field = realize(
-        &ViewNode::new(WidgetKind::Surface).prop("radius", PropValue::Float(9.0)),
+        &ViewNode::new(WidgetId::Surface).prop("radius", PropValue::Float(9.0)),
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(one_field.base().style.visual.radius, 9.0, "the one it set");
     assert_eq!(
         one_field.base().style.visual.fill,
@@ -68,7 +68,7 @@ fn a_theme_token_follows_the_theme_and_a_hex_literal_does_not() {
     light.colors.accent = heca_grid_ui::Color::rgb(0xee, 0xdd, 0xcc);
 
     let fill_of = |node: &ViewNode, theme: &Theme| {
-        realize(node, theme, &noop_emitter(), &mut FormBindings::default())
+        realize(node, theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget")
             .base()
             .style
             .visual
@@ -76,12 +76,12 @@ fn a_theme_token_follows_the_theme_and_a_hex_literal_does_not() {
     };
 
     let token =
-        ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("accent".into()));
+        ViewNode::new(WidgetId::Surface).prop("fill", PropValue::Color("accent".into()));
     assert_eq!(fill_of(&token, &dark), Some(dark.colors.accent));
     assert_eq!(fill_of(&token, &light), Some(light.colors.accent));
 
     let hex =
-        ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("#ff0000".into()));
+        ViewNode::new(WidgetId::Surface).prop("fill", PropValue::Color("#ff0000".into()));
     let literal = Some(heca_grid_ui::Color::rgb(0xff, 0, 0));
     assert_eq!(fill_of(&hex, &dark), literal);
     assert_eq!(fill_of(&hex, &light), literal, "a literal is not a token");
@@ -131,7 +131,7 @@ fn a_token_reaches_a_widgets_own_colour_builder() {
     let painted = |node: &ViewNode, theme: &Theme| {
         use heca_core::layout::Size;
         use heca_grid_ui::{LayoutEngine, PaintCx, Scene};
-        let mut w = realize(node, theme, &noop_emitter(), &mut FormBindings::default());
+        let mut w = realize(node, theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
         LayoutEngine::new().compute(w.as_mut(), Size::new(300.0, 40.0));
         let mut scene = Scene::new();
         {
@@ -141,10 +141,10 @@ fn a_token_reaches_a_widgets_own_colour_builder() {
         scene
     };
 
-    let tinted = ViewNode::new(WidgetKind::Label)
+    let tinted = ViewNode::new(WidgetId::Label)
         .text("This action cannot be undone.")
         .prop("color", PropValue::Color("danger".into()));
-    let plain = ViewNode::new(WidgetKind::Label).text("This action cannot be undone.");
+    let plain = ViewNode::new(WidgetId::Label).text("This action cannot be undone.");
 
     // The label paints; the tinted one does not paint the same thing as the untinted one.
     let a = format!("{:?}", painted(&tinted, &theme));
@@ -170,7 +170,7 @@ fn a_token_reaches_a_widgets_own_colour_builder() {
 /// `PropValue::Map` is what makes the claim true.
 #[test]
 fn a_struct_shaped_appearance_property_reaches_the_widget() {
-    let node = ViewNode::new(WidgetKind::Surface)
+    let node = ViewNode::new(WidgetId::Surface)
         .prop(
             "border",
             PropValue::Map(PropMap::from([
@@ -191,7 +191,7 @@ fn a_struct_shaped_appearance_property_reaches_the_widget() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let border = w
         .base()
         .style
@@ -234,7 +234,7 @@ fn a_described_node_stretches_to_its_parent_like_css() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        );
+        ).expect("valid described test widget");
         let mut parent = Flex::column().width(heca_grid_ui::Length::Px(600.0));
         parent.base_mut().children.push(realized);
         heca_grid_ui::LayoutEngine::new()

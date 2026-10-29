@@ -73,7 +73,7 @@ impl IconButton {
         // them genuinely will not fit is a [`ButtonGroup`](super::ButtonGroup)'s job, not a silent
         // squashing.
         base.style.layout.flex_shrink = Some(0.0);
-        base.children.push(Box::new(icon));
+        base.children.push(crate::WidgetModel::new(icon));
         Self {
             base,
             name,

@@ -1,7 +1,7 @@
 //! Grid tracks, areas and placement, and label text attributes.
 
 use heca_grid_ui::Track;
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use crate::widgets::parse_track;
 use super::*;
@@ -43,7 +43,7 @@ fn grid_node_realizes_tracks_areas_and_per_child_placement() {
     let tracks = |t: [&str; 3]| {
         PropValue::List(t.iter().map(|s| PropValue::Text((*s).into())).collect())
     };
-    let node = ViewNode::new(WidgetKind::Grid)
+    let node = ViewNode::new(WidgetId::Grid)
         .prop("columns", tracks(["auto", "1fr", "auto"]))
         .prop(
             "rows",
@@ -58,28 +58,28 @@ fn grid_node_realizes_tracks_areas_and_per_child_placement() {
         )
         // Placed by area name.
         .child(
-            ViewNode::new(WidgetKind::Icon)
+            ViewNode::new(WidgetId::Icon)
                 .prop("icon", PropValue::Glyph("terminal".into()))
                 .prop("area", PropValue::Text("icon".into())),
         )
         // Placed by explicit cell + span, in the older `col` / `col_span` spelling — still read, so a
         // tree already sent keeps working.
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("zsh")
                 .prop("col", PropValue::Int(2))
                 .prop("row", PropValue::Int(1))
                 .prop("col_span", PropValue::Int(2)),
         )
         // Neither → auto-placed.
-        .child(ViewNode::new(WidgetKind::Label).text("~/proj"));
+        .child(ViewNode::new(WidgetId::Label).text("~/proj"));
 
     let grid = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     // **A described child carries its own placement**, exactly as a native one does: the area
     // by name, the explicit cell as numbers. The name is resolved during layout, against
     // whichever template ends up holding it — so it is still a name here.
@@ -139,11 +139,11 @@ fn grid_alignment_is_authorable_on_both_axes() {
     use heca_grid_ui::Align;
     use heca_view::ViewAlign;
 
-    let node = ViewNode::new(WidgetKind::Grid)
+    let node = ViewNode::new(WidgetId::Grid)
         .prop("align", PropValue::Align(ViewAlign::Center))
         .prop("justify_items", PropValue::Align(ViewAlign::Center))
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("pinned")
                 .prop("align_self", PropValue::Align(ViewAlign::End))
                 .prop("justify_self", PropValue::Align(ViewAlign::End)),
@@ -154,7 +154,7 @@ fn grid_alignment_is_authorable_on_both_axes() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let style = grid.base().style.layout;
     assert_eq!(
         style.align,
@@ -174,13 +174,13 @@ fn grid_alignment_is_authorable_on_both_axes() {
 /// An unknown area name is not an error — the child simply auto-places (realize stays total).
 #[test]
 fn grid_child_in_an_unknown_area_auto_places() {
-    let node = ViewNode::new(WidgetKind::Grid)
+    let node = ViewNode::new(WidgetId::Grid)
         .prop(
             "areas",
             PropValue::List(vec![PropValue::Text("a b".into())]),
         )
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("x")
                 .prop("area", PropValue::Text("nope".into())),
         );
@@ -189,7 +189,7 @@ fn grid_child_in_an_unknown_area_auto_places() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     assert_eq!(grid.base().children[0].base().style.layout.grid_cell, None);
 }
 
@@ -197,7 +197,7 @@ fn grid_child_in_an_unknown_area_auto_places() {
 /// strikethrough (decorations the widget draws). Absent props keep the widget's default.
 #[test]
 fn label_text_attributes_are_authorable() {
-    let node = ViewNode::new(WidgetKind::Label)
+    let node = ViewNode::new(WidgetId::Label)
         .text("DONE")
         .prop("bold", PropValue::Bool(true))
         .prop("italic", PropValue::Bool(true))
@@ -208,8 +208,8 @@ fn label_text_attributes_are_authorable() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
-    // Realize hands back a `Box<dyn Component>`, so read the state through the scene: paint it
+    ).expect("valid described test widget");
+    // Realize hands back a `heca_grid_ui::WidgetModel`, so read the state through the scene: paint it
     // and check the run carries the font attributes and the strike is drawn as a rect.
     use heca_core::layout::Size;
     use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, TextStyle, Theme};
@@ -243,21 +243,21 @@ fn label_text_attributes_are_authorable() {
 fn a_described_child_is_placed_as_a_native_one_is() {
     use heca_grid_ui::builders::PlaceExt;
     let text = |s: &str| PropValue::Text(s.into());
-    let node = ViewNode::new(WidgetKind::Grid)
+    let node = ViewNode::new(WidgetId::Grid)
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("header")
                 .prop("column", text("1 / -1"))
                 .prop("row", text("1")),
         )
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("wide")
                 .prop("column_span", text("span 2"))
                 .prop("row_span", PropValue::Int(3)),
         )
         .child(
-            ViewNode::new(WidgetKind::Label)
+            ViewNode::new(WidgetId::Label)
                 .text("named")
                 .prop("area", text("body")),
         );
@@ -266,7 +266,7 @@ fn a_described_child_is_placed_as_a_native_one_is() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    );
+    ).expect("valid described test widget");
     let placed = |i: usize| {
         let c = &grid.base().children[i];
         (c.base().style.layout.grid_cell, c.base().grid_area.clone())

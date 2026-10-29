@@ -36,8 +36,11 @@
 mod action;
 mod extension;
 mod layer;
+pub(crate) mod widgets;
+pub use widgets::register_widget;
 
 pub(crate) use action::register_queued_actions;
 pub use extension::{Extension, extension};
+pub(crate) use extension::qualified_name;
 pub(crate) use layer::{AddedLayers, rebuild as rebuild_added_layer, register_queued_layers};
 pub use layer::{LayerBuilder, LayerCx};

@@ -7,10 +7,10 @@ use super::*;
 #[test]
 fn the_wheel_says_which_cell_it_turned_over() {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref()); // the terminal counts its cells from where it was painted
     let at = heca_grid_ui::Point::new(45.0, 61.0);
     let ev = Event::wheel(at, 0.0, 3.0);
@@ -38,7 +38,7 @@ fn the_wheel_says_which_cell_it_turned_over() {
 /// A terminal nobody has bound lets the wheel carry on outward, rather than swallowing it.
 #[test]
 fn an_unbound_terminal_leaves_the_wheel_alone() {
-    let mut root = laid_out_in(Box::new(Terminal::new()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(Terminal::unbound()), 300.0, 200.0);
     let ev = Event::wheel(heca_grid_ui::Point::new(5.0, 5.0), 0.0, 1.0);
     assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &ev), Handled::No);
 }
@@ -47,11 +47,11 @@ fn an_unbound_terminal_leaves_the_wheel_alone() {
 fn pointer_cells_follow_the_rendered_terminal_after_subtree_shifts() {
     for (top, left) in [(0.0, 0.0), (8.0, 6.0)] {
         let (seams, said) = recording();
-        let t = Terminal::new();
+        let t = Terminal::unbound();
         t.bind(seams);
         t.set_content_padding(top, 0.0, left, 0.0);
         t.show(&scrolled(0));
-        let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+        let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
 
         for (dx, dy) in [(50.0, 60.0), (-20.0, -30.0)] {
             heca_grid_ui::component::shift_subtree(root.as_mut(), dx, dy);
@@ -84,10 +84,10 @@ fn pointer_cells_follow_the_rendered_terminal_after_subtree_shifts() {
 #[test]
 fn buttons_and_moves_on_the_terminal_say_which_cell_and_leave_the_event_alone() {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.bind(seams);
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     let at = heca_grid_ui::Point::new(45.0, 61.0);
     for ev in [
@@ -125,11 +125,11 @@ fn buttons_and_moves_on_the_terminal_say_which_cell_and_leave_the_event_alone() 
 #[test]
 fn a_placed_terminal_hears_the_pointer_move_only_while_it_holds_the_keyboard() {
     let (seams, said) = recording();
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.declare("demo.pad".into());
     t.bind(seams);
     t.show(&scrolled(0));
-    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     let at = heca_grid_ui::Point::new(45.0, 61.0);
 
@@ -153,9 +153,9 @@ fn a_placed_terminal_hears_the_pointer_move_only_while_it_holds_the_keyboard() {
 /// from the box it was drawn in — and says nothing when it was not drawn.
 #[test]
 fn the_terminal_says_which_cell_is_where() {
-    let t = Terminal::new();
+    let t = Terminal::unbound();
     t.show(&scrolled(0));
-    let root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
     let on_screen = Rectangle::new(heca_grid_ui::Point::new(0.0, 0.0), Size::new(300.0, 200.0));
     t.place(Some(on_screen));

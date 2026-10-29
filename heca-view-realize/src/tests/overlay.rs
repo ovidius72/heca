@@ -1,6 +1,6 @@
 //! An overlay names how it arrives and leaves, and what it asks of what is behind it.
 
-use heca_view::WidgetKind;
+use heca_view::WidgetId;
 
 use super::*;
 
@@ -16,11 +16,11 @@ fn a_described_overlay_names_how_it_arrives_and_leaves() {
     let mut forms = FormBindings::default();
     let theme = Theme::default();
 
-    let node = ViewNode::new(WidgetKind::Overlay)
+    let node = ViewNode::new(WidgetId::Overlay)
         .prop("animation", PropValue::Text("zoom_fade".into()))
         .prop("default_open", PropValue::Bool(true))
-        .child(ViewNode::new(WidgetKind::Label).text("MAP"));
-    let mut surface = realize(&node, &theme, &emit, &mut forms);
+        .child(ViewNode::new(WidgetId::Label).text("MAP"));
+    let mut surface = realize(&node, &theme, &emit, &mut forms).expect("valid described test widget");
 
     assert!(
         surface.presence().is_some(),
@@ -42,10 +42,10 @@ fn a_described_overlay_names_how_it_arrives_and_leaves() {
     );
 
     // Untrusted input stays total: an unknown name leaves the surface with its default.
-    let unknown = ViewNode::new(WidgetKind::Overlay)
+    let unknown = ViewNode::new(WidgetId::Overlay)
         .prop("animation", PropValue::Text("supernova".into()))
-        .child(ViewNode::new(WidgetKind::Label).text("MAP"));
-    let mut cut = realize(&unknown, &theme, &emit, &mut forms);
+        .child(ViewNode::new(WidgetId::Label).text("MAP"));
+    let mut cut = realize(&unknown, &theme, &emit, &mut forms).expect("valid described test widget");
     cut.show();
     cut.close();
     assert!(
@@ -68,11 +68,11 @@ fn a_described_overlay_can_ask_for_the_frost_behind_it() {
     let theme = Theme::default();
 
     let mut backdrops = |frosted: bool| {
-        let node = ViewNode::new(WidgetKind::Overlay)
+        let node = ViewNode::new(WidgetId::Overlay)
             .prop("frosted", PropValue::Bool(frosted))
             .prop("default_open", PropValue::Bool(true))
-            .child(ViewNode::new(WidgetKind::Label).text("MAP"));
-        let mut w = realize(&node, &theme, &emit, &mut forms);
+            .child(ViewNode::new(WidgetId::Label).text("MAP"));
+        let mut w = realize(&node, &theme, &emit, &mut forms).expect("valid described test widget");
         heca_grid_ui::LayoutEngine::new()
             .compute(w.as_mut(), heca_core::layout::Size::new(800.0, 600.0));
         let mut scene = heca_grid_ui::Scene::new();

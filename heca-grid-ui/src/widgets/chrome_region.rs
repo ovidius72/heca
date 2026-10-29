@@ -126,7 +126,7 @@ impl ChromeRegion {
 
     /// Host a Dock (typically a [`DockFrame`](super::DockFrame)).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn dock(self, c: impl Component + 'static) -> Self {
+    pub fn dock(self, c: impl crate::builders::IntoComponent) -> Self {
         self.child(c)
     }
 

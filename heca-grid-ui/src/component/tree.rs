@@ -110,9 +110,9 @@ pub fn area<'a>(root: &'a dyn Component, name: &str) -> Option<&'a dyn Component
 /// swap its contents outright.
 ///
 /// It hands back the **slot** rather than the component, because replacing a part means replacing
-/// the box: `*slot = Box::new(new_thing)`. Searching from a [`Base`] rather than a `Component` is
+/// the model: `*slot = crate::WidgetModel::new(new_thing)`. Searching from a [`Base`] rather than a `Component` is
 /// what lets a widget ask about its own parts while it is still being built.
-pub fn area_slot<'a>(base: &'a mut Base, name: &str) -> Option<&'a mut Box<dyn Component>> {
+pub fn area_slot<'a>(base: &'a mut Base, name: &str) -> Option<&'a mut crate::WidgetModel> {
     for child in base.children.iter_mut() {
         if child.base().grid_area.as_deref() == Some(name) {
             return Some(child);

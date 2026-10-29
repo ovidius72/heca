@@ -64,7 +64,7 @@ fn a_surface_that_names_nothing_is_still_a_perfectly_good_surface() {
 /// halves were reachable one at a time and never together.
 #[test]
 fn a_described_layer_can_be_named_so_an_action_can_reach_it() {
-    use heca_view::{ViewNode, WidgetKind};
+    use heca_view::{ViewNode, WidgetId};
     let mut reg = LayerRegistry::default();
     let mut window = crate::chrome::new_window_root();
 
@@ -74,7 +74,7 @@ fn a_described_layer_can_be_named_so_an_action_can_reach_it() {
         Some("heca.confirm".to_string()),
         None,
         LayerKind::OnDemand,
-        ViewNode::new(WidgetKind::Label),
+        ViewNode::new(WidgetId::Label),
         declaring(empty_root(), false, true),
         &mut window,
     );
@@ -101,7 +101,7 @@ fn a_described_layer_can_be_named_so_an_action_can_reach_it() {
 /// native one — the arm decides where the tree came from, never how the stack treats it.
 #[test]
 fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
-    use heca_view::{ViewNode, WidgetKind};
+    use heca_view::{ViewNode, WidgetId};
     let mut reg = LayerRegistry::default();
     let mut window = crate::chrome::new_window_root();
     let native = reg.add(
@@ -110,7 +110,7 @@ fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
         declaring(empty_root(), false, false),
         &mut window,
     );
-    let node = ViewNode::new(WidgetKind::Label);
+    let node = ViewNode::new(WidgetId::Label);
     let slot = reg.reserve_id();
     let described = reg.add_view(
         slot,
@@ -145,7 +145,7 @@ fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
         crate::chrome::surface_node(&window, described).is_some(),
         "and its realized tree is a node in the window root, where the one walk finds it",
     );
-    assert_eq!(layer.node.as_ref().map(|n| n.kind), Some(WidgetKind::Label),);
+    assert_eq!(layer.node.as_ref().map(|n| n.kind.clone()), Some(WidgetId::Label),);
 
     // And a native layer has no description to offer — the arms are not interchangeable.
     let native_layer = reg
@@ -342,7 +342,7 @@ fn a_key_dispatched_at_the_window_root_reaches_a_placed_surface() {
         None,
         LayerKind::OnDemand,
         declaring(
-            Box::new(
+            heca_grid_ui::WidgetModel::new(
                 Dialog::new("Close pane?")
                     .action(Button::new("Cancel"))
                     .action(Button::new("OK"))
