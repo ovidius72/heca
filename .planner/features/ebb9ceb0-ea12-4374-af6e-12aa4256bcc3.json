@@ -4,15 +4,15 @@
   "shortId": "",
   "priority": 0,
   "name": "🧩 Pluggable Chrome Architecture",
-  "description": "Approved coordination, 2026-10-25: P067 is the shared UI authoring foundation. T517 owns generic parts/templates; T398 follows it and owns the open widget registry and plain native/described public APIs, including standalone Terminal::new(\"shell\"). P094 consumes that foundation for pane integration; it does not build a second registry or constructor layer. Native Provider/startup regions are public and centrally documented in docs/widgets.md; actual loaded-WASM startup parity remains P022/T075. Completed model/SDK/realizer history stays done, with current source and test evidence separated from unperformed native/plugin runtime acceptance. Preserve T360 review and F012 integration ownership.\n\nArchitettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.\n\nAuthoring/documentation clarification — Antonio, 2026-10-27: document extension identity, named resource lookup and registrations explicitly in docs/extending-heca.md, with widget-specific details in docs/widgets.md. An Extension declares an owner namespace; it is not a widget memoization mechanism. Current Terminal named lookup creates a declaration on first use and shares the session on later requests; action/layer registration has different semantics. P067/T398 carries the concrete clarification and migration review. The documentation change is WIP in feat/t398-widget-api, not yet merged; this note does not approve a new anonymous-identity/lifecycle design or claim it implemented.\n\nT398 constructor review: see phase accepted decision60dbc375-20fb-4630-b51c-fcccd1a6d387. Antonio selected named get-or-create Terminal::new(\"shell\"); its native implementation/docs are WIP in feat/t398-widget-api, aligned to main1c74bdf3. Registry design reviewed and nonvisual work authorized on 2026-10-27. Uncommitted T398 WIP now has open WidgetId lookup, shared factory/metadata definitions, legacy wire-name compatibility and recoverable invalid-data diagnostics (defaults/valid content retained; unknown IDs and unsupported versions remain blocking). Native/described Pane, FocusScope, ChromeRegion and live ScrollBar adapters are tested. Plain dock/layer factories now accept concrete components. Full authoring coverage, public erased returns, remaining lifecycle/state adapters and common Dialog sizing remain unfinished; no completion or real-WASM acceptance is implied.",
-  "descriptionUpdatedAt": "2026-10-27T18:59:22.437Z",
+  "description": "Approved coordination, 2026-10-25: P067 is the shared UI authoring foundation. T517 owns generic parts/templates; T398 follows it and owns the open widget registry and plain native/described public APIs, including standalone Terminal::new(\"shell\"). P094 consumes that foundation for pane integration; it does not build a second registry or constructor layer. Native Provider/startup regions are public and centrally documented in docs/widgets.md; actual loaded-WASM startup parity remains P022/T075. Completed model/SDK/realizer history stays done. T398 native visual acceptance is now recorded separately from actual loaded-WASM acceptance, which remains P022/T075. Preserve T360 review and F012 integration ownership.\n\nArchitettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.\n\nAuthoring/documentation clarification — Antonio, 2026-10-27: document extension identity, named resource lookup and registrations explicitly in docs/extending-heca.md, with widget-specific details in docs/widgets.md. An Extension declares an owner namespace; it is not a widget memoization mechanism. Current Terminal named lookup creates a declaration on first use and shares the session on later requests; action/layer registration has different semantics. P067/T398 carries the concrete clarification and migration review. The documentation change is WIP in feat/t398-widget-api, not yet merged; this note does not approve a new anonymous-identity/lifecycle design or claim it implemented.\n\nP067/T398 closeout,2026-10-29: DONE16/16. Named Terminal::new(name), open WidgetId/one registry+metadata source, opaque public model/animation storage, plain constructors/children/factories, complete native/described capability checks and common Dialog panel sizing are implemented. Provider startup audit and centralized docs are complete. Antonio confirmed “OK. tutti i punti passano” for the requested base-app visual checks. Gates:2235 tests/80 suites passed (106 ignored), scoped Clippy -D warnings, strict private rustdoc, app/example/showcase builds, representative sabotage guards. T517/T398 shared foundation is ready for P094 consumers; T253 is canceled with the Table proposal retained as IDEA I011, T305 is canceled in favor of composition, and P067 is now DONE. Actual loaded-WASM remains T075, flashing delegated. Source remains uncommitted in feat/t398-widget-api; no PR/merge claimed.",
+  "descriptionUpdatedAt": "2026-10-29T08:57:40.489Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "",
-  "workRemaining": "",
+  "workDone": "T398 approved opaque owned Model, direct native/described placement, private allocation, plain factories and migrated examples are implemented and scoped gates pass; uncommitted worktree only.",
+  "workRemaining": "T398 foundation still lacks bootstrap/resource adapters, full coverage, common Dialog sizing, Provider audit and native visual acceptance. No loaded-WASM/downstream pane completion claim.",
   "acceptedDecisions": [],
   "phaseIds": [
     "09bcb3cf-f8ea-454a-913e-ea377c53d37e",
@@ -53,11 +53,15 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-10-27T19:02:49.999Z",
+  "updatedAt": "2026-10-29T08:57:40.489Z",
   "sessionInfo": [
     {
+      "sessionId": "mcp-process:768e3b80-32e0-48ab-9733-01238db93a65",
+      "createdAt": "2026-10-29T08:37:45.662Z"
+    },
+    {
       "sessionId": "mcp-process:36d8322d-4c27-4f10-b762-ca3153fc2231",
-      "createdAt": "2026-10-27T15:21:55.207Z"
+      "createdAt": "2026-10-27T19:28:02.641Z"
     },
     {
       "sessionId": "mcp-process:5cf7d98d-410b-49e3-8ed3-2751f0e6868f",

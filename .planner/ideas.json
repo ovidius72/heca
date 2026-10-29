@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 11,
+  "nextIdeaNumber": 12,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -40,6 +40,16 @@
       "promotion": null,
       "createdAt": "2026-10-24T07:24:45.631Z",
       "updatedAt": "2026-10-24T07:24:45.631Z"
+    },
+    {
+      "id": "be604081-473a-4e34-8049-1409bb4b819c",
+      "number": 11,
+      "shortId": "CYBSL",
+      "title": "Table widget on demand for a concrete tabular UI consumer",
+      "description": "IDEA ONLY — preserved from P067(F003)/T253 at Antonio's explicit request on2026-10-29. The original task is closed as canceled; this is not scheduled work, an implementation approval or a prerequisite for P067/P094.\n\nConsider a first-class Table only when an actual application/plugin consumer needs tabular behavior beyond existing composition. Original candidate capabilities: shared columns, a header, row selection and sorting. No concrete consumer was found in the reviewed Heca main/T398 sources. Grid/Row/Label already compose ordinary tables; CardGrid provides selectable cells and navigation, not a complete Table abstraction.\n\nBefore promotion, identify the consumer and the exact capability/reuse gap. Agree the public typed constructor/fluent composition and data/event contract; reuse Component, existing layouts/selection and the open host WidgetId/WidgetDefinition registry, never a new closed enum/dispatcher. Include native/described parity, showcase and central docs/widgets.md when a concrete task is approved.\n\nHistory: T253 was explicitly on-demand and deferred by Antonio on2026-07-25 because its activation condition was not met. On2026-10-29 Antonio approved retaining it as an IDEA and closing the task. Preserve that original task history and link rather than treating the Table as implemented.",
+      "promotion": null,
+      "createdAt": "2026-10-29T08:54:12.083Z",
+      "updatedAt": "2026-10-29T08:58:14.635Z"
     }
   ]
 }
