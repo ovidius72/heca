@@ -384,9 +384,18 @@ fn chrome_root(
             .height(tab_bar_height)
             .align("center")
             .padding_x(Spacing::Sm);
+        // Left cluster: the sidebar toggle and, beside it, the current session name. The name is a
+        // fixed placeholder for now — the live session name arrives with the session model (T522),
+        // and the top/bottom bars are slated for a rebuild — so this is a deliberate slot, not the
+        // final bar.
+        let mut left_cluster = Flex::row().align("center").gap(Spacing::Sm);
         if let Some(t) = left_toggle {
-            band = band.child(t);
+            left_cluster = left_cluster.child(t);
         }
+        left_cluster = left_cluster
+            .child(Icon::new(Glyph::Cards).color(fg))
+            .child(Label::new("heca").color(fg));
+        band = band.child(left_cluster);
         band = band.child(Flex::row().grow(1.0));
         if let Some(t) = right_toggle {
             band = band.child(t);
