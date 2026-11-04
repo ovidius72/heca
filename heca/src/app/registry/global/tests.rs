@@ -253,6 +253,47 @@ fn default_pane_navigation_and_palette_bindings_are_separate() {
 }
 
 #[test]
+fn default_session_palette_binding_uses_the_registered_action_and_hash_key() {
+    use crate::keymap::LEADER_LAYER;
+    use winit::keyboard::{Key, KeyCode, ModifiersState, PhysicalKey};
+    let config = heca_config::theme::Config::default();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+    let registry = crate::app::registry::build_registry();
+    for (key, mode) in [("o", "pane"), ("Ctrl+o", "workspace"), ("#", "session")] {
+        let action = WmAction::CommandPalette { mode: Some(mode.into()), query: None };
+        assert!(registry.has_handler(&action));
+        assert_eq!(keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse(key)), Some(&action), "{key}");
+    }
+    let hash = crate::app::keyboard::build_event_combo(&Key::Character("#".into()),
+        &PhysicalKey::Code(KeyCode::Digit3), "#", ModifiersState::SHIFT);
+    let action = WmAction::CommandPalette { mode: Some("session".into()), query: None };
+    assert_eq!(keymap.resolve_builtin(LEADER_LAYER, &hash), Some(&action));
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let (intent, _) = crate::rpc::parse_rpc("command_palette mode=session").unwrap().into_intent(&catalog).unwrap();
+    assert_eq!(crate::input::resolve_action(&intent.action,
+        &crate::app::interaction::intent_args_as_strings(&intent)), Some(action));
+}
+
+#[test]
+fn the_default_session_palette_key_can_be_overridden_or_unbound() {
+    use crate::keymap::LEADER_LAYER;
+    let config = heca_config::loader::config_from_layers(r##"
+[[keys.bind]]
+keys = "prefix+#"
+action = "command_palette"
+args = { mode = "pane" }
+"##).unwrap();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+    assert_eq!(keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("#")),
+        Some(&WmAction::CommandPalette { mode: Some("pane".into()), query: None }));
+    assert_eq!(keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("Ctrl+o")),
+        Some(&WmAction::CommandPalette { mode: Some("workspace".into()), query: None }));
+    let config = heca_config::loader::config_from_layers("[keys.unbind]\n\"prefix+#\" = true\n").unwrap();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+    assert!(keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("#")).is_none());
+}
+
+#[test]
 fn default_selection_bindings_resolve() {
     let config = heca_config::theme::Config::default();
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());

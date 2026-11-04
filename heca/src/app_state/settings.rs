@@ -11,6 +11,10 @@ use heca_config::theme::{AppConfig, ModifierKey};
 pub struct WindowSettings {
     /// Agent labels and sound policy from the shared configuration loader.
     pub agents: heca_config::settings::AgentsConfig,
+    /// Pane-feedback flashing duration in milliseconds; zero has no timeout.
+    pub notification_flash: u64,
+    pub notification_sound: bool,
+    pub session_text: heca_config::settings::SessionText,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether a dragged pane scrolls the view when it nears the content edge.
@@ -23,12 +27,15 @@ pub struct WindowSettings {
     pub command_palette_size: PaletteSize,
     /// How a search query's case is treated.
     pub search_case: SearchCase,
+    pub folder_search_case: SearchCase,
     /// Whether the search memory is read from and written to disk at all. Turned off, the store is
     /// neither read nor written — a shared or recorded machine is a real reason, and a user who
     /// turns it off expects the existing file to stop being consulted too.
     pub search_history: bool,
     /// Append the program name (small, dimmed) next to a renamed pane's custom name.
     pub pane_renamed_add_process_name: bool,
+    /// Display-name stabilization delay in milliseconds; zero is immediate.
+    pub pane_name_delay: u64,
     /// Show each pane's folder on its card in the exposé (`[appearance.expose] show_cwd`).
     pub expose_show_cwd: bool,
     /// Whether the wheel scrolls a terminal's history (unless the program in it took the mouse).
@@ -53,14 +60,19 @@ impl WindowSettings {
         let settings = &app_config.config.settings;
         Self {
             agents: settings.agents.clone(),
+            notification_flash: settings.notification_flash,
+            notification_sound: settings.notification_sound,
+            session_text: settings.session_text.clone(),
             mouse_enabled: settings.mouse,
             auto_scroll_edge: settings.auto_scroll_edge,
             edge_scroll_distance: settings.edge_scroll_distance,
             edge_scroll_speed: settings.edge_scroll_speed,
             command_palette_size: settings.command_palette_size,
             search_case: settings.search_case,
+            folder_search_case: settings.folder_search_case,
             search_history: settings.search_history,
             pane_renamed_add_process_name: settings.pane_renamed_add_process_name,
+            pane_name_delay: settings.pane_name_delay,
             expose_show_cwd: expose_show_cwd(&app_config.config),
             terminal_mouse_enabled: settings.terminal_mouse,
             terminal_wheel_scroll_lines: settings.terminal_wheel_scroll_lines,

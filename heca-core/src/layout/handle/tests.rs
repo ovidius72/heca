@@ -178,6 +178,58 @@ fn a_window_reads_its_own_focus_through_the_layout() {
     assert_eq!(focus(&b), Some(1));
 }
 
+#[test]
+fn a_new_window_on_existing_content_keeps_its_pane_in_place_when_clicked() {
+    let mut source = Windowed::with_shape(&[&[&[1]]]);
+    let mut view = WindowView::new(source.l().viewport(), 1.0);
+    let before = source.session.through(&view).active_workspace().unwrap()
+        .scroll().panes_with_positions();
+    source.session.through_mut(&mut view).active_workspace_mut().unwrap()
+        .activate_pane(PaneId(1));
+    let after = source.session.through(&view).active_workspace().unwrap()
+        .scroll().panes_with_positions();
+    assert_eq!(before, after, "first paint and refocus must use the same configured gaps");
+}
+
+#[test]
+fn attached_views_fit_every_workspace_using_its_configured_layout_policy() {
+    use crate::layout::types::CenterFocusedColumn;
+    let source = Windowed::with_shape(&[&[&[1]], &[&[2]]]);
+    let size = Size::new(1000.0, 800.0);
+    for gaps in [0.0, 8.0, 24.0] {
+        for center in [CenterFocusedColumn::Never, CenterFocusedColumn::OnOverflow, CenterFocusedColumn::Always] {
+            for single in [false, true] {
+                let options = LayoutOptions { gaps, center_focused_column: center,
+                    always_center_single_column: single, ..Default::default() };
+                let mut session = source.session.content().rebuild(SessionId(2), options);
+                let mut view = WindowView::new(size, 1.0);
+                for (workspace, pane) in [(0, PaneId(1)), (1, PaneId(2))] {
+                    let before = session.through(&view).workspace(workspace).unwrap()
+                        .scroll().panes_with_positions();
+                    let rect = before[0].1;
+                    assert!(rect.loc.x >= gaps, "initial border needs its configured margin");
+                    assert!(rect.loc.x + rect.size.w <= size.w - gaps);
+                    session.through_mut(&mut view).workspace_mut(workspace).unwrap().activate_pane(pane);
+                    let after = session.through(&view).workspace(workspace).unwrap()
+                        .scroll().panes_with_positions();
+                    assert_eq!(before, after, "gaps={gaps}, center={center:?}, single={single}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn attaching_a_new_view_does_not_change_an_existing_windows_scroll() {
+    let mut source = Windowed::with_shape(&[&[&[1], &[2], &[3]]]);
+    source.scrolled(0, -100.0, 1);
+    let before = source.l().active_workspace().unwrap().scroll().panes_with_positions();
+    let mut other = WindowView::new(source.l().viewport(), 1.0);
+    source.session.through_mut(&mut other).active_workspace_mut().unwrap().activate_pane(PaneId(1));
+    source.ws().scroll_mut().advance_animations();
+    assert_eq!(source.l().active_workspace().unwrap().scroll().panes_with_positions(), before);
+}
+
 /// **Resizing the window carries its floating panes along** — they keep their share of the window.
 /// The layout has to read each workspace's old area before it sets the new one, so a resize that
 /// changed the area first would leave the floats at their old pixel size.

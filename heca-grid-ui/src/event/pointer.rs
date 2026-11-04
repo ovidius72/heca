@@ -163,7 +163,7 @@ pub struct HintEvent {
 /// worked out what it means.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RawPointer {
-    /// What the device did.
+    /// The device input, or a hover refresh after the tree changes.
     pub kind: RawPointerKind,
     /// Where the pointer is, in logical pixels.
     pub pos: Point,
@@ -181,10 +181,13 @@ pub struct RawPointer {
     pub delta_pixels: Option<(f32, f32)>,
 }
 
-/// What the pointing device did — the four things a host can actually observe.
+/// Pointer input from the device, or an explicit refresh beneath a stationary pointer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RawPointerKind {
     Moved,
+    /// Recheck what is under a stationary pointer after the tree changes.
+    /// Updates hover without reporting motion or driving a captured gesture.
+    Recheck,
     Pressed,
     Released,
     Wheel,

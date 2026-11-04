@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 mod build;
 mod cursor;
+mod names;
 
 /// One workspace, one column, one (active) pane — the smallest tree that still
 /// exercises every level of the projection.

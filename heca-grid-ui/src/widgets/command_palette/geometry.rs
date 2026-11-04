@@ -86,7 +86,7 @@ impl CommandPalette {
     /// the vertical sprawl this fixes. The running sum lives in [`row_rects`](Self::row_rects) and
     /// all three callers read it there, so it is still written once.
     pub(super) fn row_lines(&self, cmd: &Command) -> usize {
-        let text = if self.two_line_rows() { 2 } else { 1 };
+        let text = 1 + usize::from(self.two_line_rows()) + usize::from(cmd.detail.is_some());
         text.max(cmd.chords.len()).max(1)
     }
 

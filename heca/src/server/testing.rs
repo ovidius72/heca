@@ -21,6 +21,7 @@ fn no_process(
 /// The default terminal settings.
 fn terminal_settings() -> TerminalSettings {
     TerminalSettings {
+        agent_feedback: Default::default(),
         agents: None,
         theme: Default::default(),
         shell_integration: false,

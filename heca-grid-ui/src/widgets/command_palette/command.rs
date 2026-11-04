@@ -13,7 +13,11 @@ pub struct Command {
     /// and the blocks dissolve.
     pub(super) group: u16,
     pub(super) label: String,
+    pub(super) completion: Option<String>,
+    pub(super) fallback: bool,
     pub(super) description: Option<String>,
+    pub(super) description_path: bool,
+    pub(super) detail: Option<String>,
     pub(super) icon: Option<Glyph>,
     /// One entry per **binding**, each a chord of caps (`[λ] [⇧] [e]`). Several bindings stack, one
     /// per line — an action bound twice really is bound twice, and joining them into `"λ h / λ ←"`
@@ -40,7 +44,11 @@ impl Command {
             id: None,
             group: 0,
             label: label.into(),
+            completion: None,
+            fallback: false,
             description: None,
+            description_path: false,
+            detail: None,
             icon: None,
             chords: Vec::new(),
             current: false,
@@ -48,6 +56,22 @@ impl Command {
             mode: None,
             on_run: Box::new(on_run),
         }
+    }
+
+    /// Text inserted into the query by the configurable `complete` binding, without running.
+    /// Matching uses this value, so a decorated label does not hide a valid suggestion.
+    #[heca_grid_ui_macros::prop]
+    pub fn completion(mut self, text: impl Into<String>) -> Self {
+        self.completion = Some(text.into());
+        self
+    }
+
+    /// Offer this command after matching suggestions, such as creating a new value.
+    /// Default false; the search score still orders commands within each category.
+    #[heca_grid_ui_macros::prop]
+    pub fn fallback(mut self, yes: bool) -> Self {
+        self.fallback = yes;
+        self
     }
 
     /// Mark this row as **the one the user is already on** — the focused pane, the active
@@ -98,6 +122,22 @@ impl Command {
     #[heca_grid_ui_macros::prop]
     pub fn description(mut self, text: impl Into<String>) -> Self {
         self.description = Some(text.into());
+        self.description_path = false;
+        self
+    }
+
+    /// A single-line path below the title. Preserve its tail and expose the full value in a tooltip.
+    #[heca_grid_ui_macros::prop]
+    pub fn path(mut self, path: impl Into<String>) -> Self {
+        self.description = Some(path.into());
+        self.description_path = true;
+        self
+    }
+
+    /// A separate single-line metadata row below the description or path.
+    #[heca_grid_ui_macros::prop]
+    pub fn detail(mut self, text: impl Into<String>) -> Self {
+        self.detail = Some(text.into());
         self
     }
 

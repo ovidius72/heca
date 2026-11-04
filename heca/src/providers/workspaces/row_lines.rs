@@ -263,7 +263,7 @@ mod tests {
                 &ProgramsConfig::default(),
                 "shell",
                 None,
-                Some(&runtime),
+                Some(&crate::chrome::PanePresentation::immediate(runtime.clone())),
             )
         });
         let line = git_line(&LineCx {

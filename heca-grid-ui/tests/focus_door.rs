@@ -28,6 +28,20 @@ fn enter(root: &mut dyn Component) {
     );
 }
 
+#[test]
+fn programmatic_unmount_returns_focus_to_the_underlying_dialog() {
+    let mut root = Flex::column().child(Dialog::new("Session unavailable")
+        .action(Button::secondary("Exit")).default_open(true));
+    heca_grid_ui::focus::settle_focus(&mut root);
+    root.base_mut().children.push(heca_grid_ui::WidgetModel::new(
+        CommandPalette::new().command(Command::new("Folder", || {})).default_open(true)));
+    heca_grid_ui::focus::settle_focus(&mut root);
+    assert!(holds_keyboard(root.base().children[1].as_ref()));
+    heca_grid_ui::unmount_child(&mut root, 1).unwrap();
+    assert!(holds_keyboard(root.base().children[0].as_ref()), "RPC removal must return the keyboard before the old surface is dropped");
+    assert!(heca_grid_ui::unmount_child(&mut root, 9).is_none());
+}
+
 /// Two buttons that count their own activations: `(row, a_count, b_count)`.
 fn two_buttons() -> (Flex, Rc<Cell<u32>>, Rc<Cell<u32>>) {
     let (a, b) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
@@ -115,6 +129,51 @@ fn a_modal_returns_the_keyboard_to_the_widget_that_held_it_when_it_opened() {
     open.set(false);
     enter(&mut ui);
     assert_eq!((b.get(), layer.get()), (1, 1), "closed: back to the button");
+}
+
+#[test]
+fn a_modal_with_a_field_following_its_open_signal_returns_focus_to_its_opener() {
+    let open = signal(false);
+    let mut field = Input::new();
+    field.base_mut().follow_focus(open);
+    let mut modal = Flex::column().child(field);
+    modal.base_mut().follow_focus_modal(open);
+    let mut ui = Flex::row().child(Button::primary("Opener")).child(modal);
+    LayoutEngine::new().compute(&mut ui, Size::new(600.0, 200.0));
+    ui.base().children[0].base().focus(false);
+    heca_grid_ui::settle_focus(&mut ui);
+    let opener = heca_grid_ui::keyboard_holder(&ui);
+    open.set(true);
+    heca_grid_ui::settle_focus(&mut ui);
+    assert_ne!(heca_grid_ui::keyboard_holder(&ui), opener);
+    open.set(false);
+    heca_grid_ui::settle_focus(&mut ui);
+    assert_eq!(heca_grid_ui::keyboard_holder(&ui), opener);
+}
+
+#[test]
+fn confirming_a_modal_returns_focus_before_the_host_can_unmount_it() {
+    let activated = Rc::new(Cell::new(0));
+    let count = activated.clone();
+    let palette = CommandPalette::new().command(Command::new("Select", || {}));
+    let open = palette.open_signal();
+    let mut ui = Flex::column()
+        .child(Button::primary("Opener").on_click(move || count.set(count.get() + 1)))
+        .child(palette);
+    LayoutEngine::new().compute(&mut ui, Size::new(900.0, 600.0));
+    ui.base().children[0].base().focus(false);
+    heca_grid_ui::settle_focus(&mut ui);
+    let opener = heca_grid_ui::keyboard_holder(&ui);
+    open.set(true);
+    let keymap = heca_grid_ui::Keymap::with_defaults();
+    assert_eq!(keymap.dispatch(GridKey::Enter, Modifiers::default(), |event| {
+        heca_grid_ui::dispatch(&mut ui, event)
+    }), Handled::Yes);
+    assert_eq!(activated.get(), 0, "the opening control does not receive the confirm");
+    ui.base_mut().children.pop();
+    assert_eq!(heca_grid_ui::keyboard_holder(&ui), opener);
+    enter(&mut ui);
+    assert_eq!(activated.get(), 1, "only the next press reaches the opener");
 }
 
 /// A modal that closes **after the user clicked elsewhere** does not snatch the keyboard back: the

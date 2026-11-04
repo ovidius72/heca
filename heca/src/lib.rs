@@ -73,6 +73,7 @@ pub(crate) fn pane_name(_id: PaneId) -> String {
 
 struct HecaApp {
     launch_mode: crate::app::cli::LaunchMode,
+    startup_error: Option<std::io::Error>,
     state: Option<Box<AppState>>,
     app_config: AppConfig,
     event_proxy: EventLoopProxy<AppEvent>,
@@ -91,6 +92,7 @@ impl HecaApp {
                 Ok(update) => state.receive_client(update),
                 Err(error) => {
                     state.status_note = Some(format!("Session connection lost: {error}"));
+                    crate::handlers::session_unavailable(state, true);
                     state.mark_full_redraw();
                     state.window.request_redraw();
                     Vec::new()
@@ -197,6 +199,7 @@ impl HecaApp {
 
         Self {
             launch_mode,
+            startup_error: None,
             state: None,
             app_config,
             event_proxy,
@@ -212,12 +215,13 @@ impl HecaApp {
     /// untouched (a bad config must never overwrite settings that work). The caller turns the
     /// result into a notification. The stderr lines stay for a terminal user watching
     /// the process.
-    fn reload_config(&mut self) -> Result<(), heca_config::loader::ConfigError> {
+    fn reload_config(&mut self, reason: crate::app_state::ReloadReason) -> Result<(), heca_config::loader::ConfigError> {
         let Some(state) = self.state.as_mut() else {
             return Ok(());
         };
         {
-            let new_config = match heca_config::loader::AppConfig::try_load() {
+            let loaded = state.client.session.folder.as_deref().map_or_else(AppConfig::try_load, AppConfig::try_load_for);
+            let new_config = match loaded {
                 Ok(cfg) => cfg,
                 Err(e) => {
                     eprintln!("[heca] reload failed: {e}");
@@ -225,6 +229,12 @@ impl HecaApp {
                     return Err(e);
                 }
             };
+            crate::project_trust::notify_if_untrusted_in(state.client.session.folder.as_deref());
+            // The destination server may have older settings even when this window's match.
+            state.client.reload();
+            if !reason.requires_apply(&self.app_config, &new_config) {
+                return Ok(());
+            }
             self.app_config = new_config;
             // A reload re-reads the **file**, so the key collisions it found are stale and are
             // re-answered from scratch. The action-id collisions are not: components do not
@@ -260,7 +270,6 @@ impl HecaApp {
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance.clone();
             state.settings = crate::app_state::WindowSettings::from_config(&self.app_config);
-            crate::project_trust::notify_if_untrusted();
             crate::chrome::panes::pane_items::report_pane_items(state);
             // The layout's own options, by the one mapping startup uses too.
             state
@@ -312,7 +321,6 @@ impl HecaApp {
                     .max_lines
                     .max(1),
             );
-            state.client.reload();
             // Layout options and chrome geometry changes must reflow the real viewport
             // path so cached column widths, pane sizes, and working areas stay
             // coherent after reload.
@@ -334,8 +342,8 @@ impl HecaApp {
         Ok(())
     }
 
-    async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
-        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone(), self.launch_mode).await
+    async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> std::io::Result<Box<AppState>> {
+        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone(), self.launch_mode.clone()).await
     }
 }
 
@@ -372,7 +380,14 @@ impl ApplicationHandler<AppEvent> for HecaApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
             crate::entry::widgets::freeze();
-            let mut state = pollster::block_on(self.init_state(event_loop));
+            let mut state = match pollster::block_on(self.init_state(event_loop)) {
+                Ok(state) => state,
+                Err(error) => {
+                    self.startup_error = Some(error);
+                    event_loop.exit();
+                    return;
+                }
+            };
             // Every mounted component's **declared** actions join the one catalog and registry here
             // — after the host has its providers, before any input can reach them. This is the host
             // half of the declaration: a component never mutates app state, so it cannot register
@@ -404,7 +419,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut self.registry,
                 &mut state.action_catalog,
             );
-            crate::project_trust::notify_if_untrusted();
+            crate::project_trust::notify_if_untrusted_in(state.client.session.folder.as_deref());
             // What the pane headers are asked to show, now that every action a button names exists:
             // a name nothing provides, and an added item the user's own list leaves out.
             crate::chrome::panes::pane_items::report_pane_items(&state);
@@ -445,16 +460,15 @@ impl ApplicationHandler<AppEvent> for HecaApp {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.receive_server();
         // Config reload requested via keybinding — do it before borrowing state.
-        let needs_reload = self
-            .state
-            .as_ref()
-            .map(|s| s.pending_reload)
-            .unwrap_or(false);
-        if needs_reload {
-            if let Some(state) = self.state.as_mut() {
-                state.pending_reload = false;
+        let reload = self.state.as_mut().and_then(|state| state.pending_reload.take());
+        if let Some(reason) = reload {
+            let result = self.reload_config(reason);
+            match reason {
+                crate::app_state::ReloadReason::Explicit => notify_reload_outcome(result),
+                crate::app_state::ReloadReason::Session => {
+                    if let Err(error) = result && let Some(state) = &mut self.state { state.status_note = Some(error.to_string()); }
+                }
             }
-            notify_reload_outcome(self.reload_config());
         }
 
         if let Some(ref mut state) = self.state {
@@ -462,12 +476,13 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         }
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         self.receive_server();
         let Some(state) = self.state.as_mut() else {
             return;
         };
         match event {
+            AppEvent::CloseWindow => event_loop.exit(),
             AppEvent::BackendWake => {
                 let backend_poll = poll_backends(state);
                 let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
@@ -527,12 +542,15 @@ pub fn run() {
         .expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     let event_proxy = event_loop.create_proxy();
-    // Start serving the local control socket: scripts (`heca rpc …`) and, later, attaching
-    // windows reach the server through it. A failure to open it never stops the window.
+    // Ordinary windows connect to the shared daemon; only standalone hosts it in-process.
     let mut app = HecaApp::new(event_proxy, crate::app::cli::launch_mode(&args));
     event_loop
         .run_app(&mut app)
         .expect("Failed to run event loop");
+    if let Some(error) = app.startup_error {
+        eprintln!("[heca] could not attach to the session server: {error}");
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]

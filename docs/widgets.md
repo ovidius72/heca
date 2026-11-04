@@ -193,7 +193,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `focus_barrier` | `bool` | Whether this widget is the **only** focus target in its subtree — focus traversal visits it but never descends into its children (default `false`). Set by controls that **compose** their content (`Button`, `Item`): a control is one click target, so it must be one Tab stop, whatever it holds. Without it a focusable child (a `Toggle` used as decoration) would take its own Tab stop while being click-dead, since the control consumes the press in its own `event`. Orthogonal to `style.hidden`, which drops a subtree from layout *and* focus. |
 | `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`: `advance` → `true`, click-focus → `false`). **Every widget gates its focus ring on `Base::shows_focus_ring()`** (= `focused && focus_visible` — CSS `:focus-visible` semantics), so a mouse click focuses a widget (Enter/Space work, the caret shows) **without** drawing the ring; only keyboard navigation rings. The ring is also removable app-wide via `[appearance] show_focus_border = false` (theme token `show_focus_border`). |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
-| `children` | `Vec<WidgetModel>` | Child components. |
+| `children` | `Vec<WidgetModel>` | Child components. `heca_grid_ui::unmount_child(root, index)` closes and removes a direct child, returning its modal focus before removal, including programmatic/RPC closes. Out-of-range indices return `None`. |
 | `font` | `f32` | **Resolved** font size in logical px, written by the layout pass (see [Font sizing](#font-sizing)). Widgets read **this** for text + measurement, not `style.font_size`. |
 
 ### `Component` trait
@@ -290,6 +290,7 @@ chain fell silent the day one row forgot to declare its key. N copies of a rule 
 | `PointerDown(PointerEvent)` | a button went down on this widget. **Consuming it captures the pointer** (below). |
 | `PointerUp(PointerEvent)` | the button came up, ending that gesture. |
 | `PointerMove(PointerEvent)` | the pointer moved over this widget — or anywhere, while it holds capture. |
+| `Event::pointer_rechecked(pos)` / raw `Recheck` | the tree changed under a stationary pointer. Refreshes hover enter/leave and tooltip state without sending `PointerMove` or driving a captured gesture. |
 | `PointerEnter` / `PointerLeave` | the pointer came over / left this widget. Sent to the whole ancestor chain, like CSS `:hover`. Never consumable — leaving is not something a neighbour can veto. |
 | `Click` / `DoubleClick` / `TripleClick` | press and release on the same widget. **Every click is a `Click`**; a run *adds* `DoubleClick` (then `TripleClick`) on top, so a control that only understands single clicks still fires on the second. |
 | `RightClick` / `MiddleClick` | the same, with that button. A right-click **never** also fires a `Click`. |
@@ -1607,9 +1608,13 @@ flash.trigger(Tone::Success);
 The same `.flash(handle)` works on a `Surface`, `Card`, `Row` or a custom plugin
 widget. A new handle is idle. Copying a handle shares the request, so several
 widgets can flash together. `trigger(tone)` starts a finite burst using the theme's
-pulse count. `repeat(tone)` keeps pulsing until `clear()`, for an operation awaiting
-acknowledgement. Another explicit trigger restarts it. `clear()` ends it on every
-target sharing that handle. For example, a plugin can call `flash.repeat(Tone::Warning)`
+pulse count. `pulse(tone)` emits exactly one pulse with the same themed colour and duration.
+`repeat(tone)` keeps pulsing until `clear()`, for an operation awaiting
+acknowledgement. `repeat_for(tone, duration)` caps the total repeating time. Repeating pulses rise
+and fall smoothly; their cadence comes from the same theme. `set_repeat_duration(Some(duration))`
+changes the cap without restarting the request; `None` removes the cap. This also lets a config
+reload update an existing request without replaying the event. `clear()` stops every
+target sharing that handle. Another explicit trigger restarts it. For example, a plugin can call `flash.repeat(Tone::Warning)`
 when it needs attention, then `flash.clear()` from its existing focus or action handler.
 
 The theme resolves `Tone::{Accent, Muted, Success, Warning, Danger}` at paint time.
@@ -1625,8 +1630,8 @@ In a **theme file**, the shared settings are:
 ```toml
 [flash]
 enabled = true
-duration_s = 0.65
-pause_s = 0.45
+duration_s = 2.0
+pause_s = 1.0
 pulses = 3
 frames_per_second = 30
 border_width_em = 0.12
@@ -1657,18 +1662,29 @@ Expose the action through Heca's existing action path when it should be callable
 from RPC. The handle needs no registry lookup. Audio stays with the host's
 configured sound service; triggering a visual flash never enables audio.
 
-The workspace dock uses this API only on pane rows for real program and agent state
-transitions. A background row repeats until its pane receives focus. A state change
-in the focused pane plays a finite burst. Hovering is not acknowledgement.
-Feedback belongs to the pane, so rebuilding rows or adding a column does not move
-the light to a new pane. One observer follows the pane's actual focus, shared by
-all its rows; old row focus signals cannot restart or clear it. Initial program/working reports initialize silently;
-an explicit attention or outcome report can still draw attention immediately.
-While an agent reports its work state, later process-name or process-status
-discovery does not count as a work-state change. Programs without agent reporting
-use their actual process-status transitions; discovering a name alone stays quiet.
-Initial rendering, duplicate reports, title/model/task edits and changes to
-presentation settings do not restart the row's flash.
+The workspace dock only paints the server session's feedback projection. Actual command
+and program completions produce success/error feedback, including shell commands and editors,
+without an executable allowlist or duration threshold. Enabled integrations' configured
+`feedback_events` also select semantic attention events. Each new eligible event gets a revision;
+metadata updates, retransmission, dock rebuild and theme changes do not create one.
+Interactive command completion uses shell-integration hooks; a directly launched process also
+reports its own exit. These are backend events, not inferred runtime-status transitions.
+
+A background pane repeats gentle pulses until acknowledgement or the configured
+`[settings] notification_flash` timeout in milliseconds; zero means no timeout.
+A pane with actual input focus in the active OS window receives no flash and automatically
+acknowledges the current revision. Timing expiry stops the flash but does not acknowledge feedback.
+A palette, modal or focused dock prevents acknowledgement; mere selection is not focus.
+The acknowledgement is shared by every client of that session and leaves the reported
+agent status unchanged. A late acknowledgement cannot erase a newer event. New clients
+receive current pending/seen revisions, not a replay of acknowledged events. Animation
+and FlashHandle remain client-local. A server-granted sound is played once per pending revision,
+not per animation cycle or window, using the configured status sound and
+`[settings] notification_sound` (enabled by default). The default `notification_flash` is 8000ms.
+For accepted values, examples, config precedence and reload behaviour, see
+[Pane Feedback Settings](../README.md#pane-feedback-settings). The timeout is the total flashing
+time, not the theme's per-pulse duration; `0` is endless, not disabled. Sound accepts only
+unquoted `true`/`false` and can be muted without stopping the visual feedback.
 
 ### `Attention`
 
@@ -5546,6 +5562,13 @@ reaches it — unless it declared a pick itself. heca's pane hands its keyboard 
 pane wears one letter and picking it types into the terminal (or editor, or plugin tree) inside; a
 terminal placed in a dock is handed nothing and keeps its own letter.
 
+`.focus_fallback(true)` declares the default only when the shown tree has no keyboard owner.
+It delegates through `keyboard_to` when present, ignores hidden/disabled content, and never
+steals focus from a control, dock or overlay. The default is `false`. Native `PresenceExt` and
+declarative `Style` expose the same property; `realize` applies the boolean to every widget kind.
+Heca's active pane declares this on its shell so newly attached content has real input focus,
+including for feedback suppression, without a simulated click or a terminal-specific fallback.
+
 ```rust
 // Native: a frame whose header holds no field, and whose body holds whatever types.
 Grid::new()
@@ -6377,12 +6400,19 @@ children. `SearchModel` owns matching, ranking and history. Choosing a row runs 
 closes the palette. Each mode has its own search scope; a leading sigil selects that mode and is
 removed before matching or recording a search.
 
+Opening or relaying out the palette beneath a stationary pointer preserves its initial or
+keyboard selection. Hover refresh is not movement; actual pointer movement still selects a row,
+and clicking still activates it. Hosts use the shared raw `Recheck` event after tree changes,
+not a fabricated device move. Widgets need no private first-move flags or distance thresholds.
+
 #### Palette API
 
 | Builder or method | Behaviour and default |
 |---|---|
 | `CommandPalette::new()` | Empty, closed palette; private search memory in scope `command`. |
 | `.command(Command)` | Append one row. A row with no explicit mode belongs to the default mode. |
+| `.source(|query| Vec<Command>)` | Refresh candidates when the query changes or history is recalled. Reuses the same query Input, fuzzy matcher, selection and callbacks; only row children are replaced. Native hosts can supply folder completion or other live data without implementing another picker. |
+| `.complete_selected()` | Replace the query with the selected row's optional completion text. Keeps the palette open and does not run the callback or record usage. Returns unhandled when no completion is available. Bound through `WidgetIntent::Complete` (`[keys.widgets] complete`, default Tab); ordinary palettes retain focus traversal. |
 | `.mode(sigil, scope)` | Declare a sigil and its search scope. The first declaration is the default. Without declarations the search model's scope is the only mode, and leading punctuation is ordinary query text. |
 | `.mode_with_commands(sigil, scope, commands)` | Declare the mode and append its rows together. Assigns the scope to every supplied command, replacing any previous row mode. No separate row annotation or sigil lookup is needed. |
 | `.query(text)` | Set the full query, including any sigil. Default empty. Replaces an earlier named prefill. |
@@ -6401,7 +6431,11 @@ removed before matching or recording a search.
 | Builder | Behaviour and default |
 |---|---|
 | `Command::new(label, callback)` | Required label and callback. |
+| `.completion(text)` | Optional query replacement for completion. When present, matching uses this text rather than the decorated label; highlight offsets are not applied to a different label. Default absent. |
+| `.fallback(bool)` | Default `false`. Offer a matching creation/alternate action after matching suggestions, without changing their scores. Applies to typed and empty queries. |
 | `.description(text)` | Optional muted second line; default absent. The selected description wraps; other descriptions truncate. Descriptions do not participate in matching. |
+| `.path(text)` | A single-line second row for a path; preserves its trailing portion when shortened and exposes the complete value in a tooltip. Does not expand when selected. |
+| `.detail(text)` | A separate single-line metadata row below the description or path, sized by the normal layout engine. |
 | `.icon(Glyph)` | Optional leading icon; default absent. The icon column stays aligned for rows without one. |
 | `.keys([KeyCap, …])` | Add one binding as a row of keycaps. Repeat for several bindings; default none. The active mode reserves one shared shortcut column. |
 | `.id(text)` | Optional stable identity for ranking by past choices. Without one the row still matches and sorts, with no usage boost. |

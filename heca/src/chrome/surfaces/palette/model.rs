@@ -36,6 +36,8 @@ pub(crate) struct PaletteEntry {
     pub(crate) label: String,
     /// The action's description — the muted second line.
     pub(crate) description: String,
+    pub(crate) description_path: bool,
+    pub(crate) detail: Option<String>,
     pub(crate) icon: Option<Glyph>,
     /// Every binding of the action, already display-formatted (`"λ ⇧ e"`), one per row of keycaps —
     /// empty when unbound. The list, not a joined line: an action bound twice shows two rows.

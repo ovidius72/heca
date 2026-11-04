@@ -6,7 +6,6 @@
 //! here should name a workspace, which is why nothing in it is called `Sidebar*`.
 
 mod column_group;
-mod feedback;
 mod dock_view;
 mod model;
 mod pane_row;

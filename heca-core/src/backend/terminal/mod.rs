@@ -61,6 +61,9 @@ pub struct TerminalBackend {
     /// Cached canonical runtime truth (program/status/cwd/exit_code/kind). Updated
     /// in [`update`](PaneBackend::update) (event-driven) and exposed via [`PaneBackend::runtime`].
     runtime: PaneRuntime,
+    command_launch: Option<crate::backend::ProcessLaunch>,
+    command_active: bool,
+    pending_alerts: Vec<crate::backend::BackendAlert>,
     /// One-shot exit code captured when the PTY child is reaped; drained by the
     /// per-wake monitor via [`PaneBackend::take_exit_code`] to emit `pane.exited`.
     pending_exit: Option<i32>,

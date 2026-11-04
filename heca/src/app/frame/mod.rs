@@ -73,6 +73,7 @@ pub(super) struct Frame {
 /// date, read the values the phases share, and reset the renderers' per-frame buffers. `None` when
 /// nothing asked for a frame.
 pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
+    if !state.client.projection_ready() { return None; }
     // Mount whatever a widget asked to open since the last frame: a declared context menu is a
     // layer, and this is the one moment the host has `&mut AppState` and has not yet drawn.
     crate::chrome::drain_pending_menus(state);

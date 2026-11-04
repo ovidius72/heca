@@ -194,7 +194,16 @@ impl AppConfig {
     ///
     /// Intended for initial startup where a user config is optional.
     pub fn load() -> Self {
-        Self::try_load().unwrap_or_else(|e| {
+        Self::with_default(Self::try_load())
+    }
+
+    /// Load one project's trusted overrides without changing the process working directory.
+    pub fn load_for(folder: &Path) -> Self {
+        Self::with_default(Self::try_load_for(folder))
+    }
+
+    fn with_default(result: Result<Self, ConfigError>) -> Self {
+        result.unwrap_or_else(|e| {
             eprintln!("[heca] config load: {e}, using defaults");
             let config = Config::default();
             let mut theme = theme::load(&config.settings.theme);
@@ -209,13 +218,22 @@ impl AppConfig {
     /// Intended for runtime reload so a bad config file doesn't silently
     /// overwrite the current working config.
     pub fn try_load() -> Result<Self, ConfigError> {
-        let config = Self::load_config_file()?;
+        Self::from_config_result(Self::load_config_file(None))
+    }
+
+    /// Reload one project's settings, preserving errors for the owner to handle.
+    pub fn try_load_for(folder: &Path) -> Result<Self, ConfigError> {
+        Self::from_config_result(Self::load_config_file(Some(folder)))
+    }
+
+    fn from_config_result(result: Result<Config, ConfigError>) -> Result<Self, ConfigError> {
+        let config = result?;
         let mut theme = theme::load(&config.settings.theme);
         apply_overrides(&mut theme, &config.settings);
         Ok(Self { config, theme })
     }
 
-    fn load_config_file() -> Result<Config, ConfigError> {
+    fn load_config_file(folder: Option<&Path>) -> Result<Config, ConfigError> {
         // Start from the embedded defaults, then layer the optional user files on
         // top: config.toml (settings/appearance/font/program) and keybindings.toml
         // (keys). Both are deep-merged at the `toml::Value` level so a partial user
@@ -232,7 +250,7 @@ impl AppConfig {
         }
         // The project's own file goes on last, so any key it sets wins. A broken one is reported
         // and left out: a project's typo must not take the user's whole configuration with it.
-        let project = match read_project() {
+        let project = match folder.map_or_else(read_project, read_project_in) {
             Ok(project) => project,
             Err(e) => {
                 eprintln!("[heca] project settings ignored: {e}");
@@ -240,7 +258,7 @@ impl AppConfig {
             }
         };
         let applied = trusted_layer(project);
-        if !found_user && applied.is_none() {
+        if !found_user && applied.is_none() && folder.is_none() {
             return Err(ConfigError::NotFound);
         }
         layered(value, applied)

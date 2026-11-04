@@ -7,6 +7,9 @@ mod agents;
 mod folder;
 mod screen;
 mod shells;
+mod feedback;
+#[cfg(unix)]
+mod recorded_launch;
 
 // What the old single test module had in scope, named for the test files below.
 pub(super) use super::launch::ShellLaunch;

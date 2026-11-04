@@ -137,6 +137,7 @@ impl Component for CommandPalette {
             Event::Widget(WidgetIntent::Activate) => { self.run_selected(); Handled::Yes }
             Event::Widget(WidgetIntent::MenuDown) => { self.select_next(); Handled::Yes }
             Event::Widget(WidgetIntent::MenuUp) => { self.select_prev(); Handled::Yes }
+            Event::Widget(WidgetIntent::Complete) => self.complete_selected(),
             Event::Widget(intent @ (WidgetIntent::MenuHistoryUp | WidgetIntent::MenuHistoryDown)) => {
                 let (sigil, scope, query) = self.active();
                 let recalled = self.search.with_scope(scope).handle(*intent, &query);

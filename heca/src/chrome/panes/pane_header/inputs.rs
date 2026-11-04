@@ -9,7 +9,7 @@ pub(crate) struct PaneHeaderInput {
     pub(super) col_idx: usize,
     pub(super) name: String,
     pub(super) custom_name: Option<String>,
-    pub(super) runtime: Option<PaneRuntime>,
+    pub(super) runtime: Option<crate::chrome::PanePresentation>,
     pub(super) zoomed: bool,
     pub(super) floating: bool,
     pub(super) avail_w: f32,
@@ -70,7 +70,7 @@ pub(crate) fn pane_header_inputs(
                 (
                     p.title.clone(),
                     p.custom_name.clone(),
-                    Some(p.runtime.clone()),
+                    state.chrome_state.panes.presentation(pane_id),
                 )
             })
             .unwrap_or_else(|| (String::new(), None, None));

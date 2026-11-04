@@ -21,6 +21,48 @@ pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
     NOTIFICATION_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
 }
 
+/// Bind native notifications raised during one server request to that request's session.
+/// The guard also restores the previous sink during unwinding and nested collection.
+pub(crate) fn collect_during<T>(work: impl FnOnce() -> T) -> (T, Vec<NotificationDraft>) {
+    use std::{cell::RefCell, rc::Rc};
+    struct Restore(Option<NotificationSink>);
+    impl Drop for Restore {
+        fn drop(&mut self) { NOTIFICATION_SINK.with(|c| *c.borrow_mut() = self.0.take()); }
+    }
+    let drafts = Rc::new(RefCell::new(Vec::new()));
+    let pending = drafts.clone();
+    let previous = NOTIFICATION_SINK.with(|c| c.replace(Some(Box::new(move |draft| pending.borrow_mut().push(draft)))));
+    let restore = Restore(previous);
+    let result = work();
+    drop(restore);
+    let collected = std::mem::take(&mut *drafts.borrow_mut());
+    (result, collected)
+}
+
+#[cfg(test)]
+mod collection_tests {
+    use super::*;
+    use std::{cell::RefCell, rc::Rc};
+
+    #[test]
+    fn nested_collection_and_unwinding_restore_the_previous_session_sink() {
+        let received = Rc::new(RefCell::new(Vec::new()));
+        let sink = received.clone();
+        install_notification_sink(move |draft| sink.borrow_mut().push(draft));
+        let (_, outer) = collect_during(|| {
+            Notification::info("outer").send();
+            let (_, inner) = collect_during(|| Notification::info("inner").send());
+            assert_eq!(inner.len(), 1);
+            assert!(std::panic::catch_unwind(|| collect_during(|| panic!("request failed"))).is_err());
+            Notification::info("outer again").send();
+        });
+        assert_eq!(outer.len(), 2);
+        Notification::info("original").send();
+        assert_eq!(received.borrow().len(), 1);
+        NOTIFICATION_SINK.with(|sink| { sink.borrow_mut().take(); });
+    }
+}
+
 /// The host accepting a draft into the store.
 ///
 /// **The one place `Instant::now()` is read for a raised notification, and the only non-test

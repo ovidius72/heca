@@ -25,6 +25,11 @@ pub struct OverlayHost {
 }
 
 impl OverlayHost {
+    /// Drop results tied to an old session without executing their callbacks in a new one.
+    pub(crate) fn discard(&mut self) -> Vec<OverlayId> {
+        self.forms.clear();
+        self.completions.drain().map(|(id, _)| id).collect()
+    }
     /// Register what runs when overlay `id` resolves.
     ///
     /// The map itself stays private: a completion is only ever *installed* beside the layer that
@@ -44,6 +49,11 @@ impl OverlayHost {
 /// and swallows everything else while it's up.
 pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
     state.layers.top_modal_id(&state.window_root).map(OverlayId)
+}
+
+pub(crate) fn discard_overlays(state: &mut AppState) {
+    for overlay in state.overlays.discard() { state.layers.remove(&mut state.window_root, overlay.0); }
+    state.session_dialog = None;
 }
 
 /// Is the tiled area covered by an overlay? The one input `Domain::Overlay` needs

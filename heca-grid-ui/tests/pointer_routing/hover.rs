@@ -1,5 +1,36 @@
 use super::*;
 
+#[test]
+fn a_stationary_pointer_recheck_updates_hover_without_sending_movement() {
+    let (mut root, a, b) = two_probes();
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_rechecked(LEFT));
+    assert_eq!(meaningful(&a), ["PointerEnter"]);
+    assert!(!kinds(&a).iter().any(|kind| kind == "PointerMove"));
+    assert!(root.base().children[0].base().hovered());
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_rechecked(LEFT));
+    assert_eq!(meaningful(&a), ["PointerEnter"]);
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_rechecked(RIGHT));
+    assert_eq!(meaningful(&a), ["PointerEnter", "PointerLeave"]);
+    assert_eq!(meaningful(&b), ["PointerEnter"]);
+    assert!(!kinds(&b).iter().any(|kind| kind == "PointerMove"));
+    mv(root.as_mut(), RIGHT);
+    assert!(kinds(&b).iter().any(|kind| kind == "PointerMove"));
+}
+
+#[test]
+fn a_changed_tree_retargets_hover_at_the_same_position_without_movement() {
+    let (mut root, a, b) = two_probes();
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_rechecked(LEFT));
+    root.base_mut().children.swap(0, 1);
+    LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 50.0));
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_rechecked(LEFT));
+    assert_eq!(meaningful(&a), ["PointerEnter", "PointerLeave"]);
+    assert_eq!(meaningful(&b), ["PointerEnter"]);
+    for seen in [&a, &b] {
+        assert!(!kinds(seen).iter().any(|kind| kind == "PointerMove"));
+    }
+}
+
 // ── hover ─────────────────────────────────────────────────────────────────────────────────────
 
 /// Hover follows the pointer: one enter, one leave, and never both widgets lit at once.

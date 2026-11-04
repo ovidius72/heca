@@ -182,6 +182,19 @@ command_palette = "prefix+p"        # Open command palette (backend ready)
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
 ```
 
+Open the palette directly on sessions with `prefix+#`. It shares the registered
+`command_palette` action with `prefix+o` (panes) and `prefix+Ctrl+o` (workspaces):
+
+```toml
+[[keys.bind]]
+keys   = "prefix+#"
+action = "command_palette"
+args   = { mode = "session" }
+```
+
+Use your configured prefix (`Ctrl+b` by default), then `#`. Override this combo in your own
+`[[keys.bind]]`, or disable it with `"prefix+#" = true` under `[keys.unbind]`.
+
 ---
 
 ## Custom Modes

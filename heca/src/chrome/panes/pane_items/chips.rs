@@ -38,7 +38,8 @@ pub struct PaneFacts {
     pub icon: Glyph,
     /// The pane's own name: its rename when it has one, else the program's name.
     pub title: String,
-    /// The program running in it — always the process, never a rename.
+    /// The display program name after `pane_name_delay`, never a custom rename.
+    /// Status and agent reports below remain immediate.
     pub app_name: String,
     /// The foreground program's lifecycle, independent of an agent's reported work state.
     pub status: heca_core::runtime::ProcessStatus,
@@ -57,11 +58,12 @@ impl PaneFacts {
         programs: &heca_config::programs::ProgramsConfig,
         fallback_name: &str,
         custom_name: Option<&str>,
-        runtime: Option<&heca_core::runtime::PaneRuntime>,
+        presentation: Option<&crate::chrome::PanePresentation>,
     ) -> Self {
         // The header never shows the `(process)` suffix — that is a sidebar-card affordance.
         let view =
-            crate::chrome::pane_info_view(programs, fallback_name, custom_name, runtime, false);
+            crate::chrome::pane_info_view(programs, fallback_name, custom_name, presentation, false);
+        let runtime = presentation.map(|pane| pane.runtime());
         Self {
             pane_id,
             icon: view.icon,
@@ -315,7 +317,7 @@ mod tests {
             &ProgramsConfig::default(),
             "shell",
             custom,
-            Some(rt),
+            Some(&crate::chrome::PanePresentation::immediate(rt.clone())),
         )
     }
 

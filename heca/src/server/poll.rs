@@ -22,12 +22,22 @@ impl ServerState {
     /// Drain process output without reaching any window or OS presentation API.
     pub(crate) fn poll_backends(&mut self) -> BackendPoll {
         let mut result = BackendPoll::default();
-        for backend in self.backends.values_mut() {
+        let mut completions = Vec::new();
+        for (id, backend) in self.backends.iter_mut() {
             result.terminal_animating |= backend.tick_animation();
             result.has_data |= backend.update();
-            result.bell_any |= backend.take_alerts().into_iter()
-                .any(|alert| matches!(alert, BackendAlert::Bell));
+            for alert in backend.take_alerts() {
+                match alert {
+                    BackendAlert::Bell => result.bell_any = true,
+                    BackendAlert::ProcessCompleted { exit_code } => completions.push((id, exit_code)),
+                }
+            }
             result.clipboard_writes.extend(backend.take_clipboard_writes());
+        }
+        for (id, exit_code) in completions {
+            if let Some(pane) = self.backends.pane_of(id) {
+                self.feedback.completed(pane, exit_code);
+            }
         }
         result.closing_panes = self.backends.pane_ids_to_close();
         result

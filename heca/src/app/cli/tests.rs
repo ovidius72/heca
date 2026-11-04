@@ -16,7 +16,7 @@ fn the_help_lists_every_command_and_every_argument_it_declares() {
             "`{}` runs but --help does not list it",
             c.name
         );
-        for a in c.args {
+        for a in c.args.iter().chain(c.options) {
             assert!(
                 text.contains(a.name) && text.contains(a.description),
                 "`{}` declares `{}` but --help does not describe it",
@@ -31,6 +31,21 @@ fn the_help_lists_every_command_and_every_argument_it_declares() {
 #[test]
 fn no_command_opens_the_window() {
     assert!(ask(&[]).is_none());
+}
+
+#[test]
+fn session_launches_share_the_checked_cli_declaration() {
+    let mode = |args: &[&str]| launch_mode(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>());
+    assert_eq!(mode(&["--new"]), LaunchMode::New { path: None, name: None });
+    assert_eq!(mode(&["--new", "project A", "--name", "work"]),
+        LaunchMode::New { path: Some("project A".into()), name: Some("work".into()) });
+    assert_eq!(mode(&["--new", "--name", "work", "~/projects/A"]),
+        LaunchMode::New { path: Some("~/projects/A".into()), name: Some("work".into()) });
+    assert_eq!(mode(&["--attach", "heca #3"]), LaunchMode::Session("heca #3".into()));
+    for args in [&["--new", "--name"][..], &["--new", "--name", "A", "--name", "B"], &["--attach"], &["--standalone", "--name", "A"]] {
+        assert!(answer(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>()).is_some_and(|answer| answer.is_err()));
+    }
+    assert!(ask(&["--new", "--help"]).unwrap().contains("[--name <name>]"));
 }
 
 /// **A missing argument is a sentence, not silence** — and the same sentence an action gives,

@@ -29,7 +29,9 @@ pub(in crate::agent) fn prepare(
         let driver = drivers.recognize(&request.program)
             .ok_or_else(|| AgentError::Report(format!("no agent driver recognizes {}", request.program)))?;
         let endpoint = directory.join("reports.jsonl");
-        reader = Some(ReportReader::create(endpoint.clone(), driver.clone(), limit)?);
+        reader = Some(ReportReader::create(endpoint.clone(), driver.clone(), limit)?.with_launch(crate::backend::ProcessLaunch {
+            executable: request.executable, arguments: request.arguments, cwd: Some(request.cwd.clone()),
+        }));
         watcher.watch(&endpoint, RecursiveMode::NonRecursive)
             .map_err(|error| io::Error::other(error.to_string()))?;
         driver.prepare(&AgentLaunchContext {

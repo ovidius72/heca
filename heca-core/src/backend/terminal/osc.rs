@@ -8,6 +8,7 @@ pub(super) enum OscEvent {
     CommandStart,
     PreExec,
     Program(String),
+    LaunchCommand(String),
     CommandFinished(i32),
     Cwd(PathBuf),
     Notification(TerminalNotification),
@@ -134,6 +135,8 @@ fn parse_osc_133(payload: &str) -> Option<OscEvent> {
         Some(OscEvent::PreExec)
     } else if let Some(program) = payload.strip_prefix("E;") {
         Some(OscEvent::Program(percent_decode(program)?))
+    } else if let Some(command) = payload.strip_prefix("F;") {
+        Some(OscEvent::LaunchCommand(percent_decode(command)?))
     } else if let Some(code) = payload.strip_prefix("D;") {
         Some(OscEvent::CommandFinished(code.parse().ok()?))
     } else {

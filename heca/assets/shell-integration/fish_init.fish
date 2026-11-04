@@ -30,6 +30,7 @@ function __heca_preexec --on-event fish_preexec
     set -g __heca_have_preexec 1
     __heca_osc '133;B'
     __heca_osc '133;C'
+    __heca_osc "133;F;"(string escape --style=url -- "$argv[1]")
     set -l prog (__heca_command_name "$argv[1]")
     if test -n "$prog"
         __heca_osc "133;E;"(string escape --style=url -- "$prog")

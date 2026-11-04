@@ -158,6 +158,11 @@ impl Event {
         Self::Raw(RawPointer::new(RawPointerKind::Moved, pos))
     }
 
+    /// Refresh hover after a tree change without reporting device movement.
+    pub fn pointer_rechecked(pos: Point) -> Self {
+        Self::Raw(RawPointer::new(RawPointerKind::Recheck, pos))
+    }
+
     /// A raw press of `button` at `pos`.
     pub fn pointer_pressed(pos: Point, button: PointerButton) -> Self {
         Self::Raw(RawPointer::new(RawPointerKind::Pressed, pos).with_button(button))
@@ -233,6 +238,7 @@ impl Event {
         match self {
             Self::Raw(r) => match r.kind {
                 RawPointerKind::Moved => EventKind::PointerMove,
+                RawPointerKind::Recheck => EventKind::PointerRecheck,
                 RawPointerKind::Pressed => EventKind::PointerDown,
                 RawPointerKind::Released => EventKind::PointerUp,
                 RawPointerKind::Wheel => EventKind::Scroll,
@@ -347,6 +353,8 @@ pub enum EventKind {
     PointerDown,
     PointerUp,
     PointerMove,
+    /// Raw hover refresh; the router emits only enter/leave transitions.
+    PointerRecheck,
     PointerEnter,
     PointerLeave,
     Click,

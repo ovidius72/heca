@@ -1,9 +1,6 @@
 //! **Telling the program its size** — in cells and in pixels — at a paced rate, so dragging a
 //! divider does not signal the shell at frame rate.
 
-// Named only in the docs below.
-#[cfg(doc)]
-use crate::backend::PaneBackend;
 use super::TerminalBackend;
 use std::time::Instant;
 
@@ -37,12 +34,11 @@ impl TerminalBackend {
         // Paced like the grid size beside it — this is the same `TIOCSWINSZ`, and the same
         // `SIGWINCH` to the child (see `PTY_RESIZE_MIN_INTERVAL`).
         self.pending_pty_size = Some((self.cols, self.rows));
-        self.flush_pending_pty_size();
     }
 
     /// Tell the child about a size change it has not been told about yet, if enough time has passed
-    /// since the last one. Called from [`set_size`](PaneBackend::set_size) and from every `update`, so a size
-    /// that was held back mid-gesture is always delivered once the gesture settles.
+    /// since the last one. Called from `update`, after cell, scale and grid setters have all run,
+    /// so a size held back mid-gesture is delivered without publishing intermediate old grids.
     pub(super) fn flush_pending_pty_size(&mut self) {
         let Some((cols, rows)) = self.pending_pty_size else {
             return;

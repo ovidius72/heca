@@ -131,6 +131,26 @@ pub struct ConfirmSpec {
 }
 
 impl ConfirmSpec {
+    /// Session lifecycle prompts use the shared session text, including user overrides.
+    pub(crate) fn for_session(
+        owner: &str,
+        words: &heca_config::settings::SessionText,
+    ) -> Option<Self> {
+        let (message, verb) = match owner {
+            "terminate_session" => (&words.confirm_terminate, &words.terminate),
+            "delete_session" => (&words.confirm_delete, &words.delete),
+            _ => return None,
+        };
+        let mut spec = Self::destructive(owner, verb);
+        spec.message = message.clone();
+        for button in &mut spec.buttons {
+            if button.role == ButtonRole::Cancel {
+                button.label = words.cancel.clone();
+            }
+        }
+        Some(spec)
+    }
+
     /// The prompt for an act that cannot be undone: a forced `[Cancel] [<verb>]` choice, on by
     /// default, toggled by the user as `[confirm] <config_name> = false`.
     ///
@@ -153,7 +173,7 @@ impl ConfirmSpec {
 }
 
 /// The built-in confirmation specs, each paired with the **owner action name** it attaches to. The
-/// three destructive actions — close pane / delete column / delete workspace — each get a
+/// destructive actions — close pane, delete column/workspace and terminate/delete session — get a
 /// `[Cancel] [<verb>]` forced prompt.
 ///
 /// Note the `close` row: `ClosePane` and `ClosePaneById` both resolve to this **one** spec (§5.1),
@@ -162,15 +182,22 @@ impl ConfirmSpec {
 /// name, so `[confirm] close = false` disables the pane prompt.
 ///
 /// A pane is **closed**, not deleted: that is the word its id, its binding name and its label all
-/// use, and the "cannot be undone" line already carries the weight. Delete is kept for the two
-/// containers below, which are a different kind of thing.
+/// use, and the "cannot be undone" line already carries the weight. Delete removes a container or
+/// session; Terminate retains a stopped session.
 pub(super) fn builtin_confirm_specs() -> Vec<(&'static str, ConfirmSpec)> {
     let mk = |config_name: &'static str, verb: &str| ConfirmSpec::destructive(config_name, verb);
-    vec![
+    let mut specs = vec![
         ("close", mk("close", "Close")),
         ("delete_column", mk("delete_column", "Delete")),
         ("delete_workspace", mk("delete_workspace", "Delete")),
-    ]
+    ];
+    let words = heca_config::settings::SessionText::default();
+    for owner in ["terminate_session", "delete_session"] {
+        if let Some(spec) = ConfirmSpec::for_session(owner, &words) {
+            specs.push((owner, spec));
+        }
+    }
+    specs
 }
 
 #[cfg(test)]
@@ -189,6 +216,8 @@ mod tests {
             ("close", "close"),
             ("delete_column", "delete_column"),
             ("delete_workspace", "delete_workspace"),
+            ("terminate_session", "terminate_session"),
+            ("delete_session", "delete_session"),
         ] {
             let spec = catalog
                 .confirm_spec(owner)
@@ -236,6 +265,32 @@ mod tests {
         let spec = catalog.confirm_spec("plugin.docker.remove").unwrap();
         assert_eq!(spec.config_name, "plugin.docker.remove");
         assert!(!spec.dismissible);
+    }
+
+    #[test]
+    fn session_confirmation_uses_configured_warning_and_response_labels() {
+        let words = heca_config::settings::SessionText {
+            confirm_terminate: "Stop {name}, keep the session".into(),
+            confirm_delete: "Remove {name}, keep project files".into(),
+            terminate: "Stop".into(), delete: "Remove".into(), cancel: "Keep".into(),
+            ..Default::default()
+        };
+        for (owner, message, verb) in [
+            ("terminate_session", words.confirm_terminate.as_str(), "Stop"),
+            ("delete_session", words.confirm_delete.as_str(), "Remove"),
+        ] {
+            let spec = ConfirmSpec::for_session(owner, &words).unwrap();
+            assert_eq!(spec.message, message);
+            assert_eq!(spec.buttons[0].label, "Keep");
+            assert_eq!(spec.buttons[0].role, ButtonRole::Cancel);
+            assert!(matches!(spec.buttons[0].outcome, Outcome::Cancel));
+            assert_eq!(spec.buttons[1].label, verb);
+            assert!(matches!(spec.buttons[1].outcome, Outcome::Proceed));
+            assert!(spec.default_enabled && !spec.forced && !spec.dismissible);
+        }
+        let catalog = ActionCatalog::with_builtins();
+        assert!(catalog.confirm_spec("detach_session").is_none());
+        assert!(catalog.confirm_spec("restart_session").is_none());
     }
 
     #[test]

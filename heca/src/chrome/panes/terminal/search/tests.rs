@@ -329,6 +329,7 @@ fn enter_gives_the_keyboard_back_to_the_terminal() {
     t.find();
     frame(&mut root);
     heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("a".into()));
+    said.borrow_mut().clear();
 
     heca_grid_ui::dispatch(
         root.as_mut(),
@@ -337,7 +338,8 @@ fn enter_gives_the_keyboard_back_to_the_terminal() {
             pressed: true,
         },
     );
-    said.borrow_mut().clear();
+    assert_eq!(*said.borrow(), vec![TerminalInput::Search(Search::Editing(false))],
+        "focus returns during Enter, without waiting for another event");
     heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("x".into()));
 
     assert_eq!(

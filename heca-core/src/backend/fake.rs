@@ -20,6 +20,7 @@ pub struct FakeBackend {
     runtime: PaneRuntime,
     /// One-shot exit code drained by `take_exit_code` (tests simulate exits).
     pending_exit: Option<i32>,
+    alerts: Vec<super::BackendAlert>,
 }
 
 impl FakeBackend {
@@ -37,6 +38,7 @@ impl FakeBackend {
             dirty: true,
             runtime: PaneRuntime::default(),
             pending_exit: None,
+            alerts: Vec::new(),
         }
     }
 
@@ -49,9 +51,18 @@ impl FakeBackend {
     pub fn queue_exit(&mut self, code: i32) {
         self.pending_exit = Some(code);
     }
+
+    /// Queue the same one-shot alert produced by a real backend.
+    pub fn queue_alert(&mut self, alert: super::BackendAlert) {
+        self.alerts.push(alert);
+    }
 }
 
 impl PaneBackend for FakeBackend {
+    fn take_alerts(&mut self) -> Vec<super::BackendAlert> {
+        std::mem::take(&mut self.alerts)
+    }
+
     fn pane_type(&self) -> PaneType {
         PaneType::Terminal
     }

@@ -7,6 +7,11 @@ use crate::input::WmActionKind;
 /// Build the action registry and register individual handlers for all actions.
 pub fn build_registry() -> ActionRegistry {
     let mut registry = ActionRegistry::new();
+    registry.register(WmActionKind::NewSession, handle_new_session);
+    registry.register(WmActionKind::RenameSession, handle_rename_session);
+    registry.register(WmActionKind::SwitchSession, handle_switch_session);
+    registry.register(WmActionKind::DetachSession, handle_detach_session);
+    registry.register(WmActionKind::ReconnectSession, handle_reconnect_session);
 
     // ── Navigation ──
     registry.register(WmActionKind::FocusLeft, handle_focus_left);

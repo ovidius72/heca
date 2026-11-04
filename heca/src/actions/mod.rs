@@ -25,7 +25,7 @@ pub(crate) fn builtin_name(kind: crate::input::WmActionKind) -> Option<&'static 
 
 pub use builtins::builtins;
 pub use catalog::{
-    ActionCatalog, ActionCategory, ActionMeta, GENERIC_ACTION_ICON, Side, builtin_args,
+    ActionCatalog, ActionCategory, ActionMeta, GENERIC_ACTION_ICON, Side, builtin_args, builtin_side,
 };
 pub use confirm::{ButtonRole, ConfirmSpec, Outcome, ResponseButton};
 pub use registry::{

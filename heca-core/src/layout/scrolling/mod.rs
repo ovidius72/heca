@@ -66,6 +66,7 @@ impl ScrollingSpace {
 
     /// This space, moved by the window holding `view`.
     pub fn through_mut<'a>(&'a mut self, view: &'a mut ScrollView) -> ScrollingMut<'a> {
+        view.initialize(self);
         ScrollingMut { space: self, view }
     }
 
