@@ -10,7 +10,7 @@
 //!
 //! Windows (named pipes) is a later step; this is `cfg(unix)`.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -66,7 +66,36 @@ fn request(line: &str) -> std::io::Result<String> {
 /// One way in: the line is whatever [`crate::rpc`] reads — any action in the catalog, by name —
 /// so a script reaches every registered action with nothing added here per action.
 pub(crate) fn run_rpc_cli(args: &[String]) -> Option<String> {
+    // `heca rpc --events` is a streaming subscription, not a one-shot line: it prints each event as
+    // it arrives and blocks until the socket closes. Intercept it before the one-shot path, which
+    // would otherwise send `--events` to the server as an unknown action.
+    if args.first().map(String::as_str) == Some("rpc")
+        && args.get(1).map(String::as_str) == Some("--events")
+        && args.len() == 2
+    {
+        return Some(match stream_events() {
+            Ok(()) => String::new(),
+            Err(error) => format!("could not reach a running heca: {error}\n(is heca running?)\n"),
+        });
+    }
     run_rpc_cli_with(args, request)
+}
+
+/// Subscribe to the server's event stream and print each event as a line, until the socket closes.
+/// The events are the existing `Change`s, serialized by the wire model — one per line.
+fn stream_events() -> std::io::Result<()> {
+    let path =
+        socket_path().ok_or_else(|| std::io::Error::other("no runtime folder for the socket"))?;
+    let mut stream = UnixStream::connect(&path)?;
+    stream.write_all(runtime::EVENTS_PREFACE)?;
+    let stdout = std::io::stdout();
+    for line in std::io::BufReader::new(stream).lines() {
+        let mut out = stdout.lock();
+        if writeln!(out, "{}", line?).is_err() {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// **`heca --kill-server`** — connect to a running server and stop it, and with it every pane and

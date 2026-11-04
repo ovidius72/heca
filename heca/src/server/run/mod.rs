@@ -30,6 +30,9 @@ pub(crate) struct ServerLoop {
     catalog: crate::actions::ActionCatalog,
     stopped: bool,
     directory: Vec<SessionInfo>,
+    /// `heca rpc --events` subscribers, shared with every session so each one's broadcast fans its
+    /// events out to the scripts listening.
+    events: super::EventFanout,
 }
 
 impl ServerLoop {
@@ -47,6 +50,7 @@ impl ServerLoop {
             catalog: crate::actions::ActionCatalog::with_builtins(),
             stopped: false,
             directory: Vec::new(),
+            events: super::EventFanout::default(),
         }
     }
 
@@ -54,7 +58,9 @@ impl ServerLoop {
     pub(crate) fn new(state: ServerState, session: Session) -> Self {
         let id = session.id;
         let mut server = Self::empty();
-        server.sessions.push(SessionRuntime::new(state, session));
+        let mut runtime = SessionRuntime::new(state, session);
+        runtime.install_event_fanout(server.events.clone());
+        server.sessions.push(runtime);
         server.last_session = Some(id);
         server.recent_sessions.push(id);
         server.next_session = id.0.saturating_add(1);
@@ -84,6 +90,12 @@ impl ServerLoop {
         for session in &mut self.sessions {
             session.install_actions(self.registry.clone(), self.catalog.clone());
         }
+    }
+
+    /// Register a `heca rpc --events` subscriber: every session fans its events to it (the fanout
+    /// is shared), until the subscriber's socket side goes.
+    pub(super) fn subscribe_events(&mut self, events: std::sync::mpsc::Sender<String>) {
+        self.events.subscribe(events);
     }
 
     pub(super) fn register_extensions(&mut self) {
@@ -343,6 +355,12 @@ impl ServerLoop {
             .set(super::connection::Attachment::Pending);
         client.session.set(Some(id));
         client.queue(ClientMsg::Attach);
+        // A window attached to (or switched to) this session — a per-window event for the stream.
+        self.events.emit(&super::StreamEvent::Session {
+            window: client.id,
+            session: id,
+            name: self.sessions[index].info().name.clone(),
+        });
         self.sessions[index].add_connection(client);
     }
 

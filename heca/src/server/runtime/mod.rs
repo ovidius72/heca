@@ -19,6 +19,8 @@ enum Event {
     Connect(Box<dyn ServerLink + Send>),
     Stop,
     Rpc { line: String, reply: mpsc::Sender<String> },
+    /// `heca rpc --events`: register a subscriber the server streams each event line to.
+    Subscribe { events: mpsc::Sender<String> },
     Notification(crate::notification::NotificationDraft),
 }
 
@@ -73,6 +75,10 @@ impl RuntimeHandle {
 
     pub(super) fn rpc(&self, line: String, reply: mpsc::Sender<String>) -> io::Result<()> {
         self.send(Event::Rpc { line, reply })
+    }
+
+    pub(super) fn subscribe(&self, events: mpsc::Sender<String>) -> io::Result<()> {
+        self.send(Event::Subscribe { events })
     }
 
     pub(super) fn raise(&self, draft: crate::notification::NotificationDraft) -> io::Result<()> {
@@ -138,6 +144,7 @@ impl RuntimeInbox {
             Event::Connect(link) => server.add_link(link),
             Event::Stop => return false,
             Event::Rpc { line, reply } => server.begin_rpc(line, reply),
+            Event::Subscribe { events } => server.subscribe_events(events),
             Event::Notification(draft) => server.raise(draft),
             Event::Wake => {},
         }

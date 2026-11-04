@@ -162,6 +162,66 @@ fn following_relays_the_leaders_view_and_tells_the_leader_it_is_followed() {
 }
 
 #[test]
+fn a_sessions_broadcast_streams_each_change_to_event_subscribers() {
+    use crate::server::{Change, EventFanout, StreamEvent};
+    use std::sync::mpsc;
+    let fanout = EventFanout::default();
+    let (tx, rx) = mpsc::channel();
+    fanout.subscribe(tx);
+    let mut runtime = SessionRuntime::new(
+        ServerState::for_tests(Default::default()),
+        Session::new(SessionId(42), Default::default()),
+    );
+    runtime.install_event_fanout(fanout);
+
+    // A change broadcast to the session's windows is also streamed to the subscriber, as a line it
+    // can parse back into the same `Change` (wrapped as a `StreamEvent`) — nothing invented.
+    let gone = runtime.broadcast(&[Change::LayoutChanged, Change::NamesChanged]);
+    assert!(gone.is_empty(), "no windows attached, so none disconnect");
+    let event = |rx: &mpsc::Receiver<String>| serde_json::from_str::<StreamEvent>(&rx.recv().unwrap()).unwrap();
+    assert_eq!(event(&rx), StreamEvent::Change(Change::LayoutChanged));
+    assert_eq!(event(&rx), StreamEvent::Change(Change::NamesChanged));
+}
+
+#[test]
+fn a_windows_presence_report_becomes_focus_and_workspace_events() {
+    use crate::server::wire::in_process;
+    use crate::server::{EventFanout, StreamEvent};
+    use heca_core::layout::PaneId;
+    use std::sync::mpsc;
+    let fanout = EventFanout::default();
+    let (tx, rx) = mpsc::channel();
+    fanout.subscribe(tx);
+    let mut runtime = SessionRuntime::new(
+        ServerState::for_tests(Default::default()),
+        Session::new(SessionId(42), Default::default()),
+    );
+    runtime.install_event_fanout(fanout);
+    let (_client, server) = in_process();
+    let conn = Rc::new(Connection::new(7, Box::new(server)));
+    conn.queue(ClientMsg::Attach);
+    conn.queue(ClientMsg::ReportPresence { workspace: 0, pane: Some(PaneId(3)) });
+    // Only the workspace moved: a `Workspace` event, no new `Focus`.
+    conn.queue(ClientMsg::ReportPresence { workspace: 1, pane: Some(PaneId(3)) });
+    runtime.add_connection(conn);
+    runtime.pump(Instant::now());
+
+    let events: Vec<StreamEvent> = std::iter::from_fn(|| {
+        rx.try_recv().ok().map(|line| serde_json::from_str(&line).unwrap())
+    })
+    .collect();
+    // First report (both new) → Workspace{0} + Focus{pane 3}; second (workspace only) → Workspace{1}.
+    assert!(events.contains(&StreamEvent::Workspace { window: 7, workspace: 0 }));
+    assert!(events.contains(&StreamEvent::Focus { window: 7, workspace: 0, pane: Some(PaneId(3)) }));
+    assert!(events.contains(&StreamEvent::Workspace { window: 7, workspace: 1 }));
+    assert_eq!(
+        events.iter().filter(|event| matches!(event, StreamEvent::Focus { .. })).count(),
+        1,
+        "the pane did not change on the second report, so no second Focus",
+    );
+}
+
+#[test]
 fn an_empty_or_terminated_session_also_finishes_its_projection() {
     use crate::server::wire::{ClientLink, in_process};
     for terminated in [false, true] {

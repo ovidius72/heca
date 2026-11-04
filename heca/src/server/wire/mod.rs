@@ -83,6 +83,9 @@ pub(crate) enum ClientMsg {
     /// This window's current view, sent only while the server says it is followed
     /// ([`ServerMsg::Followed`]). The server relays it to this window's followers.
     ReportView(heca_core::layout::ViewSnapshot),
+    /// Where this window is looking — its shown workspace and focused pane — reported when it
+    /// changes. The server turns a change into a `Focus`/`Workspace` event on the `--events` stream.
+    ReportPresence { workspace: usize, pane: Option<heca_core::layout::PaneId> },
 }
 
 /// What the server tells a client.

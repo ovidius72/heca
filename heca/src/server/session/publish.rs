@@ -123,6 +123,14 @@ impl SessionRuntime {
         reply_to: Option<usize>,
     ) -> Vec<usize> {
         let mut disconnected = Vec::new();
+        // Stream these shared changes to any `heca rpc --events` subscribers — the same `Change`s
+        // windows react to (T546). Per-window events (focus, workspace, session) are emitted where
+        // they happen. Guarded so no one listening costs nothing.
+        if !self.events.is_empty() {
+            for change in changes {
+                self.events.emit(&super::super::StreamEvent::Change(change.clone()));
+            }
+        }
         if !changes.is_empty() {
             let content = self.session.content();
             for (i, client) in self.clients.iter().enumerate() {
