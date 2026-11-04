@@ -203,7 +203,9 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CreateSession { .. } | WmAction::RenameSessionTo { .. }
         | WmAction::TerminateSession { .. } | WmAction::RestartSession { .. }
         | WmAction::DeleteSession { .. } | WmAction::NewSession | WmAction::RenameSession
-        | WmAction::SwitchSession { .. } | WmAction::DetachSession | WmAction::ReconnectSession => ActionPolicy::Global,
+        | WmAction::SwitchSession { .. } | WmAction::DetachSession | WmAction::ReconnectSession
+        // Follow only changes what this window looks at; reachable like a session switch.
+        | WmAction::Follow { .. } => ActionPolicy::Global,
         // Dismissing/picking a notification touches no layout and no pane — a toast can be up
         // over a floating pane just as easily as a tiled one, and must stay reachable.
         WmAction::NotificationDismissOne { .. }

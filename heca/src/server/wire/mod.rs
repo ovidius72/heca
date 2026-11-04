@@ -73,6 +73,16 @@ pub(crate) enum ClientMsg {
     ImageChunk { id: u64, frame: usize, offset: usize },
     Read { request_id: u64, owner: crate::app::backend_store::TerminalOwner,
         start: isize, end: isize, cols: usize, query: Option<String> },
+    /// The title this window formatted for itself (from the session folder and its ordinal). The
+    /// server stores it against this connection — the stamped id, never a client-named one — and
+    /// republishes the session's window directory ([`ServerMsg::Windows`]).
+    ReportWindowTitle(String),
+    /// Follow another window (mirror its view), by its id from the directory, or `None` to stop.
+    /// The id is resolved from the displayed title by the picker, so a rename never breaks it.
+    Follow { target: Option<u64> },
+    /// This window's current view, sent only while the server says it is followed
+    /// ([`ServerMsg::Followed`]). The server relays it to this window's followers.
+    ReportView(heca_core::layout::ViewSnapshot),
 }
 
 /// What the server tells a client.
@@ -113,6 +123,16 @@ pub(crate) enum ServerMsg {
     ProcessExited { pane: heca_core::layout::PaneId, code: Option<i32> },
     Read { request_id: u64, start: isize, data: terminal::ReadData },
     TerminalClosed { owner: crate::app::backend_store::TerminalOwner },
+    /// The windows attached to this session and their titles, so each window can list the others —
+    /// the follow picker — and show them. Sent after [`Attached`](ServerMsg::Attached) and on every
+    /// join, leave and title change.
+    Windows { session_id: heca_core::layout::SessionId, windows: Vec<super::sessions::WindowInfo> },
+    /// Whether any window now follows this one. While `true`, this window reports its view
+    /// ([`ClientMsg::ReportView`]) so the server can relay it; while `false` it need not.
+    Followed { active: bool },
+    /// The view of the window this one follows, to mirror. Sent when the leader reports a new view
+    /// and once on starting to follow if the leader's view is already known.
+    FollowView(heca_core::layout::ViewSnapshot),
 }
 
 /// The client's end of the link. The client is written against this, so the socket transport (later)

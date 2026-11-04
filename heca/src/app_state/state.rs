@@ -80,6 +80,11 @@ pub struct AppState {
     /// workspace, the window's size. Reach both through [`layout`](Self::layout) and
     /// [`layout_mut`](Self::layout_mut).
     pub(crate) view: WindowViews,
+    /// The other windows on this session, as the server last reported them — the list the follow
+    /// picker chooses a target from.
+    pub(crate) windows: Vec<crate::server::sessions::WindowInfo>,
+    /// The last view this window reported while followed, so an unchanged view is not re-sent.
+    pub(crate) last_reported_view: Option<heca_core::layout::ViewSnapshot>,
     pub(crate) session_dialog: Option<crate::chrome::OverlayId>,
     pub theme: Theme,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.

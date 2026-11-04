@@ -104,6 +104,7 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
     let panes = mirrored_panes(&session.session);
     let sources = modes::RowSources {
         sessions: &[],
+        follow: &[],
         catalog: &catalog,
         owners: &owners,
         shortcuts: &shortcuts,

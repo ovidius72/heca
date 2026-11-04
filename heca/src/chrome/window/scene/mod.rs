@@ -285,6 +285,11 @@ pub(super) struct ChromeFrame<'a> {
     pub(super) tab_bar_height: f32,
     pub(super) status_bar_height: f32,
     pub(super) status: &'a str,
+    /// This window's own title (session folder + ordinal), shown in the top bar.
+    pub(super) title: &'a str,
+    /// The title of the window this one follows, when it is following one — shown after its own
+    /// title as `title → leader`. `None` when independent.
+    pub(super) follow_target: Option<&'a str>,
     pub(super) side_bg: Color,
     pub(super) fg: Color,
 }
@@ -354,6 +359,8 @@ fn chrome_root(
         tab_bar_height,
         status_bar_height,
         status,
+        title,
+        follow_target,
         side_bg,
         fg,
     } = *frame;
@@ -384,17 +391,21 @@ fn chrome_root(
             .height(tab_bar_height)
             .align("center")
             .padding_x(Spacing::Sm);
-        // Left cluster: the sidebar toggle and, beside it, the current session name. The name is a
-        // fixed placeholder for now — the live session name arrives with the session model (T522),
-        // and the top/bottom bars are slated for a rebuild — so this is a deliberate slot, not the
-        // final bar.
+        // Left cluster: the sidebar toggle and, beside it, this window's title (the session folder,
+        // numbered from the second window on — formatted client-side, decision e36aba0c). The
+        // top/bottom bars are slated for a rebuild, so this is a deliberate slot, not the final bar.
         let mut left_cluster = Flex::row().align("center").gap(Spacing::Sm);
         if let Some(t) = left_toggle {
             left_cluster = left_cluster.child(t);
         }
-        left_cluster = left_cluster
-            .child(Icon::new(Glyph::Cards).color(fg))
-            .child(Label::new("heca").color(fg));
+        // One segmented pill — built like the pane header's info bar (`build_pane_info_bar`) — for
+        // this window's identity and, while following, the window it mirrors: `[ ⬚ ~ #2 │ → ~ ]`.
+        let mut marker = heca_grid_ui::widgets::Tag::from_label(Label::new(title))
+            .leading(Icon::new(Glyph::Cards));
+        if let Some(leader) = follow_target {
+            marker = marker.segment_label_with(Label::new(leader), Icon::new(Glyph::ArrowRight));
+        }
+        left_cluster = left_cluster.child(marker);
         band = band.child(left_cluster);
         band = band.child(Flex::row().grow(1.0));
         if let Some(t) = right_toggle {
@@ -641,6 +652,12 @@ pub(crate) fn build_chrome_root(
             tab_bar_height: chrome.tab_bar_height,
             status_bar_height: chrome.status_bar_height,
             status: &status,
+            title: state.client.title.as_str(),
+            follow_target: state
+                .client
+                .following()
+                .and_then(|id| state.windows.iter().find(|window| window.id == id))
+                .map(|window| window.title.as_str()),
             side_bg,
             fg,
         },

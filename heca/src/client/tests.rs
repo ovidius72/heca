@@ -38,6 +38,11 @@ pub(super) fn client(link: impl ClientLink + 'static) -> ClientState {
     ClientState {
         client_id: 1,
         window_ordinal: 1,
+        title: "A".into(),
+        title_fmt: "{folder}".into(),
+        title_fmt_numbered: "{folder} #{number}".into(),
+        followed: false,
+        following: None,
         feedback: Default::default(),
         session: info(1, "A"),
         sessions: Vec::new(),

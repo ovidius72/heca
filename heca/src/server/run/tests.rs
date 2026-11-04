@@ -573,12 +573,14 @@ fn deleting_removes_the_definition_but_keeps_its_windows_available_without_delet
     assert!(drain(&first).iter().any(|msg| matches!(msg, ServerMsg::Attached { client_id: id, .. } if *id == client_id)));
     assert!(server.named(&a.name).is_err());
     assert_eq!(server.clients.len(), 2);
+    // `first` joining session b refreshes b's window directory, so the other window there sees a
+    // `Windows` broadcast alongside the session list — both are expected, nothing else.
     assert!(drain(&other).iter().all(|message| matches!(
         message,
         ServerMsg::Sessions {
             result: Ok(SessionReply::List(_)),
             ..
-        }
+        } | ServerMsg::Windows { .. }
     )));
     assert_eq!(
         std::fs::read_to_string(project.join("keep.txt")).unwrap(),

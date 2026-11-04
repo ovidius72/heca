@@ -34,6 +34,7 @@ mod model;
 mod modes;
 mod targets;
 mod sessions;
+mod windows;
 pub(crate) use sessions::open_session_folder;
 
 use actions::{entries, group_of};
@@ -172,8 +173,15 @@ fn standard_palette(state: &AppState, id: OverlayId, emit: &ChromeIntentEmitter)
         .placeholder("Type a command…")
         .search(search_model(state, modes::MODE_COMMAND, state.settings.search_case));
     let session_rows = sessions::entries(&state.client.sessions, &state.client.session, &state.settings.session_text);
+    let follow_rows = windows::entries(
+        &state.windows,
+        state.client.client_id,
+        state.client.following(),
+        &state.settings.session_text.stop_following,
+    );
     let sources = modes::RowSources {
         sessions: &session_rows,
+        follow: &follow_rows,
         catalog: &state.action_catalog,
         owners: &owners,
         shortcuts: &state.action_shortcuts,

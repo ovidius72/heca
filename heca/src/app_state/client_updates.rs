@@ -44,6 +44,21 @@ impl AppState {
             self.rebuild_toasts();
             self.needs_redraw = true;
         }
+        if let Some(windows) = update.windows {
+            // If the window we follow has left the session, resume our own view.
+            if let Some(target) = self.client.following()
+                && !windows.iter().any(|window| window.id == target)
+            {
+                self.client.follow(None);
+            }
+            self.windows = windows;
+        }
+        if let Some(snapshot) = update.follow_view {
+            // Mirror the followed window's view onto ours, keeping our own size and scale.
+            self.view.mirror(&snapshot);
+            self.layout_mut().reconcile_floats();
+            self.needs_redraw = true;
+        }
         self.apply(update.changes);
         for answer in update.answers {
             self.apply_answer(answer.changes, Some(Asked { action: &answer.action, name: &answer.name, before: &answer.before }));

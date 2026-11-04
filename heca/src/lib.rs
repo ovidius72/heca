@@ -475,6 +475,8 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 
         if let Some(ref mut state) = self.state {
             handle_about_to_wait(event_loop, state);
+            // After this turn's input and server updates, relay our view if a window follows us.
+            state.report_view_if_followed();
         }
     }
 

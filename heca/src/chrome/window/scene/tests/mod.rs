@@ -102,6 +102,8 @@ fn chrome_scene_emits_status_text() {
             tab_bar_height: 32.0,
             status_bar_height: 24.0,
             status: "2 panes | foo | NORMAL",
+            title: "~/projects/heca",
+            follow_target: None,
             side_bg: theme.colors.background,
             fg: Color::new(200, 200, 200, 255),
         },

@@ -448,6 +448,8 @@ pub(crate) async fn init_state(
         background,
         client,
         view: heca_core::layout::WindowViews::new(view),
+        windows: Vec::new(),
+        last_reported_view: None,
         session,
         session_dialog: None,
         theme: app_config.theme.clone(),

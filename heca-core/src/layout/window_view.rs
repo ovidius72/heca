@@ -30,11 +30,33 @@ use super::view_offset::ViewOffset;
 /// It is **per window** (F012, decision 463ccd07): one window can look at a workspace's floating
 /// pane while another looks at the tiling, so it lives in the window's [`ScrollView`] and not in
 /// the shared [`Workspace`](super::workspace::Workspace).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum FocusDomain {
     #[default]
     Tiled,
     Floating,
+}
+
+/// A serializable, read-only projection of what one window is looking at: the active workspace and
+/// that workspace's scroll state. It carries **no** window size or scale, so a window that mirrors
+/// another (follow) keeps its own geometry and only mirrors where the other is looking. This is the
+/// one thing that crosses the wire about a window's view; the [`WindowView`] itself stays private.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ViewSnapshot {
+    active_workspace: Option<WorkspaceId>,
+    scroll: Option<ScrollSnapshot>,
+}
+
+/// The scroll state of the active workspace, as plain data. `active_pane` is a list, not a map, so
+/// it serializes to JSON (a map keyed by a struct id would not).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+struct ScrollSnapshot {
+    workspace: WorkspaceId,
+    offset: f64,
+    active_column: usize,
+    active_pane: Vec<(ColumnId, PaneId)>,
+    focus_domain: FocusDomain,
+    active_float: Option<PaneId>,
 }
 
 /// Workspace switching state.
@@ -212,6 +234,39 @@ impl WindowView {
         self.scrolls.retain(|id, _| keep(*id));
     }
 
+    /// What this window is looking at, as data another window can mirror — the active workspace and
+    /// its scroll state, without this window's size or scale (follow, F012).
+    pub fn snapshot(&self) -> ViewSnapshot {
+        let scroll = self.active_workspace.map(|ws| {
+            let view = self.scroll(ws);
+            ScrollSnapshot {
+                workspace: ws,
+                offset: view.offset.current(),
+                active_column: view.active_column,
+                active_pane: view.active_pane.iter().map(|(c, p)| (*c, *p)).collect(),
+                focus_domain: view.focus_domain,
+                active_float: view.active_float,
+            }
+        });
+        ViewSnapshot { active_workspace: self.active_workspace, scroll }
+    }
+
+    /// Mirror `snapshot`: look where it looks, keeping this window's own size and scale. Any switch
+    /// animation in progress is dropped so the follower lands on the mirrored view at once.
+    pub fn mirror(&mut self, snapshot: &ViewSnapshot) {
+        self.active_workspace = snapshot.active_workspace;
+        self.switch = WorkspaceSwitch::None;
+        if let Some(scroll) = &snapshot.scroll {
+            let view = self.scroll_mut(scroll.workspace);
+            view.offset = ViewOffset::Static(scroll.offset);
+            view.initial = false;
+            view.active_column = scroll.active_column;
+            view.active_pane = scroll.active_pane.iter().copied().collect();
+            view.focus_domain = scroll.focus_domain;
+            view.active_float = scroll.active_float;
+        }
+    }
+
     /// The window was resized. This records the new size and what a workspace not yet looked at
     /// will be laid out in; the workspaces already seen are re-laid out by
     /// [`LayoutMut::update_viewport`](super::LayoutMut::update_viewport), which has to read the old
@@ -223,5 +278,41 @@ impl WindowView {
 
     fn area_of(size: Size) -> Rectangle {
         Rectangle::new(Point::new(0.0, 0.0), size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_window_mirrors_anothers_view_and_keeps_its_own_size() {
+        let ws = WorkspaceId(2);
+        let mut leader = WindowView::new(Size::new(1000.0, 800.0), 1.0);
+        leader.active_workspace = Some(ws);
+        let scroll = leader.scroll_mut(ws);
+        scroll.active_column = 3;
+        scroll.focus_pane(ColumnId(5), PaneId(9));
+        scroll.focus_domain = FocusDomain::Floating;
+        scroll.active_float = Some(PaneId(9));
+        scroll.offset = ViewOffset::Static(42.0);
+
+        // A snapshot survives serialization (it crosses the wire) and mirrors onto a smaller window.
+        let snapshot = leader.snapshot();
+        let wire = serde_json::to_string(&snapshot).unwrap();
+        let snapshot: ViewSnapshot = serde_json::from_str(&wire).unwrap();
+        let mut follower = WindowView::new(Size::new(400.0, 300.0), 2.0);
+        follower.mirror(&snapshot);
+
+        assert_eq!(follower.active_workspace, Some(ws));
+        let view = follower.scroll(ws);
+        assert_eq!(view.active_column, 3);
+        assert_eq!(view.focused_pane(ColumnId(5)), Some(PaneId(9)));
+        assert_eq!(view.focus_domain, FocusDomain::Floating);
+        assert_eq!(view.active_float, Some(PaneId(9)));
+        assert_eq!(view.offset.current(), 42.0);
+        // The follower keeps its own geometry — it mirrors where the leader looks, not its size.
+        assert_eq!(follower.viewport(), Size::new(400.0, 300.0));
+        assert_eq!(follower.scale(), 2.0);
     }
 }

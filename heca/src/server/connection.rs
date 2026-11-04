@@ -22,6 +22,16 @@ pub(super) struct Connection {
     pub projection_pending: Cell<bool>,
     pub session: Cell<Option<SessionId>>,
     pub window_ordinal: Cell<u64>,
+    /// The title this window reported for itself, once it has. `None` until the first report (the
+    /// brief gap between attach and the window formatting its title).
+    pub title: RefCell<Option<String>>,
+    /// The window this one follows (mirrors), by id, or `None`.
+    pub follows: Cell<Option<u64>>,
+    /// Whether this window was last told it is followed — so a change is sent once, not every pump.
+    pub was_followed: Cell<bool>,
+    /// This window's last reported view, relayed to its followers (and sent once when a new
+    /// follower starts). `None` until it reports one.
+    pub view: RefCell<Option<heca_core::layout::ViewSnapshot>>,
     input: RefCell<VecDeque<ClientMsg>>,
     closed: Cell<bool>,
     next_rpc: Cell<u64>,
@@ -42,6 +52,10 @@ impl Connection {
             projection_pending: Cell::new(false),
             session: Cell::new(None),
             window_ordinal: Cell::new(0),
+            title: RefCell::new(None),
+            follows: Cell::new(None),
+            was_followed: Cell::new(false),
+            view: RefCell::new(None),
             input: Default::default(),
             closed: Cell::new(false),
             next_rpc: Cell::new(1),

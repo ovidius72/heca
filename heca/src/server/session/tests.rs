@@ -85,6 +85,83 @@ fn attach_finishes_the_projection_after_terminal_snapshots() {
 }
 
 #[test]
+fn the_window_directory_lists_each_attached_window_by_its_reported_title() {
+    use crate::server::sessions::WindowInfo;
+    use crate::server::wire::{ClientLink, in_process};
+    let mut runtime = SessionRuntime::new(
+        ServerState::for_tests(Default::default()),
+        Session::new(SessionId(42), Default::default()),
+    );
+    // Two windows attach to the one session, each reporting the title it formatted for itself.
+    let (client_a, server_a) = in_process();
+    let conn_a = Rc::new(Connection::new(1, Box::new(server_a)));
+    conn_a.queue(ClientMsg::Attach);
+    conn_a.queue(ClientMsg::ReportWindowTitle("~/projects/heca".into()));
+    runtime.add_connection(conn_a);
+    let (client_b, server_b) = in_process();
+    let conn_b = Rc::new(Connection::new(2, Box::new(server_b)));
+    conn_b.queue(ClientMsg::Attach);
+    conn_b.queue(ClientMsg::ReportWindowTitle("~/projects/heca #2".into()));
+    runtime.add_connection(conn_b);
+    runtime.pump(Instant::now());
+
+    // The last directory each window received names both windows: stable id, presentation ordinal,
+    // and the title that window reported.
+    let latest_windows = |client: &dyn ClientLink| {
+        let mut windows = None;
+        while let Some(message) = client.poll().unwrap() {
+            if let ServerMsg::Windows { session_id, windows: list } = message {
+                assert_eq!(session_id, SessionId(42));
+                windows = Some(list);
+            }
+        }
+        windows.expect("every attached window gets the directory")
+    };
+    let expected = vec![
+        WindowInfo { id: 1, ordinal: 1, title: "~/projects/heca".into() },
+        WindowInfo { id: 2, ordinal: 2, title: "~/projects/heca #2".into() },
+    ];
+    assert_eq!(latest_windows(&client_a), expected);
+    assert_eq!(latest_windows(&client_b), expected);
+}
+
+#[test]
+fn following_relays_the_leaders_view_and_tells_the_leader_it_is_followed() {
+    use crate::server::wire::{ClientLink, in_process};
+    use heca_core::layout::{Size, WindowView};
+    let mut runtime = SessionRuntime::new(
+        ServerState::for_tests(Default::default()),
+        Session::new(SessionId(42), Default::default()),
+    );
+    let view = WindowView::new(Size::new(800.0, 600.0), 1.0).snapshot();
+    let (leader, leader_server) = in_process();
+    let conn_leader = Rc::new(Connection::new(1, Box::new(leader_server)));
+    conn_leader.queue(ClientMsg::Attach);
+    // The leader reports the view it is looking at.
+    conn_leader.queue(ClientMsg::ReportView(view.clone()));
+    runtime.add_connection(conn_leader);
+    let (follower, follower_server) = in_process();
+    let conn_follower = Rc::new(Connection::new(2, Box::new(follower_server)));
+    conn_follower.queue(ClientMsg::Attach);
+    // The follower follows the leader.
+    conn_follower.queue(ClientMsg::Follow { target: Some(1) });
+    runtime.add_connection(conn_follower);
+    runtime.pump(Instant::now());
+
+    // The leader is told it is followed, so it knows to keep reporting its view.
+    let mut leader_msgs = Vec::new();
+    while let Some(message) = leader.poll().unwrap() { leader_msgs.push(message); }
+    assert!(leader_msgs.iter().any(|m| matches!(m, ServerMsg::Followed { active: true })));
+
+    // The follower receives the leader's view to mirror.
+    let mut mirrored = None;
+    while let Some(message) = follower.poll().unwrap() {
+        if let ServerMsg::FollowView(snapshot) = message { mirrored = Some(snapshot); }
+    }
+    assert_eq!(mirrored, Some(view));
+}
+
+#[test]
 fn an_empty_or_terminated_session_also_finishes_its_projection() {
     use crate::server::wire::{ClientLink, in_process};
     for terminated in [false, true] {

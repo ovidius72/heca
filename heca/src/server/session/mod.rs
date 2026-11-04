@@ -213,6 +213,9 @@ impl SessionRuntime {
                         {
                             detached.push(i);
                         }
+                        // The newcomer gets the current directory (the other windows), and they get
+                        // it refreshed with the newcomer in it; its own title follows on its report.
+                        detached.extend(self.publish_windows());
                         publish_terminals = true;
                     }
                 }
@@ -465,6 +468,30 @@ impl SessionRuntime {
                         detached.push(i);
                     }
                 }
+                ClientMsg::ReportWindowTitle(title) => {
+                    // Attributed to the stamped connection, never a client-named id. A new window
+                    // reports right after attaching, so this is also its join into the directory.
+                    *self.clients[i].title.borrow_mut() = Some(title);
+                    detached.extend(self.publish_windows());
+                }
+                ClientMsg::Follow { target } => {
+                    self.clients[i].follows.set(target);
+                    detached.extend(self.refresh_follow());
+                    // Mirror at once from the leader's last known view, so following is not blank
+                    // until the leader next moves.
+                    if let Some(leader) = target
+                        && let Some(view) =
+                            self.clients.iter().find(|c| c.id == leader).and_then(|c| c.view.borrow().clone())
+                        && self.clients[i].link.send(ServerMsg::FollowView(view)).is_err()
+                    {
+                        detached.push(i);
+                    }
+                }
+                ClientMsg::ReportView(view) => {
+                    let leader = self.clients[i].id;
+                    *self.clients[i].view.borrow_mut() = Some(view.clone());
+                    detached.extend(self.relay_follow_view(leader, &view));
+                }
             }
         }
 
@@ -579,12 +606,27 @@ impl SessionRuntime {
         // Drop detached clients, highest index first so the earlier ones keep their positions.
         detached.sort_unstable();
         detached.dedup();
+        let someone_left = !detached.is_empty();
         for i in detached.into_iter().rev() {
             let gone = self.clients.remove(i);
             // Forget this window's pane-size claims so a pane it kept small (or was driving under
             // `latest`) returns to the size the remaining windows ask for.
             self.state.client_gone(gone.id);
             gone.close();
+        }
+        // A window leaving changes the directory the others see; republish it once (a client that
+        // drops during this send is caught on the next pump).
+        if someone_left {
+            let mut gone = self.publish_windows();
+            // A window leaving can drop a leader's last follower, too.
+            gone.extend(self.refresh_follow());
+            gone.sort_unstable();
+            gone.dedup();
+            for i in gone.into_iter().rev() {
+                let client = self.clients.remove(i);
+                self.state.client_gone(client.id);
+                client.close();
+            }
         }
         for client in &self.clients { client.expire_rpc(now); }
     }

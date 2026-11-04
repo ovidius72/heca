@@ -24,6 +24,15 @@ pub(crate) fn handle_switch_session(state: &mut AppState, action: &WmAction) {
     }
 }
 
+pub(crate) fn handle_follow(state: &mut AppState, action: &WmAction) {
+    let WmAction::Follow { target } = action else {
+        return;
+    };
+    // Window-local: mirror the target (or stop). The server relays the leader's view; the follow
+    // breaks on this window's own input.
+    state.client.follow(*target);
+}
+
 pub(crate) fn handle_reconnect_session(state: &mut AppState, _: &WmAction) {
     if let Err(error) = state.client.reconnect_session() {
         state.status_note = Some(error.to_string());

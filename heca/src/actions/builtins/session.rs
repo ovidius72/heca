@@ -119,4 +119,16 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         args: &[],
     },
+    ActionDescriptor {
+        name: "follow",
+        side: Side::Client,
+        label: "Follow Window",
+        description: "Mirror another window on this session; omit the target to stop following.",
+        icon: Some(Glyph::Cards),
+        args: &[ArgDescriptor::optional(
+            "target",
+            ArgKind::Text,
+            "Id of the window to follow, from the window directory.",
+        )],
+    },
 ];
