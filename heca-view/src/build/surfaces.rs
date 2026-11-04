@@ -60,6 +60,14 @@ impl Command {
     }
     pub fn id(mut self, id: &str) -> Self { self.0 = self.0.prop("id", id.into()); self }
     pub fn description(mut self, text: &str) -> Self { self.0 = self.0.prop("description", text.into()); self }
+    /// Insert this text when completing the command, without running it.
+    pub fn completion(mut self, text: &str) -> Self { self.0 = self.0.prop("completion", text.into()); self }
+    /// Place this entry after matching suggestions. Default false.
+    pub fn fallback(mut self, yes: bool) -> Self { self.0 = self.0.prop("fallback", yes.into()); self }
+    /// A path below the title, shortened by the native palette row.
+    pub fn path(mut self, path: &str) -> Self { self.0 = self.0.prop("path", path.into()); self }
+    /// A separate metadata line below the description or path.
+    pub fn detail(mut self, text: &str) -> Self { self.0 = self.0.prop("detail", text.into()); self }
     pub fn mode(mut self, name: &str) -> Self { self.0 = self.0.prop("mode", name.into()); self }
     pub fn group(mut self, group: u16) -> Self { self.0 = self.0.prop("group", i64::from(group).into()); self }
     pub fn current(mut self, current: bool) -> Self { self.0 = self.0.prop("current", current.into()); self }

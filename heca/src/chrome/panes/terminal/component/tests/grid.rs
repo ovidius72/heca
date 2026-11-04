@@ -56,3 +56,22 @@ fn no_grid_is_asked_for_before_the_cell_size_is_known() {
     let _root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     assert!(grids(&said).is_empty());
 }
+
+#[test]
+fn changing_cell_metrics_requests_layout_even_when_the_controls_do_not_change() {
+    let (seams, said) = recording();
+    let terminal = Terminal::unbound();
+    terminal.bind(seams);
+    let viewport = scrolled(0);
+    terminal.show(&viewport);
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(terminal.clone()), 300.0, 200.0);
+    assert!(!terminal.show(&viewport));
+    let mut zoomed = viewport;
+    zoomed.nominal_cell = (20.0, 40.0);
+    zoomed.cell = zoomed.nominal_cell;
+    assert!(terminal.show(&zoomed), "a new font must schedule its own layout");
+    heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 200.0));
+    let grid = grids(&said).last().copied().unwrap();
+    assert_eq!((grid.cols, grid.rows), (15, 5));
+    assert!(!terminal.show(&zoomed));
+}

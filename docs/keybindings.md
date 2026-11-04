@@ -94,6 +94,20 @@ action = "toggle_layer"
 args   = { name = "heca.expose" }
 ```
 
+The default palette shortcuts share the registered `command_palette` action:
+
+| List | Default binding | Argument |
+|---|---|---|
+| Actions | `prefix+p` | none |
+| Panes | `prefix+o` | `mode = "pane"` |
+| Workspaces | `prefix+Ctrl+o` | `mode = "workspace"` |
+| Sessions | `prefix+#` | `mode = "session"` |
+
+Press your configured prefix, then the remaining key. The default prefix is `Ctrl+b`.
+For sessions, press the prefix and then `#`; no extra character is needed in the palette.
+Override a binding with a `[[keys.bind]]` entry using the same combo, or remove it with
+`"prefix+#" = true` under `[keys.unbind]`. No additional action registration is needed.
+
 ## 3. A mode — a sub-keymap behind one key
 
 While a mode is active its own bindings come first. A key the mode does not bind falls through to

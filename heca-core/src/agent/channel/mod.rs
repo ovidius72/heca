@@ -38,6 +38,7 @@ impl Inbox {
 }
 
 pub(super) struct ReportReader {
+    launch: Option<crate::backend::ProcessLaunch>,
     path: PathBuf,
     driver: Arc<dyn AgentDriver>,
     file: File,
@@ -56,7 +57,12 @@ impl ReportReader {
     ) -> io::Result<Self> {
         fs::write(&path, [])?;
         let file = File::open(&path)?;
-        Ok(Self { path, driver, file, pending: Vec::new(), oversized: false, limit })
+        Ok(Self { launch: None, path, driver, file, pending: Vec::new(), oversized: false, limit })
+    }
+
+    pub(super) fn with_launch(mut self, launch: crate::backend::ProcessLaunch) -> Self {
+        self.launch = Some(launch);
+        self
     }
 
     fn read(&mut self, inbox: &Inbox) -> io::Result<()> {
@@ -72,8 +78,9 @@ impl ReportReader {
             for &byte in &bytes[..read] {
                 if byte == b'\n' {
                     if !self.oversized
-                        && let Ok(Some(report)) = super::registry::read_report(self.driver.as_ref(), AgentInput::SideChannel(&self.pending))
+                        && let Ok(Some(mut report)) = super::registry::read_report(self.driver.as_ref(), AgentInput::SideChannel(&self.pending))
                     {
+                        if self.launch.is_some() { report.launch.clone_from(&self.launch); }
                         inbox.push(report);
                     }
                     self.pending.clear();

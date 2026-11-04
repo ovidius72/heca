@@ -44,7 +44,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ArgDescriptor::optional(
                 "mode",
                 ArgKind::Text,
-                "Which list to open in: pane or workspace; omit for actions.",
+                "Which list to open in: pane, workspace, or session; omit for actions.",
             ),
             ArgDescriptor::optional(
                 "query",

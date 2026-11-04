@@ -112,6 +112,39 @@ fn a_node_can_hand_its_keyboard_to_a_part() {
     assert_eq!(w.base().keyboard_to.as_deref(), Some("body"));
 }
 
+#[test]
+fn described_focus_fallback_uses_the_same_focus_door_as_native_widgets() {
+    let emit: IntentEmitter = Rc::new(|_| {});
+    let node = ViewNode::new(WidgetId::Input).prop("focus_fallback", PropValue::Bool(true));
+    let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default()).unwrap();
+    heca_grid_ui::settle_focus(widget.as_mut());
+    assert_eq!(heca_grid_ui::keyboard_holder(widget.as_ref()), Some(widget.base().focus_id()));
+}
+
+#[test]
+fn described_palette_completion_prefers_suggestions_over_fallbacks() {
+    use heca_grid_ui::{Event, WidgetIntent};
+    use heca_view::build::{Command, CommandPalette, Style};
+
+    let node = CommandPalette::new().name("folder").query("Pro").default_open(true)
+        .command(Command::new("Create", Intent::new("create"))
+            .completion("Pro").fallback(true))
+        .command(Command::new("Existing", Intent::new("open"))
+            .completion("Projects/HeCa/").path("/Projects/HeCa").detail("Existing folder"))
+        .into_node();
+    assert_eq!(node.children[1].props.get("path").and_then(PropValue::as_text), Some("/Projects/HeCa"));
+    assert_eq!(node.children[1].props.get("detail").and_then(PropValue::as_text), Some("Existing folder"));
+    let (emit, intents) = recording_emitter();
+    let mut forms = FormBindings::default();
+    let mut palette = realize(&node, &Theme::default(), &emit, &mut forms).unwrap();
+    heca_grid_ui::dispatch(palette.as_mut(), &Event::Widget(WidgetIntent::Complete));
+    assert_eq!(forms.collect().get("folder").and_then(PropValue::as_text), Some("Projects/HeCa/"));
+    assert!(intents.borrow().is_empty(), "completion must not run the command");
+    heca_grid_ui::dispatch(palette.as_mut(), &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(intents.borrow().len(), 1);
+    assert_eq!(intents.borrow()[0].action, "open");
+}
+
 /// **A described `Row` is the interactive widget, not a box.** Click it and its intent fires;
 /// press Enter on it and the same intent fires; it takes one hint target so `prefix+/` reaches
 /// it; and it holds whatever content it was given.

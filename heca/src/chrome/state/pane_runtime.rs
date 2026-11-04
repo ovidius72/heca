@@ -1,6 +1,8 @@
 //! Each pane's live facts (program, status, folder, git, scroll), mirrored as signals.
 
 use super::*;
+use super::pane_presentation::ProgramName;
+use std::time::{Duration, Instant};
 
 /// Per-pane reactive mirror of canonical [`PaneRuntime`] fields.
 ///
@@ -13,10 +15,9 @@ use super::*;
 pub(crate) struct PaneRuntimeSignals {
     /// Visual feedback belongs to this pane, surviving row rebuilds and dock moves.
     pub(crate) flash: heca_grid_ui::FlashHandle,
-    /// One observer per pane, independent of how many rows display it.
-    pub(crate) feedback_bound: Signal<bool>,
     /// Raw foreground program name, verbatim (e.g. `"nvim"`); `None` until detected.
     pub(crate) program: Signal<Option<String>>,
+    program_name: Signal<ProgramName>,
     /// High-level foreground-process lifecycle status.
     pub(crate) status: Signal<ProcessStatus>,
     /// Current working directory of the pane's foreground process.
@@ -45,8 +46,8 @@ impl PaneRuntimeSignals {
     fn new(runtime: &PaneRuntime) -> Self {
         Self {
             flash: heca_grid_ui::FlashHandle::new(),
-            feedback_bound: signal(false),
             program: signal(runtime.program.clone()),
+            program_name: signal(ProgramName::default()),
             status: signal(runtime.status.clone()),
             cwd: signal(runtime.cwd.clone()),
             exit_code: signal(runtime.exit_code),
@@ -58,6 +59,11 @@ impl PaneRuntimeSignals {
             at_bottom: signal(true),
             scrollback_rows: signal(0),
         }
+    }
+
+    /// Display names and immediate runtime facts from the same shared projection.
+    pub(crate) fn presentation(&self) -> PanePresentation {
+        PanePresentation { program: self.program_name.get().shown, runtime: self.snapshot() }
     }
 
     /// Read every field of this pane's runtime at once.
@@ -102,20 +108,32 @@ pub struct PaneRuntimeStore {
     events: ChromeEventBus,
     panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
     sounds: std::rc::Rc<crate::agent::sounds::AgentSounds>,
+    name_delay: std::rc::Rc<std::cell::Cell<Duration>>,
 }
 
 impl PaneRuntimeStore {
+    pub(crate) fn play_feedback(&self, session: heca_core::layout::SessionId, pane: PaneId, revision: u64, status: String) {
+        self.events.emit(ChromeEvent::PaneFeedback { session, pane, revision, status });
+    }
+
+    pub(crate) fn clear_feedback(&self) {
+        for pane in self.panes.get_untracked().values() { pane.flash.clear(); }
+    }
+
     pub(super) fn new(events: ChromeEventBus) -> Self {
         let sounds = std::rc::Rc::new(crate::agent::sounds::AgentSounds::new(&events));
         Self {
             events,
             panes: signal(HashMap::new()),
             sounds,
+            name_delay: std::rc::Rc::new(std::cell::Cell::new(Duration::from_millis(
+                heca_config::settings::SettingsConfig::default().pane_name_delay,
+            ))),
         }
     }
 
-    pub(crate) fn configure_agents(&self, config: &heca_config::settings::AgentsConfig) {
-        self.sounds.configure(config);
+    pub(crate) fn configure_sounds(&self, config: &heca_config::settings::AgentsConfig, notification_sound: bool) {
+        self.sounds.configure(config, notification_sound);
     }
 
     /// Look at one pane's signals, if the store has met it.
@@ -157,6 +175,33 @@ impl PaneRuntimeStore {
         self.with(pane, |runtime| runtime.map(PaneRuntimeSignals::current))
     }
 
+    /// Shared display projection; raw process facts remain available through `runtime`.
+    pub fn presentation(&self, pane: PaneId) -> Option<PanePresentation> {
+        self.with(pane, |runtime| runtime.map(PaneRuntimeSignals::presentation))
+    }
+
+    pub(crate) fn set_name_delay(&self, millis: u64) {
+        self.name_delay.set(Duration::from_millis(millis));
+    }
+
+    pub(crate) fn next_name_update(&self) -> Option<Instant> {
+        let delay = self.name_delay.get();
+        self.panes.with(|panes| panes.values()
+            .filter_map(|pane| pane.program_name.get_untracked().deadline(delay)).min())
+    }
+
+    pub(crate) fn advance_names(&self, now: Instant) -> bool {
+        let panes: Vec<_> = self.panes.with(|panes| panes.values().copied().collect());
+        let mut changed = false;
+        for pane in panes {
+            let mut name = pane.program_name.get_untracked();
+            let previous = name.clone();
+            name.advance(self.name_delay.get(), now);
+            if name != previous { pane.program_name.set(name); changed = true; }
+        }
+        changed
+    }
+
     /// A pane's user-set custom name (from rename), mirrored into the store; `None`
     /// while it tracks the process name or the pane has no mirrored entry.
     pub fn custom_name(&self, pane: PaneId) -> Option<String> {
@@ -195,6 +240,10 @@ impl PaneRuntimeStore {
             let sigs = self.signals(pane);
             let cur = sigs.current();
             let mut changed = false;
+            let mut name = sigs.program_name.get_untracked();
+            let previous = name.clone();
+            name.observe(runtime, self.name_delay.get(), Instant::now());
+            if name != previous { sigs.program_name.set(name); changed = true; }
             if cur.program != runtime.program {
                 sigs.program.set(runtime.program.clone());
                 self.events.emit(ChromeEvent::PaneProcessChanged { pane });

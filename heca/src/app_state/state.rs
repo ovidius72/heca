@@ -2,6 +2,16 @@
 
 use super::*;
 
+#[derive(Clone, Copy)]
+pub(crate) enum ReloadReason { Explicit, Session }
+
+impl ReloadReason {
+    /// A session switch keeps presentation state when its effective config and theme are equal.
+    pub(crate) fn requires_apply(self, current: &heca_config::loader::AppConfig, next: &heca_config::loader::AppConfig) -> bool {
+        matches!(self, Self::Explicit) || current.config != next.config || current.theme != next.theme
+    }
+}
+
 /// **A menu a widget asked to open, waiting for the host to mount it.**
 ///
 /// The menu itself, where it goes, and **who it is about** — the declaring widget's own identity,
@@ -69,7 +79,8 @@ pub struct AppState {
     /// What **this window** sees of the session: the workspace shown, the scroll of each
     /// workspace, the window's size. Reach both through [`layout`](Self::layout) and
     /// [`layout_mut`](Self::layout_mut).
-    pub(crate) view: WindowView,
+    pub(crate) view: WindowViews,
+    pub(crate) session_dialog: Option<crate::chrome::OverlayId>,
     pub theme: Theme,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
@@ -304,7 +315,7 @@ pub struct AppState {
     pub pending_drops: std::rc::Rc<std::cell::RefCell<Vec<heca_grid_ui::drag::Dropped>>>,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
-    pub pending_reload: bool,
+    pub(crate) pending_reload: Option<ReloadReason>,
     /// Whether the application window is currently focused.
     pub window_focused: bool,
     /// The OS cursor currently set on the window. Tracked so the cursor policy only

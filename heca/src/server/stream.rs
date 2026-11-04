@@ -10,7 +10,7 @@ pub(super) fn valid_grid(cols: usize, rows: usize, cell: (f32, f32), scale: f32,
 }
 
 impl ServerState {
-    pub(super) fn process_input(&mut self, owner: &TerminalOwner, input: ProcessInput) {
+    pub(super) fn process_input(&mut self, _client_id: u64, owner: &TerminalOwner, input: ProcessInput) {
         let Some(id) = self.backends.find_owner(owner) else { return };
         let Some(backend) = self.backends.get_mut_by_id(id) else { return };
         match input {

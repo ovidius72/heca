@@ -123,7 +123,7 @@ mod tests {
         let sides = sides();
         let stragglers: Vec<_> = WmActionKind::iter()
             .filter(|k| sides.of(*k) == Some(Side::Server))
-            .filter(|k| handler_for(*k).is_none())
+            .filter(|k| handler_for(*k).is_none() && !crate::server::sessions::owns(*k))
             .collect();
         assert!(stragglers.is_empty(), "still on the window: {stragglers:?}");
     }

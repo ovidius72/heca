@@ -27,6 +27,7 @@ struct Seen {
     visible: bool,
     claim: Claim,
     released: bool,
+    held_when_released: bool,
 }
 
 fn gather(node: &dyn Component, path: &mut Vec<usize>, shown: bool, out: &mut Vec<Seen>) {
@@ -43,6 +44,7 @@ fn gather(node: &dyn Component, path: &mut Vec<usize>, shown: bool, out: &mut Ve
             visible: shown,
             claim,
             released,
+            held_when_released: base.focus_door.held_when_released.get(),
         });
     }
     for (i, child) in base.children.iter().enumerate() {
@@ -145,10 +147,6 @@ pub(super) fn follow(
 pub(crate) fn settle(root: &mut dyn Component) {
     let mut seen = Vec::new();
     gather(root, &mut Vec::new(), true, &mut seen);
-    if seen.is_empty() {
-        return;
-    }
-
     // Hidden things cannot hold the keyboard; let go of them quietly.
     for s in seen.iter().filter(|s| s.flagged && !s.visible) {
         at(root, &s.path).base().blur();
@@ -197,7 +195,12 @@ pub(crate) fn settle(root: &mut dyn Component) {
         let opener = base.focus_door.opener.replace(0);
         let held_itself = base.focus_door.held_when_released.replace(false);
         let inside = holder.clone().filter(|h| h.starts_with(&s.path));
-        let held_inside = inside.is_some();
+        // A field following the same signal has already let go during gather. Its
+        // modal still owned that keyboard and must return it to the opener.
+        let held_inside = inside.is_some() || seen.iter().any(|child| {
+            child.released && child.held_when_released
+                && child.path.len() > s.path.len() && child.path.starts_with(&s.path)
+        });
         if let Some(h) = inside {
             if !modal && h != s.path {
                 let inner = at(root, &h).base().focus_id();
@@ -223,6 +226,10 @@ pub(crate) fn settle(root: &mut dyn Component) {
         && let Some(id) = restore
         && let Some(path) = find_focusable(root, &[], id)
     {
+        arrive(root, &path);
+        holder = Some(path);
+    }
+    if holder.is_none() && let Some(path) = super::fallback::target(root) {
         arrive(root, &path);
     }
 }

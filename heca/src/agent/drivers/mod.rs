@@ -27,7 +27,7 @@ pub(super) struct Driver {
 impl Driver {
     fn configured(id: &str, config: &AgentsConfig, icon: AgentIcon, prepare: Prepare, integration: Integration) -> Option<Self> {
         let AgentProgramConfig {
-            enabled: Some(true), name: Some(name), executables: Some(programs), icon: custom_icon, mut reports, enabled_events,
+            enabled: Some(true), name: Some(name), executables: Some(programs), icon: custom_icon, mut reports, enabled_events, ..
         } = config.programs.get(id)?.clone() else { return None };
         let native_events = reports.keys().cloned().collect();
         if let Some(events) = enabled_events {
@@ -47,7 +47,7 @@ impl Driver {
     }
 
     fn report_map(&self) -> std::collections::BTreeMap<String, AgentState> {
-        self.reports.iter().map(|(event, status)| (event.clone(), self.report(status))).collect()
+        self.reports.iter().map(|(event, status)| (event.clone(), self.report(status).event(event))).collect()
     }
 }
 

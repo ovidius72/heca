@@ -61,6 +61,8 @@ pub enum WorkspaceSwitch {
 pub struct ScrollView {
     /// Horizontal scroll offset, relative to the active column.
     pub(crate) offset: ViewOffset,
+    /// No scroll has been chosen yet: reads fit the first column using its space's options.
+    pub(crate) initial: bool,
     /// Index of the active column.
     pub(crate) active_column: usize,
     /// Whether to activate the previous column on removal, and the offset to restore.
@@ -95,6 +97,7 @@ impl ScrollView {
     pub fn new(area: Rectangle, scale: f64) -> Self {
         Self {
             offset: ViewOffset::Static(0.0),
+            initial: true,
             active_column: 0,
             activate_prev_on_removal: None,
             area,
@@ -185,6 +188,12 @@ impl WindowView {
     /// The window's scale factor.
     pub(crate) fn scale(&self) -> f64 {
         self.scale
+    }
+
+    pub(super) fn update_scale(&mut self, scale: f64) {
+        self.scale = scale;
+        self.blank.scale = scale;
+        for view in self.scrolls.values_mut() { view.scale = scale; }
     }
 
     /// What this window sees of workspace `ws`.

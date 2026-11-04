@@ -95,12 +95,15 @@ impl TerminalBackend {
         match event {
             OscEvent::PromptStart => true,
             OscEvent::CommandStart | OscEvent::PreExec => {
+                self.command_active = true;
+                self.command_launch = None;
                 self.semantic_status_active = false;
                 self.runtime.exit_code = None;
                 true
             }
             OscEvent::Program(program) => {
                 if !program.is_empty() {
+                    self.command_active = true;
                     self.last_agent_notification = None;
                     self.set_agent(None);
                     self.runtime.program = Some(program);
@@ -112,6 +115,10 @@ impl TerminalBackend {
                 false
             }
             OscEvent::CommandFinished(code) => {
+                if std::mem::take(&mut self.command_active) {
+                    self.pending_alerts.push(crate::backend::BackendAlert::ProcessCompleted { exit_code: code });
+                }
+                self.command_launch = None;
                 self.last_agent_notification = None;
                 self.set_agent(None);
                 self.runtime.status = ProcessStatus::of_exit(code);
@@ -122,6 +129,10 @@ impl TerminalBackend {
             }
             OscEvent::Cwd(cwd) => {
                 self.runtime.cwd = Some(cwd);
+                false
+            }
+            OscEvent::LaunchCommand(command) => {
+                self.command_launch = self.pty.command_launch(&command, self.runtime.cwd.as_deref()).ok();
                 false
             }
             OscEvent::Notification(notification) => {
@@ -230,6 +241,10 @@ impl TerminalBackend {
             && self.reaped
             && let Some(code) = exit_code
         {
+            if !self.semantic_status_active {
+                self.pending_alerts.push(crate::backend::BackendAlert::ProcessCompleted { exit_code: code });
+            }
+            self.command_active = false;
             self.runtime.status = ProcessStatus::of_exit(code);
             self.last_agent_notification = None;
             self.set_agent(None);

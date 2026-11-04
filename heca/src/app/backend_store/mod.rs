@@ -30,6 +30,8 @@ pub(crate) enum Program {
     /// A command, run under the user's shell so job control and rc behave as they do in a pane the
     /// user opened.
     Command(String),
+    /// Exact original executable/argv, without reparsing a displayed command line.
+    Recorded(heca_core::backend::ProcessLaunch),
 }
 
 /// **Everything that decides what a terminal process is**, as plain data.
@@ -215,7 +217,11 @@ impl BackendStore {
 
     /// Iterate over all backends mutably (e.g. for per-frame polling).
     pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn PaneBackend>> {
-        self.processes.values_mut().map(|p| &mut p.backend)
+        self.iter_mut().map(|(_, backend)| backend)
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (TerminalId, &mut Box<dyn PaneBackend>)> {
+        self.processes.iter_mut().map(|(id, process)| (*id, &mut process.backend))
     }
 
     pub(crate) fn owner_of(&self, id: TerminalId) -> Option<&TerminalOwner> {

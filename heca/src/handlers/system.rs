@@ -8,7 +8,7 @@ pub fn handle_command_palette(state: &mut AppState, action: &WmAction) {
         WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
         _ => (None, None),
     };
-    crate::chrome::open_command_palette(state, mode, query);
+    crate::chrome::open_command_palette(state, mode, query, None);
 }
 
 /// Open the context menu for the active context (keyboard / RPC entry, `prefix+>`).
@@ -44,7 +44,7 @@ pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
-    state.pending_reload = true;
+    state.pending_reload = Some(crate::app_state::ReloadReason::Explicit);
 }
 
 /// Give chrome keyboard focus to a dock — by id, or by letter.

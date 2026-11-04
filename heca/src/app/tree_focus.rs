@@ -76,4 +76,7 @@ pub(crate) fn settle_window_focus(state: &mut AppState) {
     }
     let dock = focused_dock(state);
     state.chrome_state.announce_focused_container(dock);
+    let pane = state.input_focused_pane();
+    state.client.sync_feedback(pane, &state.chrome_state.panes, &state.settings.agents,
+        state.settings.notification_flash, state.settings.notification_sound);
 }

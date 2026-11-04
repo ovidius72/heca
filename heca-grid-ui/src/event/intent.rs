@@ -30,6 +30,8 @@ pub enum WidgetIntent {
     /// A **newer** past query, and past the newest, the draft the walk interrupted.
     /// `menu_history_down`.
     MenuHistoryDown,
+    /// Complete the selected suggestion into the query without activating it. `complete`.
+    Complete,
     /// **Open this terminal's search** — whichever terminal holds the keyboard answers. `find`.
     ///
     /// Vocabulary for anything that has a body of text to look through: it names the capability

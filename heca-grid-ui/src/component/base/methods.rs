@@ -111,6 +111,7 @@ impl Base {
             scope_key: None,
             keeps_keyboard: false,
             keyboard_to: None,
+            focus_fallback: false,
             font: 15.0,
             root_font: 15.0,
             input_style: heca_theme::InputStyle::default(),

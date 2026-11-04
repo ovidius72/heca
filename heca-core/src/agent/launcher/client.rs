@@ -27,6 +27,8 @@ fn run(arguments: Vec<OsString>) -> Result<i32, AgentError> {
     let root = PathBuf::from(root);
     let directory = tempfile::Builder::new().prefix("run-").tempdir_in(root)?;
     let request = LaunchRequest {
+        executable: executable.into(),
+        arguments: rest.to_vec(),
         program: program.to_str().ok_or_else(|| AgentError::Report("agent executable name must be UTF-8".into()))?.to_owned(),
         cwd: env::current_dir()?,
         environment: env::vars_os().filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?))).collect(),

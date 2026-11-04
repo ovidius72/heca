@@ -17,6 +17,7 @@ fn a_launch_uses_the_commands_current_environment_then_reports_without_terminal_
     let root = owner.bin().parent().unwrap().to_owned();
     let run = tempfile::Builder::new().prefix("run-").tempdir_in(&root).unwrap();
     let request = LaunchRequest {
+        executable: "/opt/tools/demo-agent".into(), arguments: vec!["--label".into(), "two words".into()],
         program: "demo-agent".into(), cwd: run.path().into(),
         environment: [("DEMO_CONFIG".into(), "changed after the pane opened".into())].into(),
     };
@@ -32,5 +33,8 @@ fn a_launch_uses_the_commands_current_environment_then_reports_without_terminal_
         receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap();
         reports.extend(owner.drain());
     }
-    assert_eq!(reports, [AgentState::new("demo", "Demo", AgentStatus::new("working"))]);
+    let mut expected = AgentState::new("demo", "Demo", AgentStatus::new("working"));
+    expected.launch = Some(crate::backend::ProcessLaunch { executable: request.executable,
+        arguments: request.arguments, cwd: Some(request.cwd) });
+    assert_eq!(reports, [expected]);
 }

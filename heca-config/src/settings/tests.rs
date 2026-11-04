@@ -3,6 +3,26 @@
 use super::*;
 
 #[test]
+fn session_confirmation_switches_and_text_follow_config_layers() {
+    let defaults = crate::loader::config_from_layers("").unwrap();
+    for owner in ["terminate_session", "delete_session"] {
+        assert!(defaults.confirm.enabled(owner, false));
+    }
+    let user = crate::loader::config_from_layers(
+        "[confirm]\nterminate_session=false\n[settings.session_text]\nconfirm_delete='Remove {name}'\ndelete='Remove'\ncancel='Keep'\n"
+    ).unwrap();
+    assert!(!user.confirm.enabled("terminate_session", true));
+    assert!(user.confirm.enabled("delete_session", false));
+    assert_eq!(user.settings.session_text.confirm_delete, "Remove {name}");
+    assert_eq!(user.settings.session_text.delete, "Remove");
+    assert_eq!(user.settings.session_text.cancel, "Keep");
+    assert_eq!(user.settings.session_text.confirm_terminate, defaults.settings.session_text.confirm_terminate);
+    for invalid in ["'true'", "1", "0.5"] {
+        assert!(crate::loader::config_from_layers(&format!("[confirm]\ndelete_session={invalid}\n")).is_err());
+    }
+}
+
+#[test]
 fn test_settings_config_default_values() {
     let s = SettingsConfig::default();
     assert_eq!(s.theme, "grid_tron");

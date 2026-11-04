@@ -225,6 +225,10 @@ pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     };
     match raw.kind {
         RawPointerKind::Moved => route_move(root, raw),
+        RawPointerKind::Recheck => {
+            let _ = retarget_hover(root, raw);
+            Handled::No
+        },
         RawPointerKind::Pressed => route_press(root, raw),
         RawPointerKind::Released => route_release(root, raw),
         RawPointerKind::Wheel => route_wheel(root, raw),
@@ -235,9 +239,8 @@ pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     }
 }
 
-/// The pointer moved: hover transitions first (so a widget's state is current before it is asked
-/// to do anything), then the move itself, then whatever the drag machinery makes of it.
-fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
+/// Refresh hover after either device movement or a change beneath a stationary pointer.
+fn retarget_hover(root: &mut dyn Component, raw: &RawPointer) -> Option<Path> {
     let target = hit_test(root, raw.pos);
     // **A drag owns the pointer, so nothing hovers under it.** Hover says "the pointer is on you
     // and a click would land here", which is false mid-drag: what a release will do is decided by
@@ -251,7 +254,12 @@ fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         false => target.as_deref(),
     };
     update_hover(root, hover, raw);
+    target
+}
 
+/// Actual device movement also reaches captured controls and drives drag gestures.
+fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
+    let target = retarget_hover(root, raw);
     let capture = capture_path(root);
     let mut handled = Handled::No;
     // A gesture in flight owns the pointer: it hears the move wherever the cursor went. Otherwise

@@ -7,6 +7,7 @@ mod chrome;
 mod layout;
 mod naming;
 mod terminal;
+mod session;
 #[cfg(test)]
 mod tests;
 
@@ -79,6 +80,7 @@ pub(super) fn build_action(
     args: &std::collections::HashMap<String, String>,
 ) -> Option<WmAction> {
     layout::build_layout(name, args)
+        .or_else(|| session::build_session(name, args))
         .or_else(|| naming::build_naming(name, args))
         .or_else(|| terminal::build_terminal(name, args))
         .or_else(|| chrome::build_chrome(name, args))

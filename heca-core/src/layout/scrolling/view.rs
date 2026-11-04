@@ -8,7 +8,12 @@ impl ScrollingRef<'_> {
         if self.space.columns.is_empty() {
             return 0.0;
         }
-        self.column_x(self.view.active_column) + self.view.offset.current()
+        let offset = if self.view.initial {
+            self.compute_view_offset_for_column(self.view.active_column, None)
+        } else {
+            self.view.offset.current()
+        };
+        self.column_x(self.view.active_column) + offset
     }
 
     /// Target view position.
@@ -16,7 +21,12 @@ impl ScrollingRef<'_> {
         if self.space.columns.is_empty() {
             return 0.0;
         }
-        self.column_x(self.view.active_column) + self.view.offset.target()
+        let offset = if self.view.initial {
+            self.compute_view_offset_for_column(self.view.active_column, None)
+        } else {
+            self.view.offset.target()
+        };
+        self.column_x(self.view.active_column) + offset
     }
 
     /// Compute the view offset to fit a column into view.
@@ -82,8 +92,9 @@ impl ScrollingRef<'_> {
             (self.view.area, self.space.options.gaps)
         };
 
+        // Use the stored seed: target_view_pos itself derives this fit for a fresh view.
         compute_new_view_offset(
-            self.target_view_pos() + area.loc.x,
+            self.column_x(self.view.active_column) + self.view.offset.target() + area.loc.x,
             area.size.w,
             col_x,
             col_w,
@@ -216,12 +227,25 @@ impl ScrollingMut<'_> {
 }
 
 impl ScrollView {
+    /// Commit the same initial fit reads already use before a mutation changes the scroll.
+    pub(crate) fn initialize(&mut self, space: &ScrollingSpace) {
+        if !self.initial {
+            return;
+        }
+        if !space.columns.is_empty() {
+            let offset = space.through(self).compute_view_offset_for_column(self.active_column, None);
+            self.offset = ViewOffset::Static(offset);
+        }
+        self.initial = false;
+    }
+
     /// Make column `idx` of `space` the active one, easing the view to bring it on screen. An
     /// already-active column is re-fitted, so re-focusing one scrolled out of view reveals it.
     pub(crate) fn activate_column(&mut self, space: &ScrollingSpace, idx: usize) {
         if idx >= space.columns.len() {
             return;
         }
+        self.initialize(space);
         if self.active_column == idx {
             self.ensure_active_column_visible(space);
             return;

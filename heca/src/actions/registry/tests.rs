@@ -170,3 +170,31 @@ fn a_dynamic_action_cannot_retire_a_builtin() {
     assert!(!unregister_dynamic(&mut registry, &mut catalog, "close"));
     assert!(catalog.find("close").is_some(), "built-in survives");
 }
+
+#[test]
+fn headless_session_confirmations_fail_closed_and_have_independent_overrides() {
+    let catalog = super::ActionCatalog::with_builtins();
+    let registry = super::ActionRegistry::new();
+    let store = crate::chrome::SharedChromeState::new(0.0, 0.0);
+    for (terminate, delete) in [(true, true), (false, true), (true, false), (false, false)] {
+        let config = heca_config::loader::config_from_layers(&format!(
+            "[confirm]\nterminate_session={terminate}\ndelete_session={delete}\n"
+        )).unwrap();
+        for (owner, enabled) in [("terminate_session", terminate), ("delete_session", delete)] {
+            let intent = crate::chrome::Intent::new(owner)
+                .arg("session", crate::chrome::PropValue::Text("Project A".into()));
+            let mut ran = Vec::new();
+            let result = registry.execute_server_with(&catalog, &config.confirm, store.clone(), &intent,
+                &mut |action| { ran.push(action); Ok(Vec::new()) });
+            if enabled {
+                assert!(matches!(result, Err(crate::rpc::RpcError::Blocked(name)) if name == owner));
+                assert!(ran.is_empty(), "a missing confirmation must not execute the action");
+            } else {
+                assert!(result.is_ok());
+                assert_eq!(ran.len(), 1, "disabling one prompt runs its action exactly once");
+                assert!(matches!(&ran[0], crate::input::WmAction::TerminateSession { session }
+                    | crate::input::WmAction::DeleteSession { session } if session.as_deref() == Some("Project A")));
+            }
+        }
+    }
+}

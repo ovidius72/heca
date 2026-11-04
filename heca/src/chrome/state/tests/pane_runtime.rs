@@ -3,6 +3,63 @@
 use super::*;
 
 #[test]
+fn display_names_wait_while_process_facts_and_events_remain_immediate() {
+    let s = state();
+    let pane = PaneId(7);
+    s.panes.set_name_delay(1000);
+    let mut runtime = PaneRuntime { program: Some("zsh".into()), ..Default::default() };
+    s.panes.set_runtime(pane, &runtime, Some("Editor"));
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let out = seen.clone();
+    let _sub = s.events().subscribe("*", move |event| out.borrow_mut().push(event.name().to_string()));
+    runtime.program = Some("nvim".into());
+    runtime.status = ProcessStatus::Running;
+    runtime.agent = Some(heca_core::agent::AgentState::new(
+        "external", "Editor", heca_core::agent::AgentStatus::new("waiting_input"),
+    ));
+    s.panes.set_runtime(pane, &runtime, Some("Editor"));
+    assert_eq!(s.panes.runtime(pane), Some(runtime.clone()));
+    let presentation = s.panes.presentation(pane).unwrap();
+    assert_eq!(presentation.program(), Some("zsh"));
+    assert_eq!(presentation.runtime(), &runtime);
+    let info = crate::chrome::pane_info_view(&Default::default(), "", Some("Editor"), Some(&presentation), true);
+    assert_eq!(info.title, "Editor");
+    assert_eq!(info.process_hint.as_deref(), Some("zsh"));
+    assert_eq!(info.status, ProcessStatus::Running);
+    assert_eq!(seen.borrow().as_slice(), ["pane.process.changed", "pane.status.changed", "pane.agent.changed"]);
+    let count = seen.borrow().len();
+    let due = s.panes.next_name_update().unwrap();
+    assert!(!s.panes.advance_names(due - std::time::Duration::from_nanos(1)));
+    assert!(s.panes.advance_names(due));
+    assert_eq!(s.panes.presentation(pane).unwrap().program(), Some("nvim"));
+    assert_eq!(s.panes.next_name_update(), None);
+    assert_eq!(seen.borrow().len(), count, "a title update is not a process or feedback event");
+}
+
+#[test]
+fn removing_a_pane_cancels_its_name_deadline_and_zero_applies_on_reload() {
+    let s = state();
+    let pane = PaneId(7);
+    let mut runtime = PaneRuntime { program: Some("zsh".into()), ..Default::default() };
+    s.panes.set_runtime(pane, &runtime, None);
+    runtime.program = Some("vim".into());
+    runtime.status = ProcessStatus::Running;
+    s.panes.set_runtime(pane, &runtime, None);
+    assert!(s.panes.next_name_update().is_some());
+    s.panes.set_name_delay(0);
+    s.panes.set_runtime(pane, &runtime, None);
+    assert_eq!(s.panes.presentation(pane).unwrap().program(), Some("vim"));
+    assert_eq!(s.panes.next_name_update(), None);
+    s.panes.set_name_delay(1000);
+    runtime.program = Some("other-program".into());
+    s.panes.set_runtime(pane, &runtime, None);
+    assert!(s.panes.next_name_update().is_some());
+    s.panes.retain(&Default::default());
+    assert_eq!(s.panes.next_name_update(), None);
+    assert_eq!(s.panes.presentation(pane), None);
+}
+
+#[test]
 fn pane_runtime_round_trips_through_signals() {
     let s = state();
     let pane = PaneId(42);

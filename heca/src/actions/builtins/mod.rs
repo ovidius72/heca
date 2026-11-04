@@ -11,6 +11,7 @@ mod layout;
 mod navigation;
 mod pane;
 mod system;
+mod session;
 mod workspace;
 
 /// Static descriptor for a window-manager action. The built-in set is [`builtins`];
@@ -51,6 +52,7 @@ const BY_CATEGORY: &[(ActionCategory, &[ActionDescriptor])] = &[
     (ActionCategory::Workspace, workspace::ACTIONS),
     (ActionCategory::Chrome, chrome::ACTIONS),
     (ActionCategory::System, system::ACTIONS),
+    (ActionCategory::System, session::ACTIONS),
 ];
 
 /// Every built-in action with its category, in [`ActionCategory`] order — the seed

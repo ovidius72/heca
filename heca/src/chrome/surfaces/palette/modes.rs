@@ -8,11 +8,13 @@ pub(super) const MODE_WORKSPACE: &str = "workspace";
 
 /// Plain data needed by the palette's row sources.
 pub(super) struct RowSources<'a> {
+    pub sessions: &'a [PaletteEntry],
     pub catalog: &'a crate::actions::ActionCatalog,
     pub owners: &'a std::collections::HashMap<String, OwnerInfo>,
     pub shortcuts: &'a ActionShortcuts,
     pub layout: heca_core::layout::Layout<'a>,
     pub programs: &'a heca_config::programs::ProgramsConfig,
+    pub panes: &'a crate::chrome::PaneRuntimeStore,
     /// The user's `[settings] pane_renamed_add_process_name`: a renamed pane also names its program.
     pub add_process_name: bool,
     pub last_focused: Option<heca_core::layout::PaneId>,
@@ -41,6 +43,7 @@ pub(super) const MODES: &[Mode] = &[
             pane_entries(
                 sources.layout,
                 sources.programs,
+                sources.panes,
                 sources.add_process_name,
                 sources.last_focused,
             )
@@ -51,6 +54,7 @@ pub(super) const MODES: &[Mode] = &[
         scope: MODE_WORKSPACE,
         rows: |sources| workspace_entries(sources.layout, sources.last_visited),
     },
+    Mode { sigil: '#', scope: "session", rows: |sources| sources.sessions.to_vec() },
 ];
 
 /// Build each declared list once, keeping row signals and overlay results in that order.

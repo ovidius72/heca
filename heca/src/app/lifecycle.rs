@@ -59,6 +59,8 @@ pub(crate) struct WakeRequests {
     /// the loop — terminal output, a pointer move — and on a quiet window it outlived its own
     /// deadline. A deadline nobody sleeps until is a deadline that is only approximately kept.
     pub(crate) prefix_expiry: Option<Instant>,
+    /// A running program is waiting to become the pane's displayed name.
+    pub(crate) pane_name_update: Option<Instant>,
 }
 
 /// What the loop should do next: sleep until [`wake_at`](Wake::wake_at), or until an event when it
@@ -95,6 +97,7 @@ pub(crate) fn next_wake(now: Instant, req: WakeRequests) -> Wake {
         widget_frame_due,
         req.toast_expiry,
         req.prefix_expiry,
+        req.pane_name_update,
     ]
     .into_iter()
     .flatten()
@@ -258,7 +261,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         chrome_animating,
         widget_due,
     };
-    if reasons.any() {
+    if reasons.any() && state.client.projection_ready() {
         state.window.request_redraw();
     }
 
@@ -288,6 +291,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             )
             .then(|| state.prefix_entered_at.map(|at| at + prefix_timeout))
             .flatten(),
+            pane_name_update: state.chrome_state.panes.next_name_update(),
         },
     );
     state.widget_frame_due = schedule.widget_frame_due;
@@ -312,6 +316,7 @@ mod tests {
             widget_in,
             toast_expiry: toast_in.map(|s| now + Duration::from_secs_f32(s)),
             prefix_expiry: None,
+            pane_name_update: None,
         }
     }
 
@@ -336,6 +341,18 @@ mod tests {
             Some(due),
             "nothing else was waiting, so this is the wake"
         );
+    }
+
+    #[test]
+    fn a_quiet_program_name_deadline_wakes_the_window_without_polling() {
+        let now = Instant::now();
+        let due = now + Duration::from_millis(1000);
+        let wake = next_wake(now, WakeRequests {
+            pane_name_update: Some(due), ..requests(false, None, None, now)
+        });
+        assert_eq!(wake.wake_at, Some(due));
+        assert_eq!(wake.widget_frame_due, None);
+        assert_eq!(next_wake(due, requests(false, None, None, due)).wake_at, None);
     }
 
     /// …and it does not outrank a sooner one — the nearest deadline still wins.

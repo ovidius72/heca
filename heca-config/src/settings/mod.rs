@@ -9,6 +9,7 @@ mod connection;
 mod enums;
 mod notifications;
 mod schema;
+mod sessions;
 #[cfg(test)]
 mod schema_tests;
 #[cfg(test)]
@@ -20,6 +21,7 @@ use schema::declare_settings;
 
 pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, SearchCase};
 pub use connection::ConnectionConfig;
+pub use sessions::SessionText;
 pub use notifications::{NotificationSystem, NotificationSystemConfig};
 pub use agents::{AgentProgramConfig, AgentSoundsConfig, AgentStatusConfig, AgentStatuses, AgentsConfig};
 
@@ -41,6 +43,8 @@ declare_settings! {
         /// How a search query's case is treated (`smart` / `sensitive` / `insensitive`).
         #[serde(alias = "search-case")]
         pub search_case: SearchCase,
+        /// Folder pickers' case policy, independent of other search surfaces. Default insensitive.
+        pub folder_search_case: SearchCase,
         /// Remember what has been searched for and chosen, across restarts.
         #[serde(alias = "search-history")]
         pub search_history: bool,
@@ -50,6 +54,24 @@ declare_settings! {
         /// How many commands' usage counts each search surface keeps for ranking.
         #[serde(alias = "search-usage-size")]
         pub search_usage_size: usize,
+        /// Default display name for unnamed sessions; `{number}` is the server's sequence.
+        pub session_name_format: String,
+        /// User-facing session messages and picker labels.
+        pub session_text: SessionText,
+        /// Relaunch recorded ordinary programs when restoring a session.
+        pub resume_programs: bool,
+        /// Resume registered harnesses using their recorded native session identity.
+        pub resume_harness: bool,
+        /// Maximum total pane-feedback flashing time, including pauses, in integer milliseconds.
+        /// Default `8000` (eight seconds). `0` repeats until shared acknowledgement, not "off".
+        /// Expiry stops animation without marking feedback seen. Theme timing sizes each pulse.
+        /// Reload updates the cap without resetting the repeating request's original start.
+        pub notification_flash: u64,
+        /// Feedback audio for shell/editor completions and configured integration attention.
+        /// TOML boolean, default `true`; `false` mutes audio without disabling flashes or status.
+        /// One server-granted attempt per new background event, not per pulse or window.
+        /// Per-status sound mute/source/volume still apply. Independent of agent reporting opt-in.
+        pub notification_sound: bool,
         pub window_width: u32,
         pub window_height: u32,
         /// Optional terminal default foreground override from `config.toml`.
@@ -135,6 +157,8 @@ declare_settings! {
         /// show just the custom name.
         #[serde(alias = "pane-renamed-add-process-name")]
         pub pane_renamed_add_process_name: bool,
+        /// Milliseconds a running program must persist before its name is displayed; 0 is immediate.
+        pub pane_name_delay: u64,
         /// **Deprecated: `[appearance.expose] show_cwd`.** Still read while that key is not written,
         /// with a one-time notice to move it. It once switched the sidebar's folder line too; that
         /// line is now decided by `[appearance.sidebar] pane_lines` alone.

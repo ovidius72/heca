@@ -4,11 +4,14 @@ use std::time::{Duration, Instant};
 
 use crate::{Base, PaintCx, Tone, effects::Flash, reactive::{Signal, SignalGet, SignalUpdate, signal}, scene::{Border, Glow}};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Playback { Burst, Once, Repeat { duration: Option<Duration> } }
+
 #[derive(Clone, Copy, Debug)]
 struct Request {
     started: Instant,
     tone: Tone,
-    repeat: bool,
+    playback: Playback,
 }
 
 /// A cheap, copyable handle to semantic light pulses on one or more widgets.
@@ -36,17 +39,39 @@ impl FlashHandle {
     /// Start a finite burst using the theme's colour, timing and pulse count.
     /// A later trigger restarts it; a shared handle flashes all its bound widgets.
     pub fn trigger(self, tone: Tone) {
-        self.start(tone, false);
+        self.start(tone, Playback::Burst);
+    }
+
+    /// One pulse using the theme's colour and duration, independent of its burst count.
+    pub fn pulse(self, tone: Tone) {
+        self.start(tone, Playback::Once);
     }
 
     /// Pulse until [`clear`](Self::clear), for example when a background operation
     /// needs attention. Acknowledgement belongs to the operation's existing event handler.
     pub fn repeat(self, tone: Tone) {
-        self.start(tone, true);
+        self.start(tone, Playback::Repeat { duration: None });
     }
 
-    fn start(self, tone: Tone, repeat: bool) {
-        self.request.set(Some(Request { started: Instant::now(), tone, repeat }));
+    /// Repeat soft pulses for at most `duration`, or until explicitly cleared.
+    pub fn repeat_for(self, tone: Tone, duration: Duration) {
+        self.start(tone, Playback::Repeat { duration: Some(duration) });
+    }
+
+    /// Change a repeating request's timeout without restarting its pulses or elapsed time.
+    pub fn set_repeat_duration(self, duration: Option<Duration>) {
+        let Some(mut request) = self.request.get_untracked() else { return };
+        let next = Playback::Repeat { duration };
+        if matches!(request.playback, Playback::Repeat { .. }) && request.playback != next {
+            request.playback = next;
+            self.request.set(Some(request));
+            self.next_frame.set(Some(Instant::now()));
+            crate::request_frame();
+        }
+    }
+
+    fn start(self, tone: Tone, playback: Playback) {
+        self.request.set(Some(Request { started: Instant::now(), tone, playback }));
         self.next_frame.set(Some(Instant::now()));
         crate::request_frame();
     }
@@ -77,15 +102,28 @@ fn amount(request: Request, style: heca_theme::FlashStyle, now: Instant) -> Opti
     { return None }
     let elapsed = now.saturating_duration_since(request.started).as_secs_f64();
     let cycle = f64::from(style.duration_s) + f64::from(style.pause_s);
-    if !request.repeat && elapsed >= cycle * f64::from(style.pulses.max(1)) { return None }
+    if elapsed >= lifetime(request, style) { return None }
     let phase = elapsed % cycle;
+    if matches!(request.playback, Playback::Repeat { .. }) {
+        return Some(if phase >= f64::from(style.duration_s) { 0.0 } else {
+            ((1.0 - (std::f64::consts::TAU * phase / f64::from(style.duration_s)).cos()) * 0.5) as f32
+        });
+    }
     let mut effect = Flash::with_duration(style.duration_s);
     effect.trigger();
     effect.tick(phase as f32);
     Some(effect.amount())
 }
 
-/// Paint inside the target's own bounds, so ordinary damage/clipping remains sufficient.
+fn lifetime(request: Request, style: heca_theme::FlashStyle) -> f64 {
+    match request.playback {
+        Playback::Once => f64::from(style.duration_s),
+        Playback::Burst => (f64::from(style.duration_s) + f64::from(style.pause_s)) * f64::from(style.pulses.max(1)),
+        Playback::Repeat { duration } => duration.map_or(f64::INFINITY, |duration| duration.as_secs_f64()),
+    }
+}
+
+/// Paint the target's configured shape, retaining its parent's clipping for the outer stroke.
 /// Real elapsed time also supports custom widgets that override `tick` without forwarding it.
 pub(crate) fn paint(base: &Base, cx: &mut PaintCx) {
     let Some(request) = base.flash.and_then(|handle| handle.request.get()) else { return };
@@ -104,11 +142,11 @@ pub(crate) fn paint(base: &Base, cx: &mut PaintCx) {
                 color: border, radius: base.font * style.glow_radius_em,
                 intensity: style.glow_strength * strength,
             });
-        cx.with_rounded_clip(base.bounds, base.style.visual.radius, |cx| {
-            cx.rect(base.bounds, fill, Some(Border {
-                color: border, width: base.font * style.border_width_em,
-            }), base.style.visual.radius, glow);
-        });
+        // The renderer places strokes outside the shape. Keep the parent's clip,
+        // just like the surface itself, rather than cutting the stroke to its own box.
+        cx.rect(base.bounds, fill, Some(Border {
+            color: border, width: base.font * style.border_width_em,
+        }), base.style.visual.radius, glow);
     }
     // Schedule through the same deadline path as caret/tooltip updates. Asking
     // for an immediate frame from paint would create a busy redraw loop.
@@ -117,8 +155,9 @@ pub(crate) fn paint(base: &Base, cx: &mut PaintCx) {
     let delay = if phase < f64::from(style.duration_s) {
         (1.0 / f64::from(style.frames_per_second.max(1))).min(f64::from(style.duration_s) - phase)
     } else { cycle - phase };
+    let remaining = lifetime(request, style) - now.saturating_duration_since(request.started).as_secs_f64();
     if let Some(handle) = base.flash {
-        handle.next_frame.set(Duration::try_from_secs_f64(delay).ok().and_then(|delay| now.checked_add(delay)));
+        handle.next_frame.set(Duration::try_from_secs_f64(delay.min(remaining).max(0.0)).ok().and_then(|delay| now.checked_add(delay)));
     }
     base.dirty_next_paint();
 }

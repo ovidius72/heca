@@ -4,7 +4,7 @@
 pub const END: usize = usize::MAX;
 
 /// Unique identifier for a session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SessionId(pub u64);
 
 /// Unique identifier for a workspace.

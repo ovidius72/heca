@@ -82,9 +82,9 @@ pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut heca
 /// **Take a surface out of the window root.** The counterpart of [`place_surface`]; an unknown key
 /// is a no-op, so removing twice is safe.
 pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
-    root.base_mut()
-        .children
-        .retain(|c| c.base().surface_slot.as_deref() != Some(key));
+    while let Some(index) = root.base().children.iter().position(|c| c.base().surface_slot.as_deref() == Some(key)) {
+        let _ = heca_grid_ui::unmount_child(root, index);
+    }
 }
 
 /// **Place a surface in the window root** — the whole of "how do I put something on screen"

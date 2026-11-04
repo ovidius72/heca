@@ -30,12 +30,18 @@ impl fmt::Display for AgentStatus {
 /// A complete reported state, independent of a window or renderer.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentState {
+    /// Original launcher inputs, attached by the host before integration setup is added.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<crate::backend::ProcessLaunch>,
     /// Driver that supplied the report.
     pub driver: String,
     /// Display name supplied by that driver's configured program metadata.
     pub name: String,
     /// Open identifier resolved through the status configuration for presentation and sounds.
     pub status: AgentStatus,
+    /// Native lifecycle event that produced this report, when supplied by the integration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
     /// Task title explicitly supplied by the program or launcher.
     pub task: Option<String>,
     /// Optional detail about the current activity.
@@ -64,9 +70,11 @@ impl AgentState {
         status: AgentStatus,
     ) -> Self {
         Self {
+            launch: None,
             driver: driver.into(),
             name: name.into(),
             status,
+            event: None,
             task: None,
             detail: None,
             turn_id: None,
@@ -75,6 +83,12 @@ impl AgentState {
             session_id: None,
             session_title: None,
         }
+    }
+
+    /// Identify the native event without coupling the driver to a window's presentation.
+    pub fn event(mut self, event: impl Into<String>) -> Self {
+        self.event = Some(event.into());
+        self
     }
 
     /// Preserve omitted metadata only across reports for the same explicitly identified session.
@@ -86,6 +100,7 @@ impl AgentState {
         {
             if self.model.is_none() { self.model.clone_from(&previous.model); }
             if self.session_title.is_none() { self.session_title.clone_from(&previous.session_title); }
+            if self.launch.is_none() { self.launch.clone_from(&previous.launch); }
         }
         self
     }

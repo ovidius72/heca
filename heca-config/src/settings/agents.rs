@@ -27,7 +27,7 @@ declare_settings! {
         pub programs: BTreeMap<String, AgentProgramConfig>,
         /// Open status vocabulary: plugins and projects may add more entries.
         pub statuses: AgentStatuses,
-        /// Sound playback, disabled until the user enables it and supplies sound files.
+        /// Feedback sound volume and queue. `settings.notification_sound` controls playback.
         pub sounds: AgentSoundsConfig,
     }
 }
@@ -43,6 +43,8 @@ pub struct AgentProgramConfig {
     pub icon: Option<PathBuf>,
     /// Native events to report. Unset uses the report map; empty disables reporting.
     pub enabled_events: Option<Vec<String>>,
+    /// Native events eligible for pane feedback. Omitted or empty keeps reporting silent.
+    pub feedback_events: Option<Vec<String>>,
     /// Program-native event (optionally `event:matcher`) to an open status id.
     #[serde(default)]
     pub reports: BTreeMap<String, String>,
@@ -67,7 +69,6 @@ declare_settings! {
     /// Playback settings shared by built-ins and additional drivers.
     #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
     pub struct AgentSoundsConfig {
-        pub enabled: bool,
         pub volume: f32,
         pub queue_capacity: usize,
     }

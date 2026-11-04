@@ -55,8 +55,7 @@ pub(crate) use hint::{
 pub use state::events::{
     ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection,
 };
-pub use state::{PaneRuntimeStore, SharedChromeState, WorkspacesContainerState};
-pub(crate) use state::PaneRuntimeSignals;
+pub use state::{PanePresentation, PaneRuntimeStore, SharedChromeState, WorkspacesContainerState};
 
 // ── surfaces ──
 pub use surfaces::context_menu::MenuBuild;
@@ -75,8 +74,9 @@ pub use surfaces::overlay::OverlayId;
 pub(crate) use surfaces::overlay::{
     ModalAction, ModalResult, ModalSpec, OverlayHost, collect_form as collect_overlay_form,
     content_covered, open_modal, resolve as resolve_overlay, top_modal,
+    discard_overlays,
 };
-pub(crate) use surfaces::palette::open_command_palette;
+pub(crate) use surfaces::palette::{open_command_palette, open_session_folder};
 
 // ── window ──
 pub use window::division::ChromeConfig;
@@ -104,7 +104,9 @@ use heca_core::layout::types::{Point, Rectangle, Size};
 
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
-use heca_core::runtime::{PaneRuntime, ProcessStatus};
+use heca_core::runtime::ProcessStatus;
+#[cfg(test)]
+use heca_core::runtime::PaneRuntime;
 use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
