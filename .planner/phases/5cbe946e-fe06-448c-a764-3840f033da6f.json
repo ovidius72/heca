@@ -355,9 +355,9 @@
       "priority": 4,
       "shortName": "several-windows-per-session-ow",
       "title": "Several windows per session — own view each, follow, pane size setting",
-      "status": "in-progress",
-      "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.\n\n## Protocol Agreement With T522\nCanonical F012 decision 2534270c-efd4-46ed-91ee-ddcd620b69b6 (Antonio + Opus, 2026-10-27).\nT522 owns session selection and attach/handshake shape; T545 does not add another handshake or choose a session. Work within the selected session and reuse its Connection.id, assigned by the server once and stamped onto incoming messages at the single receive/pump point. Use that same ID for owner/client/grid arbitration, latest typing client, follow and titles. Do not add a second client identity or protocol; consume the shared ClientMsg/ServerMsg extension and coordinate concrete field changes with T522 before integration.",
-      "descriptionUpdatedAt": "2026-10-27T19:25:15.995Z",
+      "status": "done",
+      "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.\n\n## Protocol Agreement With T522\nCanonical F012 decision 2534270c-efd4-46ed-91ee-ddcd620b69b6 (Antonio + Opus, 2026-10-27).\nT522 owns session selection and attach/handshake shape; T545 does not add another handshake or choose a session. Work within the selected session and reuse its Connection.id, assigned by the server once and stamped onto incoming messages at the single receive/pump point. Use that same ID for owner/client/grid arbitration, latest typing client, follow and titles. Do not add a second client identity or protocol; consume the shared ClientMsg/ServerMsg extension and coordinate concrete field changes with T522 before integration.\n\n---\n**Completion summary:**\nDONE. Several windows per session, each with its own view (F012/463ccd07): pane-size arbitration (smallest|latest|largest, default latest), per-window notifications, per-window titles + a per-session window directory, and follow (one window mirrors another's view, chosen by title, stored by id). Protocol extends the shared ClientMsg/ServerMsg from T522 (one Connection.id identity, decision e36aba0c): WindowInfo/Windows + ReportWindowTitle for the directory; Follow/ReportView + Followed/FollowView for mirroring via a serializable heca_core ViewSnapshot (active workspace + scroll/focus, not size). Title formatted client-side (folder + ' #k'), shown in the top bar as a segmented Tag, with a '→ leader' segment while following; the follow picker is a '~' command-palette mode. Verified by eye + green tests/clippy.",
+      "descriptionUpdatedAt": "2026-11-04T11:11:41.774Z",
       "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
       "statusLog": [
         {
@@ -367,6 +367,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-002-in-progress-done",
+          "date": "2026-11-04T11:11:41.772Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE. Several windows per session, each with its own view (F012/463ccd07): pane-size arbitration (smallest|latest|largest, default latest), per-window notifications, per-window titles + a per-session window directory, and follow (one window mirrors another's view, chosen by title, stored by id). Protocol extends the shared ClientMsg/ServerMsg from T522 (one Connection.id identity, decision e36aba0c): WindowInfo/Windows + ReportWindowTitle for the directory; Follow/ReportView + Followed/FollowView for mirroring via a serializable heca_core ViewSnapshot (active workspace + scroll/focus, not size). Title formatted client-side (folder + ' #k'), shown in the top bar as a segmented Tag, with a '→ leader' segment while following; the follow picker is a '~' command-palette mode. Verified by eye + green tests/clippy."
         }
       ],
       "decisions": [],
@@ -403,13 +411,13 @@
           "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-004-c4-follow-one-window-mirrors-another-window-s-view-targeted-by-title",
           "number": 4,
           "title": "C4 — follow: one window mirrors another window's view, targeted by title",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-005-c5-window-title-path-k-from-the-2nd-window-on-the-same-instance-synced-to-p100-naming",
           "number": 5,
           "title": "C5 — window title = path + ' #k' from the 2nd window on the same instance (synced to P100 naming)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-006-c6-document-pane-size-in-config-default-toml-readme",
@@ -437,16 +445,16 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-10-27T15:27:22.915Z",
-      "completedAt": "",
+      "completedAt": "2026-11-04T11:11:41.772Z",
       "createdAt": "2026-10-21T11:14:52.371Z",
-      "updatedAt": "2026-10-28T18:10:00.379Z",
+      "updatedAt": "2026-11-04T11:11:41.772Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
           "createdAt": "2026-10-27T15:27:22.786Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4"
+      "activeOwnerSession": ""
     },
     {
       "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
@@ -630,7 +638,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-10-28T18:10:00.379Z",
+  "updatedAt": "2026-11-04T11:11:41.772Z",
   "handoff": "# T545 — several windows per session: independent views, follow, pane-size arbitration\n\nCreated at: 2026-10-26T18:59:18.546Z\nUpdated at: 2026-10-27T19:18:34.860Z\nReason: T545 design is fully agreed with Antonio (2026-10-27) but no code is written yet; a cold agent needs the decisions, the resize code path, and the P100 naming it must stay in sync with before implementing.\n\n## Current focus\n- Feature: F012 — Ready for heca-pro — the pieces heca-pro builds on\n- Phase: P099(F012) — ready-02: the connection (clients attach to the server over a local socket; RPC, events, detach/attach)\n- Task: P099(F012)/T545 — \"Several windows per session — own view each, follow, pane size setting\" (in-progress)\n- Exact resume point: design agreed, **no code written**. Worktree `/Users/antonio/projects/heca-t545`, branch `feat/t545-multiwindow` (from main af4fff24). Draft only: `PaneSize` enum in `heca-config/src/settings/enums.rs` and the \"One task, one worktree\" rule in `AGENTS.md` — both uncommitted.\n\n## Current and partial state\nDecisions agreed with Antonio 2026-10-27 (all design, nothing contentious left):\n\n- **Independent windows are the default.** Each window attaches to the same session (shared content) but keeps its own view — its own `WindowView`/`ScrollView`. Antonio wants this explicitly because two monitors at different resolutions caused display problems, and watching a different pane in each window is useful. A window does NOT follow another by default.\n- **Pane-size arbitration only when two windows show the SAME pane.** A running terminal has one size (rows×cols), so when two windows display the same pane they must agree. Setting `PaneSize = smallest | latest | largest`, default **latest** (the window last typed in wins). A pane shown by one window always takes that window's size. Only rows×cols are arbitrated; the pixel cell size (font) stays each window's own.\n- **follow** = a window mirrors another window's view, targeted by the other window's **title**.\n- **Window title** = the project `path` (e.g. `~/projects/heca`), plus a ` #k` suffix from the **second** window onward on the same instance. The suffix is what lets `follow` name a window.\n- **Instance naming (owned by P100, synced here):** default instance name `heca #n`, `#n` a progressive counter only to tell anonymous defaults apart; a real unique name (create/rename) drops the `#n`. Full create-session + naming design in `.planner/docs/p100-session-create.md`.\n\nCode analysis done (resume path):\n- Resize flows `ClientMsg::Terminal(Resize{cols,rows,cell,scale})` → `ServerState::process_input` at `heca/src/server/stream.rs:22`, which today applies the last grid directly (`set_cell_size` / `set_scale_factor` / `set_size`).\n- For arbitration: keep a per-terminal map (owner → client → requested grid) plus the last-typed client id; thread the client id (`Connection.id` from the run.rs pump) into `process_input`; recompute `set_size` via the `PaneSize` policy. Cell/font stays per-window.\n- `PaneSize` enum drafted in `heca-config/src/settings/enums.rs` (snake_case, default `Latest`). Still TODO: a `SettingsConfig` field + defaults + `config.default.toml` + README.\n\n## Preservation constraints\n- Standalone = server + one in-process client = ONE code path (decision 463ccd07). Several windows must not fork a second path; a window is just another client of the same `ServerLoop`.\n- Library/widget-side only, CSS-like composition, nothing hardcoded (Antonio's standing rule). The arbitration lives in the server policy, not sprawled across call sites.\n- Naming stays single-sourced: the window-title suffix is built in T545 but the instance-name rule belongs to P100 — do not re-decide it here.\n- **Commit the \"One task, one worktree\" AGENTS.md rule together with T545's code, not as a separate PR.** No commit/PR without Antonio's explicit word.\n\n## Supporting documents\n- `.planner/docs/p100-session-create.md` — the create-session (CLI `heca --new [path] [--name <name>]` + palette \"Create Session\" with fuzzy path) and default instance-naming design; the window-title section there is the contract T545 renders.\n\n## Blockers and risks\n- None blocking. Antonio has NOT yet said \"write code\" for T545 — await explicit go before implementing.\n- Risk: the window-title/`follow` mechanism and P100's instance naming can drift. Keep both pointing at `p100-session-create.md`.\n\n## How to resume\n1. Open task P099(F012)/T545; confirm it is in-progress.\n2. Read `.planner/docs/p100-session-create.md` for the naming/title contract.\n3. Work in worktree `/Users/antonio/projects/heca-t545` (branch `feat/t545-multiwindow`).\n4. Implement in order: (a) pane-size arbitration at `heca/src/server/stream.rs:22` — per-terminal client→grid map + last-typed client, policy from `PaneSize`; finish the `SettingsConfig` field/defaults/config.default.toml/README for the drafted enum; (b) independent per-window view (each window its own `WindowView`/`ScrollView`); (c) `follow` by window title; (d) window title = path + ` #k` from the 2nd window, synced to P100.\n5. Verify by running the GPU app (Antonio tests by eye — unit green is not enough for layout/view). Commit the AGENTS.md worktree rule with T545. No commit/PR until Antonio asks.",
   "handoffUpdatedAt": "2026-10-27T19:18:34.860Z",
   "handoffAudit": {
