@@ -43,6 +43,18 @@ impl AppState {
         }
     }
 
+    /// Report this window's presence — its shown workspace and focused pane — to the server when it
+    /// changes, so a `heca rpc --events` subscriber hears a `Workspace`/`Focus` event. Reported
+    /// unconditionally (not only when a script listens): it is one small message on a user-paced
+    /// change, and the server drops it when nobody is subscribed.
+    pub(crate) fn report_presence_if_changed(&mut self) {
+        let presence = (self.layout().active_workspace_idx(), self.focused_pane);
+        if self.last_presence != Some(presence) {
+            self.client.report_presence(presence.0, presence.1);
+            self.last_presence = Some(presence);
+        }
+    }
+
     /// Do what only a window can about what the server says changed. `asked` is the built-in this
     /// window sent, by name and as data, when the changes answer one.
     pub(crate) fn apply_answer(

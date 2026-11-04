@@ -8,6 +8,8 @@ use super::listener::ControlListener;
 
 // Protocol identity, not a user preference. It consumes exactly one line before framed messages.
 const ATTACH_PREFACE: &[u8] = b"@heca-attach 1\n";
+// `heca rpc --events`: the connection then stays open and receives one event line at a time.
+pub(super) const EVENTS_PREFACE: &[u8] = b"@heca-events 1\n";
 
 pub(crate) struct RuntimeListener {
     stop: Arc<AtomicBool>,
@@ -63,6 +65,23 @@ fn serve(mut stream: UnixStream, handle: RuntimeHandle, config: ConnectionConfig
         stream.set_write_timeout(None)?;
         let link = SocketServer::new(stream, config, handle.waker())?;
         return handle.connect(link);
+    }
+    if line == EVENTS_PREFACE {
+        // A read-only stream: the server writes one event line at a time, for as long as the script
+        // keeps the socket open. No read timeout — the connection is long-lived.
+        stream.set_read_timeout(None)?;
+        stream.set_write_timeout(None)?;
+        let (sender, lines) = mpsc::channel::<String>();
+        handle.subscribe(sender)?;
+        // Each event line goes to the socket. A failed write means the script left; the receiver is
+        // then dropped and the server forgets this subscriber on its next event. The iterator also
+        // ends when the server stops (every sender dropped).
+        for line in lines {
+            if writeln!(stream, "{line}").is_err() {
+                break;
+            }
+        }
+        return Ok(());
     }
     let line = String::from_utf8(line).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let (reply, answer) = mpsc::channel();

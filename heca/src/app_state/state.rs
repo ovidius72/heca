@@ -85,6 +85,9 @@ pub struct AppState {
     pub(crate) windows: Vec<crate::server::sessions::WindowInfo>,
     /// The last view this window reported while followed, so an unchanged view is not re-sent.
     pub(crate) last_reported_view: Option<heca_core::layout::ViewSnapshot>,
+    /// The last presence (shown workspace, focused pane) this window reported, so a `--events`
+    /// subscriber hears about a change once and nothing when nothing moved.
+    pub(crate) last_presence: Option<(usize, Option<heca_core::layout::PaneId>)>,
     pub(crate) session_dialog: Option<crate::chrome::OverlayId>,
     pub theme: Theme,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.

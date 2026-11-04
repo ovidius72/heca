@@ -19,6 +19,7 @@ mod action;
 mod bootstrap;
 mod change;
 mod cx;
+mod events;
 mod handlers;
 mod layout;
 mod poll;
@@ -48,6 +49,7 @@ use heca_config::programs::ProgramsConfig;
 
 pub(crate) use action::{NotificationCommand, NotificationSettings, ServerAction};
 pub(crate) use change::{Change, Refusal};
+pub(crate) use events::{EventFanout, StreamEvent};
 pub(crate) use cx::{Asker, ServerCx};
 pub(crate) use layout::ServerLayout;
 pub(crate) use poll::BackendPoll;
