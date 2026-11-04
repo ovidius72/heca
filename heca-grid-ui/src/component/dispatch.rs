@@ -71,7 +71,11 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
         let Some(path) = focus_path(node) else {
             return Handled::No;
         };
-        return deliver_to_path(node, &path, ev);
+        let handled = deliver_to_path(node, &path, ev);
+        // Finish focus changes while a closing modal is still mounted. The event
+        // keeps its original target; only the next event uses the restored focus.
+        crate::focus::settle(node);
+        return handled;
     }
     broadcast(node, ev)
 }

@@ -8,7 +8,7 @@ pub fn handle_command_palette(state: &mut AppState, action: &WmAction) {
         WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
         _ => (None, None),
     };
-    crate::chrome::open_command_palette(state, mode, query);
+    crate::chrome::open_command_palette(state, mode, query, None);
 }
 
 /// Open the context menu for the active context (keyboard / RPC entry, `prefix+>`).

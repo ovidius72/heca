@@ -44,6 +44,8 @@ command_palette_size = "normal"
 #   "sensitive"   always case-sensitive.
 #   "insensitive" never case-sensitive, however you type.
 search_case = "smart"
+# Folder completion may insert uppercase names; keep folder matching insensitive by default.
+folder_search_case = "insensitive" # smart | sensitive | insensitive; fuzzy matching always applies
 
 # Remember what you search for and which commands you pick, across restarts, so the
 # palette lists what you actually use first and Ctrl+p walks back through past
@@ -148,6 +150,9 @@ shell_integration = true
 # appended for reference only and never edited by rename. Set false to show just the
 # custom name.
 pane_renamed_add_process_name = true
+# Delay only displayed program names, not process status or notification feedback.
+# Nonnegative integer milliseconds; 0 updates immediately. Completion restores the shell.
+pane_name_delay = 1000
 
 # DEPRECATED — now `[appearance.expose] show_cwd`. Still read while that key is not
 # written (once it is, it decides), with a one-time notice to move it. It no longer
@@ -208,11 +213,19 @@ show_bottom_bar = true # the status bar
 [settings.session_text]
 unavailable = "Session unavailable"
 terminated = "This session has been terminated and is not available."
+detached = "This window is no longer attached to a session."
+deleted = "This session has been deleted."
 server_unavailable = "The server is no longer available."
 restart = "Restart"
 exit = "Exit"
 cancel = "Cancel"
 accept = "OK"
+terminate = "Terminate"
+delete = "Delete"
+# Confirmation messages: {name} is the target session's name.
+confirm_terminate = 'The processes in session "{name}" will be terminated. The session will remain available for restart.'
+confirm_delete = 'Session "{name}" will be permanently removed and its processes terminated. Project files will not be deleted.'
+confirm_prompt = "Confirm? [y/N]: "
 folder_placeholder = "Project folder (optional)"
 create_folder = "Create folder: {path}"
 counts = "{windows} windows / {agents} agents"
@@ -380,6 +393,8 @@ sound = { source = "asset:completed" }
 close = true            # closing a pane
 delete_column = true    # deleting a column (and its panes)
 delete_workspace = true # deleting a workspace (and its contents)
+terminate_session = true # stop processes, keep the session for explicit restart
+delete_session = true    # remove the session, never project files
 
 # ─────────────────────────────────────────────────────────────────────────────
 [font]

@@ -7,7 +7,7 @@ pub(crate) struct PaneInfoView {
     pub(crate) icon: Glyph,
     /// Custom name if set, else the program name — the sidebar card's label.
     pub(crate) title: String,
-    /// The program/application name (always the process, never the rename) — the info-bar
+    /// The stabilized program/application name (never the rename) — the info-bar
     /// `AppName` segment shows this, so renaming a pane doesn't hide what's running in it.
     pub(crate) app_name: String,
     /// The process/program name shown as a small dimmed label *next to* a custom name (e.g.
@@ -58,14 +58,15 @@ pub(crate) fn pane_info_view(
     programs: &ProgramsConfig,
     fallback_name: &str,
     custom_name: Option<&str>,
-    runtime: Option<&PaneRuntime>,
+    presentation: Option<&crate::chrome::PanePresentation>,
     add_process_name: bool,
 ) -> PaneInfoView {
-    let raw = runtime
-        .and_then(|pane| pane.program.as_deref())
+    let raw = presentation
+        .and_then(|pane| pane.program())
         .filter(|raw| !raw.is_empty())
         .unwrap_or(fallback_name);
     let program = programs.resolve(raw);
+    let runtime = presentation.map(|pane| pane.runtime());
     let git = runtime.and_then(|pane| pane.git.as_ref());
     let program_name = program.name.to_string();
     // A user-set custom name wins over the process-derived program name; the icon still tracks

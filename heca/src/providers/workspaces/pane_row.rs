@@ -67,7 +67,7 @@ impl PaneRow<'_> {
         // Read off this row's own projection rather than back through the store: the projection
         // was built from it, and the menu is about the row being drawn.
         let has_custom_name = pane.custom_name.is_some();
-        let runtime = seams.panes.runtime(pane_id);
+        let runtime = seams.panes.presentation(pane_id);
         let info = pane_info_view(
             seams.programs,
             &pane.name,
@@ -142,7 +142,7 @@ impl PaneRow<'_> {
             let programs = seams.programs.clone();
             let fallback_name = pane.name.clone();
             Rc::new(move || {
-                let runtime = runtime_signals.snapshot();
+                let runtime = runtime_signals.presentation();
                 let custom = runtime_signals.custom_name.get();
                 PaneFacts::of(
                     pane_id,
@@ -279,7 +279,7 @@ impl PaneRow<'_> {
         let fallback_name = pane.name.clone();
         let add_process_name = ws_state.pane_renamed_add_process_name_signal();
         create_effect(move |_| {
-            let runtime = runtime_signals.snapshot();
+            let runtime = runtime_signals.presentation();
             let custom = runtime_signals.custom_name.get();
             face.show(&pane_info_view(
                 &programs,

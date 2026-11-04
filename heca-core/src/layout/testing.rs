@@ -151,6 +151,7 @@ impl Windowed {
         let id = self.session.workspaces[idx].id;
         let scroll = self.view.scroll_mut(id);
         scroll.offset = super::ViewOffset::Static(offset);
+        scroll.initial = false;
         scroll.active_column = active_column;
     }
 

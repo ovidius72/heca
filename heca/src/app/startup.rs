@@ -184,7 +184,7 @@ pub(crate) async fn init_state(
     event_loop: &ActiveEventLoop,
     event_proxy: EventLoopProxy<crate::app::events::AppEvent>,
     launch_mode: crate::app::cli::LaunchMode,
-) -> Box<AppState> {
+) -> std::io::Result<Box<AppState>> {
     let redraw_proxy = event_proxy.clone();
     install_frame_request(move || {
         let _ = redraw_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
@@ -356,7 +356,7 @@ pub(crate) async fn init_state(
     let (client, content) = crate::client::ClientState::connect(app_config, crate::server::ServerWaker::new({
         let proxy = event_proxy.clone();
         move || { let _ = proxy.send_event(crate::app::events::AppEvent::BackendWake); }
-    }), launch_mode).expect("could not attach to the session server");
+    }), launch_mode)?;
     let session = content.rebuild(client.session.id, layout_options);
     let view = WindowView::new(viewport_size, scale_factor);
     let focused_pane = session.through(&view).active_workspace().and_then(|workspace| workspace.active_pane()).map(|pane| pane.id);
@@ -447,8 +447,8 @@ pub(crate) async fn init_state(
         backdrop,
         background,
         client,
+        view: heca_core::layout::WindowViews::new(view),
         session,
-        view,
         session_dialog: None,
         theme: app_config.theme.clone(),
         appearance,
@@ -545,7 +545,7 @@ pub(crate) async fn init_state(
     if state.client.session.status == crate::server::sessions::SessionStatus::Terminated {
         crate::handlers::session_unavailable(&mut state, false);
     }
-    state
+    Ok(state)
 }
 
 #[cfg(test)]

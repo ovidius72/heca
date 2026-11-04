@@ -19,6 +19,8 @@ use super::{Asker, Change, ServerState};
 mod lifecycle;
 mod publish;
 mod rpc;
+#[cfg(test)]
+mod tests;
 
 /// Everything a session is and the clients watching it.
 pub(crate) struct SessionRuntime {
@@ -36,17 +38,9 @@ pub(crate) struct SessionRuntime {
     store: crate::chrome::SharedChromeState,
     confirm: heca_config::confirm::ConfirmConfig,
     rpc_asker: Asker,
-    pending_rpc: std::collections::HashMap<u64, PendingRpc>,
-    next_rpc: u64,
     connection: heca_config::settings::ConnectionConfig,
     images: std::collections::HashMap<u64, heca_core::backend::TerminalImage>,
     known_terminals: std::collections::HashSet<crate::app::backend_store::TerminalOwner>,
-}
-
-struct PendingRpc {
-    client: u64,
-    reply: std::sync::mpsc::Sender<String>,
-    deadline: Instant,
 }
 
 impl SessionRuntime {
@@ -76,8 +70,6 @@ impl SessionRuntime {
             store,
             rpc_asker,
             confirm: Default::default(),
-            pending_rpc: Default::default(),
-            next_rpc: 1,
             connection: Default::default(),
             images: Default::default(),
             known_terminals: Default::default(),
@@ -98,7 +90,6 @@ impl SessionRuntime {
             client.close();
         }
         self.clients.clear();
-        self.pending_rpc.clear();
         self.state.backends.clear();
     }
 
@@ -150,19 +141,10 @@ impl SessionRuntime {
 
     pub(super) fn detach_connection(&mut self, id: u64) {
         self.clients.retain(|client| client.id != id);
-        self.pending_rpc.retain(|_, request| {
-            if request.client != id {
-                return true;
-            }
-            let _ = request.reply.send("error: client switched session".into());
-            false
-        });
     }
 
     pub(crate) fn next_wake(&self) -> Option<Instant> {
-        self.pending_rpc
-            .values()
-            .map(|request| request.deadline)
+        self.clients.iter().filter_map(|client| client.rpc_deadline())
             .chain(self.state.next_wake())
             .min()
     }
@@ -174,7 +156,7 @@ impl SessionRuntime {
         // borrows never overlap.
         let mut pending: Vec<(usize, ClientMsg)> = Vec::new();
         let mut detached: Vec<usize> = Vec::new();
-        let mut publish_terminals = false;
+        let mut publish_terminals = self.clients.iter().any(|client| client.projection_pending.get());
         for (i, client) in self.clients.iter().enumerate() {
             loop {
                 match client.poll() {
@@ -215,6 +197,7 @@ impl SessionRuntime {
                         detached.push(i);
                     } else {
                         self.clients[i].attachment.set(Attachment::Attached);
+                        self.clients[i].projection_pending.set(true);
                         if self.clients[i].link.send(ServerMsg::Feedback {
                             session_id: self.session.id,
                             panes: self.state.feedback.snapshot(),
@@ -233,7 +216,7 @@ impl SessionRuntime {
                     }
                 }
                 ClientMsg::Detach => detached.push(i),
-                ClientMsg::AttachTo { .. } | ClientMsg::Session { .. } => detached.push(i),
+                ClientMsg::AttachTo { .. } | ClientMsg::Session { .. } | ClientMsg::LeaveSession => detached.push(i),
                 ClientMsg::Act {
                     mut action,
                     asker,
@@ -340,14 +323,7 @@ impl SessionRuntime {
                     }
                 }
                 ClientMsg::RpcReply { request_id, answer } => {
-                    if self
-                        .pending_rpc
-                        .get(&request_id)
-                        .is_some_and(|request| request.client == self.clients[i].id)
-                        && let Some(request) = self.pending_rpc.remove(&request_id)
-                    {
-                        let _ = request.reply.send(answer);
-                    }
+                    self.clients[i].reply_rpc(request_id, answer);
                 }
                 ClientMsg::Notify(command) => {
                     let changes = self.state.execute(command.into_server_action(), now);
@@ -583,31 +559,23 @@ impl SessionRuntime {
         }
         self.known_terminals = current;
 
+        // End the initial projection only after every available terminal snapshot was queued.
+        for (i, client) in self.clients.iter().enumerate() {
+            if !detached.contains(&i) && client.projection_pending.replace(false)
+                && client.link.send(ServerMsg::ProjectionReady { session_id: self.session.id }).is_err()
+            {
+                detached.push(i);
+            }
+        }
+
         // Drop detached clients, highest index first so the earlier ones keep their positions.
         detached.sort_unstable();
         detached.dedup();
         for i in detached.into_iter().rev() {
             let gone = self.clients.remove(i);
             gone.close();
-            self.pending_rpc.retain(|_, request| {
-                if request.client != gone.id {
-                    return true;
-                }
-                let _ = request
-                    .reply
-                    .send("error: attached client disconnected".into());
-                false
-            });
         }
-        self.pending_rpc.retain(|_, request| {
-            if request.deadline > now {
-                return true;
-            }
-            let _ = request
-                .reply
-                .send("error: attached client timed out".into());
-            false
-        });
+        for client in &self.clients { client.expire_rpc(now); }
     }
 
     /// Run one server action on the shared state for the window that asked, and say what changed.

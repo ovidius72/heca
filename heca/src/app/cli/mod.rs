@@ -1,8 +1,8 @@
 //! **The command line — one table that dispatches, documents and validates.**
 //!
 //! Every question heca answers before opening a window lives in [`COMMANDS`], and each entry
-//! carries four things: the command, what it does, the arguments it takes, and the function that
-//! runs it. Everything else is derived from that one declaration:
+//! carries the command, its help, arguments, handler and optional action confirmation.
+//! Everything else is derived from that one declaration:
 //!
 //! - `--help` is rendered from it, so it cannot list a command that does nothing, nor miss one that
 //!   works;
@@ -22,6 +22,7 @@ use crate::args::{ArgDescriptor, ArgSpec, check_args};
 use std::collections::HashMap;
 
 mod catalog;
+mod confirmation;
 mod integrations;
 mod queries;
 mod sessions;
@@ -64,6 +65,8 @@ struct Command {
     launch: Option<LaunchKind>,
     /// Runs it, given the checked arguments.
     run: fn(&Invocation) -> Answer,
+    /// Resolves the action-owned confirmation and target configuration before execution.
+    confirm: Option<confirmation::Prepare>,
 }
 
 /// A command about to run: its arguments, already checked against what it declared.
@@ -132,6 +135,13 @@ fn answer(args: &[String]) -> Option<Answer> {
     };
     if cmd.launch.is_some() {
         return (cmd.run)(&invocation).err().map(Err);
+    }
+    if let Some(prepare) = cmd.confirm {
+        match prepare(&invocation).and_then(confirmation::ask) {
+            Ok(true) => {}
+            Ok(false) => return Some(Ok(String::new())),
+            Err(error) => return Some(Err(error)),
+        }
     }
     Some((cmd.run)(&invocation))
 }

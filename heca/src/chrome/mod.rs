@@ -55,7 +55,7 @@ pub(crate) use hint::{
 pub use state::events::{
     ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection,
 };
-pub use state::{PaneRuntimeStore, SharedChromeState, WorkspacesContainerState};
+pub use state::{PanePresentation, PaneRuntimeStore, SharedChromeState, WorkspacesContainerState};
 
 // ── surfaces ──
 pub use surfaces::context_menu::MenuBuild;
@@ -104,7 +104,9 @@ use heca_core::layout::types::{Point, Rectangle, Size};
 
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
-use heca_core::runtime::{PaneRuntime, ProcessStatus};
+use heca_core::runtime::ProcessStatus;
+#[cfg(test)]
+use heca_core::runtime::PaneRuntime;
 use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};

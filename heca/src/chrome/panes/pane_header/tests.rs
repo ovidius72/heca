@@ -14,7 +14,7 @@ fn facts_for(cwd: &str) -> super::super::pane_items::PaneFacts {
         &ProgramsConfig::default(),
         "shell",
         None,
-        Some(&rt),
+        Some(&crate::chrome::PanePresentation::immediate(rt)),
     )
 }
 
@@ -177,6 +177,7 @@ fn pane_info_view_resolves_program_status_and_git_segments() {
         agent: None,
     };
 
+    let runtime = crate::chrome::PanePresentation::immediate(runtime);
     // No custom name → title is the program name, no process hint (the title IS the process).
     let view = pane_info_view(&programs, "shell", None, Some(&runtime), true);
     assert_eq!(view.title, "Neovim");
@@ -211,6 +212,7 @@ fn pane_info_view_uses_shell_fallbacks_without_git() {
         ..PaneRuntime::default()
     };
 
+    let runtime = crate::chrome::PanePresentation::immediate(runtime);
     let view = pane_info_view(&programs, "pane", None, Some(&runtime), false);
 
     assert_eq!(view.icon, Glyph::Terminal);
@@ -252,7 +254,7 @@ fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
             &programs,
             "shell",
             None,
-            Some(rt),
+            Some(&crate::chrome::PanePresentation::immediate(rt.clone())),
         )
     };
     #[allow(clippy::too_many_arguments)]

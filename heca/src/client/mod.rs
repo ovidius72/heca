@@ -11,6 +11,8 @@ mod feedback;
 mod sessions;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod reconnect_tests;
 pub(crate) use reads::ReadEffect;
 
 use std::{collections::HashMap, io, rc::Rc, sync::mpsc, time::Instant};
@@ -37,6 +39,7 @@ pub(crate) struct Update {
     pub(crate) session_attached: bool,
     pub(crate) session_terminated: bool,
     pub(crate) session_deleted: bool,
+    pub(crate) session_detached: bool,
     pub(crate) content: Option<SessionContent>,
     /// The notifications on show, when the server sent a fresh projection this poll. The window
     /// builds its own toasts from it; `None` means the set did not change.
@@ -73,8 +76,10 @@ pub struct ClientState {
     image_limit: usize,
     reads: reads::Reads,
     failed: bool,
+    pub(crate) detached: bool,
     switching: bool,
-    pending_selection: Option<String>,
+    pending_selection: Option<ClientMsg>,
+    projection_deadline: Option<Instant>,
     wake: ServerWaker,
     connection: heca_config::settings::ConnectionConfig,
 }
@@ -117,7 +122,9 @@ impl ClientState {
         Ok((Self { client_id, window_ordinal, feedback: Default::default(), session, sessions: Vec::new(), backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
             link, local, data: Default::default(), outbox, requests, pending: HashMap::new(), next_request: 1,
             images: Default::default(), image_limit: config.config.settings.connection.max_image_bytes.get(), reads: Default::default(), failed: false,
-            switching: false, pending_selection: None, wake, connection: config.config.settings.connection }, content))
+            detached: false, switching: false, pending_selection: None,
+            projection_deadline: Some(Instant::now() + std::time::Duration::from_millis(config.config.settings.connection.request_timeout_ms.get())),
+            wake, connection: config.config.settings.connection }, content))
     }
 
     pub(crate) fn start_terminal(&mut self, owner: impl Into<TerminalOwner>, spec: TerminalSpec, cell: (f32, f32)) -> Result<Ensured, SpawnError> {
@@ -137,7 +144,8 @@ impl ClientState {
     }
 
     pub(crate) fn act(&mut self, action: WmAction, asker: Asker, name: String, before: Before) {
-        if self.switching { return; }
+        if self.switching || !self.projection_ready()
+            || (self.detached && !crate::server::sessions::owns(action.kind())) { return; }
         let request_id = self.next_request;
         self.next_request += 1;
         let terminal = match &action {
@@ -158,10 +166,13 @@ impl ClientState {
 
     fn poll_connected(&mut self) -> io::Result<Update> {
         self.outbox.check()?;
-        while let Ok(message) = self.requests.try_recv() {
-            if !self.switching || matches!(message, ClientMsg::RpcReply { .. }) { self.link.send(message)?; }
+        for message in outbox::drain(&self.requests) {
+            let allowed_detached = matches!(&message, ClientMsg::Session { .. })
+                || matches!(&message, ClientMsg::Act { action, .. } if crate::server::sessions::owns(action.kind()));
+            let allowed = !self.switching && (!self.detached || allowed_detached);
+            if allowed || matches!(message, ClientMsg::RpcReply { .. }) { self.link.send(message)?; }
         }
-        if let Some(name) = self.pending_selection.take() { self.link.send(ClientMsg::AttachTo { name })?; }
+        if let Some(selection) = self.pending_selection.take() { self.link.send(selection)?; }
         if let Some(server) = &mut self.local { server.pump(); }
         let mut update = Update::default();
         while let Some(message) = self.link.poll()? {
@@ -170,6 +181,7 @@ impl ClientState {
                     update = Update::default();
                     if session.id != self.session.id { self.feedback = Default::default(); }
                     self.reset_projection();
+                    self.detached = false;
                     self.session = session;
                     self.client_id = client_id;
                     self.window_ordinal = window_ordinal;
@@ -177,6 +189,12 @@ impl ClientState {
                     update.session_attached = true;
                 }
                 ServerMsg::Content { content } => update.content = Some(content),
+                ServerMsg::ProjectionReady { session_id } => {
+                    if session_id == self.session.id {
+                        self.projection_deadline = None;
+                        update.effects.has_data = true;
+                    }
+                },
                 ServerMsg::Sessions { request_id, result } => match result {
                     Ok(crate::server::sessions::SessionReply::List(sessions)) => {
                         if self.pending.get(&request_id).is_some_and(|pending| matches!(pending.action, WmAction::ListSessions)) {
@@ -196,11 +214,25 @@ impl ClientState {
                     Err(error) => { self.switching = false; update.errors.push(error); },
                 },
                 ServerMsg::SessionTerminated { session } => {
+                    self.projection_deadline = None;
+                    self.switching = false;
                     self.session = session;
                     self.pending.clear();
                     update.session_terminated = true;
                 }
-                ServerMsg::SessionDeleted { .. } => { self.pending.clear(); update.session_deleted = true; },
+                ServerMsg::SessionDeleted { id } | ServerMsg::SessionDetached { id } => {
+                    if id == self.session.id {
+                        let deleted = matches!(message, ServerMsg::SessionDeleted { .. });
+                        self.reset_projection();
+                        self.projection_deadline = None;
+                        self.detached = true;
+                        self.window_ordinal = 0;
+                        self.feedback = Default::default();
+                        update = Update::default();
+                        update.session_deleted = deleted;
+                        update.session_detached = !deleted;
+                    }
+                }
                 ServerMsg::Notifications(views) => update.notifications = Some(views),
                 ServerMsg::Feedback { session_id, panes } => {
                     if session_id == self.session.id {
@@ -230,9 +262,9 @@ impl ClientState {
                 }
                 ServerMsg::Terminal(frame) => {
                     for placement in &frame.screen.graphics { self.images.need(placement.image_id, &self.outbox); }
-                    self.ensure_view(frame.owner.clone(), frame.spec.clone(), (frame.screen.cell_w, frame.screen.cell_h))
-                        .map_err(|error| io::Error::other(error.to_string()))?;
+                    let (owner, spec, cell) = (frame.owner.clone(), frame.spec.clone(), (frame.screen.cell_w, frame.screen.cell_h));
                     self.data.lock().map_err(|error| io::Error::other(error.to_string()))?.receive(*frame);
+                    self.ensure_view(owner, spec, cell).map_err(|error| io::Error::other(error.to_string()))?;
                     update.effects.has_data = true;
                 }
                 ServerMsg::ImageInfo(info) => self.images.begin(info, self.image_limit, &self.outbox)?,
@@ -257,6 +289,9 @@ impl ClientState {
                 }
             }
         }
+        if self.projection_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "session projection did not finish"));
+        }
         Ok(update)
     }
 
@@ -266,7 +301,10 @@ impl ClientState {
         Some((backend.terminal_snapshot()?, backend.take_terminal_damage()))
     }
 
-    pub(crate) fn next_wake(&self) -> Option<Instant> { self.local.as_ref().and_then(local::LocalServer::next_wake) }
+    pub(crate) fn next_wake(&self) -> Option<Instant> {
+        self.local.as_ref().and_then(local::LocalServer::next_wake)
+            .into_iter().chain(self.projection_deadline.filter(|_| !self.failed)).min()
+    }
 
     pub(crate) fn poll_views(&mut self) -> BackendPoll {
         let mut result = BackendPoll::default();

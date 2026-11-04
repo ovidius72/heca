@@ -83,6 +83,14 @@ fn session_with_panes() -> heca_core::layout::testing::Windowed {
     session
 }
 
+fn mirrored_panes(session: &heca_core::layout::Session) -> crate::chrome::PaneRuntimeStore {
+    let state = crate::chrome::SharedChromeState::new(280.0, 260.0);
+    for pane in session.workspaces.iter().flat_map(|workspace| workspace.panes()) {
+        state.panes.set_runtime(pane.id, &pane.runtime, pane.custom_name.as_deref());
+    }
+    state.panes
+}
+
 #[test]
 fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
     use heca_grid_ui::{Event, WidgetIntent};
@@ -93,6 +101,7 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
     let owners = std::collections::HashMap::new();
     let shortcuts = crate::chrome::ActionShortcuts::default();
     let programs = heca_config::programs::ProgramsConfig::default();
+    let panes = mirrored_panes(&session.session);
     let sources = modes::RowSources {
         sessions: &[],
         catalog: &catalog,
@@ -100,6 +109,7 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
         shortcuts: &shortcuts,
         layout: session.l(),
         programs: &programs,
+        panes: &panes,
         add_process_name: false,
         last_focused: None,
         last_visited: None,
@@ -140,7 +150,7 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
 #[test]
 fn rpc_keeps_the_mode_and_query_on_the_existing_palette_action() {
     let catalog = ActionCatalog::with_builtins();
-    for scope in ["command", "pane", "workspace", "unknown"] {
+    for scope in ["command", "pane", "workspace", "session", "unknown"] {
         let (intent, dock) = crate::rpc::parse_rpc(&format!(
             "command_palette mode={scope} query=nvim",
         ))
@@ -179,6 +189,7 @@ fn a_floating_pane_has_a_row() {
     let rows = pane_entries(
         session.l(),
         &heca_config::programs::ProgramsConfig::default(),
+        &mirrored_panes(&session.session),
         true,
         None,
     );
@@ -195,6 +206,7 @@ fn a_pane_row_is_ranked_by_its_display_name_not_its_id() {
     let rows = pane_entries(
         session.l(),
         &heca_config::programs::ProgramsConfig::default(),
+        &mirrored_panes(&session.session),
         true,
         None,
     );
@@ -248,6 +260,7 @@ fn the_focused_pane_and_the_active_workspace_are_marked_current() {
     let panes = pane_entries(
         session.l(),
         &heca_config::programs::ProgramsConfig::default(),
+        &mirrored_panes(&session.session),
         true,
         None,
     );

@@ -84,6 +84,54 @@ fn selecting_another_session_reuses_the_same_connection_id_and_preserves_other_c
 }
 
 #[test]
+fn logical_detach_keeps_process_state_client_identity_directory_and_window_rpc() {
+    let folder = tempfile::tempdir().unwrap();
+    let mut server = a_loop();
+    let a = create(&mut server, &folder.path().join("a"), "A");
+    let b = create(&mut server, &folder.path().join("b"), "B");
+    let window = server.connect();
+    window.send(ClientMsg::AttachTo { name: a.name.clone() }).unwrap();
+    server.pump(Instant::now());
+    drain(&window);
+    let client_id = server.clients[0].id;
+    window.send(ClientMsg::LeaveSession).unwrap();
+    server.pump(Instant::now());
+    let messages = drain(&window);
+    assert!(messages.iter().any(|message| matches!(message, ServerMsg::SessionDetached { id } if *id == a.id)));
+    let i = server.named(&a.name).unwrap();
+    assert_eq!(server.sessions[i].info().windows, 0);
+    assert_eq!(server.sessions[i].info().status, SessionStatus::Active);
+    assert!(messages.iter().any(|msg| matches!(msg, ServerMsg::Sessions { result: Ok(SessionReply::List(_)), .. })));
+    let (send, receive) = std::sync::mpsc::channel();
+    server.begin_rpc("command_palette mode=session".into(), send);
+    let request_id = drain(&window).into_iter().find_map(|message| match message {
+        ServerMsg::Rpc { request_id, .. } => Some(request_id), _ => None,
+    }).expect("the same RPC door must work while a window has no selected session");
+    window.send(ClientMsg::RpcReply { request_id, answer: "ok".into() }).unwrap();
+    window.send(ClientMsg::AttachTo { name: b.name }).unwrap();
+    server.pump(Instant::now());
+    assert_eq!(receive.try_recv().unwrap(), "ok");
+    assert!(drain(&window).iter().any(|message| matches!(message,
+        ServerMsg::Attached { client_id: id, session, .. } if *id == client_id && session.id == b.id)));
+}
+
+#[test]
+fn an_unattached_new_session_does_not_steal_window_rpc_from_the_last_attached_session() {
+    let folder = tempfile::tempdir().unwrap();
+    let mut server = a_loop();
+    let a = create(&mut server, &folder.path().join("a"), "A");
+    let client = server.connect();
+    client.send(ClientMsg::AttachTo { name: a.name }).unwrap();
+    server.pump(Instant::now());
+    drain(&client);
+    create(&mut server, &folder.path().join("b"), "B");
+    let (send, receive) = std::sync::mpsc::channel();
+    server.begin_rpc("switch_session name=B".into(), send);
+    assert!(matches!(client.poll().unwrap(), Some(ServerMsg::Rpc { line, .. }) if line == "switch_session name=B"));
+    assert!(receive.try_recv().is_err(), "a window-owned action must wait for its actual owner");
+}
+
+#[test]
 fn an_unattached_extensions_session_action_uses_the_existing_registry_gate() {
     let folder = tempfile::tempdir().unwrap();
     let destination = folder.path().join("extension");
@@ -111,8 +159,10 @@ fn an_unattached_extensions_session_action_uses_the_existing_registry_gate() {
     assert!(server.named("extension-session").is_ok());
     assert_eq!(
         server.rpc("terminate_session session=extension-session"),
-        "ok"
+        format!("error: {}", crate::rpc::RpcError::Blocked("terminate_session".into()))
     );
+    assert_eq!(server.sessions[server.named("extension-session").unwrap()].info().status, SessionStatus::Active);
+    server.execute_session(SessionCommand::Terminate { name: "extension-session".into() }).unwrap();
     assert_eq!(
         server.sessions[server.named("extension-session").unwrap()]
             .info()
@@ -486,7 +536,7 @@ fn terminating_keeps_clients_and_definition_until_explicit_restart() {
 }
 
 #[test]
-fn deleting_removes_the_definition_and_only_its_clients_without_deleting_project_files() {
+fn deleting_removes_the_definition_but_keeps_its_windows_available_without_deleting_project_files() {
     let folder = tempfile::tempdir().unwrap();
     let mut server = a_loop();
     let project = folder.path().join("a");
@@ -500,7 +550,7 @@ fn deleting_removes_the_definition_and_only_its_clients_without_deleting_project
             name: a.name.clone(),
         })
         .unwrap();
-    other.send(ClientMsg::AttachTo { name: b.name }).unwrap();
+    other.send(ClientMsg::AttachTo { name: b.name.clone() }).unwrap();
     server.pump(Instant::now());
     drain(&first);
     drain(&other);
@@ -511,11 +561,18 @@ fn deleting_removes_the_definition_and_only_its_clients_without_deleting_project
         .unwrap();
     server.pump(Instant::now());
     assert!(matches!(first.poll().unwrap(), Some(ServerMsg::SessionDeleted { id }) if id == a.id));
-    first.send(ClientMsg::Detach).unwrap();
+    assert_eq!(server.clients.len(), 2);
+    let client_id = server.clients[0].id;
+    let (send, receive) = std::sync::mpsc::channel();
+    server.begin_rpc("command_palette mode=session".into(), send);
+    // Existing attached windows still receive ordinary untargeted RPC first.
+    assert!(drain(&other).iter().any(|msg| matches!(msg, ServerMsg::Rpc { .. })));
+    drop(receive);
+    first.send(ClientMsg::AttachTo { name: b.name }).unwrap();
     server.pump(Instant::now());
-    assert!(first.poll().is_err());
+    assert!(drain(&first).iter().any(|msg| matches!(msg, ServerMsg::Attached { client_id: id, .. } if *id == client_id)));
     assert!(server.named(&a.name).is_err());
-    assert_eq!(server.clients.len(), 1);
+    assert_eq!(server.clients.len(), 2);
     assert!(drain(&other).iter().all(|message| matches!(
         message,
         ServerMsg::Sessions {

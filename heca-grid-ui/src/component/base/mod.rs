@@ -287,6 +287,9 @@ pub struct Base {
     /// already reaches it. Set with
     /// [`PresenceExt::keyboard_to`](crate::builders::PresenceExt::keyboard_to).
     pub keyboard_to: Option<String>,
+    /// Take the keyboard only when the shown tree has no owner, using `keyboard_to` when set.
+    /// Does not override a dock, an overlay, or any other focused control.
+    pub focus_fallback: bool,
     /// Resolved font size in logical px, written by the layout pass: the widget's
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.

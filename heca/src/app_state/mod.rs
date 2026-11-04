@@ -5,7 +5,7 @@ pub use crate::app::terminal_host::selection::SelectionState;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::theme::Theme;
-use heca_core::layout::{Layout, LayoutMut, PaneId, Session, WindowView};
+use heca_core::layout::{Layout, LayoutMut, PaneId, Session, WindowViews};
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;

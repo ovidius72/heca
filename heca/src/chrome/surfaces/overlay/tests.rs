@@ -23,6 +23,57 @@ fn message_spec_wraps_body_in_a_label() {
 }
 
 #[test]
+fn session_confirmation_starts_on_cancel_and_requires_navigation_to_proceed() {
+    use heca_grid_ui::{Event, Flex, Length, WidgetIntent, builders::{LayoutExt, Parent}};
+    for owner in ["terminate_session", "delete_session"] {
+        let words = heca_config::settings::SessionText::default();
+        let confirm = crate::actions::ConfirmSpec::for_session(owner, &words).unwrap();
+        let spec = crate::handlers::confirmation_modal_spec(owner.into(),
+            confirm.message.replace("{name}", "Project A"), &confirm);
+        let id = OverlayId(crate::chrome::LayerRegistry::default().reserve_id());
+        let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
+        let emit = {
+            let fired = fired.clone();
+            ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| fired.borrow_mut().push(intent))
+        };
+        let theme = heca_grid_ui::Theme::default();
+        let root = build_modal_root(&spec, id, &theme, &emit,
+            &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default()).unwrap();
+        let mut root = Flex::column().width(Length::FULL).height(Length::FULL).child(root);
+        root.tick(1.0);
+        crate::chrome::paint_chrome_root(&mut root, 640.0, 480.0, &theme);
+        heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::Activate));
+        assert!(matches!(&fired.borrow()[0],
+            InteractionIntent::ActivateAction(WmAction::SubmitOverlay { action, .. }) if action == "cancel"),
+            "Enter must select Cancel before any destructive action");
+        heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::ItemNext));
+        heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::Activate));
+        assert!(matches!(&fired.borrow()[1],
+            InteractionIntent::ActivateAction(WmAction::SubmitOverlay { action, .. }) if action == "confirm"));
+        assert_eq!(fired.borrow().len(), 2, "each activation emits exactly one response");
+    }
+}
+
+#[test]
+fn session_unavailable_dialog_swallows_dismiss_and_keeps_all_choices() {
+    use heca_grid_ui::{Event, Handled, Point, WidgetIntent};
+    let words = heca_config::settings::SessionText::default();
+    let theme = heca_grid_ui::Theme::default();
+    use crate::handlers::SessionChoice;
+    for reason in [SessionChoice::Detached, SessionChoice::Terminated, SessionChoice::Deleted, SessionChoice::ServerLost] {
+        let spec = crate::handlers::session_choice_spec(&words, reason, "Choose session", "Create session");
+        let choices = spec.actions.len();
+        let mut root = build_modal_root(&spec,
+            OverlayId(crate::chrome::LayerRegistry::default().reserve_id()), &theme,
+            &noop_emit(), &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default()).unwrap();
+        assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(WidgetIntent::Dismiss)), Handled::Yes);
+        assert!(root.overlay_active() && root.focusable(), "the dialog must remain open for input");
+        assert!(root.overlay_occludes(Point::new(0.0, 0.0)), "the dialog must still block content");
+        assert_eq!(heca_grid_ui::collect_hints(root.as_ref()).len(), choices);
+    }
+}
+
+#[test]
 fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
     use heca_grid_ui::{DrawCommand, Flex, Length, builders::{LayoutExt, Parent}};
     let message = "Trust /Users/example/projects/really-long-worktree/target/p102/harness-icons-preview/.heca/config.toml? It can bind keys to commands, so only trust a project you know.";

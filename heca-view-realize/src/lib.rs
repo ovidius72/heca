@@ -243,6 +243,9 @@ pub(crate) fn apply_common_props(
     if let Some(PropValue::Text(area)) = node.props.get("keyboard_to") {
         realized.base_mut().keyboard_to = Some(area.clone());
     }
+    if let Some(PropValue::Bool(fallback)) = node.props.get("focus_fallback") {
+        realized.base_mut().focus_fallback = *fallback;
+    }
     // **What this node says on hover**, read once here for every kind, exactly like the key above.
     //
     // `TooltipExt::tooltip` is on every widget natively — it stopped being a wrapper you put

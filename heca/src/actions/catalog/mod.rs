@@ -247,8 +247,8 @@ impl ActionCatalog {
     /// via [`builtin_policy`] — never hand-written here — so the exhaustive `match` in
     /// `interaction.rs` remains the only authority on built-in policy and the two cannot drift.
     ///
-    /// The three destructive confirm specs are attached to their **owner action's** meta — `close`,
-    /// `delete_column`, `delete_workspace` — each toggled under that same name (§5.1; the spec's
+    /// Destructive confirm specs are attached to their **owner action's** meta — including pane,
+    /// container and session actions — each toggled under that same name (§5.1; the spec's
     /// `config_name` may differ from the action name, but no built-in needs it to).
     pub fn with_builtins() -> Self {
         let mut catalog = Self {

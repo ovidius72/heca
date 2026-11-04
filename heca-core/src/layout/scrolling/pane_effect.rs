@@ -193,6 +193,7 @@ impl ScrollView {
     /// [`ScrollingRef::positions`] taken before it. Which column and pane to follow is not
     /// decided here: that is the window's own choice ([`follow`](Self::follow)).
     pub fn react_to(&mut self, space: &ScrollingSpace, effects: &[SpaceEffect], before: &Positions) {
+        self.initialize(space);
         match effects {
             [SpaceEffect::Column(effect)] => self.react(space, *effect, before),
             [SpaceEffect::Pane(effect)] => self.react_to_pane(space, *effect, before),

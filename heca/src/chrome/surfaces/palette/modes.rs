@@ -14,6 +14,7 @@ pub(super) struct RowSources<'a> {
     pub shortcuts: &'a ActionShortcuts,
     pub layout: heca_core::layout::Layout<'a>,
     pub programs: &'a heca_config::programs::ProgramsConfig,
+    pub panes: &'a crate::chrome::PaneRuntimeStore,
     /// The user's `[settings] pane_renamed_add_process_name`: a renamed pane also names its program.
     pub add_process_name: bool,
     pub last_focused: Option<heca_core::layout::PaneId>,
@@ -42,6 +43,7 @@ pub(super) const MODES: &[Mode] = &[
             pane_entries(
                 sources.layout,
                 sources.programs,
+                sources.panes,
                 sources.add_process_name,
                 sources.last_focused,
             )

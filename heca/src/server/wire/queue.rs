@@ -72,7 +72,8 @@ impl Message for super::ClientMsg {}
 impl Message for super::ServerMsg {
     fn is_boundary(&self) -> bool {
         matches!(self, super::ServerMsg::Attached { .. } | super::ServerMsg::SessionTerminated { .. }
-            | super::ServerMsg::SessionDeleted { .. })
+            | super::ServerMsg::SessionDeleted { .. } | super::ServerMsg::SessionDetached { .. }
+            | super::ServerMsg::ProjectionReady { .. })
     }
     fn replaces(&self, older: &Self) -> bool {
         use super::{Change, ServerMsg};
@@ -105,6 +106,17 @@ mod tests {
         assert!(matches!(receiver.poll().unwrap(), Some(ServerMsg::Changed(Change::LayoutChanged))));
         assert!(matches!(receiver.poll().unwrap(), Some(ServerMsg::SessionDeleted { .. })));
         assert!(matches!(receiver.poll().unwrap(), Some(ServerMsg::Changed(Change::LayoutChanged))));
+    }
+
+    #[test]
+    fn later_state_cannot_replace_a_snapshot_before_projection_ready() {
+        let (sender, receiver) = channel(NonZeroUsize::new(3).unwrap());
+        sender.send(ServerMsg::Notifications(Vec::new())).unwrap();
+        sender.send(ServerMsg::ProjectionReady { session_id: heca_core::layout::SessionId(1) }).unwrap();
+        sender.send(ServerMsg::Notifications(Vec::new())).unwrap();
+        assert!(matches!(receiver.poll().unwrap(), Some(ServerMsg::Notifications(_))));
+        assert!(matches!(receiver.poll().unwrap(), Some(ServerMsg::ProjectionReady { .. })));
+        assert!(matches!(receiver.poll().unwrap(), Some(ServerMsg::Notifications(_))));
     }
 
     #[test]

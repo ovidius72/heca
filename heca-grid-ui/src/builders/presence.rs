@@ -106,6 +106,14 @@ pub trait PresenceExt: Component + Sized {
         self
     }
 
+    /// Use this control, or its `keyboard_to` content, when the tree has no keyboard owner.
+    /// Unlike autofocus, it never takes focus away from another widget. Default false.
+    #[heca_grid_ui_macros::prop]
+    fn focus_fallback(mut self, yes: bool) -> Self {
+        self.base_mut().focus_fallback = yes;
+        self
+    }
+
 
     /// **Take this widget out of the layout entirely** — CSS `display: none`. Its neighbours close
     /// up, and it is neither painted nor Tab-focused.

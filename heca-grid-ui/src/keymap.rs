@@ -199,9 +199,8 @@ impl Keymap {
         km.bind(Char('u'), ctrl, EditDeleteToLineStart);
         km.bind(Char('a'), ctrl, EditSelectAll);
         km.bind(Char('a'), meta, EditSelectAll);
-        // Horizontal navigation (left/right). Tab / Shift+Tab are NOT here — they are the
-        // universal, always-on focus-traversal primitive handled by the `FocusManager` (and
-        // trapped inside a modal `Dialog`), not a rebindable `[keys.widgets]` binding.
+        // Horizontal navigation. An unconsumed Tab continues normal focus traversal;
+        // completion-capable widgets may consume its Complete intent instead.
         km.bind(ArrowLeft, none, ItemPrevious);
         km.bind(ArrowRight, none, ItemNext);
         km.bind(Char('h'), ctrl, ItemPrevious);
@@ -209,6 +208,7 @@ impl Keymap {
         // Vertical navigation (up/down).
         km.bind(ArrowUp, none, MenuUp);
         km.bind(ArrowDown, none, MenuDown);
+        km.bind(Tab, none, Complete);
         km.bind(Char('k'), ctrl, MenuUp);
         km.bind(Char('j'), ctrl, MenuDown);
         // Shared.

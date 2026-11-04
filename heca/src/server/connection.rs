@@ -1,6 +1,6 @@
 //! One identity and physical link per connection. Only ServerLoop receives wire input.
 
-use super::wire::{ClientMsg, ServerLink};
+use super::wire::{ClientMsg, ServerLink, ServerMsg};
 use heca_core::layout::SessionId;
 use std::{
     cell::{Cell, RefCell},
@@ -12,17 +12,25 @@ use std::{
 pub(super) enum Attachment {
     Pending,
     Attached,
+    Detached,
 }
 
 pub(super) struct Connection {
     pub id: u64,
     pub link: Box<dyn ServerLink>,
     pub attachment: Cell<Attachment>,
+    pub projection_pending: Cell<bool>,
     pub session: Cell<Option<SessionId>>,
     pub window_ordinal: Cell<u64>,
-    pub retire_at: Cell<Option<std::time::Instant>>,
     input: RefCell<VecDeque<ClientMsg>>,
     closed: Cell<bool>,
+    next_rpc: Cell<u64>,
+    pending_rpc: RefCell<std::collections::HashMap<u64, PendingRpc>>,
+}
+
+struct PendingRpc {
+    reply: std::sync::mpsc::Sender<String>,
+    deadline: std::time::Instant,
 }
 
 impl Connection {
@@ -31,11 +39,13 @@ impl Connection {
             id,
             link,
             attachment: Cell::new(Attachment::Pending),
+            projection_pending: Cell::new(false),
             session: Cell::new(None),
             window_ordinal: Cell::new(0),
-            retire_at: Cell::new(None),
             input: Default::default(),
             closed: Cell::new(false),
+            next_rpc: Cell::new(1),
+            pending_rpc: Default::default(),
         }
     }
 
@@ -61,8 +71,48 @@ impl Connection {
 
     pub(super) fn close(&self) {
         self.closed.set(true);
+        for (_, request) in self.pending_rpc.borrow_mut().drain() {
+            let _ = request.reply.send("error: attached client disconnected".into());
+        }
     }
     pub(super) fn is_closed(&self) -> bool {
         self.closed.get()
+    }
+
+    /// Window RPC belongs to the physical connection, including while it has no session.
+    pub(super) fn begin_rpc(&self, line: String, reply: std::sync::mpsc::Sender<String>,
+        limits: heca_config::settings::ConnectionConfig) {
+        let request_id = self.next_rpc.get();
+        let Some(next) = request_id.checked_add(1) else {
+            let _ = reply.send("error: no more request identifiers".into());
+            return;
+        };
+        self.next_rpc.set(next);
+        if self.link.send(ServerMsg::Rpc { request_id, line }).is_err() {
+            let _ = reply.send("error: attached client disconnected".into());
+            return;
+        }
+        self.pending_rpc.borrow_mut().insert(request_id, PendingRpc {
+            reply, deadline: std::time::Instant::now()
+                + std::time::Duration::from_millis(limits.request_timeout_ms.get()),
+        });
+    }
+
+    pub(super) fn reply_rpc(&self, request_id: u64, answer: String) {
+        if let Some(request) = self.pending_rpc.borrow_mut().remove(&request_id) {
+            let _ = request.reply.send(answer);
+        }
+    }
+
+    pub(super) fn rpc_deadline(&self) -> Option<std::time::Instant> {
+        self.pending_rpc.borrow().values().map(|request| request.deadline).min()
+    }
+
+    pub(super) fn expire_rpc(&self, now: std::time::Instant) {
+        self.pending_rpc.borrow_mut().retain(|_, request| {
+            if request.deadline > now { return true; }
+            let _ = request.reply.send("error: attached client timed out".into());
+            false
+        });
     }
 }

@@ -193,7 +193,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `focus_barrier` | `bool` | Whether this widget is the **only** focus target in its subtree — focus traversal visits it but never descends into its children (default `false`). Set by controls that **compose** their content (`Button`, `Item`): a control is one click target, so it must be one Tab stop, whatever it holds. Without it a focusable child (a `Toggle` used as decoration) would take its own Tab stop while being click-dead, since the control consumes the press in its own `event`. Orthogonal to `style.hidden`, which drops a subtree from layout *and* focus. |
 | `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`: `advance` → `true`, click-focus → `false`). **Every widget gates its focus ring on `Base::shows_focus_ring()`** (= `focused && focus_visible` — CSS `:focus-visible` semantics), so a mouse click focuses a widget (Enter/Space work, the caret shows) **without** drawing the ring; only keyboard navigation rings. The ring is also removable app-wide via `[appearance] show_focus_border = false` (theme token `show_focus_border`). |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
-| `children` | `Vec<WidgetModel>` | Child components. |
+| `children` | `Vec<WidgetModel>` | Child components. `heca_grid_ui::unmount_child(root, index)` closes and removes a direct child, returning its modal focus before removal, including programmatic/RPC closes. Out-of-range indices return `None`. |
 | `font` | `f32` | **Resolved** font size in logical px, written by the layout pass (see [Font sizing](#font-sizing)). Widgets read **this** for text + measurement, not `style.font_size`. |
 
 ### `Component` trait
@@ -290,6 +290,7 @@ chain fell silent the day one row forgot to declare its key. N copies of a rule 
 | `PointerDown(PointerEvent)` | a button went down on this widget. **Consuming it captures the pointer** (below). |
 | `PointerUp(PointerEvent)` | the button came up, ending that gesture. |
 | `PointerMove(PointerEvent)` | the pointer moved over this widget — or anywhere, while it holds capture. |
+| `Event::pointer_rechecked(pos)` / raw `Recheck` | the tree changed under a stationary pointer. Refreshes hover enter/leave and tooltip state without sending `PointerMove` or driving a captured gesture. |
 | `PointerEnter` / `PointerLeave` | the pointer came over / left this widget. Sent to the whole ancestor chain, like CSS `:hover`. Never consumable — leaving is not something a neighbour can veto. |
 | `Click` / `DoubleClick` / `TripleClick` | press and release on the same widget. **Every click is a `Click`**; a run *adds* `DoubleClick` (then `TripleClick`) on top, so a control that only understands single clicks still fires on the second. |
 | `RightClick` / `MiddleClick` | the same, with that button. A right-click **never** also fires a `Click`. |
@@ -5561,6 +5562,13 @@ reaches it — unless it declared a pick itself. heca's pane hands its keyboard 
 pane wears one letter and picking it types into the terminal (or editor, or plugin tree) inside; a
 terminal placed in a dock is handed nothing and keeps its own letter.
 
+`.focus_fallback(true)` declares the default only when the shown tree has no keyboard owner.
+It delegates through `keyboard_to` when present, ignores hidden/disabled content, and never
+steals focus from a control, dock or overlay. The default is `false`. Native `PresenceExt` and
+declarative `Style` expose the same property; `realize` applies the boolean to every widget kind.
+Heca's active pane declares this on its shell so newly attached content has real input focus,
+including for feedback suppression, without a simulated click or a terminal-specific fallback.
+
 ```rust
 // Native: a frame whose header holds no field, and whose body holds whatever types.
 Grid::new()
@@ -6392,6 +6400,11 @@ children. `SearchModel` owns matching, ranking and history. Choosing a row runs 
 closes the palette. Each mode has its own search scope; a leading sigil selects that mode and is
 removed before matching or recording a search.
 
+Opening or relaying out the palette beneath a stationary pointer preserves its initial or
+keyboard selection. Hover refresh is not movement; actual pointer movement still selects a row,
+and clicking still activates it. Hosts use the shared raw `Recheck` event after tree changes,
+not a fabricated device move. Widgets need no private first-move flags or distance thresholds.
+
 #### Palette API
 
 | Builder or method | Behaviour and default |
@@ -6399,6 +6412,7 @@ removed before matching or recording a search.
 | `CommandPalette::new()` | Empty, closed palette; private search memory in scope `command`. |
 | `.command(Command)` | Append one row. A row with no explicit mode belongs to the default mode. |
 | `.source(|query| Vec<Command>)` | Refresh candidates when the query changes or history is recalled. Reuses the same query Input, fuzzy matcher, selection and callbacks; only row children are replaced. Native hosts can supply folder completion or other live data without implementing another picker. |
+| `.complete_selected()` | Replace the query with the selected row's optional completion text. Keeps the palette open and does not run the callback or record usage. Returns unhandled when no completion is available. Bound through `WidgetIntent::Complete` (`[keys.widgets] complete`, default Tab); ordinary palettes retain focus traversal. |
 | `.mode(sigil, scope)` | Declare a sigil and its search scope. The first declaration is the default. Without declarations the search model's scope is the only mode, and leading punctuation is ordinary query text. |
 | `.mode_with_commands(sigil, scope, commands)` | Declare the mode and append its rows together. Assigns the scope to every supplied command, replacing any previous row mode. No separate row annotation or sigil lookup is needed. |
 | `.query(text)` | Set the full query, including any sigil. Default empty. Replaces an earlier named prefill. |
@@ -6417,6 +6431,8 @@ removed before matching or recording a search.
 | Builder | Behaviour and default |
 |---|---|
 | `Command::new(label, callback)` | Required label and callback. |
+| `.completion(text)` | Optional query replacement for completion. When present, matching uses this text rather than the decorated label; highlight offsets are not applied to a different label. Default absent. |
+| `.fallback(bool)` | Default `false`. Offer a matching creation/alternate action after matching suggestions, without changing their scores. Applies to typed and empty queries. |
 | `.description(text)` | Optional muted second line; default absent. The selected description wraps; other descriptions truncate. Descriptions do not participate in matching. |
 | `.path(text)` | A single-line second row for a path; preserves its trailing portion when shortened and exposes the complete value in a tooltip. Does not expand when selected. |
 | `.detail(text)` | A separate single-line metadata row below the description or path, sized by the normal layout engine. |

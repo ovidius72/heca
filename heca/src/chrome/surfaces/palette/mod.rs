@@ -72,81 +72,29 @@ pub(crate) fn owners(state: &AppState) -> std::collections::HashMap<String, Owne
 ///
 /// The two **compose into one prefilled query** — `mode=pane, query="nvim"` is `"@nvim"` — because
 /// the sigil is the mode selector. The widget resolves the name from its own mode table.
+/// A prepared palette supplies different content through the same presentation and dismissal path.
 pub(crate) fn open_command_palette(
     state: &mut AppState,
     mode: Option<&str>,
     query: Option<&str>,
+    custom: Option<CommandPalette>,
 ) -> OverlayId {
     let id = OverlayId(state.layers.reserve_id());
     let source = InteractionSource::Keyboard;
 
     let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
-    let owners = owners(state);
-    let palette = CommandPalette::new()
-        .placeholder("Type a command…")
-        // The app's search memory, so what was searched and chosen outlives this palette — it is
-        // built from scratch on every open.
-        .search(
-            heca_grid_ui::search::SearchModel::new(modes::MODE_COMMAND, state.search_store.clone())
-                // The user's `[settings] search_case`, as the library's own vocabulary.
-                .case(match state.settings.search_case {
-                    heca_config::settings::SearchCase::Smart => {
-                        heca_grid_ui::search::MatchCase::Smart
-                    }
-                    heca_config::settings::SearchCase::Sensitive => {
-                        heca_grid_ui::search::MatchCase::Sensitive
-                    }
-                    heca_config::settings::SearchCase::Insensitive => {
-                        heca_grid_ui::search::MatchCase::Insensitive
-                    }
-                }),
-        )
-        // The user's `[settings] command_palette_size`, as a semantic variant — the widget owns what
-        // each one means in pixels.
+    let (palette, rows) = if let Some(palette) = custom {
+        (palette, Vec::new())
+    } else {
+        standard_palette(state, id, &emit)
+    };
+    let palette = palette.query_in(mode, query.unwrap_or_default()).default_open(true)
         .panel_size(match state.settings.command_palette_size {
             heca_config::settings::PaletteSize::Small => heca_grid_ui::WidgetSize::Small,
             heca_config::settings::PaletteSize::Normal => heca_grid_ui::WidgetSize::Normal,
             heca_config::settings::PaletteSize::Large => heca_grid_ui::WidgetSize::Large,
         });
-    let session_rows = sessions::entries(&state.client.sessions, state.client.session.id, &state.settings.session_text);
-    let sources = modes::RowSources {
-        sessions: &session_rows,
-        catalog: &state.action_catalog,
-        owners: &owners,
-        shortcuts: &state.action_shortcuts,
-        layout: state.layout(),
-        programs: &state.client.programs,
-        add_process_name: state.settings.pane_renamed_add_process_name,
-        last_focused: state.last_focused,
-        last_visited: state.last_visited_ws_idx,
-    };
-    let (palette, rows) = modes::populate(palette, modes::MODES, &sources, |row| {
-        let mut command = Command::new(row.label.clone(), id.submitter(row.id.clone(), &emit))
-            .group(group_of(row, &owners))
-            .current(row.current)
-            .preselect(row.preselect)
-            .description(row.description.clone());
-        if row.description_path { command = command.path(row.description.clone()); }
-        if let Some(detail) = &row.detail { command = command.detail(detail.clone()); }
-        // The identity past choices are counted against — **not** the row's id. For an action they
-        // are the same string; for a pane they are not, and assuming they were is what would file
-        // a habit under a number that means something different tomorrow. An entry without one
-        // still matches and sorts, it simply carries no boost.
-        if let Some(rank_id) = &row.rank_id {
-            command = command.id(rank_id.clone());
-        }
-        if let Some(glyph) = row.icon {
-            command = command.icon(glyph);
-        }
-        // One keycap row per binding, each split into the tokens a cap is drawn per (`λ`, `⇧`, `e`)
-        // by the same seam that formatted it.
-        for chord in &row.shortcuts {
-            command = command.keys(crate::shortcut::chord_caps(chord));
-        }
-        command
-    });
-    let palette = palette.query_in(mode, query.unwrap_or_default()).default_open(true);
 
     // **A pane row follows its pane.** The chrome store already mirrors each pane's `program` and
     // `custom_name` as signals, and the row's title is a signal too, so this is one effect per pane
@@ -157,26 +105,21 @@ pub(crate) fn open_command_palette(
     let add_process_name = state.settings.pane_renamed_add_process_name;
     for (i, row) in rows.iter().enumerate() {
         let Some(pane) = row.pane else { continue };
-        let Some((program, custom_name)) = state
+        let Some(signals) = state
             .chrome_state
             .panes
-            .with(pane, |signals| signals.map(|s| (s.program, s.custom_name)))
+            .with(pane, |signals| signals.copied())
         else {
             continue;
         };
         let label = palette.label_signals()[i];
         let programs = programs.clone();
         create_effect(move |_| {
-            // Only the program matters to the title; the rest of a `PaneRuntime` is read for the
-            // fields the palette does not show.
-            let runtime = heca_core::runtime::PaneRuntime {
-                program: program.get(),
-                ..Default::default()
-            };
+            let runtime = signals.presentation();
             let info = pane_info_view(
                 &programs,
                 "",
-                custom_name.get().as_deref(),
+                signals.custom_name.get().as_deref(),
                 Some(&runtime),
                 add_process_name,
             );
@@ -215,14 +158,62 @@ pub(crate) fn open_command_palette(
                 && let Some(entry) = rows.iter().find(|e| e.id == chosen)
             {
                 dispatch_intent(state, registry, source, entry.intent.clone());
-                // Not the palette's business *what* was recorded or whether anything was: the shared
-                // helper saves when the store says it changed, so any future search surface is
-                // persisted by the same call without knowing this one exists.
-                crate::search_state::persist_if_changed(state);
             }
+            // Dynamic and fixed rows persist through the same search-store revision check.
+            crate::search_state::persist_if_changed(state);
         });
     state.needs_redraw = true;
     id
+}
+
+fn standard_palette(state: &AppState, id: OverlayId, emit: &ChromeIntentEmitter) -> (CommandPalette, Vec<PaletteEntry>) {
+    let owners = owners(state);
+    let palette = CommandPalette::new()
+        .placeholder("Type a command…")
+        .search(search_model(state, modes::MODE_COMMAND, state.settings.search_case));
+    let session_rows = sessions::entries(&state.client.sessions, &state.client.session, &state.settings.session_text);
+    let sources = modes::RowSources {
+        sessions: &session_rows,
+        catalog: &state.action_catalog,
+        owners: &owners,
+        shortcuts: &state.action_shortcuts,
+        layout: state.layout(),
+        programs: &state.client.programs,
+        panes: &state.chrome_state.panes,
+        add_process_name: state.settings.pane_renamed_add_process_name,
+        last_focused: state.last_focused,
+        last_visited: state.last_visited_ws_idx,
+    };
+    modes::populate(palette, modes::MODES, &sources, |row| {
+        let mut command = Command::new(row.label.clone(), id.submitter(row.id.clone(), emit))
+            .group(group_of(row, &owners))
+            .current(row.current)
+            .preselect(row.preselect)
+            .description(row.description.clone());
+        if row.description_path { command = command.path(row.description.clone()); }
+        if let Some(detail) = &row.detail { command = command.detail(detail.clone()); }
+        // Rank against the stable choice identity, not the row's presentation id.
+        if let Some(rank_id) = &row.rank_id {
+            command = command.id(rank_id.clone());
+        }
+        if let Some(glyph) = row.icon {
+            command = command.icon(glyph);
+        }
+        for chord in &row.shortcuts {
+            command = command.keys(crate::shortcut::chord_caps(chord));
+        }
+        command
+    })
+}
+
+fn search_model(state: &AppState, scope: &str, case: heca_config::settings::SearchCase) -> heca_grid_ui::search::SearchModel {
+    use heca_grid_ui::search::MatchCase;
+    heca_grid_ui::search::SearchModel::new(scope, state.search_store.clone())
+        .case(match case {
+            heca_config::settings::SearchCase::Smart => MatchCase::Smart,
+            heca_config::settings::SearchCase::Sensitive => MatchCase::Sensitive,
+            heca_config::settings::SearchCase::Insensitive => MatchCase::Insensitive,
+        })
 }
 
 #[cfg(test)]

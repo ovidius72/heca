@@ -274,8 +274,8 @@ scroll_to_top      = "Shift+Home"
 scroll_to_bottom   = "Shift+End"
 scroll_line_up     = "Shift+Up"
 scroll_line_down   = "Shift+Down"
-# The palette opened in a mode. One surface, three lists: the sigil is the mode selector, so these
-# are the same action with its query prefilled — typing `@` in the palette does exactly this.
+# The palette opened in a mode. The sigil selects the list on the same surface:
+# @ panes, $ workspaces, # sessions. These bindings prefill that same query.
 [[keys.bind]]
 keys   = "prefix+o"
 action = "command_palette"
@@ -285,6 +285,11 @@ args   = { mode = "pane" }
 keys   = "prefix+Ctrl+o"
 action = "command_palette"
 args   = { mode = "workspace" }
+
+[[keys.bind]]
+keys   = "prefix+#"
+action = "command_palette"
+args   = { mode = "session" }
 
 # The context menu of whatever the keyboard is on — the focused widget (a sidebar row, a
 # plugin's row), else the focused pane. `prefix+>` above is the heca-shaped binding; these two are
@@ -477,8 +482,8 @@ args   = { name = "heca.expose" }
 #   • menu_history_up / _down    — a search surface's PAST QUERIES (up = older).
 #   • activate / dismiss         — shared (commit/submit, close/cancel).
 #   • edit_*                     — text-Input shortcuts (plain typing/caret keys are built in).
-# Tab / Shift+Tab are NOT here: they are the universal, always-on focus-traversal primitive
-# handled by the focus system (and trapped inside a modal dialog), not a rebindable binding.
+# Tab / Shift+Tab traverse focus. A completion-capable widget may consume Tab through `complete`;
+# without a selected completion it continues focus traversal. Shift+Tab is unchanged.
 # A focused text field keeps its own keys first (field-first): e.g. ← moves the caret inside an
 # Input but navigates when a button is focused; Ctrl+h deletes in an Input but is item_previous
 # on a Tabs/dialog — the same key disambiguates by which widget has focus.
@@ -493,6 +498,7 @@ menu_down     = ["ArrowDown", "Ctrl+j"]    # Vertical down / next — vim Ctrl+j
 # back the draft the walk interrupted.
 menu_history_up   = ["Shift+ArrowUp", "Ctrl+p"]     # Older query
 menu_history_down = ["Shift+ArrowDown", "Ctrl+n"]   # Newer query / back to the draft
+complete = "Tab" # Complete a selected suggestion; otherwise normal focus traversal
 activate      = ["Enter", "Space"]          # Commit / submit the selected entry or primary action
 dismiss       = "Escape"                    # Close / cancel the overlay
 edit_delete_back          = "Ctrl+h"                 # Input: delete one char before the caret

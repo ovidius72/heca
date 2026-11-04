@@ -198,11 +198,25 @@ To stop the background server and everything in it — every pane and terminal, 
 heca --kill-server
 ```
 
+Press `prefix+#` to open the session palette directly (default prefix: `Ctrl+b`). This uses the
+registered `command_palette` action with `mode = "session"`, like `prefix+o` uses `mode = "pane"`.
 The command palette's `#` mode lists sessions and switches this window only. The New Session
 action uses fuzzy folder completion: relative paths start at the focused pane's folder (or home),
-and a missing folder requires choosing the explicit Create folder row. An empty folder chooses home.
+and a missing folder requires choosing the explicit Create folder row. Tab completes the selected
+path without creating it or closing the picker; Enter confirms. The binding is configurable as
+`[keys.widgets] complete` (default `Tab`). An empty folder chooses home.
+Folder matching is fuzzy and defaults to case-insensitive, including capitalized paths inserted
+by completion. `[settings] folder_search_case` accepts `insensitive` (default), `smart`, or
+`sensitive`, independently of `search_case`. Matching existing folders precedes the explicit
+creation option; an unmatched path still offers creation.
 Session rows keep the name, abbreviated path and window/agent counts on separate lines. The full
 path is available in its tooltip.
+The current terminated session is not offered as its own alternative in the session picker;
+its unavailable dialog already offers explicit Restart. Other stopped sessions remain listed
+and require explicit Restart after selection. Detach still allows reattaching to the same active
+session, and the CLI session inventory keeps all retained sessions.
+Each window remembers its workspace, focused pane and scroll separately for every session.
+Returning to a session restores that window's view without changing another window's focus.
 
 The attach response carries `session` (`SessionInfo`), `client_id`, `window_ordinal` and `content`.
 `session.id` is the existing `SessionId`; `session.folder` is the optional project path. Client IDs
@@ -225,9 +239,11 @@ heca rpc restart_session session=work
 heca rpc delete_session session=work
 ```
 
-Terminate (`--kill <name>`) stops the processes but keeps the session definition. Its windows stay
-open with Restart and Exit. Delete removes the definition and closes only its windows; project
-files are never removed. Server loss also leaves windows open for an explicit reconnect or exit;
+Detach leaves the session and processes running and removes only this window's attachment.
+Terminate (`--kill <name>`) stops the processes but keeps the session definition. Delete removes
+the definition; project files are never removed. All three leave affected windows open with
+choices for an existing session, a new session, and Exit. Terminate also offers explicit Restart.
+Canceling a picker returns to those choices. Server loss leaves windows open for reconnect or exit;
 disconnected windows do not restart the server automatically.
 
 `resume_programs` and `resume_harness` are independent `[settings]` switches, both defaulting to
@@ -677,6 +693,7 @@ before running.
 - **Fuzzy, smart-case matching.** Type lowercase and case is ignored; type an
   uppercase letter and it starts to matter. Set `search_case` to `"sensitive"` or
   `"insensitive"` in `config.toml` if you'd rather it never guessed.
+  Folder pickers use their separate `folder_search_case`, defaulting to `"insensitive"`.
 - **It learns what you use.** Commands you pick often — and recently — rise to the
   top, so an empty palette shows your habits rather than an alphabet. Running
   something a second time counts for more than having run something else a moment
@@ -1079,6 +1096,7 @@ float_size = 0.95             # Share of the working area a pane takes when it f
 move_slide_reach = 0.9        # How far (fraction of the window) a moved or swapped pane animates in from; 0 = jump
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
+pane_name_delay = 1000        # Display-name delay in milliseconds; 0 updates immediately
 # pane_show_cwd is now [appearance.expose] show_cwd (still read; see below)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
@@ -1108,13 +1126,35 @@ name — `true` prompts (Cancel / \<action\>), `false` runs immediately:
 close = true            # confirm before closing a pane
 delete_column = true    # confirm before deleting a column (and its panes)
 delete_workspace = true # confirm before deleting a workspace (and its contents)
+terminate_session = true # stop its processes, retain the session for restart
+delete_session = true    # remove the session, never project files
 ```
 
-The guard lives on the **action**, so *every* surface that triggers it — a
-keybinding, the pane-header close button, a right-click menu, or RPC — confirms
-identically. Any action (including a plugin's) is configurable by name here; an
-action not listed uses its own declared default. Changes apply on
-`prefix+Shift+r`.
+Session confirmations name the target and select Cancel initially. Terminate retains the
+session for explicit restart; Delete removes it and stops its processes, without deleting
+project files. Detach needs no confirmation and leaves its processes running. The warning
+text and button labels are configurable under `[settings.session_text]`:
+`confirm_terminate` and `confirm_delete` accept a `{name}` placeholder; `terminate`, `delete`
+and `cancel` supply the button labels. The two `[confirm]` switches accept only `true` or
+`false` and default to `true`. An RPC without a window cannot answer an enabled prompt
+and is refused rather than silently executing.
+
+`heca --kill <name>` also asks before stopping a session: `Confirm? [y/N]:`.
+Only `y` or `Y` confirms. `n`, `N`, Enter, EOF or any other answer cancels without
+changing the session. The warning and `confirm_prompt` come from
+`[settings.session_text]` in the target project's effective configuration. Changing the
+prompt or GUI button labels does not change the y/N response grammar. The prompt goes
+to stderr, leaving stdout for the result. Setting `[confirm].terminate_session=false`
+skips this prompt too.
+
+The guard lives on the **action**, so keybindings, buttons, menus and RPC use the
+same confirmation policy. Requests handled by a window can show the dialog.
+Session lifecycle RPC calls are handled by the server: while their confirmation
+is enabled, they return an error instead of opening a dialog in another window.
+Use the GUI or interactive `--kill`, or explicitly disable the corresponding
+`[confirm]` switch for unattended scripts. Any action (including a plugin's) is
+configurable by name here; an unlisted action uses its declared default. Changes
+apply on `prefix+Shift+r`.
 
 > Replaces the old `[settings] confirm_close_pane` / `confirm_delete_column` /
 > `confirm_delete_workspace` flags — move any you had set into `[confirm]` as
@@ -1122,8 +1162,8 @@ action not listed uses its own declared default. Changes apply on
 >
 > The pane toggle was once `delete_pane`; it still works, but `close` is the name
 > now — one word for the action, its key, its label and its dialog. **Close** is
-> for the pane you work in; **Delete** stays for a column or workspace, which
-> destroys everything inside it.
+> for the pane you work in; **Delete** removes a container or session. Terminating
+> a session stops its processes but retains its definition.
 
 ### Notifications
 
@@ -1294,6 +1334,16 @@ pane the same way. The process label is not part of the name
 (it's never edited by rename); toggle it with `[settings] pane_renamed_add_process_name`
 (default `true`). In the pane **info bar**, the `app_name` segment always shows the program
 name regardless of a rename; add the `pane_name` segment to show the custom name there.
+
+`[settings] pane_name_delay` keeps brief shell commands from repeatedly changing the displayed
+program name. It accepts a nonnegative integer in milliseconds (default `1000`, one second);
+`0` disables the delay. Negative numbers, fractions and quoted strings are invalid.
+The name and program icon change only after the new running program remains for that duration.
+When the command finishes and the shell returns, its name is restored without waiting.
+Custom pane names stay unchanged; their optional process suffix uses the same delayed name.
+Sidebar, info bar, pane palette and exposé share this projection. Raw process and agent state,
+exit codes, sounds and feedback remain immediate. Normal configuration precedence applies;
+startup and reload read the same setting, and changing it does not restart a process.
 
 ```toml
 [appearance.pane]
@@ -1896,8 +1946,8 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Select the whole field (C
 
 Notes:
 
-- **Tab / Shift+Tab** are the universal focus-traversal primitive (handled by the focus system, and
-  trapped inside a modal dialog) — always on, **not** listed here.
+- **Tab / Shift+Tab** traverse focus and stay inside a modal dialog. A selected suggestion may
+  consume Tab through `complete`; without a completion, normal focus traversal remains available.
 - A focused text field keeps its own keys first (**field-first**): `←` moves the caret inside an
   `Input` but navigates when a button is focused. The shared `Ctrl+h` disambiguates by focus — it
   deletes in an `Input` but is `item_previous` on a `Tabs`/dialog.

@@ -126,6 +126,7 @@ impl PaneShell<'_> {
         // its own, and has none; a terminal placed in a dock, handed nothing, keeps its own.
         let mut pane = pane
             .key(crate::chrome::pane_key(pane_id))
+            .focus_fallback(active)
             .keyboard_to(PANE_CONTENT_AREA);
         // **A tiled pane is carried by the window's key and lands beside another** — the framework
         // runs the drag and paints what follows the pointer; a float is neither picked up nor
@@ -249,6 +250,7 @@ fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
 pub(crate) fn focus_state_to(root: &mut dyn heca_grid_ui::Component, model: &PaneShellModel) {
     let color = to_gui_color(model.border_color);
     let base = root.base_mut();
+    base.focus_fallback = model.active;
     if let Some(border) = base.style.visual.border.as_mut() {
         border.color = color;
     }

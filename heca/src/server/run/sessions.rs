@@ -58,15 +58,8 @@ impl ServerLoop {
                         let _ = client.link.send(ServerMsg::SessionDeleted { id });
                         self.sessions[i].detach_connection(client.id);
                         client.session.set(None);
-                        let limits = self
-                            .config
-                            .as_ref()
-                            .map(|config| config.config.settings.connection)
-                            .unwrap_or_default();
-                        client.retire_at.set(Some(
-                            Instant::now()
-                                + std::time::Duration::from_millis(limits.request_timeout_ms.get()),
-                        ));
+                        client.attachment.set(super::super::connection::Attachment::Detached);
+                        client.projection_pending.set(false);
                     }
                 }
                 self.sessions[i].shutdown();
@@ -104,8 +97,11 @@ impl ServerLoop {
                 return Err("a session already has that name".into());
             }
         }
-        let settings = self
-            .config
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let folder = folder.canonicalize().map_err(|e| e.to_string())?;
+        // Naming and runtime construction use one load of the destination's settings.
+        let project = self.config.as_ref().map(|_| heca_config::loader::AppConfig::load_for(&folder));
+        let settings = project
             .as_ref()
             .map(|c| c.config.settings.clone())
             .unwrap_or_default();
@@ -124,14 +120,12 @@ impl ServerLoop {
                 break (SessionId(id), proposed);
             }
         };
-        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-        let folder = folder.canonicalize().map_err(|e| e.to_string())?;
         let mut identity =
             SessionInfo::unnamed(id.0, &settings.session_name_format, Some(folder.clone()));
         identity.name = id.1;
         identity.label = label;
         let (runtime, drafts) =
-            crate::notification::collect_notifications(|| self.make_session(identity.clone()));
+            crate::notification::collect_notifications(|| self.make_session(identity.clone(), project.as_ref()));
         let mut runtime = runtime?;
         for draft in drafts {
             runtime.raise(draft);
@@ -143,14 +137,10 @@ impl ServerLoop {
         Ok(identity)
     }
 
-    fn make_session(&self, identity: SessionInfo) -> Result<SessionRuntime, String> {
-        if let (Some(config), Some(wake)) = (&self.config, &self.wake) {
-            let project = identity
-                .folder
-                .as_deref()
-                .map(heca_config::loader::AppConfig::load_for);
+    fn make_session(&self, identity: SessionInfo, config: Option<&heca_config::loader::AppConfig>) -> Result<SessionRuntime, String> {
+        if let (Some(config), Some(wake)) = (config, &self.wake) {
             return SessionRuntime::from_config(
-                project.as_ref().unwrap_or(config),
+                config,
                 wake.clone(),
                 identity,
             )

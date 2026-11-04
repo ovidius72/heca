@@ -112,6 +112,7 @@ impl SessionRuntime {
         self.identity.status = SessionStatus::Active;
         let info = self.info();
         for client in &self.clients {
+            client.projection_pending.set(true);
             let _ = client.link.send(ServerMsg::Attached {
                 session: info.clone(),
                 client_id: client.id,

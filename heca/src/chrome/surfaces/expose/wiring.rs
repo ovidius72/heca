@@ -168,7 +168,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<crate::
                 &programs,
                 &pane.title,
                 pane.custom_name.as_deref(),
-                Some(&pane.runtime),
+                state.chrome_state.panes.presentation(pane.id).as_ref(),
                 add_process_name,
             )
             .label()

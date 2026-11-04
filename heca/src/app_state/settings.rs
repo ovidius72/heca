@@ -27,12 +27,15 @@ pub struct WindowSettings {
     pub command_palette_size: PaletteSize,
     /// How a search query's case is treated.
     pub search_case: SearchCase,
+    pub folder_search_case: SearchCase,
     /// Whether the search memory is read from and written to disk at all. Turned off, the store is
     /// neither read nor written — a shared or recorded machine is a real reason, and a user who
     /// turns it off expects the existing file to stop being consulted too.
     pub search_history: bool,
     /// Append the program name (small, dimmed) next to a renamed pane's custom name.
     pub pane_renamed_add_process_name: bool,
+    /// Display-name stabilization delay in milliseconds; zero is immediate.
+    pub pane_name_delay: u64,
     /// Show each pane's folder on its card in the exposé (`[appearance.expose] show_cwd`).
     pub expose_show_cwd: bool,
     /// Whether the wheel scrolls a terminal's history (unless the program in it took the mouse).
@@ -66,8 +69,10 @@ impl WindowSettings {
             edge_scroll_speed: settings.edge_scroll_speed,
             command_palette_size: settings.command_palette_size,
             search_case: settings.search_case,
+            folder_search_case: settings.folder_search_case,
             search_history: settings.search_history,
             pane_renamed_add_process_name: settings.pane_renamed_add_process_name,
+            pane_name_delay: settings.pane_name_delay,
             expose_show_cwd: expose_show_cwd(&app_config.config),
             terminal_mouse_enabled: settings.terminal_mouse,
             terminal_wheel_scroll_lines: settings.terminal_wheel_scroll_lines,

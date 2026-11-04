@@ -422,6 +422,12 @@ pub trait Style: Sized {
         self.prop("keyboard_to", area)
     }
 
+    /// Use this node, or its `keyboard_to` content, when no widget holds the keyboard.
+    /// Never overrides a focused control, dock or overlay.
+    fn focus_fallback(self, yes: bool) -> Self {
+        self.prop("focus_fallback", yes)
+    }
+
     /// **The named area of its grid this node sits in** — CSS `grid-area`. The declarative
     /// spelling of `PlaceExt::area`; the name is resolved against whichever grid holds the node.
     ///

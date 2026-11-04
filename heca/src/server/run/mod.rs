@@ -123,12 +123,19 @@ impl ServerLoop {
             self.shutdown();
             self.stopped = true;
             let _ = reply.send("heca: server stopped\n".into());
-        } else if let Some(session) = self.last_index() {
-            if self.sessions[session].info().windows > 0 {
-                self.sessions[session].begin_rpc(line, reply);
-            } else {
-                let _ = reply.send(self.rpc(&line));
-            }
+        } else if let Some(session) = self.recent_sessions.iter().rev()
+            .filter_map(|id| self.index_for(Some(*id)))
+            .find(|&index| self.sessions[index].info().windows > 0)
+        {
+            // Creating an unattached session must not take commands away from a live window.
+            self.sessions[session].begin_rpc(line, reply);
+        } else if crate::rpc::parse_rpc(&line).and_then(|command| command.into_intent(&self.catalog))
+            .is_ok_and(|(intent, _)| crate::actions::builtin_side(&intent.action)
+                != Some(crate::actions::Side::Server))
+            && let Some(client) = self.clients.iter().find(|client| !client.is_closed()
+                && matches!(client.attachment.get(), super::connection::Attachment::Detached)) {
+            let limits = self.config.as_ref().map(|c| c.config.settings.connection).unwrap_or_default();
+            client.begin_rpc(line, reply, limits);
         } else {
             let _ = reply.send(self.rpc(&line));
         }
@@ -163,7 +170,7 @@ impl ServerLoop {
             .chain(
                 self.clients
                     .iter()
-                    .filter_map(|client| client.retire_at.get()),
+                    .filter_map(|client| client.rpc_deadline()),
             )
             .min()
     }
@@ -171,14 +178,6 @@ impl ServerLoop {
     pub(crate) fn pump(&mut self, now: Instant) {
         let mut received = Vec::new();
         for client in &self.clients {
-            if client
-                .retire_at
-                .get()
-                .is_some_and(|deadline| now >= deadline)
-            {
-                client.close();
-                continue;
-            }
             loop {
                 // Every message gets its server-assigned source here, never from its payload.
                 match client.receive() {
@@ -196,13 +195,8 @@ impl ServerLoop {
             if client.is_closed() {
                 continue;
             }
-            if client.retire_at.get().is_some() {
-                if matches!(message, ClientMsg::Detach) {
-                    client.close();
-                }
-                continue;
-            }
             match message {
+                ClientMsg::RpcReply { request_id, answer } => client.reply_rpc(request_id, answer),
                 ClientMsg::Attach => {
                     self.pump_sessions(now);
                     self.attach(client, None);
@@ -210,6 +204,17 @@ impl ServerLoop {
                 ClientMsg::AttachTo { name } => {
                     self.pump_sessions(now);
                     self.attach(client, Some(name));
+                }
+                ClientMsg::LeaveSession => {
+                    self.pump_sessions(now);
+                    if let Some(id) = client.session.take() {
+                        if let Some(index) = self.index_for(Some(id)) {
+                            self.sessions[index].detach_connection(client.id);
+                        }
+                        client.attachment.set(super::connection::Attachment::Detached);
+                        client.projection_pending.set(false);
+                        let _ = client.link.send(ServerMsg::SessionDetached { id });
+                    }
                 }
                 ClientMsg::Session {
                     request_id,
@@ -249,7 +254,10 @@ impl ServerLoop {
                 }
                 message => {
                     let Some(index) = self.index_for(client.session.get()) else {
-                        client.close();
+                        // Session-scoped input queued before a logical detach is stale.
+                        if !matches!(client.attachment.get(), super::connection::Attachment::Detached) {
+                            client.close();
+                        }
                         continue;
                     };
                     if self.sessions[index].info().status == SessionStatus::Terminated
@@ -264,6 +272,7 @@ impl ServerLoop {
             }
         }
         self.pump_sessions(now);
+        for client in &self.clients { client.expire_rpc(now); }
         self.clients.retain(|c| !c.is_closed());
         self.publish_directory();
     }
@@ -275,7 +284,8 @@ impl ServerLoop {
         }
         self.directory = directory;
         for client in &self.clients {
-            if client.session.get().is_some() {
+            if client.session.get().is_some()
+                || matches!(client.attachment.get(), super::connection::Attachment::Detached) {
                 let _ = client.link.send(ServerMsg::Sessions {
                     request_id: 0,
                     result: Ok(SessionReply::List(self.directory.clone())),

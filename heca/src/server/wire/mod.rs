@@ -37,6 +37,8 @@ pub(crate) enum ClientMsg {
     Attach,
     /// Select one existing session on a new connection. The ordinary Attach selects the last one.
     AttachTo { name: String },
+    /// Leave session membership while keeping this window's physical connection available.
+    LeaveSession,
     Session { request_id: u64, command: super::sessions::SessionCommand },
     /// Detach — the window is going away; the session and its programs keep running.
     Detach,
@@ -80,9 +82,12 @@ pub(crate) enum ServerMsg {
     /// ([`SessionContent::rebuild`]).
     Attached { session: super::sessions::SessionInfo, client_id: u64,
         window_ordinal: u64, content: SessionContent },
+    /// The attach's terminal snapshots have all been sent, including an empty/stopped session.
+    ProjectionReady { session_id: heca_core::layout::SessionId },
     Sessions { request_id: u64, result: Result<super::sessions::SessionReply, String> },
     SessionTerminated { session: super::sessions::SessionInfo },
     SessionDeleted { id: heca_core::layout::SessionId },
+    SessionDetached { id: heca_core::layout::SessionId },
     /// Something changed in the shared content; the client reacts to it for itself.
     Changed(Change),
     /// The server refused an action, and why.

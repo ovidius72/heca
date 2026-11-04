@@ -17,7 +17,7 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
     let agent = signal(Some(AgentState::new("custom", "Program", AgentStatus::new("working"))));
     let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || PaneFacts::of(
         PaneId(1), &ProgramsConfig::default(), "shell", None,
-        Some(&PaneRuntime { agent: agent.get(), ..Default::default() }),
+        Some(&crate::chrome::PanePresentation::immediate(PaneRuntime { agent: agent.get(), ..Default::default() })),
     ));
     let statuses = signal(Rc::new(AgentsConfig::default().statuses));
     let mut root = Flex::column().width(Length::FULL)
@@ -56,7 +56,7 @@ fn the_line_follows_reports_and_config_without_a_rebuild() {
     let statuses = signal(Rc::new(AgentsConfig::default().statuses));
     let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || PaneFacts::of(
         PaneId(1), &ProgramsConfig::default(), "shell", None,
-        Some(&PaneRuntime { agent: agent.get(), ..Default::default() }),
+        Some(&crate::chrome::PanePresentation::immediate(PaneRuntime { agent: agent.get(), ..Default::default() })),
     ));
     let line = super::build(&LineCx { theme: &theme, facts, agent_statuses: statuses });
     let mut root = Flex::column().width(Length::FULL).child(line);
@@ -92,7 +92,7 @@ fn long_reported_text_stays_inside_a_narrow_sidebar() {
     report.task = Some("A task title long enough to extend far beyond a narrow sidebar".into());
     let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || PaneFacts::of(
         PaneId(1), &ProgramsConfig::default(), "shell", None,
-        Some(&PaneRuntime { agent: Some(report.clone()), ..Default::default() }),
+        Some(&crate::chrome::PanePresentation::immediate(PaneRuntime { agent: Some(report.clone()), ..Default::default() })),
     ));
     let line = super::build(&LineCx {
         theme: &theme, facts,
@@ -117,7 +117,7 @@ fn the_identity_uses_reported_model_and_session_title_then_the_pane_name() {
     let agent = signal(Some(AgentState::new("custom", "Program", AgentStatus::new("working"))));
     let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || PaneFacts::of(
         PaneId(1), &ProgramsConfig::default(), "shell", Some("My pane"),
-        Some(&PaneRuntime { agent: agent.get(), ..Default::default() }),
+        Some(&crate::chrome::PanePresentation::immediate(PaneRuntime { agent: agent.get(), ..Default::default() })),
     ));
     let mut root = Flex::column().width(Length::FULL).child(super::build(&LineCx {
         theme: &theme, facts,
@@ -149,7 +149,7 @@ fn arbitrary_driver_artwork_uses_the_shared_image_widget_and_clears_in_place() {
     let agent = signal(Some(report));
     let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || PaneFacts::of(
         PaneId(1), &ProgramsConfig::default(), "shell", None,
-        Some(&PaneRuntime { agent: agent.get(), ..Default::default() }),
+        Some(&crate::chrome::PanePresentation::immediate(PaneRuntime { agent: agent.get(), ..Default::default() })),
     ));
     let mut root = Flex::column().width(Length::FULL).child(super::build(&LineCx {
         theme: &theme, facts,

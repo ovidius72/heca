@@ -58,6 +58,8 @@ mod modes;
 mod paint;
 mod search;
 mod source;
+#[cfg(test)]
+mod pointer_tests;
 
 pub use command::Command;
 use metrics::*;
@@ -120,8 +122,8 @@ pub struct CommandPalette {
 impl CommandPalette {
     /// A new, empty (closed) palette.
     pub fn new() -> Self {
-        let open = signal(false);
         let mut base = Base::new();
+        let open = base.open;
         // The palette owns modal containment; its child Input owns the keyboard.
         base.follow_focus_modal(open);
         // **A palette locks because it is a palette.** It has the keyboard for its query line,

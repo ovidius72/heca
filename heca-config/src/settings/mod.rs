@@ -43,6 +43,8 @@ declare_settings! {
         /// How a search query's case is treated (`smart` / `sensitive` / `insensitive`).
         #[serde(alias = "search-case")]
         pub search_case: SearchCase,
+        /// Folder pickers' case policy, independent of other search surfaces. Default insensitive.
+        pub folder_search_case: SearchCase,
         /// Remember what has been searched for and chosen, across restarts.
         #[serde(alias = "search-history")]
         pub search_history: bool,
@@ -155,6 +157,8 @@ declare_settings! {
         /// show just the custom name.
         #[serde(alias = "pane-renamed-add-process-name")]
         pub pane_renamed_add_process_name: bool,
+        /// Milliseconds a running program must persist before its name is displayed; 0 is immediate.
+        pub pane_name_delay: u64,
         /// **Deprecated: `[appearance.expose] show_cwd`.** Still read while that key is not written,
         /// with a one-time notice to move it. It once switched the sidebar's folder line too; that
         /// line is now decided by `[appearance.sidebar] pane_lines` alone.

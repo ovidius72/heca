@@ -3,6 +3,17 @@
 
 use super::*;
 
+/// Remove a direct child, returning modal focus before its identity leaves the tree.
+/// Works for programmatic removal as well as widgets closed by keyboard or pointer input.
+pub fn unmount_child(root: &mut dyn Component, index: usize) -> Option<WidgetModel> {
+    if index >= root.base().children.len() { return None; }
+    crate::focus::settle(root);
+    root.base_mut().children[index].close();
+    crate::focus::settle(root);
+    root.base_mut().mark_needs_layout();
+    Some(root.base_mut().children.remove(index))
+}
+
 /// Logical-pixel margin added around each damaged widget so glow/shadow halos —
 /// which paint outside the widget's rect — are included in the redrawn region.
 const DAMAGE_PAD: f64 = 64.0;

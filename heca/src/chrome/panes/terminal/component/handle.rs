@@ -127,8 +127,8 @@ impl Terminal {
     /// Show how the terminal's viewport looks: the chip and the scrollbar follow it. Returns whether
     /// anything the user can see changed, so the caller can ask for a frame.
     pub(crate) fn show(&self, viewport: &Viewport) -> bool {
-        self.shared.cell.set(viewport.cell);
-        self.shared.nominal.set(viewport.nominal_cell);
+        let metrics_changed = (self.shared.cell.replace(viewport.cell) != viewport.cell)
+            | (self.shared.nominal.replace(viewport.nominal_cell) != viewport.nominal_cell);
         self.shared.link_modifier.set(viewport.open_link_modifier);
         self.shared
             .view
@@ -136,7 +136,7 @@ impl Terminal {
         let search = &self.shared.search;
         let highlights_changed = search.set_view(viewport.top_stable_row, viewport.rows)
             | search.set_look(viewport.match_alpha, viewport.current_match_alpha);
-        self.shared.controls.borrow_mut().show(viewport) | highlights_changed
+        self.shared.controls.borrow_mut().show(viewport) | highlights_changed | metrics_changed
     }
 
     /// **Open the search bar and put the keyboard in its field** — the handle's `find`. Works

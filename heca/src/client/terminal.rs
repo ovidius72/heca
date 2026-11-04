@@ -24,8 +24,11 @@ pub(super) struct TerminalView {
 
 impl TerminalView {
     pub(super) fn new(owner: TerminalOwner, spec: &TerminalSpec, data: SharedReplica, outbox: Outbox, cell: (f32, f32)) -> Self {
+        // Reattaching adopts the live screen size; the launch spec may describe an older grid.
+        let grid = data.lock().unwrap_or_else(|error| error.into_inner()).frame(&owner, 0)
+            .map_or(spec.grid, |(_, frame)| (frame.screen.cols, frame.screen.rows));
         Self { owner, data, outbox, title: String::new(), offset: 0, sequence: 0, painted: 0,
-            dirty: true, grid: spec.grid, cell, scale: 1.0, last_agent: None,
+            dirty: true, grid, cell, scale: 1.0, last_agent: None,
             live_sequence: 0, live_top: None, visible: None }
     }
 
@@ -33,7 +36,8 @@ impl TerminalView {
         self.outbox.send(ClientMsg::Terminal { owner: self.owner.clone(), input });
     }
 
-    fn resize(&self) {
+    fn resize(&mut self) {
+        self.dirty = true;
         self.tell(ProcessInput::Resize { cols: self.grid.0, rows: self.grid.1, cell: self.cell, scale: self.scale });
     }
 

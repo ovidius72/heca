@@ -31,7 +31,7 @@ impl CommandPalette {
             .map(|&i| {
                 (
                     self.commands[i].id.as_deref(),
-                    self.title_text[i].get_untracked(),
+                    self.commands[i].completion.clone().unwrap_or_else(|| self.title_text[i].get_untracked()),
                 )
             })
             .collect();
@@ -41,11 +41,16 @@ impl CommandPalette {
             .rank(&items, &query, |(id, text)| (*id, text.as_str()));
         for r in &mut out {
             r.index = of_mode[r.index];
+            if self.commands[r.index].completion.as_ref()
+                .is_some_and(|text| *text != self.title_text[r.index].get_untracked()) {
+                r.hits.clear();
+            }
         }
         if query.is_empty() {
             // Stable, so the ranking inside each block survives.
             out.sort_by_key(|r| self.commands[r.index].group);
         }
+        out.sort_by_key(|r| self.commands[r.index].fallback);
         out
     }
 

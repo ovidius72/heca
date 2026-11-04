@@ -13,7 +13,11 @@ use crate::input::WmAction;
 /// `InputMode::ConfirmDelete` is set purely as a status-bar marker (the modal layer owns input).
 fn open_confirm(state: &mut AppState, spec: crate::actions::ConfirmSpec, resolved: WmAction) {
     let title = confirm_title(state, &resolved);
-    let body = spec.message.clone();
+    let body = match &resolved {
+        WmAction::TerminateSession { session: Some(name) }
+        | WmAction::DeleteSession { session: Some(name) } => spec.message.replace("{name}", name),
+        _ => spec.message.clone(),
+    };
     raise_confirm(state, title, body, spec, Pending::Wm(resolved));
 }
 
@@ -34,16 +38,8 @@ fn raise_confirm(
     spec: crate::actions::ConfirmSpec,
     pending: Pending,
 ) {
-    use crate::actions::{ButtonRole, Outcome};
-    let mut modal = crate::chrome::ModalSpec::message(title, body)
-        .dismissible(spec.dismissible)
-        .danger(spec.buttons.iter().any(|b| b.role == ButtonRole::Danger));
-    for b in &spec.buttons {
-        modal = modal.action(
-            crate::chrome::ModalAction::new(b.id.clone(), b.label.clone())
-                .danger(b.role == ButtonRole::Danger),
-        );
-    }
+    use crate::actions::Outcome;
+    let modal = confirmation_modal_spec(title, body, &spec);
     // A raw action's go-ahead is `Outcome::Proceed` (run `resolved`); a named action's runs the call.
     let (resolved, call) = match pending {
         Pending::Wm(wm) => (wm, None),
@@ -72,6 +68,25 @@ fn raise_confirm(
     });
     state.input_mode = InputMode::ConfirmDelete;
     state.needs_redraw = true;
+}
+
+/// The shared mapping from action confirmation data to a composed modal.
+pub(crate) fn confirmation_modal_spec(
+    title: String,
+    body: String,
+    spec: &crate::actions::ConfirmSpec,
+) -> crate::chrome::ModalSpec {
+    use crate::actions::ButtonRole;
+    let mut modal = crate::chrome::ModalSpec::message(title, body)
+        .dismissible(spec.dismissible)
+        .danger(spec.buttons.iter().any(|b| b.role == ButtonRole::Danger));
+    for button in &spec.buttons {
+        modal = modal.action(
+            crate::chrome::ModalAction::new(&button.id, &button.label)
+                .danger(button.role == ButtonRole::Danger),
+        );
+    }
+    modal
 }
 
 /// Run the [`Outcome`](crate::actions::Outcome) of the response button the user chose — or, on Esc /
@@ -166,6 +181,8 @@ pub(crate) fn gate_covers(catalog: &crate::actions::ActionCatalog, name: &str) -
             col_idx: 0,
         },
         WmAction::DeleteWorkspace { ws_idx: 0 },
+        WmAction::TerminateSession { session: None },
+        WmAction::DeleteSession { session: None },
     ]
     .iter()
     .any(|raw| confirm_owner_name(raw) == Some(name))
@@ -187,8 +204,33 @@ fn confirm_owner_name(action: &WmAction) -> Option<&'static str> {
         WmAction::ClosePane | WmAction::ClosePaneById { .. } => Some("close"),
         WmAction::DeleteColumn { .. } => Some("delete_column"),
         WmAction::DeleteWorkspace { .. } => Some("delete_workspace"),
+        WmAction::TerminateSession { .. } => Some("terminate_session"),
+        WmAction::DeleteSession { .. } => Some("delete_session"),
         _ => None,
     }
+}
+
+fn configured_confirm_spec(state: &AppState, owner: &str) -> Option<crate::actions::ConfirmSpec> {
+    let declared = state.action_catalog.confirm_spec(owner)?;
+    Some(crate::actions::ConfirmSpec::for_session(owner, &state.settings.session_text)
+        .unwrap_or_else(|| declared.clone()))
+}
+
+/// Resolve a selection once, before a prompt can outlive the selection that opened it.
+fn confirmation_target(
+    action: &WmAction,
+    focused: Option<heca_core::layout::PaneId>,
+    session_name: &str,
+) -> Option<WmAction> {
+    let mut resolved = action.clone();
+    match &mut resolved {
+        WmAction::ClosePane => return focused.map(|pane_id| WmAction::ClosePaneById { pane_id }),
+        WmAction::TerminateSession { session } | WmAction::DeleteSession { session } => {
+            session.get_or_insert_with(|| session_name.to_owned());
+        }
+        _ => {}
+    }
+    Some(resolved)
 }
 
 /// Human label for a workspace index (its name, or "ws N").
@@ -225,6 +267,11 @@ fn confirm_title(state: &AppState, action: &WmAction) -> String {
         }
         WmAction::DeleteColumn { ws_idx, .. } | WmAction::DeleteWorkspace { ws_idx } => {
             confirm_title_for(action, &ws_label(state, *ws_idx))
+        }
+        WmAction::TerminateSession { .. } | WmAction::DeleteSession { .. } => {
+            confirm_owner_name(action)
+                .and_then(|owner| state.action_catalog.label(owner))
+                .unwrap_or_default().to_owned()
         }
         _ => "Confirm?".to_string(),
     }
@@ -265,10 +312,12 @@ fn run_destructive_now(state: &mut AppState, action: &WmAction) {
 /// ([`maybe_confirm_destructive`]) shares this same spec-driven path for directly-dispatched actions.
 pub(crate) fn request_destructive(state: &mut AppState, raw_action: WmAction) {
     let spec = confirm_owner_name(&raw_action)
-        .and_then(|name| state.action_catalog.confirm_spec(name).cloned());
+        .and_then(|name| configured_confirm_spec(state, name));
     match spec {
         Some(spec) if confirm_enabled(state, &spec.config_name, spec.default_enabled) => {
-            open_confirm(state, spec, raw_action)
+            if let Some(resolved) = confirmation_target(&raw_action, focused_pane_id(state), &state.client.session.name) {
+                open_confirm(state, spec, resolved);
+            }
         }
         _ => run_destructive_now(state, &raw_action),
     }
@@ -293,15 +342,11 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
     let Some(name) = confirm_owner_name(action) else {
         return false;
     };
-    let resolved = match action {
-        WmAction::ClosePane => match focused_pane_id(state) {
-            Some(pane_id) => WmAction::ClosePaneById { pane_id },
-            None => return false, // nothing focused → let the normal path no-op
-        },
-        other => other.clone(),
+    let Some(resolved) = confirmation_target(action, focused_pane_id(state), &state.client.session.name) else {
+        return false;
     };
     // `name` is the owner ACTION name; its meta's confirm spec carries the toggle key.
-    let Some(spec) = state.action_catalog.confirm_spec(name).cloned() else {
+    let Some(spec) = configured_confirm_spec(state, name) else {
         return false;
     };
     if !confirm_enabled(state, &spec.config_name, spec.default_enabled) {
@@ -449,5 +494,19 @@ mod gate_coverage_tests {
             prompt_needed(&spec, false),
             "forced: nothing switches it off"
         );
+    }
+
+    #[test]
+    fn session_confirmation_captures_the_current_target_and_preserves_an_explicit_target() {
+        for action in [WmAction::TerminateSession { session: None }, WmAction::DeleteSession { session: None }] {
+            let captured = confirmation_target(&action, None, "Project A").unwrap();
+            let unchanged = confirmation_target(&captured, None, "Project B").unwrap();
+            match unchanged {
+                WmAction::TerminateSession { session } | WmAction::DeleteSession { session } => {
+                    assert_eq!(session.as_deref(), Some("Project A"));
+                }
+                _ => panic!("the session action must be retained"),
+            }
+        }
     }
 }

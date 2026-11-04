@@ -24,25 +24,7 @@ impl SessionRuntime {
             .iter()
             .find(|client| matches!(client.attachment.get(), Attachment::Attached))
         {
-            let request_id = self.next_rpc;
-            self.next_rpc += 1;
-            if client
-                .link
-                .send(ServerMsg::Rpc { request_id, line })
-                .is_err()
-            {
-                let _ = reply.send("error: attached client disconnected".into());
-                return;
-            }
-            let timeout = self.connection.request_timeout_ms.get();
-            self.pending_rpc.insert(
-                request_id,
-                PendingRpc {
-                    client: client.id,
-                    reply,
-                    deadline: Instant::now() + std::time::Duration::from_millis(timeout),
-                },
-            );
+            client.begin_rpc(line, reply, self.connection);
         } else {
             let answer = self.rpc(&line);
             let _ = reply.send(answer);

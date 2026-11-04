@@ -37,7 +37,6 @@ impl PaneBackend for TerminalBackend {
 
         // The model is already the new size; the **child** is told at a paced rate.
         self.pending_pty_size = Some((cols, rows));
-        self.flush_pending_pty_size();
     }
 
     fn process_input(&mut self, data: &[u8]) {

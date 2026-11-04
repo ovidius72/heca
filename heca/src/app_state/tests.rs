@@ -1,6 +1,47 @@
 use super::*;
 
 #[test]
+fn pane_name_delay_uses_the_same_startup_and_reload_mapping_and_rejects_invalid_values() {
+    let mut app = heca_config::loader::AppConfig { config: Default::default(), theme: Default::default() };
+    assert_eq!(WindowSettings::from_config(&app).pane_name_delay, 1000);
+    for millis in [0, 250, u64::MAX] {
+        app.config.settings.pane_name_delay = millis;
+        assert_eq!(WindowSettings::from_config(&app).pane_name_delay, millis);
+    }
+    for value in ["-1", "1.5", "\"1000\""] {
+        assert!(toml::from_str::<heca_config::settings::SettingsConfig>(&format!("pane_name_delay = {value}")).is_err());
+    }
+}
+
+#[test]
+fn folder_case_defaults_and_reload_mapping_do_not_change_other_searches() {
+    use heca_config::settings::SearchCase;
+    let mut app = heca_config::loader::AppConfig { config: Default::default(), theme: Default::default() };
+    let settings = WindowSettings::from_config(&app);
+    assert_eq!(settings.folder_search_case, SearchCase::Insensitive);
+    assert_eq!(settings.search_case, SearchCase::Smart);
+    app.config.settings.folder_search_case = SearchCase::Sensitive;
+    let reloaded = WindowSettings::from_config(&app);
+    assert_eq!(reloaded.folder_search_case, SearchCase::Sensitive);
+    assert_eq!(reloaded.search_case, SearchCase::Smart);
+}
+
+#[test]
+fn switching_sessions_with_identical_settings_does_not_reset_presentation() {
+    let current = heca_config::loader::AppConfig {
+        config: Default::default(), theme: Default::default(),
+    };
+    assert!(!ReloadReason::Session.requires_apply(&current, &current.clone()));
+    assert!(ReloadReason::Explicit.requires_apply(&current, &current.clone()));
+    let mut next = current.clone();
+    next.config.font.size.ui += 1.0;
+    assert!(ReloadReason::Session.requires_apply(&current, &next));
+    let mut next = current.clone();
+    next.theme.accent = next.theme.accent.with_alpha(100);
+    assert!(ReloadReason::Session.requires_apply(&current, &next));
+}
+
+#[test]
 fn test_input_mode_candidates_none() {
     assert_eq!(InputMode::Normal.candidates(), None);
     assert_eq!(InputMode::Prefix.candidates(), None);

@@ -16,6 +16,7 @@ mod handed;
 mod identity;
 mod scope;
 mod settle;
+mod fallback;
 
 pub(crate) use door::FocusDoor;
 pub(crate) use handed::handed_to;

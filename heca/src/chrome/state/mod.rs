@@ -39,10 +39,12 @@ use super::{ChromeEvent, ChromeEventBus, RegionId, RegionMap};
 
 pub(super) mod events;
 mod pane_runtime;
+mod pane_presentation;
 mod shell;
 mod workspaces;
 
 pub use pane_runtime::PaneRuntimeStore;
+pub use pane_presentation::PanePresentation;
 pub use shell::SharedChromeState;
 pub use workspaces::WorkspacesContainerState;
 

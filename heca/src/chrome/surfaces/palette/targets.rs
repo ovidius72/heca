@@ -2,8 +2,8 @@
 
 use super::*;
 
-/// Every open pane, as palette rows — **pure**, over the session, so the naming and the rank ids
-/// are testable without an `AppState` (which needs a window).
+/// Every open pane, as palette rows over the layout and shared presentation store.
+/// Naming and rank ids are testable without an `AppState` (which needs a window).
 ///
 /// A pane's name is whatever [`pane_info_view`] says it is — **the one name
 /// composer**, the same call the sidebar card and the pane header make.
@@ -16,6 +16,7 @@ use super::*;
 pub(crate) fn pane_entries(
     layout: heca_core::layout::Layout<'_>,
     programs: &heca_config::programs::ProgramsConfig,
+    panes: &crate::chrome::PaneRuntimeStore,
     add_process_name: bool,
     last_focused: Option<heca_core::layout::PaneId>,
 ) -> Vec<PaletteEntry> {
@@ -33,7 +34,7 @@ pub(crate) fn pane_entries(
                 programs,
                 &pane.title,
                 pane.custom_name.as_deref(),
-                Some(&pane.runtime),
+                panes.presentation(pane.id).as_ref(),
                 add_process_name,
             );
             rows.push(PaletteEntry {

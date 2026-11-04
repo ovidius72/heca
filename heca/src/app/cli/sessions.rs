@@ -3,6 +3,24 @@
 use super::{Answer, Invocation};
 use crate::server::sessions::{SessionCommand, SessionReply};
 
+pub(super) fn terminate_confirmation(invocation: &Invocation) -> Result<Option<super::confirmation::Confirmation>, String> {
+    let name = invocation.get("name").ok_or("missing session name")?;
+    let SessionReply::List(sessions) = request(SessionCommand::List)? else {
+        return Err("unexpected session reply\n".into());
+    };
+    let target = sessions.iter().find(|session| session.name == name)
+        .ok_or_else(|| format!("session '{name}' not found\n"))?;
+    let config = target.folder.as_deref().map(heca_config::loader::AppConfig::load_for)
+        .unwrap_or_else(heca_config::loader::AppConfig::load).config;
+    let mut spec = crate::actions::ConfirmSpec::for_session("terminate_session", &config.settings.session_text)
+        .ok_or("session confirmation is not declared\n")?;
+    if !spec.forced && !config.confirm.enabled(&spec.config_name, spec.default_enabled) {
+        return Ok(None);
+    }
+    spec.message = spec.message.replace("{name}", &target.name);
+    Ok(Some(super::confirmation::Confirmation { spec, prompt: config.settings.session_text.confirm_prompt }))
+}
+
 pub(super) fn list(invocation: &Invocation) -> Answer {
     let reply = request(SessionCommand::List)?;
     let SessionReply::List(sessions) = reply else {
