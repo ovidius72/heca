@@ -1928,6 +1928,16 @@ See `niri-compatibility-review.md` for full details. Key issues:
 - At the end of tasks, wait for user approval before committing and creating a PR.
 - When the session is about to run out of tokens (70/80%), write a detailed handoff with all information for restart without losing context.
 
+### One task, one worktree
+
+Each task is done in its **own git worktree**, in its own folder, branched from `main` — never in the main checkout and never reusing another task's worktree. The lifecycle is fixed:
+
+1. **New task** → create a worktree from `main` in a folder named **`heca-feat-<num>`** (`<num>` = the task number, e.g. `heca-feat-546` for T546), on a branch for that task:
+   `git worktree add -b feat/t<num>-<slug> ../heca-feat-<num> origin/main`.
+2. **Work only in that worktree.** The canonical planner stays `/Users/antonio/projects/heca/.planner` (main checkout).
+3. **When the task is done** → open the PR, get it **merged**, then **remove the worktree and its folder**: `git worktree remove ../heca-feat-<num>` and delete the merged branch.
+4. Never leave a finished task's worktree or merged branch lying around — a stale worktree is how state and `.planner` edits get confused across tasks.
+
 ## Agent Rules
 
 ### Workflow / Step Control

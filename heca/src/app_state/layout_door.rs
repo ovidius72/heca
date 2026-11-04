@@ -28,6 +28,21 @@ impl AppState {
         self.apply_answer(changes, None);
     }
 
+    /// While another window follows this one, report this window's view so the server can relay it.
+    /// Called once per turn; an unchanged view is not re-sent. When nobody follows, the remembered
+    /// snapshot is cleared so the next follower gets a fresh report.
+    pub(crate) fn report_view_if_followed(&mut self) {
+        if !self.client.is_followed() {
+            self.last_reported_view = None;
+            return;
+        }
+        let snapshot = self.view.snapshot();
+        if self.last_reported_view.as_ref() != Some(&snapshot) {
+            self.client.report_view(snapshot.clone());
+            self.last_reported_view = Some(snapshot);
+        }
+    }
+
     /// Do what only a window can about what the server says changed. `asked` is the built-in this
     /// window sent, by name and as data, when the changes answer one.
     pub(crate) fn apply_answer(

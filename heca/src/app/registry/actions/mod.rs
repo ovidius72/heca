@@ -12,6 +12,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::SwitchSession, handle_switch_session);
     registry.register(WmActionKind::DetachSession, handle_detach_session);
     registry.register(WmActionKind::ReconnectSession, handle_reconnect_session);
+    registry.register(WmActionKind::Follow, handle_follow);
 
     // ── Navigation ──
     registry.register(WmActionKind::FocusLeft, handle_focus_left);

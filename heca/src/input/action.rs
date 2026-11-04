@@ -32,6 +32,9 @@ pub enum WmAction {
     SwitchSession { name: String },
     DetachSession,
     ReconnectSession,
+    /// Mirror another window on this session (follow), by its id from the window directory, or
+    /// `None` to stop. Window-local: it changes only what this window looks at.
+    Follow { target: Option<u64> },
     // ── Navigation (unit) ──
     FocusLeft,
     FocusRight,

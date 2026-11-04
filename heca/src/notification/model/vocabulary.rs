@@ -1,6 +1,43 @@
 use serde::{Deserialize, Serialize};
 use heca_grid_ui::widgets::ToastSeverity;
 
+/// **Who sees a notification** when several windows share one session.
+///
+/// A notification raised in response to a window's own action (a config reload, a rename) is
+/// feedback for *that* window; an ambient event (a background process finished) belongs to the
+/// whole session. The producer declares which; the default is the whole session, so nothing a
+/// caller forgets to mark goes missing.
+///
+/// The client cannot name a window — it does not know its own connection id — so it raises with
+/// [`Originator`](Self::Originator) and the server resolves it to [`Window`](Self::Window) for the
+/// connection the request arrived on. Delivery filtering is the server's
+/// (`visible_views_for`): the window never learns there was a choice.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Audience {
+    /// Every window on the session — the default, for an ambient event.
+    #[default]
+    Session,
+    /// Only the window that raised it. The client sets this; the server resolves it to
+    /// [`Window`](Self::Window) for the originating connection.
+    Originator,
+    /// Only the window on this server-assigned connection id — the resolved form of
+    /// [`Originator`](Self::Originator). A client never builds it.
+    Window(u64),
+}
+
+impl Audience {
+    /// Whether the window on connection `client` sees a notification with this audience.
+    pub fn allows(self, client: u64) -> bool {
+        match self {
+            // An unresolved `Originator` means no connection was named yet; show it rather than
+            // hide it, so a missed resolution can never silently swallow a notification.
+            Self::Session | Self::Originator => true,
+            Self::Window(id) => id == client,
+        }
+    }
+}
+
 /// The closed vocabulary of notification origins.
 ///
 /// Extensible in the sense that a new variant is an additive, non-breaking

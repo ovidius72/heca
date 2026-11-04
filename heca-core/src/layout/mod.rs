@@ -65,7 +65,7 @@ pub use session::Session;
 pub use shape::SessionShape;
 pub use types::*;
 pub use view_offset::ViewOffset;
-pub use window_view::{FocusDomain, ScrollView, WindowView, WorkspaceSwitch};
+pub use window_view::{FocusDomain, ScrollView, ViewSnapshot, WindowView, WorkspaceSwitch};
 mod window_views;
 pub use window_views::WindowViews;
 pub use workspace::{Detached, FloatPlacement, Workspace, WorkspaceMut, WorkspaceRef};

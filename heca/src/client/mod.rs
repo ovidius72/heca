@@ -34,6 +34,22 @@ pub(crate) struct Answered {
 
 struct Pending { action: WmAction, name: String, before: Before }
 
+/// Format this window's title from the session and its ordinal (decision e36aba0c): the folder
+/// shown home-relative, or the session name when it has none, run through the configured format.
+fn format_window_title(
+    session: &crate::server::sessions::SessionInfo,
+    ordinal: u64,
+    base: &str,
+    numbered: &str,
+) -> String {
+    let folder = session
+        .folder
+        .as_deref()
+        .map(crate::chrome::home_relative_path)
+        .unwrap_or_else(|| session.name.clone());
+    crate::server::sessions::window_title(&folder, ordinal, base, numbered)
+}
+
 #[derive(Default)]
 pub(crate) struct Update {
     pub(crate) session_attached: bool,
@@ -44,6 +60,12 @@ pub(crate) struct Update {
     /// The notifications on show, when the server sent a fresh projection this poll. The window
     /// builds its own toasts from it; `None` means the set did not change.
     pub(crate) notifications: Option<Vec<crate::notification::NotificationView>>,
+    /// The session's window directory, when the server sent a fresh one this poll (join, leave or
+    /// title change). The window uses it for the follow picker; `None` means it did not change.
+    pub(crate) windows: Option<Vec<crate::server::sessions::WindowInfo>>,
+    /// The view of the window this one follows, when a fresh one arrived this poll. The window
+    /// mirrors it; `None` means no update.
+    pub(crate) follow_view: Option<heca_core::layout::ViewSnapshot>,
     pub(crate) changes: Vec<Change>,
     pub(crate) answers: Vec<Answered>,
     pub(crate) effects: BackendPoll,
@@ -59,6 +81,17 @@ pub struct ClientState {
     pub client_id: u64,
     /// This connection's stable display ordinal within the selected session.
     pub window_ordinal: u64,
+    /// This window's own title, formatted from the session folder and ordinal. The window shows it
+    /// and the client reports it to the server for the session directory.
+    pub(crate) title: String,
+    /// The `[settings.session_text]` title formats, kept so a session switch reformats the title.
+    title_fmt: String,
+    title_fmt_numbered: String,
+    /// Whether another window follows this one — while true, the window reports its view so the
+    /// server can relay it to its followers.
+    followed: bool,
+    /// The window this one follows (mirrors), by id, or `None`.
+    following: Option<u64>,
     feedback: feedback::FeedbackView,
     pub(crate) session: crate::server::sessions::SessionInfo,
     pub(crate) sessions: Vec<crate::server::sessions::SessionInfo>,
@@ -118,8 +151,13 @@ impl ClientState {
             ServerMsg::Sessions { result: Err(error), .. } => return Err(io::Error::other(error)),
             _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "server did not acknowledge attach")),
         };
+        let title_fmt = config.config.settings.session_text.window_title.clone();
+        let title_fmt_numbered = config.config.settings.session_text.window_title_numbered.clone();
+        let title = format_window_title(&session, window_ordinal, &title_fmt, &title_fmt_numbered);
+        // Report this window's title so the server's session directory has it from the start.
+        link.send(ClientMsg::ReportWindowTitle(title.clone()))?;
         let (outbox, requests) = outbox::channel(config.config.settings.connection.queue_capacity.get(), wake.clone());
-        Ok((Self { client_id, window_ordinal, feedback: Default::default(), session, sessions: Vec::new(), backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
+        Ok((Self { client_id, window_ordinal, title, title_fmt, title_fmt_numbered, followed: false, following: None, feedback: Default::default(), session, sessions: Vec::new(), backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
             link, local, data: Default::default(), outbox, requests, pending: HashMap::new(), next_request: 1,
             images: Default::default(), image_limit: config.config.settings.connection.max_image_bytes.get(), reads: Default::default(), failed: false,
             detached: false, switching: false, pending_selection: None,
@@ -157,6 +195,28 @@ impl ClientState {
         self.pending.insert(request_id, Pending { action, name, before });
     }
 
+    /// Whether another window follows this one — the window reports its view while true.
+    pub(crate) fn is_followed(&self) -> bool {
+        self.followed
+    }
+
+    /// The window this one follows (mirrors), by id, or `None`.
+    pub(crate) fn following(&self) -> Option<u64> {
+        self.following
+    }
+
+    /// Follow `target` (mirror its view), or `None` to stop. Breaking is the same call with `None`.
+    pub(crate) fn follow(&mut self, target: Option<u64>) {
+        self.following = target;
+        self.outbox.send(ClientMsg::Follow { target });
+    }
+
+    /// Report this window's current view so the server can relay it to any follower. Called only
+    /// while [`is_followed`](Self::is_followed), from the window's own loop where the view lives.
+    pub(crate) fn report_view(&self, view: heca_core::layout::ViewSnapshot) {
+        self.outbox.send(ClientMsg::ReportView(view));
+    }
+
     pub(crate) fn poll(&mut self) -> io::Result<Update> {
         if self.failed { return Ok(Update::default()); }
         let result = self.poll_connected();
@@ -185,10 +245,18 @@ impl ClientState {
                     self.session = session;
                     self.client_id = client_id;
                     self.window_ordinal = window_ordinal;
+                    // Reformat the title for the (possibly new) session and ordinal and report it.
+                    self.title = format_window_title(&self.session, self.window_ordinal, &self.title_fmt, &self.title_fmt_numbered);
+                    self.link.send(ClientMsg::ReportWindowTitle(self.title.clone()))?;
                     update.content = Some(content);
                     update.session_attached = true;
                 }
                 ServerMsg::Content { content } => update.content = Some(content),
+                ServerMsg::Windows { session_id, windows } => {
+                    if session_id == self.session.id { update.windows = Some(windows); }
+                }
+                ServerMsg::Followed { active } => self.followed = active,
+                ServerMsg::FollowView(view) => update.follow_view = Some(view),
                 ServerMsg::ProjectionReady { session_id } => {
                     if session_id == self.session.id {
                         self.projection_deadline = None;

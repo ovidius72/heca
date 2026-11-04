@@ -35,6 +35,30 @@ impl SessionInfo {
     }
 }
 
+/// One attached window in a session's directory: its stable connection id, its presentation
+/// ordinal, and the title the window itself formatted and reported. The follow picker shows the
+/// title and stores the id, so renaming a window never breaks a follow (decision e36aba0c).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct WindowInfo {
+    pub id: u64,
+    pub ordinal: u64,
+    pub title: String,
+}
+
+/// **The one place a window title is formatted** (decision e36aba0c: client-side, from the session
+/// folder and the window's ordinal). The first window on an instance (ordinal 1) carries no suffix;
+/// every later one gets the numbered form. Both strings come from `[settings.session_text]`, so the
+/// suffix is never hardcoded. `folder` is already shown home-relative by the caller.
+pub(crate) fn window_title(folder: &str, ordinal: u64, base: &str, numbered: &str) -> String {
+    if ordinal <= 1 {
+        base.replace("{folder}", folder)
+    } else {
+        numbered
+            .replace("{folder}", folder)
+            .replace("{number}", &ordinal.to_string())
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) enum SessionCommand {
     List,
@@ -152,4 +176,18 @@ pub(crate) fn resolve_folder(
     } else {
         base.join(path)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::window_title;
+
+    #[test]
+    fn the_first_window_has_no_number_and_later_ones_do() {
+        let base = "{folder}";
+        let numbered = "{folder} #{number}";
+        assert_eq!(window_title("~/projects/heca", 1, base, numbered), "~/projects/heca");
+        assert_eq!(window_title("~/projects/heca", 2, base, numbered), "~/projects/heca #2");
+        assert_eq!(window_title("~/projects/heca", 5, base, numbered), "~/projects/heca #5");
+    }
 }

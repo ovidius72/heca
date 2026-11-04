@@ -31,6 +31,7 @@ pub(crate) mod socket;
 pub(crate) mod run;
 pub(crate) mod runtime;
 mod terminals;
+mod sizing;
 mod stream;
 mod session;
 mod connection;
@@ -65,6 +66,9 @@ pub struct ServerState {
     pub backends: BackendStore,
     /// What the configuration says a terminal process starts with.
     terminal_settings: TerminalSettings,
+    /// Which windows show each terminal and at what size, so the one process runs at the size the
+    /// `pane_size` setting picks among them.
+    sizing: sizing::PaneSizing,
     /// How a terminal process wakes the loop when its output changes. `None` where there is no loop
     /// to wake, as in a test.
     waker: Option<ServerWaker>,
@@ -222,8 +226,11 @@ impl ServerState {
     /// a window, which builds its own toasts from it
     /// ([`toast_spec`](crate::notification::toast_spec)). Sent on attach and whenever
     /// [`Change::NotificationsChanged`] is produced.
-    pub(crate) fn visible_notifications(&self) -> Vec<crate::notification::NotificationView> {
-        self.notifications.visible_views()
+    /// The projection for the window on connection `client`: session-wide notifications plus any
+    /// addressed to that window. Sent to each client on attach and on every
+    /// [`Change::NotificationsChanged`], so a window only ever draws what is meant for it.
+    pub(crate) fn visible_notifications_for(&self, client: u64) -> Vec<crate::notification::NotificationView> {
+        self.notifications.visible_views_for(client)
     }
 
     pub(crate) fn new(
@@ -237,6 +244,7 @@ impl ServerState {
             feedback: Default::default(),
             backends,
             terminal_settings,
+            sizing: sizing::PaneSizing::default(),
             waker,
             launch,
             notifications,
@@ -257,7 +265,7 @@ mod tests {
     }
 
     fn on_screen(server: &ServerState) -> usize {
-        server.visible_notifications().len()
+        server.notifications.visible_views().len()
     }
 
     /// **The server's state needs no window.** It is built from plain data, so a test — and later a

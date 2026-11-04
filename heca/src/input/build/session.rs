@@ -31,6 +31,9 @@ pub(super) fn build_session(
         "rename_session" => WmAction::RenameSession,
         "detach_session" => WmAction::DetachSession,
         "reconnect_session" => WmAction::ReconnectSession,
+        "follow" => WmAction::Follow {
+            target: get_string(args, "target").and_then(|value| value.parse().ok()),
+        },
         _ => return None,
     })
 }

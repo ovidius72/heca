@@ -5,10 +5,12 @@ use super::*;
 pub(super) const MODE_COMMAND: &str = "command";
 pub(super) const MODE_PANE: &str = "pane";
 pub(super) const MODE_WORKSPACE: &str = "workspace";
+pub(super) const MODE_FOLLOW: &str = "follow";
 
 /// Plain data needed by the palette's row sources.
 pub(super) struct RowSources<'a> {
     pub sessions: &'a [PaletteEntry],
+    pub follow: &'a [PaletteEntry],
     pub catalog: &'a crate::actions::ActionCatalog,
     pub owners: &'a std::collections::HashMap<String, OwnerInfo>,
     pub shortcuts: &'a ActionShortcuts,
@@ -55,6 +57,7 @@ pub(super) const MODES: &[Mode] = &[
         rows: |sources| workspace_entries(sources.layout, sources.last_visited),
     },
     Mode { sigil: '#', scope: "session", rows: |sources| sources.sessions.to_vec() },
+    Mode { sigil: '~', scope: MODE_FOLLOW, rows: |sources| sources.follow.to_vec() },
 ];
 
 /// Build each declared list once, keeping row signals and overlay results in that order.

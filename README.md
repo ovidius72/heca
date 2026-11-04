@@ -222,8 +222,20 @@ The attach response carries `session` (`SessionInfo`), `client_id`, `window_ordi
 `session.id` is the existing `SessionId`; `session.folder` is the optional project path. Client IDs
 identify physical connections and remain unchanged when switching sessions. Display ordinals start
 at one within each session, permit gaps and remain stable through a restart of that session.
-Window-title formatting and follow consume these values in T545; this task does not provide a
-second title or follow implementation.
+
+Each window titles itself from the session folder and its ordinal: the first window on a session
+reads `~/projects/heca` and each later one adds its number — `~/projects/heca #2`. The two formats
+are `[settings.session_text] window_title` (default `{folder}`) and `window_title_numbered`
+(default `{folder} #{number}`); `{folder}` is the folder shown home-relative, or the session name
+when it has none. The window shows its title in the top bar and reports it to the server, which
+keeps a per-session window directory (each window's id, ordinal and title) and sends it to every
+window on join, leave and title change — the list a follow picker chooses a target from.
+
+A window can **follow** another: open the command palette and switch to the follow mode (`~`), then
+pick a window by its title. The follower mirrors where the leader is looking — the shown workspace,
+the focused pane and the scroll — while keeping its own size. The leader relays its view through the
+server; the follower resumes its own view the moment you touch its keyboard or mouse, or when the
+followed window leaves. A target is stored by id, so renaming the leader never breaks the follow.
 
 Session actions use the same catalog as keys, plugins and RPC:
 `list_sessions`, `create_session`, `rename_session_to`, `terminate_session`, `restart_session`, `delete_session`,
@@ -1101,6 +1113,11 @@ pane_name_delay = 1000        # Display-name delay in milliseconds; 0 updates im
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
+pane_size = "latest"          # When several windows show the SAME pane at once, the one running
+                              # terminal still has a single size, so the windows must agree on it:
+                              # "smallest" (fits every window) | "latest" (the window last typed in,
+                              # the default) | "largest". A pane shown by one window takes that
+                              # window's size. Only rows×cols are shared; each window draws at its own font.
 
 [settings.notification_system]
 mode = "app"                  # "app" (in-app toast stack) | "system" (OS notifications —

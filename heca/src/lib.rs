@@ -360,6 +360,7 @@ fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) 
         Ok(()) => {
             Notification::success("Configuration reloaded")
                 .dedup_key("config-reload")
+                .originator()
                 .send();
         }
         Err(e) => {
@@ -371,6 +372,7 @@ fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) 
                         .dismiss_after(true),
                 )
                 .sticky()
+                .originator()
                 .send();
         }
     }
@@ -473,6 +475,8 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 
         if let Some(ref mut state) = self.state {
             handle_about_to_wait(event_loop, state);
+            // After this turn's input and server updates, relay our view if a window follows us.
+            state.report_view_if_followed();
         }
     }
 

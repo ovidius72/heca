@@ -82,5 +82,16 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
         }
         u64::MAX.hash(&mut hsh); // workspace separator
     }
+    // The top bar shows this window's title and, while following, the window it follows — so a
+    // change to either (including the followed window's own rename) must rebuild the tree.
+    state.client.title.hash(&mut hsh);
+    state.client.following().hash(&mut hsh);
+    if let Some(leader) = state
+        .client
+        .following()
+        .and_then(|id| state.windows.iter().find(|window| window.id == id))
+    {
+        leader.title.hash(&mut hsh);
+    }
     hsh.finish()
 }
