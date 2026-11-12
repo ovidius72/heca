@@ -194,6 +194,7 @@ pub(crate) fn window_reacts(
             }
         }
         Change::NamesChanged => reaction.names_changed = true,
+        Change::TerminalTitleChanged { .. } => {},
         Change::PaneRemoved { .. } => {
             // A closed float takes its per-window geometry with it; the window forgets it and
             // leaves the floating domain in a workspace with no float left.

@@ -59,6 +59,7 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
         WidgetDefinition::new(WidgetId::TreeLayout, containers::tree_layout).names("TreeLayout", "TreeLayout").children(),
         WidgetDefinition::new(WidgetId::MessageList, containers::message_list).names("MessageList", "MessageList").properties::<heca_grid_ui::MessageList>().children(),
         WidgetDefinition::new(WidgetId::Label, display::label).names("Label", "Label").properties::<Label>(),
+        WidgetDefinition::new("caption", display::caption).names("Caption", "Caption").properties::<heca_grid_ui::Caption>(),
         WidgetDefinition::new(WidgetId::Button, controls::button).names("Button", "Button").properties::<Button>().children().events(&[ViewEvent::Press]),
         WidgetDefinition::new(WidgetId::Badge, display::badge).names("Badge", "Badge").properties::<Badge>(),
         WidgetDefinition::new(WidgetId::Tag, display::tag).names("Tag", "Tag").properties::<Tag>().children(),

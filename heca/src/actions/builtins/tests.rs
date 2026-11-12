@@ -52,6 +52,7 @@ const SERVER_SIDE: &[&str] = &[
     "take_pane",
     "terminal_kill",
     "terminal_run",
+    "terminal_rename_to",
     "zoom_column",
     "zoom_column_at_index",
 ];

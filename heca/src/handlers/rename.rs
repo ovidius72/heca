@@ -91,6 +91,20 @@ pub fn handle_rename_pane_by_id(state: &mut AppState, action: &WmAction) {
     enter_pane_rename(state, *pane_id);
 }
 
+/// A pane-owned terminal uses the pane's existing name, not a second competing label.
+pub fn handle_terminal_rename(state: &mut AppState, action: &WmAction) {
+    let WmAction::TerminalRename { terminal } = action else { return; };
+    let Some(id) = state.client.backends.resolve_reference(terminal) else { return; };
+    match state.client.backends.owner_of(id).cloned() {
+        Some(crate::app::backend_store::TerminalOwner::Pane(pane)) => enter_pane_rename(state, pane),
+        Some(crate::app::backend_store::TerminalOwner::Named(_)) => {
+            let current = state.client.backends.custom_title(id).unwrap_or_default().to_owned();
+            open_rename_dialog(state, RenameTarget::Terminal(id.0), current);
+        }
+        None => {}
+    }
+}
+
 /// Open the rename dialog for column `col_idx` in workspace `ws_idx`, pre-filled with its
 /// current name. Shared by the active-column (`RenameColumn`) and by-index
 /// (`RenameColumnByIdx`) entry points. Like a workspace, a column's shown label is its
@@ -189,6 +203,7 @@ mod tests {
                 col_idx: 0,
             },
             RenameTarget::Workspace(0),
+            RenameTarget::Terminal(7),
         ] {
             let name = target.action_name();
             assert!(

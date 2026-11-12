@@ -57,7 +57,7 @@ impl Provider for Notes {
             Flex::column()
                 .child(Label::new("No notes yet"))
                 // The same terminal every time this dock is built: `demo.shell`.
-                .child(demo.terminal("shell").title("Scratch shell").grow(1.0))
+                .child(demo.terminal("shell").title("Scratch shell").header(true).grow(1.0))
         }))
     }
 }

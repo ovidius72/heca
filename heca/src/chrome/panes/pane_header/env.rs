@@ -11,39 +11,19 @@ use super::*;
 /// nothing in it is refreshed per frame — **do not add a per-frame field**. What is true of the pane
 /// right now travels beside it, as the [`PaneHeaderInput`] the pane is handed.
 pub(crate) struct HeaderEnv {
-    theme: GuiTheme,
-    band: heca_grid_ui::Color,
-    segment_names: Vec<String>,
-    action_names: Vec<String>,
-    chips: crate::chrome::panes::pane_items::PaneChips,
-    buttons: crate::chrome::panes::pane_items::PaneButtons,
-    programs: std::rc::Rc<ProgramsConfig>,
-    shortcuts: ActionShortcuts,
-    catalog: crate::actions::ActionCatalog,
-    event_proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    pub(super) theme: GuiTheme,
+    pub(super) band: heca_grid_ui::Color,
+    pub(super) segment_names: Vec<String>,
+    pub(super) action_names: Vec<String>,
+    pub(super) chips: crate::chrome::panes::pane_items::PaneChips,
+    pub(super) buttons: crate::chrome::panes::pane_items::PaneButtons,
+    pub(super) programs: std::rc::Rc<ProgramsConfig>,
+    pub(super) shortcuts: ActionShortcuts,
+    pub(super) catalog: crate::actions::ActionCatalog,
+    pub(super) event_proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
 }
 
-impl HeaderEnv {
-    /// Take what a header is built from, as it is now.
-    pub(crate) fn of(state: &crate::app_state::AppState) -> std::rc::Rc<Self> {
-        std::rc::Rc::new(Self {
-            theme: super::chrome_gui_theme(state),
-            band: crate::chrome::window::theme::top_bottom_pane_background_color(&state.theme),
-            segment_names: state.appearance.pane.title_segments.clone(),
-            action_names: state.appearance.pane.title_actions.clone(),
-            chips: state.pane_chips.clone(),
-            buttons: state.pane_buttons.clone(),
-            programs: state.client.programs.clone(),
-            shortcuts: state.action_shortcuts.clone(),
-            catalog: state.action_catalog.clone(),
-            event_proxy: state.event_proxy.clone(),
-        })
-    }
-}
-
-/// **A pane's header, held by the pane that shows it.** The pane seats the same node as a child and
-/// answers [`PaneHeaderInput`] props by showing them in it, so whoever owns the pane hands it
-/// facts and never touches the header.
+/// The terminal content's pane-info header. Its retained node is independent of the terminal body.
 pub(crate) struct PaneHeader {
     node: heca_grid_ui::widgets::Keyed,
     show: Box<Show>,
@@ -68,14 +48,14 @@ impl PaneHeader {
         }
     }
 
-    /// The node to seat in the pane. A clone is the same node.
+    /// The node to compose above the terminal. A clone is the same retained node.
     pub(crate) fn seat(&self) -> heca_grid_ui::WidgetModel {
         heca_grid_ui::WidgetModel::new(self.node.clone())
     }
 
-    /// Teach `pane` to show the facts it is handed in this header.
-    pub(crate) fn answer_props<C: heca_grid_ui::builders::IdentityExt>(self, pane: C) -> C {
-        pane.on_props(move |input: &PaneHeaderInput, _| (self.show)(input, &self.node))
+    /// The terminal composition, not its enclosing frame, receives these facts.
+    pub(crate) fn answer_props<C: heca_grid_ui::builders::IdentityExt>(self, content: C) -> C {
+        content.on_props(move |input: &PaneHeaderInput, _| (self.show)(input, &self.node))
     }
 }
 
@@ -84,7 +64,7 @@ impl PaneHeader {
 pub(crate) fn give_header_facts(pane: &mut dyn Component, input: &PaneHeaderInput) {
     if !pane.set_props(input) {
         crate::chrome::input::identity::warn_author(
-            "[heca] a pane did not take the facts its header shows, so the header will not update"
+            "[heca] terminal content did not take its header facts, so the header will not update"
                 .to_string(),
         );
     }
@@ -119,7 +99,7 @@ fn show_pane_header(
         shortcuts: &env.shortcuts,
         catalog: &env.catalog,
     };
-    let key = pane_header_key(&content, font, input.avail_w);
+    let key = pane_header_key(&content, font);
     // **The words travel beside the tree, not inside its identity**: they are written onto the tree
     // by the key of the chip that shows each, so a command changing the program it shows moves the
     // words and nothing else.

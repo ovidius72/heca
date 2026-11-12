@@ -1,7 +1,8 @@
 //! **Opening a menu** — the one path the mouse and the keyboard share — and turning the identity a
 //! menu's declarer published into the target its providers read.
 
-use heca_core::layout::{PaneId, Point};
+use heca_core::layout::PaneId;
+use heca_grid_ui::widgets::MenuAnchor;
 
 use super::registry::plugin_providers_for;
 use super::{ContextPath, ContextTarget};
@@ -21,7 +22,7 @@ pub(crate) fn open_context_menu_for(
     state: &mut AppState,
     path: &str,
     target: ContextTarget,
-    anchor: Point,
+    anchor: MenuAnchor,
     source: InteractionSource,
 ) {
     // Providers — built-in and plugin alike — build against the host facade, never `AppState`. An
@@ -35,16 +36,12 @@ pub(crate) fn open_context_menu_for(
     let items = state
         .context_menu_registry
         .items_for(&ctx, path, &target, plugin);
-    // A keyboard/RPC-opened menu is centered on its anchor (window center); a mouse-opened menu
-    // is placed down-right of the click point.
-    let centered = matches!(source, InteractionSource::Keyboard);
     open_dropdown(
         state,
         DropdownSpec {
             anchor,
             items,
             source,
-            centered,
         },
     );
 }
@@ -54,9 +51,8 @@ pub(crate) fn open_context_menu_for(
 ///
 /// It used to also resolve the focused container's cursor row, by asking the component which menu
 /// path described that key. That whole route is gone: a row **declares its own menu**, so the keyboard
-/// trigger finds it by walking the tree from the container's cursor (`chrome::open_declared_menu_for_focus`)
-/// and never asks the host to name a menu. What is left here is the fallback for a content pane, which is not
-/// a widget and cannot carry a declaration.
+/// trigger finds it by walking the tree from the container's cursor (`chrome::open_declared_menu_for_focus`).
+/// What is left here is the compatibility lookup when no mounted widget declares a menu.
 ///
 /// Returns `None` when no pane is focused.
 pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, ContextTarget)> {

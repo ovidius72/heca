@@ -65,12 +65,14 @@ impl Terminal {
         if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
             declared.title = Some(title.into());
         }
+        self.refresh_title();
         self
     }
 
     /// The title to show: the one given, else the name; `None` for a terminal that was not
     /// declared by an extension.
     pub fn shown_title(&self) -> Option<String> {
+        if let Some(title) = self.shared.custom_title.borrow().as_ref() { return Some(title.clone()); }
         self.shared
             .declared
             .borrow()
@@ -116,6 +118,7 @@ impl Terminal {
             cwd: None,
             resolved: false,
         });
+        self.refresh_title();
     }
 
     /// Say what the terminal's owner wants of it: what a click on the scrollback controls means,
@@ -205,6 +208,9 @@ impl Terminal {
     pub fn kill(&self) {
         self.tell(TerminalCommand::Kill);
     }
+
+    /// Open the shared rename dialog for this terminal. Its process is not restarted.
+    pub fn rename(&self) { self.tell(TerminalCommand::Rename); }
 
     fn tell(&self, command: TerminalCommand) {
         let Some(id) = self.shared.id.get() else {

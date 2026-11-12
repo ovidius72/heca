@@ -77,7 +77,7 @@
 //! | Trigger | Target | Anchor |
 //! |---|---|---|
 //! | [`Event::RightClick`] | the widget under the pointer | the pointer |
-//! | the host's `open_context_menu` action (`prefix+>`, `Shift+F10`, the Menu key) | the focused widget | under the widget |
+//! | the host's `open_context_menu` action (`prefix+>`, `Shift+F10`, the Menu key) | the focused widget | declaring component's centre |
 //!
 //! The anchor is read **out of the event**: a pointer event carries a cursor, a keyboard event
 //! carries the target widget's bounds. No event in flight ⇒ no `show` ⇒ nothing to guess. Both
@@ -132,9 +132,11 @@ const KEYCAP_FONT_SCALE: f32 = 0.72;
 pub enum MenuAnchor {
     /// At a point: the panel's top-left goes there, clamped into the viewport. The pointer trigger.
     At(Point),
+    /// Centre on the component that owns the menu; clamp to the viewport if needed.
+    Center(Rectangle),
     /// Under a widget: the panel hangs off its bottom edge, flipping above and clamping like every
     /// other anchored panel — so the row the menu is *about* stays visible while you read it. The
-    /// keyboard trigger.
+    /// explicit anchored-panel trigger.
     Under(Rectangle),
 }
 
@@ -148,13 +150,17 @@ impl MenuAnchor {
         if let Some(pos) = ev.position() {
             return Some(Self::At(pos));
         }
-        ev.target_bounds().map(Self::Under)
+        ev.target_bounds().map(Self::Center)
     }
 
     /// Apply this anchor to a panel and open it.
     pub fn open(self, panel: ContextMenu) -> ContextMenu {
         match self {
             Self::At(p) => panel.anchor(p).centered(false).default_open(true),
+            Self::Center(bounds) => panel
+                .anchor(Point::new(bounds.loc.x + bounds.size.w / 2.0, bounds.loc.y + bounds.size.h / 2.0))
+                .centered(true)
+                .default_open(true),
             Self::Under(b) => panel
                 .anchor(Point::new(b.loc.x, b.loc.y + b.size.h))
                 .centered(false)

@@ -92,7 +92,6 @@ mod tests {
             model: m,
             cb: &cb,
             pane_cb: &pane_cb(),
-            header_env: None,
             contents: Default::default(),
         }
         .build()
@@ -205,7 +204,6 @@ mod tests {
             model: &m,
             cb: &cb,
             pane_cb: &pane_cb(),
-            header_env: None,
             contents: Default::default(),
         }
         .build();

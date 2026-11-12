@@ -38,9 +38,6 @@ pub(crate) struct ColumnShell<'a> {
     pub(crate) cb: &'a ColumnCallbacks,
     /// What each pane binds, travelling as one group exactly as the column's own seams do.
     pub(crate) pane_cb: &'a PaneCallbacks,
-    /// **What a pane's header is built from**, when the info bar is on. The column hands it to each
-    /// pane it builds and knows no more about a header than that.
-    pub(crate) header_env: Option<std::rc::Rc<crate::chrome::HeaderEnv>>,
     /// **What each pane runs**, by pane — the terminal today, anything else tomorrow. Carried down
     /// exactly as the header's environment is: the column does not know what it is.
     pub(crate) contents: HashMap<PaneId, heca_grid_ui::WidgetModel>,
@@ -59,13 +56,11 @@ pub(crate) fn pane_child(
     model: &PaneShellModel,
     column: &ColumnShellModel,
     cb: &PaneCallbacks,
-    header: Option<crate::chrome::PaneHeader>,
     content: Option<heca_grid_ui::WidgetModel>,
 ) -> heca_grid_ui::WidgetModel {
     let shell = PaneShell {
         model,
         cb,
-        header,
         content,
     }
     .build();
@@ -114,12 +109,8 @@ impl ColumnShell<'_> {
         // The panes, each at the rect the layout engine gave it.
         let mut column = column;
         for pane in &self.model.panes {
-            let header = self
-                .header_env
-                .as_ref()
-                .map(|env| crate::chrome::PaneHeader::new(env.clone()));
             let content = self.contents.remove(&pane.pane_id);
-            column = column.child(pane_child(pane, self.model, self.pane_cb, header, content));
+            column = column.child(pane_child(pane, self.model, self.pane_cb, content));
         }
         column
     }

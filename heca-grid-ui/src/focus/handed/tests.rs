@@ -1,4 +1,4 @@
-use crate::builders::{HintExt, Parent, PlaceExt, PresenceExt};
+use crate::builders::{HintExt, LayoutExt, Parent, PlaceExt, PresenceExt};
 use crate::component::{Base, Component, Event, Handled};
 use crate::focus::{focus_on_press, holder_path};
 use crate::widgets::{Flex, Grid};
@@ -78,6 +78,34 @@ fn a_part_with_nothing_to_take_it_changes_nothing() {
     assert_eq!(holder_path(&root), None);
 }
 
+#[test]
+fn nested_content_owns_its_keyboard_destination_not_its_enclosing_frame() {
+    let content = frame(Control::new(), Control::new()).keyboard_to("content");
+    let mut root = frame(Flex::row(), content).keyboard_to("content");
+    focus_on_press(&mut root, &[]);
+    assert_eq!(holder_path(&root), Some(vec![1, 0, 0, 1, 0, 0]));
+}
+
+#[test]
+fn a_delegation_to_the_widgets_own_area_does_not_recurse() {
+    let mut root = Flex::column().area("body").keyboard_to("body").child(Control::new());
+    focus_on_press(&mut root, &[]);
+    assert_eq!(holder_path(&root), Some(vec![0]));
+}
+
+#[test]
+fn a_nested_missing_or_hidden_destination_does_not_focus_its_header_instead() {
+    for content in [
+        frame(Control::new(), Control::new()).keyboard_to("missing"),
+        frame(Control::new(), Control::new()).keyboard_to("content").hidden(true),
+        frame(Control::new(), Control::new()).keyboard_to("content").disabled(true),
+    ] {
+        let mut root = frame(Flex::row(), content).keyboard_to("content");
+        focus_on_press(&mut root, &[]);
+        assert_eq!(holder_path(&root), None);
+    }
+}
+
 /// Targets in `root`, by path.
 fn lettered(root: &dyn Component) -> Vec<Vec<usize>> {
     crate::hint::collect_hints(root)
@@ -97,6 +125,24 @@ fn what_the_frame_hands_the_keyboard_to_wears_no_letter() {
 
     let not_handing = frame(Flex::row(), Control::new()).on_hint(|| {});
     assert_eq!(lettered(&not_handing), vec![vec![], vec![1, 0, 0]]);
+}
+
+#[test]
+fn an_unlettered_layout_does_not_remove_its_contents_letter() {
+    let mut root = frame(Flex::row(), Control::new()).keyboard_to("content");
+    let targets = lettered(&root);
+    assert_eq!(targets, vec![vec![1, 0, 0]]);
+    assert!(crate::fire_hint(&mut root, &targets[0]));
+    assert_eq!(holder_path(&root), Some(vec![1, 0, 0]));
+}
+
+#[test]
+fn opting_a_frame_out_of_hinting_does_not_hide_its_contents_letter() {
+    let root = frame(Flex::row(), Control::new())
+        .keyboard_to("content")
+        .on_hint(|| {})
+        .hintable(false);
+    assert_eq!(lettered(&root), vec![vec![1, 0, 0]]);
 }
 
 /// **Even one you can click** — the parent's letter is how you reach it.

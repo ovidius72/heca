@@ -95,6 +95,8 @@ pub use key_hint::{
 pub use key_hint_group::{DEFAULT_LETTERS, KeyHintGroup};
 pub use keyed::Keyed;
 pub use label::{Ellipsis, Label};
+mod caption;
+pub use caption::Caption;
 pub use line::Line;
 pub use message_list::{MessageFeed, MessageList};
 pub use resizable::Resizable;

@@ -108,9 +108,10 @@ fn the_codex_mark_has_transparent_corners_and_visible_brand_artwork() {
     for (x, y) in [(0, 0), (63, 0), (0, 63), (63, 63)] {
         assert_eq!(pixels.rgba[(y * 64 + x) * 4 + 3], 0, "the mark must not have a background tile");
     }
-    assert!(pixels.rgba.chunks_exact(4).any(|pixel| pixel[3] == 255),
+    assert_eq!(pixels.rgba.len() % 4, 0, "RGBA pixels must be complete");
+    assert!(pixels.rgba.chunks(4).any(|pixel| pixel[3] == 255),
         "the brand artwork must remain visible");
-    assert!(pixels.rgba.chunks_exact(4).all(|pixel| pixel[3] == 0 || pixel[..3] == [0, 0, 0]),
+    assert!(pixels.rgba.chunks(4).all(|pixel| pixel[3] == 0 || pixel[..3] == [0, 0, 0]),
         "the requested black mark must not inherit text tint or keep the old gradient");
 }
 

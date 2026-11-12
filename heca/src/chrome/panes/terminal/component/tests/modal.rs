@@ -11,7 +11,7 @@ fn a_newly_mounted_active_pane_gives_its_content_real_keyboard_focus() {
     let mut model = testing::model(1);
     model.active = true;
     let (callbacks, _) = testing::recording_callbacks();
-    let pane = PaneShell { model: &model, cb: &callbacks, header: None,
+    let pane = PaneShell { model: &model, cb: &callbacks,
         content: Some(WidgetModel::new(terminal.clone())) }.build();
     let mut window = crate::chrome::new_window_root();
     window.base_mut().children.push(WidgetModel::new(pane));
@@ -43,8 +43,9 @@ fn a_palette_confirm_never_reaches_the_terminal_or_resizes_it() {
     let pane = PaneShell {
         model: &model,
         cb: &callbacks,
-        header: Some(crate::chrome::PaneHeader::showing(|_, _| {})),
-        content: Some(WidgetModel::new(terminal.clone())),
+        content: Some(WidgetModel::new(crate::chrome::panes::terminal::content::compose(
+            Some(crate::chrome::PaneHeader::showing(|_, _| {})), terminal.clone(),
+        ))),
     }.build();
     let mut window = crate::chrome::new_window_root();
     window.base_mut().children.push(WidgetModel::new(pane));

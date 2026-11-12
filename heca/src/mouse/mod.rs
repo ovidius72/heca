@@ -65,14 +65,6 @@ fn cursor_icon(cursor: heca_grid_ui::Cursor) -> winit::window::CursorIcon {
     }
 }
 
-/// Logical-pixel center of the app window — the anchor for keyboard/RPC-opened menus so a menu
-/// opened with no pointer stays centered on screen instead of at a stale cursor position.
-pub(crate) fn window_center_logical(state: &AppState) -> (f32, f32) {
-    let phys = state.window.inner_size();
-    let s = state.scale_factor as f32;
-    (phys.width as f32 / s / 2.0, phys.height as f32 / s / 2.0)
-}
-
 /// Check the focus-follows-mouse timer on every frame (even without cursor movement).
 /// Call from `about_to_wait` for frame-rate-independent debounce.
 /// Handle mouse button events. Returns a `WmAction` if one should be dispatched.

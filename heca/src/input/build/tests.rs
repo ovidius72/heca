@@ -228,6 +228,24 @@ fn test_build_terminal_run_and_kill() {
 }
 
 #[test]
+fn terminal_rename_requires_a_target_and_keeps_the_name_structured() {
+    let args = std::collections::HashMap::from([("terminal".into(), "7".into()), ("name".into(), "Build logs".into())]);
+    assert_eq!(build_action("terminal_rename", &args), Some(WmAction::TerminalRename { terminal: "7".into() }));
+    assert_eq!(build_action("terminal_rename_to", &args), Some(WmAction::TerminalRenameTo { terminal: "7".into(), name: "Build logs".into() }));
+    assert_eq!(build_action("terminal_rename_to", &std::collections::HashMap::new()), None);
+}
+
+#[test]
+fn qualified_terminal_names_reach_both_rename_actions() {
+    let args = std::collections::HashMap::from([
+        ("terminal".into(), "demo.shell".into()),
+        ("name".into(), "Build logs".into()),
+    ]);
+    assert!(build_action("terminal_rename", &args).is_some());
+    assert!(build_action("terminal_rename_to", &args).is_some());
+}
+
+#[test]
 fn test_spawn_command_takes_a_folder() {
     let args = std::collections::HashMap::from([
         ("command".to_string(), "htop".to_string()),

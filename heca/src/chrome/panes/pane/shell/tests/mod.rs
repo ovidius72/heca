@@ -37,8 +37,7 @@ pub(super) fn dispatched(build: impl FnOnce(&mut UiPane)) -> Vec<String> {
     let mut pane = PaneShell {
         model: &model(3),
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
     size_to(&mut pane, 400.0, 300.0);

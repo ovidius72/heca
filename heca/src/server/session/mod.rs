@@ -253,6 +253,7 @@ impl SessionRuntime {
                             | crate::input::WmAction::TerminalKill { terminal, .. } => {
                                 *terminal = Some(id.0)
                             }
+                            crate::input::WmAction::TerminalRenameTo { terminal, .. } => *terminal = id.0.to_string(),
                             _ => {}
                         }
                     }

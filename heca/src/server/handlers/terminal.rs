@@ -125,3 +125,20 @@ pub(super) fn terminal_kill(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Cha
         None => Vec::new(),
     }
 }
+
+/// Rename metadata only; a pane-owned terminal retains the existing pane naming contract.
+pub(super) fn terminal_rename_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
+    let WmAction::TerminalRenameTo { terminal, name } = action else { return Vec::new(); };
+    let Some(id) = cx.terminals.backends.resolve_reference(terminal) else {
+        return vec![Change::Refused(crate::server::Refusal::TerminalUnavailable)];
+    };
+    let Some(owner) = cx.terminals.backends.owner_of(id).cloned() else {
+        return vec![Change::Refused(crate::server::Refusal::TerminalUnavailable)];
+    };
+    if let crate::app::backend_store::TerminalOwner::Pane(pane) = owner {
+        return super::names::rename_target(cx, &WmAction::RenameTarget { pane_id: pane, name: name.clone() });
+    }
+    let title = (!name.trim().is_empty()).then(|| name.trim().to_owned());
+    if !cx.terminals.backends.set_custom_title(id, title.clone()) { return Vec::new(); }
+    vec![Change::TerminalTitleChanged { owner, title }]
+}

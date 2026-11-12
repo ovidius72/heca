@@ -27,11 +27,13 @@
 //! everything below it takes plain data and is testable headless.
 
 mod component;
+pub(crate) mod content;
 mod declared;
 mod input;
 mod model;
 mod search;
 mod shared;
+mod title;
 #[cfg(test)]
 pub(crate) mod testing;
 mod viewport;
@@ -147,6 +149,7 @@ fn seams(
                     pane_id: None,
                     terminal: Some(id.0),
                 },
+                TerminalCommand::Rename => WmAction::TerminalRename { terminal: id.0.to_string() },
             };
             let _ = command_proxy.send_event(AppEvent::ChromeIntent {
                 source: InteractionSource::MouseContent,
@@ -189,6 +192,13 @@ fn scroll_intents(
 pub(crate) fn retain_owned(state: &mut AppState) {
     let backends = &state.client.backends;
     state.terminals.retain(|id, _| backends.is_issued(*id));
+}
+
+/// Refresh shared title metadata before layout, without changing a terminal's resource or tree.
+pub(crate) fn sync_titles(state: &AppState) {
+    for (id, terminal) in &state.terminals {
+        terminal.show_title(state.client.backends.custom_title(*id), &state.action_catalog);
+    }
 }
 
 /// **Where each terminal was drawn this frame**, as the flush met them: every scene the frame

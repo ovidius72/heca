@@ -47,3 +47,23 @@ fn malformed_terminal_identity_is_rejected_before_any_factory_acquires_resources
     assert_eq!(error.path, vec![1]);
     assert!(!called.get());
 }
+
+#[test]
+fn native_and_described_terminal_headers_have_the_same_layout() {
+    reset();
+    use heca_grid_ui::{LayoutEngine, Size};
+    use crate::chrome::panes::terminal::content::{BODY_AREA, HEADER_AREA};
+    let node: ViewNode = heca_view::build::Terminal::new("header_parity").title("Build").header(true).into();
+    let mut described = crate::chrome::realize(&node, &Theme::default(), &emitter(), &mut FormBindings::default()).unwrap();
+    let mut native = crate::Terminal::new("header_parity").title("Build").header(true);
+    for size in [Size::new(360.0, 240.0), Size::new(120.0, 90.0)] {
+        LayoutEngine::new().compute(&mut native, size);
+        LayoutEngine::new().compute(described.as_mut(), size);
+        for area in [HEADER_AREA, BODY_AREA] {
+            let native_bounds = heca_grid_ui::area(&native, area).unwrap().base().bounds;
+            let described_bounds = heca_grid_ui::area(described.as_ref(), area).unwrap().base().bounds;
+            assert_eq!(native_bounds, described_bounds);
+            assert!(native_bounds.loc.y + native_bounds.size.h <= size.h + 0.01);
+        }
+    }
+}

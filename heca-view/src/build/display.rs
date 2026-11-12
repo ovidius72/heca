@@ -10,6 +10,11 @@ builder_text!(
 );
 
 builder_text!(
+    /// A small caption aligned with a quiet rule. Blank text occupies no space.
+    Caption => "caption"
+);
+
+builder_text!(
     /// A small status chip.
     Badge => Badge
 );

@@ -7,7 +7,7 @@ use super::IntoContextMenu;
 pub trait MenuExt: Component + Sized {
     /// **Give this widget a context menu.** Right-click it — or anything inside it — and the menu
     /// opens at the cursor; trigger the host's `open_context_menu` while focus is here and it
-    /// opens under the widget.
+    /// opens at the centre of the component declaring it.
     ///
     /// ```
     /// use heca_grid_ui::prelude::*;

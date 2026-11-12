@@ -99,6 +99,8 @@ pub struct ButtonGroup {
     /// because the widths measured this pass only mean something alongside the mode that produced
     /// them.
     words: Cell<bool>,
+    /// The overflow button's laid-out width at the current font, the group's smallest control.
+    overflow_width: Cell<Option<(f32, f64)>>,
     /// Labels and glyphs, kept beside the children so the menu can be built without taking them
     /// apart. Read from each `Button` as it is added.
     entries: Vec<Entry>,
@@ -162,6 +164,7 @@ impl ButtonGroup {
             wanted_with_words: Cell::new(0.0),
             applied: Cell::new(false),
             words: Cell::new(true),
+            overflow_width: Cell::new(None),
             entries: Vec::new(),
             menu: Rc::new(std::cell::RefCell::new(
                 ContextMenu::new("button-group-overflow").child(Menu::new(OVERFLOW_LABEL, "")),
@@ -280,6 +283,17 @@ impl Component for ButtonGroup {
         &mut self.base
     }
 
+    fn taffy_style(&self) -> taffy::Style {
+        let mut style = self.base.style.layout.to_taffy(self.base.font);
+        if let Some((font, width)) = self.overflow_width.get()
+            && font == self.base.font
+            && let taffy::Dimension::Length(minimum) = style.min_size.width
+        {
+            style.min_size.width = taffy::Dimension::Length(minimum.max(width as f32));
+        }
+        style
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
@@ -300,6 +314,17 @@ impl Component for ButtonGroup {
         let count = self.entries.len();
         if count == 0 {
             return;
+        }
+        if let Some(trigger) = self.base.children.last()
+            && !trigger.base().style.layout.hidden
+            && trigger.base().bounds.size.w > 0.0
+        {
+            let minimum = (self.base.font, trigger.base().bounds.size.w);
+            if self.overflow_width.replace(Some(minimum)) != Some(minimum) {
+                // End-aligned children can spill left out of a smaller group and consume the
+                // parent's gap. Reserve the trigger's real width before deciding what else fits.
+                self.base.mark_needs_layout();
+            }
         }
         // The left edge of the box the parent gave this group.
         let left = self.base.bounds.loc.x;

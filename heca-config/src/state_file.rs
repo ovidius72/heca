@@ -87,7 +87,7 @@ mod tests {
         let path = directory.path().join("shared.json");
         let barrier = std::sync::Barrier::new(2);
         std::thread::scope(|scope| {
-            let writers: Vec<_> = [b'a', b'b'].into_iter().map(|byte| {
+            let writers: Vec<_> = b"ab".iter().copied().map(|byte| {
                 let path = &path;
                 let barrier = &barrier;
                 scope.spawn(move || { barrier.wait(); write_bytes(path, &vec![byte; 131072]) })

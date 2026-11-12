@@ -14,4 +14,6 @@ impl Terminal {
     pub fn command(self, command: impl Into<String>) -> Self { self.prop("command", command.into()) }
     pub fn cwd(self, directory: impl Into<String>) -> Self { self.prop("cwd", directory.into()) }
     pub fn title(self, title: impl Into<String>) -> Self { self.prop("title", title.into()) }
+    /// Show the terminal-owned title bar; false leaves no reserved header space.
+    pub fn header(self, visible: bool) -> Self { self.prop("header", visible) }
 }

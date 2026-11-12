@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn a_hidden_marker_reserves_no_gutter_and_owns_no_grip() {
         let g = MarkerGroup::new().marker(false);
-        assert_eq!(g.taffy_style().padding.left, taffy::prelude::length(0.0));
+        assert_eq!(g.taffy_style().padding.left, taffy::prelude::length(0.0_f32));
         assert!(!g.in_grip(Point::new(5.0, 20.0)));
     }
 

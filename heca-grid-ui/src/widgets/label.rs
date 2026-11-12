@@ -338,12 +338,10 @@ impl Label {
         if mode == Ellipsis::None {
             return vec![whole(&chars)];
         }
-        // **No box yet is not an empty box.** Bounds are zero until the layout pass fills them in,
-        // and cutting to a zero-width box draws nothing at all — so a tree painted before it is laid
-        // out would come out blank rather than merely mis-sized. Degenerate geometry means "no
-        // answer yet" here exactly as it does in the picker's visibility rules.
+        // A laid-out flex item can legitimately shrink to zero. It must not restore the full
+        // text there; the paint walk already skips widgets that have not been laid out.
         if self.base.bounds.size.w <= 0.0 {
-            return vec![whole(&chars)];
+            return vec![Vec::new()];
         }
         if chars.len() <= cells {
             return vec![whole(&chars)];

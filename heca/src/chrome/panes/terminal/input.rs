@@ -199,6 +199,8 @@ pub(crate) enum TerminalCommand {
     Run { text: String, enter: bool },
     /// End the terminal.
     Kill,
+    /// Open the ordinary rename dialog for this terminal.
+    Rename,
 }
 
 /// **Everything a terminal's owner says to it, once**: what a click on the scrollback controls

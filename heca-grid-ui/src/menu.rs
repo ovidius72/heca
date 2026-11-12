@@ -128,7 +128,7 @@ pub fn has_menu_sink() -> bool {
 /// and a declared menu is simply what happens when nothing does.
 pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) -> bool {
     match menu_on(root, path, at) {
-        Some((menu, subject)) => {
+        Some((menu, subject, _bounds)) => {
             present(menu, MenuAnchor::At(at), subject);
             true
         }
@@ -137,7 +137,7 @@ pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) 
 }
 
 /// **The keyboard trigger** — open the menu declared nearest to wherever the keyboard is, anchored
-/// under that widget. Returns whether anything declared one. Called by the host's
+/// on the component that declares it. Returns whether anything declared one. Called by the host's
 /// `open_context_menu` action; nothing there ⇒ `false`, and the host does whatever it does with an
 /// action that found no target.
 ///
@@ -152,10 +152,7 @@ pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) 
 /// It was two exported functions with three identical lines each, and the host wrote the "try both,
 /// in this order" rule beside them. Two spellings of one question, in two places.
 pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
-    let path = cursor
-        .and_then(|key| key_path(root, key))
-        .or_else(|| focused_path(root));
-    let Some(path) = path else {
+    let Some(path) = keyboard_path(root, cursor) else {
         return false;
     };
     let bounds = node_bounds(root, &path);
@@ -164,12 +161,24 @@ pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
     // involved. A builder that varies by point (a terminal's *Open link*) therefore offers nothing
     // extra here, which is right: there is no cell under a keystroke.
     match menu_on(root, &path, bounds.loc) {
-        Some((menu, subject)) => {
-            present(menu, MenuAnchor::Under(bounds), subject);
+        Some((menu, subject, bounds)) => {
+            present(menu, MenuAnchor::Center(bounds), subject);
             true
         }
         None => false,
     }
+}
+
+/// Resolve a keyboard anchor without building a menu, for host-provided entries.
+/// Uses the declaring component, or the focused target when it declares no menu.
+pub fn keyboard_anchor(root: &dyn Component, cursor: Option<&str>) -> Option<MenuAnchor> {
+    let path = keyboard_path(root, cursor)?;
+    let bounds = menu_owner(root, &path).map_or_else(|| node_bounds(root, &path), |node| node.base().bounds);
+    Some(MenuAnchor::Center(bounds))
+}
+
+fn keyboard_path(root: &dyn Component, cursor: Option<&str>) -> Option<Vec<usize>> {
+    cursor.and_then(|key| key_path(root, key)).or_else(|| focused_path(root))
 }
 
 /// The path to the widget that declared `key`.
@@ -200,28 +209,28 @@ fn menu_on(
     root: &dyn Component,
     path: &[usize],
     at: Point,
-) -> Option<(ContextMenu, Option<String>)> {
+) -> Option<(ContextMenu, Option<String>, Rectangle)> {
+    let owner = menu_owner(root, path)?;
+    let base = owner.base();
+    let menu = base.context_menu.as_deref()?(at);
+    Some((menu, base.key.clone(), base.bounds))
+}
+
+/// The nearest declaring ancestor, shared by menu building and anchor discovery.
+fn menu_owner<'a>(root: &'a dyn Component, path: &[usize]) -> Option<&'a dyn Component> {
     let mut node = root;
-    let mut best = root.base().context_menu.as_deref();
-    // **Who the menu is about**, taken from the identity the declaring widget already publishes.
-    // A menu is opened *about* something, and the thing it is about is the widget that declared it
-    // — which, if it is anything a cursor, a right-click or a drag can point at, has already said
-    // so via `Base::key`. So the host learns the subject from a declaration that exists rather than
-    // from a hit test of its own, and an author writes nothing new.
-    let mut subject = root.base().key.clone();
+    let mut best = root.base().context_menu.as_ref().map(|_| root);
+    // Ownership comes from the declaration, not a key or a host-side hit test.
     for i in path {
         let Some(child) = node.base().children.get(*i) else {
             break;
         };
         node = child.as_ref();
-        if let Some(f) = node.base().context_menu.as_deref() {
-            best = Some(f);
-            subject = node.base().key.clone();
+        if node.base().context_menu.is_some() {
+            best = Some(node);
         }
     }
-    // Built **now**, not when it was written: an item's label and its `enabled` are answers about
-    // the state the menu is being opened in.
-    best.map(|f| (f(at), subject))
+    best
 }
 
 /// The path to the focused widget, if one holds the keyboard.

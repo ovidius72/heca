@@ -90,8 +90,9 @@ pub trait PresenceExt: Component + Sized {
     /// takes the keyboard itself gives it to **the first thing in that part that does**, whatever
     /// the part holds: a terminal, an editor, a plugin's tree. Nothing inside has to know.
     ///
-    /// **What it hands the keyboard to wears no pick letter of its own**: this widget's letter
-    /// already reaches it, so a second one would be two letters for one place. Anything else in the
+    /// **When this widget has a pick letter, what it hands the keyboard to needs no second one**:
+    /// this widget's letter already reaches it. An unlettered layout never suppresses its content's
+    /// letter. Anything else in the
     /// part keeps its letter, and so does a handed-to widget that
     /// [declared a pick of its own](crate::builders::HintExt::on_hint).
     ///

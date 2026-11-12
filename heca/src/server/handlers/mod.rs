@@ -89,6 +89,7 @@ pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
         K::SpawnCommand => terminal::spawn_command,
         K::TerminalRun => terminal::terminal_run,
         K::TerminalKill => terminal::terminal_kill,
+        K::TerminalRenameTo => terminal::terminal_rename_to,
         _ => return None,
     })
 }

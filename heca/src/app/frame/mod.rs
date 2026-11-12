@@ -93,6 +93,7 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     // The terminals extensions declared since the last frame are started now, so the scenes
     // painted next already place them.
     crate::chrome::panes::terminal::start_declared(state);
+    crate::chrome::panes::terminal::sync_titles(state);
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;

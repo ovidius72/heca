@@ -53,6 +53,8 @@ pub(crate) enum Change {
     WorkspaceRemoved { index: usize },
     /// A pane, column or workspace has a different name.
     NamesChanged,
+    /// A named terminal's user label changed, independently of its program's OSC title.
+    TerminalTitleChanged { owner: crate::app::backend_store::TerminalOwner, title: Option<String> },
     /// The server did not do what was asked, and why. Not a change to anything: a window says it
     /// in its own words.
     Refused(Refusal),

@@ -233,29 +233,35 @@ impl Component for Tag {
             glow,
         );
 
-        // Thin dividers in the gap between consecutive segments.
-        let divider = c.with_alpha(ia.tag_border);
-        let inset = pill.size.h * DIVIDER_INSET_FRAC;
-        for i in 1..self.base.children.len() {
-            let prev = self.base.children[i - 1].base().bounds;
-            let cur = self.base.children[i].base().bounds;
-            let x = (prev.loc.x + prev.size.w + cur.loc.x) / 2.0;
-            cx.rect(
-                Rectangle::new(
-                    Point::new(x, pill.loc.y + inset),
-                    Size::new(f64::from(border_w), pill.size.h - 2.0 * inset),
-                ),
-                divider,
-                None,
-                0.0,
-                None,
-            );
-        }
+        // Fixed leading slots and nonshrinking segments can exceed very narrow chips. Keep
+        // their paint inside the chip and each segment; fitting never changes tooltip values.
+        cx.with_clip(pill, |cx| {
+            // Thin dividers in the gap between consecutive segments.
+            let divider = c.with_alpha(ia.tag_border);
+            let inset = pill.size.h * DIVIDER_INSET_FRAC;
+            for i in 1..self.base.children.len() {
+                let prev = self.base.children[i - 1].base().bounds;
+                let cur = self.base.children[i].base().bounds;
+                let x = (prev.loc.x + prev.size.w + cur.loc.x) / 2.0;
+                cx.rect(
+                    Rectangle::new(
+                        Point::new(x, pill.loc.y + inset),
+                        Size::new(f64::from(border_w), pill.size.h - 2.0 * inset),
+                    ),
+                    divider,
+                    None,
+                    0.0,
+                    None,
+                );
+            }
 
-        // Segments draw themselves.
-        for child in &self.base.children {
-            crate::component::paint_child(child.as_ref(), cx);
-        }
+            // Segments draw themselves.
+            for child in &self.base.children {
+                cx.with_clip(child.base().bounds, |cx| {
+                    crate::component::paint_child(child.as_ref(), cx);
+                });
+            }
+        });
     }
 }
 

@@ -16,8 +16,7 @@ fn the_pane_says_what_picking_it_would_do() {
     let tree = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
     let intent = tree
@@ -47,8 +46,7 @@ fn picking_the_pane_focuses_that_pane() {
     let tree = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
     let hint = tree.base().hint.as_ref().expect("the pane declares a pick");
@@ -65,8 +63,7 @@ fn the_letter_is_centred_over_the_pane() {
     let tree = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
     assert_eq!(tree.base().hint_style.placement, HintPlacement::Center);
@@ -119,8 +116,7 @@ fn a_pane_declares_a_menu_rather_than_opening_one() {
     let pane = PaneShell {
         model: &model(3),
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
     // The declaration sits on the pane itself, inside the picker wrapper the shell returns.
@@ -173,8 +169,7 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
         PaneShell {
             model: m,
             cb: &cb,
-            header: None,
-            content: None,
+            content: None::<heca_grid_ui::WidgetModel>,
         }
         .build()
     };
@@ -207,11 +202,10 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
 fn a_pane_types_into_what_it_holds_however_deep() {
     use heca_grid_ui::builders::Parent;
     let (cb, picked) = recording_callbacks();
-    let held = crate::chrome::panes::terminal::Terminal::unbound();
+    let held = crate::chrome::panes::terminal::Terminal::unbound().key("test.typing");
     let mut pane = PaneShell {
         model: &model(5),
         cb: &cb,
-        header: None,
         content: Some(heca_grid_ui::WidgetModel::new(
             heca_grid_ui::widgets::Flex::column()
                 .child(heca_grid_ui::widgets::Flex::row().child(held)),
@@ -226,9 +220,7 @@ fn a_pane_types_into_what_it_holds_however_deep() {
 
     assert!(heca_grid_ui::fire_hint(&mut pane, &[]));
     assert_eq!(*picked.borrow(), vec![heca_core::layout::PaneId(5)]);
-    let deep = heca_grid_ui::area(&pane, PANE_CONTENT_AREA)
-        .and_then(|part| part.base().children.first())
-        .and_then(|row| row.base().children.first())
+    let deep = heca_grid_ui::node_with_key(&pane, "test.typing")
         .expect("the typing area")
         .base()
         .focus_id();

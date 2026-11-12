@@ -36,10 +36,14 @@ fn letters_in_pane(ws: &dyn Component, id: u64) -> (Vec<usize>, Vec<Vec<usize>>)
 
 /// Whose turn the keyboard is in `root`: the focus identity of what runs in the pane `id`.
 fn content_of(root: &dyn Component, id: u64) -> u64 {
+    fn terminal(node: &dyn Component) -> Option<&dyn Component> {
+        if node.focusable() && node.text_summary().as_deref() == Some("terminal") { return Some(node); }
+        node.base().children.iter().find_map(|child| terminal(child.as_ref()))
+    }
     let pane = heca_grid_ui::node_with_key(root, &crate::chrome::pane_key(PaneId(id)))
         .expect("the pane is built");
-    heca_grid_ui::area(pane, PANE_CONTENT_AREA)
-        .expect("the pane holds its content")
+    terminal(heca_grid_ui::area(pane, PANE_CONTENT_AREA).expect("the pane holds its content"))
+        .expect("the content contains the terminal")
         .base()
         .focus_id()
 }

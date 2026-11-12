@@ -133,6 +133,7 @@ fn sample_node(kind: WidgetId) -> ViewNode {
 
         // Leaves that carry text.
         "label"
+        | "caption"
         | "button"
         | "badge"
         | "badge_button"

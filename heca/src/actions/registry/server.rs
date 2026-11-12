@@ -58,7 +58,14 @@ impl ActionRegistry {
             return Err(RpcError::Blocked(name.clone()));
         }
         if let Some(action) = action {
-            return run(action);
+            let changes = run(action)?;
+            if let Some(reason) = changes.iter().find_map(|change| match change {
+                Change::Refused(reason) => Some(reason),
+                _ => None,
+            }) {
+                return Err(RpcError::Failed(format!("{reason:?}")));
+            }
+            return Ok(changes);
         }
         let emitted = self.execute_server_dynamic(name, store.clone(), intent)
             .ok_or_else(|| RpcError::NotRunnable(name.clone()))?;

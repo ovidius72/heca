@@ -45,6 +45,10 @@ pub(super) fn build_terminal(
             pane_id: get_u64(args, "pane_id").map(PaneId),
             terminal: get_u64(args, "terminal"),
         }),
+        "terminal_rename" => Some(WmAction::TerminalRename { terminal: get_string(args, "terminal")? }),
+        "terminal_rename_to" => Some(WmAction::TerminalRenameTo {
+            terminal: get_string(args, "terminal")?, name: get_string(args, "name")?,
+        }),
 
         // ── Context-menu / sidebar targets (context-menu-5) ──
         // Reachable by NAME so a menu entry — built-in or plugin-contributed — carries an `Intent`
