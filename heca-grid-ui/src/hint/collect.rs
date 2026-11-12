@@ -410,6 +410,7 @@ fn hints_into(
     // does not spend one of the 52 either. Hidden by an ancestor's clip, or squeezed to nothing of
     // its own: one question, asked once (see [`unseen`]).
     let mut here = wrapping;
+    let mut lettered_here = false;
     if is_target_of(node, scope) && !unseen(node, clip) && !reached_through_ancestor(node, path, handed)
     {
         let declares = node.base().hint.is_some();
@@ -428,6 +429,7 @@ fn hints_into(
             }
             out.push(Some((path.clone(), node.base().bounds)));
             here = Some((out.len() - 1, declares));
+            lettered_here = true;
         }
     }
     // **Only a transparent wrapper passes the chain on** — it is the widget inside it, so the two
@@ -444,7 +446,7 @@ fn hints_into(
     // Judged per node rather than by pruning the subtree: a transparent wrapper can carry bounds
     // its child does not, and pruning on one would silently take every letter beneath it.
     let clip = narrowed(clip, node);
-    let hands = crate::focus::handed_to(node);
+    let hands = lettered_here.then(|| crate::focus::handed_to(node)).flatten();
     if let Some(to) = &hands {
         handed.push(path.iter().chain(to).copied().collect());
     }

@@ -11,6 +11,7 @@ use super::search::{SearchBar, SearchSlot};
 use super::shared::Shared;
 use super::viewport::{Controls, IntentSlot};
 use heca_grid_ui::builders::{EventExt, LayoutExt};
+use heca_grid_ui::MenuExt;
 use heca_grid_ui::component::{Base, Component, GridKey, PaintCx, WidgetIntent};
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::style::Length;
@@ -24,7 +25,7 @@ use heca_grid_ui::style::Length;
 /// placed in a tree and the one kept by the caller agree at once.
 pub struct Terminal {
     base: Base,
-    shared: Rc<Shared>,
+    pub(super) shared: Rc<Shared>,
     /// This node's own scrollback controls. They are its children; the handle is kept so they stay
     /// alive in `shared.controls` for as long as the node does.
     _controls: Rc<Controls>,
@@ -45,6 +46,9 @@ impl Terminal {
             reported: Cell::new(None),
             controls: RefCell::default(),
             declared: RefCell::new(None),
+            title: heca_grid_ui::reactive::signal(String::new()),
+            custom_title: RefCell::new(None),
+            rename: RefCell::new(super::title::RenamePresentation::default()),
             search: SearchSlot::default(),
             links: RefCell::default(),
             view: Cell::new((0, 0)),
@@ -78,9 +82,11 @@ impl Terminal {
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
         let me = shared.clone();
+        let menu = super::title::menu(shared.clone());
+        let named = shared.declared.borrow().is_some();
         // **The wheel is the terminal's own.** It works out where in the grid it turned and says so
         // to whoever owns the process; whatever is beneath it is not offered the turn.
-        Self {
+        let terminal = Self {
             base,
             shared,
             _controls: controls,
@@ -123,7 +129,8 @@ impl Terminal {
         })
         // **Clicking a link with the window's key held opens it.** The framework tells a click from
         // the start of a drag by how far the pointer travelled, so the same key serves both.
-        .on(EventKind::Click, move |cx| me.open_link(cx))
+        .on(EventKind::Click, move |cx| me.open_link(cx));
+        if named { terminal.context_menu(menu) } else { terminal }
     }
 }
 

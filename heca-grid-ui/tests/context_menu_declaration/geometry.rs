@@ -1,5 +1,99 @@
 use super::*;
 
+#[test]
+fn keyboard_menus_are_centered_on_the_component_that_declares_them() {
+    for (width, height) in [(100.0, 40.0), (400.0, 450.0)] {
+        let opened = recording_sink();
+        let owner = Row::new().at_rect(300.0, 140.0, width, height).context_menu(menu_named("Rename"));
+        let mut root = Flex::column().child(owner);
+        LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+        root.base().children[0].base().focus(true);
+        assert!(heca_grid_ui::open_for_keyboard(&root, None));
+        let mut panels = opened.borrow_mut();
+        let menu = &mut panels[0];
+        LayoutEngine::new().compute(menu, Size::new(1000.0, 800.0));
+        let bounds = menu.base().bounds;
+        assert!((bounds.loc.x + bounds.size.w / 2.0 - (300.0 + width / 2.0)).abs() < 0.5);
+        assert!((bounds.loc.y + bounds.size.h / 2.0 - (140.0 + height / 2.0)).abs() < 0.5);
+    }
+}
+
+#[test]
+fn keyboard_menu_uses_its_declaring_ancestor_not_the_small_focused_child() {
+    let opened = recording_sink();
+    let owner = Row::new()
+        .at_rect(300.0, 140.0, 400.0, 450.0)
+        .context_menu(menu_named("Rename"))
+        .child(Button::new("Input").at_rect(10.0, 20.0, 60.0, 30.0));
+    let mut root = Flex::column().child(owner);
+    LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+    root.base().children[0].base().children[0].base().focus(true);
+    assert!(heca_grid_ui::open_for_keyboard(&root, None));
+    let mut panels = opened.borrow_mut();
+    let menu = &mut panels[0];
+    LayoutEngine::new().compute(menu, Size::new(1000.0, 800.0));
+    let bounds = menu.base().bounds;
+    assert!((bounds.loc.x + bounds.size.w / 2.0 - 500.0).abs() < 0.5);
+    assert!((bounds.loc.y + bounds.size.h / 2.0 - 365.0).abs() < 0.5);
+}
+
+#[test]
+fn resolving_a_keyboard_anchor_does_not_build_the_menu() {
+    let built = Rc::new(std::cell::Cell::new(0));
+    let seen = built.clone();
+    let mut root = Flex::column().child(
+        Button::new("Target").at_rect(300.0, 140.0, 400.0, 450.0).context_menu(move |_| {
+            seen.set(seen.get() + 1);
+            menu_named("Rename")
+        }),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+    let target = root.base().children[0].base();
+    target.focus(true);
+    assert_eq!(heca_grid_ui::menu::keyboard_anchor(&root, None), Some(MenuAnchor::Center(target.bounds)));
+    assert_eq!(built.get(), 0);
+}
+
+#[test]
+fn a_host_menu_without_a_declaration_uses_the_focused_components_bounds() {
+    let mut root = Flex::column().child(Button::new("Target").at_rect(300.0, 140.0, 400.0, 450.0));
+    LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+    let target = root.base().children[0].base();
+    target.focus(true);
+    assert_eq!(heca_grid_ui::menu::keyboard_anchor(&root, None), Some(MenuAnchor::Center(target.bounds)));
+}
+
+#[test]
+fn a_keyboard_menu_near_the_viewport_edge_stays_visible_after_resizing() {
+    let opened = recording_sink();
+    let mut root = Flex::column().child(
+        Button::new("Target").at_rect(940.0, 740.0, 40.0, 40.0).context_menu(menu_named("Rename")),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+    root.base().children[0].base().focus(true);
+    assert!(heca_grid_ui::open_for_keyboard(&root, None));
+    let mut panels = opened.borrow_mut();
+    for viewport in [Size::new(1000.0, 800.0), Size::new(600.0, 400.0)] {
+        LayoutEngine::new().compute(&mut panels[0], viewport);
+        let bounds = panels[0].base().bounds;
+        assert!(bounds.loc.x >= 0.0 && bounds.loc.y >= 0.0);
+        assert!(bounds.loc.x + bounds.size.w <= viewport.w);
+        assert!(bounds.loc.y + bounds.size.h <= viewport.h);
+    }
+}
+
+#[test]
+fn a_pointer_reopening_a_keyboard_menu_uses_the_pointer_anchor() {
+    let menu = MenuAnchor::Center(heca_grid_ui::Rectangle::new(Point::new(300.0, 140.0), Size::new(400.0, 450.0)))
+        .open(menu_named("Rename"));
+    let at = Point::new(40.0, 60.0);
+    let mut reopened = MenuAnchor::At(at).open(menu.clone());
+    LayoutEngine::new().compute(&mut reopened, Size::new(1000.0, 800.0));
+    let bounds = reopened.base().bounds;
+    assert!((bounds.loc.x - at.x).abs() < 5.0);
+    assert!((bounds.loc.y - at.y).abs() < 5.0);
+}
+
 /// **The anchor comes out of the event.** A pointer event answers with the cursor, a widget-bounds
 /// event answers with the widget — and an event carrying neither opens nothing rather than
 /// guessing a corner of the screen.

@@ -16,6 +16,10 @@ pub(super) fn label(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid
         })
 }
 
+pub(super) fn caption(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    Ok(heca_grid_ui::WidgetModel::new(with_props(heca_grid_ui::Caption::new(text_of(node)), node, cx.theme())))
+}
+
 pub(super) fn badge(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
     Ok(heca_grid_ui::WidgetModel::new(with_props(Badge::new(text_of(node)), node, cx.theme())))
 }

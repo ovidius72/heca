@@ -490,7 +490,7 @@ impl Layout {
         // by templating the rows. The implicit track takes the room instead, on whichever axis was
         // left unsaid.
         use taffy::style_helpers::{fr, length, minmax};
-        let fill = minmax(length(0.0), fr(1.0));
+        let fill = minmax(length(0.0_f32), fr(1.0_f32));
         if columns.is_empty() {
             s.grid_auto_columns = vec![fill];
         }

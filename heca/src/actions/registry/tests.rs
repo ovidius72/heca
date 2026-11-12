@@ -198,3 +198,22 @@ fn headless_session_confirmations_fail_closed_and_have_independent_overrides() {
         }
     }
 }
+
+#[test]
+fn headless_action_refusals_are_errors_not_successful_rpc_answers() {
+    use crate::server::{Change, Refusal};
+    let catalog = ActionCatalog::with_builtins();
+    let registry = ActionRegistry::new();
+    let store = crate::chrome::SharedChromeState::new(0.0, 0.0);
+    let intent = crate::chrome::Intent::new("terminal_rename_to")
+        .arg("terminal", crate::chrome::PropValue::Text("demo.shell".into()))
+        .arg("name", crate::chrome::PropValue::Text("Build".into()));
+    for reason in [Refusal::TerminalUnavailable, Refusal::OnlyPaneInColumn] {
+        let result = registry.execute_server_with(&catalog, &Default::default(), store.clone(), &intent,
+            &mut |_| Ok(vec![Change::Refused(reason)]));
+        assert!(matches!(result, Err(crate::rpc::RpcError::Failed(_))));
+    }
+    let result = registry.execute_server_with(&catalog, &Default::default(), store, &intent,
+        &mut |_| Ok(vec![Change::NamesChanged]));
+    assert_eq!(result.unwrap(), vec![Change::NamesChanged]);
+}

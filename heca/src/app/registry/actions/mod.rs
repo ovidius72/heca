@@ -68,6 +68,7 @@ pub fn build_registry() -> ActionRegistry {
     );
     registry.register(WmActionKind::SetRegionVisible, handle_set_region_visible);
     registry.register(WmActionKind::RenamePane, handle_rename_pane);
+    registry.register(WmActionKind::TerminalRename, handle_terminal_rename);
     registry.register(WmActionKind::RenameColumn, handle_rename_column);
     registry.register(WmActionKind::RenameColumnByIdx, handle_rename_column_by_idx);
     registry.register(WmActionKind::RenamePaneById, handle_rename_pane_by_id);

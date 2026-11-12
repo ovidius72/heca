@@ -20,7 +20,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[what every widget gets](#what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Animations](#animations--how-a-surface-arrives-and-leaves)**, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`TreeLayout`](#treelayout), [`MessageList`](#messagelist), [`Resizable`](#resizable), [`Line`](#line), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
-  - Text: [`Label`](#label)
+  - Text: [`Label`](#label), [`Caption`](#caption)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Image` / `Svg`](#image), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there), [Cursor](#cursor--what-the-pointer-looks-like-over-a-widget)
@@ -889,7 +889,7 @@ takes no argument and there is no event to carry.
 
 | Method | Effect |
 |--------|--------|
-| `.child(impl IntoChildren)` | Append a widget, an opaque subtree, or an array/`Vec` of either. Chain calls for different types. |
+| `.child(impl IntoChildren)` | Append a widget, an optional widget, an opaque subtree, or an array/`Vec` of either. `None` adds no placeholder. Chain calls for different types. |
 
 > **One builder per slot.** Native components and opaque `WidgetModel` trees use the same
 > child builder. Conversion happens inside `IntoComponent` / `IntoChildren`; callers do not
@@ -2225,7 +2225,9 @@ demo.terminal("logs").command("tail -f app.log").cwd(dir)
 | `extension.terminal("short")` | the terminal `<extension>.<short>`. **The name is the identity and never changes.** Every call with the same name is the same terminal, so building the dock again or opening the overlay again shows the process that was already running |
 | `.command("…")` | run this under the user's shell instead of the shell itself. Fixed when it starts |
 | `.cwd(path)` | start in this folder. Fixed when it starts |
-| `.title("…")` | what the user reads; defaults to the name. ⚠️ Nothing shows it yet and the user cannot rename it: both wait for the terminal's own header (P094(F011)/T450) |
+| `.title("…")` | default display title; defaults to the declared name. An explicit user rename wins over this declaration |
+| `.header(true)` / `.header(false)` | compose the terminal-owned title bar above its surface, or omit it without reserving space. Returns an ordinary `Grid`; configure the terminal before this call and use the returned layout builders afterwards |
+| `.rename()` | open the existing rename dialog for this terminal; no new shortcut. A pane-owned terminal uses the pane's existing name |
 | `.run("ls")` | type a line into it and press Enter. Does nothing until it has started |
 | `.kill()` | end it — the one thing that does |
 | `.find()` / `.find_next()` / `.find_previous()` | open its search bar with the keyboard in the field / step to the next / previous match. Works wherever it is placed |
@@ -2236,6 +2238,52 @@ detaching: reopening shows the same terminal. Only an explicit kill (`.kill()`, 
 heca exiting, ends it; a killed one stays ended — its dock keeps showing the ended terminal, and the
 declared table keeps its entry, so asking for the same name again does not start another. A terminal
 in a pane is the pane's, and closing the pane ends it.
+
+**The title belongs to the terminal content, not its frame.** For a docked or otherwise named
+terminal, use `Terminal::new("logs").title("Logs").header(true)`. The same native composition is
+available through `extension.terminal("logs")`; the typed description is
+`heca_view::build::Terminal::new("logs").title("Logs").header(true)` and uses the same host factory.
+The name uses the reusable [`Caption`](#caption) widget: small, muted text aligned with a quiet
+upper-edge line, not a bordered field or chip. The same library widget is available to any other
+component; the terminal does not contain a private copy of its styling or empty-text handling. It does not own
+another scroll region or change the terminal process. A headerless terminal remains valid everywhere.
+An empty or whitespace-only title hides the label and reserves no header space. Updating a retained
+terminal handle with `terminal.clone().title("Build")` changes the mounted label; setting it to `""`
+hides it, and setting a nonempty title shows it again without rebuilding the terminal. The explicit
+`.header(bool)` option chooses whether this composition has a title at all; it is a construction
+option, not a separate runtime visibility command. An explicit user rename still has precedence.
+
+The terminal is reachable through the universal KeyHint picker (`prefix+/`) wherever it is placed,
+with no hint declaration at the call site. A pane's letter already reaches its terminal, so that
+pair keeps one letter; a layout with no letter of its own never removes its content's letter.
+
+A named terminal's context menu offers the catalogued **Rename Terminal** action. It opens the
+existing rename dialog with the current custom label, and Cancel or Escape changes nothing.
+The server owns that custom label and shares it with attached windows and later attachments.
+The precedence is user rename, then the author's `.title(...)`, then the declared identity.
+The `terminal_rename_to` action also accepts an empty name to clear the custom label. Neither
+renaming nor rebuilding changes the executable, terminal identity or running process. Durable
+cross-server-restart saving remains P105/T527; a live-server title is not disk persistence.
+
+Both rename actions accept the exact qualified resource name or its numeric runtime ID in the
+existing `terminal` argument. The name is not the mutable display title and does not fall back to
+the focused terminal when it cannot be found. For example:
+
+```sh
+heca rpc 'terminal_rename terminal=demo.shell'
+heca rpc 'terminal_rename_to terminal=demo.shell name=Build'
+heca rpc 'terminal_rename_to terminal=demo.shell name='
+```
+
+`terminal_rename` opens the dialog in an attached window. `terminal_rename_to` changes server-owned
+metadata and also works without an attached window. Numeric runtime IDs are session-local; a
+qualified name continues to address the resource after its display label changes. Generic resource
+discovery and the read-only GUI Inspector are planned separately in P107/T552, not delivered here.
+
+A pane-owned terminal reuses the pane's existing rename and menu, including `prefix+>`; it does
+not gain a competing second name. The configured pane info bar is now part of terminal content.
+The generic pane and column do not reserve header space or infer roles from child count: ordinary
+one-or-many children and nested `Grid`/`Flex` compositions use the same frame.
 
 **Wherever it is placed it is a terminal**: the wheel and the scrollbar work, and **a click gives it
 the keyboard**, like any focusable. Then it hears the pointer's moves (a program that tracks the
@@ -2816,6 +2864,48 @@ region and mounts a realized subtree inside it.
 > [`heca-renderer/examples/showcase/main.rs`](../heca-renderer/examples/showcase/main.rs) for
 > the wheel / thumb / click-track / two-axis demo.
 
+### Caption
+
+A small, left-aligned label with a quiet horizontal rule. It is composed from `Label`, `Flex`
+and `Separator`; it does not add a surrounding frame or a body, and knows nothing about terminals.
+Place it before any content using ordinary composition.
+
+- **Construct**: `Caption::new(text)`.
+- **Text builder**: `.text(text)` changes the same label; it does not rebuild the row.
+- **Common properties**: `.size(WidgetSize)`, `.content_tone(Tone)`, `.width(...)`, `.gap(...)`,
+  `.padding(...)` and the other normal layout builders. Defaults are `Small`, muted text, the theme's
+  border colour for the rule, `Xs` gap/horizontal padding and full available width. No pixel sizing
+  or caller-computed text width is required. Text truncates at the end when space is tight.
+- **Live text**: `.text_signal() -> Signal<String>` updates a mounted caption;
+  `.with_text_signal(signal)` binds an existing signal. Blank or whitespace-only text removes the
+  entire caption from layout, including its padding, rule and any parent gap. No caller-written
+  `Visibility` is needed. An explicit `.hidden(true)` remains respected when text changes.
+- **Theme changes**: size/spacing follow the inherited font; text/rule colours read the current theme.
+- **Children/events**: no body slot or caption-specific event. Normal tooltips, hints and event
+  declarations remain available like on other widgets.
+
+```rust
+use heca_grid_ui::{Caption, LayoutExt, Tone, ToneExt, WidgetSize};
+
+let caption = Caption::new("Logs")
+    .text("Build output")
+    .size(WidgetSize::Normal)
+    .content_tone(Tone::Accent)
+    .gap("sm")
+    .padding_x("sm");
+```
+
+The typed description uses the same constructor/property style and the same registered native widget:
+
+```rust
+use heca_view::build::{Caption, Style};
+let caption = Caption::new("Logs").text("Build output").gap("sm").padding_x("sm");
+```
+
+Its open registry id is `"caption"`; serialized trees carry the text in the `text` property. Live
+native signals stay inside the host and are not serialized. The showcase's Caption example binds
+an input to the caption, including the empty-text case.
+
 ### Label
 
 A single text run bound to a `Signal<String>`.
@@ -3124,6 +3214,8 @@ As the space narrows it gives things up in the order that costs least:
 | 2 | the **buttons that no longer fit** | a single trailing `⋮`, whose menu reads their words again |
 
 Nothing is ever squashed, and nothing is ever silently unreachable.
+The collapsed group reserves its overflow button's actual width, so the button cannot
+spill into a neighbouring title or consume the parent row's gap. This minimum follows font changes.
 
 ```rust
 ButtonGroup::new()
@@ -4815,6 +4907,8 @@ label; `.segment_label(label)` adds another; `.segment_label_with(label, leading
 accept `.content_tone(Tone)` to follow the current theme.
 `.segment_shrink(false)` keeps the most recently added segment at its natural
 width while neighbouring paths or descriptions shorten.
+Text reduced to zero width draws nothing. Segment content and dividers stay inside
+the chip even when fixed content cannot fit; full-value tooltips remain available.
 
 A bordered metadata chip — git branch / path / filter, hue-configurable and domain-neutral.
 **Multi-segment**: chain `.segment_*` to render thin-divided sections (e.g. `path │ ⎇ main │ 5
@@ -4841,6 +4935,7 @@ cleanly when absent.
 
 - **Construct**: `Visibility::new(child, visible)`.
 - **Live update**: `.visible_signal() -> Signal<bool>`.
+- **Existing signal**: `.with_visible_signal(signal)` binds presence without an extra event handler.
 
 ```rust
 let error = Visibility::new(StatusDot::error(), false);
@@ -6645,7 +6740,7 @@ implemented in terms of `ContextMenu::show`.
 | Trigger | Target | Anchor |
 |---|---|---|
 | `Event::RightClick` | the widget under the pointer | the pointer |
-| the host's `open_context_menu` action (`prefix+>`) | the focused widget | under the widget |
+| the host's `open_context_menu` action (`prefix+>`) | the focused widget | centre of the component declaring the menu, clamped to the viewport |
 
 **The anchor is read out of the event**, never chosen by an author: `Event::position()` gives the
 cursor, `Event::target_bounds()` gives the widget the event was delivered to (the router stamps it
@@ -7122,6 +7217,7 @@ and a bad value costs only itself: the good props on the same node still apply.
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
 | **`Overlay`** | `blocking` (Bool, default `true`), `frosted` (Bool, default `false` — blur what is behind it, at the theme's radius), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
+| `Caption` | `text` (blank collapses the whole caption); common size/tone/layout properties | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
 | `BadgeButton` | `text`, `variant`, `size` | `press` |

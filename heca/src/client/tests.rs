@@ -31,6 +31,60 @@ fn info(id: u64, name: &str) -> SessionInfo {
     }
 }
 
+#[test]
+fn terminal_title_snapshots_peer_changes_and_own_replies_use_owner_identity() {
+    use heca_core::backend::PaneBackend;
+    use crate::app::backend_store::Program;
+    use crate::server::wire::terminal::TerminalFrame;
+    let incoming = Arc::new(Mutex::new(VecDeque::new()));
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let mut client = client(RecordingLink { incoming: incoming.clone(), sent: sent.clone() });
+    client.backends.id_for(TerminalOwner::Named("unrelated".into()));
+    let owner = TerminalOwner::Named("demo.logs".into());
+    let backend = heca_core::backend::FakeBackend::new(20, 6);
+    incoming.lock().unwrap().push_back(ServerMsg::Terminal(Box::new(TerminalFrame {
+        id: 90, owner: owner.clone(), title: "program title".into(), display_title: Some("Logs".into()),
+        spec: TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 6) },
+        screen: backend.terminal_snapshot().unwrap().to_wire(), damage: TerminalDamage::Full,
+        runtime: Default::default(), mouse_grabbed: false,
+    })));
+    client.poll().unwrap();
+    let local = client.backends.find_owner(&owner).unwrap();
+    assert_ne!(local.0, 90);
+    assert_eq!(client.backends.custom_title(local), Some("Logs"));
+    for action in ["terminal_rename", "terminal_rename_to"] {
+        for reference in ["90", "demo.logs"] {
+            let mut intent = crate::chrome::Intent::new(action)
+                .arg("terminal", crate::chrome::PropValue::Text(reference.into()));
+            if action == "terminal_rename_to" {
+                intent = intent.arg("name", crate::chrome::PropValue::Text("Updated".into()));
+            }
+            client.normalize_server_intent(&mut intent).unwrap();
+            assert_eq!(intent.args.get("terminal"), Some(&crate::chrome::PropValue::Int(local.0 as i64)));
+        }
+        for missing in ["demo.missing", "Logs", "9999"] {
+            let mut intent = crate::chrome::Intent::new(action)
+                .arg("terminal", crate::chrome::PropValue::Text(missing.into()));
+            if action == "terminal_rename_to" {
+                intent = intent.arg("name", crate::chrome::PropValue::Text("Updated".into()));
+            }
+            assert!(client.normalize_server_intent(&mut intent).is_err(), "{missing}");
+        }
+    }
+    incoming.lock().unwrap().push_back(ServerMsg::Changed(Change::TerminalTitleChanged { owner: owner.clone(), title: Some("Peer label".into()) }));
+    client.poll().unwrap();
+    assert_eq!(client.backends.custom_title(local), Some("Peer label"));
+    let window = heca_core::layout::testing::Windowed::with_shape(&[&[&[1]]]);
+    let asker = Asker::seen_through(window.l(), None, (10.0, 20.0));
+    client.act(WmAction::TerminalRenameTo { terminal: "demo.logs".into(), name: "Mine".into() }, asker, "terminal_rename_to".into(), window.l().before());
+    incoming.lock().unwrap().push_back(ServerMsg::Reply { request_id: 1,
+        changes: vec![Change::TerminalTitleChanged { owner: owner.clone(), title: Some("Mine".into()) }] });
+    client.poll().unwrap();
+    assert_eq!(client.backends.custom_title(local), Some("Mine"));
+    assert!(sent.lock().unwrap().iter().any(|message| matches!(message,
+        ClientMsg::Act { terminal_owner: Some(found), .. } if found == &owner)));
+}
+
 pub(super) fn client(link: impl ClientLink + 'static) -> ClientState {
     let connection = heca_config::settings::ConnectionConfig::default();
     let wake = ServerWaker::new(|| {});
@@ -200,7 +254,7 @@ fn session_projection_is_not_presented_between_attach_and_the_last_snapshot() {
     let owner = TerminalOwner::Pane(heca_core::layout::PaneId(7));
     let backend = heca_core::backend::FakeBackend::new(20, 6);
     let frame = crate::server::wire::terminal::TerminalFrame {
-        id: 1, owner: owner.clone(), title: "shell".into(),
+        id: 1, owner: owner.clone(), title: "shell".into(), display_title: None,
         spec: TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (20, 6) },
         screen: backend.terminal_snapshot().unwrap().to_wire(),
         damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
@@ -261,7 +315,7 @@ fn recreating_a_terminal_view_never_restores_its_original_launch_grid() {
         let backend = heca_core::backend::FakeBackend::new(grid.0, grid.1);
         let incoming = Arc::new(Mutex::new(VecDeque::from([
             ServerMsg::Terminal(Box::new(TerminalFrame {
-                id: 1, owner: owner.clone(), title: "shell".into(),
+                id: 1, owner: owner.clone(), title: "shell".into(), display_title: None,
                 spec: TerminalSpec { program: crate::app::backend_store::Program::Shell,
                     cwd: None, grid: (80, 24) },
                 screen: backend.terminal_snapshot().unwrap().to_wire(),

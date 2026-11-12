@@ -236,7 +236,7 @@ impl Track {
             // something tall grows past its share and pushes its neighbours out of the box — two
             // docks in one sidebar, and the second one off the bottom. The floor has to go for the
             // fraction to be a fraction, and it goes here so no grid, and no caller, meets it.
-            Track::Fr(v) => minmax(length(0.0), fr(v)),
+            Track::Fr(v) => minmax(length(0.0_f32), fr(v)),
             Track::Auto => auto(),
             Track::MinContent => min_content(),
             Track::MaxContent => max_content(),

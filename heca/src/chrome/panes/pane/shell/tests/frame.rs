@@ -1,6 +1,21 @@
 //! What the frame shows: its header, colour, size and identity.
 
 use super::*;
+use crate::chrome::panes::terminal::content::{compose, give_facts, HEADER_AREA};
+
+#[test]
+fn the_frame_accepts_ordinary_multiple_children_without_header_roles() {
+    use heca_grid_ui::Label;
+    let (cb, _) = recording_callbacks();
+    let model = model(9);
+    let mut pane = PaneShell { model: &model, cb: &cb,
+        content: [Label::new("First"), Label::new("Second")] }.build();
+    size_to(&mut pane, 200.0, 200.0);
+    LayoutEngine::new().compute(&mut pane, Size::new(200.0, 200.0));
+    let content = heca_grid_ui::area(&pane, PANE_CONTENT_AREA).unwrap();
+    assert_eq!(content.base().children.len(), 2);
+    assert!(heca_grid_ui::area(&pane, HEADER_AREA).is_none());
+}
 
 /// **A second thing in the body is not mistaken for a header.**
 ///
@@ -29,7 +44,6 @@ fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
     let mut tree = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
         content: Some(heca_grid_ui::WidgetModel::new(
             Flex::column().child([Flex::column().height(20.0), Flex::column().height(20.0)]),
         )),
@@ -38,7 +52,7 @@ fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
     LayoutEngine::new().compute(&mut tree, Size::new(200.0, 200.0));
 
     assert!(
-        !named(&tree, PANE_HEADER_AREA),
+        !named(&tree, HEADER_AREA),
         "no part claims the header row, however many things the body holds",
     );
     assert!(
@@ -50,19 +64,20 @@ fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
     let mut with_header = PaneShell {
         model: &m,
         cb: &cb,
-        header: Some(crate::chrome::PaneHeader::showing(|_, _| {})),
-        content: Some(heca_grid_ui::WidgetModel::new(Flex::column())),
+        content: Some(heca_grid_ui::WidgetModel::new(compose(
+            Some(crate::chrome::PaneHeader::showing(|_, _| {})), Flex::column(),
+        ))),
     }
     .build();
     LayoutEngine::new().compute(&mut with_header, Size::new(200.0, 200.0));
-    assert!(named(&with_header, PANE_HEADER_AREA));
+    assert!(named(&with_header, HEADER_AREA));
 }
 
 /// **A pane shows the facts it is handed in the header it holds** — the header is the pane's
 /// own, so whoever owns the pane never reaches it. A pane with no header takes none, and a value
 /// of any other type is refused.
 #[test]
-fn a_pane_shows_the_facts_it_is_handed_in_its_own_header() {
+fn terminal_content_takes_its_facts_but_its_frame_does_not() {
     use crate::chrome::PaneHeader;
     use crate::chrome::panes::pane_header::PaneHeaderInput;
     use heca_grid_ui::Component;
@@ -72,22 +87,21 @@ fn a_pane_shows_the_facts_it_is_handed_in_its_own_header() {
     let mut with = PaneShell {
         model: &m,
         cb: &cb,
-        header: Some(PaneHeader::showing({
+        content: Some(heca_grid_ui::WidgetModel::new(compose(Some(PaneHeader::showing({
             let seen = seen.clone();
             move |input, _| seen.borrow_mut().push(input.pane())
-        })),
-        content: None,
+        })), heca_grid_ui::widgets::Flex::column()))),
     }
     .build();
-    assert!(with.set_props(&PaneHeaderInput::for_test(PaneId(4))));
+    assert!(!with.set_props(&PaneHeaderInput::for_test(PaneId(4))));
+    give_facts(&mut with, &PaneHeaderInput::for_test(PaneId(4)));
     assert_eq!(*seen.borrow(), vec![PaneId(4)]);
     assert!(!with.set_props(&"not facts"), "another type is refused");
 
     let mut without = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
     assert!(
@@ -104,8 +118,7 @@ fn the_pane_declares_its_own_identity() {
     let tree = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
     // **The identity is on the outermost node**, because the pane IS the outermost node.
@@ -131,8 +144,7 @@ fn a_pane_publishes_its_frame_colour_to_everything_it_holds() {
     let mut tree = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
 
@@ -166,8 +178,7 @@ fn resizing_an_already_built_shell_moves_the_frame() {
     let mut tree = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
 
@@ -197,8 +208,7 @@ fn the_shell_never_exceeds_the_box_it_is_given() {
         let mut tree = PaneShell {
             model: &m,
             cb: &cb,
-            header: None,
-            content: None,
+            content: None::<heca_grid_ui::WidgetModel>,
         }
         .build();
         size_to(&mut tree, w, h);
@@ -226,8 +236,7 @@ fn a_focused_pane_still_glows() {
     let mut pane = PaneShell {
         model: &model(3),
         cb: &cb,
-        header: None,
-        content: None,
+        content: None::<heca_grid_ui::WidgetModel>,
     }
     .build();
 
@@ -294,22 +303,21 @@ fn a_header_that_changes_shape_leaves_what_the_pane_holds_alone() {
     let mut pane = PaneShell {
         model: &m,
         cb: &cb,
-        header: Some(PaneHeader::showing(|input, node| {
+        content: Some(heca_grid_ui::WidgetModel::new(compose(Some(PaneHeader::showing(|input, node| {
             let shape = format!("chips of {}", input.pane().0);
             node.show(shape.clone(), move || {
                 Some(heca_grid_ui::WidgetModel::new(Label::new(shape)))
             });
-        })),
-        content: Some(heca_grid_ui::WidgetModel::new(crate::chrome::panes::terminal::Terminal::unbound())),
+        })), crate::chrome::panes::terminal::Terminal::unbound()))),
     }
     .build();
-    assert!(pane.set_props(&PaneHeaderInput::for_test(PaneId(1))));
+    give_facts(&mut pane, &PaneHeaderInput::for_test(PaneId(1)));
     lay_out(&mut pane);
     assert!(header_says(&pane, "chips of 1"));
     // A mark only this node of the content carries.
     content(&mut pane).expect("a body").base_mut().key = Some("placed once".into());
 
-    assert!(pane.set_props(&PaneHeaderInput::for_test(PaneId(2))));
+    give_facts(&mut pane, &PaneHeaderInput::for_test(PaneId(2)));
     lay_out(&mut pane);
 
     assert!(
@@ -354,7 +362,6 @@ fn what_a_pane_holds_is_drawn_under_the_panes_round_corners() {
     let mut pane = PaneShell {
         model: &m,
         cb: &cb,
-        header: None,
         content: Some(heca_grid_ui::WidgetModel::new(Screen { base })),
     }
     .build();

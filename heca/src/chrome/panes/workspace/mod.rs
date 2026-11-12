@@ -291,19 +291,13 @@ fn build_column(
     let contents = column
         .panes
         .iter()
-        .filter_map(|p| {
-            model
-                .panes
-                .get(&p.pane_id)
-                .map(|e| (p.pane_id, heca_grid_ui::WidgetModel::new(e.content.clone())))
-        })
+        .filter_map(|p| content_of(seams, model, p.pane_id).map(|content| (p.pane_id, content)))
         .collect();
     heca_grid_ui::WidgetModel::new(
         ColumnShell {
             model: column,
             cb: &seams.column,
             pane_cb: &seams.pane,
-            header_env: seams.header_env.clone(),
             contents,
         }
         .build(),
@@ -320,18 +314,19 @@ fn build_float(
         PaneShell {
             model: pane,
             cb: &seams.pane,
-            header: seams.header_env.clone().map(PaneHeader::new),
-            content: content_of(model, pane.pane_id),
+            content: content_of(seams, model, pane.pane_id),
         }
         .build(),
     )
 }
 
-fn content_of(model: &WorkspaceModel, pane: PaneId) -> Option<heca_grid_ui::WidgetModel> {
+fn content_of(seams: &WorkspaceSeams, model: &WorkspaceModel, pane: PaneId) -> Option<heca_grid_ui::WidgetModel> {
     model
         .panes
         .get(&pane)
-        .map(|e| heca_grid_ui::WidgetModel::new(e.content.clone()))
+        .map(|e| heca_grid_ui::WidgetModel::new(crate::chrome::panes::terminal::content::compose(
+            seams.header_env.clone().map(PaneHeader::new), e.content.clone(),
+        )))
 }
 
 /// A column that is still here: reconcile its panes, then place it and them.
@@ -356,8 +351,7 @@ fn place_column(
             pane,
             column,
             &seams.pane,
-            seams.header_env.clone().map(PaneHeader::new),
-            content_of(model, pane.pane_id),
+            content_of(seams, model, pane.pane_id),
         )
     });
     for pane_child in child.base_mut().children.iter_mut() {
@@ -391,7 +385,7 @@ fn give_pane(model: &WorkspaceModel, pane: &PaneShellModel, child: &mut dyn Comp
         .get(&pane.pane_id)
         .and_then(|e| e.header.as_ref())
     {
-        crate::chrome::give_header_facts(child, input);
+        crate::chrome::panes::terminal::content::give_facts(child, input);
     }
 }
 

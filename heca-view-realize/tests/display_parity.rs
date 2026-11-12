@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use heca_grid_ui::{*, builders::Parent};
-use heca_view::{build::{self as view, Parent as _}, ViewBadgeVariant, ViewDotStatus, ViewGlyph, ViewSeverity};
+use heca_view::{build::{self as view, Parent as _, Style as _}, ViewBadgeVariant, ViewDotStatus, ViewGlyph, ViewSeverity};
 use heca_view_realize::{realize, FormBindings, IntentEmitter};
 
 fn same_scene(mut native: impl Component, node: &impl AsRef<heca_view::ViewNode>) {
@@ -9,10 +9,22 @@ fn same_scene(mut native: impl Component, node: &impl AsRef<heca_view::ViewNode>
     let mut described = realize(node, &theme, &emit, &mut FormBindings::default()).unwrap();
     fn scene(widget: &mut dyn Component, theme: &Theme) -> Vec<DrawCommand> {
         LayoutEngine::new().compute(widget, Size::new(400.0, 180.0));
-        let mut scene = Scene::new(); widget.paint(&mut PaintCx::new(&mut scene, theme));
+        let mut scene = Scene::new(); paint_child(widget, &mut PaintCx::new(&mut scene, theme));
         scene.iter().cloned().collect()
     }
     assert_eq!(scene(&mut native, &theme), scene(described.as_mut(), &theme));
+}
+
+#[test]
+fn caption_constructors_and_properties_use_the_same_composed_widget() {
+    for text in ["Build", "", "   ", "A long deployment caption that must fit"] {
+        same_scene(Caption::new("Initial").text(text).gap("sm").padding_x("md"),
+            &view::Caption::new("Initial").text(text).gap("sm").padding_x("md"));
+    }
+    let registry = heca_view_realize::WidgetRegistry::builtins().unwrap();
+    let definition = registry.get(&heca_view::WidgetId::new("caption")).unwrap();
+    assert!(definition.metadata().properties.iter().any(|property| property == "text"));
+    assert_eq!(definition.metadata().native_name, "Caption");
 }
 
 #[test]

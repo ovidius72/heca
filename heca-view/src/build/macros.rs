@@ -71,6 +71,12 @@ macro_rules! builder {
 /// constructor, because a `Label` with no text is not a thing anyone means to write.
 macro_rules! builder_text {
     ($(#[$m:meta])* $name:ident => $kind:ident) => {
+        builder_text!(@id $(#[$m])* $name => WidgetId::$kind);
+    };
+    ($(#[$m:meta])* $name:ident => $id:literal) => {
+        builder_text!(@id $(#[$m])* $name => $id);
+    };
+    (@id $(#[$m:meta])* $name:ident => $id:expr) => {
         $(#[$m])*
         #[derive(Debug, Clone, PartialEq)]
         pub struct $name(pub(super) ViewNode);
@@ -78,7 +84,7 @@ macro_rules! builder_text {
         impl $name {
             /// A new node of this kind, showing `text`.
             pub fn new(text: impl Into<String>) -> Self {
-                Self(ViewNode::new(WidgetId::$kind).text(text))
+                Self(ViewNode::new($id).text(text))
             }
         }
 

@@ -28,17 +28,19 @@ pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
     if crate::chrome::open_declared_menu_for_focus(state) {
         return;
     }
-    // Nothing declared one: the content pane is the app's own domain and still resolves the old
-    // way, since a terminal surface is not a widget that can carry a declaration.
+    // No mounted widget declared one: retain the registered active-pane context lookup.
+    // Both routes use the library's keyboard anchor, never host-computed coordinates.
     let Some((path, target)) = crate::chrome::resolve_active_context(state) else {
         return;
     };
-    let (cx, cy) = crate::mouse::window_center_logical(state);
+    let Some(anchor) = heca_grid_ui::menu::keyboard_anchor(&state.window_root, None) else {
+        return;
+    };
     crate::chrome::open_context_menu_for(
         state,
         &path.0,
         target,
-        heca_core::layout::Point::new(cx as f64, cy as f64),
+        anchor,
         crate::app::interaction::InteractionSource::Keyboard,
     );
 }

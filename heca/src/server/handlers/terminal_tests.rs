@@ -18,6 +18,36 @@ fn columns(w: &Windowed, ws: usize) -> Vec<Vec<u64>> {
         .collect()
 }
 
+#[test]
+fn renaming_a_named_terminal_changes_only_metadata_and_clear_restores_its_default() {
+    use crate::app::backend_store::{Program, TerminalOwner, TerminalSpec};
+    let (mut state, mut window) = (server(), two_workspaces_of_two_columns());
+    let owner = TerminalOwner::Named("demo.logs".into());
+    let spec = TerminalSpec { program: Program::Shell, cwd: None, grid: (80, 24) };
+    let id = state.backends.ensure(owner.clone(), spec.clone(), |_| Ok(Box::new(heca_core::backend::FakeBackend::new(80, 24)))).unwrap().id();
+    let rename = |name: &str| WmAction::TerminalRenameTo { terminal: "demo.logs".into(), name: name.into() };
+    assert_eq!(run_on(&mut state, &mut window, None, rename("Logs")),
+        vec![Change::TerminalTitleChanged { owner: owner.clone(), title: Some("Logs".into()) }]);
+    assert_eq!(state.backends.find_owner(&owner), Some(id));
+    assert_eq!(state.backends.spec_of(id), Some(&spec));
+    assert_eq!(state.backends.custom_title(id), Some("Logs"));
+    assert!(run_on(&mut state, &mut window, None, rename("Logs")).is_empty());
+    assert_eq!(run_on(&mut state, &mut window, None, rename("")),
+        vec![Change::TerminalTitleChanged { owner, title: None }]);
+    assert_eq!(state.backends.custom_title(id), None);
+}
+
+#[test]
+fn renaming_a_panes_terminal_reuses_its_existing_pane_name() {
+    let (mut state, mut window) = (server(), two_workspaces_of_two_columns());
+    let pane = PaneId(1);
+    state.terminals().start_shell(pane, (80, 24), (10.0, 20.0));
+    let id = state.backends.identity_of(pane).unwrap();
+    assert_eq!(run_on(&mut state, &mut window, Some(pane), WmAction::TerminalRenameTo { terminal: id.0.to_string(), name: "Build".into() }), vec![Change::NamesChanged]);
+    assert_eq!(window.session.workspaces[0].find_pane(pane).unwrap().custom_name.as_deref(), Some("Build"));
+    assert_eq!(state.backends.custom_title(id), None, "there is no second competing terminal label");
+}
+
 /// The pane a change says was made — tiled ([`Change::PaneAdded`]) or floating
 /// ([`Change::Floated`]).
 fn made(changes: &[Change]) -> Option<PaneId> {

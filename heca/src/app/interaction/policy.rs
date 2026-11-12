@@ -142,7 +142,9 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::RenameTarget { .. }
         // Typing into a terminal, or ending it, acts on one pane and moves nothing else.
         | WmAction::TerminalRun { .. }
-        | WmAction::TerminalKill { .. } => ActionPolicy::FocusedPaneLocal,
+        | WmAction::TerminalKill { .. }
+        | WmAction::TerminalRename { .. }
+        | WmAction::TerminalRenameTo { .. } => ActionPolicy::FocusedPaneLocal,
 
         // ── The terminal the keyboard is on ──
         WmAction::ScrollbackPageUp

@@ -1,4 +1,4 @@
-//! Fan server-side events — the same [`Change`](super::Change)s a window reacts to — out to
+//! Fan server-side events — the same [`Change`]s a window reacts to — out to
 //! `heca rpc --events` subscribers (T546).
 //!
 //! A subscriber is a script connected over the control socket. The server holds the sending end of

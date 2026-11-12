@@ -1,5 +1,40 @@
 use super::*;
 
+#[test]
+fn a_collapsed_group_keeps_the_parent_gap_clear_beside_a_segmented_title() {
+    use heca_grid_ui::{Spacing, Tag};
+    let group = ButtonGroup::new()
+        .size(WidgetSize::Header)
+        .display(Display::IconOnly)
+        .child(Button::new("Split").icon(Glyph::Plus))
+        .child(Button::new("Zoom").icon(Glyph::FrameCorners))
+        .child(Button::new("Close").icon(Glyph::Minus));
+    let mut parent = Flex::row()
+        .width("100%")
+        .gap(Spacing::Sm)
+        .align("center")
+        .child(
+            Tag::new("/a/very/long/path")
+                .segment_text("zsh").segment_shrink(false)
+                .segment_text("feature/a-long-branch")
+                .segment_text("+8 ~87").segment_shrink(false),
+        )
+        .child(group);
+    for font in [15.0, 24.0, 12.0] {
+        let mut layout = LayoutEngine::new().base_font(font);
+        for width in (100..=600).rev().chain(100..=600) {
+            layout.compute(&mut parent, Size::new(f64::from(width), 60.0));
+            let tag = parent.base().children[0].base().bounds;
+            let actions = parent.base().children[1].as_ref();
+            let gap = parent.base().style.layout.gap.resolve(parent.base().font);
+            for action in actions.base().children.iter().filter(|c| !c.base().style.layout.hidden) {
+                assert!(action.base().bounds.loc.x - (tag.loc.x + tag.size.w) >= f64::from(gap) - 1.0,
+                    "at {width}px the action {:?} consumes the gap after {:?}", action.base().bounds, tag);
+            }
+        }
+    }
+}
+
 /// **Too narrow, and what does not fit leaves the row** — rather than every button being squashed,
 /// which is what a plain row does and what this widget exists to replace.
 #[test]

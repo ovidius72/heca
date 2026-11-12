@@ -9,6 +9,7 @@ mod choices;
 mod toggle;
 mod checkbox;
 mod label;
+mod caption;
 mod tabs;
 mod grid;
 mod grid_areas;
@@ -420,6 +421,8 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // color. They compose freely.
         .child(caption("Label"))
         .child(label::build(&cx))
+        .child(caption("Caption"))
+        .child(caption::build(&cx))
         // Text inputs: empty-with-placeholder, pre-filled, and disabled.
         .child(caption("Input"))
         .child(

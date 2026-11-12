@@ -8,6 +8,87 @@ use heca_core::{
 };
 
 #[test]
+fn qualified_terminal_names_work_through_headless_rpc_without_changing_identity() {
+    use crate::app::backend_store::TerminalOwner;
+    let mut state = ServerState::for_tests(Default::default());
+    let owner = TerminalOwner::Named("demo.logs".into());
+    let spec = TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 6) };
+    let id = state.backends.ensure(owner.clone(), spec.clone(),
+        |_| Ok(Box::new(FakeBackend::new(20, 6)))).unwrap().id();
+    let mut runtime = SessionRuntime::new(state, Session::new(SessionId(42), Default::default()));
+    for reference in ["demo.logs", &id.0.to_string()] {
+        assert_eq!(runtime.rpc(&format!("terminal_rename_to terminal={reference} name=Release")), "ok");
+        assert_eq!(runtime.state.backends.custom_title(id), Some("Release"));
+        assert_eq!(runtime.state.backends.find_owner(&owner), Some(id));
+        assert_eq!(runtime.state.backends.spec_of(id), Some(&spec));
+    }
+    for reference in ["demo.missing", "Release", "9999"] {
+        assert!(runtime.rpc(&format!("terminal_rename_to terminal={reference} name=Wrong")).starts_with("error:"));
+        assert_eq!(runtime.state.backends.custom_title(id), Some("Release"));
+    }
+    assert_eq!(runtime.rpc("terminal_rename_to terminal=demo.logs name="), "ok");
+    assert_eq!(runtime.state.backends.custom_title(id), None);
+}
+
+#[test]
+fn terminal_title_is_shared_replayed_on_attach_and_retained_on_restart() {
+    use crate::app::backend_store::TerminalOwner;
+    use crate::input::WmAction;
+    use crate::server::wire::{ClientLink, in_process};
+    let mut state = ServerState::for_tests(Default::default());
+    state.backends.id_for(TerminalOwner::Named("unused".into()));
+    let owner = TerminalOwner::Named("demo.logs".into());
+    let id = state.backends.ensure(owner.clone(), TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 6) },
+        |_| Ok(Box::new(FakeBackend::new(20, 6)))).unwrap().id();
+    let mut runtime = SessionRuntime::new(state, Session::new(SessionId(42), Default::default()));
+    let mut clients = Vec::new();
+    let mut connections = Vec::new();
+    for client_id in [1, 2] {
+        let (client, server) = in_process();
+        let connection = Rc::new(Connection::new(client_id, Box::new(server)));
+        connection.queue(ClientMsg::Attach);
+        runtime.add_connection(connection.clone());
+        connections.push(connection);
+        clients.push(client);
+    }
+    runtime.pump(Instant::now());
+    for client in &clients { while client.poll().unwrap().is_some() {} }
+    // The sender's numeric id is not the server's id: owner normalization is authoritative.
+    connections[0].queue(ClientMsg::Act {
+        action: WmAction::TerminalRenameTo { terminal: "900".into(), name: "Build logs".into() },
+        asker: runtime.rpc_asker, request_id: None, terminal_owner: Some(owner.clone()),
+    });
+    runtime.pump(Instant::now());
+    assert_eq!(runtime.state.backends.custom_title(id), Some("Build logs"));
+    for client in &clients {
+        let mut received = false;
+        while let Some(message) = client.poll().unwrap() {
+            if matches!(message, ServerMsg::Changed(Change::TerminalTitleChanged { title: Some(ref title), .. }) if title == "Build logs") {
+                received = true;
+            }
+        }
+        assert!(received, "both windows receive the shared label");
+    }
+    let (third, server) = in_process();
+    let connection = Rc::new(Connection::new(3, Box::new(server)));
+    connection.queue(ClientMsg::Attach);
+    runtime.add_connection(connection);
+    runtime.pump(Instant::now());
+    let mut replayed = false;
+    while let Some(message) = third.poll().unwrap() {
+        if let ServerMsg::Terminal(frame) = message
+            && frame.owner == owner
+        { replayed = frame.display_title.as_deref() == Some("Build logs"); }
+    }
+    assert!(replayed, "new attachments receive the title with the terminal snapshot");
+    runtime.terminate();
+    assert_eq!(runtime.recorded_terminals()[0].display_title.as_deref(), Some("Build logs"));
+    runtime.restart().unwrap();
+    let new_id = runtime.state.backends.find_owner(&owner).unwrap();
+    assert_eq!(runtime.state.backends.custom_title(new_id), Some("Build logs"));
+}
+
+#[test]
 fn termination_retains_original_launch_and_native_harness_identity_for_persistence() {
     let folder = tempfile::tempdir().unwrap();
     let original = ProcessLaunch {

@@ -61,6 +61,8 @@ fn every_widget_property_is_reachable_from_the_sdk() {
     let registry = WidgetRegistry::builtins().expect("library definitions");
     let shared_style = sdk.split("pub trait Style: Sized {").nth(1)
         .and_then(|style| style.split("\n}\n").next()).unwrap_or("");
+    let text_setter = sdk.split("macro_rules! with_text {").nth(1)
+        .and_then(|body| body.split("\n}\n").next()).unwrap_or("");
     let mut missing = Vec::new();
     for definition in registry.definitions() {
         let metadata = definition.metadata();
@@ -73,7 +75,13 @@ fn every_widget_property_is_reachable_from_the_sdk() {
             }
             let writes_key = block.contains(&format!(".prop(\"{prop}\""))
                 || block.contains(&format!("props.insert(\"{prop}\""))
-                || shared_style.contains(&format!("fn {prop}("));
+                || shared_style.contains(&format!("fn {prop}("))
+                || (text_setter.contains(&format!("props.insert(\"{prop}\""))
+                    && sdk.split("with_text!(").skip(1).any(|call| {
+                        call.split_once(')').is_some_and(|(names, _)| {
+                            names.split(',').any(|name| name.trim() == sdk_name)
+                        })
+                    }));
             if !writes_key {
                 missing.push(format!("{}::{prop} (builder {sdk_name})", metadata.native_name));
             }

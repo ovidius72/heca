@@ -28,39 +28,17 @@ pub(crate) struct PaneCallbacks {
 
 /// The pane shell component. Properties are struct fields and the constructor is a struct literal
 /// (AGENTS.md § 0b-bis rule 2), so a call site reads without counting arguments.
-pub(crate) struct PaneShell<'a> {
+pub(crate) struct PaneShell<'a, C> {
     pub(crate) model: &'a PaneShellModel,
     pub(crate) cb: &'a PaneCallbacks,
-    /// **The header slot — whatever the thing running in this pane wants along its top.**
-    ///
-    /// The shell does not know what a terminal is, so it does not know what a title bar is either.
-    /// A terminal fills this with its info bar (a `Tag` of title segments and a row of action
-    /// `IconButton`s); an editor, a browser or a plugin's pane fills it with something else, or
-    /// with nothing. Same slot, same rules, no special case — exactly what
-    /// [`DockFrame::header`](heca_grid_ui::widgets::DockFrame::header) already does for a dock.
-    ///
-    /// It is a **child**, which is the whole point: the layout places it, it sizes itself, and one
-    /// walk delivers its input. Before this it was a second retained tree the app laid out,
-    /// positioned by hand and routed events to separately.
-    ///
-    /// The pane keeps the header it is given as its own: it seats the node as a child and answers
-    /// the facts it is handed by showing them there.
-    pub(crate) header: Option<crate::chrome::PaneHeader>,
-    /// **The content slot — what actually runs in this pane**, under the header: a terminal today.
-    ///
-    /// It takes everything the header leaves, which is what puts the header in a strip at the top
-    /// instead of in the middle of the pane. It is the header's sibling, so a header built again
-    /// for a new shape leaves it the node it was.
-    pub(crate) content: Option<heca_grid_ui::WidgetModel>,
+    /// An arbitrary component subtree. Any header belongs inside that content.
+    pub(crate) content: C,
 }
 
-/// **The pane's two rows, named.** The parts say which one they are and the host asks by name —
-/// which used to count children instead.
-pub(crate) const PANE_HEADER_AREA: &str = "header";
-/// The row that takes whatever the header does not.
+/// The frame's content, independent of the layout or component it contains.
 pub(crate) const PANE_CONTENT_AREA: &str = "content";
 
-impl PaneShell<'_> {
+impl<C: heca_grid_ui::builders::IntoChildren> PaneShell<'_, C> {
     /// Build the retained tree for one pane.
     ///
     /// Returns the `Pane` itself: it says what picking it does, where its letter goes and what
@@ -174,41 +152,12 @@ impl PaneShell<'_> {
                 )
             });
 
-        // **The pane is a FRAME; the arrangement is a template.** The header takes its own
-        // height, the content takes the rest, and each part says which row it is by name.
-        //
-        // A `header` slot would answer exactly this one shape — and then Header | Content | Footer
-        // would need a second slot, and the next part a third. A track template answers all of
-        // them in one line, and it is the same line a dock, a palette or a plugin's panel writes
-        // (docs/layout.md). It also ends the question the host used to ask: "does this pane have
-        // two children, so is the first one a header?" — put a second thing in the body and the
-        // first was mistaken for one. A part is in the area it named, and a missing part is a
-        // missing row.
-        let content: heca_grid_ui::WidgetModel = match self.content {
-            Some(content) => content,
-            None => heca_grid_ui::WidgetModel::new(heca_grid_ui::widgets::Flex::column().grow(1.0)),
-        };
-        let body = match &self.header {
-            Some(header) => heca_grid_ui::widgets::Grid::new()
-                .template_row("auto 1fr")
-                .template_area([PANE_HEADER_AREA, PANE_CONTENT_AREA])
-                .child([
-                    header.seat().area(PANE_HEADER_AREA),
-                    content.area(PANE_CONTENT_AREA),
-                ]),
-            // **A missing part is a missing row**, not a flag and not a zero-height placeholder.
-            None => heca_grid_ui::widgets::Grid::new()
-                .template_row("1fr")
-                .template_area([PANE_CONTENT_AREA])
-                .child(content.area(PANE_CONTENT_AREA)),
-        };
-        if let Some(header) = self.header {
-            pane = header.answer_props(pane);
-        }
-        pane = pane.child(
-            body.width(heca_grid_ui::Length::Percent(1.0))
-                .height(heca_grid_ui::Length::Percent(1.0)),
-        );
+        let body = heca_grid_ui::widgets::Flex::column()
+            .area(PANE_CONTENT_AREA)
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0))
+            .child(self.content);
+        pane = pane.child(body);
 
         let pick = self.cb.pick.clone();
         // **Say what the pick IS, not only what it runs**. The closure emits

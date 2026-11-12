@@ -208,7 +208,7 @@ impl Event {
     ///
     /// The other half of "an author never picks an anchor": [`position`](Self::position) is where
     /// the pointer is, this is what it is on. A menu opened from a right-click hangs off the
-    /// cursor; one opened from a widget hangs under the widget — and the handler picks neither,
+    /// cursor; one opened by keyboard is centred on its component — and the handler picks neither,
     /// it just passes the event along.
     ///
     /// `None` for events that carry no pointer, and for a synthetic event nobody routed.

@@ -19,6 +19,8 @@ pub(crate) struct TerminalFrame {
     pub(crate) owner: TerminalOwner,
     pub(crate) spec: crate::app::backend_store::TerminalSpec,
     pub(crate) title: String,
+    #[serde(default)]
+    pub(crate) display_title: Option<String>,
     pub(crate) screen: WireSnapshot,
     pub(crate) damage: TerminalDamage,
     pub(crate) runtime: PaneRuntime,

@@ -225,7 +225,7 @@ fn pane_info_view_uses_shell_fallbacks_without_git() {
 }
 
 #[test]
-fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
+fn pane_header_key_tracks_its_shape_never_its_words() {
     let programs = ProgramsConfig::default();
     let chips = super::PaneChips::default();
     let segments: Vec<&crate::chrome::panes::pane_items::PaneChipDef> = ["app_name", "git_branch"]
@@ -291,7 +291,6 @@ fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
             0,
         ),
         15.0,
-        300.0,
     );
     // Same inputs ⇒ same key (no needless rebuild).
     assert_eq!(
@@ -306,8 +305,7 @@ fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
                 &catalog,
                 0
             ),
-            15.0,
-            300.0
+            15.0
         )
     );
     // A different column ⇒ different key (re-bakes the split action's col_idx).
@@ -323,8 +321,7 @@ fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
                 &catalog,
                 1
             ),
-            15.0,
-            300.0
+            15.0
         )
     );
     // **A different branch ⇒ the SAME key**. A branch is *words*, and words are
@@ -349,8 +346,7 @@ fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
                 &catalog,
                 0
             ),
-            15.0,
-            300.0
+            15.0
         ),
         "changing a segment's words rebuilt the header instead of rewriting them",
     );
@@ -372,8 +368,7 @@ fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
                 &catalog,
                 0
             ),
-            15.0,
-            300.0
+            15.0
         ),
         "a segment disappearing must rebuild — it changes what the bar IS",
     );
@@ -395,34 +390,8 @@ fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
                 &catalog,
                 0
             ),
-            15.0,
-            300.0
+            15.0
         ),
         "a status this bar does not render must not rebuild it",
     );
-    // **A width change ⇒ the SAME key.** A pane's width is a per-frame layout input, not part of
-    // what the header is — the same rule the pane shell states for its own rect. The bar used to
-    // re-run width arithmetic of its own, so a resize had to rebuild it; `Label` truncates
-    // itself, so nothing does now. Keying on width meant every step of a drag threw the header
-    // away and built a new one: a burst of CPU and a visible flicker in the buttons. It re-lays
-    // out instead.
-    for w in [120.0, 295.0, 1600.0] {
-        assert_eq!(
-            base,
-            super::pane_header_key(
-                &content(
-                    &chips,
-                    &segments,
-                    &actions,
-                    &facts_of(&runtime),
-                    &hints,
-                    &catalog,
-                    0
-                ),
-                15.0,
-                w
-            ),
-            "a resize to {w} rebuilt the header instead of re-laying it out"
-        );
-    }
 }

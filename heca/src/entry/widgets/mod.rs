@@ -15,7 +15,7 @@ fn invalid(id: WidgetId, detail: impl Into<String>) -> RealizeError {
 }
 
 #[derive(Default, Serialize, Deserialize)]
-struct TerminalInputs { name: String, command: Option<String>, cwd: Option<String>, title: Option<String> }
+struct TerminalInputs { name: String, command: Option<String>, cwd: Option<String>, title: Option<String>, #[serde(default)] header: bool }
 
 fn terminal() -> Result<WidgetDefinition, RealizeError> {
     Ok(WidgetDefinition::new("terminal", |node, cx| {
@@ -27,7 +27,7 @@ fn terminal() -> Result<WidgetDefinition, RealizeError> {
         if let Some(command) = input.command { terminal = terminal.command(command); }
         if let Some(cwd) = input.cwd { terminal = terminal.cwd(cwd); }
         if let Some(title) = input.title { terminal = terminal.title(title); }
-        Ok(terminal)
+        Ok(terminal.header(input.header))
     }).names("Terminal", "Terminal").inputs::<TerminalInputs>()?.validate(|node, _| {
         match node.props.get("name").and_then(heca_view::PropValue::as_text) {
             Some(name) if !name.is_empty() && !name.contains('.') => Ok(()),

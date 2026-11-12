@@ -4,6 +4,7 @@
 //! for it are always the same one.
 
 use crate::component::Component;
+use crate::reactive::SignalGet;
 
 #[cfg(test)]
 mod tests;
@@ -33,8 +34,17 @@ fn part_path(node: &dyn Component, area: &str) -> Option<Vec<usize>> {
 
 /// The path to the first shown widget in `node` (itself included) that takes the keyboard.
 fn first_taker(node: &dyn Component) -> Option<Vec<usize>> {
+    if !node.is_shown() || node.base().disabled.get_untracked() { return None; }
     if node.focusable() {
         return Some(Vec::new());
+    }
+    if let Some(area) = node.base().keyboard_to.as_deref() {
+        let mut path = part_path(node, area)?;
+        if !path.is_empty() {
+            let target = first_taker(super::at(node, &path))?;
+            path.extend(target);
+            return Some(path);
+        }
     }
     node.base()
         .children

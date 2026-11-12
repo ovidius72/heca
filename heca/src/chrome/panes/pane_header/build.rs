@@ -114,7 +114,7 @@ pub(crate) fn pane_header_buttons(
 /// A content key identifying everything the header *renders* — used to decide when
 /// the retained tree must be rebuilt (vs. just re-laid-out). Cheap per-frame string
 /// build (≤20 panes); avoids deriving `Hash` on the projection enums.
-pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f32) -> String {
+pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32) -> String {
     // ⚠️ **The width is deliberately NOT part of this key.**
     //
     // A pane's width is a per-frame layout input, not part of what the header *is* — the same rule
@@ -123,8 +123,6 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
     // there is nothing left that needs re-running. Keying on it meant every step of a drag threw the
     // whole header away and built a new one — a burst of CPU and a visible flicker in the buttons
     // A resize now re-lays out the retained tree instead.
-    let _ = avail_w;
-    let w_bucket = 0;
     // Tooltip hints for the configured actions (so a rebind rebuilds the tips).
     let hints: Vec<String> = content
         .actions
@@ -156,7 +154,7 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
     .collect();
     let chip_names: Vec<&str> = content.segments.iter().map(|d| d.name.as_str()).collect();
     format!(
-        "{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
+        "{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{:?}",
         content.facts.icon,
         present,
         chip_names,
@@ -166,7 +164,6 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         content.zoomed,
         content.floating,
         font.to_bits(),
-        w_bucket,
         hints,
     )
 }

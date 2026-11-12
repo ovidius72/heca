@@ -81,6 +81,7 @@ impl ServerState {
         let screen = backend.terminal_snapshot_at(offset)?;
         let frame = TerminalFrame {
             id: id.0, owner: owner.clone(), title: backend.title().into(),
+            display_title: self.backends.custom_title(id).map(str::to_owned),
             spec: self.backends.spec_of(id)?.clone(),
             screen: screen.to_wire(), damage: TerminalDamage::Full,
             runtime: backend.runtime(), mouse_grabbed: backend.is_mouse_grabbed(),

@@ -14,6 +14,14 @@ pub(crate) enum TerminalTarget {
 }
 
 impl BackendStore {
+    /// Resolve a numeric identity or an exact qualified owner name, never a display title.
+    pub(crate) fn resolve_reference(&self, reference: &str) -> Option<TerminalId> {
+        match reference.parse::<u64>() {
+            Ok(id) => self.is_issued(TerminalId(id)).then_some(TerminalId(id)),
+            Err(_) => self.find_owner(&super::TerminalOwner::Named(reference.to_owned())),
+        }
+    }
+
     /// **Which terminal an action means.** A `terminal` id wins (it is what a script that started
     /// one holds), then an explicit `pane_id`, then the pane `focused` — the one with the keyboard.
     /// An id that names no terminal is no target, never the focused pane.
@@ -53,6 +61,21 @@ fn target(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn references_use_exact_owner_names_or_issued_ids_never_custom_titles() {
+        let mut store = BackendStore::new();
+        let first = store.id_for(super::super::TerminalOwner::Named("demo.shell".into()));
+        let other = store.id_for(super::super::TerminalOwner::Named("other.shell".into()));
+        store.set_custom_title(first, Some("Renamed".into()));
+        for name in ["demo.shell", &first.0.to_string()] {
+            assert_eq!(store.resolve_reference(name), Some(first));
+        }
+        assert_eq!(store.resolve_reference("other.shell"), Some(other));
+        for missing in ["shell", "Renamed", "DEMO.shell", "missing.shell", "9999", ""] {
+            assert_eq!(store.resolve_reference(missing), None, "{missing}");
+        }
+    }
 
     fn find(id: TerminalId) -> Option<TerminalTarget> {
         match id.0 {

@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 mod target;
+mod titles;
 pub(crate) use target::TerminalTarget;
 
 /// What to run in a terminal. Fixed at start: a running terminal's program and folder do not change.
@@ -104,6 +105,7 @@ impl From<PaneId> for TerminalOwner {
 pub struct BackendStore {
     processes: HashMap<TerminalId, Process>,
     by_owner: HashMap<TerminalOwner, TerminalId>,
+    custom_titles: HashMap<TerminalId, String>,
     /// The next id to issue. Only ever goes up.
     next: u64,
 }
@@ -113,6 +115,7 @@ impl BackendStore {
         Self {
             processes: HashMap::new(),
             by_owner: HashMap::new(),
+            custom_titles: HashMap::new(),
             next: 1,
         }
     }
@@ -173,7 +176,7 @@ impl BackendStore {
     /// before heca does, besides [`kill`](Self::kill).
     pub fn kill_for_pane(&mut self, pane: PaneId) -> bool {
         match self.by_owner.remove(&TerminalOwner::Pane(pane)) {
-            Some(id) => self.processes.remove(&id).is_some(),
+            Some(id) => { self.custom_titles.remove(&id); self.processes.remove(&id).is_some() },
             None => false,
         }
     }
@@ -181,6 +184,7 @@ impl BackendStore {
     /// **End the terminal process `id`**, whoever owns it — an explicit kill. The id is retired
     /// with it: asking for the owner's terminal again gives a new one.
     pub(crate) fn kill(&mut self, id: TerminalId) -> bool {
+        self.custom_titles.remove(&id);
         self.by_owner.retain(|_, t| *t != id);
         self.processes.remove(&id).is_some()
     }
@@ -245,6 +249,7 @@ impl BackendStore {
     }
 
     pub(crate) fn clear(&mut self) {
+        self.custom_titles.clear();
         self.by_owner.clear();
         self.processes.clear();
     }

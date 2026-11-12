@@ -15,28 +15,13 @@ use crate::providers::ChromeCtx;
 // name a hundred call sites already use keeps working — one type, not a second one beside it.
 pub use heca_view::DropdownItem;
 
-/// A cursor-anchored dropdown / context menu spec — the pointer / `OpenContextMenu` counterpart to
+/// A dropdown / context menu spec — the pointer / `OpenContextMenu` counterpart to
 /// [`ModalSpec`](crate::chrome::ModalSpec). A data description a native handler **or** a plugin submits to [`open_dropdown`].
 pub struct DropdownSpec {
-    pub anchor: Point,
+    pub anchor: MenuAnchor,
     pub items: Vec<DropdownItem>,
     /// Attribution for the dispatched action (which surface opened the menu).
     pub source: InteractionSource,
-    /// When true the menu is **centered on `anchor`** (anchor = desired center) instead of
-    /// placed down-right of it. Set by the keyboard/RPC-open path; the mouse path leaves it
-    /// `false` (anchor = click point).
-    pub centered: bool,
-}
-
-impl DropdownSpec {
-    /// Mark the anchor as the desired **panel center** (keyboard/RPC-opened menus) rather than
-    /// the top-left. The mouse-open path keeps the default `false`.
-    // A keyboard- or RPC-opened menu will set it; neither opens a menu through this path yet.
-    #[allow(dead_code)]
-    pub fn centered(mut self, on: bool) -> Self {
-        self.centered = on;
-        self
-    }
 }
 
 /// Put a built menu on screen as an Overlay-band **modal** layer.
@@ -175,18 +160,15 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     // same menu came to have two shapes on screen.
     let items =
         menu_from_items("", "", "", spec.items, &state.action_catalog, &emit);
-    let menu = ContextMenu::new("dropdown")
+    let menu = spec.anchor.open(ContextMenu::new("dropdown")
         .child(items)
-        .anchor(spec.anchor)
-        .centered(spec.centered)
         .on_dismiss(id.closer(&emit))
         // **A chosen entry takes the layer down too, not just a dismissal.** An entry dispatches
         // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
         // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
         // panel hid itself while the layer stayed registered: still modal, still holding the
         // keyboard, so every keybinding was dead until `Escape`.
-        .after_select(id.closer(&emit))
-        .default_open(true);
+        .after_select(id.closer(&emit)));
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
     // its panel is small: *a modal is an overlay with coverage*. Its own entries

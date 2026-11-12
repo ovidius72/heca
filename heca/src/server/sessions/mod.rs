@@ -92,6 +92,7 @@ pub(crate) enum SessionReply {
 /// A terminal's original launch and reported native agent identity, not a live process.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct RecordedTerminal {
+    pub display_title: Option<String>,
     pub running: bool,
     pub launch: Option<heca_core::backend::ProcessLaunch>,
     pub owner: crate::app::backend_store::TerminalOwner,

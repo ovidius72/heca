@@ -27,7 +27,7 @@ impl IntoComponent for crate::WidgetModel {
 
 /// **One child or many, through one builder.**
 ///
-/// A widget, an opaque subtree, or a `Vec`/array of either. It exists so that every place
+/// A widget, an optional widget, an opaque subtree, or a `Vec`/array of either. It exists so that every place
 /// that takes children takes them in whichever shape the caller happens to hold — `.child(row)` and
 /// `.child(rows)` are the same door, and nobody has to find out that a plural spelling exists.
 ///
@@ -50,6 +50,12 @@ impl<T: IntoComponent> IntoChildren for Vec<T> {
         self.into_iter()
             .map(IntoComponent::into_component)
             .collect()
+    }
+}
+
+impl<T: IntoComponent> IntoChildren for Option<T> {
+    fn into_children(self) -> Vec<crate::WidgetModel> {
+        self.into_iter().map(IntoComponent::into_component).collect()
     }
 }
 
@@ -117,5 +123,20 @@ impl IntoContextMenu for crate::widgets::ContextMenu {
 impl<F: Fn(heca_core::layout::Point) -> crate::widgets::ContextMenu> IntoContextMenu for F {
     fn build(&self, at: heca_core::layout::Point) -> crate::widgets::ContextMenu {
         self(at)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Parent;
+    use crate::{Component, Flex, Label};
+
+    #[test]
+    fn optional_children_use_the_same_container_path_without_empty_placeholders() {
+        let absent = Flex::column().child(None::<Label>);
+        assert!(absent.base().children.is_empty());
+        let present = Flex::column().child(Some(Label::new("Optional")));
+        assert_eq!(present.base().children.len(), 1);
+        assert_eq!(present.base().children[0].text_summary().as_deref(), Some("Optional"));
     }
 }

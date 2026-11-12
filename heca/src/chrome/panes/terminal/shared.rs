@@ -46,6 +46,9 @@ pub(super) struct Shared {
     pub(super) controls: RefCell<Placed>,
     /// What an extension asked of it, if it placed it by name (`demo.terminal("shell")`).
     pub(super) declared: RefCell<Option<Declared>>,
+    pub(super) title: heca_grid_ui::reactive::Signal<String>,
+    pub(super) custom_title: RefCell<Option<String>>,
+    pub(super) rename: RefCell<super::title::RenamePresentation>,
     /// Its search: whether the bar is open, the query, and the matches it was told to show.
     pub(super) search: SearchSlot,
     /// The hyperlinks on screen this frame, as the backend captured them. **The one place** the

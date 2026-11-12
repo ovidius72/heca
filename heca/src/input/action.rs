@@ -218,6 +218,10 @@ pub enum WmAction {
         pane_id: Option<PaneId>,
         terminal: Option<u64>,
     },
+    /// Open the shared rename dialog for a terminal, wherever it is placed.
+    TerminalRename { terminal: String },
+    /// Set a terminal's display label without changing its identity or process.
+    TerminalRenameTo { terminal: String, name: String },
 
     // ── Pane (unit) ──
     Float,

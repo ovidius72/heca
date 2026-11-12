@@ -31,6 +31,7 @@ fn every_exported_component_has_a_plain_external_construction_and_composition_ex
         .child(widget!(BadgeButton, BadgeButton::new("Run")))
         .child(widget!(Button, Button::new("Run").child(Label::new("Content"))))
         .child(widget!(ButtonGroup, ButtonGroup::new().child(Button::new("Run"))))
+        .child(widget!(Caption, Caption::new("Build").text("Logs").gap("sm").padding_x("sm")))
         .child(widget!(Card, Card::new("Card").child(Label::new("Body"))))
         .child(widget!(CardGrid, CardGrid::new().row(Vec::new(), Label::new("Row"))))
         .child(widget!(Checkbox, Checkbox::new()))

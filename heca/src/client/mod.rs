@@ -9,6 +9,7 @@ mod reads;
 mod local;
 mod feedback;
 mod sessions;
+mod titles;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -188,6 +189,7 @@ impl ClientState {
         self.next_request += 1;
         let terminal = match &action {
             WmAction::TerminalRun { terminal, .. } | WmAction::TerminalKill { terminal, .. } => *terminal,
+            WmAction::TerminalRenameTo { terminal, .. } => self.backends.resolve_reference(terminal).map(|id| id.0),
             _ => None,
         };
         let terminal_owner = terminal.and_then(|id| self.backends.owner_of(TerminalId(id))).cloned();
@@ -337,8 +339,10 @@ impl ClientState {
                 ServerMsg::Terminal(frame) => {
                     for placement in &frame.screen.graphics { self.images.need(placement.image_id, &self.outbox); }
                     let (owner, spec, cell) = (frame.owner.clone(), frame.spec.clone(), (frame.screen.cell_w, frame.screen.cell_h));
+                    let display_title = frame.display_title.clone();
                     self.data.lock().map_err(|error| io::Error::other(error.to_string()))?.receive(*frame);
-                    self.ensure_view(owner, spec, cell).map_err(|error| io::Error::other(error.to_string()))?;
+                    self.ensure_view(owner.clone(), spec, cell).map_err(|error| io::Error::other(error.to_string()))?;
+                    if let Some(id) = self.backends.find_owner(&owner) { self.backends.set_custom_title(id, display_title); }
                     update.effects.has_data = true;
                 }
                 ServerMsg::ImageInfo(info) => self.images.begin(info, self.image_limit, &self.outbox)?,
@@ -366,6 +370,7 @@ impl ClientState {
         if self.projection_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             return Err(io::Error::new(io::ErrorKind::TimedOut, "session projection did not finish"));
         }
+        self.receive_titles(&update);
         Ok(update)
     }
 
@@ -454,6 +459,15 @@ impl ClientState {
         let terminal = match action {
             Some(WmAction::TerminalRun { terminal, .. } | WmAction::TerminalKill { terminal, .. }
                 | WmAction::PaneTerminalFontZoom { terminal, .. }) => terminal,
+            Some(WmAction::TerminalRename { terminal } | WmAction::TerminalRenameTo { terminal, .. }) => {
+                // Numeric RPC references are server IDs; qualified names resolve to this view's owner.
+                let local = match terminal.parse::<u64>() {
+                    Ok(server_id) => self.local_terminal(server_id),
+                    Err(_) => self.backends.resolve_reference(&terminal).map(|id| id.0),
+                }.ok_or_else(|| crate::rpc::RpcError::NotRunnable(intent.action.clone()))?;
+                intent.args.insert("terminal".into(), crate::chrome::PropValue::Int(local as i64));
+                return Ok(());
+            }
             _ => None,
         };
         if let Some(server_id) = terminal {

@@ -43,6 +43,7 @@ impl SessionRuntime {
                 let runtime = backend.runtime();
                 let agent = runtime.agent;
                 Some(crate::server::sessions::RecordedTerminal {
+                    display_title: self.state.backends.custom_title(id).map(str::to_owned),
                     running: runtime.status == heca_core::runtime::ProcessStatus::Running,
                     launch: agent
                         .as_ref()
@@ -97,16 +98,19 @@ impl SessionRuntime {
                 spec.cwd.clone_from(&original.cwd);
                 spec.program = crate::app::backend_store::Program::Recorded(original);
             }
-            launches.push((launch.owner.clone(), spec));
+            launches.push((launch.owner.clone(), spec, launch.display_title.clone()));
         }
-        for (owner, spec) in launches {
+        for (owner, spec, title) in launches {
             if let Err(error) = self
                 .state
                 .terminals()
-                .start(owner, spec, self.rpc_asker.cell)
+                .start(owner.clone(), spec, self.rpc_asker.cell)
             {
                 self.state.backends.clear();
                 return Err(error.to_string());
+            }
+            if let Some(id) = self.state.backends.find_owner(&owner) {
+                self.state.backends.set_custom_title(id, title);
             }
         }
         self.identity.status = SessionStatus::Active;

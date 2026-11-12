@@ -29,6 +29,7 @@ pub enum RenameTarget {
     Workspace(usize),
     Column { ws_idx: usize, col_idx: usize },
     Pane(PaneId),
+    Terminal(u64),
 }
 
 impl RenameTarget {
@@ -37,6 +38,7 @@ impl RenameTarget {
     pub fn action_name(self) -> &'static str {
         match self {
             RenameTarget::Pane(_) => "rename_pane",
+            RenameTarget::Terminal(_) => "terminal_rename",
             RenameTarget::Column { .. } => "rename_column",
             RenameTarget::Workspace(_) => "rename_workspace",
         }
@@ -48,6 +50,7 @@ impl RenameTarget {
         use crate::input::WmAction;
         match self {
             RenameTarget::Pane(pane_id) => WmAction::RenameTarget { pane_id, name },
+            RenameTarget::Terminal(terminal) => WmAction::TerminalRenameTo { terminal: terminal.to_string(), name },
             RenameTarget::Column { ws_idx, col_idx } => WmAction::RenameColumnTo {
                 ws_idx,
                 col_idx,

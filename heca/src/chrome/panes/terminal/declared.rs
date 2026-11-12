@@ -19,13 +19,11 @@ thread_local! {
 pub(super) fn of(name: String) -> Terminal {
     DECLARED.with(|table| {
         let mut table = table.borrow_mut();
-        if let Some(terminal) = table.get(&name) {
-            return terminal.clone();
-        }
-        let terminal = Terminal::unbound();
-        terminal.declare(name.clone());
-        table.insert(name, terminal.clone());
-        terminal
+        table.entry(name.clone()).or_insert_with(|| {
+            let terminal = Terminal::unbound();
+            terminal.declare(name);
+            terminal
+        }).clone()
     })
 }
 
