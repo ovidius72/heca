@@ -355,9 +355,9 @@
       "priority": 4,
       "shortName": "several-windows-per-session-ow",
       "title": "Several windows per session — own view each, follow, pane size setting",
-      "status": "in-progress",
-      "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.\n\n## Protocol Agreement With T522\nCanonical F012 decision 2534270c-efd4-46ed-91ee-ddcd620b69b6 (Antonio + Opus, 2026-10-27).\nT522 owns session selection and attach/handshake shape; T545 does not add another handshake or choose a session. Work within the selected session and reuse its Connection.id, assigned by the server once and stamped onto incoming messages at the single receive/pump point. Use that same ID for owner/client/grid arbitration, latest typing client, follow and titles. Do not add a second client identity or protocol; consume the shared ClientMsg/ServerMsg extension and coordinate concrete field changes with T522 before integration.",
-      "descriptionUpdatedAt": "2026-10-27T19:25:15.995Z",
+      "status": "done",
+      "description": "ready-02d. Several windows attach to one session (decision 463ccd07): shared content, each its own view.\n\nThe per-window view already exists — `WindowView`/`ScrollView` (heca-core/src/layout/window_view.rs), split out in P104 — and the server reads what it needs from the per-request `Asker` (heca/src/server/cx.rs: `focused_pane`, `workspace`, `column`, `area`, `cell`), never from a window.\n\nAdd: a `follow` option so one window mirrors another; and — because a running terminal has ONE size while several windows show it at different sizes — a setting `smallest | latest | largest` (default `latest` = the window last typed in), decided server-side on the resize event (heca/src/app/terminal_host/input.rs::on_resize feeds it today). Add the setting to config.default.toml + README.\n\nDone when: two windows on one session move independently, and typing in one resizes a shared pane per the setting. Depends on T544.\n\n## Protocol Agreement With T522\nCanonical F012 decision 2534270c-efd4-46ed-91ee-ddcd620b69b6 (Antonio + Opus, 2026-10-27).\nT522 owns session selection and attach/handshake shape; T545 does not add another handshake or choose a session. Work within the selected session and reuse its Connection.id, assigned by the server once and stamped onto incoming messages at the single receive/pump point. Use that same ID for owner/client/grid arbitration, latest typing client, follow and titles. Do not add a second client identity or protocol; consume the shared ClientMsg/ServerMsg extension and coordinate concrete field changes with T522 before integration.\n\n---\n**Completion summary:**\nDONE. Several windows per session, each with its own view (F012/463ccd07): pane-size arbitration (smallest|latest|largest, default latest), per-window notifications, per-window titles + a per-session window directory, and follow (one window mirrors another's view, chosen by title, stored by id). Protocol extends the shared ClientMsg/ServerMsg from T522 (one Connection.id identity, decision e36aba0c): WindowInfo/Windows + ReportWindowTitle for the directory; Follow/ReportView + Followed/FollowView for mirroring via a serializable heca_core ViewSnapshot (active workspace + scroll/focus, not size). Title formatted client-side (folder + ' #k'), shown in the top bar as a segmented Tag, with a '→ leader' segment while following; the follow picker is a '~' command-palette mode. Verified by eye + green tests/clippy.",
+      "descriptionUpdatedAt": "2026-11-04T11:11:41.774Z",
       "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
       "statusLog": [
         {
@@ -367,6 +367,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-002-in-progress-done",
+          "date": "2026-11-04T11:11:41.772Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE. Several windows per session, each with its own view (F012/463ccd07): pane-size arbitration (smallest|latest|largest, default latest), per-window notifications, per-window titles + a per-session window directory, and follow (one window mirrors another's view, chosen by title, stored by id). Protocol extends the shared ClientMsg/ServerMsg from T522 (one Connection.id identity, decision e36aba0c): WindowInfo/Windows + ReportWindowTitle for the directory; Follow/ReportView + Followed/FollowView for mirroring via a serializable heca_core ViewSnapshot (active workspace + scroll/focus, not size). Title formatted client-side (folder + ' #k'), shown in the top bar as a segmented Tag, with a '→ leader' segment while following; the follow picker is a '~' command-palette mode. Verified by eye + green tests/clippy."
         }
       ],
       "decisions": [],
@@ -403,13 +411,13 @@
           "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-004-c4-follow-one-window-mirrors-another-window-s-view-targeted-by-title",
           "number": 4,
           "title": "C4 — follow: one window mirrors another window's view, targeted by title",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-005-c5-window-title-path-k-from-the-2nd-window-on-the-same-instance-synced-to-p100-naming",
           "number": 5,
           "title": "C5 — window title = path + ' #k' from the 2nd window on the same instance (synced to P100 naming)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e90e1886-2ec1-4a87-94a4-2a3d4b56c404-check-006-c6-document-pane-size-in-config-default-toml-readme",
@@ -437,16 +445,16 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-10-27T15:27:22.915Z",
-      "completedAt": "",
+      "completedAt": "2026-11-04T11:11:41.772Z",
       "createdAt": "2026-10-21T11:14:52.371Z",
-      "updatedAt": "2026-10-28T18:10:00.379Z",
+      "updatedAt": "2026-11-04T11:11:41.772Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4",
           "createdAt": "2026-10-27T15:27:22.786Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:933bcd17-753c-45f3-8104-a3baeb49b3c4"
+      "activeOwnerSession": ""
     },
     {
       "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2",
@@ -456,19 +464,63 @@
       "priority": 5,
       "shortName": "heca-rpc-events-stream-events",
       "title": "`heca rpc --events` — stream events to scripts",
-      "status": "planned",
-      "description": "ready-02e. `heca rpc --events` streams the session's events to a script over the socket — the same `Change`s a window reacts to (heca/src/server/change.rs), serialized via the wire model (T543).\n\nExtend the socket client (heca/src/server/socket.rs — a streaming request that stays open and prints each event as a line) and the server side to fan events out to subscribed connections (a subscriber list beside the per-request handling T521 added). Keep it one way in: the events are the existing `Change`s, nothing invented per event.\n\nDone when: `heca rpc --events` in a shell prints events as the session changes (a split made in another window shows up). Depends on T544.",
-      "descriptionUpdatedAt": "2026-10-21T11:21:27.193Z",
+      "status": "done",
+      "description": "ready-02e. `heca rpc --events` streams the session's events to a script over the socket — the same `Change`s a window reacts to (heca/src/server/change.rs), serialized via the wire model (T543).\n\nExtend the socket client (heca/src/server/socket.rs — a streaming request that stays open and prints each event as a line) and the server side to fan events out to subscribed connections (a subscriber list beside the per-request handling T521 added). Keep it one way in: the events are the existing `Change`s, nothing invented per event.\n\nDone when: `heca rpc --events` in a shell prints events as the session changes (a split made in another window shows up). Depends on T544.\n\n---\n**Completion summary:**\nDONE. `heca rpc --events` streams the session server's events to scripts over the control socket, one JSON line per event. The stream is a tagged `StreamEvent`: the shared content `Change`s a window reacts to (`{\"Change\":...}`) PLUS per-window events — `Focus`, `Workspace`, `Session` — each tagged with the window's connection id (scope extended by Antonio on 2026-11-04; see the task's Accepted Decision). The agent event stays for P102. One shared `EventFanout` fans events from every session to every subscriber; the socket's `@heca-events` preface opens a read-only stream. Verified live and by unit tests.",
+      "descriptionUpdatedAt": "2026-11-04T17:03:59.242Z",
       "notes": "\n\n2026-10-24 reconciliation authorized by Antonio: recovered existing task identity, scope, checklist and historical evidence from heca-p085. Code remains on feat/p099-connection / feat/t544-server-wiring, now also feat/p099-resume; it is not integrated in origin/main. Historical tests were not rerun during metadata recovery.",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "87372076-d72e-4ad8-ada5-7334a27e62c2",
+          "date": "2026-11-04T15:52:41.227Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-002-in-progress-done",
+          "date": "2026-11-04T17:03:59.241Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE. `heca rpc --events` streams the session server's events to scripts over the control socket, one JSON line per event. The stream is a tagged `StreamEvent`: the shared content `Change`s a window reacts to (`{\"Change\":...}`) PLUS per-window events — `Focus`, `Workspace`, `Session` — each tagged with the window's connection id (scope extended by Antonio on 2026-11-04; see the task's Accepted Decision). The agent event stays for P102. One shared `EventFanout` fans events from every session to every subscriber; the socket's `@heca-events` preface opens a read-only stream. Verified live and by unit tests."
+        }
+      ],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "8e28d7e9-ea60-42d5-bb07-33a2af78e2c6",
+          "title": "The --events stream carries per-window events too, not only shared Changes",
+          "decision": "Antonio extended T546's scope on 2026-11-04: the `heca rpc --events` stream is a tagged union `StreamEvent` carrying both the shared content `Change`s a window reacts to AND per-window events — `Focus` (focused pane), `Workspace` (shown workspace) and `Session` (which session a window attached/switched to) — each tagged with the window's connection id. This supersedes the task's original \"existing Changes, nothing invented per event\" line for focus/workspace/session, which Antonio judged important. The agent (`Change::PaneAgentChanged`) event stays deferred to P102 where AgentState lives.",
+          "rationale": "Antonio asked for focus, workspace and session changes in the stream because they make the scripting/observability surface genuinely useful (status tooling, heca-pro). They are per-window view/attachment facts, not shared Changes, so they are new event types rather than existing Changes.",
+          "implementationNotes": "Wire line is `server::events::StreamEvent` (serde). Shared changes emit `StreamEvent::Change(Change)` from `session/publish.rs::broadcast_except`. Per-window: the window reports its presence (shown workspace + focused pane) via `ClientMsg::ReportPresence` on change (client `report_presence`, driven by `AppState::report_presence_if_changed` in `about_to_wait`, diffed against `last_presence`); the server diffs against `Connection.presence` and emits `Workspace`/`Focus` tagged with the connection id. `Session` is emitted from `ServerLoop::attach`. One shared `EventFanout` serves all sessions. Presence is reported unconditionally (small, user-paced) and dropped server-side when no subscriber. Verified live: Session/Workspace/Focus/Change all stream with the window id, including keyboard focus navigation.",
+          "acceptedAt": "2026-11-04T17:03:43.955Z"
+        }
+      ],
       "checklist": [
         {
-          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-001-add-change-paneagentchanged-pane-paneid-previous-option-box-agentstate-agent-option-box-agentstate-to-server-change-rs-reusing-heca-core-agent-agentstate-from-p102-snapshots-carry-current-agent-state-an-event-preserves-each-transition-agent-none-clears-needs-p102-s-agentstate-integrated-on-this-branch-next-first",
+          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-002-cli-heca-rpc-events-opens-a-streaming-subscription-over-the-control-socket-no-line-subscribe",
           "number": 1,
-          "title": "Add Change::PaneAgentChanged { pane: PaneId, previous: Option<Box<AgentState>>, agent: Option<Box<AgentState>> } to server/change.rs, reusing heca_core::agent::AgentState (from P102). Snapshots carry current agent state; an event preserves each transition; agent: None clears. Needs P102's AgentState integrated on this branch/next first.",
-          "checked": false
+          "title": "CLI: `heca rpc --events` opens a streaming subscription over the control socket (no line = subscribe)",
+          "checked": true
+        },
+        {
+          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-003-server-keep-an-event-subscriber-list-beside-t521-s-one-shot-rpc-fan-each-session-change-out-as-one-serialized-line-existing-changes-only-nothing-invented",
+          "number": 2,
+          "title": "Server: keep an event-subscriber list beside T521's one-shot rpc; fan each session `Change` out as one serialized line (existing Changes only, nothing invented)",
+          "checked": true
+        },
+        {
+          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-004-socket-client-a-streaming-request-that-stays-open-and-prints-each-event-as-a-json-line-to-stdout-until-closed",
+          "number": 3,
+          "title": "Socket client: a streaming request that stays open and prints each event as a JSON line to stdout until closed",
+          "checked": true
+        },
+        {
+          "id": "73a5a8de-08c1-4b6f-8bdb-336ec26a3da2-check-005-test-eye-check-a-change-on-the-server-reaches-a-subscriber-heca-rpc-events-prints-when-another-window-splits",
+          "number": 4,
+          "title": "Test + eye-check: a Change on the server reaches a subscriber; `heca rpc --events` prints when another window splits",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -477,11 +529,16 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-04T15:52:41.227Z",
+      "completedAt": "2026-11-04T17:03:59.241Z",
       "createdAt": "2026-10-21T11:14:54.116Z",
-      "updatedAt": "2026-10-24T18:33:41.775Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-04T17:03:59.241Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:4a6d23ed-1c33-4fa6-aa9e-ca2d81c7c33c",
+          "createdAt": "2026-11-04T15:52:41.054Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -630,7 +687,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-10-28T18:10:00.379Z",
+  "updatedAt": "2026-11-04T17:03:59.241Z",
   "handoff": "# T545 — several windows per session: independent views, follow, pane-size arbitration\n\nCreated at: 2026-10-26T18:59:18.546Z\nUpdated at: 2026-10-27T19:18:34.860Z\nReason: T545 design is fully agreed with Antonio (2026-10-27) but no code is written yet; a cold agent needs the decisions, the resize code path, and the P100 naming it must stay in sync with before implementing.\n\n## Current focus\n- Feature: F012 — Ready for heca-pro — the pieces heca-pro builds on\n- Phase: P099(F012) — ready-02: the connection (clients attach to the server over a local socket; RPC, events, detach/attach)\n- Task: P099(F012)/T545 — \"Several windows per session — own view each, follow, pane size setting\" (in-progress)\n- Exact resume point: design agreed, **no code written**. Worktree `/Users/antonio/projects/heca-t545`, branch `feat/t545-multiwindow` (from main af4fff24). Draft only: `PaneSize` enum in `heca-config/src/settings/enums.rs` and the \"One task, one worktree\" rule in `AGENTS.md` — both uncommitted.\n\n## Current and partial state\nDecisions agreed with Antonio 2026-10-27 (all design, nothing contentious left):\n\n- **Independent windows are the default.** Each window attaches to the same session (shared content) but keeps its own view — its own `WindowView`/`ScrollView`. Antonio wants this explicitly because two monitors at different resolutions caused display problems, and watching a different pane in each window is useful. A window does NOT follow another by default.\n- **Pane-size arbitration only when two windows show the SAME pane.** A running terminal has one size (rows×cols), so when two windows display the same pane they must agree. Setting `PaneSize = smallest | latest | largest`, default **latest** (the window last typed in wins). A pane shown by one window always takes that window's size. Only rows×cols are arbitrated; the pixel cell size (font) stays each window's own.\n- **follow** = a window mirrors another window's view, targeted by the other window's **title**.\n- **Window title** = the project `path` (e.g. `~/projects/heca`), plus a ` #k` suffix from the **second** window onward on the same instance. The suffix is what lets `follow` name a window.\n- **Instance naming (owned by P100, synced here):** default instance name `heca #n`, `#n` a progressive counter only to tell anonymous defaults apart; a real unique name (create/rename) drops the `#n`. Full create-session + naming design in `.planner/docs/p100-session-create.md`.\n\nCode analysis done (resume path):\n- Resize flows `ClientMsg::Terminal(Resize{cols,rows,cell,scale})` → `ServerState::process_input` at `heca/src/server/stream.rs:22`, which today applies the last grid directly (`set_cell_size` / `set_scale_factor` / `set_size`).\n- For arbitration: keep a per-terminal map (owner → client → requested grid) plus the last-typed client id; thread the client id (`Connection.id` from the run.rs pump) into `process_input`; recompute `set_size` via the `PaneSize` policy. Cell/font stays per-window.\n- `PaneSize` enum drafted in `heca-config/src/settings/enums.rs` (snake_case, default `Latest`). Still TODO: a `SettingsConfig` field + defaults + `config.default.toml` + README.\n\n## Preservation constraints\n- Standalone = server + one in-process client = ONE code path (decision 463ccd07). Several windows must not fork a second path; a window is just another client of the same `ServerLoop`.\n- Library/widget-side only, CSS-like composition, nothing hardcoded (Antonio's standing rule). The arbitration lives in the server policy, not sprawled across call sites.\n- Naming stays single-sourced: the window-title suffix is built in T545 but the instance-name rule belongs to P100 — do not re-decide it here.\n- **Commit the \"One task, one worktree\" AGENTS.md rule together with T545's code, not as a separate PR.** No commit/PR without Antonio's explicit word.\n\n## Supporting documents\n- `.planner/docs/p100-session-create.md` — the create-session (CLI `heca --new [path] [--name <name>]` + palette \"Create Session\" with fuzzy path) and default instance-naming design; the window-title section there is the contract T545 renders.\n\n## Blockers and risks\n- None blocking. Antonio has NOT yet said \"write code\" for T545 — await explicit go before implementing.\n- Risk: the window-title/`follow` mechanism and P100's instance naming can drift. Keep both pointing at `p100-session-create.md`.\n\n## How to resume\n1. Open task P099(F012)/T545; confirm it is in-progress.\n2. Read `.planner/docs/p100-session-create.md` for the naming/title contract.\n3. Work in worktree `/Users/antonio/projects/heca-t545` (branch `feat/t545-multiwindow`).\n4. Implement in order: (a) pane-size arbitration at `heca/src/server/stream.rs:22` — per-terminal client→grid map + last-typed client, policy from `PaneSize`; finish the `SettingsConfig` field/defaults/config.default.toml/README for the drafted enum; (b) independent per-window view (each window its own `WindowView`/`ScrollView`); (c) `follow` by window title; (d) window title = path + ` #k` from the 2nd window, synced to P100.\n5. Verify by running the GPU app (Antonio tests by eye — unit green is not enough for layout/view). Commit the AGENTS.md worktree rule with T545. No commit/PR until Antonio asks.",
   "handoffUpdatedAt": "2026-10-27T19:18:34.860Z",
   "handoffAudit": {
@@ -893,6 +950,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:4a6d23ed-1c33-4fa6-aa9e-ca2d81c7c33c",
+      "createdAt": "2026-11-04T15:52:41.054Z"
+    },
     {
       "sessionId": "mcp-process:bcb34529-16fd-4db9-8c7a-60dfd3a99ed0",
       "createdAt": "2026-10-28T12:55:39.181Z"

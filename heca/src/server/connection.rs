@@ -22,6 +22,9 @@ pub(super) struct Connection {
     pub projection_pending: Cell<bool>,
     pub session: Cell<Option<SessionId>>,
     pub window_ordinal: Cell<u64>,
+    /// The last presence this window reported — its shown workspace and focused pane — so a change
+    /// is turned into one `Workspace`/`Focus` event and an unchanged report says nothing.
+    pub presence: Cell<Option<(usize, Option<heca_core::layout::PaneId>)>>,
     /// The title this window reported for itself, once it has. `None` until the first report (the
     /// brief gap between attach and the window formatting its title).
     pub title: RefCell<Option<String>>,
@@ -52,6 +55,7 @@ impl Connection {
             projection_pending: Cell::new(false),
             session: Cell::new(None),
             window_ordinal: Cell::new(0),
+            presence: Cell::new(None),
             title: RefCell::new(None),
             follows: Cell::new(None),
             was_followed: Cell::new(false),

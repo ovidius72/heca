@@ -219,6 +219,12 @@ impl ClientState {
         self.outbox.send(ClientMsg::ReportView(view));
     }
 
+    /// Report where this window is looking — its shown workspace and focused pane — so the server
+    /// turns the change into `Focus`/`Workspace` events on the `--events` stream.
+    pub(crate) fn report_presence(&self, workspace: usize, pane: Option<heca_core::layout::PaneId>) {
+        self.outbox.send(ClientMsg::ReportPresence { workspace, pane });
+    }
+
     pub(crate) fn poll(&mut self) -> io::Result<Update> {
         if self.failed { return Ok(Update::default()); }
         let result = self.poll_connected();

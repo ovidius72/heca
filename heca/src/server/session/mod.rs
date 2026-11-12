@@ -41,6 +41,9 @@ pub(crate) struct SessionRuntime {
     connection: heca_config::settings::ConnectionConfig,
     images: std::collections::HashMap<u64, heca_core::backend::TerminalImage>,
     known_terminals: std::collections::HashSet<crate::app::backend_store::TerminalOwner>,
+    /// `heca rpc --events` subscribers (shared across sessions), fanned to from this session's
+    /// broadcast. Empty until the owner loop installs the shared fanout.
+    events: super::EventFanout,
 }
 
 impl SessionRuntime {
@@ -73,6 +76,7 @@ impl SessionRuntime {
             connection: Default::default(),
             images: Default::default(),
             known_terminals: Default::default(),
+            events: Default::default(),
         }
     }
 
@@ -83,6 +87,12 @@ impl SessionRuntime {
     ) {
         self.registry = registry;
         self.catalog = catalog;
+    }
+
+    /// Share the server-wide `heca rpc --events` fanout: this session's broadcast streams its
+    /// events to every subscriber.
+    pub(crate) fn install_event_fanout(&mut self, events: super::EventFanout) {
+        self.events = events;
     }
 
     pub(crate) fn shutdown(&mut self) {
@@ -492,6 +502,21 @@ impl SessionRuntime {
                     let leader = self.clients[i].id;
                     *self.clients[i].view.borrow_mut() = Some(view.clone());
                     detached.extend(self.relay_follow_view(leader, &view));
+                }
+                ClientMsg::ReportPresence { workspace, pane } => {
+                    // Turn a per-window view change into stream events, each tagged with the window.
+                    let window = self.clients[i].id;
+                    let previous = self.clients[i].presence.replace(Some((workspace, pane)));
+                    let (prev_workspace, prev_pane) = match previous {
+                        Some((workspace, pane)) => (Some(workspace), Some(pane)),
+                        None => (None, None),
+                    };
+                    if prev_workspace != Some(workspace) {
+                        self.events.emit(&super::StreamEvent::Workspace { window, workspace });
+                    }
+                    if prev_pane != Some(pane) {
+                        self.events.emit(&super::StreamEvent::Focus { window, workspace, pane });
+                    }
                 }
             }
         }
