@@ -23,7 +23,8 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "74772bff-bdb4-4df7-8ef9-85d047bd8842"
+    "74772bff-bdb4-4df7-8ef9-85d047bd8842",
+    "98ab3973-1e79-478e-80b8-b992951813ad"
   ],
   "tasks": [
     {
@@ -126,10 +127,79 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "98ab3973-1e79-478e-80b8-b992951813ad",
+      "phaseId": "3bed2236-a07a-49d9-9492-72dba0084b04",
+      "number": 554,
+      "shortId": "JBZJF",
+      "priority": 2,
+      "shortName": "extension-services-persistent",
+      "title": "Extension services: persistent data folder and the extension's own configuration",
+      "status": "in-progress",
+      "description": "Requested by heca-pro (T013 is integrating T553 and is blocked on this), approved by Antonio on 2026-11-14. It extends the T553 contract, decision c7fb5fc3; the extension is recorded as a decision on this task.\n\n## What exists\n- `StartCx` (heca/src/entry/service/cx.rs) gives `config()`, `server_epoch()` and `inbox()`. It has no persistent path.\n- The epoch changes on every start (heca/src/server/services/mod.rs `new_epoch`).\n- heca's data folder is `heca_config::state_file::data_path(file)` (heca-config/src/state_file.rs), which resolves to `dirs::data_dir()/heca/<file>`.\n- No server has a stable name. The socket is always `default.sock` (heca/src/server/socket/mod.rs `socket_path`).\n- The server is started by `ServerLoop::from_config` (heca/src/server/bootstrap.rs) → `start_services` → `ServiceHost::start(config, wake)`. It is reached from the daemon (`heca/src/server/runtime/headless.rs` `serve`) and from standalone (`heca/src/client/local.rs` `LocalServer::new`).\n- `Config` (heca-config/src/loader/mod.rs `struct Config`) has only heca's own fields. An unknown table such as `[extensions.x]` is dropped.\n- Configuration layering: embedded defaults → user `config.toml` → trusted project `.heca/config.toml`.\n- A session's effective config is in `SessionRuntime::config()` and reaches actions through `ActionCx::config()`.\n\n## To build\n1. **`StartCx::data_dir() -> &Path`.** The folder owned by this service on this server: `<data dir>/heca/servers/<server name>/<extension>.<service>/`.\n   - The server name is `default` for the background server (`heca --server`) and `standalone` for a standalone window. It is passed into `ServerLoop::from_config` by each entry point; it is not guessed.\n   - heca creates the folder owner-only (0700) before calling the factory.\n   - It stays stable across restarts, unlike the epoch.\n   - If the platform has no data folder, the factory gets an error reported like any factory failure; it never panics.\n   - Also exposed on `ServiceCx`/`ActionCx` if cheap, so a service need not store it itself.\n2. **`[extensions.<name>]` in config.**\n   - `Config` keeps a generic `extensions: toml::Table` (no heca-pro fields), merged per key through the same layering.\n   - `extension_config::<T: DeserializeOwned>() -> Result<T, _>` on `StartCx` reads the server config, and on `ActionCx`/`ProjectCx` reads the session's effective config.\n   - The extension name comes from the service registration (`<extension>.<service>` → `<extension>`), so one extension can never read another's table.\n   - A missing table deserializes from an empty table, so `#[serde(default)]` types work.\n   - A config reload (`ClientMsg::Reload` → `SessionRuntime::reload_config`) refreshes what actions and projections see.\n3. **Docs.** docs/extending-heca.md, section \"A service inside the server\": data_dir and extension_config, plus an example `[extensions.demo]` block. README/config.default.toml: document that `[extensions.<name>]` exists.\n\n## Edge cases\n- A refused or late service gets no folder.\n- Two servers in one process with the same name share the folder: tests must use a temp data root, never the user's real folder (inject the root).\n- Never put heca-pro names in heca.",
+      "descriptionUpdatedAt": "2026-11-14T19:26:24.994Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "928abf5f-f477-493f-8e2c-fcd8beabbb92",
+          "date": "2026-11-14T19:26:50.180Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "01c25e3c-4fd1-4f8c-85ca-ee43a4c2f8f9",
+          "title": "Service data folder per server + service; extension config typed from [extensions.<name>]",
+          "decision": "Agreed on 2026-11-14 by Antonio and the heca-pro agent. This extends T553 decision c7fb5fc3.\n1. `StartCx::data_dir() -> &Path` returns the folder that belongs to this server and this service, in `<data dir>/heca/servers/<server>/<extension>.<service>/`. heca creates it owner-only before the factory runs. It stays the same across restarts, unlike the epoch, and is separate from every other service's folder.\n2. Server naming:\n   - The background server is `default`.\n   - `standalone` is only a category. Two standalone windows running at the same time must never open the same archive. Each standalone server therefore claims the lowest free slot, `standalone-1`, `standalone-2` and so on, by taking an exclusive lock on it for its whole life. A restarted standalone gets its slot back, so its folder is stable.\n   - The background server takes the same lock on `default`.\n3. `extension_config::<T>()` reads `[extensions.<extension>]` as a typed value and returns explicit errors: a table that does not fit `T` is an error, never a silent default. A missing table reads as an empty table.\n   - On `StartCx` it reads the server's configuration.\n   - On `ActionCx` and `ProjectCx` it reads the session's effective configuration, the same one `config()` returns.\n   - The extension name comes from the registration, so an extension cannot read another extension's table.\n4. heca carries no heca-pro fields: `[extensions.*]` is a generic table.",
+          "rationale": "heca-pro (T013) needs an archive per server that is found again after a restart. The epoch cannot do that because it changes on every start. Two concurrent standalone windows sharing one archive would corrupt it. A typed read with explicit errors catches configuration mistakes early, and reading the session's effective configuration keeps it consistent with `config()`.",
+          "implementationNotes": "- Data root: `heca_config::state_file::data_path` / `dirs::data_dir()`. Tests inject a temporary root.\n- Slot lock: reuse the exclusive file lock pattern of the socket listener (heca/src/server/socket/listener.rs takes a lock on default.lock). Hold the lock in the ServiceHost or ServerLoop for the server's life.\n- The server name is passed explicitly by the daemon entry (`headless.rs` serve) and by standalone (`client/local.rs`) into `ServerLoop::from_config`.\n- `Config` gets a generic `extensions` table merged through the existing layering.",
+          "acceptedAt": "2026-11-14T19:26:43.011Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "98ab3973-1e79-478e-80b8-b992951813ad-check-001-startcx-data-dir-per-server-name-service-created-owner-only-stable-across-restarts-server-name-passed-by-daemon-default-and-standalone-standalone",
+          "number": 1,
+          "title": "StartCx::data_dir — per server name + service, created owner-only, stable across restarts; server name passed by daemon (default) and standalone (standalone)",
+          "checked": false
+        },
+        {
+          "id": "98ab3973-1e79-478e-80b8-b992951813ad-check-002-extensions-name-kept-in-config-through-the-same-layering-extension-config-t-on-startcx-actioncx-projectcx-scoped-to-the-service-s-own-extension-refreshed-on-reload",
+          "number": 2,
+          "title": "[extensions.<name>] kept in Config through the same layering; extension_config::<T>() on StartCx/ActionCx/ProjectCx scoped to the service's own extension; refreshed on reload",
+          "checked": false
+        },
+        {
+          "id": "98ab3973-1e79-478e-80b8-b992951813ad-check-003-tests-temp-data-root-restart-keeps-the-folder-two-services-isolated-config-layering-isolation-missing-table-and-docs-extending-heca-md-config-default-toml-readme",
+          "number": 3,
+          "title": "Tests (temp data root, restart keeps the folder, two services isolated, config layering + isolation + missing table) and docs (extending-heca.md, config.default.toml/README)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-14T19:26:50.180Z",
+      "completedAt": "",
+      "createdAt": "2026-11-14T19:26:24.908Z",
+      "updatedAt": "2026-11-14T19:26:50.180Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+          "createdAt": "2026-11-14T19:26:50.105Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438"
     }
   ],
   "createdAt": "2026-11-14T09:59:01.452Z",
-  "updatedAt": "2026-11-14T19:07:07.509Z",
+  "updatedAt": "2026-11-14T19:26:50.180Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -151,12 +221,20 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "bb78619f-f228-4da0-936f-f2eabe187a0c",
+      "date": "2026-11-14T19:26:50.354Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
-      "createdAt": "2026-11-14T14:04:41.736Z"
+      "createdAt": "2026-11-14T19:26:50.105Z"
     }
   ]
 }
