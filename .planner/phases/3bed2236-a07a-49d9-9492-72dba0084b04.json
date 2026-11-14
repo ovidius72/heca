@@ -214,9 +214,9 @@
       "priority": 3,
       "shortName": "persistent-session-key-for-ext",
       "title": "Persistent session key for extension services (SessionKey)",
-      "status": "in-progress",
-      "description": "Requested by heca-pro (T013) and approved by Antonio on 2026-11-14. The contract is the accepted decision on this task.\n\n## Problem\n- A session's id is `SessionId` (heca_core::layout::SessionId, a u64) handed out per server run by `ServerLoop` (heca/src/server/run/sessions.rs `create_session`, `next_session`).\n- A restarted headless server hands out ids from 1 again, so a new session C can get the old session A's id.\n- An extension that keys stored data by `ActionCx::session()` / `ProjectCx::session()` (heca/src/entry/service/cx.rs) can therefore attach A's data to C.\n\n## To build\n1. **Public `SessionKey` type** (exported next to the service types in heca/src/entry/mod.rs and heca/src/lib.rs):\n   - opaque, `Clone + Eq + Hash + Debug + Serialize + Deserialize`;\n   - 128 random bits, from the OS random source through `getrandom`, already in Cargo.lock;\n   - never a string to interpret: `Display` may print it for logs, but nothing parses it.\n2. **Owned by the session.** Add it to `SessionInfo` (heca/src/server/sessions/mod.rs) or the `SessionRuntime` identity.\n   - A new key when a session is created from scratch (`create_session`, and the first session made on attach).\n   - The same key through rename, terminate, restart and attach/detach. It goes when the session is deleted.\n   - Independent of name, folder and connection id.\n   - `SessionInfo` is on the wire (ServerMsg::Sessions/Attached): decide whether the key travels to clients. Only if something needs it; otherwise keep it server-side.\n3. **Exposed** as `ActionCx::session_key() -> &SessionKey` and `ProjectCx::session_key() -> &SessionKey`. `session()` stays unchanged as the id for this run. Thread the key through `services::Caller` / `Audience` (heca/src/server/services/) from the session that ran the action or is being projected.\n4. **Docs:** docs/extending-heca.md \"A service inside the server\", explaining when to use `session()` versus `session_key()`.\n\n## Not here\nPersisting the key and restoring the same key after a server restart belong to P105(F012)/T527, recorded there as a requirement. Until T527 ships, a restarted server's sessions are new, with new keys, so stored data for an old key is simply not matched.\n\n## Tests\n- Two sessions get different keys.\n- Rename, terminate and restart keep the key.\n- A session created after a server restart with a reused numeric id gets a different key.\n- `ActionCx` and `ProjectCx` report the key of their own session.\n- The key round-trips through serde.",
-      "descriptionUpdatedAt": "2026-11-14T20:06:34.887Z",
+      "status": "done",
+      "description": "Requested by heca-pro (T013) and approved by Antonio on 2026-11-14. The contract is the accepted decision on this task.\n\n## Problem\n- A session's id is `SessionId` (heca_core::layout::SessionId, a u64) handed out per server run by `ServerLoop` (heca/src/server/run/sessions.rs `create_session`, `next_session`).\n- A restarted headless server hands out ids from 1 again, so a new session C can get the old session A's id.\n- An extension that keys stored data by `ActionCx::session()` / `ProjectCx::session()` (heca/src/entry/service/cx.rs) can therefore attach A's data to C.\n\n## To build\n1. **Public `SessionKey` type** (exported next to the service types in heca/src/entry/mod.rs and heca/src/lib.rs):\n   - opaque, `Clone + Eq + Hash + Debug + Serialize + Deserialize`;\n   - 128 random bits, from the OS random source through `getrandom`, already in Cargo.lock;\n   - never a string to interpret: `Display` may print it for logs, but nothing parses it.\n2. **Owned by the session.** Add it to `SessionInfo` (heca/src/server/sessions/mod.rs) or the `SessionRuntime` identity.\n   - A new key when a session is created from scratch (`create_session`, and the first session made on attach).\n   - The same key through rename, terminate, restart and attach/detach. It goes when the session is deleted.\n   - Independent of name, folder and connection id.\n   - `SessionInfo` is on the wire (ServerMsg::Sessions/Attached): decide whether the key travels to clients. Only if something needs it; otherwise keep it server-side.\n3. **Exposed** as `ActionCx::session_key() -> &SessionKey` and `ProjectCx::session_key() -> &SessionKey`. `session()` stays unchanged as the id for this run. Thread the key through `services::Caller` / `Audience` (heca/src/server/services/) from the session that ran the action or is being projected.\n4. **Docs:** docs/extending-heca.md \"A service inside the server\", explaining when to use `session()` versus `session_key()`.\n\n## Not here\nPersisting the key and restoring the same key after a server restart belong to P105(F012)/T527, recorded there as a requirement. Until T527 ships, a restarted server's sessions are new, with new keys, so stored data for an old key is simply not matched.\n\n## Tests\n- Two sessions get different keys.\n- Rename, terminate and restart keep the key.\n- A session created after a server restart with a reused numeric id gets a different key.\n- `ActionCx` and `ProjectCx` report the key of their own session.\n- The key round-trips through serde.\n\n---\n**Completion summary:**\nShipped on branch feat/t556-session-key (worktree heca-feat-556), following decision 15768fa9.\n\n- **Public `SessionKey`** (heca/src/entry/service/session_key.rs, exported from the crate root):\n  - Copy/Eq/Hash, opaque, 128 random bits from `getrandom` (0.3, already locked);\n  - Display and serde use 32 hex digits, and deserializing rejects anything else;\n  - no public constructor.\n- **Where it lives.** The key is a field of `SessionRuntime`, made in `SessionRuntime::new`, the path every session goes through. It is kept out of `SessionInfo`, so it is not on the wire. Rename, terminate, restart and attach/detach never touch it, and Delete drops it with the session.\n- **API.** `ActionCx::session_key()` and `ProjectCx::session_key()`; `session()` is unchanged.\n- **Threading.** One `SessionRef { id, key }` now replaces the bare `SessionId` in `ServiceHost::invoke`/`run_step`/`Caller`, so a new path cannot forget the key. Covered paths:\n  - a window's Invoke;\n  - `rpc_service`;\n  - `run_rpc_service`;\n  - a session chain through `ServerInvocation`;\n  - projections, through `Audience`.\n- **Docs:** docs/extending-heca.md explains `session()` against `session_key()`, and says keys are new after a server restart until T527.\n\nVerification:\n- New tests in heca/src/server/run/service_key_tests.rs:\n  - distinct keys;\n  - kept through rename, terminate and restart;\n  - a reused numeric id on a new server gives a new key;\n  - every path reports its own session's key, across two sessions;\n  - a projection gets its own session's key;\n  - serde round-trip, and invalid input rejected.\n- Two guarded behaviours were broken on purpose, and their tests failed.\n- `cargo test -p heca`: 1245 lib tests pass, re-run by me after review. Clippy and rustdoc are clean.\n\nRemaining, owned by T527 (C12): persist the key and restore the same key after a server restart.",
+      "descriptionUpdatedAt": "2026-11-14T20:14:00.128Z",
       "notes": "",
       "statusLog": [
         {
@@ -226,6 +226,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "d6d51e90-226f-4f01-b157-45f47790f589-check-002-in-progress-done",
+          "date": "2026-11-14T20:14:00.126Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped on branch feat/t556-session-key (worktree heca-feat-556), following decision 15768fa9.\n\n- **Public `SessionKey`** (heca/src/entry/service/session_key.rs, exported from the crate root):\n  - Copy/Eq/Hash, opaque, 128 random bits from `getrandom` (0.3, already locked);\n  - Display and serde use 32 hex digits, and deserializing rejects anything else;\n  - no public constructor.\n- **Where it lives.** The key is a field of `SessionRuntime`, made in `SessionRuntime::new`, the path every session goes through. It is kept out of `SessionInfo`, so it is not on the wire. Rename, terminate, restart and attach/detach never touch it, and Delete drops it with the session.\n- **API.** `ActionCx::session_key()` and `ProjectCx::session_key()`; `session()` is unchanged.\n- **Threading.** One `SessionRef { id, key }` now replaces the bare `SessionId` in `ServiceHost::invoke`/`run_step`/`Caller`, so a new path cannot forget the key. Covered paths:\n  - a window's Invoke;\n  - `rpc_service`;\n  - `run_rpc_service`;\n  - a session chain through `ServerInvocation`;\n  - projections, through `Audience`.\n- **Docs:** docs/extending-heca.md explains `session()` against `session_key()`, and says keys are new after a server restart until T527.\n\nVerification:\n- New tests in heca/src/server/run/service_key_tests.rs:\n  - distinct keys;\n  - kept through rename, terminate and restart;\n  - a reused numeric id on a new server gives a new key;\n  - every path reports its own session's key, across two sessions;\n  - a projection gets its own session's key;\n  - serde round-trip, and invalid input rejected.\n- Two guarded behaviours were broken on purpose, and their tests failed.\n- `cargo test -p heca`: 1245 lib tests pass, re-run by me after review. Clippy and rustdoc are clean.\n\nRemaining, owned by T527 (C12): persist the key and restore the same key after a server restart."
         }
       ],
       "decisions": [],
@@ -244,19 +252,19 @@
           "id": "d6d51e90-226f-4f01-b157-45f47790f589-check-001-public-opaque-serializable-sessionkey-128-random-bits-owned-by-the-session-new-on-create-kept-through-rename-terminate-restart-attach-gone-on-delete",
           "number": 1,
           "title": "Public opaque serializable SessionKey (128 random bits), owned by the session: new on create, kept through rename/terminate/restart/attach, gone on delete",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d6d51e90-226f-4f01-b157-45f47790f589-check-002-actioncx-session-key-and-projectcx-session-key-from-the-right-session-session-unchanged",
           "number": 2,
           "title": "ActionCx::session_key() and ProjectCx::session_key() from the right session; session() unchanged",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d6d51e90-226f-4f01-b157-45f47790f589-check-003-tests-distinct-keys-kept-through-lifecycle-reused-numeric-id-gets-a-new-key-cx-reports-own-session-serde-round-trip-and-docs",
           "number": 3,
           "title": "Tests (distinct keys, kept through lifecycle, reused numeric id gets a new key, cx reports own session, serde round-trip) and docs",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -264,20 +272,20 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-11-14T20:06:54.194Z",
-      "completedAt": "",
+      "completedAt": "2026-11-14T20:14:00.126Z",
       "createdAt": "2026-11-14T20:06:34.824Z",
-      "updatedAt": "2026-11-14T20:06:54.194Z",
+      "updatedAt": "2026-11-14T20:14:00.126Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
           "createdAt": "2026-11-14T20:06:54.125Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438"
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-14T09:59:01.452Z",
-  "updatedAt": "2026-11-14T20:06:54.194Z",
+  "updatedAt": "2026-11-14T20:14:00.126Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -322,6 +330,14 @@
       "fromStatus": "done",
       "toStatus": "in-progress",
       "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "f80a9f01-e867-40b5-8834-cbb87910060a",
+      "date": "2026-11-14T20:14:00.159Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],

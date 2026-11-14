@@ -744,7 +744,7 @@
       "priority": 9,
       "shortName": "ci-on-github-build-clippy-and",
       "title": "CI on GitHub: build, clippy and tests on macOS, Linux and Windows",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Approved by Antonio on 2026-11-14 as the way to verify T547 (the Windows named pipe), which cannot be built or run from the maintainer's Mac. It also covers his earlier request to add CI/CD configuration.\n\n## What exists\n- No `.github/workflows/` in the repo: nothing runs on a PR.\n- `rust-toolchain.toml` pins Rust 1.100.0 (profile minimal, components clippy and rustfmt), so CI uses the same toolchain as local work and heca-pro.\n- `scripts/lint-changed.sh` maps changed files to crates. A full-workspace lint is expensive here (AGENTS.md § Commands).\n- The socket code is Unix-only today (`#[cfg(unix)]` in heca/src/server/mod.rs `socket`, heca/src/client/mod.rs `transport::connect`, heca/src/client/local.rs), so the Windows job must compile the non-unix paths.\n- GPU tests: some renderer tests need an adapter (heca-renderer/src/gpu.rs `headless_device`). They must skip or be ignored on runners without a GPU, and the job must say which.\n\n## To build\n1. `.github/workflows/ci.yml`: on pull_request and on push to main. Matrix: ubuntu-latest, macos-latest, windows-latest. The toolchain comes from rust-toolchain.toml. Cache cargo with Swatinem/rust-cache.\n2. Steps: `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo test --workspace`. Linux needs the system packages winit/wgpu need (list them). CI is where the full workspace run belongs; the local hook rule against `--workspace` stays for local work.\n3. Make it pass. Fix real Windows/Linux compile errors at their source, never by `cfg`-hiding a feature. Ignore a test only where the runner lacks something real (GPU, display), and give the reason in the ignore attribute.\n4. README: a short \"Continuous integration\" note saying what runs and how to reproduce it locally.\n\n## Edge cases\n- Windows path separators and line endings in tests.\n- Socket tests are unix-only until T547.\n- Long build times: keep the cache key on Cargo.lock plus the toolchain.",
       "descriptionUpdatedAt": "2026-11-14T19:27:37.951Z",
       "notes": "",
@@ -764,6 +764,14 @@
           "toStatus": "planned",
           "title": "in-progress → planned (checkpoint saved)",
           "description": "Reason: heca-pro T013 needs the SessionKey; Antonio approved it and heca-pro work takes priority.\nWhat was being done: A sub-agent is bringing the CI up in heca-feat-555 (branch feat/t555-ci). Run 43634992831 carries the fixes: boxed TOML error, Windows warnings, portable home paths, collapsed if.\nResume location: /Users/antonio/projects/heca-feat-555, branch feat/t555-ci (pushed)\nHow to resume: Check `gh run list --branch feat/t555-ci`. When all three OS are green, review the diff, tick C1-C3, complete T555 and open the PR."
+        },
+        {
+          "id": "1cc22b72-b83d-4b65-9903-c58d35613c04",
+          "date": "2026-11-14T20:14:45.070Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from /Users/antonio/projects/heca-feat-555, branch feat/t555-ci (pushed). Check `gh run list --branch feat/t555-ci`. When all three OS are green, review the diff, tick C1-C3, complete T555 and open the PR."
         }
       ],
       "decisions": [],
@@ -790,16 +798,7 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "pauseSnapshot": {
-        "id": "b8300b68-e5cb-466a-934d-dfc84b6e9ae5",
-        "reason": "heca-pro T013 needs the SessionKey; Antonio approved it and heca-pro work takes priority.",
-        "whatWasBeingDone": "A sub-agent is bringing the CI up in heca-feat-555 (branch feat/t555-ci). Run 43634992831 carries the fixes: boxed TOML error, Windows warnings, portable home paths, collapsed if.",
-        "resumeLocation": "/Users/antonio/projects/heca-feat-555, branch feat/t555-ci (pushed)",
-        "howToResume": "Check `gh run list --branch feat/t555-ci`. When all three OS are green, review the diff, tick C1-C3, complete T555 and open the PR.",
-        "relatedTaskId": "d6d51e90-226f-4f01-b157-45f47790f589",
-        "pausedAt": "2026-11-14T20:06:54.194Z",
-        "pausedBy": ""
-      },
+      "pauseSnapshot": null,
       "pauseHistory": [
         {
           "id": "b8300b68-e5cb-466a-934d-dfc84b6e9ae5",
@@ -815,14 +814,14 @@
       "startedAt": "2026-11-14T19:42:51.309Z",
       "completedAt": "",
       "createdAt": "2026-11-14T19:27:37.896Z",
-      "updatedAt": "2026-11-14T20:06:54.194Z",
+      "updatedAt": "2026-11-14T20:14:45.070Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
-          "createdAt": "2026-11-14T19:42:50.656Z"
+          "createdAt": "2026-11-14T20:14:44.950Z"
         }
       ],
-      "activeOwnerSession": ""
+      "activeOwnerSession": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438"
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
@@ -1091,7 +1090,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
-      "createdAt": "2026-11-14T19:42:50.656Z"
+      "createdAt": "2026-11-14T20:14:44.950Z"
     },
     {
       "sessionId": "mcp-process:4a6d23ed-1c33-4fa6-aa9e-ca2d81c7c33c",
