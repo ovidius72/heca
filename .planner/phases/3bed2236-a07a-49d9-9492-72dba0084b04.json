@@ -1,0 +1,162 @@
+{
+  "id": "3bed2236-a07a-49d9-9492-72dba0084b04",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 108,
+  "shortId": "T7JF9",
+  "priority": 9,
+  "slug": "ready-07-extension-services-on-the-server-what-heca-pro-mounts-its-services-on",
+  "title": "ready-07: extension services on the server — what heca-pro mounts its services on",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "A public, generic way for an extension to run a service inside the heca server (daemon and standalone), with its own lifecycle, context, wakeup, client projection and action access.",
+  "description": "Requested by heca-pro (Heca-Pro P003(F001)/T013, also consumed by T014). Proposed contract: `~/projects/heca-pro-feat-13/docs/open-heca-work.md:40` (\"Server service contract for T013\"). heca owns the generic mounting, lifecycle, wakeup, action context and client projection; heca-pro owns its service implementation, room logic and archive. heca must stay generic: no heca-pro room or conversation types in heca.\n\n## Current state (verified on main a5dd334d, 2026-11-14)\n- The public extension entry point `heca::extension(name)` (`heca/src/entry/extension.rs:44`) offers only actions (`:80`), layers (`:87`), terminals (`:105`) and pane contributions (`pane_button`, `pane_chip`, `pane_line`). There is no server-side service.\n- An extension action handler is `Fn(&mut ProviderCx, &Intent) -> Handled` (`heca/src/entry/action.rs:45`; `ProviderCx` at `heca/src/providers/mod.rs:230`). It reads the chrome store and emits intents; it cannot reach server state or a service.\n- The headless server `serve()` (`heca/src/server/runtime/headless.rs:7`) builds the `ServerLoop` and calls `register_extensions` (`heca/src/server/run/mod.rs:101`), which registers only queued actions (`entry/action.rs:110`).\n- Nothing server-side is publicly exported from `heca/src/lib.rs`.\n\n## Reusable building blocks (internal today)\n- Waking the owner loop from another thread and submitting work: the notification sink does exactly this (`headless.rs:14` `install_notification_sink` → `RuntimeHandle::raise` → `Event::Notification`; `heca/src/server/runtime/mod.rs:17` `Event`, `:29` `RuntimeHandle`, `:142` `dispatch`).\n- Per-topic projections sent to attached clients on attach and on change: `publish_notifications` / `publish_windows` (`heca/src/server/session/publish.rs:96`, `:72`), and the script event stream `StreamEvent` / `EventFanout` (`heca/src/server/events.rs:22`, `:37`, T546).\n- Identities: `heca_core::layout::SessionId` (public) and `Connection.id` (`heca/src/server/connection.rs:19`, internal; the one window identity, decision 2534270c).\n- Wire vocabulary: `ClientMsg` / `ServerMsg` (`heca/src/server/wire/mod.rs:35`, `:93`).\n\n## Behaviour to provide (from the heca-pro contract, to be agreed first)\n1. A builder-style extension declaration registers a service factory before `heca::run()`. The host invokes it once per actual server (daemon and standalone), never per window, dock, session switch or snapshot.\n2. Lifecycle without a window, winit or GPU; closing a client does not stop it; server shutdown stops it once, with bounded queues and visible failures.\n3. A public context with the configuration/path owner and the real server/session/client identities (reuse `SessionId` and `Connection.id`; no second window identity; a request never asserts its sender).\n4. Background work wakes the loop and submits bounded results without polling or blocking dispatch; service data is committed before the projection event that announces it.\n5. The existing transport carries an initial extension snapshot plus versioned deltas to permitted clients; reattach or a lost/expired cursor gets a fresh snapshot; a client is never the authority.\n6. Registered actions reach their owning service through public context; native UI, RPC and other commands keep the existing action/permission/result door. No second server, private dispatcher or terminal-input injection.\n\n## Rules\nAGENTS.md § 0 and Rule Zero: the API is what a plugin author types (builder on the extension, no registry lookups, ids or crate-private types in authoring). Reuse the wakeup, projection and identity mechanisms above instead of a parallel path. Work in its own worktree; the shape is agreed with heca-pro before code.\n\nDepends on: P104 (server/client split), P099 (socket, events), P100 (sessions) — all in place.",
+  "descriptionUpdatedAt": "2026-11-14T09:59:01.539Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "74772bff-bdb4-4df7-8ef9-85d047bd8842"
+  ],
+  "tasks": [
+    {
+      "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842",
+      "phaseId": "3bed2236-a07a-49d9-9492-72dba0084b04",
+      "number": 553,
+      "shortId": "SDYH5",
+      "priority": 1,
+      "shortName": "extension-services-on-the-serv",
+      "title": "Extension services on the server: mount, lifecycle, context, wakeup, client projection, action access",
+      "status": "done",
+      "description": "One generic capability for heca-pro (and any extension): run a service inside the heca server. Full context, code references and the requested behaviour are in the phase P108(F012) description; the heca-pro proposal is `~/projects/heca-pro-feat-13/docs/open-heca-work.md:40`.\n\nWhat exists vs what to build:\n- Exists: extension entry point with actions/layers/terminals/pane contributions (`heca/src/entry/extension.rs:44`); action handlers get `ProviderCx` only (`heca/src/entry/action.rs:45`); `ServerLoop::register_extensions` registers actions only (`heca/src/server/run/mod.rs:101`); the headless entry (`heca/src/server/runtime/headless.rs:7`); internal wakeup via `RuntimeHandle` (`heca/src/server/runtime/mod.rs:29`), already used by notifications (`headless.rs:14`); per-topic client projections (`heca/src/server/session/publish.rs:72`, `:96`) and the event stream (`heca/src/server/events.rs`).\n- To build: a public service declaration on the extension builder, a host-owned lifecycle per server, a public service context, a supported wakeup/submit path, a generic versioned snapshot+delta projection to clients over the existing `ClientMsg`/`ServerMsg` transport, and action access to the owning service.\n\nSteps are the checklist. Step 1 (agree the API shape with the heca-pro agent) comes before any code; record the agreed shape as an Accepted Decision on this task.\n\nEdge cases to cover: daemon vs standalone (one invocation per server, not per window); several servers in one process get separate service instances; client detach/reattach and session switch never restart the service; lost or expired cursor → fresh snapshot; server shutdown stops workers once; a failing factory is reported visibly and does not take the server down silently; no heca-pro types in heca.\n\n---\n**Completion summary:**\nShipped on branch feat/t553-extension-services (worktree heca-feat-553), following decision c7fb5fc3.\n\nAuthoring API, in heca/src/entry/service/:\n- `ext.service(short, factory) -> ServiceRegistration<S>`, plus the trait `Service` (receive / project / stop, `SCHEMA_VERSION`).\n- `registration.action(meta, handler)`, where the handler receives `&mut S` and returns `ActionResult::{Done, Refused, Later(ticket)}`.\n- `registration.client(initial, apply) -> ServiceState<C>`, a reactive value on the window.\n- `ServiceInbox` is bounded and Send, and a send wakes the server through the RuntimeHandle waker.\n- Contexts: `StartCx`, `ServiceCx` (republish, complete), `ActionCx` (session, optional client, effective session config, later), `ProjectCx` (session, client, config, epoch, since).\n\nHost, in heca/src/server/services/:\n- Started in `ServerLoop::from_config`, so once per server, for both the daemon and standalone. Two servers in one process each start their own.\n- Each pump drains the inboxes.\n- Projections are computed per window (session plus connection), with per-window revisions and a server epoch. A window gets a snapshot on attach, on reattach, on `ClientMsg::ServiceResync`, and when it holds data from another server run. Updates are checked against `max_frame_bytes`.\n- Wire messages: `ServerMsg::Service` and `ClientMsg::ServiceResync`.\n- Deferred tickets keep the RPC reply until the service settles them; a window is told only about a refusal.\n- `shutdown` calls stop until Done, delivering inbox messages in between, within `stop_timeout_ms`, then answers the callers still waiting. The daemon loop end now calls `shutdown`.\n- A failing factory, message or projection is reported as a notification plus a line on stderr. Start-up reports are held for the first session.\n\nRouting:\n- Service action metadata enters the one catalog through `register_queued_actions`, as `DynamicHandler::Service`. A name already taken is refused and reported.\n- A window's call goes `ClientMsg::Invoke` → session → host.\n- A script's direct call goes `begin_rpc` → `rpc_service`, using the shared check `check_server_intent` extracted from `execute_server_with`.\n- A script chain that ends in a service action now works too: `execute_server_with` hands its callers a `ServerStep::{Action, Service}`.\n\nSettings: `[settings.services] inbox_capacity = 256, stop_timeout_ms = 3000` (config.default.toml, heca-config/src/settings/services.rs). `StartupQueue` gained `close` / `is_closed` / `peek`, so every server reads the service declarations.\n\nDocs:\n- docs/extending-heca.md, section \"A service inside the server\".\n- docs/server-client-architecture.md, section \"Extension services\".\n\nVerification:\n- Unit tests: 5 in entry/service/tests.rs and 9 in server/run/service_tests.rs. They cover:\n  - one instance per server, never restarted by detach or reattach;\n  - snapshot, then delta, then reattach or resync giving a snapshot;\n  - a script answered at once, deferred, or with \"who asked\";\n  - a window's call, with a refusal shown;\n  - shutdown waiting for a pending stop, and stopping once;\n  - a failing factory;\n  - an update over the frame limit;\n  - the owner loop waking for a worker's message and stopping its services at the end;\n  - a script chain ending in a service action.\n- Each guarded behaviour was broken on purpose and its test went red. A guard that could not be caught was redundant, so it was removed.\n- `cargo test -p heca -p heca-config`: all pass, 1220 heca lib tests.\n- Clippy on toolchain 1.100.0 with a forced re-lint: clean. `cargo doc --document-private-items` for heca: clean.\n- Not verified: no GUI run. A component reading `ServiceState` in the real app has not been tried; there is no GUI change.",
+      "descriptionUpdatedAt": "2026-11-14T19:07:07.518Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "cdfb1632-c7d1-4cf9-acb7-0c320dd8ed71",
+          "date": "2026-11-14T14:04:41.850Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-002-in-progress-done",
+          "date": "2026-11-14T19:07:07.509Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped on branch feat/t553-extension-services (worktree heca-feat-553), following decision c7fb5fc3.\n\nAuthoring API, in heca/src/entry/service/:\n- `ext.service(short, factory) -> ServiceRegistration<S>`, plus the trait `Service` (receive / project / stop, `SCHEMA_VERSION`).\n- `registration.action(meta, handler)`, where the handler receives `&mut S` and returns `ActionResult::{Done, Refused, Later(ticket)}`.\n- `registration.client(initial, apply) -> ServiceState<C>`, a reactive value on the window.\n- `ServiceInbox` is bounded and Send, and a send wakes the server through the RuntimeHandle waker.\n- Contexts: `StartCx`, `ServiceCx` (republish, complete), `ActionCx` (session, optional client, effective session config, later), `ProjectCx` (session, client, config, epoch, since).\n\nHost, in heca/src/server/services/:\n- Started in `ServerLoop::from_config`, so once per server, for both the daemon and standalone. Two servers in one process each start their own.\n- Each pump drains the inboxes.\n- Projections are computed per window (session plus connection), with per-window revisions and a server epoch. A window gets a snapshot on attach, on reattach, on `ClientMsg::ServiceResync`, and when it holds data from another server run. Updates are checked against `max_frame_bytes`.\n- Wire messages: `ServerMsg::Service` and `ClientMsg::ServiceResync`.\n- Deferred tickets keep the RPC reply until the service settles them; a window is told only about a refusal.\n- `shutdown` calls stop until Done, delivering inbox messages in between, within `stop_timeout_ms`, then answers the callers still waiting. The daemon loop end now calls `shutdown`.\n- A failing factory, message or projection is reported as a notification plus a line on stderr. Start-up reports are held for the first session.\n\nRouting:\n- Service action metadata enters the one catalog through `register_queued_actions`, as `DynamicHandler::Service`. A name already taken is refused and reported.\n- A window's call goes `ClientMsg::Invoke` → session → host.\n- A script's direct call goes `begin_rpc` → `rpc_service`, using the shared check `check_server_intent` extracted from `execute_server_with`.\n- A script chain that ends in a service action now works too: `execute_server_with` hands its callers a `ServerStep::{Action, Service}`.\n\nSettings: `[settings.services] inbox_capacity = 256, stop_timeout_ms = 3000` (config.default.toml, heca-config/src/settings/services.rs). `StartupQueue` gained `close` / `is_closed` / `peek`, so every server reads the service declarations.\n\nDocs:\n- docs/extending-heca.md, section \"A service inside the server\".\n- docs/server-client-architecture.md, section \"Extension services\".\n\nVerification:\n- Unit tests: 5 in entry/service/tests.rs and 9 in server/run/service_tests.rs. They cover:\n  - one instance per server, never restarted by detach or reattach;\n  - snapshot, then delta, then reattach or resync giving a snapshot;\n  - a script answered at once, deferred, or with \"who asked\";\n  - a window's call, with a refusal shown;\n  - shutdown waiting for a pending stop, and stopping once;\n  - a failing factory;\n  - an update over the frame limit;\n  - the owner loop waking for a worker's message and stopping its services at the end;\n  - a script chain ending in a service action.\n- Each guarded behaviour was broken on purpose and its test went red. A guard that could not be caught was redundant, so it was removed.\n- `cargo test -p heca -p heca-config`: all pass, 1220 heca lib tests.\n- Clippy on toolchain 1.100.0 with a forced re-lint: clean. `cargo doc --document-private-items` for heca: clean.\n- Not verified: no GUI run. A component reading `ServiceState` in the real app has not been tried; there is no GUI change."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "c7fb5fc3-236e-4017-9573-b77b2e924c7d",
+          "title": "Server extension services: agreed contract with heca-pro (factory + typed service + registration-bound actions)",
+          "decision": "Agreed on 2026-11-14 between heca (Opus) and the heca-pro agent, relayed and approved by Antonio. Shape: `ext.service(name, factory)` registers a factory run once per actual server (daemon and standalone, never per window/dock/session switch/snapshot), returning a `ServiceRegistration<S>`; actions are declared on that registration and receive `&mut S` directly (no plugin-written lookups).\n1. Threads: no Send/Sync on the factory or the service — registrations are thread-local and the server loop runs on the registering thread. Only the service inbox and its messages cross threads.\n2. Stop: `stop(cx) -> Done | Pending`, non-blocking, safe to call repeatedly, with a shutdown deadline from config.\n3. Context: a new per-run server identity (epoch); the session's effective configuration is available to actions and projections. heca-pro's persistent archive identity stays separate and is not heca's concern.\n4. Identity: only the provenance heca really has — the session and an optional `Connection.id` (absent for windowless RPC). No promise of authentication.\n5. Projection: computed by the service per recipient (session + client). `None` removes that recipient's previous projection; it does not mean \"no update\". Payload is serializable (JSON on the wire), with service, schema_version, server_epoch, revision, base_revision (absent for snapshots), kind snapshot|delta; attach, reconnect, different epoch or a missing revision force a snapshot; size bounds; only committed data.\n6. Client: the extension applies snapshots and deltas (it knows their meaning). heca owns transport, revision checking, snapshot re-requests and public reactive access from components — no manual lookups or per-dock state copies.\n7. Actions: the existing action path (`ClientMsg::Invoke` → server-side dynamic actions, same catalog/permission/RPC door), returning either an immediate result or a deferred ticket the service completes after commit. A timeout or disconnect never re-runs the action nor implicitly cancels an accepted transaction.\n8. Names: `<extension>.<action>`; duplicates are refused with a visible error.",
+          "rationale": "heca-pro needs a server-resident service (rooms) built on open heca. The corrected contract matches what heca really has: thread-local registration on the owner thread, ServerWaker-based wakeup, JSON wire, per-recipient projections (as per-window notifications), the existing server-side dynamic action path, local owner-only identity. It keeps heca generic and the authoring API Rule-Zero compliant.",
+          "implementationNotes": "Reuse: RuntimeHandle/Event wakeup used by the notification sink (heca/src/server/runtime/mod.rs, headless.rs:14) for the bounded service inbox; per-recipient projection like `visible_notifications_for`; `ClientMsg::Invoke` → `execute_server_dynamic` (heca/src/server/session/mod.rs:366, heca/src/actions/registry/mod.rs:188) for actions; `<extension>.<short>` naming and the existing duplicate refusal. New: server epoch; deferred correlated replies (today RPC answers are synchronous with a timeout, heca/src/server/socket/runtime.rs:89); a generic versioned extension projection message in ClientMsg/ServerMsg; a client-side public reactive accessor fed by the extension's snapshot/delta appliers; per-service inbox bounds and shutdown deadline as config keys. Still to fix exact signatures during implementation: how the service signals \"republish\" (e.g. after commit) so heca recomputes per-recipient projections, and the client-side accessor/applier declaration on the registration.",
+          "acceptedAt": "2026-11-14T13:53:14.016Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-001-agree-the-public-api-shape-with-the-heca-pro-agent-service-declaration-context-wakeup-projection-action-access-record-it-as-an-accepted-decision",
+          "number": 1,
+          "title": "Agree the public API shape with the heca-pro agent (service declaration, context, wakeup, projection, action access); record it as an Accepted Decision",
+          "checked": true
+        },
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-002-service-declaration-on-the-extension-builder-host-owned-lifecycle-created-once-per-server-daemon-and-standalone-unaffected-by-clients-session-switches-stopped-once-on-shutdown-with-visible-failures",
+          "number": 2,
+          "title": "Service declaration on the extension builder + host-owned lifecycle: created once per server (daemon and standalone), unaffected by clients/session switches, stopped once on shutdown with visible failures",
+          "checked": true
+        },
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-003-public-service-context-configuration-path-owner-and-real-server-session-client-identities-reuse-sessionid-and-connection-id-no-second-window-identity-requests-never-assert-their-sender",
+          "number": 3,
+          "title": "Public service context: configuration/path owner and real server/session/client identities (reuse SessionId and Connection.id; no second window identity; requests never assert their sender)",
+          "checked": true
+        },
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-004-wakeup-and-bounded-result-submission-from-background-work-reusing-the-runtimehandle-path-the-notification-sink-uses-data-committed-before-its-projection-event",
+          "number": 4,
+          "title": "Wakeup and bounded result submission from background work, reusing the RuntimeHandle path the notification sink uses; data committed before its projection event",
+          "checked": true
+        },
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-005-generic-extension-projection-initial-snapshot-versioned-deltas-to-permitted-clients-over-the-existing-clientmsg-servermsg-transport-fresh-snapshot-on-reattach-or-lost-cursor-clients-never-authoritative",
+          "number": 5,
+          "title": "Generic extension projection: initial snapshot + versioned deltas to permitted clients over the existing ClientMsg/ServerMsg transport; fresh snapshot on reattach or lost cursor; clients never authoritative",
+          "checked": true
+        },
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-006-registered-actions-reach-their-owning-service-through-public-context-through-the-existing-action-permission-result-door-ui-rpc",
+          "number": 6,
+          "title": "Registered actions reach their owning service through public context, through the existing action/permission/result door (UI, RPC)",
+          "checked": true
+        },
+        {
+          "id": "74772bff-bdb4-4df7-8ef9-85d047bd8842-check-007-tests-daemon-standalone-reattach-shutdown-multiple-servers-and-docs-docs-server-client-architecture-md-the-extension-authoring-guide",
+          "number": 7,
+          "title": "Tests (daemon + standalone, reattach, shutdown, multiple servers) and docs (docs/server-client-architecture.md + the extension authoring guide)",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-14T14:04:41.850Z",
+      "completedAt": "2026-11-14T19:07:07.509Z",
+      "createdAt": "2026-11-14T09:59:14.909Z",
+      "updatedAt": "2026-11-14T19:07:07.509Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+          "createdAt": "2026-11-14T14:04:41.736Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-11-14T09:59:01.452Z",
+  "updatedAt": "2026-11-14T19:07:07.509Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "1c98eb0d-0efc-4136-a712-f038f6f877f4",
+      "date": "2026-11-14T14:04:41.903Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "1b05c899-0a6a-44f9-b2a8-2620c027cfb4",
+      "date": "2026-11-14T19:07:07.629Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+      "createdAt": "2026-11-14T14:04:41.736Z"
+    }
+  ]
+}
