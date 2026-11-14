@@ -32,26 +32,6 @@ fn add_initial_pane(session: &mut Session, view: &mut WindowView) -> PaneId {
     pane_id
 }
 
-/// Pick a surface composite-alpha mode. When transparency is requested, prefer a
-/// transparency-capable mode (premultiplied, matching the renderers' premultiplied
-/// blending, then postmultiplied). Otherwise keep today's opaque behavior.
-fn choose_alpha_mode(
-    modes: &[wgpu::CompositeAlphaMode],
-    transparent: bool,
-) -> wgpu::CompositeAlphaMode {
-    use wgpu::CompositeAlphaMode::*;
-    if transparent {
-        for pref in [PreMultiplied, PostMultiplied] {
-            if modes.contains(&pref) {
-                return pref;
-            }
-        }
-    } else if modes.contains(&Opaque) {
-        return Opaque;
-    }
-    modes.first().copied().unwrap_or(Auto)
-}
-
 /// Apply OS backdrop blur / vibrancy once after window creation, when enabled.
 /// macOS = `NSVisualEffectView`; Windows = acrylic; Linux/other = no-op (the
 /// effect is not portably available). Needs a transparent window (F2b) to show.
@@ -243,55 +223,10 @@ pub(crate) async fn init_state(
     apply_window_vibrancy(window.as_ref(), &appearance);
     let scale_factor = window.scale_factor();
 
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        ..Default::default()
-    });
-
-    let surface = instance
-        .create_surface(window.clone())
-        .expect("Failed to create surface");
-
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })
-        .await
-        .expect("Failed to find an appropriate adapter");
-
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor {
-            label: Some("heca_device"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::default(),
-            memory_hints: wgpu::MemoryHints::default(),
-            trace: wgpu::Trace::Off,
-        })
-        .await
-        .expect("Failed to create device");
-
-    let surface_caps = surface.get_capabilities(&adapter);
-    let surface_format = surface_caps
-        .formats
-        .iter()
-        .find(|f| f.is_srgb())
-        .copied()
-        .unwrap_or(surface_caps.formats[0]);
-
+    let gpu = heca_renderer::gpu::WindowGpu::new(window.clone(), "heca_device", appearance.is_transparent()).await;
+    let surface_format = gpu.format();
+    let heca_renderer::gpu::WindowGpu { surface, device, queue, config } = gpu;
     let physical = window.inner_size();
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface_format,
-        width: physical.width.max(1),
-        height: physical.height.max(1),
-        present_mode: wgpu::PresentMode::AutoVsync,
-        desired_maximum_frame_latency: 2,
-        alpha_mode: choose_alpha_mode(&surface_caps.alpha_modes, appearance.is_transparent()),
-        view_formats: vec![],
-    };
-    surface.configure(&device, &config);
 
     let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
     let image_renderer = heca_renderer::image::ImageRenderer::new(&device, surface_format);

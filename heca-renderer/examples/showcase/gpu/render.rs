@@ -170,8 +170,8 @@ impl GpuState {
         self.text.set_damage(damage);
 
         let frame = match self.surface.get_current_texture() {
-            Ok(f) => f,
-            Err(_) => {
+            wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
+            _ => {
                 self.surface.configure(&self.device, &self.config);
                 return;
             }
@@ -222,7 +222,7 @@ impl GpuState {
         // Blit the composited scene onto the swapchain.
         self.compositor.blit(&view, &mut encoder);
         self.queue.submit(std::iter::once(encoder.finish()));
-        frame.present();
+        self.queue.present(frame);
 
         // Decide when the next frame is needed: a continuous animation (spinner,
         // slide) runs at the ~30fps cap; otherwise sleep until the soonest timed

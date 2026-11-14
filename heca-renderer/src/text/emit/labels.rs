@@ -250,11 +250,7 @@ mod tests {
 
     #[test]
     fn duotone_layers_keep_their_shared_font_origin() {
-        let instance = wgpu::Instance::default();
-        let adapter = pollster::block_on(instance.request_adapter(&Default::default()))
-            .expect("a GPU adapter for the rendering regression");
-        let (device, queue) = pollster::block_on(adapter.request_device(&Default::default()))
-            .expect("a rendering device");
+        let (device, queue) = crate::gpu::headless_device();
         let mut renderer = TextRenderer::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb);
         for size in [16.0, 20.0, 24.0] {
             for scale in [1.0, 2.0] {

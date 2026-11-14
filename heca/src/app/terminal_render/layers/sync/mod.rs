@@ -228,10 +228,12 @@ fn render_terminal_layer_update(
             label: Some("terminal_layer_update"),
         });
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        multiview_mask: None,
         label: Some("terminal_layer_clear_scratch"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: state.terminal_layer_scratch.view(),
             resolve_target: None,
+            depth_slice: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                 store: wgpu::StoreOp::Store,

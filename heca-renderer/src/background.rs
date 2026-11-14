@@ -94,8 +94,8 @@ impl BackgroundLayer {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("background_blit_pipeline_layout"),
-            bind_group_layouts: &[&blit_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&blit_layout)],
+            immediate_size: 0,
         });
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -128,7 +128,7 @@ impl BackgroundLayer {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -258,10 +258,12 @@ impl BackgroundLayer {
             ],
         });
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            multiview_mask: None,
             label: Some("background_blit_pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &self.cache_view,
                 resolve_target: None,
+                depth_slice: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: wgpu::StoreOp::Store,

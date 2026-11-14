@@ -18,7 +18,7 @@ private_intra_doc_links = "deny"
 
 [workspace.dependencies]
 winit = "0.30"
-wgpu = "25"
+wgpu = "30"
 pollster = "0.4"
 
 # --- build-speed profile -------------------------------------------------

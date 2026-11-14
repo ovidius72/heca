@@ -5,6 +5,7 @@ pub mod blur;
 pub(crate) mod clip;
 pub mod composite;
 pub mod font;
+pub mod gpu;
 pub mod gradient;
 pub mod grid;
 pub mod image;

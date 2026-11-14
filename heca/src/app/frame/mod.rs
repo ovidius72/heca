@@ -129,15 +129,15 @@ impl Frame {
     /// draw into (lost, outdated): the frame is skipped.
     pub(super) fn open(state: &mut AppState, v: FrameValues) -> Option<Self> {
         let surface_texture = match state.surface.get_current_texture() {
-            Ok(t) => t,
-            Err(wgpu::SurfaceError::Lost) => {
+            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Lost => {
                 state
                     .surface
                     .configure(&state.device, &state.surface_config);
                 return None;
             }
-            Err(wgpu::SurfaceError::OutOfMemory) => std::process::exit(1),
-            Err(_) => return None,
+            // Outdated, occluded, timed out or invalid: skip this frame.
+            _ => return None,
         };
         let view = surface_texture
             .texture
@@ -192,6 +192,6 @@ impl Frame {
         std::mem::take(&mut self.flushed.drawn).settle(state);
         state.compositor.blit(&self.view, &mut self.encoder);
         state.queue.submit(std::iter::once(self.encoder.finish()));
-        self.surface_texture.present();
+        state.queue.present(self.surface_texture);
     }
 }

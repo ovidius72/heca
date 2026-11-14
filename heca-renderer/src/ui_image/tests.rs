@@ -49,15 +49,13 @@ fn partial_and_idle_redraws_do_not_accumulate_image_alpha() {
         queue.submit([encoder.finish()]);
         let (tx, rx) = mpsc::channel();
         buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| { tx.send(result).unwrap(); });
-        device.poll(wgpu::PollType::Wait).unwrap();
+        device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
         rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
-        let result = buffer.slice(..).get_mapped_range().to_vec();
+        let result = buffer.slice(..).get_mapped_range().expect("mapped").to_vec();
         buffer.unmap();
         result
     }
-    let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
-    let (device, queue) = pollster::block_on(adapter.request_device(&Default::default())).unwrap();
+    let (device, queue) = crate::gpu::headless_device();
     let format = wgpu::TextureFormat::Rgba8Unorm;
     let target = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("persistent image regression"),
@@ -78,7 +76,7 @@ fn partial_and_idle_redraws_do_not_accumulate_image_alpha() {
         if clear {
             let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view, resolve_target: None,
+                    view: &view, resolve_target: None, depth_slice: None,
                     ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store },
                 })], ..Default::default()

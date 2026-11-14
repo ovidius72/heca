@@ -19,10 +19,12 @@ impl Frame {
             (bg[0] as f64, bg[1] as f64, bg[2] as f64, bg[3] as f64)
         };
         self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            multiview_mask: None,
             label: Some("clear"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &self.scene,
                 resolve_target: None,
+                depth_slice: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: clear_r,
