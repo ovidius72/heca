@@ -15,7 +15,7 @@ use heca_config::loader::AppConfig;
 use heca_core::layout::SessionId;
 
 use crate::chrome::Intent;
-use crate::entry::service::{ActionResult, ProjectCx, ServiceTicket, Stop};
+use crate::entry::service::{ActionResult, ProjectCx, ServiceTicket, SessionKey, Stop};
 
 use super::connection::{Attachment, Connection};
 use super::identity::ServerIdentity;
@@ -24,7 +24,7 @@ use super::ServerWaker;
 
 mod running;
 
-pub(crate) use running::{Caller, Home, Hosted, Running, StartArgs};
+pub(crate) use running::{Caller, Home, Hosted, Running, SessionRef, StartArgs};
 use running::Projected;
 
 /// The one host, shared by the server and every session it owns.
@@ -62,6 +62,7 @@ impl Reply {
 /// One window's place in the session it is attached to, as the services see it.
 pub(super) struct Audience<'a> {
     pub(super) session: SessionId,
+    pub(super) key: SessionKey,
     /// The session's effective configuration; the server's when the session has none of its own.
     pub(super) config: Option<&'a AppConfig>,
     pub(super) clients: Vec<Rc<Connection>>,
@@ -135,7 +136,7 @@ impl ServiceHost {
 
     /// Run a service action. An immediate answer goes to `reply` now; a ticket keeps it until the
     /// service settles it.
-    pub(crate) fn invoke(&mut self, session: SessionId, client: Option<u64>, config: Option<&AppConfig>,
+    pub(crate) fn invoke(&mut self, session: SessionRef, client: Option<u64>, config: Option<&AppConfig>,
         intent: &Intent, reply: Reply) {
         let Some(index) = self.services.iter().position(|service| service.owns(&intent.action)) else {
             return reply.answer(Err(format!("no service runs '{}'", intent.action)));
@@ -143,7 +144,7 @@ impl ServiceHost {
         let Some(config) = config.or(self.config.as_deref()) else {
             return reply.answer(Err("the server has no configuration".into()));
         };
-        let caller = Caller { session: session.0, client, config };
+        let caller = Caller { session, client, config };
         match self.services[index].invoke(self.epoch, caller, intent) {
             ActionResult::Done(line) => reply.answer(Ok(line)),
             ActionResult::Refused(reason) => reply.answer(Err(reason)),
@@ -154,7 +155,7 @@ impl ServiceHost {
 
     /// A service action that a script's chain reached (no window to hand it to): a refusal fails
     /// the chain, a deferred answer is accepted and not waited for.
-    pub(crate) fn run_step(&mut self, session: SessionId, config: Option<&AppConfig>, intent: &Intent)
+    pub(crate) fn run_step(&mut self, session: SessionRef, config: Option<&AppConfig>, intent: &Intent)
         -> Result<(), crate::rpc::RpcError> {
         let (sender, answer) = mpsc::channel();
         self.invoke(session, None, config, intent, Reply::Step(sender));
@@ -204,7 +205,7 @@ impl ServiceHost {
                     if seen.is_some() && !republish { continue; }
                     let since = seen.and_then(|seen| seen.revision);
                     let cx = ProjectCx {
-                        session: group.session.0, client: client.id,
+                        session: group.session.0, session_key: group.key, client: client.id,
                         config: group.config.unwrap_or(&server_config),
                         extension: self.services[index].extension(), epoch: self.epoch, since,
                     };

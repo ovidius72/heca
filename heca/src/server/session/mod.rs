@@ -13,6 +13,7 @@ use heca_core::layout::Session;
 
 use super::connection::{Attachment, Connection};
 use super::sessions::{SessionInfo, SessionStatus};
+use crate::entry::service::SessionKey;
 use super::wire::{ClientMsg, ServerMsg};
 use super::{Asker, Change, ServerState};
 
@@ -27,6 +28,8 @@ pub(crate) struct SessionRuntime {
     state: ServerState,
     session: Session,
     identity: SessionInfo,
+    /// Made when the session is, kept through everything but its deletion; never on the wire.
+    key: SessionKey,
     saved_terminals: Vec<super::sessions::RecordedTerminal>,
     resume_programs: bool,
     resume_harness: bool,
@@ -67,6 +70,7 @@ impl SessionRuntime {
         Self {
             state,
             identity: SessionInfo::unnamed(session.id, &defaults.session_name_format, None),
+            key: SessionKey::generate(),
             saved_terminals: Vec::new(),
             resume_programs: defaults.resume_programs,
             resume_harness: defaults.resume_harness,
@@ -116,10 +120,16 @@ impl SessionRuntime {
         self.config.as_deref()
     }
 
+    /// This session as the services are told of it.
+    pub(crate) fn service_ref(&self) -> super::services::SessionRef {
+        super::services::SessionRef { id: self.session.id, key: self.key }
+    }
+
     /// This session's attached windows, for the services to show.
     pub(super) fn audience(&self) -> super::services::Audience<'_> {
         super::services::Audience {
             session: self.session.id,
+            key: self.key,
             config: self.config(),
             clients: self.clients.iter()
                 .filter(|client| !client.is_closed() && matches!(client.attachment.get(), Attachment::Attached))
@@ -401,7 +411,7 @@ impl SessionRuntime {
                 }
                 ClientMsg::Invoke { intent } if self.services.borrow().owns(&intent.action) => {
                     let reply = super::services::Reply::Window { action: intent.action.clone() };
-                    self.services.borrow_mut().invoke(self.session.id, Some(self.clients[i].id),
+                    self.services.borrow_mut().invoke(self.service_ref(), Some(self.clients[i].id),
                         self.config.as_deref(), &intent, reply);
                 }
                 ClientMsg::Invoke { intent } => {

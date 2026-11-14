@@ -20,6 +20,8 @@ pub(crate) enum ServerStep<'a> {
 pub(crate) struct ServerInvocation<'a> {
     pub(crate) state: &'a mut ServerState,
     pub(crate) session: &'a mut Session,
+    /// The session as the services are told of it.
+    pub(crate) service_ref: crate::server::services::SessionRef,
     pub(crate) store: SharedChromeState,
     pub(crate) catalog: &'a ActionCatalog,
     pub(crate) confirm: &'a heca_config::confirm::ConfirmConfig,
@@ -40,7 +42,7 @@ impl ActionRegistry {
             ServerStep::Action(action) if ServerState::runs(action.kind()) && !crate::server::sessions::owns(action.kind()) =>
                 Ok(cx.state.run(cx.session, cx.asker, &action)),
             ServerStep::Service(intent) =>
-                cx.services.borrow_mut().run_step(cx.session.id, cx.config, intent).map(|()| Vec::new()),
+                cx.services.borrow_mut().run_step(cx.service_ref, cx.config, intent).map(|()| Vec::new()),
             ServerStep::Action(_) => Err(RpcError::NotRunnable(intent.action.clone())),
         })
     }

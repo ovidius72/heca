@@ -10,7 +10,7 @@ use heca_config::loader::AppConfig;
 use crate::chrome::Intent;
 use crate::entry::service::{
     ActionCx, ActionFn, ActionResult, Effects, ProjectCx, Projection, Service, ServiceCx,
-    ServiceInbox, Stop,
+    ServiceInbox, SessionKey, Stop,
 };
 use crate::server::{ServerWaker, identity::ServerIdentity, wire::service::ServiceUpdateKind};
 
@@ -32,9 +32,16 @@ pub(crate) struct Home {
     pub(crate) data_dir: PathBuf,
 }
 
+/// A session as the services are told of it: this run's number and the key that outlives it.
+#[derive(Clone, Copy)]
+pub(crate) struct SessionRef {
+    pub(crate) id: heca_core::layout::SessionId,
+    pub(crate) key: SessionKey,
+}
+
 /// Who asked for an action: the session, the window if any, and the session's configuration.
 pub(crate) struct Caller<'a> {
-    pub(crate) session: u64,
+    pub(crate) session: SessionRef,
     pub(crate) client: Option<u64>,
     pub(crate) config: &'a AppConfig,
 }
@@ -128,7 +135,8 @@ impl<S: Service> Hosted for Running<S> {
         };
         let mut cx = ActionCx {
             service: ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects, data_dir: &self.home.data_dir },
-            session: caller.session,
+            session: caller.session.id.0,
+            session_key: caller.session.key,
             client: caller.client,
             config: caller.config,
             extension: &self.home.extension,

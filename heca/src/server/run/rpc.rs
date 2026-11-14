@@ -47,14 +47,14 @@ impl ServerLoop {
             Err(error) => { let _ = reply.send(format!("error: {error}")); return; }
         };
         let session = &self.sessions[index];
-        self.services.borrow_mut().invoke(session.info().id, None, session.config(), intent,
+        self.services.borrow_mut().invoke(session.service_ref(), None, session.config(), intent,
             super::super::services::Reply::Rpc(reply));
     }
 
     /// A service action reached by a chain a script started: in the most recent session.
     fn run_rpc_service(&mut self, intent: &crate::chrome::Intent) -> Result<(), RpcError> {
         let session = &self.sessions[self.last_index().ok_or(RpcError::NotInitialized)?];
-        self.services.borrow_mut().run_step(session.info().id, session.config(), intent)
+        self.services.borrow_mut().run_step(session.service_ref(), session.config(), intent)
     }
 
     fn run_rpc_action(&mut self, action: WmAction, output: &mut Option<String>) -> Result<Vec<super::super::Change>, RpcError> {
