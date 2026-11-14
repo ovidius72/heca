@@ -2,13 +2,14 @@
 //! `heca rpc --events` subscribers (T546).
 //!
 //! A subscriber is a script connected over the control socket. The server holds the sending end of
-//! an mpsc channel per subscriber; the socket's handshake thread holds the receiving end and writes
-//! each line to the socket. One shared fanout serves every session, so a subscriber sees the whole
-//! server's events. Nothing is invented per event: the line is a serialized existing `Change`.
+//! a bounded channel per subscriber (`[settings.connection] queue_capacity` lines); the socket's
+//! handshake thread holds the receiving end and writes each line to the socket. A subscriber whose
+//! queue is full has fallen behind and is dropped, as a window that falls behind is. One shared
+//! fanout serves every session, so a subscriber sees the whole server's events. Nothing is invented per event: the line is a serialized existing `Change`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 use heca_core::layout::{PaneId, SessionId};
 
@@ -31,14 +32,14 @@ pub(crate) enum StreamEvent {
 }
 
 /// The subscribers' sending ends, shared by the owner loop and its sessions. Cheap to clone (an
-/// `Rc`), and it never leaves the server's own thread — only the `Sender` crosses to the socket
+/// `Rc`), and it never leaves the server's own thread — only the receiver crosses to the socket
 /// thread, which mpsc already supports — so `Rc`/`RefCell` are enough.
 #[derive(Clone, Default)]
-pub(crate) struct EventFanout(Rc<RefCell<Vec<Sender<String>>>>);
+pub(crate) struct EventFanout(Rc<RefCell<Vec<SyncSender<String>>>>);
 
 impl EventFanout {
-    /// Register a new subscriber's sending end.
-    pub(crate) fn subscribe(&self, sender: Sender<String>) {
+    /// Register a new subscriber's sending end. Its capacity is the subscriber's queue size.
+    pub(crate) fn subscribe(&self, sender: SyncSender<String>) {
         self.0.borrow_mut().push(sender);
     }
 
@@ -48,8 +49,8 @@ impl EventFanout {
     }
 
     /// Serialize `event` to one line and send it to every subscriber, dropping the ones whose
-    /// socket side has gone (the send fails once the receiver is dropped). A no-op with no
-    /// subscribers, so the caller need not guard.
+    /// socket side has gone (receiver dropped) and the ones whose queue is full (they fell behind).
+    /// Never blocks. A no-op with no subscribers, so the caller need not guard.
     pub(crate) fn emit(&self, event: &StreamEvent) {
         if self.0.borrow().is_empty() {
             return;
@@ -59,7 +60,7 @@ impl EventFanout {
         };
         self.0
             .borrow_mut()
-            .retain(|sender| sender.send(line.clone()).is_ok());
+            .retain(|sender| sender.try_send(line.clone()).is_ok());
     }
 }
 
@@ -79,8 +80,8 @@ mod tests {
         // An emit with no subscribers is a no-op, not a panic.
         fanout.emit(&StreamEvent::Change(Change::LayoutChanged));
 
-        let (a_tx, a_rx) = mpsc::channel();
-        let (b_tx, b_rx) = mpsc::channel();
+        let (a_tx, a_rx) = mpsc::sync_channel(8);
+        let (b_tx, b_rx) = mpsc::sync_channel(8);
         fanout.subscribe(a_tx);
         fanout.subscribe(b_tx);
         assert!(!fanout.is_empty());
@@ -100,5 +101,30 @@ mod tests {
         drop(a_rx);
         fanout.emit(&two);
         assert!(fanout.is_empty(), "no subscribers left");
+    }
+
+    #[test]
+    fn a_subscriber_that_never_reads_is_dropped_once_its_queue_is_full() {
+        let fanout = EventFanout::default();
+        let (slow_tx, slow_rx) = mpsc::sync_channel(2);
+        let (live_tx, live_rx) = mpsc::sync_channel(2);
+        fanout.subscribe(slow_tx);
+        fanout.subscribe(live_tx);
+
+        let event = StreamEvent::Workspace { window: 1, workspace: 0 };
+        // Emit more events than the queue holds; the live one is read each time. Emit returns
+        // every time (it would hang here if it blocked on the full queue).
+        for _ in 0..3 {
+            fanout.emit(&event);
+            assert_eq!(recv(&live_rx), event);
+        }
+        // The slow one got its two queued lines, then was dropped: its stream ends.
+        assert_eq!(recv(&slow_rx), event);
+        assert_eq!(recv(&slow_rx), event);
+        assert_eq!(slow_rx.try_recv(), Err(mpsc::TryRecvError::Disconnected), "dropped subscriber's stream ends");
+        // The live one is still subscribed and keeps receiving.
+        fanout.emit(&event);
+        assert_eq!(recv(&live_rx), event);
+        assert!(!fanout.is_empty());
     }
 }

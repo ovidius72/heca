@@ -1,16 +1,12 @@
 //! **The client ↔ server protocol** (F012, P099/T544 C2).
 //!
 //! A client sends [`ClientMsg`]; the server sends [`ServerMsg`]. Both ends are written against this
-//! one vocabulary whatever carries it: in standalone an in-process channel pair ([`in_process`])
+//! one vocabulary whatever carries it: in standalone an in-process channel pair ([`in_process_with_limits`])
 //! moves the values directly, with no serialization; over the socket the same values are
 //! framed bytes. The server and client code never know which is under them — that is what keeps
 //! standalone and an attached window one code path (decision d108b88c).
 //!
-//! Terminal snapshots, the per-pane input and the event subscription are added with the attach
-//! protocol (T544 C5 / T546); this is the layout/action spine both ends share.
-
-// Not yet called from the running app — the entry wiring (the next C4/C5 step) consumes it.
-#![allow(dead_code)]
+//! What travels and how is described in `docs/server-client-architecture.md` → "The wire model".
 
 #[cfg(test)]
 use std::sync::mpsc::channel;
@@ -220,10 +216,12 @@ impl ServerLink for InProcessServer {
 
 /// A client and the server in one process, joined by two channels that carry the messages **as they
 /// are** — no serialization. The standalone path.
+#[cfg(test)]
 pub(crate) fn in_process() -> (InProcessClient, InProcessServer) {
     in_process_waking(ServerWaker::new(|| {}), ServerWaker::new(|| {}))
 }
 
+#[cfg(test)]
 pub(crate) fn in_process_waking(
     server_wake: ServerWaker,
     client_wake: ServerWaker,
