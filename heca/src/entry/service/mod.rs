@@ -58,6 +58,7 @@ mod config;
 mod cx;
 mod declared;
 mod inbox;
+mod session_key;
 #[cfg(test)]
 mod tests;
 
@@ -67,6 +68,7 @@ pub use cx::{ActionCx, ProjectCx, ServiceCx, StartCx};
 pub(crate) use cx::Effects;
 pub(crate) use declared::{ActionFn, Declaration};
 pub use inbox::{ServiceInbox, ServiceSendError};
+pub use session_key::SessionKey;
 
 use declared::Declared;
 

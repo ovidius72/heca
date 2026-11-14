@@ -41,7 +41,7 @@ pub use chrome::{
 pub use entry::{
     ActionCx, ActionResult, Extension, ExtensionConfigError, LayerBuilder, LayerCx, ProjectCx, Projection,
     Service, ServiceCx, ServiceInbox, ServiceRegistration, ServiceResult, ServiceSendError, ServiceState,
-    ServiceTicket, StartCx, Stop, Update, extension, register_widget,
+    ServiceTicket, SessionKey, StartCx, Stop, Update, extension, register_widget,
 };
 pub use heca_view_realize::WidgetDefinition;
 pub use heca_view::{Intent, PropMap, PropValue};

@@ -47,5 +47,5 @@ pub(crate) use layer::{AddedLayers, rebuild as rebuild_added_layer, register_que
 pub use layer::{LayerBuilder, LayerCx};
 pub use service::{
     ActionCx, ActionResult, ExtensionConfigError, ProjectCx, Projection, Service, ServiceCx, ServiceInbox,
-    ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, StartCx, Stop, Update,
+    ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, Update,
 };

@@ -1315,6 +1315,7 @@ dependencies = [
  "arboard",
  "dirs",
  "fs2",
+ "getrandom 0.3.4",
  "git2",
  "heca-config",
  "heca-core",

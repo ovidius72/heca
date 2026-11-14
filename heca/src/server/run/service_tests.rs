@@ -134,11 +134,16 @@ fn server_waking(config: &heca_config::loader::AppConfig, wake: ServerWaker) -> 
 pub(super) fn server_as(config: &heca_config::loader::AppConfig, identity: ServerIdentity, wake: ServerWaker) -> ServerLoop {
     let mut server = ServerLoop::from_config(config, identity, wake).unwrap()
         .with_session(ServerState::for_tests(Default::default()), Session::new(SessionId(1), LayoutOptions::default()));
+    register_actions(&mut server);
+    server
+}
+
+/// Give `server` and every session it has the extensions' actions declared so far.
+pub(super) fn register_actions(server: &mut ServerLoop) {
     let mut registry = crate::actions::ActionRegistry::new();
     let mut catalog = crate::actions::ActionCatalog::with_builtins();
     crate::entry::register_queued_actions(&mut registry, &mut catalog, &mut Default::default());
     server.install_actions(registry, catalog);
-    server
 }
 
 pub(super) fn attached(server: &mut ServerLoop) -> crate::server::wire::InProcessClient {

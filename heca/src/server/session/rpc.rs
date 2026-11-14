@@ -51,10 +51,12 @@ impl SessionRuntime {
             if dock.is_some() {
                 return Err(crate::rpc::RpcError::NotRunnable(intent.action));
             }
+            let service_ref = self.service_ref();
             self.registry.execute_server_intent(
                 &mut crate::actions::ServerInvocation {
                     state: &mut self.state,
                     session: &mut self.session,
+                    service_ref,
                     store: self.store.clone(),
                     catalog: &self.catalog,
                     confirm: &self.confirm,
