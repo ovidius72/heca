@@ -3,7 +3,7 @@
 //! The server listens on a local-only Unix socket in an owner-only runtime folder; it never
 //! touches the network. A script connects with [`heca rpc <line>`](crate::server::socket::run_rpc_cli) and a client
 //! (a window) attaches over the same socket. An RPC request is one line — an action by its catalog
-//! name, exactly what [`crate::rpc`] already reads — and the answer is one line back.
+//! name, exactly what [`crate::rpc`] already reads — and the answer comes back as text, ended by a newline.
 //!
 //! The listener sends requests through the server's bounded inbox. Attached clients receive framed
 //! state messages, while scripts receive a line reply. No window event proxy owns the socket.

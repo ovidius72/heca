@@ -71,11 +71,13 @@ fn serve(mut stream: UnixStream, handle: RuntimeHandle, config: ConnectionConfig
         // keeps the socket open. No read timeout — the connection is long-lived.
         stream.set_read_timeout(None)?;
         stream.set_write_timeout(None)?;
-        let (sender, lines) = mpsc::channel::<String>();
+        // Bounded like every other connection queue: a script that falls behind is dropped by the
+        // server, never buffered without end.
+        let (sender, lines) = mpsc::sync_channel::<String>(config.queue_capacity.get());
         handle.subscribe(sender)?;
         // Each event line goes to the socket. A failed write means the script left; the receiver is
         // then dropped and the server forgets this subscriber on its next event. The iterator also
-        // ends when the server stops (every sender dropped).
+        // ends when the server stops or drops this subscriber for falling behind (sender dropped).
         for line in lines {
             if writeln!(stream, "{line}").is_err() {
                 break;
