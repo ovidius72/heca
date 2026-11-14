@@ -31,8 +31,8 @@ pub use confirm::{ButtonRole, ConfirmSpec, Outcome, ResponseButton};
 pub use registry::{
     ActionHandle, ActionRegistry, DuplicateAction, register_dynamic, unregister_dynamic,
 };
-pub(crate) use registry::register_server_dynamic;
-pub(crate) use registry::server::ServerInvocation;
+pub(crate) use registry::{register_server_dynamic, register_service_dynamic};
+pub(crate) use registry::server::{ServerInvocation, ServerStep, check_server_intent};
 
 // Read outside this module only by tests (RPC introspection).
 #[cfg(test)]

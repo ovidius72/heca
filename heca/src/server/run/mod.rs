@@ -33,6 +33,8 @@ pub(crate) struct ServerLoop {
     /// `heca rpc --events` subscribers, shared with every session so each one's broadcast fans its
     /// events out to the scripts listening.
     events: super::EventFanout,
+    /// The extension services this server runs, shared with every session.
+    services: super::services::SharedServices,
 }
 
 impl ServerLoop {
@@ -51,20 +53,27 @@ impl ServerLoop {
             stopped: false,
             directory: Vec::new(),
             events: super::EventFanout::default(),
+            services: Default::default(),
         }
     }
 
     #[cfg(test)]
     pub(crate) fn new(state: ServerState, session: Session) -> Self {
+        Self::empty().with_session(state, session)
+    }
+
+    /// This server with one test-built session in it, made the most recent.
+    #[cfg(test)]
+    pub(crate) fn with_session(mut self, state: ServerState, session: Session) -> Self {
         let id = session.id;
-        let mut server = Self::empty();
         let mut runtime = SessionRuntime::new(state, session);
-        runtime.install_event_fanout(server.events.clone());
-        server.sessions.push(runtime);
-        server.last_session = Some(id);
-        server.recent_sessions.push(id);
-        server.next_session = id.0.saturating_add(1);
-        server
+        runtime.install_event_fanout(self.events.clone());
+        runtime.install_services(self.services.clone());
+        self.sessions.push(runtime);
+        self.last_session = Some(id);
+        self.recent_sessions.push(id);
+        self.next_session = id.0.saturating_add(1);
+        self
     }
 
     pub(super) fn configure_factory(
@@ -74,6 +83,11 @@ impl ServerLoop {
     ) {
         self.config = Some(config);
         self.wake = Some(wake);
+    }
+
+    /// Run every declared service for this server — once, as it starts.
+    pub(super) fn start_services(&mut self, config: &heca_config::loader::AppConfig, wake: &ServerWaker) {
+        *self.services.borrow_mut() = super::services::ServiceHost::start(config, wake);
     }
 
     pub(crate) fn wants_shutdown(&self) -> bool {
@@ -110,6 +124,7 @@ impl ServerLoop {
     }
 
     pub(crate) fn shutdown(&mut self) {
+        self.services.borrow_mut().shutdown();
         for client in &self.clients {
             client.close();
         }
@@ -126,6 +141,11 @@ impl ServerLoop {
     }
 
     pub(super) fn begin_rpc(&mut self, line: String, reply: std::sync::mpsc::Sender<String>) {
+        // A service's action runs where the service is, whoever is attached.
+        if let Ok((intent, None)) = crate::rpc::parse_rpc(&line).and_then(|command| command.into_intent(&self.catalog))
+            && self.services.borrow().owns(&intent.action) {
+            return self.rpc_service(&intent, reply);
+        }
         let owned = crate::rpc::parse_rpc(&line).and_then(|command| command.into_intent(&self.catalog))
             .is_ok_and(|(intent, dock)| dock.is_none()
                 && crate::input::resolve_action(&intent.action, &crate::app::interaction::intent_args_as_strings(&intent))
@@ -209,6 +229,7 @@ impl ServerLoop {
             }
             match message {
                 ClientMsg::RpcReply { request_id, answer } => client.reply_rpc(request_id, answer),
+                ClientMsg::ServiceResync { service } => self.services.borrow_mut().forget(client.id, &service),
                 ClientMsg::Attach => {
                     self.pump_sessions(now);
                     self.attach(client, None);
@@ -284,6 +305,7 @@ impl ServerLoop {
             }
         }
         self.pump_sessions(now);
+        self.pump_services();
         for client in &self.clients { client.expire_rpc(now); }
         self.clients.retain(|c| !c.is_closed());
         self.publish_directory();
@@ -340,6 +362,8 @@ impl ServerLoop {
             return;
         };
         let id = self.sessions[index].info().id;
+        // Attaching, even to the same session, starts the window's service projections afresh.
+        self.services.borrow_mut().forget_client(client.id);
         self.last_session = Some(id);
         self.recent_sessions.retain(|recent| *recent != id);
         self.recent_sessions.push(id);
@@ -364,6 +388,18 @@ impl ServerLoop {
         self.sessions[index].add_connection(client);
     }
 
+    /// Deliver the services' inboxes, then show each attached window what changed for it.
+    fn pump_services(&mut self) {
+        let mut host = self.services.borrow_mut();
+        host.drain();
+        if let Some(index) = self.last_index() {
+            for draft in host.take_held() { self.sessions[index].raise(draft); }
+        }
+        let audience: Vec<_> = self.sessions.iter().map(SessionRuntime::audience).collect();
+        let limits = self.config.as_ref().map(|c| c.config.settings.connection).unwrap_or_default();
+        host.publish(&audience, limits.max_frame_bytes.get());
+    }
+
     fn index_for(&self, id: Option<SessionId>) -> Option<usize> {
         self.sessions.iter().position(|s| Some(s.info().id) == id)
     }
@@ -377,5 +413,7 @@ impl ServerLoop {
 mod tests;
 #[cfg(test)]
 mod feedback_tests;
+#[cfg(test)]
+mod service_tests;
 #[cfg(test)]
 mod identity_tests;

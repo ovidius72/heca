@@ -9,6 +9,7 @@ mod connection;
 mod enums;
 mod notifications;
 mod schema;
+mod services;
 mod sessions;
 #[cfg(test)]
 mod schema_tests;
@@ -21,6 +22,7 @@ use schema::declare_settings;
 
 pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, PaneSize, SearchCase};
 pub use connection::ConnectionConfig;
+pub use services::ServicesConfig;
 pub use sessions::SessionText;
 pub use notifications::{NotificationSystem, NotificationSystemConfig};
 pub use agents::{AgentProgramConfig, AgentSoundsConfig, AgentStatusConfig, AgentStatuses, AgentsConfig};
@@ -233,6 +235,8 @@ declare_settings! {
         pub agents: AgentsConfig,
         /// Limits shared by local client/server connections.
         pub connection: ConnectionConfig,
+        /// Limits for the services extensions run inside the server.
+        pub services: ServicesConfig,
         // Destructive-action confirmation moved to the generic `[confirm]` table
         // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
     }

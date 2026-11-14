@@ -55,6 +55,14 @@ impl<T> StartupQueue<T> {
         std::mem::take(&mut *self.items.borrow_mut())
     }
 
+    /// Everything queued, **kept** — and the queue is closed. For a kind every host reads in full
+    /// (each server in a process runs every declared service), where taking would leave the second
+    /// host nothing.
+    pub(crate) fn close<R>(&self, read: impl FnOnce(&[T]) -> R) -> R {
+        self.taken.set(true);
+        read(&self.items.borrow())
+    }
+
     /// A new host is starting: accept again. What was declared before it started is kept — that is
     /// what the new host is about to take.
     pub(crate) fn reopen(&self) {
@@ -68,8 +76,12 @@ impl<T> StartupQueue<T> {
         self.items.borrow_mut().clear();
     }
 
+    /// Whether a host has started reading it, so a declaration made now would reach nothing.
+    pub(crate) fn is_closed(&self) -> bool {
+        self.taken.get()
+    }
+
     /// What is queued right now, without taking it.
-    #[cfg(test)]
     pub(crate) fn peek<R>(&self, read: impl FnOnce(&[T]) -> R) -> R {
         read(&self.items.borrow())
     }
@@ -92,6 +104,16 @@ mod tests {
             "the refused item comes back"
         );
         assert!(queue.peek(<[_]>::is_empty), "and was not kept");
+    }
+
+    /// **Closing keeps the declarations for the next host, and still refuses late ones.**
+    #[test]
+    fn closing_keeps_what_was_declared_and_refuses_what_comes_after() {
+        let queue = StartupQueue::new();
+        let _ = queue.add("service");
+        assert_eq!(queue.close(<[_]>::len), 1);
+        assert_eq!(queue.add("late"), Err("late"));
+        assert_eq!(queue.close(|items| items.to_vec()), ["service"], "a second host reads it too");
     }
 
     /// A new host accepts again and keeps what was declared before it started.

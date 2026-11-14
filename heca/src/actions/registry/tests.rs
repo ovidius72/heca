@@ -185,7 +185,10 @@ fn headless_session_confirmations_fail_closed_and_have_independent_overrides() {
                 .arg("session", crate::chrome::PropValue::Text("Project A".into()));
             let mut ran = Vec::new();
             let result = registry.execute_server_with(&catalog, &config.confirm, store.clone(), &intent,
-                &mut |action| { ran.push(action); Ok(Vec::new()) });
+                &mut |step| {
+                    if let super::server::ServerStep::Action(action) = step { ran.push(action); }
+                    Ok(Vec::new())
+                });
             if enabled {
                 assert!(matches!(result, Err(crate::rpc::RpcError::Blocked(name)) if name == owner));
                 assert!(ran.is_empty(), "a missing confirmation must not execute the action");

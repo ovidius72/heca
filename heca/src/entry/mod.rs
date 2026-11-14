@@ -27,7 +27,7 @@
 //!
 //! | side | doors | why |
 //! |---|---|---|
-//! | server | [`action`] | it changes state, so it runs where the state is |
+//! | server | [`action`], [`service`] | it changes state, so it runs where the state is |
 //! | client | docks (`regions`), layers, pane decoration | it is drawn, so it lives in a window |
 //!
 //! Every door queues its declarations and the host takes them once, as it starts. A call after
@@ -36,6 +36,7 @@
 mod action;
 mod extension;
 mod layer;
+pub(crate) mod service;
 pub(crate) mod widgets;
 pub use widgets::register_widget;
 
@@ -44,3 +45,7 @@ pub use extension::{Extension, extension};
 pub(crate) use extension::qualified_name;
 pub(crate) use layer::{AddedLayers, rebuild as rebuild_added_layer, register_queued_layers};
 pub use layer::{LayerBuilder, LayerCx};
+pub use service::{
+    ActionCx, ActionResult, ProjectCx, Projection, Service, ServiceCx, ServiceInbox, ServiceRegistration,
+    ServiceResult, ServiceSendError, ServiceState, ServiceTicket, StartCx, Stop, Update,
+};
