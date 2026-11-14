@@ -55,7 +55,7 @@ fn partial_and_idle_redraws_do_not_accumulate_image_alpha() {
         buffer.unmap();
         result
     }
-    let (device, queue) = crate::gpu::headless_device();
+    let (device, queue) = crate::gpu::headless_device_or_skip!();
     let format = wgpu::TextureFormat::Rgba8Unorm;
     let target = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("persistent image regression"),

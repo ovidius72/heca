@@ -101,6 +101,7 @@ impl ServerLoop {
         self._identity = Some(identity);
     }
 
+    #[cfg(any(unix, test))]
     pub(crate) fn wants_shutdown(&self) -> bool {
         self.stopped
     }
@@ -119,10 +120,12 @@ impl ServerLoop {
 
     /// Register a `heca rpc --events` subscriber: every session fans its events to it (the fanout
     /// is shared), until the subscriber's socket side goes.
+    #[cfg(unix)]
     pub(super) fn subscribe_events(&mut self, events: std::sync::mpsc::SyncSender<String>) {
         self.events.subscribe(events);
     }
 
+    #[cfg(unix)]
     pub(super) fn register_extensions(&mut self) {
         let mut conflicts = crate::app::conflicts::Conflicts::default();
         crate::entry::register_queued_actions(

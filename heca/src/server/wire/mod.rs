@@ -12,6 +12,7 @@
 use std::sync::mpsc::channel;
 use std::io;
 
+#[cfg(any(unix, test))]
 mod frame;
 mod queue;
 mod wait;
