@@ -20,7 +20,7 @@ enum Event {
     Stop,
     Rpc { line: String, reply: mpsc::Sender<String> },
     /// `heca rpc --events`: register a subscriber the server streams each event line to.
-    Subscribe { events: mpsc::Sender<String> },
+    Subscribe { events: SyncSender<String> },
     Notification(crate::notification::NotificationDraft),
 }
 
@@ -77,7 +77,7 @@ impl RuntimeHandle {
         self.send(Event::Rpc { line, reply })
     }
 
-    pub(super) fn subscribe(&self, events: mpsc::Sender<String>) -> io::Result<()> {
+    pub(super) fn subscribe(&self, events: SyncSender<String>) -> io::Result<()> {
         self.send(Event::Subscribe { events })
     }
 

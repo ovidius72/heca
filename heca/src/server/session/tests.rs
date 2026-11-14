@@ -247,7 +247,7 @@ fn a_sessions_broadcast_streams_each_change_to_event_subscribers() {
     use crate::server::{Change, EventFanout, StreamEvent};
     use std::sync::mpsc;
     let fanout = EventFanout::default();
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(64);
     fanout.subscribe(tx);
     let mut runtime = SessionRuntime::new(
         ServerState::for_tests(Default::default()),
@@ -271,7 +271,7 @@ fn a_windows_presence_report_becomes_focus_and_workspace_events() {
     use heca_core::layout::PaneId;
     use std::sync::mpsc;
     let fanout = EventFanout::default();
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(64);
     fanout.subscribe(tx);
     let mut runtime = SessionRuntime::new(
         ServerState::for_tests(Default::default()),
