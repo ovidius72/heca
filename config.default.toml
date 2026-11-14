@@ -765,3 +765,8 @@ icon = "terminal"
 name = "Pi"
 processes = ["pi"]
 icon = "terminal"
+
+# ── Extensions ──
+# A table named [extensions.<name>] belongs to the extension called <name>, and only that extension
+# reads it. heca has no keys of its own here, so nothing is listed. Like every other table, it can
+# be set in config.toml and, in a trusted project, in .heca/config.toml; a project's keys win.

@@ -35,6 +35,9 @@ pub(crate) struct ServerLoop {
     events: super::EventFanout,
     /// The extension services this server runs, shared with every session.
     services: super::services::SharedServices,
+    /// Which server this is. Held for as long as the server lives: the lock that keeps its folder
+    /// its own goes when the server does. `None` for a test-built server that runs no services.
+    _identity: Option<super::identity::ServerIdentity>,
 }
 
 impl ServerLoop {
@@ -54,6 +57,7 @@ impl ServerLoop {
             directory: Vec::new(),
             events: super::EventFanout::default(),
             services: Default::default(),
+            _identity: None,
         }
     }
 
@@ -85,9 +89,16 @@ impl ServerLoop {
         self.wake = Some(wake);
     }
 
-    /// Run every declared service for this server — once, as it starts.
-    pub(super) fn start_services(&mut self, config: &heca_config::loader::AppConfig, wake: &ServerWaker) {
-        *self.services.borrow_mut() = super::services::ServiceHost::start(config, wake);
+    /// Run every declared service for this server — once, as it starts — and keep `identity` for
+    /// as long as the server lives.
+    pub(super) fn start_services(
+        &mut self,
+        config: &heca_config::loader::AppConfig,
+        identity: super::identity::ServerIdentity,
+        wake: &ServerWaker,
+    ) {
+        *self.services.borrow_mut() = super::services::ServiceHost::start(config, &identity, wake);
+        self._identity = Some(identity);
     }
 
     pub(crate) fn wants_shutdown(&self) -> bool {
@@ -415,5 +426,7 @@ mod tests;
 mod feedback_tests;
 #[cfg(test)]
 mod service_tests;
+#[cfg(test)]
+mod service_data_tests;
 #[cfg(test)]
 mod identity_tests;

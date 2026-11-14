@@ -166,6 +166,25 @@ pub struct Config {
     /// `[confirm]` — per-action confirmation toggles (generic, keyed by action name).
     #[serde(default)]
     pub confirm: crate::confirm::ConfirmConfig,
+    /// `[extensions.<name>]` — one table per extension, whose shape only that extension knows. heca
+    /// keeps them as written and layers them like every other table; the extension reads its own
+    /// with [`Config::extension`].
+    #[serde(default, skip_serializing_if = "toml::Table::is_empty")]
+    pub extensions: toml::Table,
+}
+
+impl Config {
+    /// **An extension's own table, `[extensions.<name>]`, read as `T`.**
+    ///
+    /// A table that does not fit `T` is an error that says why — never a default. A missing table
+    /// reads as an empty one, so a type whose fields all have a `#[serde(default)]` is the
+    /// extension's defaults.
+    pub fn extension<T: serde::de::DeserializeOwned>(&self, name: &str) -> Result<T, toml::de::Error> {
+        match self.extensions.get(name) {
+            Some(table) => table.clone().try_into(),
+            None => toml::Table::new().try_into(),
+        }
+    }
 }
 
 impl Default for Config {

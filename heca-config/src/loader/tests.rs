@@ -447,3 +447,70 @@ fn a_project_file_applies_only_while_it_is_trusted_as_it_stands() {
     assert!(!edited.trusted, "edited: asked about again");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// What an extension keeps in its own table. Its defaults are 7, so a read that fell back to a
+/// default cannot pass for one that read the table.
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(default)]
+struct Limits {
+    max: u32,
+    name: String,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self { max: 7, name: "plain".into() }
+    }
+}
+
+fn limits(max: u32, name: &str) -> Limits {
+    Limits { max, name: name.into() }
+}
+
+#[test]
+fn an_extension_reads_its_own_table_as_a_typed_value() {
+    let config = config_from_layers("[extensions.demo]\nmax = 3\nname = \"rooms\"\n").unwrap();
+    assert_eq!(config.extension::<Limits>("demo").unwrap(), limits(3, "rooms"));
+}
+
+#[test]
+fn a_missing_table_reads_as_an_empty_one() {
+    let config = config_from_layers("[extensions.other]\nmax = 3\n").unwrap();
+    assert_eq!(config.extension::<Limits>("demo").unwrap(), Limits::default());
+    assert_eq!(Config::default().extension::<Limits>("demo").unwrap(), Limits::default());
+}
+
+#[test]
+fn a_table_that_does_not_fit_is_an_error_not_a_default() {
+    let config = config_from_layers("[extensions.demo]\nmax = \"lots\"\n").unwrap();
+    let error = config.extension::<Limits>("demo").unwrap_err().to_string();
+    assert!(error.contains("lots"), "{error}");
+    let not_a_table = config_from_layers("[extensions]\ndemo = 3\n").unwrap();
+    assert!(not_a_table.extension::<Limits>("demo").is_err());
+    // An empty table is still an error for a type that has no defaults to fall back on.
+    #[derive(Debug, Deserialize)]
+    struct Needs {
+        #[allow(dead_code)]
+        token: String,
+    }
+    let error = Config::default().extension::<Needs>("demo").unwrap_err().to_string();
+    assert!(error.contains("token"), "{error}");
+}
+
+#[test]
+fn extension_tables_layer_per_key_like_every_other_table() {
+    let user = deep_merge(
+        embedded_base(),
+        toml::from_str("[extensions.demo]\nmax = 3\nname = \"user\"\n[extensions.other]\nmax = 1\n").unwrap(),
+    );
+    let project: toml::Value = toml::from_str("[extensions.demo]\nmax = 5\n").unwrap();
+    let config = layered(user, Some((PathBuf::from(".heca/config.toml"), project))).unwrap();
+    assert_eq!(config.extension::<Limits>("demo").unwrap(), limits(5, "user"), "the project's key wins, the user's others stay");
+    assert_eq!(config.extension::<Limits>("other").unwrap().max, 1, "another extension's table is untouched");
+}
+
+#[test]
+fn a_config_without_extension_tables_serializes_without_one() {
+    let text = toml::to_string(&Config::default()).unwrap();
+    assert!(!text.contains("extensions"), "{text}");
+}

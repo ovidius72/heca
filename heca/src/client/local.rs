@@ -2,7 +2,7 @@
 
 use std::io;
 use heca_config::loader::AppConfig;
-use crate::server::{ServerWaker, run::ServerLoop, runtime::{self, RuntimeHandle, RuntimeInbox}, wire::ServerLink};
+use crate::server::{ServerWaker, identity::{ServerIdentity, ServerKind}, run::ServerLoop, runtime::{self, RuntimeHandle, RuntimeInbox}, wire::ServerLink};
 
 pub(super) struct LocalServer {
     server: ServerLoop,
@@ -15,7 +15,7 @@ pub(super) struct LocalServer {
 impl LocalServer {
     pub(super) fn new(config: &AppConfig, wake: ServerWaker) -> io::Result<Self> {
         let (handle, inbox) = runtime::channel_waking(config.config.settings.connection, wake);
-        let server = ServerLoop::from_config(config, handle.waker())?;
+        let server = ServerLoop::from_config(config, ServerIdentity::claim(ServerKind::Standalone), handle.waker())?;
         #[cfg(unix)]
         let listener = crate::server::socket::socket_path().and_then(|path| {
             match crate::server::socket::RuntimeListener::bind(&path, handle.clone(), config.config.settings.connection) {

@@ -1,8 +1,8 @@
 //! Keep a live server's socket intact and reclaim only a stale socket.
 
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io;
-use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::{Incoming, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 
@@ -10,15 +10,14 @@ pub(super) struct ControlListener {
     socket: UnixListener,
     path: PathBuf,
     identity: (u64, u64),
-    // Keep the lock file inode stable: deleting it would let a second binder lock a different file.
+    // Held, never read: the lock goes when this file is closed.
     _lock: File,
 }
 
 impl ControlListener {
     pub(super) fn bind(path: &Path) -> io::Result<Self> {
-        let lock = OpenOptions::new().read(true).write(true).create(true)
-            .truncate(false).mode(0o600).open(path.with_extension("lock"))?;
-        fs2::FileExt::try_lock_exclusive(&lock)?;
+        let lock = crate::server::private_fs::try_lock(&path.with_extension("lock"))?
+            .ok_or_else(|| io::Error::new(io::ErrorKind::AddrInUse, "another server holds the socket"))?;
         let socket = match UnixListener::bind(path) {
             Ok(socket) => socket,
             Err(error) if error.kind() == io::ErrorKind::AddrInUse => {

@@ -11,7 +11,6 @@
 //! Windows (named pipes) is a later step; this is `cfg(unix)`.
 
 use std::io::{BufRead, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
@@ -27,13 +26,7 @@ pub(crate) use runtime::RuntimeListener;
 fn runtime_dir() -> Option<PathBuf> {
     let base = dirs::runtime_dir().unwrap_or_else(std::env::temp_dir);
     let dir = base.join("heca");
-    match std::fs::DirBuilder::new().mode(0o700).create(&dir) {
-        Ok(()) => {},
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {},
-        Err(_) => return None,
-    }
-    if !std::fs::symlink_metadata(&dir).ok()?.file_type().is_dir() { return None; }
-    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).ok()?;
+    super::private_fs::private_folder(&dir).ok()?;
     Some(dir)
 }
 

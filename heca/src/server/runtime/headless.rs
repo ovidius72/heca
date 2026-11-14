@@ -2,7 +2,7 @@
 
 use std::{io, path::Path};
 use heca_config::loader::AppConfig;
-use crate::server::{run::ServerLoop, socket::RuntimeListener};
+use crate::server::{identity::{ServerIdentity, ServerKind}, run::ServerLoop, socket::RuntimeListener};
 
 pub(crate) fn serve(socket: Option<&Path>) -> io::Result<()> {
     let config = AppConfig::load();
@@ -17,7 +17,8 @@ pub(crate) fn serve(socket: Option<&Path>) -> io::Result<()> {
             if let Err(error) = handle.raise(draft) { eprintln!("[heca] notification: {error}"); }
         }
     });
-    let mut server = ServerLoop::from_config(&config, handle.waker())?;
+    let identity = ServerIdentity::claim(ServerKind::Background);
+    let mut server = ServerLoop::from_config(&config, identity, handle.waker())?;
     server.register_extensions();
     inbox.run(server);
     Ok(())

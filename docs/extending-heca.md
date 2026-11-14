@@ -364,10 +364,52 @@ when it is full, `send` returns an error to the sender and never blocks.
 An action answers `Done`, `Refused(why)` or `Later(ticket)`. For `Later`, take the ticket with
 `cx.later()` and call `cx.complete(ticket, result)` when the work is done.
 
+**A folder of its own.** `cx.data_dir()` is the folder for what the service writes to disk. It
+exists before the factory runs, only your user can read it, and no other service shares it. It is the
+same on every start of this server, so a service finds its files again after a restart. The folder is
+`<data folder>/heca/servers/<server>/<extension>.<service>/`. `<server>` is `default` for the
+background server (`heca --server`). A standalone window's server is `standalone-1`, or the lowest
+`standalone-<n>` no other running server holds: two windows open at once never share files, and a
+window opened again after one closed gets its folder back. `ServiceCx` and so every action have
+`data_dir()` too, so a service need not keep the path. Where the platform has no data folder, the
+service does not start and says so in a notification; the server keeps running.
+
+**A table of its own.** `cx.extension_config::<T>()` reads `[extensions.<name>]`, where `<name>` is
+the extension the service was declared under, as any type that implements `serde::Deserialize`. A
+table that does not fit `T` is an error that names the table and says what is wrong
+(`ExtensionConfigError`), never a quiet default. A missing table reads as an empty one, so a type with
+`#[serde(default)]` is its own defaults. An extension can read no table but its own.
+
+```toml
+# ~/.config/heca/config.toml — a trusted project's .heca/config.toml can set the same keys
+[extensions.demo]
+server = "wss://rooms.example.com"
+max_rooms = 20
+```
+
+```rust
+#[derive(serde::Deserialize, Default)]
+#[serde(default)]
+struct Settings { server: String, max_rooms: usize }
+
+let rooms = demo.service("rooms", |cx| {
+    let settings: Settings = cx.extension_config()?;      // the server's configuration
+    Ok(Rooms::open(cx.data_dir(), settings, cx.inbox())?) // its own folder
+});
+// In an action or a projection, `cx.extension_config()` reads the session's configuration — the
+// user's, with a trusted project's on top — the same one `cx.config()` returns.
+```
+
+A trusted project can override any of your keys, as it can every other setting. If a key is
+sensitive — a command to run, a path to write to — check it before you use it, or read it only from
+the server's configuration (`cx.extension_config()` in the factory).
+
 **What heca guarantees**
 
 - **One per server.** The factory runs once when a server starts, not per window or per session.
   Closing a window or switching session never restarts it.
+- **Its folder is its own.** Never shared with another service or another running server, never
+  readable by other users, and the same after a restart.
 - **A window always gets a snapshot** when it attaches, reconnects, meets a server that has started
   again, or misses a revision (it asks for a fresh one). Between those it gets deltas.
 - **A deferred answer is never run again and never cancelled.** If the caller times out or goes

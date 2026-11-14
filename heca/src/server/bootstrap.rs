@@ -1,7 +1,7 @@
 //! Construct the process owner from configuration, before or without any window.
 
 use heca_config::loader::AppConfig;
-use super::{ServerState, ServerWaker};
+use super::{ServerState, ServerWaker, identity::ServerIdentity};
 use crate::{app::{backend_factory::TerminalSettings, backend_store::BackendStore}, notification::NotificationRuntime};
 use heca_core::layout::{Pane, PaneId, Rectangle, Session, SessionId, Size};
 use super::{Asker, run::ServerLoop};
@@ -27,9 +27,11 @@ impl ServerState {
 }
 
 impl ServerLoop {
-    pub(crate) fn from_config(config: &AppConfig, wake: ServerWaker) -> std::io::Result<Self> {
+    /// A server for `config`, which is the one `identity` — claimed by the entry point that knows
+    /// what kind of server this is.
+    pub(crate) fn from_config(config: &AppConfig, identity: ServerIdentity, wake: ServerWaker) -> std::io::Result<Self> {
         let mut server = Self::empty();
-        server.start_services(config, &wake);
+        server.start_services(config, identity, &wake);
         server.configure_factory(config.clone(), wake);
         Ok(server)
     }

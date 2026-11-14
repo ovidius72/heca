@@ -31,6 +31,13 @@
 //! ([`ServiceCx::complete`]). A caller that times out or goes away never runs it twice and never
 //! cancels it.
 //!
+//! **A folder of its own, and a table of its own.** [`StartCx::data_dir`] is where the service keeps
+//! what it writes to disk: private to its owner, shared with no other service, the same on every
+//! start of this server and different on another server running at the same time.
+//! [`StartCx::extension_config`] reads the extension's `[extensions.<name>]` table as a type of its
+//! own; one that does not fit is an error, and an extension can read no table but its own. Actions
+//! and projections read the session's table the same way.
+//!
 //! **Stopping.** When the server shuts down it calls [`Service::stop`] until it says
 //! [`Stop::Done`], delivering inbox messages in between, for at most
 //! `[settings.services] stop_timeout_ms`.
@@ -47,6 +54,7 @@ use crate::actions::ActionMeta;
 use crate::chrome::{Intent, StartupQueue, warn_author};
 
 pub(crate) mod client;
+mod config;
 mod cx;
 mod declared;
 mod inbox;
@@ -54,6 +62,7 @@ mod inbox;
 mod tests;
 
 pub use client::ServiceState;
+pub use config::ExtensionConfigError;
 pub use cx::{ActionCx, ProjectCx, ServiceCx, StartCx};
 pub(crate) use cx::Effects;
 pub(crate) use declared::{ActionFn, Declaration};
@@ -152,7 +161,7 @@ impl super::Extension {
         short: &str,
         factory: impl Fn(&mut StartCx<'_, S::Message>) -> ServiceResult<S> + 'static,
     ) -> ServiceRegistration<S> {
-        let Some(name) = self.full("service", short) else {
+        let (Some(extension), Some(name)) = (self.name(), self.full("service", short)) else {
             return ServiceRegistration { declared: None };
         };
         if SERVICES.with(|q| q.peek(|all| all.iter().any(|d| d.name() == name))) {
@@ -161,6 +170,7 @@ impl super::Extension {
         }
         let declared = Rc::new(Declared::<S> {
             name,
+            extension: extension.to_owned(),
             factory: Box::new(factory),
             actions: RefCell::new(Vec::new()),
         });
