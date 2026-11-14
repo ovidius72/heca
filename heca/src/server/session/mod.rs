@@ -44,6 +44,11 @@ pub(crate) struct SessionRuntime {
     /// `heca rpc --events` subscribers (shared across sessions), fanned to from this session's
     /// broadcast. Empty until the owner loop installs the shared fanout.
     events: super::EventFanout,
+    /// The server's extension services, shared with it: a window's call to one runs here.
+    services: super::services::SharedServices,
+    /// The session's effective configuration — the user's, with a trusted project's on top — as
+    /// its services see it. `None` for a session built without one (tests).
+    config: Option<Rc<heca_config::loader::AppConfig>>,
 }
 
 impl SessionRuntime {
@@ -77,6 +82,8 @@ impl SessionRuntime {
             images: Default::default(),
             known_terminals: Default::default(),
             events: Default::default(),
+            services: Default::default(),
+            config: None,
         }
     }
 
@@ -93,6 +100,32 @@ impl SessionRuntime {
     /// events to every subscriber.
     pub(crate) fn install_event_fanout(&mut self, events: super::EventFanout) {
         self.events = events;
+    }
+
+    /// Share the server's service host, so a window's call to a service action reaches it.
+    pub(crate) fn install_services(&mut self, services: super::services::SharedServices) {
+        self.services = services;
+    }
+
+    pub(crate) fn set_config(&mut self, config: &heca_config::loader::AppConfig) {
+        self.config = Some(Rc::new(config.clone()));
+    }
+
+    /// The session's effective configuration, when it has one.
+    pub(crate) fn config(&self) -> Option<&heca_config::loader::AppConfig> {
+        self.config.as_deref()
+    }
+
+    /// This session's attached windows, for the services to show.
+    pub(super) fn audience(&self) -> super::services::Audience<'_> {
+        super::services::Audience {
+            session: self.session.id,
+            config: self.config(),
+            clients: self.clients.iter()
+                .filter(|client| !client.is_closed() && matches!(client.attachment.get(), Attachment::Attached))
+                .cloned()
+                .collect(),
+        }
     }
 
     pub(crate) fn shutdown(&mut self) {
@@ -122,6 +155,7 @@ impl SessionRuntime {
         let Ok(config) = loaded else {
             return Vec::new();
         };
+        self.set_config(&config);
         self.configure_recovery(&config.config.settings);
         let terminals = crate::app::backend_factory::TerminalSettings::from_config(&config);
         let _ = self.state.execute(
@@ -230,7 +264,9 @@ impl SessionRuntime {
                     }
                 }
                 ClientMsg::Detach => detached.push(i),
-                ClientMsg::AttachTo { .. } | ClientMsg::Session { .. } | ClientMsg::LeaveSession => detached.push(i),
+                // Routed by the server loop, which owns them; never queued to a session.
+                ClientMsg::AttachTo { .. } | ClientMsg::Session { .. } | ClientMsg::LeaveSession
+                | ClientMsg::ServiceResync { .. } => detached.push(i),
                 ClientMsg::Act {
                     mut action,
                     asker,
@@ -362,6 +398,11 @@ impl SessionRuntime {
                     let changes = self.reload_config(now);
                     detached.extend(self.publish_notifications(&changes));
                     publish_terminals = true;
+                }
+                ClientMsg::Invoke { intent } if self.services.borrow().owns(&intent.action) => {
+                    let reply = super::services::Reply::Window { action: intent.action.clone() };
+                    self.services.borrow_mut().invoke(self.session.id, Some(self.clients[i].id),
+                        self.config.as_deref(), &intent, reply);
                 }
                 ClientMsg::Invoke { intent } => {
                     crate::chrome::window::signals::sync_pane_runtime_state(

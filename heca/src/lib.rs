@@ -38,7 +38,11 @@ pub use chrome::{
     BuildCx, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
-pub use entry::{Extension, LayerBuilder, LayerCx, extension, register_widget};
+pub use entry::{
+    ActionCx, ActionResult, Extension, LayerBuilder, LayerCx, ProjectCx, Projection, Service, ServiceCx,
+    ServiceInbox, ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket,
+    StartCx, Stop, Update, extension, register_widget,
+};
 pub use heca_view_realize::WidgetDefinition;
 pub use heca_view::{Intent, PropMap, PropValue};
 pub use notification::{Notification, NotificationAction};

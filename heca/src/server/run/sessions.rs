@@ -132,6 +132,7 @@ impl ServerLoop {
         }
         runtime.install_actions(self.registry.clone(), self.catalog.clone());
         runtime.install_event_fanout(self.events.clone());
+        runtime.install_services(self.services.clone());
         self.sessions.push(runtime);
         self.last_session = Some(identity.id);
         self.recent_sessions.push(identity.id);

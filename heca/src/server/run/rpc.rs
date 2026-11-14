@@ -25,14 +25,36 @@ impl ServerLoop {
                 .as_ref()
                 .map(|config| config.config.confirm.clone())
                 .unwrap_or_default();
-            registry.execute_server_with(&catalog, &confirm, store, &intent, &mut |action| {
-                self.run_rpc_action(action, &mut output)
+            registry.execute_server_with(&catalog, &confirm, store, &intent, &mut |step| match step {
+                crate::actions::ServerStep::Action(action) => self.run_rpc_action(action, &mut output),
+                crate::actions::ServerStep::Service(intent) => self.run_rpc_service(intent).map(|()| Vec::new()),
             })
         })();
         match result {
             Ok(_) => output.unwrap_or_else(|| "ok".into()),
             Err(error) => format!("error: {error}"),
         }
+    }
+
+    /// A script's call to a service action: the same check every unattached call gets, then the
+    /// service, in the most recent session. A deferred answer keeps `reply` until it is settled.
+    pub(super) fn rpc_service(&mut self, intent: &crate::chrome::Intent, reply: std::sync::mpsc::Sender<String>) {
+        let confirm = self.config.as_ref().map(|config| config.config.confirm.clone()).unwrap_or_default();
+        let checked = crate::actions::check_server_intent(&self.catalog, &confirm, intent)
+            .and_then(|_| self.last_index().ok_or(RpcError::NotInitialized));
+        let index = match checked {
+            Ok(index) => index,
+            Err(error) => { let _ = reply.send(format!("error: {error}")); return; }
+        };
+        let session = &self.sessions[index];
+        self.services.borrow_mut().invoke(session.info().id, None, session.config(), intent,
+            super::super::services::Reply::Rpc(reply));
+    }
+
+    /// A service action reached by a chain a script started: in the most recent session.
+    fn run_rpc_service(&mut self, intent: &crate::chrome::Intent) -> Result<(), RpcError> {
+        let session = &self.sessions[self.last_index().ok_or(RpcError::NotInitialized)?];
+        self.services.borrow_mut().run_step(session.info().id, session.config(), intent)
     }
 
     fn run_rpc_action(&mut self, action: WmAction, output: &mut Option<String>) -> Result<Vec<super::super::Change>, RpcError> {

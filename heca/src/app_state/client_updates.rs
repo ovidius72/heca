@@ -44,6 +44,12 @@ impl AppState {
             self.rebuild_toasts();
             self.needs_redraw = true;
         }
+        // A session change, or leaving one, resets what services show; then what they sent applies.
+        let left = update.session_attached || update.session_deleted || update.session_detached;
+        if left || !update.services.is_empty() {
+            crate::entry::service::client::apply_updates(left, update.services, |service| self.client.resync_service(service));
+            self.needs_redraw = true;
+        }
         if let Some(windows) = update.windows {
             // If the window we follow has left the session, resume our own view.
             if let Some(target) = self.client.following()

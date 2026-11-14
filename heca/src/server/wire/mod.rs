@@ -22,6 +22,7 @@ mod wait;
 pub(crate) use wait::await_message;
 pub(crate) mod terminal;
 pub(crate) mod image;
+pub(crate) mod service;
 #[cfg(unix)]
 pub(crate) mod socket;
 
@@ -86,6 +87,9 @@ pub(crate) enum ClientMsg {
     /// Where this window is looking — its shown workspace and focused pane — reported when it
     /// changes. The server turns a change into a `Focus`/`Workspace` event on the `--events` stream.
     ReportPresence { workspace: usize, pane: Option<heca_core::layout::PaneId> },
+    /// This window's copy of an extension service's projection is out of step (a missed revision
+    /// or another server run): send it a fresh snapshot.
+    ServiceResync { service: String },
 }
 
 /// What the server tells a client.
@@ -136,6 +140,8 @@ pub(crate) enum ServerMsg {
     /// The view of the window this one follows, to mirror. Sent when the leader reports a new view
     /// and once on starting to follow if the leader's view is already known.
     FollowView(heca_core::layout::ViewSnapshot),
+    /// What an extension service shows this window: a snapshot, a delta or a removal.
+    Service(service::ServiceUpdate),
 }
 
 /// The client's end of the link. The client is written against this, so the socket transport (later)

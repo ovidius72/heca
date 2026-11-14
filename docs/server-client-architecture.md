@@ -122,6 +122,30 @@ Several windows on one session, the `follow` option and the shared-pane size arb
 
 ---
 
+## Extension services
+
+An extension can run a long-lived **service** inside the server (see
+[A service inside the server](extending-heca.md#a-service-inside-the-server)). The server owns one
+host for all of them (`heca/src/server/services/`) and shares it with its sessions: an action from a
+window reaches the service through the session that received it, an action from a script through the
+server. Services start once when the server starts and stop once when it shuts down, so detaching a
+window or switching session never touches them.
+
+**Two messages carry them.** `ServerMsg::Service` sends one window one update (the service's name,
+its schema version, the server epoch, a revision, and a snapshot, a delta or a removal).
+`ClientMsg::ServiceResync` is the window asking for a fresh snapshot of one service.
+
+**Each window is shown its own projection.** After a service says its data changed, the server asks it
+once per attached window (its session and connection) what that window shows, and remembers the
+revision it last sent each one. A delta names the revision it builds on; if the window does not hold
+exactly that, it keeps what it has, sends `ServiceResync`, and the server starts that window again from a
+snapshot. The **server epoch** is a number for this run of the server: a window holding data from
+another epoch cannot apply a delta, so a restarted server always begins with snapshots. Attaching or
+reattaching also clears what the server remembers for that window, and a window that changes session is
+sent a snapshot for its new session.
+
+---
+
 ## Per-window state is keyed by id, resolved at read time
 
 When a piece of state is per window, it moves out of the shared content into the window's view
