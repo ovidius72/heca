@@ -259,6 +259,7 @@ impl PtyHandle {
     }
 
     /// The resolved shell path this PTY spawned (e.g. `/bin/zsh`).
+    #[cfg(unix)]
     pub(super) fn shell_path(&self) -> &str {
         &self.shell
     }

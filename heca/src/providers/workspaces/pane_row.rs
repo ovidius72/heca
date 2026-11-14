@@ -442,7 +442,7 @@ mod tests {
             &fx,
             PaneId(7),
             heca_core::runtime::PaneRuntime {
-                cwd: Some("/Users/antonio/projects/heca".into()),
+                cwd: Some(dirs::home_dir().expect("a home folder").join("projects").join("heca")),
                 ..Default::default()
             },
         );
