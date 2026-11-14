@@ -4,8 +4,8 @@
   "shortId": "",
   "priority": 0,
   "name": "🛠️ App / Chrome Features",
-  "description": "Feature applicative e di chrome: audit di parità con Niri, split di `render.rs`, zoom/font-size controls, pane numbering, workspace drag-to-reorder, sidebar wiring + collapsed rail, damage-region optimization, fix vibrancy warning macOS, leftovers sidebar/chrome e context menu.",
-  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
+  "description": "Feature applicative e di chrome: audit di parità con Niri, split di `render.rs`, zoom/font-size controls, pane numbering, workspace drag-to-reorder, sidebar wiring + collapsed rail, damage-region optimization, fix vibrancy warning macOS, leftovers sidebar/chrome e context menu.\n\nApproved 2026-11-05: P107(F006), Developer Tools: UI Inspector and RPC inspection, adds a user-placed read-only Inspector dock and matching JSON inspection over the existing RPC connection. One ActionRegistry action opens/closes it through a configurable shortcut, palette and RPC. It reuses F003 identity/widget/action metadata rather than adding registries; T082 action discovery and T506 namespace reads retain their ownership. This dedicated planned work is separate from P094/T450 and from P093 startup diagnostics. The exact action name/default shortcut remain to be agreed before implementation.",
+  "descriptionUpdatedAt": "2026-11-04T23:46:45.299Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -27,11 +27,12 @@
     "884c75d3-e99a-4537-b09c-aa9efab3270c",
     "3bdc254b-4b5c-4f74-a783-8de4ae1628fa",
     "9cefac90-9fea-427c-9106-9a41e71e8acd",
-    "821e5ab9-22e8-4e04-a356-209350f305d5"
+    "821e5ab9-22e8-4e04-a356-209350f305d5",
+    "8ef76076-51ef-41b4-b338-bf59b0fcae58"
   ],
   "dependsOn": [],
   "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-07-01T20:27:40.669Z",
+  "updatedAt": "2026-11-04T23:46:45.299Z",
   "sessionInfo": []
 }

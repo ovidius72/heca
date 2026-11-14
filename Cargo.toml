@@ -8,7 +8,7 @@ edition = "2024"
 authors = ["heca contributors"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ovidius72/heca"
-rust-version = "1.85"
+rust-version = "1.100"
 
 # A doc link that names something gone or private is an error when the docs are built
 # (`cargo doc`), not a warning nobody reads.

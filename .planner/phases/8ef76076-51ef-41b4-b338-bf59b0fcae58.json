@@ -1,0 +1,147 @@
+{
+  "id": "8ef76076-51ef-41b4-b338-bf59b0fcae58",
+  "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
+  "number": 107,
+  "shortId": "ABF4W",
+  "priority": 14,
+  "slug": "developer-tools-ui-inspector-and-rpc-inspection",
+  "title": "Developer Tools: UI Inspector and RPC inspection",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "A read-only Inspector dock and JSON RPC inspection over shared component/resource metadata.",
+  "description": "APPROVED SCOPE — Antonio, 2026-11-05\nA dedicated read-only UI Inspector for open heca, separate from P094(F011)/T450. It is an application tool in F006, not a terminal-specific feature or another widget/action registry. The user places its dock through the normal provider/region mechanism; do not choose or hard-code a sidebar. Selecting an entry can highlight the corresponding element in the window.\n\nDELIVERABLE\nA component/resource tree with separate fields for qualified stable names (for example demo.shell), runtime IDs, component type, display title and available actions with declared arguments. The GUI and JSON RPC inspection consume the same authoritative inspection model. Showing/hiding the Inspector is one ActionRegistry action, available through the command palette, RPC and a configurable shortcut. Agree the action name and default shortcut before implementation; none has been selected by this planning decision.\n\nVERIFIED BASELINE, 2026-11-05\n- heca-grid-ui/src/component/behavior.rs:7 defines Component; component/base/mod.rs:8 defines Base and its children/layout state. component/base/methods.rs:45 centralizes declared widget identity; nav/identity.rs:36 supplies tree identity, including the existing unnamed-node behavior. A key is optional. Inspect unnamed widgets too; do not demand keys or turn a derived diagnostic identity into a permanent RPC resource address.\n- heca-view-realize/src/registry/mod.rs:19 and :41 define WidgetMetadata/WidgetDefinition. Reuse the open widget registry and its metadata, not a closed type enum or a second inventory.\n- heca/src/app/backend_store/mod.rs:84 and :104 define TerminalOwner and BackendStore. Named terminals use qualified owner names. owners/find_owner at :231-235 expose existing resource identity internally. Widget instances/mounts and shared terminal resources are not the same thing: show their relationship without inventing another identity.\n- docs/extending-heca.md:33-70 documents namespaces and named lookup. heca/src/entry/widgets/mod.rs:24 qualifies terminal names.\n- heca/src/actions/catalog/mod.rs:86, :235 and :391-400 provide action metadata and discovery; heca/src/rpc.rs:87 already answers list-actions/describe-action as JSON. This is action metadata, not a delivered live component-tree Inspector.\n- heca/src/server/wire/mod.rs:59 and :121 plus heca/src/client/mod.rs:330, :393 carry existing RPC requests/replies. Reuse the socket and established client/server action/query routing. The live GUI tree belongs to its client/window; session resource ownership belongs to the server. Do not pretend a headless server owns a rendered window tree.\n- keybindings.default.toml:1-30 and docs/keybindings.md define default/configured bindings. Register the action once; no private key handler, hard-coded shortcut or RPC-only dispatcher.\nNo generic live Inspector was found in the reviewed catalog/code and current task-title inventory. This is planned work, not a claim that every source path has been exhaustively audited. Refresh the baseline at execution time.\n\nOWNERSHIP AND COORDINATION\nP051(F003)/T082 already owns action-discovery UX. Consume the common catalog/discovery results and agree any shared changes there; do not duplicate its inventory or silently absorb its task. P035(F003)/T506 owns public read-only namespace access, while P085/T357 and T360 own events/per-mount values. This Inspector does not implement arbitrary state namespaces, mutable Signal exposure or their store/event contracts. Those planned tasks are coordination references, not automatic hard prerequisites for inspecting identities and action metadata already present.\nP067(F003)/T398 is the completed shared authoring/registry foundation. P094/T450 retains terminal-header/name/rename work. The Inspector is not a T450 acceptance blocker. P093(F006) remains startup/config diagnostics, not live UI inspection.\n\nBOUNDARIES\nRead-only metadata only. No property editor, action execution from inspection, process control, new resource lifecycle, terminal output capture, environment/secret dumps or arbitrary private-state browsing. Do not redesign Provider/Dock APIs, add a second action/identity registry or require all widgets to acquire stable names. Reuse existing tree/list, layout, detail, dock and overlay capabilities; any generic missing capability belongs in its owning library and must have an ordinary constructor/fluent authoring API.\n\nACCEPTANCE\nGUI and JSON agree for a declared name, an unnamed widget and multiple placements sharing one resource. Inspection stays scoped to the selected session/window, handles detach/removal/rebuild without stale references, and does not rename/restart processes, invoke inspected actions or mutate application state. The Inspector is keyboard-accessible through its registered configurable action, and its own widgets own scrolling/selection/input. Verify headlessly, through socket RPC, and in a native GUI review with Antonio. Document the schema, identity limits, scope and shortcut. Planning creates no implementation, priority deviation, commit or worktree.",
+  "descriptionUpdatedAt": "2026-11-04T23:44:53.473Z",
+  "notes": "",
+  "goals": [
+    "Provide a user-placed read-only Inspector dock over the live component/resource tree.",
+    "Expose the same scoped inspection records as JSON through the existing RPC connection.",
+    "Open/close through one registered action with palette/RPC reachability and a configurable shortcut."
+  ],
+  "nonGoals": [
+    "No property editing, inspected-action execution, process control or terminal/private-state dumps.",
+    "No replacement of Provider, widget identity, ActionRegistry, T082 action discovery or T506 namespace contracts.",
+    "No Inspector implementation or acceptance work inside T450."
+  ],
+  "dependencies": [
+    "Reuse completed P067(F003)/T398 authoring/registry APIs; refresh current source before execution.",
+    "Coordinate shared action metadata with P051(F003)/T082; arbitrary namespace reads remain P035(F003)/T506. Neither planned task is made a hard dependency by this phase."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Runtime widget IDs and derived identities can change; they must not masquerade as stable resource names.",
+    "One named resource may have multiple widget instances/mounts; inspection must preserve both.",
+    "A headless server cannot invent a window tree; RPC inspection must identify the actual client/window and reject unavailable targets."
+  ],
+  "openQuestions": [
+    "Agree the registered Inspector action name and conflict-free default shortcut before code.",
+    "Agree the public constructor/fluent inspection API, JSON schema and explicit session/window query selection using the existing transport."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "62cc85ab-0fb1-4f4f-bc21-6599632e04fc",
+      "title": "A dedicated read-only Inspector dock shares metadata with RPC",
+      "decision": "Antonio approved the read-only Inspector scope and its placement under F006 in a dedicated phase/task on 2026-11-05. The user places the dock. It shows component/resource hierarchy, separate stable names and runtime IDs, type, title and available action arguments. Selecting an element can highlight it. GUI and RPC use the same authoritative inspection model; RPC returns JSON. One ActionRegistry action shows/hides the Inspector and is reachable through a configurable shortcut, the command palette and RPC.",
+      "rationale": "Runtime names and action targets must be discoverable without permanent ID labels over the working UI. A dedicated application tool keeps generic debugging separate from terminal-header work and avoids divergent GUI/RPC inventories.",
+      "implementationNotes": "Task is planned, not started. The action name and default shortcut still require agreement. Reuse existing identity, widget metadata, catalog and socket routing; keys remain optional. Preserve session/window/mount scope and distinguish shared resources from their views. T082 retains action-discovery ownership; T506 retains public namespace reads. No property editing/private-state dumps, new Provider API, second registry or T450 acceptance dependency.",
+      "acceptedAt": "2026-11-04T23:45:23.654Z"
+    }
+  ],
+  "completionCriteria": [
+    "GUI and RPC expose matching read-only metadata without a parallel registry.",
+    "The dock is user-placeable and usable by keyboard/mouse; selection highlight uses existing overlay geometry.",
+    "Tests cover unnamed widgets, shared resources, multiple windows, stale/removed nodes and non-mutation.",
+    "Native acceptance and documentation cover the agreed shortcut, identity lifetime and RPC schema."
+  ],
+  "taskIds": [
+    "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c"
+  ],
+  "tasks": [
+    {
+      "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c",
+      "phaseId": "8ef76076-51ef-41b4-b338-bf59b0fcae58",
+      "number": 552,
+      "shortId": "BSB2V",
+      "priority": 1,
+      "shortName": "read-only-inspector-dock-with",
+      "title": "Read-only Inspector dock with RPC discovery",
+      "status": "planned",
+      "description": "APPROVED TASK — Antonio, 2026-11-05\nDeliver the read-only Inspector described by P107(F006), accepted decision 62cc85ab-0fb1-4f4f-bc21-6599632e04fc. This is a separate planned task, not an addition to P094(F011)/T450. No implementation starts on creation.\n\nPUBLIC BEHAVIOR\nThe user places the Inspector dock through the existing provider/region system. It displays the component/resource hierarchy and selection details: qualified stable name when available, runtime ID, component type, display title and available actions with declared arguments. Selection may highlight the corresponding on-screen element. The same scoped data is returned as JSON through the existing RPC socket.\nOpen/close is one ActionRegistry action reachable by configurable shortcut, palette and RPC. Agree its name and conflict-free default key with Antonio before code. Do not invent a private key handler. Write the public constructor/fluent composition and inspection/query authoring examples before implementing a new API; agree the exact API/schema rather than copying provisional names from chat.\n\nCURRENT IMPLEMENTATION TO REUSE\n- Component and Base children: heca-grid-ui/src/component/behavior.rs:7; component/base/mod.rs:8.\n- Declared identity: heca-grid-ui/src/component/base/methods.rs:45; common tree/derived identity: nav/identity.rs:36. Names/keys are optional. Unnamed nodes must still be inspectable, while derived identity is clearly not a guaranteed permanent resource address.\n- WidgetMetadata/WidgetDefinition: heca-view-realize/src/registry/mod.rs:19,41. Read the existing open registry; do not maintain a second type/property/action list.\n- Qualified resource names: docs/extending-heca.md:33-70; heca/src/entry/widgets/mod.rs:24. BackendStore/TerminalOwner and owners/find_owner: heca/src/app/backend_store/mod.rs:84,104,231-235. A shared named terminal can have several UI instances: preserve resource identity and mount/window identity separately.\n- ActionMeta/ActionCatalog/describe: heca/src/actions/catalog/mod.rs:86,235,391-400. heca/src/rpc.rs:87 already lists/describes action metadata as JSON. This is not yet a component-tree/resource Inspector.\n- Existing wire requests/replies: heca/src/server/wire/mod.rs:59,121; client/mod.rs:330,393. Reuse the connection, policy/argument validation and action/query routing; no alternate socket/dispatcher/catalog.\n- Central default bindings and docs: keybindings.default.toml:1-30; docs/keybindings.md. UI composition guidance: docs/widgets.md; docs/extending-heca.md.\nSource references were checked on main at planning time; refresh them at execution. T450's newer title/rename branch is not assumed merged. No native Inspector code is claimed present.\n\nIMPLEMENTATION PLAN\n1. Refresh existing metadata, identity, tree traversal, provider, action and RPC contracts. Confirm the public authoring/query API, record schema, target scope and default shortcut with Antonio.\n2. Build one read-only inspection model using authoritative existing identities and action metadata. Do not expose mutable widget references, Signals or a hand-maintained parallel inventory.\n3. Compose the user-placeable dock from existing tree/list, layout and details widgets, with framework-owned selection/scrolling/input. Reuse overlay geometry for selection highlighting. Keep host-private AppState out of reusable presentation.\n4. Serve the same records over the existing RPC query path and route the registered open/close action through the common action pipeline. A rendered tree is client/window-local; server-owned resource identity stays server-owned. Missing/disconnected windows must return an honest unavailable result.\n5. Handle rebuild/removal, hidden nodes, detached windows, duplicate short names across namespaces, and multiple mounts/windows of a shared resource without stale references or accidental cross-session selection.\n6. Test identity, JSON/GUI parity, scope, action discovery/keybindings and read-only behavior. Document the chosen API/schema/shortcut and complete Antonio-driven native acceptance.\n\nOWNERSHIP\nConsume completed P067(F003)/T398 APIs. P051(F003)/T082 retains action-discovery UX; reuse its common catalog and coordinate any shared changes instead of duplicating its inventory. P035(F003)/T506 retains public namespace reads, and P085/T357/T360 retain event/per-mount values. This task does not absorb them and does not require their future arbitrary-state API just to inspect currently available identity/action metadata. Do not change their statuses or dependencies silently.\nT450 retains terminal header/name/rename behavior. This Inspector does not block T450 acceptance. P093(F006) remains startup diagnostics.\n\nLIMITS\nRead-only metadata and selection highlight only. No property editor, inspected-action runner, terminal output/environment/secret capture, process restart/rename, lifecycle change or Provider redesign. No forced widget keys, closed type enum, second registry, manual event forwarding or call-site geometry fix. GUI state is per client/window unless an existing canonical contract explicitly owns it elsewhere. Use actual library capabilities; report and agree missing scope rather than inventing it.\n\nVERIFICATION\nUse focused unit/integration tests plus the existing changed-file/workspace verification rules. Exercise native and described/plugin-authored content, an unnamed widget, two mounts of one component, a shared named terminal, two sessions/windows and stale selection after removal. JSON must distinguish stable name, mutable title and runtime/mount identity. Prove no inspected action is executed and no process/session state changes. Run the app for visual/keybinding review with Antonio; builds and snapshots alone do not satisfy native acceptance.",
+      "descriptionUpdatedAt": "2026-11-04T23:46:43.954Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-001-refresh-current-source-and-agree-the-inspector-s-public-constructor-fluent-api-read-only-record-schema-rpc-session-window-scope-action-name-and-conflict-free-default-shortcut-before-code",
+          "number": 1,
+          "title": "Refresh current source and agree the Inspector's public constructor/fluent API, read-only record schema, RPC session/window scope, action name and conflict-free default shortcut before code.",
+          "checked": false
+        },
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-002-derive-one-inspection-model-from-existing-component-resource-identities-and-widget-action-metadata-unnamed-widgets-work-and-runtime-derived-ids-are-not-represented-as-stable-resource-names",
+          "number": 2,
+          "title": "Derive one inspection model from existing component/resource identities and widget/action metadata; unnamed widgets work and runtime/derived IDs are not represented as stable resource names.",
+          "checked": false
+        },
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-003-compose-a-user-placeable-inspector-dock-with-navigable-hierarchy-name-id-type-title-action-argument-details-and-shared-overlay-selection-highlighting-widgets-own-input-and-scrolling",
+          "number": 3,
+          "title": "Compose a user-placeable Inspector dock with navigable hierarchy, name/ID/type/title/action-argument details and shared-overlay selection highlighting; widgets own input and scrolling.",
+          "checked": false
+        },
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-004-expose-matching-json-records-through-the-existing-rpc-connection-query-path-with-explicit-client-window-and-session-scope-and-honest-unavailable-stale-target-errors",
+          "number": 4,
+          "title": "Expose matching JSON records through the existing RPC connection/query path, with explicit client/window and session scope and honest unavailable/stale-target errors.",
+          "checked": false
+        },
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-005-register-one-open-close-action-through-actionregistry-for-configured-default-shortcut-palette-and-rpc-preserving-normal-policy-focus-and-keybinding-behavior",
+          "number": 5,
+          "title": "Register one open/close action through ActionRegistry for configured/default shortcut, palette and RPC, preserving normal policy, focus and keybinding behavior.",
+          "checked": false
+        },
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-006-preserve-identity-relationships-across-two-mounts-shared-named-resources-and-multiple-windows-refresh-safely-after-rebuild-removal-hide-or-detach-without-mutating-the-inspected-app",
+          "number": 6,
+          "title": "Preserve identity relationships across two mounts, shared named resources and multiple windows; refresh safely after rebuild, removal, hide or detach without mutating the inspected app.",
+          "checked": false
+        },
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-007-add-native-described-gui-model-json-parity-scope-keybinding-and-non-mutation-tests-run-the-required-focused-workspace-lint-gates",
+          "number": 7,
+          "title": "Add native/described, GUI-model/JSON parity, scope, keybinding and non-mutation tests; run the required focused/workspace/lint gates.",
+          "checked": false
+        },
+        {
+          "id": "74bcf5ee-1812-4ebf-9e6e-84b6316c6c2c-check-008-document-the-final-schema-api-shortcut-and-identity-limits-obtain-antonio-s-native-acceptance-for-inspection-highlight-and-open-close-behavior",
+          "number": 8,
+          "title": "Document the final schema/API/shortcut and identity limits; obtain Antonio's native acceptance for inspection, highlight and open/close behavior.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-04T23:46:43.909Z",
+      "updatedAt": "2026-11-04T23:46:43.909Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-11-04T23:44:53.403Z",
+  "updatedAt": "2026-11-04T23:46:43.909Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}
