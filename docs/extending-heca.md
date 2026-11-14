@@ -374,6 +374,18 @@ window opened again after one closed gets its folder back. `ServiceCx` and so ev
 `data_dir()` too, so a service need not keep the path. Where the platform has no data folder, the
 service does not start and says so in a notification; the server keeps running.
 
+**Which session — `session()` or `session_key()`.** `cx.session()` is a number for this run of the
+server: use it to say "the session this call is in" and nothing more, because a server that starts
+again numbers its sessions from the beginning. To store something against a session, use
+`cx.session_key()`. It is a `SessionKey`, which heca makes once when the session is created. It stays
+the same when the session is renamed, terminated, restarted or has windows come and go, and it does
+not depend on the session's name, folder or a window's connection. It ends only when the session is
+deleted. Compare it, hash it and store it (it implements `Serialize` and `Deserialize`); you cannot
+read anything out of it or make one. `ActionCx` and `ProjectCx` both have it, and it is always the
+key of the session the call or the window is in. Until sessions are restored across restarts
+(planner task T527), a server that starts again gives its sessions new keys, so data stored against a
+key is not found again after a restart.
+
 **A table of its own.** `cx.extension_config::<T>()` reads `[extensions.<name>]`, where `<name>` is
 the extension the service was declared under, as any type that implements `serde::Deserialize`. A
 table that does not fit `T` is an error that names the table and says what is wrong

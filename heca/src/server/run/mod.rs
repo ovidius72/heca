@@ -429,4 +429,6 @@ mod service_tests;
 #[cfg(test)]
 mod service_data_tests;
 #[cfg(test)]
+mod service_key_tests;
+#[cfg(test)]
 mod identity_tests;

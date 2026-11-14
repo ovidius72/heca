@@ -6,7 +6,7 @@ use std::path::Path;
 use heca_config::loader::AppConfig;
 use serde::de::DeserializeOwned;
 
-use super::{ExtensionConfigError, ServiceInbox, ServiceTicket, config};
+use super::{ExtensionConfigError, ServiceInbox, ServiceTicket, SessionKey, config};
 
 /// What a service asked of the host during one call, collected and acted on after it returns.
 #[derive(Debug, Default)]
@@ -105,15 +105,23 @@ impl<M> ServiceCx<'_, M> {
 pub struct ActionCx<'a, M> {
     pub(crate) service: ServiceCx<'a, M>,
     pub(crate) session: u64,
+    pub(crate) session_key: SessionKey,
     pub(crate) client: Option<u64>,
     pub(crate) config: &'a AppConfig,
     pub(crate) extension: &'a str,
 }
 
 impl<M> ActionCx<'_, M> {
-    /// The session the action ran in.
+    /// The session the action ran in, as a number for this run of the server only. To store
+    /// something against the session, use [`session_key`](Self::session_key).
     pub fn session(&self) -> u64 {
         self.session
+    }
+
+    /// **The session's key** — the same for the life of the session, whatever happens to its name,
+    /// its folder or its windows. See [`SessionKey`].
+    pub fn session_key(&self) -> SessionKey {
+        self.session_key
     }
 
     /// The window's connection, when a window asked. `None` for a script with no window.
@@ -157,6 +165,7 @@ impl<M> std::ops::DerefMut for ActionCx<'_, M> {
 /// Handed to [`Service::project`](super::Service::project): which window is asking, and what it has.
 pub struct ProjectCx<'a> {
     pub(crate) session: u64,
+    pub(crate) session_key: SessionKey,
     pub(crate) client: u64,
     pub(crate) config: &'a AppConfig,
     pub(crate) extension: &'a str,
@@ -165,9 +174,14 @@ pub struct ProjectCx<'a> {
 }
 
 impl ProjectCx<'_> {
-    /// The session the window is attached to.
+    /// The session the window is attached to, as a number for this run of the server only.
     pub fn session(&self) -> u64 {
         self.session
+    }
+
+    /// The key of the session the window is attached to — see [`ActionCx::session_key`].
+    pub fn session_key(&self) -> SessionKey {
+        self.session_key
     }
 
     /// The window's connection.
