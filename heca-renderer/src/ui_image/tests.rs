@@ -99,7 +99,7 @@ fn partial_and_idle_redraws_do_not_accumulate_image_alpha() {
     assert_eq!(render(&mut renderer, None, true), pending,
         "a newly ready raster requests a full repaint");
     let baseline = pixels(&device, &queue, &target);
-    assert!(baseline.chunks_exact(4).any(|p| p[..3] != [0, 0, 0]), "the image must actually render");
+    assert!(baseline.as_chunks::<4>().0.iter().any(|p| p[..3] != [0, 0, 0]), "the image must actually render");
     for _ in 0..4 {
         render(&mut renderer, Some([0.0, 0.0, 0.0, 0.0]), false);
         assert!(pixels(&device, &queue, &target) == baseline,

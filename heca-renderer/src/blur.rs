@@ -278,10 +278,10 @@ impl Blur {
         // Write each pass's offset to its own buffer (distinct buffers → no
         // last-write-wins hazard; each is read by exactly one pass).
         let zero = [0.0f32; 2];
-        for i in 0..passes as usize {
+        for (i, params) in self.params.iter().take(passes as usize).enumerate() {
             let offset = Self::offset_for(radius, (i + 1) as u32, passes);
             queue.write_buffer(
-                &self.params[i],
+                params,
                 0,
                 bytemuck::cast_slice(&[BlurParams {
                     step: if radius <= 0.0 {

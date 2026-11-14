@@ -255,9 +255,9 @@ impl TextRenderer {
 
             let first_index = indices.len() as u32;
             let mut base = vertices.len() as u32;
-            let quads = emitted.verts.chunks_exact(4);
+            let (quads, rest) = emitted.verts.as_chunks::<4>();
             debug_assert!(
-                quads.remainder().is_empty(),
+                rest.is_empty(),
                 "emitted terminal/text geometry must contain 4 vertices per glyph quad"
             );
             for quad in quads {

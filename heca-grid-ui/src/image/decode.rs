@@ -43,7 +43,7 @@ pub(super) fn raster(data: &ImageData, spec: RasterSpec) -> Result<ImagePixels, 
     let transform = tiny_skia::Transform::from_scale(spec.width as f32 / tree.size().width(), spec.height as f32 / tree.size().height());
     resvg::render(&tree, transform, &mut pixmap.as_mut());
     let mut pixels = pixmap.take();
-    for pixel in pixels.chunks_exact_mut(4) {
+    for pixel in pixels.as_chunks_mut::<4>().0 {
         let alpha = u32::from(pixel[3]);
         if alpha == 0 { continue }
         for channel in &mut pixel[..3] { *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8; }
