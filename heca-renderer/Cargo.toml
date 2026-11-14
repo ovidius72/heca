@@ -12,13 +12,14 @@ license.workspace = true
 # two copies of one table drift.
 winit = { workspace = true }
 heca-core = { path = "../heca-core" }
-heca-config = { path = "../heca-config" }
 heca-grid-ui = { path = "../heca-grid-ui" }
 wgpu = { workspace = true }
 cosmic-text = "0.19"
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+# Only the showcase reads the user's configuration; the renderer itself stays config-free.
+heca-config = { path = "../heca-config" }
 heca-theme = { path = "../heca-theme" }
 # Reads the embedded faces' cmap so `tests/font_coverage.rs` can prove every glyph the widgets name
 # is actually in the font. Already in the tree (cosmic-text → fontdb → ttf-parser), so it adds a
