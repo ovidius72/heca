@@ -36,6 +36,7 @@ use heca_grid_ui::Handled;
 
 use crate::actions::{
     ActionCatalog, ActionMeta, ActionRegistry, DuplicateAction, register_server_dynamic,
+    register_service_dynamic,
 };
 use crate::app::conflicts::{ActionConflict, Conflicts};
 use crate::chrome::{Intent, SharedChromeState, StartupQueue};
@@ -66,20 +67,7 @@ impl ActionMeta {
     /// namespace by building the metadata by hand. A dock's own actions are declared by the dock
     /// ([`Provider::actions`](crate::providers::Provider::actions)) and run by its `perform`.
     pub fn run(self, run: impl Fn(&mut ProviderCx<'_>, &Intent) -> Handled + 'static) {
-        // A refused item carries no name and was already reported where it was refused.
-        if self.name.is_empty() {
-            return;
-        }
-        let declared = self
-            .name
-            .split_once('.')
-            .is_some_and(|(owner, _)| super::extension::is_declared(owner));
-        if !declared {
-            crate::chrome::warn_author(format!(
-                "[heca] action '{}' does not belong to an extension — declare one with \
-                 `heca::extension(..)` and add it with `.action(..)` — so it was not added",
-                self.name
-            ));
+        if !belongs_to_an_extension(&self) {
             return;
         }
         let declared = Declared {
@@ -94,6 +82,27 @@ impl ActionMeta {
             ));
         }
     }
+}
+
+/// Whether `meta` names an action of an extension this program declared — said out loud when not.
+/// The one check every way of adding an extension's action goes through.
+pub(super) fn belongs_to_an_extension(meta: &ActionMeta) -> bool {
+    // A refused item carries no name and was already reported where it was refused.
+    if meta.name.is_empty() {
+        return false;
+    }
+    let declared = meta
+        .name
+        .split_once('.')
+        .is_some_and(|(owner, _)| super::extension::is_declared(owner));
+    if !declared {
+        crate::chrome::warn_author(format!(
+            "[heca] action '{}' does not belong to an extension — declare one with \
+             `heca::extension(..)` and add it with `.action(..)` — so it was not added",
+            meta.name
+        ));
+    }
+    declared
 }
 
 /// Run one added action against `store`, returning what it asked the host to do.
@@ -139,6 +148,24 @@ pub(crate) fn register_queued_actions(
                 rejected: "an action added with an extension's `.action(..)`".to_string(),
                 shadows_builtin: matches!(duplicate, DuplicateAction::ShadowsBuiltin),
             });
+        }
+    }
+    // A service's actions are refused when their name is taken, by anything: the handler is bound
+    // to one service, so replacing it would hand the call to a different owner.
+    for declared in super::service::declared() {
+        for meta in declared.action_metas() {
+            let id = meta.name.clone();
+            let refused = |kept: &str, shadows_builtin| ActionConflict {
+                id: id.clone(),
+                kept: kept.to_string(),
+                rejected: format!("an action of the service '{}'", declared.name()),
+                shadows_builtin,
+            };
+            if !seen.insert(id.clone()) || catalog.find(&id).is_some() {
+                conflicts.action(refused("the action declared first", catalog.is_builtin(&id)));
+            } else if register_service_dynamic(registry, catalog, meta).is_err() {
+                conflicts.action(refused("the built-in", true));
+            }
         }
     }
 }

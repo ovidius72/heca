@@ -255,6 +255,13 @@ connect_retry_ms = 20
 max_image_bytes = 67108864
 max_terminal_cells = 262144
 
+[settings.services]
+# Long-lived services that extensions run inside the server.
+# Messages a service's inbox holds; a sender is told when it is full, never blocked.
+inbox_capacity = 256
+# Longest the server waits at shutdown for services to finish stopping.
+stop_timeout_ms = 3000
+
 [settings.notification_system]
 # ─────────────────────────────────────────────────────────────────────────────
 # In-app toast notifications (pane created, config reloaded, …).

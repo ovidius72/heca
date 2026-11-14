@@ -59,6 +59,8 @@ impl SessionRuntime {
                     catalog: &self.catalog,
                     confirm: &self.confirm,
                     asker: self.rpc_asker,
+                    services: &self.services,
+                    config: self.config.as_deref(),
                 },
                 &intent,
             )

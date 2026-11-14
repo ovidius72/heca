@@ -110,6 +110,7 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | a terminal | `demo.terminal("s")` | client | the terminal `demo.s` in any tree you build (a dock, an overlay): `.command(..)`, `.cwd(..)`, `.title(..)`; the same name is the same running process, and closing the dock never ends it |
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
+| a service | `demo.service("s", factory)` | server | something that lives inside the server, once; see [A service inside the server](#a-service-inside-the-server) |
 | a terminal agent driver | `demo.agent_driver(MyDriver::new())` | terminal owner | implements `heca::agent::AgentDriver`; scoped as `demo.<driver id>` and used by the same launch/report path as built-in drivers |
 
 Dock and layer factories return ordinary components. For a dock, implement
@@ -321,6 +322,71 @@ looking at.
 `PaneFacts` is plain data about one pane (`#[non_exhaustive]`: fields may be added, so read them by
 name). An action changes shared state; a dock, layer or pane decoration is drawn by a window.
 The server/client boundary carries those responsibilities without changing these extension calls.
+
+## A service inside the server
+
+**When to use one.** When something has to keep running whatever windows do: a connection to another
+program, a watcher, a queue of work. A dock or layer is drawn by a window and goes with it; a service
+lives in the server, so it is still there when the window closes and when another one opens.
+
+```rust
+let demo = heca::extension("demo");
+
+// 1. Declare it. The factory runs once, when a server starts.
+let rooms = demo.service("rooms", |cx| Ok(Rooms::open(cx.config(), cx.inbox())?));
+
+// 2. An action on it. It is an ordinary action: a key, a menu, the palette and RPC all find it.
+rooms.action(
+    demo.action("join").label("Join room"),
+    |rooms, cx, intent| rooms.join(cx, intent), // returns an `ActionResult`
+);
+
+// 3. What a window shows. `apply` folds each snapshot or delta into the value.
+let shown = rooms.client(RoomsView::default(), |view, update| view.apply(update));
+
+// In a component: it redraws when the value changes.
+let count = shown.with(|view| view.rooms.len());
+```
+
+`Rooms` implements `Service`:
+
+- `receive` takes one message from the inbox. Call `cx.republish()` when what windows see changed.
+- `project` says what one window is shown: a whole snapshot, a delta on the revision that window
+  already has, "unchanged", or nothing.
+- `stop` is called at shutdown. The default has nothing to wait for.
+- `SCHEMA_VERSION` goes up when the snapshot or delta shape changes. A window on another version
+  shows a notification instead of misreading the data.
+
+A worker the service starts sends it messages through the `ServiceInbox` (`cx.inbox()`). It is
+the only part that crosses threads, so the service itself need not be `Send`. The inbox is bounded:
+when it is full, `send` returns an error to the sender and never blocks.
+
+An action answers `Done`, `Refused(why)` or `Later(ticket)`. For `Later`, take the ticket with
+`cx.later()` and call `cx.complete(ticket, result)` when the work is done.
+
+**What heca guarantees**
+
+- **One per server.** The factory runs once when a server starts, not per window or per session.
+  Closing a window or switching session never restarts it.
+- **A window always gets a snapshot** when it attaches, reconnects, meets a server that has started
+  again, or misses a revision (it asks for a fresh one). Between those it gets deltas.
+- **A deferred answer is never run again and never cancelled.** If the caller times out or goes
+  away, the work still finishes. A script waiting on it is answered; a window is only told if it was
+  refused.
+- **Stopping waits for the service.** At shutdown heca calls `stop` until it answers `Done`,
+  delivering inbox messages in between, for at most `stop_timeout_ms`. Callers still waiting are then
+  answered "the server stopped".
+- **Failures are shown, not fatal.** A factory, message or projection that fails, or a service that
+  is slow to stop, becomes a notification (and a line on stderr); the server keeps running.
+
+**Settings** (`[settings.services]`):
+
+| setting | default | meaning |
+|---|---|---|
+| `inbox_capacity` | `256` | messages one service's inbox holds before senders are told it is full |
+| `stop_timeout_ms` | `3000` | the longest the server waits for services to stop at shutdown |
+
+Declare services and their actions before `heca::run()`; later ones are reported and dropped. Code: `heca/src/entry/service/` (what you write), `heca/src/server/services/` (the host).
 
 ## Where the code lives
 

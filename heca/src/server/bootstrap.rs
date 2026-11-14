@@ -29,6 +29,7 @@ impl ServerState {
 impl ServerLoop {
     pub(crate) fn from_config(config: &AppConfig, wake: ServerWaker) -> std::io::Result<Self> {
         let mut server = Self::empty();
+        server.start_services(config, &wake);
         server.configure_factory(config.clone(), wake);
         Ok(server)
     }
@@ -41,6 +42,7 @@ impl SessionRuntime {
         runtime.set_identity(identity);
         runtime.configure_recovery(&config.config.settings);
         runtime.configure_rpc(asker, config.config.confirm.clone(), config.config.settings.connection);
+        runtime.set_config(config);
         Ok(runtime)
     }
 }

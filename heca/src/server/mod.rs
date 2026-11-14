@@ -35,6 +35,7 @@ mod terminals;
 mod sizing;
 mod stream;
 mod session;
+pub(crate) mod services;
 mod connection;
 pub(crate) mod sessions;
 #[cfg(test)]

@@ -123,6 +123,8 @@ impl RuntimeInbox {
             };
             if let Some(event) = event && !Self::dispatch(event, &mut server) { break; }
         }
+        // However the loop ended, stop what the server runs — its services first — exactly once.
+        server.shutdown();
     }
 
     /// Standalone drains the same inbox from winit instead of sleeping in a second owner loop.

@@ -55,6 +55,9 @@ pub(crate) type ServerDynHandler = std::rc::Rc<dyn Fn(crate::chrome::SharedChrom
 enum DynamicHandler {
     Window(DynHandler),
     Server(ServerDynHandler),
+    /// An extension service's action. Its handler is bound to the service and lives with it in the
+    /// server's service host; a window forwards the call there.
+    Service,
 }
 
 /// Why a name-keyed action's id was already taken.
@@ -105,6 +108,16 @@ pub(crate) fn register_server_dynamic(
     handler: ServerDynHandler,
 ) -> Result<ActionHandle, DuplicateAction> {
     register_handler(registry, catalog, meta, Some(DynamicHandler::Server(handler)))
+}
+
+/// Register an extension service's action: its metadata joins the catalog, and a call is forwarded
+/// to the service that runs it.
+pub(crate) fn register_service_dynamic(
+    registry: &mut ActionRegistry,
+    catalog: &mut ActionCatalog,
+    meta: ActionMeta,
+) -> Result<ActionHandle, DuplicateAction> {
+    register_handler(registry, catalog, meta, Some(DynamicHandler::Service))
 }
 
 fn register_handler(
@@ -179,9 +192,14 @@ impl ActionRegistry {
         let handler = handler.clone();
         run_then_follow_up(state, |state| match handler {
             DynamicHandler::Window(handler) => handler(state, intent),
-            DynamicHandler::Server(_) => state.client.invoke(intent.clone()),
+            DynamicHandler::Server(_) | DynamicHandler::Service => state.client.invoke(intent.clone()),
         });
         true
+    }
+
+    /// Whether `id` is an extension service's action, which only the server's service host runs.
+    pub(crate) fn is_service(&self, id: &str) -> bool {
+        matches!(self.dyn_handlers.get(id), Some(DynamicHandler::Service))
     }
 
     /// Run a server-owned extension with plain store data, without constructing a window.
@@ -193,7 +211,7 @@ impl ActionRegistry {
     ) -> Option<Vec<crate::chrome::Intent>> {
         match self.dyn_handlers.get(id)? {
             DynamicHandler::Server(handler) => Some(handler(store, intent)),
-            DynamicHandler::Window(_) => None,
+            DynamicHandler::Window(_) | DynamicHandler::Service => None,
         }
     }
 

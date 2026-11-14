@@ -75,6 +75,8 @@ pub(crate) struct Update {
     pub(crate) errors: Vec<String>,
     pub(crate) exits: Vec<(heca_core::layout::PaneId, Option<i32>)>,
     pub(crate) reads: Vec<ReadEffect>,
+    /// What extension services sent this window this poll, in order.
+    pub(crate) services: Vec<crate::server::wire::service::ServiceUpdate>,
 }
 
 pub struct ClientState {
@@ -331,6 +333,7 @@ impl ClientState {
                 }
                 ServerMsg::Rpc { request_id, line } => update.rpc.push((request_id, line)),
                 ServerMsg::Dispatch { intents } => update.intents.extend(intents),
+                ServerMsg::Service(service) => update.services.push(service),
                 ServerMsg::BackendEffects(effects) => {
                     update.effects.has_data |= effects.has_data;
                     update.effects.bell_any |= effects.bell_any;
@@ -408,6 +411,11 @@ impl ClientState {
     /// and notification settings. The window keeps only its own view-side config.
     pub(crate) fn reload(&self) {
         self.outbox.send(ClientMsg::Reload);
+    }
+
+    /// This window's copy of `service` fell out of step: ask the server for a fresh snapshot.
+    pub(crate) fn resync_service(&self, service: &str) {
+        self.outbox.send(ClientMsg::ServiceResync { service: service.to_owned() });
     }
 
     pub(crate) fn invoke(&self, intent: crate::chrome::Intent) {
