@@ -107,24 +107,31 @@
           "number": 11,
           "title": "Resume disabled: preserve pane/layout and create each registered content's fresh default; shell for terminal programs, configured browser home, empty editor; custom content fixture proves no closed type list",
           "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-012-persist-each-session-s-sessionkey-and-restore-the-same-key-when-the-session-is-rebuilt-after-a-server-restart-contract-p108-f012-t556-decision-sessionkey-a-restored-session-never-gets-a-new-key-a-deleted-one-is-never-restored",
+          "number": 12,
+          "title": "Persist each session's SessionKey and restore the SAME key when the session is rebuilt after a server restart (contract: P108(F012)/T556 decision 'SessionKey'); a restored session never gets a new key, a deleted one is never restored",
+          "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
-        "79db766a-7f02-474e-b7dc-2f4c0675a030"
+        "79db766a-7f02-474e-b7dc-2f4c0675a030",
+        "d6d51e90-226f-4f01-b157-45f47790f589"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-09-29T21:32:42.950Z",
-      "updatedAt": "2026-10-27T14:36:40.001Z",
+      "updatedAt": "2026-11-14T20:06:45.761Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T21:32:11.171Z",
-  "updatedAt": "2026-10-27T14:37:17.929Z",
+  "updatedAt": "2026-11-14T20:06:45.761Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
