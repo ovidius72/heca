@@ -738,6 +738,9 @@ versioned, embedded files (the single source of truth — copy and edit them):
 - `config.default.toml` — default `[settings]`, `[appearance]`, `[font]`, `[program]`
 - `keybindings.default.toml` — default `[keys]` (prefix, bindings, modes)
 
+An extension's own settings go in `[extensions.<name>]`, a table per extension. heca has no keys of
+its own there, so the defaults list none; see [Building on heca](docs/extending-heca.md).
+
 ### Per-project settings
 
 A `.heca/config.toml` in the folder heca was started in (or the nearest parent that has a `.heca/`

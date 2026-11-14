@@ -1,6 +1,7 @@
 //! One started service, whatever its type: what the host drives.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 
@@ -11,14 +12,24 @@ use crate::entry::service::{
     ActionCx, ActionFn, ActionResult, Effects, ProjectCx, Projection, Service, ServiceCx,
     ServiceInbox, Stop,
 };
-use crate::server::{ServerWaker, wire::service::ServiceUpdateKind};
+use crate::server::{ServerWaker, identity::ServerIdentity, wire::service::ServiceUpdateKind};
 
 /// What a starting server hands every factory.
 pub(crate) struct StartArgs<'a> {
     pub(crate) config: &'a AppConfig,
+    pub(crate) identity: &'a ServerIdentity,
     pub(crate) epoch: u64,
     pub(crate) capacity: usize,
     pub(crate) wake: ServerWaker,
+}
+
+/// Who a started service is and where it keeps its files.
+pub(crate) struct Home {
+    /// `<extension>.<service>`.
+    pub(crate) name: String,
+    /// The one `[extensions.<name>]` table it may read.
+    pub(crate) extension: String,
+    pub(crate) data_dir: PathBuf,
 }
 
 /// Who asked for an action: the session, the window if any, and the session's configuration.
@@ -41,6 +52,8 @@ pub(crate) enum Projected {
 /// A started service with its type erased.
 pub(crate) trait Hosted {
     fn name(&self) -> &str;
+    /// The extension it was declared under.
+    fn extension(&self) -> &str;
     fn schema_version(&self) -> u32;
     fn owns(&self, action: &str) -> bool;
     /// Hand the service what its inbox holds — at most one inbox's worth per turn.
@@ -52,7 +65,7 @@ pub(crate) trait Hosted {
 }
 
 pub(crate) struct Running<S: Service> {
-    name: String,
+    home: Home,
     service: S,
     inbox: ServiceInbox<S::Message>,
     messages: Receiver<S::Message>,
@@ -63,14 +76,14 @@ pub(crate) struct Running<S: Service> {
 
 impl<S: Service> Running<S> {
     pub(crate) fn new(
-        name: String,
+        home: Home,
         service: S,
         inbox: ServiceInbox<S::Message>,
         messages: Receiver<S::Message>,
         actions: HashMap<String, Rc<ActionFn<S>>>,
         capacity: usize,
     ) -> Self {
-        Self { name, service, inbox, messages, actions, effects: Effects::default(), capacity }
+        Self { home, service, inbox, messages, actions, effects: Effects::default(), capacity }
     }
 
     fn encode(value: impl serde::Serialize) -> Result<serde_json::Value, String> {
@@ -80,7 +93,11 @@ impl<S: Service> Running<S> {
 
 impl<S: Service> Hosted for Running<S> {
     fn name(&self) -> &str {
-        &self.name
+        &self.home.name
+    }
+
+    fn extension(&self) -> &str {
+        &self.home.extension
     }
 
     fn schema_version(&self) -> u32 {
@@ -96,9 +113,9 @@ impl<S: Service> Hosted for Running<S> {
         while delivered < self.capacity {
             let Ok(message) = self.messages.try_recv() else { return };
             delivered += 1;
-            let mut cx = ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects };
+            let mut cx = ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects, data_dir: &self.home.data_dir };
             if let Err(error) = self.service.receive(&mut cx, message) {
-                super::report(&self.name, "a message failed", &error);
+                super::report(&self.home.name, "a message failed", &error);
             }
         }
         // A full turn's worth: let the rest wait for the next turn instead of starving the server.
@@ -107,13 +124,14 @@ impl<S: Service> Hosted for Running<S> {
 
     fn invoke(&mut self, epoch: u64, caller: Caller<'_>, intent: &Intent) -> ActionResult {
         let Some(run) = self.actions.get(&intent.action).cloned() else {
-            return ActionResult::Refused(format!("'{}' is not an action of {}", intent.action, self.name));
+            return ActionResult::Refused(format!("'{}' is not an action of {}", intent.action, self.home.name));
         };
         let mut cx = ActionCx {
-            service: ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects },
+            service: ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects, data_dir: &self.home.data_dir },
             session: caller.session,
             client: caller.client,
             config: caller.config,
+            extension: &self.home.extension,
         };
         run(&mut self.service, &mut cx, intent)
     }
@@ -135,7 +153,7 @@ impl<S: Service> Hosted for Running<S> {
     }
 
     fn stop(&mut self, epoch: u64) -> Stop {
-        let mut cx = ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects };
+        let mut cx = ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects, data_dir: &self.home.data_dir };
         self.service.stop(&mut cx)
     }
 
