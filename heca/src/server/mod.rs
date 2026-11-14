@@ -24,6 +24,8 @@ mod handlers;
 mod layout;
 mod poll;
 pub(crate) mod feedback;
+pub(crate) mod identity;
+pub(crate) mod private_fs;
 pub(crate) mod process;
 /// The local socket clients and scripts reach the server through. Unix for now (Windows named
 /// pipes later).

@@ -1,9 +1,12 @@
 //! What a service is handed at each point of its life: starting, a message or an action, and a
 //! projection for one window.
 
-use heca_config::loader::AppConfig;
+use std::path::Path;
 
-use super::{ServiceInbox, ServiceTicket};
+use heca_config::loader::AppConfig;
+use serde::de::DeserializeOwned;
+
+use super::{ExtensionConfigError, ServiceInbox, ServiceTicket, config};
 
 /// What a service asked of the host during one call, collected and acted on after it returns.
 #[derive(Debug, Default)]
@@ -19,8 +22,10 @@ pub(crate) struct Effects {
 /// Handed to a service's factory, once per server.
 pub struct StartCx<'a, M> {
     pub(crate) config: &'a AppConfig,
+    pub(crate) extension: &'a str,
     pub(crate) epoch: u64,
     pub(crate) inbox: &'a ServiceInbox<M>,
+    pub(crate) data_dir: &'a Path,
 }
 
 impl<M> StartCx<'_, M> {
@@ -38,6 +43,21 @@ impl<M> StartCx<'_, M> {
     pub fn inbox(&self) -> ServiceInbox<M> {
         self.inbox.clone()
     }
+
+    /// **The folder that is this service's, on this server** — to keep what it writes to disk.
+    /// It exists, only its owner can read it, no other service shares it, and it is the same on
+    /// every start of this server (unlike [`server_epoch`](Self::server_epoch)). Two servers at once
+    /// have different folders.
+    pub fn data_dir(&self) -> &Path {
+        self.data_dir
+    }
+
+    /// **The extension's own `[extensions.<name>]` table, as `T`**, from the configuration the
+    /// server started with. A table that does not fit `T` is an error, never a default; a missing
+    /// one reads as empty, so a `T` whose fields have `#[serde(default)]` is its defaults.
+    pub fn extension_config<T: DeserializeOwned>(&self) -> Result<T, ExtensionConfigError> {
+        config::read(self.config, self.extension)
+    }
 }
 
 /// Handed to [`Service::receive`](super::Service::receive) and [`Service::stop`](super::Service::stop).
@@ -45,6 +65,7 @@ pub struct ServiceCx<'a, M> {
     pub(crate) epoch: u64,
     pub(crate) inbox: &'a ServiceInbox<M>,
     pub(crate) effects: &'a mut Effects,
+    pub(crate) data_dir: &'a Path,
 }
 
 impl<M> ServiceCx<'_, M> {
@@ -56,6 +77,12 @@ impl<M> ServiceCx<'_, M> {
     /// The service's inbox, to hand to a worker started now.
     pub fn inbox(&self) -> ServiceInbox<M> {
         self.inbox.clone()
+    }
+
+    /// The service's own folder — see [`StartCx::data_dir`]. Ask again when it is needed; there is
+    /// nothing to store.
+    pub fn data_dir(&self) -> &Path {
+        self.data_dir
     }
 
     /// What windows see changed: heca asks [`Service::project`](super::Service::project) again for
@@ -80,6 +107,7 @@ pub struct ActionCx<'a, M> {
     pub(crate) session: u64,
     pub(crate) client: Option<u64>,
     pub(crate) config: &'a AppConfig,
+    pub(crate) extension: &'a str,
 }
 
 impl<M> ActionCx<'_, M> {
@@ -96,6 +124,12 @@ impl<M> ActionCx<'_, M> {
     /// The session's effective configuration — the user's, with a trusted project's on top.
     pub fn config(&self) -> &AppConfig {
         self.config
+    }
+
+    /// The extension's own `[extensions.<name>]` table as `T`, from the session's effective
+    /// configuration — see [`StartCx::extension_config`].
+    pub fn extension_config<T: DeserializeOwned>(&self) -> Result<T, ExtensionConfigError> {
+        config::read(self.config, self.extension)
     }
 
     /// Answer later: return [`ActionResult::Later`](super::ActionResult::Later) with this ticket and
@@ -125,6 +159,7 @@ pub struct ProjectCx<'a> {
     pub(crate) session: u64,
     pub(crate) client: u64,
     pub(crate) config: &'a AppConfig,
+    pub(crate) extension: &'a str,
     pub(crate) epoch: u64,
     pub(crate) since: Option<u64>,
 }
@@ -143,6 +178,12 @@ impl ProjectCx<'_> {
     /// The session's effective configuration.
     pub fn config(&self) -> &AppConfig {
         self.config
+    }
+
+    /// The extension's own `[extensions.<name>]` table as `T`, from the session's effective
+    /// configuration — see [`StartCx::extension_config`].
+    pub fn extension_config<T: DeserializeOwned>(&self) -> Result<T, ExtensionConfigError> {
+        config::read(self.config, self.extension)
     }
 
     /// This run of the server — see [`StartCx::server_epoch`].

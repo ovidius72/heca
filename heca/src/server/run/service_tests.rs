@@ -5,6 +5,7 @@ use super::*;
 use crate::entry::service::{
     ActionResult, ProjectCx, Projection, Service, ServiceCx, ServiceInbox, ServiceResult, ServiceTicket, Stop,
 };
+use crate::server::identity::{ServerIdentity, ServerKind};
 use crate::server::wire::{ClientLink, service::ServiceUpdateKind};
 use heca_core::layout::LayoutOptions;
 use std::cell::{Cell, RefCell};
@@ -115,18 +116,23 @@ fn declare(busy: bool, broken: bool) -> Declared {
     declared
 }
 
-fn config(text: &str) -> heca_config::loader::AppConfig {
+pub(super) fn config(text: &str) -> heca_config::loader::AppConfig {
     heca_config::loader::AppConfig { config: heca_config::loader::config_from_layers(text).unwrap(), theme: Default::default() }
 }
 
 /// A server started the way the background server and a standalone window start theirs, with a
 /// test session in it and the extensions' actions registered.
-fn server(config: &heca_config::loader::AppConfig) -> ServerLoop {
+pub(super) fn server(config: &heca_config::loader::AppConfig) -> ServerLoop {
     server_waking(config, ServerWaker::new(|| {}))
 }
 
 fn server_waking(config: &heca_config::loader::AppConfig, wake: ServerWaker) -> ServerLoop {
-    let mut server = ServerLoop::from_config(config, wake).unwrap()
+    server_as(config, ServerIdentity::for_tests(ServerKind::Background), wake)
+}
+
+/// [`server`] as the server `identity` — what an entry point claims before it starts one.
+pub(super) fn server_as(config: &heca_config::loader::AppConfig, identity: ServerIdentity, wake: ServerWaker) -> ServerLoop {
+    let mut server = ServerLoop::from_config(config, identity, wake).unwrap()
         .with_session(ServerState::for_tests(Default::default()), Session::new(SessionId(1), LayoutOptions::default()));
     let mut registry = crate::actions::ActionRegistry::new();
     let mut catalog = crate::actions::ActionCatalog::with_builtins();
@@ -135,14 +141,14 @@ fn server_waking(config: &heca_config::loader::AppConfig, wake: ServerWaker) -> 
     server
 }
 
-fn attached(server: &mut ServerLoop) -> crate::server::wire::InProcessClient {
+pub(super) fn attached(server: &mut ServerLoop) -> crate::server::wire::InProcessClient {
     let client = server.connect();
     client.send(ClientMsg::Attach).unwrap();
     server.pump(Instant::now());
     client
 }
 
-fn drain(client: &impl ClientLink) -> Vec<ServerMsg> {
+pub(super) fn drain(client: &impl ClientLink) -> Vec<ServerMsg> {
     std::iter::from_fn(|| client.poll().unwrap()).collect()
 }
 
@@ -154,7 +160,7 @@ fn updates(client: &impl ClientLink) -> Vec<(u64, ServiceUpdateKind)> {
     }).collect()
 }
 
-fn rpc(server: &mut ServerLoop, line: &str) -> std::sync::mpsc::Receiver<String> {
+pub(super) fn rpc(server: &mut ServerLoop, line: &str) -> std::sync::mpsc::Receiver<String> {
     let (reply, answer) = channel();
     server.begin_rpc(line.into(), reply);
     answer

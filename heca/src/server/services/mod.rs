@@ -18,12 +18,13 @@ use crate::chrome::Intent;
 use crate::entry::service::{ActionResult, ProjectCx, ServiceTicket, Stop};
 
 use super::connection::{Attachment, Connection};
+use super::identity::ServerIdentity;
 use super::wire::{ServerMsg, service::{ServiceUpdate, ServiceUpdateKind}};
 use super::ServerWaker;
 
 mod running;
 
-pub(crate) use running::{Caller, Hosted, Running, StartArgs};
+pub(crate) use running::{Caller, Home, Hosted, Running, StartArgs};
 use running::Projected;
 
 /// The one host, shared by the server and every session it owns.
@@ -87,9 +88,10 @@ pub(crate) struct ServiceHost {
 }
 
 impl ServiceHost {
-    /// Run every declared service's factory for this server. A factory that fails is reported and
-    /// skipped; the server starts without it.
-    pub(crate) fn start(config: &AppConfig, wake: &ServerWaker) -> Self {
+    /// Run every declared service's factory for this server, each in its own folder under
+    /// `identity`. A factory that fails — or has no folder to run in — is reported and skipped; the
+    /// server starts without it.
+    pub(crate) fn start(config: &AppConfig, identity: &ServerIdentity, wake: &ServerWaker) -> Self {
         let (nudge_tx, nudge) = mpsc::sync_channel(1);
         let server = wake.clone();
         let wake = ServerWaker::new(move || {
@@ -98,6 +100,7 @@ impl ServiceHost {
         });
         let args = StartArgs {
             config,
+            identity,
             epoch: new_epoch(),
             capacity: config.config.settings.services.inbox_capacity.get(),
             wake,
@@ -202,7 +205,8 @@ impl ServiceHost {
                     let since = seen.and_then(|seen| seen.revision);
                     let cx = ProjectCx {
                         session: group.session.0, client: client.id,
-                        config: group.config.unwrap_or(&server_config), epoch: self.epoch, since,
+                        config: group.config.unwrap_or(&server_config),
+                        extension: self.services[index].extension(), epoch: self.epoch, since,
                     };
                     let revision = match self.services[index].project(&cx) {
                         Ok(Projected::Unchanged) => since,

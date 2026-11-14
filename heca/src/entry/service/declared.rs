@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::actions::ActionMeta;
 use crate::chrome::Intent;
-use crate::server::services::{Hosted, Running, StartArgs};
+use crate::server::services::{Home, Hosted, Running, StartArgs};
 
 use super::{ActionCx, ActionResult, Service, ServiceInbox, ServiceResult, StartCx};
 
@@ -17,6 +17,8 @@ type Factory<S> = dyn Fn(&mut StartCx<'_, <S as Service>::Message>) -> ServiceRe
 
 pub(super) struct Declared<S: Service> {
     pub(super) name: String,
+    /// The extension it was declared under: the one table of the configuration it may read.
+    pub(super) extension: String,
     pub(super) factory: Box<Factory<S>>,
     pub(super) actions: RefCell<Vec<(ActionMeta, Rc<ActionFn<S>>)>>,
 }
@@ -42,10 +44,18 @@ impl<S: Service> Declaration for Declared<S> {
 
     fn start(&self, args: &StartArgs<'_>) -> ServiceResult<Box<dyn Hosted>> {
         let (inbox, messages) = ServiceInbox::channel(args.capacity, args.wake.clone());
-        let service = (self.factory)(&mut StartCx { config: args.config, epoch: args.epoch, inbox: &inbox })?;
+        let data_dir = args.identity.service_folder(&self.name)?;
+        let service = (self.factory)(&mut StartCx {
+            config: args.config,
+            extension: &self.extension,
+            epoch: args.epoch,
+            inbox: &inbox,
+            data_dir: &data_dir,
+        })?;
         let actions = self.actions.borrow().iter()
             .map(|(meta, run)| (meta.name.clone(), run.clone()))
             .collect();
-        Ok(Box::new(Running::new(self.name.clone(), service, inbox, messages, actions, args.capacity)))
+        let home = Home { name: self.name.clone(), extension: self.extension.clone(), data_dir };
+        Ok(Box::new(Running::new(home, service, inbox, messages, actions, args.capacity)))
     }
 }
