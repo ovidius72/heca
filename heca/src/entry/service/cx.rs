@@ -6,10 +6,12 @@ use std::path::Path;
 use heca_config::loader::AppConfig;
 use serde::de::DeserializeOwned;
 
-use super::{ExtensionConfigError, ServiceInbox, ServiceTicket, SessionKey, config};
+use super::{
+    ExtensionConfigError, ExternalRequest, RequestRef, Sender, ServiceInbox, ServiceTicket, SessionKey, SubmitError, config,
+};
+use crate::server::services::Requests;
 
 /// What a service asked of the host during one call, collected and acted on after it returns.
-#[derive(Debug, Default)]
 pub(crate) struct Effects {
     /// Windows should be shown the service again.
     pub(crate) republish: bool,
@@ -17,6 +19,14 @@ pub(crate) struct Effects {
     pub(crate) completed: Vec<(ServiceTicket, Result<Option<String>, String>)>,
     /// The next ticket this service hands out.
     pub(crate) next_ticket: u64,
+    /// The requests it has handed in for others. Unlike the rest, these last across calls.
+    pub(crate) requests: Requests,
+}
+
+impl Effects {
+    pub(crate) fn new(requests: Requests) -> Self {
+        Self { republish: false, completed: Vec::new(), next_ticket: 0, requests }
+    }
 }
 
 /// Handed to a service's factory, once per server.
@@ -91,6 +101,19 @@ impl<M> ServiceCx<'_, M> {
         self.effects.republish = true;
     }
 
+    /// **Hand in a request for someone else.** It is answered at once, with the request's
+    /// [`RequestRef`] or why it was not taken, and runs on the server's next turn: through the
+    /// same parser, catalog, confirmations and execution as `heca rpc`, in `request.session`, with
+    /// every declared action policy asked first. How it ended arrives in
+    /// [`Service::request_done`](super::Service::request_done).
+    ///
+    /// Nothing is persisted: a request not finished when the server stops is not run again.
+    pub fn submit(&mut self, request: ExternalRequest) -> Result<RequestRef, SubmitError> {
+        let reference = self.effects.requests.submit(request)?;
+        self.inbox.wake();
+        Ok(reference)
+    }
+
     /// Settle a deferred action: `Ok` with an optional line for an RPC caller, or `Err` and why. A
     /// ticket whose caller has gone is settled with no one to tell, which is fine.
     pub fn complete(&mut self, ticket: ServiceTicket, result: Result<Option<String>, String>) {
@@ -107,6 +130,7 @@ pub struct ActionCx<'a, M> {
     pub(crate) session: u64,
     pub(crate) session_key: SessionKey,
     pub(crate) client: Option<u64>,
+    pub(crate) sender: Option<&'a Sender>,
     pub(crate) config: &'a AppConfig,
     pub(crate) extension: &'a str,
 }
@@ -127,6 +151,13 @@ impl<M> ActionCx<'_, M> {
     /// The window's connection, when a window asked. `None` for a script with no window.
     pub fn client(&self) -> Option<u64> {
         self.client
+    }
+
+    /// Who a service handed this request in for, when it came from
+    /// [`ServiceCx::submit`]. `None` for the user, from a window or a script. It names whoever the
+    /// integration said it was relaying for and authenticates no one.
+    pub fn sender(&self) -> Option<&Sender> {
+        self.sender
     }
 
     /// The session's effective configuration — the user's, with a trusted project's on top.

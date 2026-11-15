@@ -90,6 +90,7 @@ impl ServerLoop {
         runtime.install_event_fanout(self.events.clone());
         runtime.install_services(self.services.clone());
         self.sessions.push(runtime);
+        self.sessions_changed();
     }
 
     /// Everything the file keeps, as the server is now.

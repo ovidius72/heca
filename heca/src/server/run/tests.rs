@@ -316,7 +316,7 @@ fn detach_prevents_later_queued_actions_from_running() {
     assert!(server.clients.is_empty());
 }
 
-fn test_asker() -> super::super::Asker {
+pub(super) fn test_asker() -> super::super::Asker {
     use heca_core::layout::{Rectangle, Size};
     super::super::Asker {
         focused_pane: None,

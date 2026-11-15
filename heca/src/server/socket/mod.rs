@@ -1,7 +1,7 @@
 //! **The local socket — the one door for clients and scripts.**
 //!
 //! The server listens on a local-only Unix socket in an owner-only runtime folder; it never
-//! touches the network. Windows serves the same kind of socket, and [`local`] is the only place the
+//! touches the network. Windows serves the same kind of socket, and [`local`](crate::server::socket::local) is the only place the
 //! two differ. A script connects with [`heca rpc <line>`](crate::server::socket::run_rpc_cli) and a
 //! client (a window) attaches over the same socket. An RPC request is one line — an action by its
 //! catalog name, exactly what [`crate::rpc`] already reads — and the answer comes back as text, ended

@@ -38,6 +38,10 @@
 //! own; one that does not fit is an error, and an extension can read no table but its own. Actions
 //! and projections read the session's table the same way.
 //!
+//! **Who may run what.** [`ServiceRegistration::action_policy`] declares a rule every action the
+//! server runs is put to, wherever it comes from. A service that relays what others ask for hands
+//! each request in with [`ServiceCx::submit`] and hears how it ended in [`Service::request_done`].
+//!
 //! **Stopping.** When the server shuts down it calls [`Service::stop`] until it says
 //! [`Stop::Done`], delivering inbox messages in between, for at most
 //! `[settings.services] stop_timeout_ms`.
@@ -58,6 +62,7 @@ mod config;
 mod cx;
 mod declared;
 mod inbox;
+mod request;
 mod session_key;
 #[cfg(test)]
 mod tests;
@@ -66,8 +71,11 @@ pub use client::ServiceState;
 pub use config::ExtensionConfigError;
 pub use cx::{ActionCx, ProjectCx, ServiceCx, StartCx};
 pub(crate) use cx::Effects;
-pub(crate) use declared::{ActionFn, Declaration};
+pub(crate) use declared::{ActionFn, Declaration, PolicyFn};
 pub use inbox::{ServiceInbox, ServiceSendError};
+pub use request::{
+    ActionRequest, ExternalRequest, Permit, RequestOutcome, RequestRef, Requester, Sender, SubmitError,
+};
 pub use session_key::SessionKey;
 
 use declared::Declared;
@@ -105,6 +113,12 @@ pub trait Service: 'static {
     fn stop(&mut self, _cx: &mut ServiceCx<'_, Self::Message>) -> Stop {
         Stop::Done
     }
+
+    /// **A request this service handed in with [`ServiceCx::submit`] has ended**, and how. Called
+    /// once per request, on the server's turn after it ended; a request still open when the server
+    /// stops is ended first, as [`RequestOutcome::Refused`] if it never started and
+    /// [`RequestOutcome::Unknown`] if it did. The default does nothing.
+    fn request_done(&mut self, _cx: &mut ServiceCx<'_, Self::Message>, _request: &RequestRef, _outcome: RequestOutcome) {}
 }
 
 /// What a window is shown, from [`Service::project`].
@@ -175,6 +189,7 @@ impl super::Extension {
             extension: extension.to_owned(),
             factory: Box::new(factory),
             actions: RefCell::new(Vec::new()),
+            policies: RefCell::new(Vec::new()),
         });
         if let Err(late) = SERVICES.with(|q| q.add(declared.clone())) {
             warn_author(format!(
@@ -216,6 +231,44 @@ impl<S: Service> ServiceRegistration<S> {
             return;
         }
         declared.actions.borrow_mut().push((meta, Rc::new(run)));
+    }
+
+    /// **A rule about who may run what.** Every action about to run is put to every policy any
+    /// service declared — an action from a window, a script, a helper or an integration's request,
+    /// and every follow-up of a chain, which is asked again with the same requester — and the first
+    /// [`Permit::Deny`] stops it, with its reason shown to whoever asked: a notification in a window,
+    /// `error: …` to a script. Asked when the action is about to run, never earlier, so a rule that
+    /// changed applies to what was already waiting.
+    ///
+    /// With no policy declared, the user's own requests go through and a request handed in by a
+    /// service is refused. A request handed in by a service that declares no policy is refused
+    /// even when another service declares one.
+    ///
+    /// ```ignore
+    /// rooms.action_policy(|rooms, _cx, request| match request.requester() {
+    ///     Requester::External { sender, .. } if !rooms.may(sender, request.action()) =>
+    ///         Permit::Deny(format!("{sender} may not run {}", request.action())),
+    ///     _ => Permit::Allow,
+    /// });
+    /// ```
+    ///
+    /// This limits what requests relayed through cooperating integrations can do. Any process of
+    /// the same user can open the socket directly, so it is no defence against a hostile local
+    /// process.
+    pub fn action_policy(
+        &self,
+        policy: impl Fn(&mut S, &mut ServiceCx<'_, S::Message>, &ActionRequest<'_>) -> Permit + 'static,
+    ) {
+        let Some(declared) = &self.declared else { return };
+        if SERVICES.with(StartupQueue::is_closed) {
+            warn_author(format!(
+                "[heca] an action policy of service '{}' was added after the app started, so it does nothing — add it \
+                 before `heca::run()`",
+                declared.name
+            ));
+            return;
+        }
+        declared.policies.borrow_mut().push(Rc::new(policy));
     }
 
     /// **What this service shows a window, as a value components read.** `initial` is what a

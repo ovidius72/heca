@@ -39,9 +39,10 @@ pub use chrome::{
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
 pub use entry::{
-    ActionCx, ActionResult, Extension, ExtensionConfigError, LayerBuilder, LayerCx, ProjectCx, Projection,
-    Service, ServiceCx, ServiceInbox, ServiceRegistration, ServiceResult, ServiceSendError, ServiceState,
-    ServiceTicket, SessionKey, StartCx, Stop, Update, extension, register_widget,
+    ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError, ExternalRequest, LayerBuilder, LayerCx,
+    Permit, ProjectCx, Projection, RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox,
+    ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop,
+    SubmitError, Update, extension, register_widget,
 };
 pub use heca_view_realize::WidgetDefinition;
 pub use heca_view::{Intent, PropMap, PropValue};

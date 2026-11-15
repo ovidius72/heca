@@ -5,6 +5,7 @@ use super::{
     connection::Connection,
     session::SessionRuntime,
     sessions::{SessionCommand, SessionInfo, SessionReply, SessionStatus},
+    services::Call,
     wire::{ClientMsg, ServerLink, ServerMsg},
 };
 #[cfg(test)]
@@ -14,6 +15,7 @@ use std::{rc::Rc, time::Instant};
 
 /// The one server-shutdown protocol word, shared with the CLI.
 pub(crate) const KILL_SERVER: &str = "kill-server";
+mod requests;
 mod restore;
 mod rpc;
 mod sessions;
@@ -112,6 +114,7 @@ impl ServerLoop {
         self.last_session = Some(id);
         self.recent_sessions.push(id);
         self.next_session = id.0.saturating_add(1);
+        self.sessions_changed();
         self
     }
 
@@ -310,6 +313,16 @@ impl ServerLoop {
                     action, request_id, ..
                 } if super::sessions::owns(action.kind()) => {
                     self.pump_sessions(now);
+                    // Making, listing or renaming sessions belongs to no session: asked as such.
+                    let (name, args) = crate::actions::describe(&action);
+                    if let Err(reason) = self.services.borrow_mut()
+                        .authorize(&Call::local(Some(client.id)), None, &name, &args, None) {
+                        super::services::refused(&name, reason);
+                        if let Some(request_id) = request_id {
+                            let _ = client.link.send(ServerMsg::Reply { request_id, changes: Vec::new() });
+                        }
+                        continue;
+                    }
                     let current = self
                         .index_for(client.session.get())
                         .map(|i| self.sessions[i].info().name);
@@ -439,16 +452,25 @@ impl ServerLoop {
         self.sessions[index].add_connection(client);
     }
 
-    /// Deliver the services' inboxes, then show each attached window what changed for it.
+    /// Deliver the services' inboxes, run what they handed in for others, and tell them how it
+    /// ended; then show each attached window what changed for it.
     fn pump_services(&mut self) {
+        self.services.borrow_mut().drain();
+        self.run_requests();
         let mut host = self.services.borrow_mut();
-        host.drain();
+        host.tell_outcomes();
         if let Some(index) = self.last_index() {
             for draft in host.take_held() { self.sessions[index].raise(draft); }
         }
         let audience: Vec<_> = self.sessions.iter().map(SessionRuntime::audience).collect();
         let limits = self.config.as_ref().map(|c| c.config.settings.connection).unwrap_or_default();
         host.publish(&audience, limits.max_frame_bytes.get());
+    }
+
+    /// Tell the services which sessions exist, after one is made, restored or deleted.
+    pub(super) fn sessions_changed(&self) {
+        let sessions: Vec<_> = self.sessions.iter().map(SessionRuntime::service_ref).collect();
+        self.services.borrow_mut().know_sessions(&sessions);
     }
 
     fn index_for(&self, id: Option<SessionId>) -> Option<usize> {
@@ -470,6 +492,8 @@ mod service_tests;
 mod service_data_tests;
 #[cfg(test)]
 mod service_key_tests;
+#[cfg(test)]
+mod policy_tests;
 #[cfg(test)]
 mod identity_tests;
 #[cfg(test)]

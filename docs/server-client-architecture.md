@@ -375,6 +375,17 @@ window reaches the service through the session that received it, an action from 
 server. Services start once when the server starts and stop once when it shuts down, so detaching a
 window or switching session never touches them.
 
+**Who may run what.** A service can declare an action policy, and every action the server runs is put
+to every declared policy first, with who is asking (the user from a window or a script, or a request
+another service handed in) and the session it runs in. A script's line, a helper's request and each
+follow-up of a chain go through `execute_server_with`, which asks before every action; a window's
+`Act` and `Invoke` are asked where the session receives them, and a window's session-management
+`Act` where the server loop receives it. An action a window runs on its own, with no message to the
+server, is not seen. A request a service hands in (`ServiceCx::submit`) is queued in that service's book,
+run on the server loop's next turn in the session its key names, and ended exactly once: `Done`, `Refused`,
+`Failed` or `Unknown`, told to the service that handed it in. Code: `heca/src/server/services/permit.rs`
+(the question), `book.rs` (the queue), `heca/src/server/run/requests.rs` (running them).
+
 **Two messages carry them.** `ServerMsg::Service` sends one window one update (the service's name,
 its schema version, the server epoch, a revision, and a snapshot, a delta or a removal).
 `ClientMsg::ServiceResync` is the window asking for a fresh snapshot of one service.
