@@ -21,6 +21,8 @@ pub struct FakeBackend {
     /// One-shot exit code drained by `take_exit_code` (tests simulate exits).
     pending_exit: Option<i32>,
     alerts: Vec<super::BackendAlert>,
+    /// What this fake reports as the process it runs, via [`PaneBackend::process_launch`].
+    launch: Option<super::ProcessLaunch>,
 }
 
 impl FakeBackend {
@@ -39,7 +41,13 @@ impl FakeBackend {
             runtime: PaneRuntime::default(),
             pending_exit: None,
             alerts: Vec::new(),
+            launch: None,
         }
+    }
+
+    /// Say what process this fake stands for, as a real terminal records it.
+    pub fn set_launch(&mut self, launch: super::ProcessLaunch) {
+        self.launch = Some(launch);
     }
 
     /// Set the runtime snapshot this fake reports via [`PaneBackend::runtime`].
@@ -59,6 +67,10 @@ impl FakeBackend {
 }
 
 impl PaneBackend for FakeBackend {
+    fn process_launch(&self) -> Option<super::ProcessLaunch> {
+        self.launch.clone()
+    }
+
     fn take_alerts(&mut self) -> Vec<super::BackendAlert> {
         std::mem::take(&mut self.alerts)
     }

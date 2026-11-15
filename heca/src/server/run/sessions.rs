@@ -7,6 +7,17 @@ impl ServerLoop {
         &mut self,
         command: SessionCommand,
     ) -> Result<SessionReply, String> {
+        let changes_sessions = !matches!(command, SessionCommand::List);
+        let result = self.run_session_command(command);
+        // A session made, renamed, stopped, started or deleted is written at once, not after the
+        // delay: these are what a crash right after must not lose.
+        if changes_sessions && result.is_ok() {
+            self.save_now();
+        }
+        result
+    }
+
+    fn run_session_command(&mut self, command: SessionCommand) -> Result<SessionReply, String> {
         match command {
             SessionCommand::List => Ok(SessionReply::List(
                 self.sessions.iter().map(SessionRuntime::info).collect(),
@@ -45,7 +56,7 @@ impl ServerLoop {
                 let (result, drafts) =
                     crate::notification::collect_notifications(|| self.sessions[i].restart());
                 for draft in drafts {
-                    self.sessions[i].raise(draft);
+                    self.sessions[i].raise_lasting(draft);
                 }
                 result?;
                 Ok(SessionReply::Updated(self.sessions[i].info()))
@@ -100,7 +111,7 @@ impl ServerLoop {
         std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
         let folder = folder.canonicalize().map_err(|e| e.to_string())?;
         // Naming and runtime construction use one load of the destination's settings.
-        let project = self.config.as_ref().map(|_| heca_config::loader::AppConfig::load_for(&folder));
+        let project = self.config.as_ref().map(|_| (self.machine.project_config)(&folder));
         let settings = project
             .as_ref()
             .map(|c| c.config.settings.clone())
@@ -130,10 +141,7 @@ impl ServerLoop {
         for draft in drafts {
             runtime.raise(draft);
         }
-        runtime.install_actions(self.registry.clone(), self.catalog.clone());
-        runtime.install_event_fanout(self.events.clone());
-        runtime.install_services(self.services.clone());
-        self.sessions.push(runtime);
+        self.install(runtime);
         self.last_session = Some(identity.id);
         self.recent_sessions.push(identity.id);
         Ok(identity)
@@ -144,6 +152,7 @@ impl ServerLoop {
             return SessionRuntime::from_config(
                 config,
                 wake.clone(),
+                self.machine.launch,
                 identity,
             )
             .map_err(|e| e.to_string());

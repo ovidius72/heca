@@ -19,7 +19,9 @@ use super::{Asker, Change, ServerState};
 
 mod lifecycle;
 mod publish;
+mod relaunch;
 mod rpc;
+mod saved;
 #[cfg(test)]
 mod tests;
 
@@ -31,6 +33,10 @@ pub(crate) struct SessionRuntime {
     /// Made when the session is, kept through everything but its deletion; never on the wire.
     key: SessionKey,
     saved_terminals: Vec<super::sessions::RecordedTerminal>,
+    /// Where a window last said it was looking, kept for the saved file.
+    last_focus: Option<super::persist::Focus>,
+    /// The view a followed window last reported, kept for the saved file.
+    last_view: Option<heca_core::layout::ViewSnapshot>,
     resume_programs: bool,
     resume_harness: bool,
     /// The server end of each attached client. A detached client is dropped from here.
@@ -72,6 +78,8 @@ impl SessionRuntime {
             identity: SessionInfo::unnamed(session.id, &defaults.session_name_format, None),
             key: SessionKey::generate(),
             saved_terminals: Vec::new(),
+            last_focus: None,
+            last_view: None,
             resume_programs: defaults.resume_programs,
             resume_harness: defaults.resume_harness,
             session,
@@ -552,11 +560,13 @@ impl SessionRuntime {
                 ClientMsg::ReportView(view) => {
                     let leader = self.clients[i].id;
                     *self.clients[i].view.borrow_mut() = Some(view.clone());
+                    self.last_view = Some(view.clone());
                     detached.extend(self.relay_follow_view(leader, &view));
                 }
                 ClientMsg::ReportPresence { workspace, pane } => {
                     // Turn a per-window view change into stream events, each tagged with the window.
                     let window = self.clients[i].id;
+                    self.last_focus = Some(super::persist::Focus { workspace, pane });
                     let previous = self.clients[i].presence.replace(Some((workspace, pane)));
                     let (prev_workspace, prev_pane) = match previous {
                         Some((workspace, pane)) => (Some(workspace), Some(pane)),

@@ -1,16 +1,29 @@
-//! Start or reconnect to the local server. No alternate process or terminal implementation.
+//! **The one way a client connects to the local server** — a window, and every command-line command
+//! that talks to it. Whether a missing server is started is the caller's one choice, [`Start`]; there
+//! is no second way to connect. No alternate process or terminal implementation.
 
 use std::io;
 use heca_config::settings::ConnectionConfig;
 use crate::server::{ServerWaker, wire::ClientLink};
 
-pub(super) fn connect(config: ConnectionConfig, wake: ServerWaker) -> io::Result<Box<dyn ClientLink>> {
+/// What to do when no server is running.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Start {
+    /// Start the background server and connect to it: what opening a window, and anything that
+    /// needs the server's sessions (which it restores), does.
+    IfMissing,
+    /// Fail: the command is about a server that is already running, and must not make one.
+    Never,
+}
+
+/// Connect to the local server, starting it first when none is running and `start` says to.
+pub(crate) fn connect(config: ConnectionConfig, wake: ServerWaker, start: Start) -> io::Result<Box<dyn ClientLink>> {
     use std::{process::{Command, Stdio}, time::{Duration, Instant}};
     use crate::server::{socket::{local::detach, socket_path}, wire::socket::SocketClient};
     let path = socket_path().ok_or_else(|| io::Error::other("no runtime folder for the server"))?;
     match SocketClient::connect(&path, config, wake.clone()) {
         Ok(client) => return Ok(Box::new(client)),
-        Err(error) if matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused) => {},
+        Err(error) if start == Start::IfMissing && matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused) => {},
         Err(error) => return Err(error),
     }
     let child = detach(Command::new(std::env::current_exe()?).arg("--server").arg(&path)

@@ -13,8 +13,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 /// [`ProjectCx::session`] are a different thing: a number for this run only.
 ///
 /// It is opaque: compare it, hash it, store it, send it. Nothing can be read out of it and nothing
-/// can make one but heca. A server that starts again gives its sessions new keys until sessions are
-/// restored across restarts.
+/// can make one but heca. A session saved when its server stops comes back with the same key when
+/// the server starts again; a server with no saved sessions (or with saving off) makes new ones.
 ///
 /// [`ActionCx::session`]: super::ActionCx::session
 /// [`ProjectCx::session`]: super::ProjectCx::session

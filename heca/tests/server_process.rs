@@ -61,3 +61,41 @@ fn a_second_server_does_not_take_the_socket_of_a_live_one() {
     assert!(!output(heca(root.path()).args(["rpc", "describe-action", "split_horizontal"])).contains("could not reach"));
     drop(first);
 }
+
+/// **A command that needs the server's sessions starts the server when none runs** — and the sessions
+/// come back with it. `--attach` asks the server whether the session exists before it opens a window,
+/// so after `--kill-server` it must start the background server rather than fail to reach it.
+#[cfg(unix)]
+#[test]
+fn listing_and_attaching_start_the_server_and_find_the_restored_session() {
+    /// Stops the server the commands below start, whatever the test does.
+    struct Daemon<'a>(&'a Path);
+    impl Drop for Daemon<'_> {
+        fn drop(&mut self) { let _ = heca(self.0).arg("--kill-server").stdin(Stdio::null()).output(); }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    let _daemon = Daemon(root.path());
+    let mut first = Server(heca(root.path()).arg("--server").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::inherit()).spawn().unwrap());
+    until("the server did not answer", || {
+        output(heca(root.path()).args(["rpc", "create_session", &format!("folder={}", project.display()), "name=A"])).trim() == "ok"
+    });
+    assert!(output(heca(root.path()).arg("--kill-server")).contains("server stopped"));
+    until("the server did not end", || first.0.try_wait().unwrap().is_some());
+    assert!(output(heca(root.path()).args(["rpc", "list_sessions"])).contains("could not reach"), "no server runs");
+
+    // `--kill` acts on a running server: with none, it fails and starts nothing.
+    let kill = heca(root.path()).args(["--kill", "A"]).stdin(Stdio::null()).output().unwrap();
+    assert!(String::from_utf8_lossy(&kill.stderr).contains("could not reach") || String::from_utf8_lossy(&kill.stdout).contains("could not reach"));
+    assert!(output(heca(root.path()).args(["rpc", "list_sessions"])).contains("could not reach"), "--kill started a server");
+
+    // `--attach` to a session that is not there says so — it reached a server it had to start, and
+    // opened no window.
+    let missing = heca(root.path()).args(["--attach", "nope"]).stdin(Stdio::null()).output().unwrap();
+    let said = String::from_utf8_lossy(&missing.stderr).into_owned() + &String::from_utf8_lossy(&missing.stdout);
+    assert!(said.contains("session 'nope' not found"), "got: {said}");
+    let listed = output(heca(root.path()).arg("--sessions"));
+    assert!(listed.starts_with("A\t"), "the saved session came back with the server it started: {listed}");
+    assert!(output(heca(root.path()).args(["rpc", "list_sessions"])).contains("\"A\""), "and the server stays running");
+}
