@@ -42,6 +42,11 @@ fn a_script_reaches_the_server_and_kill_server_ends_it() {
     });
     assert_eq!(serde_json::from_str::<serde_json::Value>(&answer).unwrap()["name"], "split_horizontal", "got: {answer}");
 
+    // The old raw line is gone: it is an unknown command now, and the server stays up.
+    assert!(output(heca(root.path()).args(["rpc", "kill-server"])).contains("unknown command"));
+    assert!(server.0.try_wait().unwrap().is_none(), "the old line stopped the server");
+
+    // `heca rpc kill_server` and `heca --kill-server` are the same action.
     assert!(output(heca(root.path()).arg("--kill-server")).contains("server stopped"));
     until("the server did not end", || server.0.try_wait().unwrap().is_some());
     let gone = output(heca(root.path()).args(["rpc", "describe-action", "split_horizontal"]));

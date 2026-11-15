@@ -27,6 +27,8 @@ pub enum WmAction {
     TerminateSession { session: Option<String> },
     RestartSession { session: Option<String> },
     DeleteSession { session: Option<String> },
+    /// Stop the server and with it every session, pane and terminal.
+    KillServer,
     NewSession,
     RenameSession,
     SwitchSession { name: String },

@@ -7,7 +7,7 @@ use heca_config::settings::ConnectionConfig;
 use heca_core::layout::{LayoutOptions, Session, SessionId};
 use crate::server::{ServerState, ServerWaker, runtime::channel, wire::{ClientLink, ClientMsg, ServerMsg, await_message}};
 
-/// A server loop on its own thread, with a listener at a fresh address. `kill-server` ends it.
+/// A server loop on its own thread, with a listener at a fresh address. `kill_server` ends it.
 struct Served {
     address: std::path::PathBuf,
     _folder: tempfile::TempDir,
@@ -35,7 +35,7 @@ impl Drop for Served {
     fn drop(&mut self) {
         // Ask the loop to stop if a test did not, then close the door, then wait for the loop.
         if self.owner.is_some() {
-            let _ = request_to(&self.address, crate::server::run::KILL_SERVER);
+            let _ = request_to(&self.address, "kill_server");
         }
         self.listener.take();
         if let Some(owner) = self.owner.take() { owner.join().unwrap(); }
@@ -50,11 +50,11 @@ fn a_script_line_is_answered_over_the_socket() {
     assert!(answer.starts_with("error:"), "got: {answer}");
 }
 
-/// `heca --kill-server`: the one protocol word is answered, and the server ends.
+/// `heca --kill-server`: `kill_server` is answered, and the server ends.
 #[test]
 fn kill_server_is_answered_and_ends_the_server() {
     let mut served = Served::new();
-    assert_eq!(request_to(&served.address, crate::server::run::KILL_SERVER).unwrap().trim_end(), "heca: server stopped");
+    assert_eq!(request_to(&served.address, "kill_server").unwrap().trim_end(), "heca: server stopped");
     served.owner.take().unwrap().join().unwrap();
 }
 
@@ -82,7 +82,7 @@ fn an_events_subscriber_is_kept_until_the_server_ends() {
     // Subscribing is queued on the server like any request; once a later line is answered it has
     // been taken in.
     assert!(request_to(&served.address, "no_such_action").unwrap().starts_with("error:"));
-    assert_eq!(request_to(&served.address, crate::server::run::KILL_SERVER).unwrap().trim_end(), "heca: server stopped");
+    assert_eq!(request_to(&served.address, "kill_server").unwrap().trim_end(), "heca: server stopped");
     served.owner.take().unwrap().join().unwrap();
     let lines = BufReader::new(subscriber).lines().collect::<Result<Vec<_>, _>>().unwrap();
     assert!(lines.iter().all(|line| !line.is_empty()), "got: {lines:?}");

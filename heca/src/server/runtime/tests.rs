@@ -106,7 +106,7 @@ fn kill_server_ends_the_owner_loop() {
     });
     let (reply_tx, reply_rx) = mpsc::channel();
     handle
-        .rpc(crate::server::run::KILL_SERVER.to_string(), reply_tx)
+        .rpc("kill_server".to_string(), reply_tx)
         .unwrap();
     assert_eq!(
         reply_rx.recv_timeout(Duration::from_secs(3)).unwrap(),

@@ -13,8 +13,6 @@ use heca_core::layout::Session;
 use heca_core::layout::SessionId;
 use std::{rc::Rc, time::Instant};
 
-/// The one server-shutdown protocol word, shared with the CLI.
-pub(crate) const KILL_SERVER: &str = "kill-server";
 mod requests;
 mod restore;
 mod rpc;
@@ -172,6 +170,12 @@ impl ServerLoop {
         self.install_actions(self.registry.clone(), self.catalog.clone());
     }
 
+    /// **Stop the server**: what `kill_server` does, whoever asked. The loop ends on its next turn.
+    pub(super) fn stop(&mut self) {
+        self.shutdown();
+        self.stopped = true;
+    }
+
     pub(crate) fn shutdown(&mut self) {
         // Before the sessions end their processes: what ran in them is what is written down.
         self.save_and_close_store();
@@ -183,6 +187,18 @@ impl ServerLoop {
             session.shutdown();
         }
         self.clients.clear();
+    }
+
+    /// Tell the window that asked why its request was refused, as a notification in its session
+    /// (or the most recent one when it has none).
+    fn report_refusal(&mut self, client: &Connection, action: &str, reason: String) {
+        let (_, drafts) = crate::notification::collect_notifications(|| super::services::refused(action, reason));
+        for draft in drafts {
+            match self.index_for(client.session.get()).or_else(|| self.last_index()) {
+                Some(index) => self.sessions[index].raise(draft),
+                None => self.notices.push(draft),
+            }
+        }
     }
 
     pub(super) fn raise(&mut self, draft: crate::notification::NotificationDraft) {
@@ -202,11 +218,7 @@ impl ServerLoop {
                 && crate::input::resolve_action(&intent.action, &crate::app::interaction::intent_args_as_strings(&intent))
                     .is_some_and(|action| super::sessions::owns(action.kind())));
         if owned { let _ = reply.send(self.rpc(&line)); return; }
-        if line.trim() == KILL_SERVER {
-            self.shutdown();
-            self.stopped = true;
-            let _ = reply.send("heca: server stopped\n".into());
-        } else if let Some(session) = self.recent_sessions.iter().rev()
+        if let Some(session) = self.recent_sessions.iter().rev()
             .filter_map(|id| self.index_for(Some(*id)))
             .find(|&index| self.sessions[index].info().windows > 0)
         {
@@ -315,13 +327,19 @@ impl ServerLoop {
                     self.pump_sessions(now);
                     // Making, listing or renaming sessions belongs to no session: asked as such.
                     let (name, args) = crate::actions::describe(&action);
-                    if let Err(reason) = self.services.borrow_mut()
-                        .authorize(&Call::local(Some(client.id)), None, &name, &args, None) {
-                        super::services::refused(&name, reason);
+                    let verdict = self.services.borrow_mut()
+                        .authorize(&Call::local(Some(client.id)), None, &name, &args, None);
+                    if let Err(reason) = verdict {
+                        self.report_refusal(&client, &name, reason);
                         if let Some(request_id) = request_id {
                             let _ = client.link.send(ServerMsg::Reply { request_id, changes: Vec::new() });
                         }
                         continue;
+                    }
+                    if matches!(action, crate::input::WmAction::KillServer) {
+                        // Every window is gone with the server: nothing is left to answer or pump.
+                        self.stop();
+                        return;
                     }
                     let current = self
                         .index_for(client.session.get())

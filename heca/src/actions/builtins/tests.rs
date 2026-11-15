@@ -4,7 +4,7 @@ use crate::actions::Side;
 /// The actions that run on the server, by name. A change here is a decision about which side of
 /// the split an action is on, so it is written out — not derived from the descriptors it checks.
 const SERVER_SIDE: &[&str] = &[
-    "create_session", "rename_session_to", "terminate_session", "restart_session", "delete_session", "list_sessions",
+    "create_session", "rename_session_to", "terminate_session", "restart_session", "delete_session", "list_sessions", "kill_server",
     "add_column_to_workspace",
     "add_pane_to_column",
     "close",

@@ -87,7 +87,7 @@ impl ActionRegistry {
                 ServerStep::Service(intent) =>
                     cx.services.borrow_mut().run_step(cx.service_ref, cx.call, cx.config, intent).map(|()| Vec::new()),
                 ServerStep::Expanded => Ok(Vec::new()),
-                ServerStep::Action(_) => Err(RpcError::NotRunnable(intent.action.clone())),
+                ServerStep::Action(action) => Err(RpcError::NotRunnable(crate::actions::describe(&action).0)),
             };
             *ran += usize::from(changes.is_ok());
             changes

@@ -245,10 +245,20 @@ fn kill_server_drops_every_client_and_asks_the_loop_to_stop() {
     assert_eq!(server.clients.len(), 1);
 
     let (reply, answer) = std::sync::mpsc::channel();
-    server.begin_rpc(super::KILL_SERVER.to_string(), reply);
+    server.begin_rpc("kill_server".to_string(), reply);
     assert!(server.wants_shutdown(), "the server was asked to stop");
-    assert!(server.clients.is_empty(), "kill-server drops every client");
+    assert!(server.clients.is_empty(), "kill_server drops every client");
     assert_eq!(answer.recv().unwrap(), "heca: server stopped\n");
+}
+
+/// The old raw `kill-server` line is gone: it is an unknown command, and the server stays up.
+#[test]
+fn the_old_kill_server_line_is_an_unknown_command() {
+    let mut server = a_loop();
+    let (reply, answer) = std::sync::mpsc::channel();
+    server.begin_rpc("kill-server".to_string(), reply);
+    assert!(answer.recv().unwrap().starts_with("error: unknown command"));
+    assert!(!server.wants_shutdown());
 }
 
 #[test]

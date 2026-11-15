@@ -451,6 +451,10 @@ rooms.action_policy(|rooms, _cx, request| match request.requester() {
   in by a service is refused. A request handed in by a service that declares no policy of its own is
   refused even when another service declares one.
 - There is no way around it: heca keeps no exception for any requester.
+- **Stopping the server (`kill_server`) is covered for the user** — from a window, `heca --kill-server`
+  or `heca rpc kill_server` — so a policy can forbid it and the server stays up, with the reason
+  reported as for any other refusal. For a request handed in by a service it is **never runnable**,
+  whatever any policy says, also as a follow-up of a chain.
 - **What it does not cover.** An action a window runs by itself, with no help from the server (moving
   focus, scrolling, opening a menu), never reaches the server, so no policy sees it. Everything that
   changes the server's state does.
