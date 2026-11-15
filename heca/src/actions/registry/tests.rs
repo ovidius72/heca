@@ -173,6 +173,7 @@ fn a_dynamic_action_cannot_retire_a_builtin() {
 
 #[test]
 fn headless_session_confirmations_fail_closed_and_have_independent_overrides() {
+    let mut allow = super::server::AllowLocal;
     let catalog = super::ActionCatalog::with_builtins();
     let registry = super::ActionRegistry::new();
     let store = crate::chrome::SharedChromeState::new(0.0, 0.0);
@@ -184,7 +185,7 @@ fn headless_session_confirmations_fail_closed_and_have_independent_overrides() {
             let intent = crate::chrome::Intent::new(owner)
                 .arg("session", crate::chrome::PropValue::Text("Project A".into()));
             let mut ran = Vec::new();
-            let result = registry.execute_server_with(&catalog, &config.confirm, store.clone(), &intent,
+            let result = registry.execute_server_with(&catalog, &config.confirm, store.clone(), &mut allow, &intent,
                 &mut |step| {
                     if let super::server::ServerStep::Action(action) = step { ran.push(action); }
                     Ok(Vec::new())
@@ -204,6 +205,7 @@ fn headless_session_confirmations_fail_closed_and_have_independent_overrides() {
 
 #[test]
 fn headless_action_refusals_are_errors_not_successful_rpc_answers() {
+    let mut allow = super::server::AllowLocal;
     use crate::server::{Change, Refusal};
     let catalog = ActionCatalog::with_builtins();
     let registry = ActionRegistry::new();
@@ -212,11 +214,11 @@ fn headless_action_refusals_are_errors_not_successful_rpc_answers() {
         .arg("terminal", crate::chrome::PropValue::Text("demo.shell".into()))
         .arg("name", crate::chrome::PropValue::Text("Build".into()));
     for reason in [Refusal::TerminalUnavailable, Refusal::OnlyPaneInColumn] {
-        let result = registry.execute_server_with(&catalog, &Default::default(), store.clone(), &intent,
+        let result = registry.execute_server_with(&catalog, &Default::default(), store.clone(), &mut allow, &intent,
             &mut |_| Ok(vec![Change::Refused(reason)]));
         assert!(matches!(result, Err(crate::rpc::RpcError::Failed(_))));
     }
-    let result = registry.execute_server_with(&catalog, &Default::default(), store, &intent,
+    let result = registry.execute_server_with(&catalog, &Default::default(), store, &mut allow, &intent,
         &mut |_| Ok(vec![Change::NamesChanged]));
     assert_eq!(result.unwrap(), vec![Change::NamesChanged]);
 }

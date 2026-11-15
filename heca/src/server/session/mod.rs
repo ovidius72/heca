@@ -15,6 +15,7 @@ use super::connection::{Attachment, Connection};
 use super::sessions::{SessionInfo, SessionStatus};
 use crate::entry::service::SessionKey;
 use super::wire::{ClientMsg, ServerMsg};
+use super::services::Call;
 use super::{Asker, Change, ServerState};
 
 mod lifecycle;
@@ -297,6 +298,16 @@ impl SessionRuntime {
                         detached.push(i);
                         continue;
                     }
+                    let (name, args) = crate::actions::describe(&action);
+                    if let Err(reason) = self.window_may(self.clients[i].id, &name, &args) {
+                        super::services::refused(&name, reason);
+                        // The window is waiting on this request: answer it, with nothing changed.
+                        if let Some(request_id) = request_id
+                            && self.clients[i].link.send(ServerMsg::Reply { request_id, changes: Vec::new() }).is_err() {
+                            detached.push(i);
+                        }
+                        continue;
+                    }
                     if let Some(owner) = terminal_owner {
                         let Some(id) = self.state.backends.find_owner(&owner) else {
                             let refusal = super::Refusal::TerminalUnavailable;
@@ -417,12 +428,17 @@ impl SessionRuntime {
                     detached.extend(self.publish_notifications(&changes));
                     publish_terminals = true;
                 }
-                ClientMsg::Invoke { intent } if self.services.borrow().owns(&intent.action) => {
-                    let reply = super::services::Reply::Window { action: intent.action.clone() };
-                    self.services.borrow_mut().invoke(self.service_ref(), Some(self.clients[i].id),
-                        self.config.as_deref(), &intent, reply);
-                }
                 ClientMsg::Invoke { intent } => {
+                    if let Err(reason) = self.window_may(self.clients[i].id, &intent.action, &intent.args) {
+                        super::services::refused(&intent.action, reason);
+                        continue;
+                    }
+                    if self.services.borrow().owns(&intent.action) {
+                        let reply = super::services::Reply::Window { action: intent.action.clone() };
+                        self.services.borrow_mut().invoke(self.service_ref(), &Call::local(Some(self.clients[i].id)),
+                            self.config.as_deref(), &intent, reply);
+                        continue;
+                    }
                     crate::chrome::window::signals::sync_pane_runtime_state(
                         &self.session,
                         &self.store.panes,

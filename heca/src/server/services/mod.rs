@@ -22,9 +22,14 @@ use super::identity::ServerIdentity;
 use super::wire::{ServerMsg, service::{ServiceUpdate, ServiceUpdateKind}};
 use super::ServerWaker;
 
+mod book;
+mod permit;
+mod requests;
 mod running;
 
-pub(crate) use running::{Caller, Home, Hosted, Running, SessionRef, StartArgs};
+pub(crate) use book::{Handle, Queued, Requests};
+pub(crate) use permit::{Call, gate};
+pub(crate) use running::{Caller, Brought, Home, Hosted, Running, SessionRef, StartArgs};
 use running::Projected;
 
 /// The one host, shared by the server and every session it owns.
@@ -36,13 +41,10 @@ pub(crate) enum Reply {
     Rpc(mpsc::Sender<String>),
     /// A window, which does not wait: a refusal is shown as a notification.
     Window { action: String },
-    /// A step in a chain a script started: the caller reads a refusal now, and a deferred answer is
-    /// not waited for.
-    Step(mpsc::Sender<Result<Option<String>, String>>),
 }
 
 impl Reply {
-    fn answer(self, result: Result<Option<String>, String>) {
+    pub(crate) fn answer(self, result: Result<Option<String>, String>) {
         match (self, result) {
             (Reply::Rpc(reply), result) => {
                 let _ = reply.send(match result {
@@ -50,10 +52,7 @@ impl Reply {
                     Err(reason) => format!("error: {reason}"),
                 });
             }
-            (Reply::Step(reply), result) => { let _ = reply.send(result); }
-            (Reply::Window { action }, Err(reason)) => {
-                crate::notification::Notification::danger(format!("{action} was refused")).body(reason).send();
-            }
+            (Reply::Window { action }, Err(reason)) => refused(&action, reason),
             (Reply::Window { .. }, Ok(_)) => {}
         }
     }
@@ -75,6 +74,17 @@ struct Seen {
     revision: Option<u64>,
 }
 
+/// Show a window that an action it asked for was refused, and why.
+pub(crate) fn refused(action: &str, reason: String) {
+    crate::notification::Notification::danger(format!("{action} was refused")).body(reason).send();
+}
+
+/// A deferred answer owed to a request a service handed in: which service's, and which request.
+struct Owed {
+    origin: usize,
+    serial: u64,
+}
+
 #[derive(Default)]
 pub(crate) struct ServiceHost {
     epoch: u64,
@@ -82,6 +92,8 @@ pub(crate) struct ServiceHost {
     services: Vec<Box<dyn Hosted>>,
     seen: HashMap<(u64, usize), Seen>,
     pending: HashMap<(usize, ServiceTicket), Reply>,
+    /// Deferred answers a request handed in by a service waits on.
+    owed: HashMap<(usize, ServiceTicket), Owed>,
     /// Woken by every inbox send, so shutdown can sleep until a stopping service has news.
     nudge: Option<Receiver<()>>,
     /// Reports raised while starting, before anything could show them.
@@ -104,6 +116,8 @@ impl ServiceHost {
             identity,
             epoch: new_epoch(),
             capacity: config.config.settings.services.inbox_capacity.get(),
+            request_capacity: config.config.settings.services.request_queue_capacity.get(),
+            max_line: config.config.settings.connection.max_frame_bytes.get(),
             wake,
         };
         // Nothing can show a notification yet — no session, and in a standalone window no sink — so
@@ -134,34 +148,55 @@ impl ServiceHost {
         self.services.iter().any(|service| service.owns(action))
     }
 
-    /// Run a service action. An immediate answer goes to `reply` now; a ticket keeps it until the
-    /// service settles it.
-    pub(crate) fn invoke(&mut self, session: SessionRef, client: Option<u64>, config: Option<&AppConfig>,
-        intent: &Intent, reply: Reply) {
+    /// Start a service action as `call`. An immediate answer comes back now; a ticket is the
+    /// service's promise to settle it later.
+    fn begin(&mut self, session: SessionRef, call: &Call, config: Option<&AppConfig>, intent: &Intent) -> Started {
         let Some(index) = self.services.iter().position(|service| service.owns(&intent.action)) else {
-            return reply.answer(Err(format!("no service runs '{}'", intent.action)));
+            return Started::Now(Err(format!("no service runs '{}'", intent.action)));
         };
         let Some(config) = config.or(self.config.as_deref()) else {
-            return reply.answer(Err("the server has no configuration".into()));
+            return Started::Now(Err("the server has no configuration".into()));
         };
-        let caller = Caller { session, client, config };
-        match self.services[index].invoke(self.epoch, caller, intent) {
-            ActionResult::Done(line) => reply.answer(Ok(line)),
-            ActionResult::Refused(reason) => reply.answer(Err(reason)),
-            ActionResult::Later(ticket) => { self.pending.insert((index, ticket), reply); }
-        }
+        let caller = Caller { session, requester: call.requester(), config };
+        let now = match self.services[index].invoke(self.epoch, caller, intent) {
+            ActionResult::Done(line) => Ok(line),
+            ActionResult::Refused(reason) => Err(reason),
+            // The caller keeps the ticket first, then settles: the answer may already be in.
+            ActionResult::Later(ticket) => return Started::Later(index, ticket),
+        };
         self.settle(index);
+        Started::Now(now)
     }
 
-    /// A service action that a script's chain reached (no window to hand it to): a refusal fails
-    /// the chain, a deferred answer is accepted and not waited for.
-    pub(crate) fn run_step(&mut self, session: SessionRef, config: Option<&AppConfig>, intent: &Intent)
+    /// Run a service action. An immediate answer goes to `reply` now; a ticket keeps it until the
+    /// service settles it. Whether `call` may ask is decided by the caller, before this.
+    pub(crate) fn invoke(&mut self, session: SessionRef, call: &Call, config: Option<&AppConfig>,
+        intent: &Intent, reply: Reply) {
+        match self.begin(session, call, config, intent) {
+            Started::Now(result) => reply.answer(result),
+            Started::Later(index, ticket) => {
+                self.pending.insert((index, ticket), reply);
+                self.settle(index);
+            }
+        }
+    }
+
+    /// A service action that a chain reached (no window to hand it to): a refusal fails the chain.
+    /// A deferred answer is not waited for, unless the chain is a request a service handed in —
+    /// then that request is not over until it comes.
+    pub(crate) fn run_step(&mut self, session: SessionRef, call: &Call, config: Option<&AppConfig>, intent: &Intent)
         -> Result<(), crate::rpc::RpcError> {
-        let (sender, answer) = mpsc::channel();
-        self.invoke(session, None, config, intent, Reply::Step(sender));
-        match answer.try_recv() {
-            Ok(Err(reason)) => Err(crate::rpc::RpcError::Failed(reason)),
-            _ => Ok(()),
+        match self.begin(session, call, config, intent) {
+            Started::Now(Err(reason)) => Err(crate::rpc::RpcError::Failed(reason)),
+            Started::Now(Ok(line)) => {
+                self.answered(call, line);
+                Ok(())
+            }
+            Started::Later(index, ticket) => {
+                self.owe(call, index, ticket);
+                self.settle(index);
+                Ok(())
+            }
         }
     }
 
@@ -177,6 +212,7 @@ impl ServiceHost {
     fn settle(&mut self, index: usize) {
         for (ticket, result) in std::mem::take(&mut self.services[index].effects().completed) {
             if let Some(reply) = self.pending.remove(&(index, ticket)) { reply.answer(result); }
+            else if let Some(owed) = self.owed.remove(&(index, ticket)) { self.book(owed.origin).settled(owed.serial, result); }
         }
     }
 
@@ -267,6 +303,7 @@ impl ServiceHost {
                 self.services[index].stop(self.epoch) == Stop::Pending
             });
             for index in 0..self.services.len() { self.settle(index); }
+            self.tell_outcomes();
             if stopping.is_empty() { break; }
             let left = deadline.saturating_duration_since(Instant::now());
             let woken = self.nudge.as_ref().map(|nudge| nudge.recv_timeout(left));
@@ -278,10 +315,23 @@ impl ServiceHost {
                 break;
             }
         }
+        // What was handed in and never finished is over: refused if it never started, unknown if it
+        // did. The service is told while it is still there to hear it.
+        for index in 0..self.services.len() { self.book(index).close(); }
+        self.tell_outcomes();
+        self.owed.clear();
         for (_, reply) in self.pending.drain() { reply.answer(Err("the server stopped".into())); }
         // Dropping the services closes their inboxes: a worker still sending is told so.
         self.services.clear();
     }
+}
+
+/// How a service action started.
+enum Started {
+    /// Answered at once.
+    Now(Result<Option<String>, String>),
+    /// Accepted: the service at this index owes the answer for this ticket.
+    Later(usize, ServiceTicket),
 }
 
 /// Say that `service` failed, where the user and the log both see it, and carry on.

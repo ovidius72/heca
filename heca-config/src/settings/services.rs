@@ -14,6 +14,8 @@ declare_settings! {
         pub inbox_capacity: NonZeroUsize,
         /// Longest the server waits at shutdown for services to finish stopping.
         pub stop_timeout_ms: NonZeroU64,
+        /// Requests one service may have open at once: waiting to run, or waiting on a deferred answer.
+        pub request_queue_capacity: NonZeroUsize,
     }
 }
 
@@ -32,7 +34,7 @@ mod tests {
 
     #[test]
     fn limits_must_be_positive() {
-        for field in ["inbox_capacity", "stop_timeout_ms"] {
+        for field in ["inbox_capacity", "stop_timeout_ms", "request_queue_capacity"] {
             let input = format!("[settings.services]\n{field} = 0");
             assert!(config_from_layers(&input).is_err(), "{input}");
         }

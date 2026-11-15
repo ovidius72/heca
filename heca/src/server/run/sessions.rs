@@ -75,6 +75,7 @@ impl ServerLoop {
                 }
                 self.sessions[i].shutdown();
                 self.sessions.remove(i);
+                self.sessions_changed();
                 if self.last_session == Some(id) {
                     self.recent_sessions.retain(|recent| *recent != id);
                     self.last_session = self.recent_sessions.last().copied();

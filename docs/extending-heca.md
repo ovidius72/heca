@@ -423,6 +423,84 @@ A trusted project can override any of your keys, as it can every other setting. 
 sensitive — a command to run, a path to write to — check it before you use it, or read it only from
 the server's configuration (`cx.extension_config()` in the factory).
 
+**Who may run what — `action_policy`.** Every action the server runs is first put to every policy any
+service declared: an action from a window, a script, a helper or a request another service handed in,
+and each follow-up of a chain.
+
+```rust
+rooms.action_policy(|rooms, _cx, request| match request.requester() {
+    Requester::External { sender, .. } if !rooms.may(sender, request.action()) =>
+        Permit::Deny(format!("{sender} may not run {}", request.action())),
+    _ => Permit::Allow,
+});
+```
+
+- `request.requester()` is `Requester::Local { window }` (the user, from a window or a script) or
+  `Requester::External { service, sender }` (a request a service handed in for `sender`).
+  `request.action()`, `request.args()`, `request.session()` (`None` for what belongs to no session, such
+  as listing or creating sessions) and `request.parent()` (the action that asked for this follow-up)
+  say the rest. An action reads who it was run for with `cx.sender()` (`None` for the user).
+- **Every declared policy is asked about every request, local or external, and the first `Deny` wins.**
+  The reason goes to whoever asked: a notification in a window, `error: …` to a script, the outcome of
+  a request a service handed in.
+- It is asked when the action is about to run, never earlier, so a rule that changed applies to what
+  was already waiting. It covers every action in the catalog: built-ins, extension actions, service
+  actions and the follow-ups of a chain, which are asked with the same requester as the action that
+  started them. A chain cannot do what its requester could not.
+- **With no policy declared anywhere**, the user's requests go through as before and a request handed
+  in by a service is refused. A request handed in by a service that declares no policy of its own is
+  refused even when another service declares one.
+- There is no way around it: heca keeps no exception for any requester.
+- **What it does not cover.** An action a window runs by itself, with no help from the server (moving
+  focus, scrolling, opening a menu), never reaches the server, so no policy sees it. Everything that
+  changes the server's state does.
+
+**Security limit.**
+
+Any process of the same user can open the socket directly. Without effective isolation, such as a different OS user, permissions limit requests received through cooperating integrations, not a hostile local process. Nothing more is promised. `Sender::new(...)` authenticates no one.
+
+**Requests handed in for someone else — `cx.submit`.** A service that relays what other people ask
+for (a chat room, a webhook) hands each request in from where it gets control (`receive`, an action):
+
+```rust
+let sender = Sender::new(who_the_integration_says_this_is); // from the integration, never from message text
+match cx.submit(ExternalRequest { sender, session, request_id, line }) {
+    Ok(request) => self.waiting.insert(request),            // a `RequestRef`
+    Err(SubmitError::QueueFull | SubmitError::DuplicateId) => { /* try later, or say so */ }
+    Err(other) => { /* UnknownSession, or Refused(why) */ }
+}
+
+// Later, once per request:
+fn request_done(&mut self, cx: &mut ServiceCx<'_, Msg>, request: &RequestRef, outcome: RequestOutcome) {
+    match outcome {
+        RequestOutcome::Done(line) => { /* … */ }
+        RequestOutcome::Refused(why) | RequestOutcome::Failed(why) => { /* … */ }
+        RequestOutcome::Unknown => { /* the server stopped part way; never run again */ }
+    }
+}
+```
+
+- `line` is exactly what `heca rpc` takes, and it is read, checked and run the way a script's line is,
+  in the session `session` names. heca never guesses a session and never uses another one:
+  `SubmitError::UnknownSession` if no session has that key. A line is at most `max_frame_bytes` long.
+  An action that **declares** a confirmation (a built-in like `close`, or one an extension marks
+  `.destructive()`) is always refused for a sender, even when the user turned that confirmation off
+  for themselves in `[confirm]`; the same holds for a chain's follow-up. A query (`list-actions`,
+  `describe-action`) is not an action and is refused. An action that needs a window, or that makes,
+  lists or removes sessions, is not run: a request handed in is never sent to a window.
+- `submit` answers at once and runs the request on the server's next turn, with every policy asked
+  first. The answer is one of `Ok(RequestRef)`, `QueueFull` (the service already has
+  `request_queue_capacity` open), `UnknownSession`, `DuplicateId` (a request of this service with the
+  same id is still open) or `Refused(why)` (empty or too long a line, no policy, server stopping).
+  heca does not remember an id once its request has ended; remembering them is the service's job.
+- `request_done` says how it ended. **`Done(line)`**: every action of it ran and every deferred answer
+  came in. **`Refused(why)`**: nothing ran. **`Failed(why)`**: it ended with an error after something
+  may have run, including a refusal part way through a chain; what ran before is not undone.
+  **`Unknown`**: it was started and the server stopped before it ended.
+- **Restarts.** Nothing is saved. When the server stops, a request that never started is
+  `Refused("server stopped, not executed")` and one that started and did not finish is `Unknown`, and
+  the service is told while it is still running. Nothing is run again by the next server.
+
 **What heca guarantees**
 
 - **One per server.** The factory runs once when a server starts, not per window or per session.
@@ -437,6 +515,8 @@ the server's configuration (`cx.extension_config()` in the factory).
 - **Stopping waits for the service.** At shutdown heca calls `stop` until it answers `Done`,
   delivering inbox messages in between, for at most `stop_timeout_ms`. Callers still waiting are then
   answered "the server stopped".
+- **Every action is judged by the same policies, wherever it comes from**, and a request handed in
+  by a service is run in the session it names or not at all.
 - **Failures are shown, not fatal.** A factory, message or projection that fails, or a service that
   is slow to stop, becomes a notification (and a line on stderr); the server keeps running.
 
@@ -446,6 +526,7 @@ the server's configuration (`cx.extension_config()` in the factory).
 |---|---|---|
 | `inbox_capacity` | `256` | messages one service's inbox holds before senders are told it is full |
 | `stop_timeout_ms` | `3000` | the longest the server waits for services to stop at shutdown |
+| `request_queue_capacity` | `64` | requests one service may have open at once, waiting to run or waiting on a deferred answer |
 
 Declare services and their actions before `heca::run()`; later ones are reported and dropped. Code: `heca/src/entry/service/` (what you write), `heca/src/server/services/` (the host).
 
