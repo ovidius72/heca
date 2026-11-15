@@ -34,85 +34,105 @@
       "priority": 1,
       "shortName": "save-each-session-to-json-and",
       "title": "Save each session to JSON and rebuild it when the server starts",
-      "status": "planned",
-      "description": "Execution task for P105; depends on completed P100(F012)/T522. Canonical F012 decisions c205c5f5-cd0a-4212-9fda-8a8c63c98d3d (lifecycle) and 2fc26220-2583-4392-bc2f-4724d406a555 (configurable recovery) refine and supersede shell-only restoration.\n\nReuse the existing search-state/state-file persistence pattern: data_dir, JSON version, atomic write, load tolerates missing/corrupt/future files, save on revision changes and before graceful exit. Reuse existing serialized session content where suitable and keep UI out of heca-core.\n\nPersist session identity, name, folder, metadata, active/stopped lifecycle state, layout (workspace/column/pane shares and names), and last plain-data view/focus. Persist each original launch's executable, complete structured arguments and working directory. Harness records additionally carry the registered driver identity and native session ID.\n\nconfig.toml defines two independent booleans, both default true:\n- resume_programs: relaunch recorded ordinary programs with their original commands and arguments.\n- resume_harness: resume registered harnesses from their original launch data plus their saved native session ID using the driver's actual CLI resume API. No hardcoded harness list or universal --sessionId switch.\n\nOn restore, reconstruct layout independently of flags; apply launch policy per category. Never replay shell history or claim that a killed process's memory/PID/scrollback survived. An explicitly terminated session remains stopped across server restarts until the user chooses Restart. The flags must not undo that choice. Delete removes the persisted definition and all Heca-owned restore/last-used references so it cannot return on restart; live client closure is T522's responsibility. Project files remain untouched.\n\nKeep the extension hook so heca-pro can contribute resume metadata, but generic harness recovery is open Heca behavior, not a pro-only path. Missing native IDs, unsupported resume APIs or obsolete launch targets must not silently create a new harness conversation or be reported as successful resume.\n\nAcceptance: round-trip several sessions/layouts and full argv including quoted values; restore eligible active sessions; stopped session stays stopped; explicit restart applies policy; deletion never restores; all four flag combinations; native harness ID preserved and used by driver-specific invocation; ordinary-program and harness categories do not gate each other; missing/corrupt/future JSON and absent folders handled. Existing missing-folder policy: new shell at home and inform the user. When resume is disabled for a category, keep the pane/layout but initialize its registered content at its normal fresh default, not an inactive placeholder: terminal-hosted program/harness becomes the user's normal shell; browser opens its configured default home page; editor opens with no files. Every future content type uses its own default constructor/factory contract, with defaults from its own config. Never hardcode a Terminal/Browser/Editor list or replace unrelated content with Terminal. Reuse the open managed-content creation/lifecycle contract (P094/T452 consuming P067/T398). T527 must not implement Browser/Editor, a second registry or a closed kind match. Test a registered custom/nonterminal content fixture as well as terminal behavior. Fresh defaults under an explicit false flag are intentional; do not confuse them with an enabled-resume failure.",
-      "descriptionUpdatedAt": "2026-10-27T14:36:38.918Z",
+      "status": "done",
+      "description": "Execution task for P105; depends on completed P100(F012)/T522. Canonical F012 decisions c205c5f5-cd0a-4212-9fda-8a8c63c98d3d (lifecycle) and 2fc26220-2583-4392-bc2f-4724d406a555 (configurable recovery) refine and supersede shell-only restoration.\n\nReuse the existing search-state/state-file persistence pattern: data_dir, JSON version, atomic write, load tolerates missing/corrupt/future files, save on revision changes and before graceful exit. Reuse existing serialized session content where suitable and keep UI out of heca-core.\n\nPersist session identity, name, folder, metadata, active/stopped lifecycle state, layout (workspace/column/pane shares and names), and last plain-data view/focus. Persist each original launch's executable, complete structured arguments and working directory. Harness records additionally carry the registered driver identity and native session ID.\n\nconfig.toml defines two independent booleans, both default true:\n- resume_programs: relaunch recorded ordinary programs with their original commands and arguments.\n- resume_harness: resume registered harnesses from their original launch data plus their saved native session ID using the driver's actual CLI resume API. No hardcoded harness list or universal --sessionId switch.\n\nOn restore, reconstruct layout independently of flags; apply launch policy per category. Never replay shell history or claim that a killed process's memory/PID/scrollback survived. An explicitly terminated session remains stopped across server restarts until the user chooses Restart. The flags must not undo that choice. Delete removes the persisted definition and all Heca-owned restore/last-used references so it cannot return on restart; live client closure is T522's responsibility. Project files remain untouched.\n\nKeep the extension hook so heca-pro can contribute resume metadata, but generic harness recovery is open Heca behavior, not a pro-only path. Missing native IDs, unsupported resume APIs or obsolete launch targets must not silently create a new harness conversation or be reported as successful resume.\n\nAcceptance: round-trip several sessions/layouts and full argv including quoted values; restore eligible active sessions; stopped session stays stopped; explicit restart applies policy; deletion never restores; all four flag combinations; native harness ID preserved and used by driver-specific invocation; ordinary-program and harness categories do not gate each other; missing/corrupt/future JSON and absent folders handled. Existing missing-folder policy: new shell at home and inform the user. When resume is disabled for a category, keep the pane/layout but initialize its registered content at its normal fresh default, not an inactive placeholder: terminal-hosted program/harness becomes the user's normal shell; browser opens its configured default home page; editor opens with no files. Every future content type uses its own default constructor/factory contract, with defaults from its own config. Never hardcode a Terminal/Browser/Editor list or replace unrelated content with Terminal. Reuse the open managed-content creation/lifecycle contract (P094/T452 consuming P067/T398). T527 must not implement Browser/Editor, a second registry or a closed kind match. Test a registered custom/nonterminal content fixture as well as terminal behavior. Fresh defaults under an explicit false flag are intentional; do not confuse them with an enabled-resume failure.\n\n---\n**Completion summary:**\nShipped on branch feat/t527-session-restore (worktree heca-feat-527), following decision 87a058ec (scope; C11 moved to P094/T452).\n\n- **The session file.** `heca.sessions.json` lives in the server's own folder, `<data>/heca/servers/<server>/` (T554 identity), so two servers never share one.\n  - It is versioned, written atomically, and holds every session: number, SessionKey, name, folder, label, running or stopped, layout (SessionContent), last focus and view, and per terminal the exact launch (executable, argv, cwd), title, driver id and native session id.\n  - Bad entries are skipped individually. A corrupt, missing or newer file never stops the server; it is kept as `.unreadable` and reported.\n- **When it saves.** At once on create, rename, terminate, restart and delete; after `session_save_delay_ms` (default 1000) for other changes; once at graceful shutdown. `save_sessions = false` turns it off and removes the file.\n- **Restore.** In `ServerLoop::from_config`, for both daemon and standalone: same key, number, name, folder, layout and use order. A stopped session stays stopped until Restart; a deleted one never returns.\n- **Relaunch.** Through the existing Restart path, split into `relaunch()`, with no second starter. `resume_programs` and `resume_harness` are independent.\n- **Harness resume.** `AgentDriver::resume(original, id)` exists, and the four built-in drivers have real resume argv, checked against each tool's `--help`:\n  - `claude --resume <id>`, `codex resume <id>`, `opencode --session <id>`, `pi --session <id>`;\n  - each keeps the user's options and drops the initial prompt.\n- **A harness that cannot be resumed** gets the user's shell plus a warning, never a fresh conversation. This covers a missing id, a driver without resume, and a command recognised by a known driver even with reporting off (the maintainer's test case: `zsh -ic \"claude \"`).\n- **Warnings stay until dismissed.** Restore and restart warnings are sticky (no timer), raised in one place, `raise_lasting`.\n- **The CLI always reaches a server.** One connect function, `socket/connect.rs` with `Start::IfMissing` or `Start::Never`, so `--attach`, `--new` and `--sessions` start the background server after `--kill-server`; `--kill` does not.\n- **Docs:** server-client-architecture.md (\"Sessions across a restart\"), extending-heca.md, README, config.default.toml (`save_sessions`, `session_save_delay_ms`).\n\nVerification:\n- About 30 new tests: restore and resume, persistence, driver resume argv, recognition, connect start, the real-binary `--sessions`/`--attach` test, and sticky warnings.\n- Break-it runs failed as expected: stopped-stays-stopped, no fresh conversation, recognition, sticky, connect start.\n- Clippy, tests and `cargo xwin clippy` are clean.\n- Antonio's native test:\n  - the layout and names came back after `--kill-server`, B stayed stopped, and `--attach` worked after the fix;\n  - an unreported claude came back as a shell with the warning.\n- Not verified natively: an actual claude resume in a trusted project with reporting on.\n\nKnown, not changed:\n- Ordinary commands still running at save are replayed on restart (T522 Restart behaviour, as agreed).\n- The saved last focus and view are restored into the session, but windows do not yet apply them on attach.\n- The socket test `connecting_to_nobody_is_not_found_or_refused` flakes rarely under load; its cause is not proven.",
+      "descriptionUpdatedAt": "2026-11-15T12:47:10.212Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5771266f-095e-4d20-a95d-05ad5bbcba9d",
+          "date": "2026-11-15T08:48:10.036Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-002-in-progress-done",
+          "date": "2026-11-15T12:47:10.211Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped on branch feat/t527-session-restore (worktree heca-feat-527), following decision 87a058ec (scope; C11 moved to P094/T452).\n\n- **The session file.** `heca.sessions.json` lives in the server's own folder, `<data>/heca/servers/<server>/` (T554 identity), so two servers never share one.\n  - It is versioned, written atomically, and holds every session: number, SessionKey, name, folder, label, running or stopped, layout (SessionContent), last focus and view, and per terminal the exact launch (executable, argv, cwd), title, driver id and native session id.\n  - Bad entries are skipped individually. A corrupt, missing or newer file never stops the server; it is kept as `.unreadable` and reported.\n- **When it saves.** At once on create, rename, terminate, restart and delete; after `session_save_delay_ms` (default 1000) for other changes; once at graceful shutdown. `save_sessions = false` turns it off and removes the file.\n- **Restore.** In `ServerLoop::from_config`, for both daemon and standalone: same key, number, name, folder, layout and use order. A stopped session stays stopped until Restart; a deleted one never returns.\n- **Relaunch.** Through the existing Restart path, split into `relaunch()`, with no second starter. `resume_programs` and `resume_harness` are independent.\n- **Harness resume.** `AgentDriver::resume(original, id)` exists, and the four built-in drivers have real resume argv, checked against each tool's `--help`:\n  - `claude --resume <id>`, `codex resume <id>`, `opencode --session <id>`, `pi --session <id>`;\n  - each keeps the user's options and drops the initial prompt.\n- **A harness that cannot be resumed** gets the user's shell plus a warning, never a fresh conversation. This covers a missing id, a driver without resume, and a command recognised by a known driver even with reporting off (the maintainer's test case: `zsh -ic \"claude \"`).\n- **Warnings stay until dismissed.** Restore and restart warnings are sticky (no timer), raised in one place, `raise_lasting`.\n- **The CLI always reaches a server.** One connect function, `socket/connect.rs` with `Start::IfMissing` or `Start::Never`, so `--attach`, `--new` and `--sessions` start the background server after `--kill-server`; `--kill` does not.\n- **Docs:** server-client-architecture.md (\"Sessions across a restart\"), extending-heca.md, README, config.default.toml (`save_sessions`, `session_save_delay_ms`).\n\nVerification:\n- About 30 new tests: restore and resume, persistence, driver resume argv, recognition, connect start, the real-binary `--sessions`/`--attach` test, and sticky warnings.\n- Break-it runs failed as expected: stopped-stays-stopped, no fresh conversation, recognition, sticky, connect start.\n- Clippy, tests and `cargo xwin clippy` are clean.\n- Antonio's native test:\n  - the layout and names came back after `--kill-server`, B stayed stopped, and `--attach` worked after the fix;\n  - an unreported claude came back as a shell with the warning.\n- Not verified natively: an actual claude resume in a trusted project with reporting on.\n\nKnown, not changed:\n- Ordinary commands still running at save are replayed on restart (T522 Restart behaviour, as agreed).\n- The saved last focus and view are restored into the session, but windows do not yet apply them on attach.\n- The socket test `connecting_to_nobody_is_not_found_or_refused` flakes rarely under load; its cause is not proven."
+        }
+      ],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "87a058ec-e9ac-4241-ac77-64b37ae9c9ae",
+          "title": "T527 scope: session file, lifecycle, terminal and harness relaunch through the existing restart path; generic fresh-content defaults belong to T452",
+          "decision": "Antonio approved this on 2026-11-15.\n- T527 covers:\n  - the versioned session file: identity, the SessionKey (T556), name, folder, layout, names and last view;\n  - lifecycle across a server restart: a stopped session stays stopped, a deleted one never comes back;\n  - `resume_programs` and `resume_harness`;\n  - relaunching recorded programs and harnesses, with driver-native resume from the saved native ID.\n- Relaunch reuses the path \"Restart session\" already uses (T522's recorded terminals), with no second terminal starter.\n- The former C11 (fresh default content per registered content type when resume is off) moved to P094(F011)/T452, which owns managed-content creation, lifecycle and restore through the open factory. T527 must not build that logic or a closed type list.",
+          "rationale": "T452 owns content restore through the open factory, which is not built yet. Doing C11 inside T527 would create a second path T452 would have to redo. heca-pro needs the session found again with the same key after a restart, and that is inside T527.",
+          "implementationNotes": "- Reuse `SessionRuntime::recorded_terminals` / `restart` (heca/src/server/session/lifecycle.rs) and `RecordedTerminal` (heca/src/server/sessions/).\n- Reuse the `state_file` pattern (heca-config/src/state_file.rs: data_path, write_json atomic, tolerant load).\n- With resume off for a category, a terminal pane gets the user's normal shell through the existing start path; non-terminal content waits on T452.",
+          "acceptedAt": "2026-11-15T08:48:05.044Z"
+        }
+      ],
       "checklist": [
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-001-layout-types-writable-to-json-heca-core-stays-ui-free",
           "number": 1,
           "title": "Layout types writable to JSON (heca-core stays UI-free)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-002-session-file-per-the-search-state-pattern-saved-on-change-and-on-exit",
           "number": 2,
           "title": "Session file per the search_state pattern; saved on change and on exit",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-003-restore-layout-names-last-view-relaunch-eligible-programs-harnesses-by-config-while-explicitly-terminated-sessions-remain-stopped",
           "number": 3,
           "title": "Restore layout/names/last view; relaunch eligible programs/harnesses by config while explicitly terminated sessions remain stopped",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-004-registered-harness-native-resume-from-original-launch-data-and-saved-native-session-id-preserve-heca-pro-extension-hook",
           "number": 4,
           "title": "Registered harness-native resume from original launch data and saved native session ID; preserve heca-pro extension hook",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-005-setting-to-turn-it-off-bad-file-never-stops-the-server",
           "number": 5,
           "title": "Setting to turn it off; bad file never stops the server",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-006-test-round-trip-two-sessions-corrupt-and-future-version-files",
           "number": 6,
           "title": "Test: round-trip two sessions; corrupt and future-version files",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-007-persist-original-executable-complete-structured-argv-cwd-and-registered-harness-driver-native-session-id-in-versioned-json",
           "number": 7,
           "title": "Persist original executable, complete structured argv/cwd and registered harness driver/native session ID in versioned JSON",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-008-config-resume-programs-true-and-resume-harness-true-independent-categories-verify-all-four-combinations",
           "number": 8,
           "title": "Config resume_programs=true and resume_harness=true: independent categories; verify all four combinations",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-009-persist-stopped-state-until-explicit-restart-delete-purges-durable-restore-last-used-references-and-never-resurrects-a-session",
           "number": 9,
           "title": "Persist stopped state until explicit Restart; Delete purges durable restore/last-used references and never resurrects a session",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-010-driver-specific-resume-preserves-the-native-harness-session-missing-id-unsupported-api-does-not-silently-start-a-fresh-conversation",
           "number": 10,
           "title": "Driver-specific resume preserves the native harness session; missing ID/unsupported API does not silently start a fresh conversation",
-          "checked": false
-        },
-        {
-          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-011-resume-disabled-preserve-pane-layout-and-create-each-registered-content-s-fresh-default-shell-for-terminal-programs-configured-browser-home-empty-editor-custom-content-fixture-proves-no-closed-type-list",
-          "number": 11,
-          "title": "Resume disabled: preserve pane/layout and create each registered content's fresh default; shell for terminal programs, configured browser home, empty editor; custom content fixture proves no closed type list",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-012-persist-each-session-s-sessionkey-and-restore-the-same-key-when-the-session-is-rebuilt-after-a-server-restart-contract-p108-f012-t556-decision-sessionkey-a-restored-session-never-gets-a-new-key-a-deleted-one-is-never-restored",
-          "number": 12,
+          "number": 11,
           "title": "Persist each session's SessionKey and restore the SAME key when the session is rebuilt after a server restart (contract: P108(F012)/T556 decision 'SessionKey'); a restored session never gets a new key, a deleted one is never restored",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -122,16 +142,21 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-15T08:48:10.036Z",
+      "completedAt": "2026-11-15T12:47:10.211Z",
       "createdAt": "2026-09-29T21:32:42.950Z",
-      "updatedAt": "2026-11-14T20:06:45.761Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-15T12:47:10.211Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+          "createdAt": "2026-11-15T08:48:09.922Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T21:32:11.171Z",
-  "updatedAt": "2026-11-14T20:06:45.761Z",
+  "updatedAt": "2026-11-15T12:47:10.211Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -145,7 +170,28 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "7992871a-5544-419a-b16b-c520819d5a34",
+      "date": "2026-11-15T08:48:10.091Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "cdd4ce54-72c4-4eed-851a-18ad30688c3c",
+      "date": "2026-11-15T12:47:10.243Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+      "createdAt": "2026-11-15T08:48:09.922Z"
+    }
+  ]
 }
