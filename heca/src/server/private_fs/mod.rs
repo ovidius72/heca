@@ -14,6 +14,9 @@ use std::path::Path;
 /// `folder` and any missing parents, readable by the owner alone — also when it was already
 /// there and had been loosened. Refuses a `folder` that is a symlink or not a folder.
 pub(crate) fn private_folder(folder: &Path) -> io::Result<()> {
+    // The folders this call makes, innermost first: every one of them is the owner's.
+    #[cfg(windows)]
+    let made: Vec<&Path> = folder.ancestors().take_while(|path| !path.as_os_str().is_empty() && !path.exists()).collect();
     let mut builder = DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
@@ -26,7 +29,9 @@ pub(crate) fn private_folder(folder: &Path) -> io::Result<()> {
     #[cfg(unix)]
     std::fs::set_permissions(folder, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
     #[cfg(windows)]
-    acl::restrict_to_current_user(folder)?;
+    for path in made.iter().rev().chain((!made.contains(&folder)).then_some(&folder)) {
+        acl::restrict_to_current_user(path)?;
+    }
     Ok(())
 }
 
