@@ -292,17 +292,26 @@
       "priority": 4,
       "shortName": "action-policy-for-every-reques",
       "title": "Action policy for every request, and an external-request door for services (heca-pro T014)",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Requested by heca-pro (F001/P003/T014). The contract was agreed with heca-pro and approved by Antonio on 2026-11-15; it is the accepted decision on this task. Implement after P105/T527.\n\n## What exists\n- Service actions run through `ServiceHost::invoke` and `run_step` (heca/src/server/services/mod.rs).\n- Script lines go through `ServerLoop::begin_rpc` / `rpc` / `rpc_service` (heca/src/server/run/).\n- The shared check is `check_server_intent` (heca/src/actions/registry/server.rs): catalog, arguments, interaction policy and confirm gate.\n- Chained follow-ups run through `execute_server_with` → `ServerStep`.\n- A window's call goes `ClientMsg::Invoke` → session (heca/src/server/session/mod.rs).\n- `ActionCx`/`ProjectCx` carry the session id, the SessionKey (T556) and the client.\n- There is no authorization hook and no way for a service to submit a request on someone else's behalf.\n\n## To build (see the decision for the exact contract)\n1. **`registration.action_policy(|service, cx, request| -> Permit)`.**\n   - With no policy declared, behaviour stays as today: local requests pass, external ones are refused.\n   - With policies declared, every declared policy checks every request, local or external; the first deny wins.\n   - It is consulted at execution time, for every catalog action: native, plugin and chained.\n   - The requester is carried to chained actions.\n   - Wire it once, in the shared execution path used by window, socket, helper and chain, so there is no per-handler check and no second path.\n2. **`Requester::{Local { window: Option<u64> }, External { service, sender }}`**, plus `request.session() -> Option<SessionKey>` and `cx.sender()` on `ActionCx`.\n3. **`cx.submit(ExternalRequest { sender, session, request_id, line }) -> Result<RequestRef, SubmitError>`.**\n   - It answers at once. Errors: `QueueFull`, `UnknownSession`, `DuplicateId` (an id equal to a still-open request in this service), `Refused`.\n   - The queue capacity goes in `[settings.services] request_queue_capacity` (config.default.toml + README); line length is bounded by `max_frame_bytes`.\n   - It uses the same parser, catalog, confirmations and execution as RPC. A confirm-gated action is refused for an external sender.\n4. **`Service::request_done(&mut self, cx, &RequestRef, RequestOutcome)`.**\n   - `RequestRef` holds service, sender, session and request_id. `RequestOutcome` is `Done`, `Refused`, `Failed` or `Unknown`.\n   - For a chain, `Done` comes only after every action and every deferred ticket finishes. A refusal or error mid-chain is `Failed`, and earlier actions are not undone.\n   - At shutdown: a request never started is `Refused`; one started but unfinished is `Unknown`.\n   - Nothing is persisted or re-executed after a restart.\n5. **Docs:** docs/extending-heca.md, covering the security limit exactly as agreed and that `Sender::new` authenticates no one.\n\n## Tests (heca's share)\n- The same policy applies for window, socket and helper.\n- The requester propagates, and a chain never escalates.\n- A revocation applies to queued requests.\n- The session is explicit: unknown → refused, never substituted.\n- Queue full; a duplicate open id.\n- A deferred result arrives correlated; `Unknown`/`Refused` at shutdown; no re-execution.\n- No policy → local passes and external is refused.\n- A confirm-gated action is refused for an external sender.\n\nheca-pro owns: member→role mapping, RolePermissions, the message format, room replies, persistent dedup, and the check that the sender comes from trusted integration metadata.",
       "descriptionUpdatedAt": "2026-11-15T12:37:00.402Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "056b22d3-7717-46cf-b128-fb2979fc58e1",
+          "date": "2026-11-15T12:52:46.968Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [
         {
           "id": "0be89c38-96fe-4da7-8f21-7f33e104d18b",
           "title": "Contract: action policy for every request and the external-request door (agreed with heca-pro T014)",
-          "decision": "Agreed with heca-pro (F001/P003/T014) and approved by Antonio on 2026-11-15.\n\n1. **Policy.** `registration.action_policy(|service, cx, request| -> Permit /* Allow | Deny(reason) */)`.\n   - With no policy declared, behaviour stays as today: local requests pass, external requests are refused.\n   - With policies declared, every declared policy checks every request, local or external, and the first deny wins. An external request is also refused when its originating service has no policy.\n   - It covers every catalog action (native, plugin, chained) and is consulted at execution time, so a revocation applies to queued requests.\n   - The requester propagates to chained actions, so a chain never escalates.\n   - A local refusal shows as a notification in the window or as `error: …` for scripts.\n   - heca keeps no escape hatch. The default full-access local role is heca-pro's responsibility (their decision 63).\n2. **Requester and session.**\n   - `enum Requester { Local { window: Option<u64> }, External { service, sender } }`, where an external requester keeps its originating service.\n   - The request exposes `requester()`, `action()`, `args()`, `session() -> Option<SessionKey>` and `parent() -> Option<&str>`.\n   - A local request may have no session (global actions such as listing or creating sessions).\n   - `cx.sender()` on `ActionCx`.\n3. **External request door.** `cx.submit(ExternalRequest { sender, session, request_id, line }) -> Result<RequestRef, SubmitError>`, answering at once.\n   - `SubmitError` is `QueueFull`, `UnknownSession`, `DuplicateId` or `Refused(reason)`.\n   - The session is mandatory and verified; heca never invents a session or substitutes the last one.\n   - The queue capacity is configurable in `[settings.services]`; line length is bounded by `max_frame_bytes`.\n   - It uses the same parser, catalog, confirmations and execution as RPC, with no second path. A confirm-gated action is refused for an external sender.\n4. **Completion.** `Service::request_done(&mut self, cx, &RequestRef, RequestOutcome)`.\n   - `RequestRef` holds service, sender, session (SessionKey) and request_id.\n   - `RequestOutcome` is one of:\n     - `Done(Option<String>)`: done, only after every action and deferred ticket in the chain finishes;\n     - `Refused(reason)`: refused before anything ran;\n     - `Failed(reason)`: ended with an error, possibly after partial effects, including a refusal mid-chain; earlier actions are not undone;\n     - `Unknown`: the conclusion cannot be known.\n5. **Duplicates and restart.**\n   - heca refuses a request_id equal to a still-open request in the same service. It does not remember completed ids; persistent dedup is heca-pro's job, with its archive.\n   - The queue is not persisted. At shutdown, a request never started is `Refused(\"server stopped, not executed\")` and a request started but unfinished is `Unknown`.\n   - After a restart nothing is re-executed; `Unknown` never becomes a new execution.\n6. **Security limit, stated exactly.** Any process of the same user can open the socket directly. Without effective isolation, such as a different OS user, permissions limit requests received through cooperating integrations, not a hostile local process. Nothing more is promised. `Sender::new(...)` authenticates no one.\n7. **Who verifies what.**\n   - heca tests: the common policy across window, socket and helper; requester propagation; revocation; chains; the explicit session; deferred results; queue full; duplicates; the shutdown outcomes.\n   - heca-pro verifies that the sender comes from trusted integration metadata, never from message content, and owns member→role mapping, RolePermissions, the message format and room replies.\n   - heca adds no Pro types.",
+          "decision": "Agreed with heca-pro (F001/P003/T014) and approved by Antonio on 2026-11-15. Clarified the same day, after implementation review: see points 1 and 3.\n\n1. **Policy.** `registration.action_policy(|service, cx, request| -> Permit /* Allow | Deny(reason) */)`.\n   - With no policy declared, behaviour stays as today: local requests pass, external requests are refused.\n   - With policies declared, every declared policy checks every request, local or external, and the first deny wins. An external request is also refused when its originating service has no policy.\n   - **Scope (clarified):** the policy covers every action the server executes, including reads such as listing sessions, not only actions that change shared state. It covers native, plugin, service and chained actions, and is consulted at execution time, so a revocation applies to queued requests.\n   - **Window-only view actions** (focus, scroll, menus and the like, which run inside a window and never reach the server) are outside the policy. An external sender can never run them, and never gets a privileged forward to a window. Any server action a chain produces is still checked with the original requester.\n   - The requester propagates to chained actions, so a chain never escalates.\n   - A local refusal shows as a notification in the window or as `error: …` for scripts.\n   - heca keeps no escape hatch. The default full-access local role is heca-pro's responsibility (their decision 63).\n2. **Requester and session.**\n   - `enum Requester { Local { window: Option<u64> }, External { service, sender } }`, where an external requester keeps its originating service.\n   - The request exposes `requester()`, `action()`, `args()`, `session() -> Option<SessionKey>` and `parent() -> Option<&str>`.\n   - A local request may have no session (global actions such as listing or creating sessions).\n   - `cx.sender()` on `ActionCx`.\n3. **External request door.** `cx.submit(ExternalRequest { sender, session, request_id, line }) -> Result<RequestRef, SubmitError>`, answering at once.\n   - `SubmitError` is `QueueFull`, `UnknownSession`, `DuplicateId` or `Refused(reason)`.\n   - The session is mandatory and verified; heca never invents a session or substitutes the last one.\n   - The queue capacity is configurable in `[settings.services]`; line length is bounded by `max_frame_bytes`.\n   - It uses the same parser, catalog, confirmations and execution as RPC, with no second path.\n   - **Confirmation (clarified):** an action that declares a confirmation (`ActionMeta.confirm` present) is always refused for an external sender, whatever the user's local confirmation setting, including when the user has turned that confirmation off. The rule keys on a declared confirmation, never on a \"danger\" colour or style. For local requests, the policy and the user's confirmation settings apply as before. The same rule holds inside chains, without losing the external identity.\n4. **Completion.** `Service::request_done(&mut self, cx, &RequestRef, RequestOutcome)`.\n   - `RequestRef` holds service, sender, session (SessionKey) and request_id.\n   - `RequestOutcome` is one of:\n     - `Done(Option<String>)`: done, only after every action and deferred ticket in the chain finishes;\n     - `Refused(reason)`: refused before anything ran;\n     - `Failed(reason)`: ended with an error, possibly after partial effects, including a refusal mid-chain; earlier actions are not undone;\n     - `Unknown`: the conclusion cannot be known.\n5. **Duplicates and restart.**\n   - heca refuses a request_id equal to a still-open request in the same service. It does not remember completed ids; persistent dedup is heca-pro's job, with its archive.\n   - The queue is not persisted. At shutdown, a request never started is `Refused(\"server stopped, not executed\")` and a request started but unfinished is `Unknown`.\n   - After a restart nothing is re-executed; `Unknown` never becomes a new execution.\n6. **Security limit, stated exactly.** Any process of the same user can open the socket directly. Without effective isolation, such as a different OS user, permissions limit requests received through cooperating integrations, not a hostile local process. Nothing more is promised. `Sender::new(...)` authenticates no one.\n7. **Who verifies what.**\n   - heca tests: the common policy across window, socket and helper; requester propagation; revocation; chains; the explicit session; deferred results; queue full; duplicates; the shutdown outcomes; a declared confirmation refused for an external sender even with that confirmation turned off, directly and in a chain.\n   - heca-pro verifies that the sender comes from trusted integration metadata, never from message content, and owns member→role mapping, RolePermissions, the message format and room replies.\n   - heca adds no Pro types.",
           "rationale": "heca-pro needs room members to drive heca actions under roles, without duplicating heca's action path or trusting message content. A policy wired into the one execution path covers every surface and every chained action. Explicit outcomes, duplicates and restart behaviour remove guesswork on both sides. The security limit is stated so no isolation is promised that the local socket cannot give.",
           "implementationNotes": "- Wire the policy in the shared path (`check_server_intent` / `execute_server_with` / `ServiceHost::invoke`), never per handler.\n- The requester travels with `SessionRef`/`Caller` and with `ServerStep` follow-ups.\n- Heca-Pro T014 links to this decision and does not duplicate it.\n- Implement after P105/T527.",
           "acceptedAt": "2026-11-15T12:37:16.835Z"
@@ -346,16 +355,21 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-11-15T12:52:46.968Z",
       "completedAt": "",
       "createdAt": "2026-11-15T12:37:00.341Z",
-      "updatedAt": "2026-11-15T12:37:22.819Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-11-15T13:18:39.103Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+          "createdAt": "2026-11-15T12:52:46.853Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438"
     }
   ],
   "createdAt": "2026-11-14T09:59:01.452Z",
-  "updatedAt": "2026-11-15T12:37:22.819Z",
+  "updatedAt": "2026-11-15T13:18:39.103Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -409,12 +423,20 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "ad314b56-7fda-4f5f-bba7-5b1e60e2ce31",
+      "date": "2026-11-15T12:52:47.023Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
-      "createdAt": "2026-11-14T20:06:54.125Z"
+      "createdAt": "2026-11-15T12:52:46.853Z"
     }
   ]
 }
