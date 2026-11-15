@@ -271,6 +271,15 @@ impl PtyHandle {
         self.master.process_group_leader()
     }
 
+    /// The PTY child's own process id — the shell or program heca started. Unlike
+    /// [`process_group_leader`](Self::process_group_leader), it does not move when that shell
+    /// hands the terminal to a job it starts.
+    // Only the unix reporting test reads it.
+    #[cfg(all(test, unix))]
+    pub(super) fn child_pid(&self) -> Option<u32> {
+        self.child.process_id()
+    }
+
     /// The raw fd of the PTY master, for `tcgetpgrp` (foreground pgrp lookup).
     /// `None` where the platform exposes no such accessor.
     #[cfg(unix)]

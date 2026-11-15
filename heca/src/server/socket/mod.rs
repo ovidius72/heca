@@ -101,10 +101,10 @@ fn stream_events() -> std::io::Result<()> {
 
 /// **`heca --kill-server`** — connect to a running server and stop it, and with it every pane and
 /// terminal (tmux's `kill-server`). Nothing is spawned: if no server is listening, it says so. The
-/// request is the one protocol word [`KILL_SERVER`](crate::server::run::KILL_SERVER); the server
-/// answers one line and then ends.
+/// request is the `kill_server` action, the same one the palette and a key binding run; the server
+/// answers one line and then ends, or says why it will not.
 pub(crate) fn kill_server() -> String {
-    match request(crate::server::run::KILL_SERVER) {
+    match request("kill_server") {
         Ok(answer) => answer,
         Err(error)
             if matches!(

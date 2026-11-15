@@ -115,11 +115,13 @@ pub(super) fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The actions the server loop runs itself, because they belong to no session: the session
+/// lifecycle, and stopping the server.
 pub(crate) fn owns(kind: crate::input::WmActionKind) -> bool {
     use crate::input::WmActionKind as K;
     matches!(
         kind,
-        K::ListSessions | K::CreateSession
+        K::ListSessions | K::KillServer | K::CreateSession
             | K::RenameSessionTo
             | K::TerminateSession
             | K::RestartSession

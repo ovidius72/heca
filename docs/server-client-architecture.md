@@ -156,10 +156,14 @@ Two queries return JSON instead of running anything: `list-actions` and `describ
 - The request must be answered within `request_timeout_ms`.
 
 **Who runs the line.** A service's action runs in the service. A session-management action
-(create, rename, list) runs in the server. Otherwise the line goes to the most recently used session
+(create, rename, list) and `kill_server` run in the server. Otherwise the line goes to the most recently used session
 that has a window attached, and that window runs it and sends the answer back. With no window
-attached, the server runs it itself in the most recent session. `heca rpc kill-server` — which is what
-`heca --kill-server` sends — stops the server and every pane and terminal. Code:
+attached, the server runs it itself in the most recent session. Stopping the server is the catalog
+action `kill_server`, run by the server loop like a session-management action: `heca --kill-server`
+sends exactly `kill_server`, as `heca rpc kill_server` does, and so do the palette and any key bound
+to it. It stops the server and every pane and terminal, and is put to the action policy like every
+other local request. `heca rpc kill_server` replaces the old raw line `heca rpc kill-server`, which is
+now an unknown command. A request another service hands in can never run it. Code:
 `heca/src/server/socket/mod.rs` (`run_rpc_cli`, `request`), `heca/src/server/run/mod.rs`
 (`begin_rpc`), `heca/src/server/run/rpc.rs`; the command line is declared in
 `heca/src/app/cli/catalog.rs`.
@@ -187,7 +191,7 @@ from each window reporting where it is looking and are sent only when the value 
 
 **The server runs without a window.** `heca --server` (`heca/src/server/runtime/headless.rs`, `serve`)
 loads the config, binds the socket, starts the extension services and runs the server loop. It needs
-no display and no GPU. `heca --kill-server` stops it.
+no display and no GPU. `heca --kill-server` (the `kill_server` action) stops it.
 
 **A window attaches.** Plain `heca` is a pure client (`ClientState::connect`,
 `heca/src/client/mod.rs`):

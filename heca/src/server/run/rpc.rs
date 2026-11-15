@@ -80,6 +80,11 @@ impl ServerLoop {
     }
 
     fn run_rpc_action(&mut self, action: WmAction, output: &mut Option<String>) -> Result<Vec<super::super::Change>, RpcError> {
+        if matches!(action, WmAction::KillServer) {
+            self.stop();
+            *output = Some("heca: server stopped\n".into());
+            return Ok(Vec::new());
+        }
         if super::super::sessions::owns(action.kind()) {
             let current = self.last_index().map(|i| self.sessions[i].info().name);
             let command = super::super::sessions::from_action(&action, current.as_deref())

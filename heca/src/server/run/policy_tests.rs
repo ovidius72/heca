@@ -152,6 +152,7 @@ fn declare(policy: bool, judge: bool) -> Log {
         cx.dispatch("demo.refuse", crate::chrome::PropMap::new());
         heca_grid_ui::event::Handled::Yes
     });
+    demo.action("chain_kill").run(|cx, _| { cx.dispatch("kill_server", crate::chrome::PropMap::new()); heca_grid_ui::event::Handled::Yes });
     demo.action("chain_wipe").run(|cx, _| { cx.dispatch("demo.wipe", crate::chrome::PropMap::new()); heca_grid_ui::event::Handled::Yes });
     demo.action("chain_later").run(|cx, _| { cx.dispatch("demo.later", crate::chrome::PropMap::new()); heca_grid_ui::event::Handled::Yes });
     log
@@ -527,4 +528,79 @@ fn a_global_action_is_asked_with_no_session() {
     assert_eq!((asked[0].action.as_str(), asked[0].session), ("list_sessions", None));
     assert_eq!((asked[1].action.as_str(), asked[1].session), ("split_horizontal", Some(key)));
     assert_eq!(asked[0].requester, "local");
+}
+
+fn kill(window: &impl crate::server::wire::ClientLink, id: u64) {
+    window.send(ClientMsg::Act {
+        action: crate::input::WmAction::KillServer,
+        asker: super::tests::test_asker(),
+        request_id: Some(id),
+        terminal_owner: None,
+    }).unwrap();
+}
+
+/// **Stopping the server is asked about like anything else**: a policy that forbids `kill_server`
+/// stops the script and the window alike, the server stays up and the window is told why; allowed
+/// by a policy, or with none, both stop it.
+#[test]
+fn a_policy_can_forbid_kill_server_for_a_script_and_a_window() {
+    let log = declare(true, false);
+    let mut server = server(&config(""));
+    let window = attached(&mut server);
+    drain(&window);
+    log.inbox().send(Msg::Deny("kill_server")).unwrap();
+    pump(&mut server);
+
+    assert_eq!(server.rpc("kill_server"), "error: not permitted: kill_server is not allowed", "a script");
+    kill(&window, 1);
+    pump(&mut server);
+    assert!(notified(&window, "kill_server was refused", "kill_server is not allowed"), "a window");
+    assert!(!server.wants_shutdown(), "the server is still up");
+    assert_eq!(server.clients.len(), 1, "and the window is still attached");
+    assert_eq!(server.rpc("split_horizontal"), "ok", "and answering");
+    assert_eq!(log.asked().iter().filter(|asked| asked.action == "kill_server" && asked.requester == "local").count(), 1);
+    assert_eq!(log.asked().iter().filter(|asked| asked.action == "kill_server" && asked.requester == "window 1").count(), 1);
+
+    // The policy allows it: the script stops the server and is told so.
+    let log = declare(true, false);
+    let mut server = super::service_tests::server(&config(""));
+    assert_eq!(server.rpc("kill_server"), "heca: server stopped\n");
+    assert!(server.wants_shutdown());
+    assert_eq!(log.asked().iter().filter(|asked| asked.action == "kill_server").count(), 1);
+
+    // The policy allows it: the window's request stops the server.
+    declare(true, false);
+    let mut server = super::service_tests::server(&config(""));
+    let window = attached(&mut server);
+    kill(&window, 1);
+    pump(&mut server);
+    assert!(server.wants_shutdown(), "a window");
+}
+
+/// **With no policy anywhere nothing changes**: the palette's `kill_server` stops the server.
+#[test]
+fn without_a_policy_a_window_stops_the_server() {
+    declare(false, false);
+    let mut server = super::service_tests::server(&config(""));
+    let window = attached(&mut server);
+    kill(&window, 1);
+    pump(&mut server);
+    assert!(server.wants_shutdown());
+    assert!(server.clients.is_empty(), "every window is dropped with the server");
+}
+
+/// **A sender can never stop the server**, whatever the policy says: handed in directly or reached by a
+/// chain it started, it is not run.
+#[test]
+fn a_sender_can_never_stop_the_server() {
+    let log = declare(true, true);
+    let mut server = server(&config(""));
+    let key = key_of(&server, 0);
+    submit(&mut server, &log, [request(key, "r1", "kill_server"), request(key, "r2", "demo.chain_kill")]);
+    let done = log.done();
+    assert!(matches!(&done[0].1, RequestOutcome::Refused(reason) if reason.contains("no runnable owner")), "direct: {done:?}");
+    assert!(matches!(&done[1].1, RequestOutcome::Failed(reason) if reason.contains("kill_server")), "chain: {done:?}");
+    assert!(!server.wants_shutdown(), "the server is still up");
+    assert!(log.asked().iter().any(|asked| asked.action == "kill_server" && asked.parent.as_deref() == Some("demo.chain_kill")),
+        "the follow-up was put to the policy first");
 }
