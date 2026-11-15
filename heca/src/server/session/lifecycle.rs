@@ -41,11 +41,15 @@ impl SessionRuntime {
             .filter_map(|(owner, id)| {
                 let backend = self.state.backends.get_by_id(id)?;
                 let runtime = backend.runtime();
-                let agent = runtime.agent;
+                let agent = runtime.agent.as_ref().map(|agent| crate::server::sessions::RecordedAgent {
+                    driver: agent.driver.clone(),
+                    session_id: agent.session_id.clone(),
+                });
                 Some(crate::server::sessions::RecordedTerminal {
                     display_title: self.state.backends.custom_title(id).map(str::to_owned),
                     running: runtime.status == heca_core::runtime::ProcessStatus::Running,
-                    launch: agent
+                    launch: runtime
+                        .agent
                         .as_ref()
                         .and_then(|agent| agent.launch.clone())
                         .or_else(|| backend.process_launch()),
@@ -71,6 +75,13 @@ impl SessionRuntime {
         }
     }
 
+    /// Raise what starting the session again had to say — a harness that was not resumed, a folder
+    /// that is gone, a file that could not be read. The user must act on it, so it stays until it is
+    /// dismissed instead of leaving on a timer. The one place these are raised.
+    pub(crate) fn raise_lasting(&mut self, draft: crate::notification::NotificationDraft) {
+        self.raise(draft.sticky());
+    }
+
     pub(crate) fn configure_recovery(&mut self, settings: &heca_config::settings::SettingsConfig) {
         self.resume_programs = settings.resume_programs;
         self.resume_harness = settings.resume_harness;
@@ -81,24 +92,10 @@ impl SessionRuntime {
             return Ok(());
         }
         let mut launches = Vec::new();
-        for launch in &self.saved_terminals {
-            let mut spec = launch.spec.clone();
-            if launch.agent.is_some() {
-                if self.resume_harness {
-                    return Err("this harness has no recorded native resume command yet".into());
-                }
-                spec.program = crate::app::backend_store::Program::Shell;
-            } else if !self.resume_programs {
-                spec.program = crate::app::backend_store::Program::Shell;
-            } else if launch.running {
-                let original = launch
-                    .launch
-                    .clone()
-                    .ok_or("the running program's original launch data is unavailable")?;
-                spec.cwd.clone_from(&original.cwd);
-                spec.program = crate::app::backend_store::Program::Recorded(original);
-            }
-            launches.push((launch.owner.clone(), spec, launch.display_title.clone()));
+        let known = self.known_agents();
+        for recorded in &self.saved_terminals {
+            let spec = self.relaunch(recorded, &known)?;
+            launches.push((recorded.owner.clone(), spec, recorded.display_title.clone()));
         }
         for (owner, spec, title) in launches {
             if let Err(error) = self

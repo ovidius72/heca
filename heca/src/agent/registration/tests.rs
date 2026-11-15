@@ -77,3 +77,29 @@ fn an_embedding_registers_a_driver_without_accessing_a_registry() {
     demo.agent_driver(AddedDriver { programs: vec!["too-late".into()] });
     assert!(QUEUE.with(|queue| queue.peek(<[_]>::is_empty)), "late declarations are refused");
 }
+
+struct Resumable;
+
+impl AgentDriver for Resumable {
+    fn id(&self) -> &str { "resumable" }
+    fn name(&self) -> &str { "Resumable" }
+    fn programs(&self) -> &[String] { &[] }
+    fn prepare(&self, _: &AgentLaunchContext) -> Result<AgentSetup, AgentError> { Ok(AgentSetup::default()) }
+    fn read_status(&self, _: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> { Ok(None) }
+    fn resume(&self, original: &ProcessLaunch, session_id: &str) -> Option<ProcessLaunch> {
+        let mut launch = original.clone();
+        launch.arguments.push(session_id.into());
+        Some(launch)
+    }
+}
+
+/// **The scope an extension's driver is registered under hides nothing**: the host's resume reaches
+/// the driver's own, and a driver without one stays without one.
+#[test]
+fn a_declared_drivers_resume_is_reached_through_its_scope() {
+    let original = ProcessLaunch { executable: "/bin/resumable".into(), arguments: vec!["--flag".into()], cwd: None };
+    let scoped = |inner: Arc<dyn AgentDriver>| ConfiguredDriver { id: "demo.driver".into(), inner, config: None };
+    let launch = scoped(Arc::new(Resumable)).resume(&original, "native-1").expect("the driver's resume");
+    assert_eq!(launch.arguments, ["--flag", "native-1"]);
+    assert_eq!(scoped(Arc::new(AddedDriver { programs: Vec::new() })).resume(&original, "native-1"), None);
+}

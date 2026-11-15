@@ -97,7 +97,15 @@ pub(crate) struct RecordedTerminal {
     pub launch: Option<heca_core::backend::ProcessLaunch>,
     pub owner: crate::app::backend_store::TerminalOwner,
     pub spec: crate::app::backend_store::TerminalSpec,
-    pub agent: Option<heca_core::agent::AgentState>,
+    pub agent: Option<RecordedAgent>,
+}
+
+/// What it takes to continue a harness's conversation: the driver that knows the program and the
+/// native session identity the program reported. Nothing about what it was doing when it stopped.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct RecordedAgent {
+    pub driver: String,
+    pub session_id: Option<String>,
 }
 
 pub(super) fn validate_name(name: &str) -> Result<(), String> {

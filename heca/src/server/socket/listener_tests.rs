@@ -69,7 +69,7 @@ fn listener_drop_does_not_remove_a_replacement() {
 
 #[test]
 fn connecting_to_nobody_is_not_found_or_refused() {
-    // The client starts the background server on exactly these two answers (client/transport.rs).
+    // The client starts the background server on exactly these two answers (server/socket/connect.rs).
     let path = SocketPath::new();
     let kind = UnixStream::connect(&path.0).unwrap_err().kind();
     assert!(matches!(kind, io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused), "{kind:?}");

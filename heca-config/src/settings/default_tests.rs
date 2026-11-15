@@ -115,6 +115,17 @@ fn session_resume_switches_default_on_and_are_independent() {
 }
 
 #[test]
+fn saving_sessions_is_on_by_default_and_can_be_turned_off_or_slowed() {
+    let defaults = SettingsConfig::default();
+    assert!(defaults.save_sessions);
+    assert_eq!(defaults.session_save_delay_ms, 1000);
+    let config = config_from_layers("[settings]\nsave_sessions=false\nsession_save_delay_ms=0").unwrap();
+    assert!(!config.settings.save_sessions);
+    assert_eq!(config.settings.session_save_delay_ms, 0);
+    assert!(config_from_layers("[settings]\nsession_save_delay_ms=-1").is_err());
+}
+
+#[test]
 fn pane_feedback_timeout_accepts_zero_or_milliseconds_but_not_invalid_values() {
     assert_eq!(SettingsConfig::default().notification_flash, 8000);
     assert!(SettingsConfig::default().notification_sound);

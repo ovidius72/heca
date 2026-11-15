@@ -25,6 +25,7 @@ mod layout;
 mod poll;
 pub(crate) mod feedback;
 pub(crate) mod identity;
+pub(crate) mod persist;
 pub(crate) mod private_fs;
 pub(crate) mod process;
 /// The local socket clients and scripts reach the server through.
@@ -174,8 +175,13 @@ impl ServerState {
         }
     }
 
-    /// This server, building terminal processes with `launch` — a test's, which starts nothing.
-    #[cfg(test)]
+    /// The agent drivers terminals are started with, when agent reporting has any.
+    pub(crate) fn agent_drivers(&self) -> Option<&heca_core::agent::AgentDrivers> {
+        self.terminal_settings.agents.as_ref().map(|agents| &agents.drivers)
+    }
+
+    /// This server, building terminal processes with `launch` — the app's, or a test's that starts
+    /// nothing.
     pub(crate) fn launching_with(mut self, launch: Launch) -> Self {
         self.launch = launch;
         self

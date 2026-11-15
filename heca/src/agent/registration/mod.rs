@@ -4,6 +4,7 @@ use std::{cell::RefCell, sync::Arc};
 
 use heca_config::settings::{AgentProgramConfig, AgentsConfig};
 use heca_core::agent::AgentDrivers;
+use heca_core::backend::ProcessLaunch;
 use crate::chrome::StartupQueue;
 
 use super::*;
@@ -61,6 +62,9 @@ impl AgentDriver for ConfiguredDriver {
     fn prepare(&self, context: &AgentLaunchContext) -> Result<AgentSetup, AgentError> { self.inner.prepare(context) }
     fn integration(&self, context: &IntegrationContext) -> Result<Option<AgentIntegration>, AgentError> {
         self.inner.integration(context)
+    }
+    fn resume(&self, original: &ProcessLaunch, session_id: &str) -> Option<ProcessLaunch> {
+        self.inner.resume(original, session_id)
     }
     fn read_status(&self, input: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> {
         let Some(mut report) = self.inner.read_status(input)? else { return Ok(None) };

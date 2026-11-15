@@ -14,8 +14,27 @@ use std::{rc::Rc, time::Instant};
 
 /// The one server-shutdown protocol word, shared with the CLI.
 pub(crate) const KILL_SERVER: &str = "kill-server";
+mod restore;
 mod rpc;
 mod sessions;
+
+/// **What a server loop reaches the machine through**: how it starts a terminal process, and how it
+/// reads the settings of a folder. The app's own unless a test, which must start no process and read
+/// none of the user's files, hands in others.
+#[derive(Clone, Copy)]
+pub(crate) struct Machine {
+    pub(crate) launch: crate::app::backend_factory::Launch,
+    pub(crate) project_config: fn(&std::path::Path) -> heca_config::loader::AppConfig,
+}
+
+impl Default for Machine {
+    fn default() -> Self {
+        Self {
+            launch: crate::app::backend_factory::launch,
+            project_config: heca_config::loader::AppConfig::load_for,
+        }
+    }
+}
 
 pub(crate) struct ServerLoop {
     sessions: Vec<SessionRuntime>,
@@ -35,6 +54,13 @@ pub(crate) struct ServerLoop {
     events: super::EventFanout,
     /// The extension services this server runs, shared with every session.
     services: super::services::SharedServices,
+    /// What this server reaches the machine through.
+    machine: Machine,
+    /// The file this server's sessions are kept in. `None` when they are not kept, and after the
+    /// server has stopped and written them for the last time.
+    store: Option<super::persist::SessionStore>,
+    /// Reports raised before any session could show them, for the first one that can.
+    notices: Vec<crate::notification::NotificationDraft>,
     /// Which server this is. Held for as long as the server lives: the lock that keeps its folder
     /// its own goes when the server does. `None` for a test-built server that runs no services.
     _identity: Option<super::identity::ServerIdentity>,
@@ -57,8 +83,17 @@ impl ServerLoop {
             directory: Vec::new(),
             events: super::EventFanout::default(),
             services: Default::default(),
+            machine: Machine::default(),
+            store: None,
+            notices: Vec::new(),
             _identity: None,
         }
+    }
+
+    /// This server, reaching the machine through `machine`.
+    pub(in crate::server) fn on(mut self, machine: Machine) -> Self {
+        self.machine = machine;
+        self
     }
 
     #[cfg(test)]
@@ -135,6 +170,8 @@ impl ServerLoop {
     }
 
     pub(crate) fn shutdown(&mut self) {
+        // Before the sessions end their processes: what ran in them is what is written down.
+        self.save_and_close_store();
         self.services.borrow_mut().shutdown();
         for client in &self.clients {
             client.close();
@@ -215,6 +252,7 @@ impl ServerLoop {
                     .iter()
                     .filter_map(|client| client.rpc_deadline()),
             )
+            .chain(self.store.as_ref().and_then(super::persist::SessionStore::next_wake))
             .min()
     }
 
@@ -320,6 +358,8 @@ impl ServerLoop {
         for client in &self.clients { client.expire_rpc(now); }
         self.clients.retain(|c| !c.is_closed());
         self.publish_directory();
+        self.flush_notices();
+        self.autosave(now);
     }
 
     fn publish_directory(&mut self) {
@@ -432,3 +472,7 @@ mod service_data_tests;
 mod service_key_tests;
 #[cfg(test)]
 mod identity_tests;
+#[cfg(test)]
+mod restore_tests;
+#[cfg(test)]
+mod resume_tests;

@@ -35,9 +35,16 @@ pub fn integrations_in(
     context: IntegrationContext,
     config_file: std::path::PathBuf,
 ) -> integration::Integrations {
+    integration::Integrations::new(known(config), context, config_file)
+}
+
+/// **Every driver heca knows** — built in and declared by an extension — whether or not the user has
+/// switched it on. For saying what a program *is* (and installing its integration), never for
+/// reporting: only [`options`]'s drivers report.
+pub(crate) fn known(config: &heca_config::settings::AgentsConfig) -> heca_core::agent::AgentDrivers {
     let mut drivers = drivers::available(config);
     registration::append_available(&mut drivers, config);
-    integration::Integrations::new(drivers, context, config_file)
+    drivers
 }
 
 pub(crate) fn options(config: &heca_config::settings::AgentsConfig) -> Option<AgentOptions> {

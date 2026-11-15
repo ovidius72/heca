@@ -5,13 +5,16 @@ mod codex;
 mod pi;
 mod opencode;
 mod hooks;
+mod resume;
 
 use heca_config::settings::{AgentProgramConfig, AgentsConfig};
 use heca_core::agent::AgentDrivers;
 use super::*;
+use heca_core::backend::ProcessLaunch;
 
 type Prepare = fn(&Driver, &AgentLaunchContext) -> Result<AgentSetup, AgentError>;
 type Integration = fn(&Driver, &IntegrationContext) -> Result<AgentIntegration, AgentError>;
+use resume::Grammar;
 
 pub(super) struct Driver {
     id: String,
@@ -22,10 +25,12 @@ pub(super) struct Driver {
     native_events: Vec<String>,
     prepare: Prepare,
     integration: Integration,
+    /// How this program's command line continues a conversation. `None`: it cannot be continued.
+    resume: Option<&'static Grammar>,
 }
 
 impl Driver {
-    fn configured(id: &str, config: &AgentsConfig, icon: AgentIcon, prepare: Prepare, integration: Integration) -> Option<Self> {
+    fn configured(id: &str, config: &AgentsConfig, icon: AgentIcon, prepare: Prepare, integration: Integration, resume: Option<&'static Grammar>) -> Option<Self> {
         let AgentProgramConfig {
             enabled: Some(true), name: Some(name), executables: Some(programs), icon: custom_icon, mut reports, enabled_events, ..
         } = config.programs.get(id)?.clone() else { return None };
@@ -39,7 +44,7 @@ impl Driver {
             reports.retain(|event, _| events.contains(event));
         }
         if reports.is_empty() { return None }
-        Some(Self { id: id.into(), name, icon: custom_icon.map(AgentIcon::file).unwrap_or(icon), programs, reports, native_events, prepare, integration })
+        Some(Self { id: id.into(), name, icon: custom_icon.map(AgentIcon::file).unwrap_or(icon), programs, reports, native_events, prepare, integration, resume })
     }
 
     fn report(&self, status: &str) -> AgentState {
@@ -61,6 +66,9 @@ impl AgentDriver for Driver {
     }
     fn integration(&self, context: &IntegrationContext) -> Result<Option<AgentIntegration>, AgentError> {
         (self.integration)(self, context).map(Some)
+    }
+    fn resume(&self, original: &ProcessLaunch, session_id: &str) -> Option<ProcessLaunch> {
+        self.resume?.resumed(original, session_id)
     }
     fn read_status(&self, input: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> {
         let bytes = match input {
@@ -126,5 +134,7 @@ fn environment(driver: &Driver, context: &AgentLaunchContext) -> Result<AgentSet
     })
 }
 
+#[cfg(test)]
+mod resume_tests;
 #[cfg(test)]
 mod tests;
