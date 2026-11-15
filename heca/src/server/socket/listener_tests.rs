@@ -38,12 +38,13 @@ fn a_live_legacy_socket_without_a_lock_is_preserved() {
 }
 
 #[test]
-fn a_stale_socket_is_reclaimed_with_private_permissions() {
+fn a_stale_socket_is_reclaimed() {
     let path = SocketPath::new();
     drop(UnixListener::bind(&path.0).unwrap());
     let listener = ControlListener::bind(&path.0).unwrap();
     assert!(UnixStream::connect(&path.0).is_ok());
-    assert_eq!(std::fs::metadata(&path.0).unwrap().permissions().mode() & 0o777, 0o600);
+    #[cfg(unix)]
+    assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&path.0).unwrap().permissions()) & 0o777, 0o600);
     drop(listener);
     assert!(!path.0.exists());
 }
@@ -64,4 +65,77 @@ fn listener_drop_does_not_remove_a_replacement() {
     let _replacement = UnixListener::bind(&path.0).unwrap();
     drop(first);
     assert!(UnixStream::connect(&path.0).is_ok());
+}
+
+#[test]
+fn connecting_to_nobody_is_not_found_or_refused() {
+    // The client starts the background server on exactly these two answers (client/transport.rs).
+    let path = SocketPath::new();
+    let kind = UnixStream::connect(&path.0).unwrap_err().kind();
+    assert!(matches!(kind, io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused), "{kind:?}");
+    drop(UnixListener::bind(&path.0).unwrap());
+    let kind = UnixStream::connect(&path.0).unwrap_err().kind();
+    assert!(matches!(kind, io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused), "{kind:?}");
+}
+
+#[test]
+fn bytes_cross_in_both_directions_and_the_end_is_seen() {
+    use std::io::{Read, Write};
+    let path = SocketPath::new();
+    let listener = ControlListener::bind(&path.0).unwrap();
+    let mut client = UnixStream::connect(&path.0).unwrap();
+    let mut server = listener.incoming().next().unwrap().unwrap();
+    client.write_all(b"ping").unwrap();
+    let mut got = [0; 4];
+    server.read_exact(&mut got).unwrap();
+    assert_eq!(&got, b"ping");
+    server.write_all(b"pong").unwrap();
+    client.read_exact(&mut got).unwrap();
+    assert_eq!(&got, b"pong");
+    drop(server);
+    assert_eq!(client.read(&mut got).unwrap(), 0);
+}
+
+/// The reader thread of a wire link sits in `read` for as long as the connection lives; the link's
+/// drop must be able to wake it by shutting the connection down from another thread.
+#[test]
+fn a_blocked_reader_wakes_when_the_connection_is_shut_down() {
+    use std::io::Read;
+    let (reader, _peer) = UnixStream::pair().unwrap();
+    let shutter = reader.try_clone().unwrap();
+    let (done, woke) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        let mut reader = reader;
+        let mut byte = [0];
+        let _ = done.send(reader.read(&mut byte));
+    });
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    shutter.shutdown(std::net::Shutdown::Both).unwrap();
+    let read = woke.recv_timeout(std::time::Duration::from_secs(5)).expect("the blocked read did not return");
+    assert!(matches!(read, Ok(0) | Err(_)));
+    thread.join().unwrap();
+}
+
+#[test]
+fn a_read_timeout_ends_a_read_that_gets_nothing() {
+    use std::io::Read;
+    let (mut quiet, _peer) = UnixStream::pair().unwrap();
+    quiet.set_read_timeout(Some(std::time::Duration::from_millis(50))).unwrap();
+    let kind = quiet.read(&mut [0]).unwrap_err().kind();
+    assert!(matches!(kind, io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock), "{kind:?}");
+}
+
+#[test]
+fn a_reader_and_a_writer_on_one_connection_do_not_hold_each_other_up() {
+    use std::io::{Read, Write};
+    let (a, mut b) = UnixStream::pair().unwrap();
+    let mut writer = a.try_clone().unwrap();
+    let mut reader = a;
+    let blocked = std::thread::spawn(move || { let mut byte = [0]; reader.read_exact(&mut byte).map(|()| byte[0]) });
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    writer.write_all(b"x").unwrap();
+    let mut got = [0];
+    b.read_exact(&mut got).unwrap();
+    b.write_all(b"y").unwrap();
+    assert_eq!(blocked.join().unwrap().unwrap(), b'y');
 }

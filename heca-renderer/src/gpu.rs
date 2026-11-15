@@ -97,14 +97,35 @@ fn alpha_mode(modes: &[wgpu::CompositeAlphaMode], transparent: bool) -> wgpu::Co
         .unwrap_or(Auto)
 }
 
-/// A device with no window, for tests that render into an offscreen texture.
+/// A device with no window, for tests that render into an offscreen texture. `None` when the
+/// machine has no GPU adapter (a CI runner): the reason is printed. Tests call
+/// [`headless_device_or_skip`] rather than this.
 #[cfg(test)]
-pub(crate) fn headless_device() -> (wgpu::Device, wgpu::Queue) {
+pub(crate) fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
     let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&Default::default()))
-        .expect("a GPU adapter for rendering tests");
-    pollster::block_on(adapter.request_device(&Default::default())).expect("a rendering device")
+    let adapter = match pollster::block_on(instance.request_adapter(&Default::default())) {
+        Ok(adapter) => adapter,
+        Err(error) => {
+            eprintln!("SKIPPED: no GPU adapter on this machine ({error})");
+            return None;
+        }
+    };
+    Some(pollster::block_on(adapter.request_device(&Default::default())).expect("a rendering device"))
 }
+
+/// `let (device, queue) = headless_device_or_skip!();` -- ends the calling test early, with the
+/// reason printed, when there is no GPU adapter.
+#[cfg(test)]
+macro_rules! headless_device_or_skip {
+    () => {
+        match $crate::gpu::headless_device() {
+            Some(device) => device,
+            None => return,
+        }
+    };
+}
+#[cfg(test)]
+pub(crate) use headless_device_or_skip;
 
 #[cfg(test)]
 mod tests {

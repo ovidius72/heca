@@ -8,7 +8,6 @@ pub(super) struct LocalServer {
     server: ServerLoop,
     handle: RuntimeHandle,
     inbox: RuntimeInbox,
-    #[cfg(unix)]
     listener: Option<crate::server::socket::RuntimeListener>,
 }
 
@@ -16,14 +15,13 @@ impl LocalServer {
     pub(super) fn new(config: &AppConfig, wake: ServerWaker) -> io::Result<Self> {
         let (handle, inbox) = runtime::channel_waking(config.config.settings.connection, wake);
         let server = ServerLoop::from_config(config, ServerIdentity::claim(ServerKind::Standalone), handle.waker())?;
-        #[cfg(unix)]
         let listener = crate::server::socket::socket_path().and_then(|path| {
             match crate::server::socket::RuntimeListener::bind(&path, handle.clone(), config.config.settings.connection) {
                 Ok(listener) => Some(listener),
                 Err(error) => { eprintln!("[heca] standalone control socket: {error}"); None },
             }
         });
-        Ok(Self { server, handle, inbox, #[cfg(unix)] listener })
+        Ok(Self { server, handle, inbox, listener })
     }
 
     pub(super) fn add_client(&mut self, client: impl ServerLink + 'static) { self.server.add_client(client); }
@@ -39,7 +37,6 @@ impl Drop for LocalServer {
         let _ = self.handle.stop();
         self.server.shutdown();
         self.inbox.reject_pending();
-        #[cfg(unix)]
         self.listener.take();
     }
 }

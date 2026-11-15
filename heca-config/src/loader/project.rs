@@ -58,7 +58,7 @@ pub fn read_project_with(
     };
     let value = toml::from_str::<toml::Value>(&text).map_err(|source| ConfigError::Parse {
         path: path.clone(),
-        source,
+        source: Box::new(source),
     })?;
     let dir = path
         .parent()

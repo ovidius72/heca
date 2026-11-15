@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn duotone_layers_keep_their_shared_font_origin() {
-        let (device, queue) = crate::gpu::headless_device();
+        let (device, queue) = crate::gpu::headless_device_or_skip!();
         let mut renderer = TextRenderer::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb);
         for size in [16.0, 20.0, 24.0] {
             for scale in [1.0, 2.0] {

@@ -108,7 +108,8 @@ pub enum ConfigError {
     /// Config file found but could not be parsed as valid TOML.
     Parse {
         path: PathBuf,
-        source: toml::de::Error,
+        // Boxed so `ConfigError` (the `Err` of every loader function) stays small.
+        source: Box<toml::de::Error>,
     },
     /// Config file could not be read from disk.
     Io {
@@ -368,7 +369,7 @@ pub(super) fn read_first_toml(
                 let value =
                     toml::from_str::<toml::Value>(&content).map_err(|e| ConfigError::Parse {
                         path: path.clone(),
-                        source: e,
+                        source: Box::new(e),
                     })?;
                 return Ok(Some((path.clone(), value)));
             }

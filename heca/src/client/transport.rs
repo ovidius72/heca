@@ -4,18 +4,17 @@ use std::io;
 use heca_config::settings::ConnectionConfig;
 use crate::server::{ServerWaker, wire::ClientLink};
 
-#[cfg(unix)]
 pub(super) fn connect(config: ConnectionConfig, wake: ServerWaker) -> io::Result<Box<dyn ClientLink>> {
-    use std::{process::{Command, Stdio}, os::unix::process::CommandExt, time::{Duration, Instant}};
-    use crate::server::{socket::socket_path, wire::socket::SocketClient};
+    use std::{process::{Command, Stdio}, time::{Duration, Instant}};
+    use crate::server::{socket::{local::detach, socket_path}, wire::socket::SocketClient};
     let path = socket_path().ok_or_else(|| io::Error::other("no runtime folder for the server"))?;
     match SocketClient::connect(&path, config, wake.clone()) {
         Ok(client) => return Ok(Box::new(client)),
         Err(error) if matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused) => {},
         Err(error) => return Err(error),
     }
-    let child = Command::new(std::env::current_exe()?).arg("--server").arg(&path)
-        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).process_group(0).spawn()?;
+    let child = detach(Command::new(std::env::current_exe()?).arg("--server").arg(&path)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())).spawn()?;
     let exited = reap(child);
     let deadline = Instant::now() + Duration::from_millis(config.request_timeout_ms.get());
     loop {
@@ -34,7 +33,6 @@ pub(super) fn connect(config: ConnectionConfig, wake: ServerWaker) -> io::Result
     }
 }
 
-#[cfg(unix)]
 fn reap(mut child: std::process::Child) -> std::sync::mpsc::Receiver<io::Result<std::process::ExitStatus>> {
     let (sender, receiver) = std::sync::mpsc::channel();
     // The daemon outlives the client connection. Waiting must not own or close that connection.
@@ -42,20 +40,16 @@ fn reap(mut child: std::process::Child) -> std::sync::mpsc::Receiver<io::Result<
     receiver
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn daemon_is_reaped_and_its_exit_status_is_reported() {
         use std::{process::Command, time::Duration};
-        let status = reap(Command::new("/bin/sh").args(["-c", "exit 7"]).spawn().unwrap())
+        let exit_7 = if cfg!(windows) { ("cmd", ["/C", "exit 7"]) } else { ("/bin/sh", ["-c", "exit 7"]) };
+        let status = reap(Command::new(exit_7.0).args(exit_7.1).spawn().unwrap())
             .recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
         assert_eq!(status.code(), Some(7));
     }
-}
-
-#[cfg(not(unix))]
-pub(super) fn connect(_: ConnectionConfig, _: ServerWaker) -> io::Result<Box<dyn ClientLink>> {
-    Err(io::Error::new(io::ErrorKind::Unsupported, "socket attachment is not available on this platform"))
 }

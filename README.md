@@ -20,6 +20,7 @@ Think tmux meets NIRI meets Neovide — all panes render in a single GPU-acceler
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Running and testing](#running-and-testing)
+- [Continuous integration](#continuous-integration)
 - [Getting Started](#getting-started)
 - [Keyboard Commands](#keyboard-commands)
 - [Configuration](#configuration)
@@ -151,6 +152,24 @@ runtime results alongside automated test results.
 
 Cargo discovers these programs from the package manifests and example sources. When adding or
 renaming a runnable program, update this table and its linked usage guide.
+
+---
+
+## Continuous integration
+
+Every pull request, and every push to `main`, runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+on Linux, macOS and Windows. Each system runs, with the Rust version pinned in
+[`rust-toolchain.toml`](rust-toolchain.toml):
+
+```bash
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace
+```
+
+A warning fails the build. One system failing does not stop the other two. To reproduce a run
+locally, use those same two commands. They build the whole workspace and take a long time, so
+day to day scope cargo to the crates you changed, for example `./scripts/lint-changed.sh` and
+`./scripts/lint-changed.sh test`.
 
 ---
 
