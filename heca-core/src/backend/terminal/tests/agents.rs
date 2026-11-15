@@ -18,7 +18,7 @@ fn enabling_reporting_reaches_the_existing_terminal_and_replays_its_latest_statu
     let mut backend = TerminalBackend::with_command(80, 24, 8.0, 16.0, "cat", TerminalBackendOptions {
         agents: Some(options(false)), shell_override: Some(TEST_SHELL.into()), ..Default::default()
     }).unwrap();
-    let process = backend.pty.process_group_leader();
+    let process = backend.pty.child_pid();
     let bin = backend.agent_session.as_ref().unwrap().bin();
     backend.apply_osc_event(OscEvent::Program("demo-agent".into()));
     backend.apply_osc_event(OscEvent::Notification(TerminalNotification { code: 9, payload: "demo:working".into() }));
@@ -26,7 +26,7 @@ fn enabling_reporting_reaches_the_existing_terminal_and_replays_its_latest_statu
     backend.reload_agent_config(Some(options(true))).unwrap();
     assert_eq!(backend.runtime().agent.unwrap().status.as_str(), "working");
     assert_eq!(backend.take_agent_updates().len(), 1, "one real transition reaches subscribers");
-    assert_eq!(backend.pty.process_group_leader(), process, "the existing process stays alive");
+    assert_eq!(backend.pty.child_pid(), process, "the existing process stays alive");
     assert_eq!(backend.agent_session.as_ref().unwrap().bin(), bin);
     assert!(bin.join("demo-agent").exists(), "the existing shell's private PATH entry now resolves the enabled launcher");
 
