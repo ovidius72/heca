@@ -1,4 +1,8 @@
 //! The installed-program CLI exercises the shared installer through the real host, without a GUI.
+//!
+//! Unix only: the test points the app at its fixture with `HOME` and `XDG_*`, which Windows does not
+//! read for the config, data and cache folders (it asks the system for them).
+#![cfg(unix)]
 
 use std::{fs, path::Path, process::{Command, Output}};
 

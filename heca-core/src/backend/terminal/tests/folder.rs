@@ -4,6 +4,7 @@ use super::*;
 
 /// A fresh, empty folder under the system temp dir, resolved (macOS's `/tmp` is a symlink, and
 /// `pwd` reports the resolved path).
+#[cfg(unix)]
 fn scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("heca-cwd-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("create scratch dir");
@@ -11,6 +12,7 @@ fn scratch_dir(name: &str) -> PathBuf {
 }
 
 /// A shell starts in the folder it was told to start in.
+#[cfg(unix)] // spawns `/bin/sh`
 #[test]
 fn a_shell_starts_in_the_folder_it_is_given() {
     let _serial = shell_test_guard();
@@ -40,6 +42,7 @@ fn a_shell_starts_in_the_folder_it_is_given() {
 }
 
 /// A spawned command starts in the folder it was told to start in.
+#[cfg(unix)] // spawns `/bin/sh`
 #[test]
 fn a_command_starts_in_the_folder_it_is_given() {
     let _serial = shell_test_guard();
