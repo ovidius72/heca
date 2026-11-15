@@ -7,7 +7,9 @@
 mod driver;
 mod model;
 mod icon;
+mod launched;
 mod registry;
+mod resume;
 mod integration;
 mod channel;
 mod session;
@@ -19,6 +21,7 @@ pub use driver::{AgentDriver, AgentInput, AgentLaunchContext, AgentSetup, progra
 pub use model::{AgentError, AgentState, AgentStatus, TerminalNotification};
 pub use icon::AgentIcon;
 pub use registry::AgentDrivers;
+pub use resume::ResumeRefusal;
 pub use integration::{AgentIntegration, IntegrationContext, IntegrationResource};
 pub use session::AgentOptions;
 pub(crate) use session::AgentSession;

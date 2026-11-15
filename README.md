@@ -277,11 +277,15 @@ choices for an existing session, a new session, and Exit. Terminate also offers 
 Canceling a picker returns to those choices. Server loss leaves windows open for reconnect or exit;
 disconnected windows do not restart the server automatically.
 
-`resume_programs` and `resume_harness` are independent `[settings]` switches, both defaulting to
-true. Disabled categories start fresh in the retained pane. Original process argv/cwd and native
-harness session IDs are recorded separately. Native harness resume construction and durable JSON
-recovery are P105/T527 work; unavailable launch/resume data is an error, never a silent new
-conversation. A killed server's sessions cannot be recovered from disk until that work lands.
+Sessions are saved and come back when the server starts again: name, folder, layout, key, and what
+ran in each pane. A terminated session stays terminated until Restart; a deleted one is gone.
+`save_sessions = false` keeps nothing. `resume_programs` and `resume_harness` are independent
+`[settings]` switches, both defaulting to true, for relaunching ordinary programs (with their exact
+arguments) and resuming harnesses through their driver and native session ID. A disabled category,
+and a harness that cannot be resumed (no ID, or a driver without resume), leaves the pane with your
+normal shell; a harness is never started as a new conversation, and you are told. A missing folder
+gives a shell in your home folder. See
+[docs/server-client-architecture.md](docs/server-client-architecture.md#sessions-across-a-restart).
 Session dialog text is configurable under `[settings.session_text]`.
 
 ---

@@ -62,7 +62,22 @@ search_history_size = 50
 search_usage_size = 500
 # Unnamed sessions receive a distinct display name. A user name replaces it.
 session_name_format = "heca #{number}"
-# These settings independently govern ordinary program relaunch and harness resume.
+# Keep every session — its name, folder, workspaces, panes and what ran in them — in a
+# file that belongs to the server (under its folder in your data directory, e.g.
+# ~/.local/share/heca/servers/default/heca.sessions.json), and rebuild the sessions when the
+# server starts again. A session you terminated stays terminated until you restart it;
+# one you delete is gone for good. Delete the file any time and you lose only the
+# convenience. Set false on a shared or recorded machine: nothing is written, nothing is
+# read, and a file left from before is removed when the server starts. Read at start.
+save_sessions = true
+# How long after a session changes it is written, in milliseconds. A change made inside
+# that time is written with the next one, and everything is written when the server stops.
+session_save_delay_ms = 1000
+# These settings independently govern ordinary program relaunch and harness resume when a
+# session starts again — after Restart, and when a saved session is rebuilt. A program that
+# is not relaunched, or a harness that is not resumed, leaves its pane with your normal
+# shell. A harness is resumed through its own driver and the session identity it reported;
+# when it cannot be, you are told and the pane gets a shell, never a new conversation.
 resume_programs = true
 resume_harness = true
 # ─────────────────────────────────────────────────────────────────────────────

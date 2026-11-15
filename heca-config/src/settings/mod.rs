@@ -60,6 +60,10 @@ declare_settings! {
         pub session_name_format: String,
         /// User-facing session messages and picker labels.
         pub session_text: SessionText,
+        /// Keep each session in a file of the server's own and rebuild it when the server starts.
+        pub save_sessions: bool,
+        /// How long after a session changes it is written to that file, in milliseconds.
+        pub session_save_delay_ms: u64,
         /// Relaunch recorded ordinary programs when restoring a session.
         pub resume_programs: bool,
         /// Resume registered harnesses using their recorded native session identity.

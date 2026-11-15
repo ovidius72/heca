@@ -129,6 +129,20 @@ impl ServerIdentity {
         private_folder(&folder)?;
         Ok(folder)
     }
+
+    /// **A file heca itself keeps for this server**, directly in its folder (made owner-only if it
+    /// is not there). `name` is a single file name; the file is `heca.<name>`. A service's folder is
+    /// `<extension>.<short>` and `heca` is not an extension's name, so nothing a service is called
+    /// can ever be this path. The same path on every start.
+    pub(crate) fn own_file(&self, name: &str) -> io::Result<PathBuf> {
+        let claim = self.claim.as_ref().map_err(|why| io::Error::other(why.clone()))?;
+        let mut parts = Path::new(name).components();
+        if !matches!((parts.next(), parts.next()), (Some(Component::Normal(_)), None)) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("'{name}' is not a file name")));
+        }
+        private_folder(&claim.folder)?;
+        Ok(claim.folder.join(format!("heca.{name}")))
+    }
 }
 
 /// Take the lowest slot of `kind` nobody holds.

@@ -3,7 +3,6 @@
 mod outbox;
 mod replica;
 mod terminal;
-mod transport;
 mod images;
 mod reads;
 mod local;
@@ -131,7 +130,7 @@ impl ClientState {
             server.add_client(link);
             (Box::new(client), Some(server))
         } else {
-            (transport::connect(config.config.settings.connection, wake.clone())?, None)
+            (crate::server::socket::connect(config.config.settings.connection, wake.clone(), crate::server::socket::Start::IfMissing)?, None)
         };
         let target = match launch {
             crate::app::cli::LaunchMode::Session(name) => ClientMsg::AttachTo { name },

@@ -1,4 +1,5 @@
 use super::*;
+use crate::server::sessions::RecordedAgent;
 use crate::app::backend_store::{Program, TerminalSpec};
 use heca_core::{
     agent::{AgentState, AgentStatus},
@@ -117,7 +118,7 @@ fn termination_retains_original_launch_and_native_harness_identity_for_persisten
     assert_eq!(before.len(), 1);
     assert!(before[0].running);
     assert_eq!(before[0].launch.as_ref(), Some(&original));
-    assert_eq!(before[0].agent.as_ref(), Some(&agent));
+    assert_eq!(before[0].agent, Some(RecordedAgent { driver: "custom-driver".into(), session_id: Some("native-conversation-777".into()) }));
 
     runtime.terminate();
     assert_eq!(runtime.info().status, SessionStatus::Terminated);

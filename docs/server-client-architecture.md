@@ -15,6 +15,7 @@ local socket**, so a window can detach and reattach and a session outlives its w
   — [socket](#the-socket-and-the-runtime-folder), [scripts](#scripts--heca-rpc),
   [attach and detach](#the-background-server-attach-and-detach),
   [several windows](#several-windows-on-one-session), [wire model](#the-wire-model)
+- [Sessions across a restart](#sessions-across-a-restart)
 - [Extension services](#extension-services)
 - [Per-window state is keyed by id, resolved at read time](#per-window-state-is-keyed-by-id-resolved-at-read-time)
 - [Terminals](#terminals)
@@ -191,11 +192,14 @@ no display and no GPU. `heca --kill-server` stops it.
 **A window attaches.** Plain `heca` is a pure client (`ClientState::connect`,
 `heca/src/client/mod.rs`):
 
-1. It connects to the socket (`heca/src/client/transport.rs`). If nothing answers it starts
+1. It connects to the socket (`heca/src/server/socket/connect.rs`, the one connect function). If nothing answers it starts
    `heca --server` as a detached daemon, then retries every `connect_retry_ms` until the socket
    answers, the daemon exits, or `request_timeout_ms` passes.
 2. It sends `@heca-attach 1`, then `ClientMsg::Attach` — or `AttachTo { name }` for
    `heca --attach <name>`. `heca --new` first asks the server to create the session, then attaches to it.
+   `--attach`, `--new` and `--sessions` start the background server the same way when none runs (its
+   sessions come back with it), through that one function (`Start::IfMissing`); `--kill`,
+   `--kill-server` and `heca rpc` act on a running server and never start one.
 3. The server replies `ServerMsg::Attached`: the session, the window's id and number, and the whole
    shared content. The window rebuilds its own `Session` from it.
 4. The server then sends the notifications, the feedback state, the window directory and one
@@ -296,6 +300,69 @@ No handles, no window types, no types from the terminal library.
 | `connect_retry_ms` | 20 | Pause between connection attempts while starting the background server |
 | `max_image_bytes` | 67108864 (64 MiB) | One decoded image, all animation frames |
 | `max_terminal_cells` | 262144 | Columns × rows a connection may ask a terminal to have |
+
+---
+
+## Sessions across a restart
+
+The server keeps its sessions in a file and rebuilds them when it starts, so a session outlives the
+server too (P105/T527). Code: `heca/src/server/persist/` (the file and when it is written),
+`heca/src/server/run/restore.rs` (what goes in it and the rebuild), `heca/src/server/session/relaunch.rs`
+(how each terminal starts again).
+
+**Where.** `heca.sessions.json` in the server's own folder, `<data>/heca/servers/<server>/`
+(`ServerIdentity::own_file`), so the background server (`default`) and each standalone window
+(`standalone-<n>`) never write the same file. One file for all sessions, because the next session
+number and which session a window opens first belong to none of them and must agree with all of them;
+each session is still read on its own, so one that cannot be understood is left out and the rest come
+back. The file is versioned and written atomically (`heca_config::state_file`).
+
+**What is saved, per session.** Its number, **key** (`SessionKey`), name, folder, label, whether it is
+running or stopped, its layout (`SessionContent`: workspaces, columns, pane shares and names), the last
+focus a window reported (workspace and pane) and the last view a followed window reported, and for each
+terminal what it was started with: executable, full argument list and folder, its custom title, and for
+a harness the driver's identity and the native session id it reported. Nothing about what a program was
+doing, and no terminal output.
+
+**When it is written.** At once when a session is created, renamed, stopped, started or deleted (a
+deleted session is out of the file immediately). Other changes (layout, names, what runs in a pane, the
+last view) are noticed after any turn of the server and written `session_save_delay_ms` later (default
+1000), at most once per delay; a server nobody touches writes nothing and sets no timer. Everything is
+written when the server stops, before its processes end, and never again after that.
+
+**What restore does.** `ServerLoop::from_config` (the background server and standalone alike) rebuilds
+every saved session with the **same key**, number, name, folder, label, layout and use order. A session
+that was stopped stays stopped until Restart, whatever the settings say. A session that was running is
+started the way Restart starts one: the one relaunch path decides each terminal.
+
+- `resume_programs` (default `true`) is for ordinary programs: relaunched exactly as recorded, with the
+  recorded argument list. `resume_harness` (default `true`) is for harnesses, resumed through the
+  registered driver's `AgentDriver::resume` with the saved native session id. The two are independent.
+  The built-in drivers resume by rebuilding the recorded launch: the program, the user's own options
+  (model, permissions, folders) and the new id stay, an initial prompt and any option that picks
+  another conversation go — `claude --resume <id>`, `codex resume <id>`, `opencode --session <id>`,
+  `pi --session <id>` (`heca/src/agent/drivers/resume.rs`, one grammar per program beside its driver).
+  A non-interactive launch (`claude -p`, `pi -p`, `codex exec`, `opencode run`) is not resumed.
+  A terminal whose switch is off gets the user's normal shell.
+- A harness that cannot be resumed — no native id was reported, its driver has no `resume`, or its
+  driver is not registered — gets the user's shell in its folder and a notification says why. It is
+  never started as a new conversation.
+- A folder that is gone gives a shell in the home folder and the usual notification; a program is not
+  run in the wrong folder.
+- A file that is missing is a first start. One that is corrupt or from a newer heca starts the server
+  with no sessions, is kept beside the original as `heca.sessions.json.unreadable`, and is reported once
+  (a notification, held for the first session, and a line on stderr). A session in it that cannot be
+  rebuilt is left out and reported in the same message.
+
+**What it does not do.** Terminal output and scrollback are not saved, and a program's own state is not
+restored beyond what a driver's `resume` does. A pane that holds something other than a terminal is
+planned with the content types (P094/T452). The saved last view is kept and written but no window
+applies it on attach yet. A server that is killed rather than stopped has the last write, at most one
+delay old.
+
+**Settings** (`[settings]`, `config.default.toml`): `save_sessions` (default `true`; `false` writes and
+reads nothing and removes a file left from before, so it can never bring back what was deleted since;
+read when the server starts), `session_save_delay_ms`, `resume_programs`, `resume_harness`.
 
 ---
 

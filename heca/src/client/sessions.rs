@@ -58,7 +58,7 @@ impl ClientState {
             wake.wake();
             let _ = ready.try_send(());
         });
-        let link = transport::connect(self.connection, wake)?;
+        let link = crate::server::socket::connect(self.connection, wake, crate::server::socket::Start::IfMissing)?;
         self.reconnect_link(link, &receive)
     }
 

@@ -13,9 +13,11 @@
 use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
 
+mod connect;
 mod listener;
 pub(crate) mod local;
 mod runtime;
+pub(crate) use connect::{Start, connect};
 pub(crate) use runtime::RuntimeListener;
 use local::UnixStream;
 

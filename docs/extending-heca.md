@@ -138,6 +138,12 @@ personal settings. A side-channel driver writes newline-delimited reports to the
 driver reads `TerminalNotification` inputs. Reports use open `AgentStatus` identifiers. The configured
 byte and queue limits apply to custom drivers too.
 
+To let a saved session continue the program's own conversation, implement
+`AgentDriver::resume(original, session_id)`: return the launch that continues the native session
+`session_id` the program reported (`original` may already be an earlier resume). The default returns
+`None`, and then heca says the harness was not resumed and gives the pane the user's shell; it never
+starts a new conversation in its place.
+
 For persistent setup, implement `AgentDriver::integration(&IntegrationContext)`. Return an
 `AgentIntegration` with a version and `IntegrationResource` entries: owned files, appended JSON/TOML
 array entries, an owned TOML value, or a native TOML feature switch. This method describes the installation; it does not
@@ -376,15 +382,16 @@ service does not start and says so in a notification; the server keeps running.
 
 **Which session — `session()` or `session_key()`.** `cx.session()` is a number for this run of the
 server: use it to say "the session this call is in" and nothing more, because a server that starts
-again numbers its sessions from the beginning. To store something against a session, use
+again may number its sessions differently (it keeps the numbers of sessions it restores, but not when
+saving is off). To store something against a session, use
 `cx.session_key()`. It is a `SessionKey`, which heca makes once when the session is created. It stays
 the same when the session is renamed, terminated, restarted or has windows come and go, and it does
 not depend on the session's name, folder or a window's connection. It ends only when the session is
 deleted. Compare it, hash it and store it (it implements `Serialize` and `Deserialize`); you cannot
 read anything out of it or make one. `ActionCx` and `ProjectCx` both have it, and it is always the
-key of the session the call or the window is in. Until sessions are restored across restarts
-(planner task T527), a server that starts again gives its sessions new keys, so data stored against a
-key is not found again after a restart.
+key of the session the call or the window is in. A session the server saved when it stopped comes back
+with the same key, so data stored against it is found again after a restart; with `save_sessions = false`
+(or a file that cannot be read) the sessions are new and so are their keys.
 
 **A table of its own.** `cx.extension_config::<T>()` reads `[extensions.<name>]`, where `<name>` is
 the extension the service was declared under, as any type that implements `serde::Deserialize`. A

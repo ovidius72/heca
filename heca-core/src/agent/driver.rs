@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use super::{AgentError, AgentIntegration, AgentState, IntegrationContext, TerminalNotification};
+use crate::backend::ProcessLaunch;
 
 /// Resources supplied by the terminal owner for one program's integration.
 #[derive(Clone, Debug)]
@@ -75,6 +76,17 @@ pub trait AgentDriver: Send + Sync {
     /// # Errors
     /// Return a launch or configuration error without editing personal configuration.
     fn prepare(&self, context: &AgentLaunchContext) -> Result<AgentSetup, AgentError>;
+
+    /// The launch that continues the program's own conversation `session_id` — its native session
+    /// identity, as the program reported it — in place of starting a new one.
+    ///
+    /// `original` is what the program was last started with, which is already the result of an
+    /// earlier resume when the session has been restored before. Keep its executable, arguments and
+    /// folder unless continuing needs them changed.
+    ///
+    /// The default is `None`: this program has no way to continue a conversation, and the host will
+    /// say so rather than start a fresh one. Return `None` too when `session_id` cannot be used.
+    fn resume(&self, _original: &ProcessLaunch, _session_id: &str) -> Option<ProcessLaunch> { None }
 
     /// Read a status report. Return `None` for unrelated input; do not infer a state from it.
     ///
