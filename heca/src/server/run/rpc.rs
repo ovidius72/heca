@@ -1,6 +1,7 @@
 //! Unattached RPC uses the same registry gate, including extension-emitted session actions.
 
 use super::*;
+use crate::server::services::{Call, Reply, gate};
 use crate::{input::WmAction, rpc::RpcError};
 
 impl ServerLoop {
@@ -25,9 +26,17 @@ impl ServerLoop {
                 .as_ref()
                 .map(|config| config.config.confirm.clone())
                 .unwrap_or_default();
-            registry.execute_server_with(&catalog, &confirm, store, &intent, &mut |step| match step {
+            let services = self.services.clone();
+            let call = Call::local(None);
+            let last = self.last_index().map(|index| self.sessions[index].service_ref());
+            // What belongs to no session (making, listing, renaming sessions) is asked as such.
+            let mut gate = gate(&services, &call, |intent| last.filter(|_| !crate::input::resolve_action(
+                &intent.action, &crate::app::interaction::intent_args_as_strings(intent))
+                .is_some_and(|action| super::super::sessions::owns(action.kind()))));
+            registry.execute_server_with(&catalog, &confirm, store, &mut gate, &intent, &mut |step| match step {
                 crate::actions::ServerStep::Action(action) => self.run_rpc_action(action, &mut output),
-                crate::actions::ServerStep::Service(intent) => self.run_rpc_service(intent).map(|()| Vec::new()),
+                crate::actions::ServerStep::Service(intent) => self.run_rpc_service(&call, intent).map(|()| Vec::new()),
+                crate::actions::ServerStep::Expanded => Ok(Vec::new()),
             })
         })();
         match result {
@@ -36,25 +45,38 @@ impl ServerLoop {
         }
     }
 
-    /// A script's call to a service action: the same check every unattached call gets, then the
-    /// service, in the most recent session. A deferred answer keeps `reply` until it is settled.
+    /// A script's call to a service action: the same check and the same question of who may ask
+    /// every unattached call gets, then the service, in the most recent session. A deferred answer
+    /// keeps `reply` until it is settled.
     pub(super) fn rpc_service(&mut self, intent: &crate::chrome::Intent, reply: std::sync::mpsc::Sender<String>) {
         let confirm = self.config.as_ref().map(|config| config.config.confirm.clone()).unwrap_or_default();
-        let checked = crate::actions::check_server_intent(&self.catalog, &confirm, intent)
-            .and_then(|_| self.last_index().ok_or(RpcError::NotInitialized));
-        let index = match checked {
-            Ok(index) => index,
-            Err(error) => { let _ = reply.send(format!("error: {error}")); return; }
-        };
-        let session = &self.sessions[index];
-        self.services.borrow_mut().invoke(session.service_ref(), None, session.config(), intent,
-            super::super::services::Reply::Rpc(reply));
+        let registry = self.registry.clone();
+        let catalog = self.catalog.clone();
+        let call = Call::local(None);
+        let session = self.last_index().map(|index| (self.sessions[index].service_ref(), self.sessions[index].config()));
+        let services = self.services.clone();
+        let mut gate = gate(&services, &call, |_| session.map(|(session, _)| session));
+        let store = crate::chrome::SharedChromeState::new(0.0, 0.0);
+        let result = registry.execute_server_with(&catalog, &confirm, store, &mut gate, intent, &mut |step| match step {
+            crate::actions::ServerStep::Service(intent) => match session {
+                Some((session, config)) => {
+                    services.borrow_mut().invoke(session, &call, config, intent, Reply::Rpc(reply.clone()));
+                    Ok(Vec::new())
+                }
+                None => Err(RpcError::NotInitialized),
+            },
+            crate::actions::ServerStep::Action(_) | crate::actions::ServerStep::Expanded =>
+                Err(RpcError::NotRunnable(intent.action.clone())),
+        });
+        if let Err(error) = result {
+            let _ = reply.send(format!("error: {error}"));
+        }
     }
 
     /// A service action reached by a chain a script started: in the most recent session.
-    fn run_rpc_service(&mut self, intent: &crate::chrome::Intent) -> Result<(), RpcError> {
+    fn run_rpc_service(&mut self, call: &Call, intent: &crate::chrome::Intent) -> Result<(), RpcError> {
         let session = &self.sessions[self.last_index().ok_or(RpcError::NotInitialized)?];
-        self.services.borrow_mut().run_step(session.service_ref(), session.config(), intent)
+        self.services.borrow_mut().run_step(session.service_ref(), call, session.config(), intent)
     }
 
     fn run_rpc_action(&mut self, action: WmAction, output: &mut Option<String>) -> Result<Vec<super::super::Change>, RpcError> {

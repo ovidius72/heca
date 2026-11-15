@@ -42,6 +42,8 @@ pub enum RpcError {
     MissingArgs(String),
     /// The action ran, but its owner rejected the requested operation.
     Failed(String),
+    /// A service's action policy said this requester may not run it, and why. Nothing ran.
+    Denied(String),
 }
 
 impl std::fmt::Display for RpcError {
@@ -70,6 +72,7 @@ impl std::fmt::Display for RpcError {
             ),
             RpcError::NotInitialized => write!(f, "app not initialized"),
             RpcError::Failed(message) => write!(f, "{message}"),
+            RpcError::Denied(reason) => write!(f, "not permitted: {reason}"),
         }
     }
 }
@@ -92,8 +95,8 @@ pub fn introspect(
     let mut parts = input.split_whitespace();
     let cmd = parts.next()?.to_lowercase();
     match cmd.as_str() {
-        "list-actions" => Some(to_json(&catalog.describe_all(), &cmd)),
-        "describe-action" => Some(match parts.next() {
+        LIST_ACTIONS => Some(to_json(&catalog.describe_all(), &cmd)),
+        DESCRIBE_ACTION => Some(match parts.next() {
             Some(name) => match catalog.describe(name) {
                 Some(info) => to_json(&info, &cmd),
                 None => Err(RpcError::UnknownCommand(format!(
@@ -107,6 +110,16 @@ pub fn introspect(
         }),
         _ => None,
     }
+}
+
+const LIST_ACTIONS: &str = "list-actions";
+const DESCRIBE_ACTION: &str = "describe-action";
+
+/// Whether `input` is a query ([`introspect`]) and not an action — read the same way `introspect`
+/// reads it, so the two can never disagree about what is one.
+pub(crate) fn is_query(input: &str) -> bool {
+    input.split_whitespace().next()
+        .is_some_and(|word| matches!(word.to_lowercase().as_str(), LIST_ACTIONS | DESCRIBE_ACTION))
 }
 
 fn to_json<T: serde::Serialize>(value: &T, cmd: &str) -> Result<String, RpcError> {

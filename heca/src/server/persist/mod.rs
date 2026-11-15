@@ -7,7 +7,7 @@
 //! missing, unreadable or newer file is never a failed start — the server starts with no sessions
 //! and says why, once.
 //!
-//! This module owns the file and *when* it is written; [`file`] owns its shape; the server loop owns
+//! This module owns the file and *when* it is written; [`mod@file`] owns its shape; the server loop owns
 //! what goes in it and what is done with what comes out.
 
 use std::collections::HashSet;

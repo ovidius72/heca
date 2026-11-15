@@ -1,6 +1,7 @@
 //! Session-local action execution and forwarding to an attached window.
 
 use super::*;
+use crate::server::services::Call;
 
 impl SessionRuntime {
     pub(crate) fn store(&self) -> crate::chrome::SharedChromeState {
@@ -46,28 +47,7 @@ impl SessionRuntime {
         if let Some(result) = crate::rpc::introspect(&self.catalog, line) {
             return result.unwrap_or_else(|error| format!("error: {error}"));
         }
-        let result = (|| {
-            let (intent, dock) = crate::rpc::parse_rpc(line)?.into_intent(&self.catalog)?;
-            if dock.is_some() {
-                return Err(crate::rpc::RpcError::NotRunnable(intent.action));
-            }
-            let service_ref = self.service_ref();
-            self.registry.execute_server_intent(
-                &mut crate::actions::ServerInvocation {
-                    state: &mut self.state,
-                    session: &mut self.session,
-                    service_ref,
-                    store: self.store.clone(),
-                    catalog: &self.catalog,
-                    confirm: &self.confirm,
-                    asker: self.rpc_asker,
-                    services: &self.services,
-                    config: self.config.as_deref(),
-                },
-                &intent,
-            )
-        })();
-        match result {
+        match self.run_line(&Call::local(None), line).result {
             Ok(changes) => {
                 let _ = self.broadcast(&changes);
                 "ok".into()
@@ -75,4 +55,60 @@ impl SessionRuntime {
             Err(error) => format!("error: {error}"),
         }
     }
+
+    /// **Run a request a service handed in**, as `call`, in this session: the same line, parser,
+    /// catalog, confirmations, question of who may ask and execution as a script's. `Err` says why
+    /// it stopped and whether anything had run before.
+    pub(crate) fn run_request(&mut self, call: &Call, line: &str) -> Result<(), (String, bool)> {
+        let Executed { result, ran } = self.run_line(call, line);
+        match result {
+            Ok(changes) => {
+                let _ = self.broadcast(&changes);
+                Ok(())
+            }
+            // A policy's own words, not the script's "not permitted: " in front of them.
+            Err(crate::rpc::RpcError::Denied(reason)) => Err((reason, ran > 0)),
+            Err(error) => Err((error.to_string(), ran > 0)),
+        }
+    }
+
+    /// **May the window `client` run this?** Asked when its message is about to run, so a rule that
+    /// changed applies to what was already on its way.
+    pub(super) fn window_may(&self, client: u64, action: &str, args: &crate::chrome::PropMap) -> Result<(), String> {
+        self.services.borrow_mut()
+            .authorize(&Call::local(Some(client)), Some(self.service_ref()), action, args, None)
+    }
+
+    /// The one way a line becomes an action in this session: parsed against the catalog, checked,
+    /// put to every action policy as `call`, and run — each follow-up of a chain as the same `call`.
+    fn run_line(&mut self, call: &Call, line: &str) -> Executed {
+        let service_ref = self.service_ref();
+        let mut invocation = crate::actions::ServerInvocation {
+            state: &mut self.state,
+            session: &mut self.session,
+            service_ref,
+            store: self.store.clone(),
+            catalog: &self.catalog,
+            confirm: &self.confirm,
+            asker: self.rpc_asker,
+            services: &self.services,
+            config: self.config.as_deref(),
+            call,
+            ran: 0,
+        };
+        let result = (|| {
+            let (intent, dock) = crate::rpc::parse_rpc(line)?.into_intent(invocation.catalog)?;
+            if dock.is_some() {
+                return Err(crate::rpc::RpcError::NotRunnable(intent.action));
+            }
+            self.registry.execute_server_intent(&mut invocation, &intent)
+        })();
+        Executed { result, ran: invocation.ran }
+    }
+}
+
+/// What running a line did: how it ended, and how many of its actions had run.
+struct Executed {
+    result: Result<Vec<Change>, crate::rpc::RpcError>,
+    ran: usize,
 }

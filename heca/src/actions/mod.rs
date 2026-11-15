@@ -6,6 +6,7 @@
 mod builtins;
 mod catalog;
 mod confirm;
+mod described;
 mod registry;
 mod sides;
 
@@ -23,6 +24,7 @@ pub(crate) fn builtin_name(kind: crate::input::WmActionKind) -> Option<&'static 
     sides::shared().name_of(kind)
 }
 
+pub(crate) use described::describe;
 pub use builtins::builtins;
 pub use catalog::{
     ActionCatalog, ActionCategory, ActionMeta, GENERIC_ACTION_ICON, Side, builtin_args, builtin_side,
@@ -32,7 +34,7 @@ pub use registry::{
     ActionHandle, ActionRegistry, DuplicateAction, register_dynamic, unregister_dynamic,
 };
 pub(crate) use registry::{register_server_dynamic, register_service_dynamic};
-pub(crate) use registry::server::{ServerInvocation, ServerStep, check_server_intent};
+pub(crate) use registry::server::{ServerGate, ServerInvocation, ServerStep};
 
 // Read outside this module only by tests (RPC introspection).
 #[cfg(test)]

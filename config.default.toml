@@ -276,6 +276,9 @@ max_terminal_cells = 262144
 inbox_capacity = 256
 # Longest the server waits at shutdown for services to finish stopping.
 stop_timeout_ms = 3000
+# Requests one service may have open at once, counting those waiting to run and those waiting on a
+# deferred answer. A service that submits a request past this is told the queue is full.
+request_queue_capacity = 64
 
 [settings.notification_system]
 # ─────────────────────────────────────────────────────────────────────────────

@@ -46,6 +46,7 @@ pub(crate) use extension::qualified_name;
 pub(crate) use layer::{AddedLayers, rebuild as rebuild_added_layer, register_queued_layers};
 pub use layer::{LayerBuilder, LayerCx};
 pub use service::{
-    ActionCx, ActionResult, ExtensionConfigError, ProjectCx, Projection, Service, ServiceCx, ServiceInbox,
-    ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, Update,
+    ActionCx, ActionRequest, ActionResult, ExtensionConfigError, ExternalRequest, Permit, ProjectCx, Projection,
+    RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox, ServiceRegistration,
+    ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, SubmitError, Update,
 };
