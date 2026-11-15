@@ -101,11 +101,6 @@ fn start_under(root: &Path, kind: ServerKind, config: &heca_config::loader::AppC
     server_as(config, ServerIdentity::claim_in(kind, Some(root.to_owned())), ServerWaker::new(|| {}))
 }
 
-#[cfg(unix)]
-fn mode(path: &Path) -> u32 {
-    std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(path).unwrap().permissions()) & 0o777
-}
-
 /// **A service's folder exists before its factory runs, only its owner can use it, and no other
 /// service shares it.** The service sees the same folder from an action as from its factory.
 #[test]
@@ -117,9 +112,8 @@ fn each_service_gets_a_folder_that_exists_is_private_and_is_its_own() {
     assert_ne!(one, two);
     assert_eq!(one.parent(), two.parent(), "both are in this server's folder");
     assert!(one.ends_with("default/demo.one"), "{one:?}");
-    #[cfg(unix)]
     for folder in [&one, &two, one.parent().unwrap()] {
-        assert_eq!(mode(folder), 0o700, "{folder:?} is the owner's alone");
+        crate::server::private_fs::assert_owner_only(folder);
     }
     assert_eq!(rpc(&mut server, "demo.one_dir").try_recv().unwrap(), one.display().to_string());
     assert_eq!(rpc(&mut server, "demo.two_dir").try_recv().unwrap(), two.display().to_string());

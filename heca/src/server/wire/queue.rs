@@ -45,7 +45,6 @@ impl<T> Receiver<T> {
         Ok(None)
     }
 
-    #[cfg(any(unix, test))]
     pub(super) fn recv(&self) -> io::Result<Option<T>> {
         let mut state = self.0.state.lock().map_err(poisoned)?;
         loop {

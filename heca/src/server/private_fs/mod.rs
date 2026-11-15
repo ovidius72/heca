@@ -1,13 +1,17 @@
 //! **Owner-only folders and lock files** — the two things a server keeps private on disk.
 //!
 //! The socket's runtime folder and a server's identity folders are both made here, so the rule
-//! (owner only, never a symlink planted in their place) is written once.
+//! (owner only, never a symlink planted in their place) is written once. Owner-only is mode `0700` on
+//! Unix and, on Windows, an access list with the current user's entry alone.
+
+#[cfg(windows)]
+mod acl;
 
 use std::fs::{DirBuilder, File, OpenOptions};
 use std::io;
 use std::path::Path;
 
-/// `folder` and any missing parents, readable by the owner alone (unix) — also when it was already
+/// `folder` and any missing parents, readable by the owner alone — also when it was already
 /// there and had been loosened. Refuses a `folder` that is a symlink or not a folder.
 pub(crate) fn private_folder(folder: &Path) -> io::Result<()> {
     let mut builder = DirBuilder::new();
@@ -21,6 +25,8 @@ pub(crate) fn private_folder(folder: &Path) -> io::Result<()> {
     }
     #[cfg(unix)]
     std::fs::set_permissions(folder, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+    #[cfg(windows)]
+    acl::restrict_to_current_user(folder)?;
     Ok(())
 }
 
@@ -38,6 +44,16 @@ pub(crate) fn try_lock(path: &Path) -> io::Result<Option<File>> {
         Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => Ok(None),
         Err(error) => Err(error),
     }
+}
+
+/// Fail unless `path` is the owner's alone: mode `0700` on Unix; on Windows a protected access list
+/// with the current user's entry and no other.
+#[cfg(test)]
+pub(crate) fn assert_owner_only(path: &Path) {
+    #[cfg(unix)]
+    assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(path).unwrap().permissions()) & 0o777, 0o700, "{path:?}");
+    #[cfg(windows)]
+    assert_eq!(acl::entries(path).unwrap(), (true, vec![acl::current_user().unwrap()]), "{path:?}");
 }
 
 #[cfg(test)]
@@ -63,6 +79,14 @@ mod tests {
         assert!(private_folder(&file).is_err());
     }
 
+    #[test]
+    fn a_new_folder_is_the_owners_alone() {
+        let scratch = tempfile::tempdir().unwrap();
+        let folder = scratch.path().join("a").join("b");
+        private_folder(&folder).unwrap();
+        assert_owner_only(&folder);
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_loosened_folder_is_tightened_back() {
@@ -72,7 +96,33 @@ mod tests {
         private_folder(&folder).unwrap();
         std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o755)).unwrap();
         private_folder(&folder).unwrap();
-        assert_eq!(std::fs::metadata(&folder).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_owner_only(&folder);
+    }
+
+    /// A folder that was open to everyone gets the owner-only list when `private_folder` meets it.
+    #[cfg(windows)]
+    #[test]
+    fn a_folder_open_to_others_is_tightened_back() {
+        let scratch = tempfile::tempdir().unwrap();
+        // The scratch folder inherits its list from the temp folder, which is not protected.
+        assert_ne!(acl::entries(scratch.path()).unwrap(), (true, vec![acl::current_user().unwrap()]));
+        private_folder(scratch.path()).unwrap();
+        assert_owner_only(scratch.path());
+    }
+
+    /// The socket, its lock and a server's folders are made inside a private folder and take its list.
+    #[cfg(windows)]
+    #[test]
+    fn what_is_made_inside_a_private_folder_is_the_owners_alone() {
+        let scratch = tempfile::tempdir().unwrap();
+        let folder = scratch.path().join("heca");
+        private_folder(&folder).unwrap();
+        let lock = try_lock(&folder.join("default.lock")).unwrap();
+        assert!(lock.is_some());
+        let inner = folder.join("inner");
+        std::fs::create_dir(&inner).unwrap();
+        assert_eq!(acl::entries(&inner).unwrap().1, vec![acl::current_user().unwrap()]);
+        assert_eq!(acl::entries(&folder.join("default.lock")).unwrap().1, vec![acl::current_user().unwrap()]);
     }
 
     #[test]

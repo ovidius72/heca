@@ -2,14 +2,14 @@
 
 use std::fs::File;
 use std::io;
-use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
-use std::os::unix::net::{Incoming, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
+
+use super::local::{self, FileIdentity, UnixListener, UnixStream};
 
 pub(super) struct ControlListener {
     socket: UnixListener,
     path: PathBuf,
-    identity: (u64, u64),
+    identity: FileIdentity,
     // Held, never read: the lock goes when this file is closed.
     _lock: File,
 }
@@ -21,8 +21,7 @@ impl ControlListener {
         let socket = match UnixListener::bind(path) {
             Ok(socket) => socket,
             Err(error) if error.kind() == io::ErrorKind::AddrInUse => {
-                let metadata = std::fs::symlink_metadata(path)?;
-                if !metadata.file_type().is_socket() { return Err(error); }
+                if !local::is_socket(path)? { return Err(error); }
                 match UnixStream::connect(path) {
                     Err(probe) if probe.kind() == io::ErrorKind::ConnectionRefused => {
                         std::fs::remove_file(path)?;
@@ -34,20 +33,17 @@ impl ControlListener {
             }
             Err(error) => return Err(error),
         };
-        let metadata = std::fs::symlink_metadata(path)?;
-        let listener = Self { socket, path: path.to_owned(), identity: (metadata.dev(), metadata.ino()), _lock: lock };
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        let listener = Self { socket, path: path.to_owned(), identity: local::identity(path)?, _lock: lock };
+        local::restrict_to_owner(path)?;
         Ok(listener)
     }
 
-    pub(super) fn incoming(&self) -> Incoming<'_> { self.socket.incoming() }
+    pub(super) fn incoming(&self) -> impl Iterator<Item = io::Result<UnixStream>> + '_ { self.socket.incoming() }
 }
 
 impl Drop for ControlListener {
     fn drop(&mut self) {
-        if let Ok(metadata) = std::fs::symlink_metadata(&self.path)
-            && (metadata.dev(), metadata.ino()) == self.identity
-        {
+        if local::identity(&self.path).is_ok_and(|identity| identity == self.identity) {
             let _ = std::fs::remove_file(&self.path);
         }
     }

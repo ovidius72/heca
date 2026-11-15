@@ -39,7 +39,6 @@ pub(super) const COMMANDS: &[Command] = &[
         args: &[], options: &[], json: false, launch: Some(LaunchKind::Standalone),
         run: |_| Ok(String::new()), confirm: None,
     },
-    #[cfg(unix)]
     Command {
         name: "--server", short: None,
         about: "Run the session server without a window.",
@@ -48,7 +47,6 @@ pub(super) const COMMANDS: &[Command] = &[
         run: |inv| crate::server::runtime::serve(inv.get("socket").map(std::path::Path::new))
             .map(|()| String::new()).map_err(|error| format!("server: {error}\n")), confirm: None,
     },
-    #[cfg(unix)]
     Command {
         name: "--kill-server", short: None,
         about: "Stop the running session server, and with it every pane and terminal.",

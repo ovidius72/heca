@@ -73,7 +73,6 @@ pub(super) fn check_attach(invocation: &Invocation) -> Answer {
     }
 }
 
-#[cfg(unix)]
 fn request(command: SessionCommand) -> Result<SessionReply, String> {
     use crate::server::{
         ServerWaker,
@@ -105,9 +104,4 @@ fn request(command: SessionCommand) -> Result<SessionReply, String> {
         } => result,
         _ => Err("unexpected session reply".into()),
     }
-}
-
-#[cfg(not(unix))]
-fn request(_: SessionCommand) -> Result<SessionReply, String> {
-    Err("session sockets are not available on this platform".into())
 }

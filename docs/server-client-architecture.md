@@ -107,8 +107,11 @@ connect, what a script can do, how a window attaches and detaches, and what trav
 ### The socket and the runtime folder
 
 **Who may connect.** Only the user who owns the socket. The server never touches the network;
-clients from another computer (which need login and encryption) are later work. Unix only; Windows
-(named pipes) is a later step.
+clients from another computer (which need login and encryption) are later work. It is a Unix domain
+socket on every system: Unix has it in `std`, and Windows 10 (build 1809) and later have it in the
+system, reached through the `uds_windows` crate, which gives the same API. The four things that differ
+about the socket *file* live in one folder, `heca/src/server/socket/local/` (is it a socket, is it
+still the file this server made, owner-only access, detaching the background server).
 
 **Where it lives.** In a folder called `heca` inside the user's runtime folder: `$XDG_RUNTIME_DIR/heca/`
 where the platform has one (Linux), otherwise the per-user temp folder (macOS has no runtime folder;
@@ -117,9 +120,11 @@ file beside it. One socket for now; sessions give it a name later (P100). If the
 folder heca can write to, the socket is simply not served and heca still runs standalone.
 Code: `heca/src/server/socket/mod.rs` (`runtime_dir`, `socket_path`).
 
-**How it is kept private.** The folder is created owner-only (`0700`) and its permissions are set
-again each time; if something other than a real folder is in its place, heca refuses it. The socket
-itself is set to `0600` once bound. Code: `heca/src/server/socket/mod.rs`, `listener.rs`.
+**How it is kept private.** The folder is created owner-only and that is set again each time; if
+something other than a real folder is in its place, heca refuses it. On Unix that is mode `0700` and
+the socket is set to `0600` once bound. On Windows the folder gets an access list with the current user
+alone (full control, nothing inherited from above), and the socket and lock inside take it. Code:
+`heca/src/server/private_fs/`, `heca/src/server/socket/mod.rs`, `listener.rs`, `local/`.
 
 **One server per socket, and stale sockets.** The server takes an exclusive lock on `default.lock`
 before it binds; a second server cannot start on the same socket. If the socket file is already

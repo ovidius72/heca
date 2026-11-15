@@ -327,12 +327,11 @@ fn test_asker() -> super::super::Asker {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn a_socket_attaches_through_the_same_server_loop() {
     use super::super::wire::socket::{SocketClient, SocketServer, TransportLimits};
     use std::num::NonZeroUsize;
-    use std::os::unix::net::UnixStream;
+    use super::super::socket::local::UnixStream;
     use std::time::Duration;
     let mut server = a_loop();
     let (a, b) = UnixStream::pair().unwrap();

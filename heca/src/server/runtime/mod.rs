@@ -1,8 +1,6 @@
 //! The window-free owner loop. Connection and PTY workers only wake it or send links.
 
-#[cfg(unix)]
 mod headless;
-#[cfg(unix)]
 pub(crate) use headless::serve;
 
 use std::io;
@@ -16,15 +14,11 @@ use super::{ServerWaker, run::ServerLoop, wire::ServerLink};
 
 enum Event {
     Wake,
-    #[cfg(any(unix, test))]
     Connect(Box<dyn ServerLink + Send>),
     Stop,
-    #[cfg(any(unix, test))]
     Rpc { line: String, reply: mpsc::Sender<String> },
-    #[cfg(unix)]
     /// `heca rpc --events`: register a subscriber the server streams each event line to.
     Subscribe { events: SyncSender<String> },
-    #[cfg(unix)]
     Notification(crate::notification::NotificationDraft),
 }
 
@@ -38,7 +32,6 @@ pub(crate) struct RuntimeHandle {
 
 pub(crate) struct RuntimeInbox(Receiver<Event>, Arc<AtomicBool>);
 
-#[cfg(any(unix, test))]
 pub(crate) fn channel(config: ConnectionConfig) -> (RuntimeHandle, RuntimeInbox) {
     make_channel(config, None)
 }
@@ -64,7 +57,6 @@ impl RuntimeHandle {
         })
     }
 
-    #[cfg(any(unix, test))]
     pub(super) fn connect(&self, link: impl ServerLink + Send + 'static) -> io::Result<()> {
         self.send(Event::Connect(Box::new(link)))
     }
@@ -79,22 +71,18 @@ impl RuntimeHandle {
         result
     }
 
-    #[cfg(any(unix, test))]
     pub(super) fn rpc(&self, line: String, reply: mpsc::Sender<String>) -> io::Result<()> {
         self.send(Event::Rpc { line, reply })
     }
 
-    #[cfg(unix)]
     pub(super) fn subscribe(&self, events: SyncSender<String>) -> io::Result<()> {
         self.send(Event::Subscribe { events })
     }
 
-    #[cfg(unix)]
     pub(super) fn raise(&self, draft: crate::notification::NotificationDraft) -> io::Result<()> {
         self.send(Event::Notification(draft))
     }
 
-    #[cfg(any(unix, test))]
     fn send(&self, event: Event) -> io::Result<()> {
         if self.stopped.load(Ordering::Acquire) { return Err(io::Error::new(io::ErrorKind::BrokenPipe, "server stopped")); }
         self.sender.try_send(event).map_err(|error| match error {
@@ -112,7 +100,6 @@ impl RuntimeHandle {
 
 impl RuntimeInbox {
     /// Sleep until an event or the nearest server deadline, never on a fixed frame interval.
-    #[cfg(any(unix, test))]
     pub(super) fn run(self, mut server: ServerLoop) {
         loop {
             if self.1.load(Ordering::Acquire) { break; }
@@ -148,23 +135,16 @@ impl RuntimeInbox {
 
     pub(crate) fn reject_pending(&self) {
         while let Ok(event) = self.0.try_recv() {
-            #[cfg(any(unix, test))]
             if let Event::Rpc { reply, .. } = event { let _ = reply.send("error: server stopped".into()); }
-            #[cfg(not(any(unix, test)))]
-            drop(event);
         }
     }
 
     fn dispatch(event: Event, server: &mut ServerLoop) -> bool {
         match event {
-            #[cfg(any(unix, test))]
             Event::Connect(link) => server.add_link(link),
             Event::Stop => return false,
-            #[cfg(any(unix, test))]
             Event::Rpc { line, reply } => server.begin_rpc(line, reply),
-            #[cfg(unix)]
             Event::Subscribe { events } => server.subscribe_events(events),
-            #[cfg(unix)]
             Event::Notification(draft) => server.raise(draft),
             Event::Wake => {},
         }

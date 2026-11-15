@@ -12,7 +12,6 @@
 use std::sync::mpsc::channel;
 use std::io;
 
-#[cfg(any(unix, test))]
 mod frame;
 mod queue;
 mod wait;
@@ -20,7 +19,6 @@ pub(crate) use wait::await_message;
 pub(crate) mod terminal;
 pub(crate) mod image;
 pub(crate) mod service;
-#[cfg(unix)]
 pub(crate) mod socket;
 
 use heca_core::layout::SessionContent;

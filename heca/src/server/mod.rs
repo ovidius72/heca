@@ -27,9 +27,7 @@ pub(crate) mod feedback;
 pub(crate) mod identity;
 pub(crate) mod private_fs;
 pub(crate) mod process;
-/// The local socket clients and scripts reach the server through. Unix for now (Windows named
-/// pipes later).
-#[cfg(unix)]
+/// The local socket clients and scripts reach the server through.
 pub(crate) mod socket;
 pub(crate) mod run;
 pub(crate) mod runtime;

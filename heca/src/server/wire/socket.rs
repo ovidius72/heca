@@ -2,7 +2,6 @@
 
 use std::io;
 use std::net::Shutdown;
-use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 
@@ -10,6 +9,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use super::{ClientLink, ClientMsg, ServerLink, ServerMsg, frame, queue};
 use crate::server::ServerWaker;
+use crate::server::socket::local::UnixStream;
 
 pub(crate) use heca_config::settings::ConnectionConfig as TransportLimits;
 

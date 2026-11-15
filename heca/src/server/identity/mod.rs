@@ -30,7 +30,6 @@ mod tests;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ServerKind {
     /// The background server: `heca --server`.
-    #[cfg(any(unix, test))]
     Background,
     /// The server inside one standalone window.
     Standalone,
@@ -40,7 +39,6 @@ impl ServerKind {
     /// The name of the one slot of a background server, and the category of a standalone one.
     fn category(self) -> &'static str {
         match self {
-            #[cfg(any(unix, test))]
             Self::Background => "default",
             Self::Standalone => "standalone",
         }
@@ -49,9 +47,7 @@ impl ServerKind {
     /// The name of the `n`th slot, counting from 1. A background server has only the first.
     fn slot(self, n: u32) -> Option<String> {
         match (self, n) {
-            #[cfg(any(unix, test))]
             (Self::Background, 1) => Some(self.category().to_owned()),
-            #[cfg(any(unix, test))]
             (Self::Background, _) => None,
             (Self::Standalone, n) => Some(format!("{}-{n}", self.category())),
         }
