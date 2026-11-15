@@ -274,7 +274,8 @@ impl PtyHandle {
     /// The PTY child's own process id — the shell or program heca started. Unlike
     /// [`process_group_leader`](Self::process_group_leader), it does not move when that shell
     /// hands the terminal to a job it starts.
-    #[cfg(test)]
+    // Only the unix reporting test reads it.
+    #[cfg(all(test, unix))]
     pub(super) fn child_pid(&self) -> Option<u32> {
         self.child.process_id()
     }
