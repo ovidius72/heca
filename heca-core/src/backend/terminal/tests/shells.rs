@@ -163,6 +163,7 @@ fn terminal_backend_zsh_integration_detects_nvim_as_running_program() {
     );
 }
 
+#[cfg(unix)] // spawns `/bin/sh`
 #[test]
 fn terminal_backend_command_spawn_runs_and_stays_open_for_policy() {
     // Spawns a real shell on a PTY, so it contends for the same scarce resource as the other

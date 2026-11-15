@@ -61,9 +61,9 @@ fn a_service_folder_is_private_made_on_asking_and_stable() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&one, std::fs::Permissions::from_mode(0o755)).unwrap();
         identity.service_folder("demo.one").unwrap();
-        for folder in [&one, one.parent().unwrap(), root.path()] {
-            assert_eq!(std::fs::metadata(folder).unwrap().permissions().mode() & 0o777, 0o700, "{folder:?}");
-        }
+    }
+    for folder in [&one, one.parent().unwrap(), root.path()] {
+        crate::server::private_fs::assert_owner_only(folder);
     }
 }
 

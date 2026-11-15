@@ -1,10 +1,10 @@
 //! One listener accepts the versioned attach protocol and the existing line RPC protocol.
 
-use std::{io::{self, Read, Write}, os::unix::net::UnixStream, path::{Path, PathBuf},
+use std::{io::{self, Read, Write}, path::{Path, PathBuf},
     sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, thread::{self, JoinHandle}, time::Duration};
 use heca_config::settings::ConnectionConfig;
 use crate::server::{runtime::RuntimeHandle, wire::socket::{SocketClient, SocketServer}, ServerWaker};
-use super::listener::ControlListener;
+use super::{listener::ControlListener, local::UnixStream};
 
 // Protocol identity, not a user preference. It consumes exactly one line before framed messages.
 const ATTACH_PREFACE: &[u8] = b"@heca-attach 1\n";

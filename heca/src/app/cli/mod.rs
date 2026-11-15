@@ -114,7 +114,6 @@ fn is_flag(arg: &str) -> bool {
 ///
 /// Returns `true` when it handled the invocation and the caller should not open a window.
 pub(crate) fn run_if_requested(args: &[String]) -> bool {
-    #[cfg(unix)]
     if let Some(output) = crate::server::socket::run_rpc_cli(args) {
         print!("{output}");
         return true;

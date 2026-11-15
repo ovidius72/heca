@@ -1,26 +1,28 @@
 //! **The local socket — the one door for clients and scripts.**
 //!
 //! The server listens on a local-only Unix socket in an owner-only runtime folder; it never
-//! touches the network. A script connects with [`heca rpc <line>`](crate::server::socket::run_rpc_cli) and a client
-//! (a window) attaches over the same socket. An RPC request is one line — an action by its catalog
-//! name, exactly what [`crate::rpc`] already reads — and the answer comes back as text, ended by a newline.
+//! touches the network. Windows serves the same kind of socket, and [`local`] is the only place the
+//! two differ. A script connects with [`heca rpc <line>`](crate::server::socket::run_rpc_cli) and a
+//! client (a window) attaches over the same socket. An RPC request is one line — an action by its
+//! catalog name, exactly what [`crate::rpc`] already reads — and the answer comes back as text, ended
+//! by a newline.
 //!
 //! The listener sends requests through the server's bounded inbox. Attached clients receive framed
 //! state messages, while scripts receive a line reply. No window event proxy owns the socket.
-//!
-//! Windows (named pipes) is a later step; this is `cfg(unix)`.
 
 use std::io::{BufRead, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
 mod listener;
+pub(crate) mod local;
 mod runtime;
 pub(crate) use runtime::RuntimeListener;
+use local::UnixStream;
 
 /// The owner-only runtime folder the socket lives in: `$XDG_RUNTIME_DIR/heca/` where the platform
-/// has one (Linux), else a per-user temp folder (macOS has no runtime dir; its temp dir is already
-/// per-user). Created `0700` so the socket inside it is reachable only by its owner. `None` when
+/// has one (Linux), else a per-user temp folder (macOS and Windows have no runtime dir; their temp dir
+/// is already per-user). Created owner-only (`0700`; on Windows an access list for the user alone) so
+/// the socket inside it is reachable only by its owner. `None` when
 /// the platform gives no writable answer — the socket is then simply not served and heca still runs
 /// standalone.
 fn runtime_dir() -> Option<PathBuf> {
@@ -40,7 +42,11 @@ pub(crate) fn socket_path() -> Option<PathBuf> {
 fn request(line: &str) -> std::io::Result<String> {
     let path =
         socket_path().ok_or_else(|| std::io::Error::other("no runtime folder for the socket"))?;
-    let mut stream = UnixStream::connect(&path)?;
+    request_to(&path, line)
+}
+
+fn request_to(path: &std::path::Path, line: &str) -> std::io::Result<String> {
+    let mut stream = UnixStream::connect(path)?;
     let limits = heca_config::loader::AppConfig::load().config.settings.connection;
     let timeout = Some(std::time::Duration::from_millis(limits.request_timeout_ms.get()));
     stream.set_read_timeout(timeout)?;
@@ -127,6 +133,10 @@ fn run_rpc_cli_with(args: &[String], request: impl FnOnce(&str) -> std::io::Resu
         Err(e) => format!("could not reach a running heca: {e}\n(is heca running?)\n"),
     })
 }
+
+#[cfg(test)]
+#[path = "runtime_tests.rs"]
+mod runtime_tests;
 
 #[cfg(test)]
 mod tests {

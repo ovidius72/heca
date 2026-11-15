@@ -21,7 +21,10 @@ pub use icon::AgentIcon;
 pub use registry::AgentDrivers;
 pub use integration::{AgentIntegration, IntegrationContext, IntegrationResource};
 pub use session::AgentOptions;
-pub(crate) use session::{AgentSession, quote};
+pub(crate) use session::AgentSession;
+// Only the unix PTY launcher quotes a path for a shell command line (see `agent_command`).
+#[cfg(not(windows))]
+pub(crate) use session::quote;
 
 #[cfg(test)]
 pub(crate) mod tests;

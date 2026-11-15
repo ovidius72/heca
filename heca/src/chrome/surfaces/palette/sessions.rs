@@ -58,7 +58,7 @@ fn folders(query: &str, base: &Path, home: &Path) -> Vec<(PathBuf, bool)> {
     let Ok(target) = crate::server::sessions::resolve_folder(Some(query), base) else {
         return Vec::new();
     };
-    let parent = if query.ends_with('/') {
+    let parent = if query.ends_with(std::path::is_separator) {
         target.as_path()
     } else {
         target.parent().unwrap_or(base)
@@ -110,7 +110,9 @@ fn folder_commands(query: &str, base: &Path, home: &Path,
         } else {
             path.clone()
         };
-        let shown = if shown.is_empty() { path.clone() } else { shown };
+        // What the user types and completes is written with `/`, so what is shown is too: the palette
+        // matches the typed text against it.
+        let shown = if shown.is_empty() { path.clone() } else { shown }.replace(std::path::MAIN_SEPARATOR, "/");
         let completion = format!("{}/", shown.trim_end_matches('/'));
         let label = if create { words.create_folder.replace("{path}", &shown) } else { shown };
         let emit = emit.clone();

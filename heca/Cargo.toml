@@ -43,6 +43,18 @@ objc2-app-kit = { version = "0.2.2", default-features = false, features = ["std"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-vibrancy = "0.5"
+# Unix domain sockets on Windows (10 build 1809 and later), with std's API: the one local socket on
+# every system. See heca/src/server/socket/local/.
+uds_windows = "1.2"
+# The few Windows calls for the socket file (what `std` has no API for) and the owner-only folder.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Threading",
+] }
 
 [lints]
 workspace = true

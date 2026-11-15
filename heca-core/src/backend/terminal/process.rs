@@ -9,6 +9,7 @@
 //! backend compiles everywhere. macOS is the primary target (libproc via
 //! libSystem); Linux uses `/proc`.
 
+#[cfg(unix)]
 use std::path::PathBuf;
 
 /// A foreground re-sample result.
@@ -66,6 +67,7 @@ pub(super) fn detect_foreground(
 ///   (the backend maps `None` to the shell basename); `cwd` is the shell's cwd.
 /// - otherwise ⇒ a program is running ⇒ `program = name_of(fg_pgrp)`,
 ///   `cwd = cwd_of(fg_pgrp)`.
+#[cfg(unix)]
 fn resolve_foreground(
     fg_pgrp: i32,
     shell_pgrp: i32,
@@ -144,6 +146,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(unix)]
     fn resolve_foreground_shell_is_idle_with_shell_cwd() {
         let (program, cwd) = resolve_foreground(
             100,
@@ -156,6 +159,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn resolve_foreground_program_when_not_shell() {
         let (program, cwd) = resolve_foreground(
             200,
@@ -168,6 +172,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn resolve_foreground_unknown_name_and_cwd_degrade_to_none() {
         let (program, cwd) = resolve_foreground(200, 100, |_| None, |_| None);
         assert_eq!(program, None);

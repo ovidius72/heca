@@ -1,8 +1,6 @@
 //! The window-free owner loop. Connection and PTY workers only wake it or send links.
 
-#[cfg(unix)]
 mod headless;
-#[cfg(unix)]
 pub(crate) use headless::serve;
 
 use std::io;

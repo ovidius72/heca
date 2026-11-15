@@ -118,16 +118,14 @@ pub(crate) fn git_deleted(info: &heca_core::runtime::GitInfo) -> Option<String> 
     (info.deleted > 0).then(|| format!("-{}", info.deleted))
 }
 
-/// A path shown home-relative (`/Users/x/proj` → `~/proj`).
+/// A path shown home-relative (`/Users/x/proj` → `~/proj`). The shown path always uses `/`,
+/// whatever the platform's separator is.
 pub(crate) fn home_relative_path(path: &std::path::Path) -> String {
-    if let Some(home) = std::env::var_os("HOME") {
-        let home = std::path::Path::new(&home);
-        if let Ok(rest) = path.strip_prefix(home) {
-            if rest.as_os_str().is_empty() {
-                return "~".to_string();
-            }
-            return format!("~/{}", rest.display());
-        }
+    if let Some(home) = dirs::home_dir()
+        && let Ok(rest) = path.strip_prefix(&home)
+    {
+        let parts: Vec<_> = rest.components().map(|c| c.as_os_str().to_string_lossy()).collect();
+        return if parts.is_empty() { "~".to_string() } else { format!("~/{}", parts.join("/")) };
     }
     path.display().to_string()
 }

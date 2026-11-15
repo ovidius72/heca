@@ -81,7 +81,7 @@ fn nothing_outside_the_registry_calls_a_handler() {
                 .strip_prefix(&src)
                 .unwrap()
                 .to_string_lossy()
-                .to_string();
+                .replace('\\', "/");
             if path.is_dir() {
                 if rel != "handlers" && rel != "app/registry" {
                     stack.push(path);

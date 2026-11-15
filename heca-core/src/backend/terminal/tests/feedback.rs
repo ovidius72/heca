@@ -19,6 +19,7 @@ fn command_completions_are_one_shot_events_not_runtime_snapshots() {
     assert!(backend.take_alerts().is_empty());
 }
 
+#[cfg(unix)] // spawns `/bin/sh`
 #[test]
 fn bash_prompt_hooks_do_not_report_their_own_commands_or_completions() {
     let _serial = shell_test_guard();

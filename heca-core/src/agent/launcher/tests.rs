@@ -27,6 +27,8 @@ fn a_launch_uses_the_commands_current_environment_then_reports_without_terminal_
     assert!(!request_path(run.path()).unwrap().exists(), "the shell environment must not remain on disk");
     let mut file = OpenOptions::new().append(true).open(run.path().join("reports.jsonl")).unwrap();
     file.write_all(b"demo:working\n").unwrap();
+    // A reporter appends and closes; Windows tells a watcher about the append when the file closes.
+    drop(file);
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut reports = Vec::new();
     while reports.is_empty() {
