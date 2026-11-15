@@ -215,7 +215,13 @@ To stop the background server and everything in it — every pane and terminal, 
 
 ```bash
 heca --kill-server
+heca rpc kill_server      # the same thing, from a script
 ```
+
+Both run the `kill_server` action, the one way to stop the server. It is also in the command
+palette ("Kill Server") and can be bound to a key in `[keys]`; no key is bound by default. An
+action policy can forbid it for the user; a request another service hands in can never run it.
+(`heca rpc kill-server`, the old spelling, is gone.)
 
 Press `prefix+#` to open the session palette directly (default prefix: `Ctrl+b`). This uses the
 registered `command_palette` action with `mode = "session"`, like `prefix+o` uses `mode = "pane"`.
@@ -257,7 +263,7 @@ server; the follower resumes its own view the moment you touch its keyboard or m
 followed window leaves. A target is stored by id, so renaming the leader never breaks the follow.
 
 Session actions use the same catalog as keys, plugins and RPC:
-`list_sessions`, `create_session`, `rename_session_to`, `terminate_session`, `restart_session`, `delete_session`,
+`list_sessions`, `kill_server`, `create_session`, `rename_session_to`, `terminate_session`, `restart_session`, `delete_session`,
 `switch_session`, and `detach_session`. `new_session` and `rename_session` open the GUI prompts.
 Use `heca --describe-action <action>` for arguments. For example:
 

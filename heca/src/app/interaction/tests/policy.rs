@@ -84,6 +84,7 @@ fn action_policy_classifies_these_as_documented() {
         ActionPolicy::AlwaysAllowed
     );
     assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
+    assert_eq!(action_policy(&WmAction::KillServer), ActionPolicy::Global);
     // **Taking** chrome focus is tiled-only; **releasing** it is always allowed. A focused
     // container's own `activate`/`hint` move pane focus and are reached through the first, so it
     // must not open while a float owns the domain — but a way out that can be blocked is not a

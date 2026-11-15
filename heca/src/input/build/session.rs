@@ -6,6 +6,7 @@ pub(super) fn build_session(
 ) -> Option<WmAction> {
     Some(match name {
         "list_sessions" => WmAction::ListSessions,
+        "kill_server" => WmAction::KillServer,
         "create_session" => WmAction::CreateSession {
             folder: get_string(args, "folder")?,
             name: get_string(args, "name"),

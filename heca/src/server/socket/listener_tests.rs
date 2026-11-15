@@ -73,9 +73,8 @@ fn connecting_to_nobody_is_not_found_or_refused() {
     let path = SocketPath::new();
     let kind = UnixStream::connect(&path.0).unwrap_err().kind();
     assert!(matches!(kind, io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused), "{kind:?}");
-    drop(UnixListener::bind(&path.0).unwrap());
-    let kind = UnixStream::connect(&path.0).unwrap_err().kind();
-    assert!(matches!(kind, io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused), "{kind:?}");
+    // The stale-socket half lives in heca/tests/stale_socket.rs, its own process: here another test
+    // spawning a child can inherit the listening socket for a moment, and the connect then succeeds.
 }
 
 #[test]
