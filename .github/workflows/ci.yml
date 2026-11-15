@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, feat/t555-ci, feat/t547-named-pipe]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
