@@ -380,6 +380,15 @@ window opened again after one closed gets its folder back. `ServiceCx` and so ev
 `data_dir()` too, so a service need not keep the path. Where the platform has no data folder, the
 service does not start and says so in a notification; the server keeps running.
 
+**Which actions exist — `cx.action_catalog()`.** The factory can ask what actions this server has,
+to check that an action it will name is there. The answer has every action of heca, every extension's
+plain action, every service's action (its own and other services') and `kill_server`. It does not
+have what only a window declares, such as a dock's own actions. It is complete when the factory runs:
+the server adds all of these before it starts any service. It is a list of names (`contains(name)`,
+`names()`), cheap to clone, and safe to send to a worker thread. It describes this run of the server
+only and is not saved, so ask again on every start. It grants nothing: whether an action may run is
+still decided by the action policy when it is asked.
+
 **Which session — `session()` or `session_key()`.** `cx.session()` is a number for this run of the
 server: use it to say "the session this call is in" and nothing more, because a server that starts
 again may number its sessions differently (it keeps the numbers of sessions it restores, but not when

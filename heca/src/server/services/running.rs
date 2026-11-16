@@ -25,6 +25,8 @@ pub(crate) struct StartArgs<'a> {
     /// The longest line a request may be.
     pub(crate) max_line: usize,
     pub(crate) wake: ServerWaker,
+    /// The actions this run has, for every factory to read.
+    pub(crate) catalog: &'a crate::actions::ActionCatalogSnapshot,
 }
 
 /// Who a started service is and where it keeps its files.

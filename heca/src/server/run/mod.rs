@@ -133,7 +133,8 @@ impl ServerLoop {
         identity: super::identity::ServerIdentity,
         wake: &ServerWaker,
     ) {
-        *self.services.borrow_mut() = super::services::ServiceHost::start(config, &identity, wake);
+        let catalog = self.catalog.snapshot();
+        *self.services.borrow_mut() = super::services::ServiceHost::start(config, &identity, wake, &catalog);
         self._identity = Some(identity);
     }
 
@@ -159,15 +160,13 @@ impl ServerLoop {
         self.events.subscribe(events);
     }
 
-    pub(super) fn register_extensions(&mut self) {
+    /// **Build this server's actions**: heca's own, then what extensions and services added.
+    /// Done once, as the server starts and before its services do, so a service's factory sees the
+    /// complete catalog. Returns what collided while adding them.
+    pub(super) fn register_actions(&mut self) -> crate::app::conflicts::Conflicts {
         let mut conflicts = crate::app::conflicts::Conflicts::default();
-        crate::entry::register_queued_actions(
-            &mut self.registry,
-            &mut self.catalog,
-            &mut conflicts,
-        );
-        conflicts.report();
-        self.install_actions(self.registry.clone(), self.catalog.clone());
+        crate::entry::register_queued_actions(&mut self.registry, &mut self.catalog, &mut conflicts);
+        conflicts
     }
 
     /// **Stop the server**: what `kill_server` does, whoever asked. The loop ends on its next turn.
@@ -506,6 +505,8 @@ mod tests;
 mod feedback_tests;
 #[cfg(test)]
 mod service_tests;
+#[cfg(test)]
+mod catalog_tests;
 #[cfg(test)]
 mod service_data_tests;
 #[cfg(test)]

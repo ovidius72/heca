@@ -39,7 +39,7 @@ pub use chrome::{
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
 pub use entry::{
-    ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError, ExternalRequest, LayerBuilder, LayerCx,
+    ActionCatalogSnapshot, ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError, ExternalRequest, LayerBuilder, LayerCx,
     Permit, ProjectCx, Projection, RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox,
     ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop,
     SubmitError, Update, extension, register_widget,

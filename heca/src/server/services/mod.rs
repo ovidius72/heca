@@ -104,7 +104,8 @@ impl ServiceHost {
     /// Run every declared service's factory for this server, each in its own folder under
     /// `identity`. A factory that fails — or has no folder to run in — is reported and skipped; the
     /// server starts without it.
-    pub(crate) fn start(config: &AppConfig, identity: &ServerIdentity, wake: &ServerWaker) -> Self {
+    pub(crate) fn start(config: &AppConfig, identity: &ServerIdentity, wake: &ServerWaker,
+        catalog: &crate::actions::ActionCatalogSnapshot) -> Self {
         let (nudge_tx, nudge) = mpsc::sync_channel(1);
         let server = wake.clone();
         let wake = ServerWaker::new(move || {
@@ -119,6 +120,7 @@ impl ServiceHost {
             request_capacity: config.config.settings.services.request_queue_capacity.get(),
             max_line: config.config.settings.connection.max_frame_bytes.get(),
             wake,
+            catalog,
         };
         // Nothing can show a notification yet — no session, and in a standalone window no sink — so
         // a failing factory's report is held for the first session.

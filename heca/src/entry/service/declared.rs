@@ -56,6 +56,7 @@ impl<S: Service> Declaration for Declared<S> {
             epoch: args.epoch,
             inbox: &inbox,
             data_dir: &data_dir,
+            catalog: args.catalog,
         })?;
         let actions = self.actions.borrow().iter()
             .map(|(meta, run)| (meta.name.clone(), run.clone()))
