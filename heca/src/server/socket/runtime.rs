@@ -86,6 +86,8 @@ fn serve(mut stream: UnixStream, handle: RuntimeHandle, config: ConnectionConfig
         return Ok(());
     }
     let line = String::from_utf8(line).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    // The terminator ends the request; it is not part of the line, so a line break left inside is refused.
+    let line = crate::rpc::line::without_terminator(&line).to_string();
     let (reply, answer) = mpsc::channel();
     handle.rpc(line, reply)?;
     let answer = answer.recv_timeout(timeout).map_err(|error| io::Error::new(io::ErrorKind::TimedOut, error))?;
