@@ -18,8 +18,7 @@ pub(crate) fn serve(socket: Option<&Path>) -> io::Result<()> {
         }
     });
     let identity = ServerIdentity::claim(ServerKind::Background);
-    let mut server = ServerLoop::from_config(&config, identity, handle.waker())?;
-    server.register_extensions();
+    let server = ServerLoop::from_config(&config, identity, handle.waker())?;
     inbox.run(server);
     Ok(())
 }

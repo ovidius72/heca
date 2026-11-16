@@ -36,6 +36,7 @@ pub struct StartCx<'a, M> {
     pub(crate) epoch: u64,
     pub(crate) inbox: &'a ServiceInbox<M>,
     pub(crate) data_dir: &'a Path,
+    pub(crate) catalog: &'a crate::actions::ActionCatalogSnapshot,
 }
 
 impl<M> StartCx<'_, M> {
@@ -60,6 +61,16 @@ impl<M> StartCx<'_, M> {
     /// have different folders.
     pub fn data_dir(&self) -> &Path {
         self.data_dir
+    }
+
+    /// **The names of the actions this run of the server has**, once everything that adds one has
+    /// added it: heca's own, every extension's, every service's (this one's too) and `kill_server`.
+    /// What a window draws itself, such as a dock's own actions, is not in it.
+    ///
+    /// It describes this run only and is not saved. It grants nothing: whether an action may run is
+    /// still the action policy's call when it is asked. Keep it, or send it to a worker.
+    pub fn action_catalog(&self) -> crate::actions::ActionCatalogSnapshot {
+        self.catalog.clone()
     }
 
     /// **The extension's own `[extensions.<name>]` table, as `T`**, from the configuration the

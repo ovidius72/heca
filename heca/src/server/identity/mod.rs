@@ -64,6 +64,8 @@ struct Claim {
 
 /// **A server's name and folder** — see the [module](self).
 pub(crate) struct ServerIdentity {
+    /// What kind of server this is.
+    kind: ServerKind,
     /// What a service is told when there is no folder.
     claim: Result<Claim, String>,
     /// A folder made for a test, removed with the identity.
@@ -84,16 +86,17 @@ impl ServerIdentity {
             .ok_or_else(|| "this platform has no data folder".to_owned())
             .and_then(|servers| claim_slot(kind, &servers).map_err(|error| error.to_string()));
         match claimed {
-            Ok(claim) => Self::new(Ok(claim)),
+            Ok(claim) => Self::new(kind, Ok(claim)),
             Err(why) => {
                 eprintln!("[heca] this server has no folder of its own for its services: {why}");
-                Self::new(Err(why))
+                Self::new(kind, Err(why))
             }
         }
     }
 
-    fn new(claim: Result<Claim, String>) -> Self {
+    fn new(kind: ServerKind, claim: Result<Claim, String>) -> Self {
         Self {
+            kind,
             claim,
             #[cfg(test)]
             _scratch: None,
@@ -108,6 +111,11 @@ impl ServerIdentity {
         let mut identity = Self::claim_in(kind, Some(scratch.path().to_owned()));
         identity._scratch = Some(scratch);
         identity
+    }
+
+    /// What kind of server this is, as its entry point said.
+    pub(crate) fn kind(&self) -> ServerKind {
+        self.kind
     }
 
     /// `default`, or `standalone-<n>`; `None` when no name could be claimed.
