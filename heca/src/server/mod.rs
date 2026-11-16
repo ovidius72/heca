@@ -122,6 +122,8 @@ impl ServerState {
             ServerAction::Configure(settings) => {
                 self.notifications.set_auto_dismiss(settings.auto_dismiss);
                 self.notifications.set_mode(settings.mode);
+                // Not a redraw: the history is read only when a window asks for it.
+                self.notifications.set_history_limit(settings.history_limit);
                 // Whether the cards on show moved is the only part a window has to redraw for.
                 self.notifications
                     .set_max_visible(settings.max_visible, now)
@@ -242,6 +244,13 @@ impl ServerState {
         self.notifications.visible_views_for(client)
     }
 
+    /// **The notification history** for the window on connection `client`, newest first — what
+    /// the server answers a [`ClientMsg::NotificationHistory`](wire::ClientMsg::NotificationHistory)
+    /// with. Server-owned, so every window reads the same list, a reattached one included.
+    pub(crate) fn notification_history_for(&self, client: u64) -> Vec<crate::notification::NotificationRecord> {
+        self.notifications.history_for(client)
+    }
+
     pub(crate) fn new(
         backends: BackendStore,
         notifications: NotificationRuntime,
@@ -262,6 +271,9 @@ impl ServerState {
         }
     }
 }
+
+#[cfg(test)]
+mod history_tests;
 
 #[cfg(test)]
 mod tests {

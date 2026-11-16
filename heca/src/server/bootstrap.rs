@@ -9,13 +9,12 @@ use super::{session::SessionRuntime, sessions::SessionInfo};
 
 impl ServerState {
     pub(crate) fn from_config(config: &AppConfig, wake: ServerWaker) -> Self {
-        let notifications = &config.config.settings.notification_system;
+        let notifications = super::NotificationSettings::from(&config.config.settings.notification_system);
         Self::new(
             BackendStore::new(),
             NotificationRuntime::with_capacity(
-                // Existing history policy; moving ownership must not change retention.
-                50,
-                std::time::Duration::from_millis(notifications.auto_dismiss_ms),
+                notifications.history_limit,
+                notifications.auto_dismiss,
                 notifications.mode,
                 notifications.max_visible,
             ),

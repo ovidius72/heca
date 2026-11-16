@@ -225,7 +225,8 @@ action policy can forbid it for the user; a request another service hands in can
 
 Press `prefix+#` to open the session palette directly (default prefix: `Ctrl+b`). This uses the
 registered `command_palette` action with `mode = "session"`, like `prefix+o` uses `mode = "pane"`.
-The command palette's `#` mode lists sessions and switches this window only. The New Session
+The command palette's `#` mode lists sessions and switches this window only; type a name **or part
+of its folder** to find one (a name match is listed first). The New Session
 action uses fuzzy folder completion: relative paths start at the focused pane's folder (or home),
 and a missing folder requires choosing the explicit Create folder row. Tab completes the selected
 path without creating it or closing the picker; Enter confirms. The binding is configurable as
@@ -1162,6 +1163,9 @@ auto_dismiss_ms = 4000        # How long an in-app toast stays before dismissing
 max_visible = 5               # How many toasts are on screen at once. The rest queue in the
                               # order they were raised — nothing is dropped — and each takes
                               # the slot that frees. Minimum 1.
+history_limit = 100           # How many dismissed or expired notifications the server keeps for
+                              # the notification history. Oldest forgotten first; 0 keeps none.
+                              # Applies on prefix+Shift+r.
 ```
 
 ### Confirmation prompts
@@ -1226,6 +1230,7 @@ mode = "app"          # "app" (in-app toast stack) | "system" (OS notifications 
                       # "none" (no notifications at all — stderr logs are unaffected)
 auto_dismiss_ms = 4000 # how long a toast stays before dismissing itself
 max_visible = 5        # how many are on screen at once; the rest queue
+history_limit = 100    # how many dismissed/expired ones the server remembers; 0 = none
 ```
 
 - **Severity is tone, not importance.** `info` / `success` / `warning` / `danger`
@@ -1248,6 +1253,26 @@ max_visible = 5        # how many are on screen at once; the rest queue
   An optional `.auto_dismiss(std::time::Duration::from_secs(10))` overrides the
   configured duration for that notification. `.sticky()` disables automatic expiry.
   A config reload affects future notifications, not deadlines already assigned.
+- **Notification history.** A toast that went away is not lost. `prefix+Ctrl+Alt+n` (the
+  `notification_history` action — also in the command palette and over RPC) opens the command
+  palette's **notifications mode** (`!`): every notification still on screen and every one the
+  server remembers, **newest first**, each with its level (the toast's own icon), title, full
+  body (the selected row shows it whole, wrapped), how long ago it was raised and whether it is
+  still `visible` or was `dismissed` / `expired` (`just now · dismissed`). Where it came from is
+  named only when it is not heca itself (a plugin, a provider, a pane). A notification raised
+  again under the same key is one entry with a count: `2 min ago · visible · ×3`. Type to search by title **or
+  body** (the same fuzzy matcher as the rest of the palette; a title match is listed above a
+  body-only match, and the match is highlighted in whichever text it hit). A notification still on screen that has
+  buttons also lists them as `Title › Button` rows; choosing one does what the toast's button
+  does. A dismissed notification has no buttons left, and choosing it just closes the palette.
+  The history belongs to the server, so every window sees the same list, a window that
+  reattached included. `[settings.notification_system] history_limit` (default `100`) says how
+  many dismissed or expired ones are kept, the oldest forgotten first; `0` keeps none, so the
+  list only shows what is still on screen. A config reload applies a new limit at once.
+  **Every way into the mode asks the server again** — the key, the action over RPC, or typing
+  `!` in a palette that is already open — so the list is never an old one. Typing `!` shows an
+  empty list for a moment, then the palette is replaced by one holding the answer, keeping
+  what you had typed.
 - What produces a toast today: a new pane, a pane whose process exited while the
   pane stays open, `prefix+Shift+r` (success or the parse error), and a command
   that fails to spawn.

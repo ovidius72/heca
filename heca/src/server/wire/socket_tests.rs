@@ -149,3 +149,36 @@ fn incoming_messages_and_disconnects_wake_the_owner() {
     rx.recv_timeout(Duration::from_secs(3)).expect("disconnect wakes");
     assert!(wait(|| server.poll()).is_err());
 }
+
+/// The notification history, typed on both ends of a real socket: records with a still-visible
+/// notification carrying an action (an intent with arguments) and a dismissed one.
+#[test]
+fn the_notification_history_crosses_a_real_socket_as_typed_values() {
+    use crate::notification::{NotificationAction, NotificationDraft, NotificationStore};
+    let (a, b) = UnixStream::pair().unwrap();
+    let client = SocketClient::new(a, limits(), wake()).unwrap();
+    let server = SocketServer::new(b, limits(), wake()).unwrap();
+    client.send(ClientMsg::NotificationHistory).unwrap();
+    assert!(matches!(wait(|| server.poll()).unwrap(), ClientMsg::NotificationHistory));
+
+    let now = Instant::now();
+    let mut store = crate::notification::NotificationStore::with_capacity(10, 10);
+    let first = store.push(NotificationDraft::new("first").body("whole\nbody"), now).unwrap().notification_id();
+    store.push(
+        NotificationDraft::new("second").action(NotificationAction::new(
+            "Retry",
+            heca_view::Intent::new("reload_config").arg("why", heca_view::PropValue::Text("typo".into())),
+        )),
+        now + Duration::from_millis(1),
+    ).unwrap();
+    store.dismiss(first, now + Duration::from_secs(1));
+    let records = store.history_records_for(1, now + Duration::from_secs(2), std::time::SystemTime::now());
+    assert_eq!(records.len(), 2);
+    let _ = NotificationStore::new(0);
+
+    server.send(ServerMsg::NotificationHistory(records.clone())).unwrap();
+    match wait(|| client.poll()).unwrap() {
+        ServerMsg::NotificationHistory(received) => assert_eq!(received, records),
+        other => panic!("unexpected reply: {other:?}"),
+    }
+}

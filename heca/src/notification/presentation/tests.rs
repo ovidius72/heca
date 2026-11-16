@@ -121,3 +121,37 @@ fn same_id_payload_update_produces_a_different_spec() {
     assert_ne!(first_spec, second_spec);
     assert_eq!(second_spec.severity, ToastSeverity::Success);
 }
+
+#[test]
+fn a_history_record_survives_the_wire_with_its_source_time_and_standing() {
+    let now = Instant::now();
+    let mut notification = NotificationDraft::new("Restore failed")
+        .source(NotificationSource::app("restore"))
+        .severity(NotificationSeverity::Warning)
+        .body("the folder is gone\nthe second line stays")
+        .action(NotificationAction::new("Retry", Intent::new("restore.retry")))
+        .build(NotificationId::from_raw(50), now);
+    notification.placement = NotificationPlacement::History {
+        cause: NotificationArchiveCause::Expired,
+        archived_at: now,
+    };
+
+    let wall = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(5_000);
+    let record = notification_record(&notification, now + std::time::Duration::from_secs(60), wall)
+        .expect("an archived notification is in the history");
+    assert_eq!(record.view.body.as_deref(), Some("the folder is gone\nthe second line stays"), "the whole body");
+    assert_eq!(record.source, NotificationSource::app("restore"));
+    assert_eq!(record.raised_at, 4_940);
+    assert_eq!(record.standing.word(), "expired");
+    assert!(record.view.actions.is_empty(), "a gone notification offers nothing");
+
+    let json = serde_json::to_string(&record).expect("serializes");
+    let back: NotificationRecord = serde_json::from_str(&json).expect("deserializes");
+    assert_eq!(record, back);
+}
+
+#[test]
+fn only_a_queued_notification_has_no_record() {
+    let queued = NotificationDraft::new("Waiting").build(NotificationId::from_raw(51), Instant::now());
+    assert!(notification_record(&queued, Instant::now(), std::time::SystemTime::now()).is_none());
+}

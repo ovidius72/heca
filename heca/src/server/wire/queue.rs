@@ -81,6 +81,8 @@ impl Message for super::ServerMsg {
             (ServerMsg::Content { .. }, ServerMsg::Content { .. }) => true,
             // A notification projection is a whole snapshot: the newest replaces a still-queued one.
             (ServerMsg::Notifications(_), ServerMsg::Notifications(_)) => true,
+            // Likewise a whole snapshot: asking twice before the first is read gets one answer.
+            (ServerMsg::NotificationHistory(_), ServerMsg::NotificationHistory(_)) => true,
             (ServerMsg::Feedback { session_id: new, .. }, ServerMsg::Feedback { session_id: old, .. }) => new == old,
             (ServerMsg::Terminal(new), ServerMsg::Terminal(old)) =>
                 new.owner == old.owner && new.screen.viewport_offset == old.screen.viewport_offset,

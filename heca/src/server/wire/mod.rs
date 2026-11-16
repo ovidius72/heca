@@ -56,6 +56,9 @@ pub(crate) enum ClientMsg {
     /// Raise/dismiss/hover a notification — the server owns the queue, timers and dedup and sends
     /// back a [`ServerMsg::Notifications`] projection.
     Notify(crate::server::NotificationCommand),
+    /// Ask for the notification history; the server replies with [`ServerMsg::NotificationHistory`].
+    /// Only on request: the history is not pushed, so a window that never opens it never receives it.
+    NotificationHistory,
     AcknowledgeFeedback { session_id: heca_core::layout::SessionId,
         pane_id: heca_core::layout::PaneId, revision: u64 },
     RequestFeedbackSound { session_id: heca_core::layout::SessionId,
@@ -112,6 +115,10 @@ pub(crate) enum ServerMsg {
     /// from them. Sent on attach and whenever the visible set changes; a newer one replaces a
     /// still-queued older one (it is a whole snapshot).
     Notifications(Vec<crate::notification::NotificationView>),
+    /// The notification history this window asked for ([`ClientMsg::NotificationHistory`]), newest
+    /// first: what is still on screen and what was dismissed or expired, as plain data. The same
+    /// list for every window, whenever it attached.
+    NotificationHistory(Vec<crate::notification::NotificationRecord>),
     Feedback { session_id: heca_core::layout::SessionId,
         panes: Vec<super::feedback::PaneFeedback> },
     FeedbackSound { session_id: heca_core::layout::SessionId,

@@ -1775,9 +1775,17 @@ let mut search = SearchModel::new("command", store);   // "command" is the scope
 | Call | When | What it does |
 |------|------|--------------|
 | `.rank(&items, query, key)` | filtering | Returns `Vec<Ranked>` — index into `items`, score, and the matched character indices. `key` yields `(Option<&str> id, &str text)`. |
+| `.rank_with_secondary(&items, query, key)` | filtering items that also have a description, folder or body | The same, where `key` yields `(Option<&str> id, &str text, Option<&str> secondary)` and the query is matched against the secondary text too. `Ranked::hits` are the matches in `text`, `Ranked::secondary_hits` those in the secondary text (an item may match either or both). **A match on `text` always ranks above a match on the secondary text alone**, whatever either scored and however much the secondary-only item has been used; within each group the order is score plus use. An item with `None` is matched on `text` alone, so a list opts in by what it supplies. |
 | `.handle(intent, query)` | on `MenuHistoryUp`/`Down` | Walks the history. Returns `SearchAction::SetQuery(..)` to apply, or `Ignored`. **The whole of history navigation** — a widget that walks a history itself has copied this. |
 | `.query_changed()` | the user typed | Leaves the history walk; the field is theirs again. |
 | `.record_run(query, id)` | something ran | Remembers the query (for recall) and the id (for ranking). Only on a run — an abandoned search is not one anyone wants back. |
+
+**A second text to search.** A name is what a user types first, but a half-remembered word often
+lives in the second line — a session's folder, a notification's body. An item offers it as its
+secondary text and `rank_with_secondary` matches it as well; nothing else about the item changes. A
+text match still leads, and the highlight (`Label::marks`) is drawn from `hits` on the title and
+from `secondary_hits` on the second line, wherever each matched. The palette turns this on **per
+mode** (`CommandPalette::match_description_in`, below), never per row and never at a call site.
 
 **Identity is optional.** `key` returns `Option<&str>`; an item without an id matches and sorts
 normally and simply carries no ranking boost, so nothing has to grow an id field to become
@@ -4423,7 +4431,9 @@ sidebar. Severity maps to theme tokens, never literals.
 - **Construct**: `Toast::new(title)` (= info) or `Toast::{info,success,warning,danger}(title)`.
 - **Look**: `.severity(ToastSeverity)` (default `Info` — sets the hue *and* the default leading
   glyph), `.icon(Glyph)` to override that glyph / `.no_icon()` to drop it, `.dismissible(bool)`
-  (default `true` — the × affordance).
+  (default `true` — the × affordance). `ToastSeverity::default_glyph()` is public, so a list of
+  notifications that is not a toast (the notification history in the command palette) shows the same
+  glyph for the same severity from this one table.
 - **Content is slots, and each takes any component**:
   - `.body(..)` — the column under the title. Takes a widget **or** an already-realized subtree,
     through the one builder. `.body_text(text)` is **sugar** that builds the small **wrapping**
@@ -6519,6 +6529,8 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.open_signal()` | Read or write the open-state signal. Closing also releases modal focus. |
 | `.label_signals()` | Title text signals in insertion order. Updating one changes both the displayed label and matching without rebuilding the palette. |
 | `.select_next()` / `.select_prev()` | Move the selection and keep it visible. |
+| `.match_description_in(scope)` | Also match the **description** of that mode's rows (`rank_with_secondary`), with the match highlighted in the description as well as the title; a title match still ranks above a description-only one. Off by default: a mode whose descriptions only explain a row already found (the command list) stays title-only. Heca turns it on in the `MODES` declaration of the sessions and notifications modes. |
+| `.on_mode_enter(scope, callback)` | Run `callback` whenever the open palette **enters** that mode — when it opens in it (prefilled query or named mode, whichever order the builders ran in) and when the user types its sigil. Announced once per entry; leaving the mode and coming back, or reopening, announces it again. For a mode whose rows are not known until asked for: the host starts its request here, so every route into the mode asks. |
 | `.run_selected()` | Run the selected callback, record its effective query and optional rank id in the active scope, then close. Dismissal records nothing. |
 
 #### Command API
@@ -6528,7 +6540,7 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `Command::new(label, callback)` | Required label and callback. |
 | `.completion(text)` | Optional query replacement for completion. When present, matching uses this text rather than the decorated label; highlight offsets are not applied to a different label. Default absent. |
 | `.fallback(bool)` | Default `false`. Offer a matching creation/alternate action after matching suggestions, without changing their scores. Applies to typed and empty queries. |
-| `.description(text)` | Optional muted second line; default absent. The selected description wraps; other descriptions truncate. Descriptions do not participate in matching. |
+| `.description(text)` | Optional muted second line; default absent. The selected description wraps; other descriptions truncate. Descriptions do not participate in matching **unless the row's mode opted in** with `match_description_in`; then they are matched and highlighted like the title, ranked below a title match. |
 | `.path(text)` | A single-line second row for a path; preserves its trailing portion when shortened and exposes the complete value in a tooltip. Does not expand when selected. |
 | `.detail(text)` | A separate single-line metadata row below the description or path, sized by the normal layout engine. |
 | `.icon(Glyph)` | Optional leading icon; default absent. The icon column stays aligned for rows without one. |
@@ -6540,7 +6552,11 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.preselect(bool)` | Start the empty-query selection here; default `false`. First matching claim wins. Typing selects the best match instead. |
 
 `KeyCap::Nf(NfGlyph)` draws a picture in the icon face; `KeyCap::Text(String)` draws text.
-Rows grow to fit their own bindings and measured description. The widget owns selection,
+Row text colours come from the theme, in every mode: the title is `foreground` when the row is selected
+and a muted blend of it otherwise; the **second line (description, detail)** is `colors.muted` on a plain
+row and, on the selected row, `foreground` at the overlay hint alpha (`interaction.menu_shortcut`) —
+`muted` is nearly the colour of the selection fill, so it is not used there. Rows grow to fit their own
+bindings and measured description. The widget owns selection,
 mode filtering, search, history, panel drawing and dismissal; the caller supplies rows, callbacks,
 words and optional shared memory.
 
@@ -6564,8 +6580,9 @@ let open = palette.open_signal();
 
 Adding `! / reports` above declares its sigil, scope and rows once. Both typing `!build` and
 `query_in(Some("reports"), "build")` reach those rows. To add a built-in Heca mode, add one `Mode`
-entry to `heca/src/chrome/surfaces/palette/modes.rs::MODES`, with its sigil, durable search-scope name and
-row-source function. `populate` builds that source once and gives it to `mode_with_commands`.
+entry to `heca/src/chrome/surfaces/palette/modes.rs::MODES`, with its sigil, durable search-scope name,
+row-source function, `search_description` (also match the rows' second line) and `on_enter` (an action to
+run each time the mode is entered, for rows that must be asked for). `populate` builds that source once and gives it to `mode_with_commands`.
 Keep existing scope names unchanged so saved searches still belong to the same lists.
 
 #### Declarative hosts

@@ -135,6 +135,25 @@ fn notification_max_lines_defaults_to_eight_and_is_overridable() {
 }
 
 #[test]
+fn notification_history_limit_defaults_to_one_hundred_and_zero_is_kept() {
+    let s = SettingsConfig::default();
+    assert_eq!(s.notification_system.history_limit, 100);
+
+    let s: SettingsConfig =
+        toml::from_str("[notification_system]\nhistory_limit = 7\n").expect("parses");
+    assert_eq!(s.notification_system.history_limit, 7);
+
+    // Zero is a value (history off), not a request for the default.
+    let s: SettingsConfig =
+        toml::from_str("[notification_system]\nhistory_limit = 0\n").expect("parses");
+    assert_eq!(s.notification_system.history_limit, 0);
+
+    let s: SettingsConfig =
+        toml::from_str("[notification_system]\nmax_visible = 2\n").expect("parses");
+    assert_eq!(s.notification_system.history_limit, 100);
+}
+
+#[test]
 fn test_notification_system_defaults_and_override() {
     // Absent section → default mode app, 4 s.
     let s = SettingsConfig::default();

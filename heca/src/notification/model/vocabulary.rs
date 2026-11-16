@@ -153,6 +153,12 @@ impl NotificationSource {
         self.kind
     }
 
+    /// Whether heca itself raised it (`App`, `Config`), as opposed to a pane, a provider, a plugin or
+    /// a command — the sources a user may want named, because they are not heca.
+    pub fn is_heca(&self) -> bool {
+        matches!(self.kind, NotificationSourceKind::App | NotificationSourceKind::Config)
+    }
+
     /// The opaque identifier within the kind, if any.
     pub fn id(&self) -> Option<&str> {
         self.id.as_deref()
@@ -323,6 +329,20 @@ impl NotificationSeverity {
             Self::Success => ToastSeverity::Success,
             Self::Warning => ToastSeverity::Warning,
             Self::Error => ToastSeverity::Danger,
+        }
+    }
+}
+
+impl NotificationSeverity {
+    /// The severity's word — the same spelling [`FromStr`](std::str::FromStr) reads and the
+    /// `notify` action's `severity` argument lists (`"danger"`, not `"error"`), so a word shown to
+    /// the user can be typed back.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Success => "success",
+            Self::Warning => "warning",
+            Self::Error => "danger",
         }
     }
 }

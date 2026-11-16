@@ -38,7 +38,12 @@ impl ServerState {
     pub(crate) fn for_tests(mode: heca_config::settings::NotificationSystem) -> Self {
         Self::new(
             BackendStore::new(),
-            NotificationRuntime::with_capacity(50, Duration::from_millis(4000), mode, 5),
+            NotificationRuntime::with_capacity(
+                heca_config::settings::NotificationSystemConfig::default().history_limit,
+                Duration::from_millis(4000),
+                mode,
+                5,
+            ),
             ProgramsConfig::default(),
             terminal_settings(),
             None,

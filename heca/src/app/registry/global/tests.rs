@@ -275,6 +275,37 @@ fn default_session_palette_binding_uses_the_registered_action_and_hash_key() {
 }
 
 #[test]
+fn the_notification_history_opens_from_its_default_key_and_from_rpc() {
+    use crate::keymap::LEADER_LAYER;
+    let config = heca_config::theme::Config::default();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+    let registry = crate::app::registry::build_registry();
+
+    assert!(registry.has_handler(&WmAction::NotificationHistory));
+    assert_eq!(
+        keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("Ctrl+Alt+n")),
+        Some(&WmAction::NotificationHistory),
+        "prefix+Ctrl+Alt+n",
+    );
+    // The neighbours keep their keys: the new one took a free combination.
+    assert_eq!(
+        keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("Ctrl+n")),
+        Some(&WmAction::WorkspaceNext),
+    );
+    assert_eq!(keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("n")), Some(&WmAction::NotificationPick));
+
+    // Named, it is in the catalog with no arguments, so RPC and the palette reach it by that name.
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let meta = catalog.all().find(|meta| meta.name == "notification_history").expect("described");
+    assert!(meta.args.is_empty());
+    let (intent, _) = crate::rpc::parse_rpc("notification_history").unwrap().into_intent(&catalog).unwrap();
+    assert_eq!(
+        crate::input::resolve_action(&intent.action, &crate::app::interaction::intent_args_as_strings(&intent)),
+        Some(WmAction::NotificationHistory),
+    );
+}
+
+#[test]
 fn the_default_session_palette_key_can_be_overridden_or_unbound() {
     use crate::keymap::LEADER_LAYER;
     let config = heca_config::loader::config_from_layers(r##"

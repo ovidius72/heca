@@ -350,6 +350,9 @@ pub struct AppState {
     /// projection the server sent ([`notifications`](Self::notifications)) by
     /// [`rebuild_toasts`](Self::rebuild_toasts) whenever a fresh projection arrives.
     pub toasts: heca_grid_ui::reactive::Signal<Vec<heca_grid_ui::widgets::ToastSpec>>,
+    /// The command palette that was opened last, while it is still open — so a fresher palette can
+    /// replace it and keep what was typed (`chrome::open_command_palette`).
+    pub(crate) open_palette: Option<crate::chrome::OpenPalette>,
     /// **The most lines a notification card's title and body may each take** —
     /// `[settings.notification_system] max_lines`, re-applied on reload. Read by the mounted
     /// `ToastStack` when it builds each card.

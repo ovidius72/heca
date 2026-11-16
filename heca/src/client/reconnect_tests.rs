@@ -8,12 +8,12 @@ use std::thread::JoinHandle;
 
 type Tick = mpsc::Sender<Option<mpsc::SyncSender<()>>>;
 
-struct Owner {
+pub(super) struct Owner {
     tick: Tick,
     thread: Option<JoinHandle<()>>,
 }
 
-struct Pumped {
+pub(super) struct Pumped {
     link: InProcessClient,
     tick: Tick,
 }
@@ -38,7 +38,7 @@ impl ClientLink for Pumped {
 }
 
 impl Owner {
-    fn new() -> (Self, Pumped, Pumped) {
+    pub(super) fn new() -> (Self, Pumped, Pumped) {
         let (tick, ticks) = mpsc::channel::<Option<mpsc::SyncSender<()>>>();
         let (ready, receive) = mpsc::sync_channel(1);
         let thread = std::thread::spawn(move || {
@@ -76,14 +76,14 @@ fn command(control: &Pumped, command: SessionCommand) -> SessionReply {
     panic!("the owner did not answer the session command");
 }
 
-fn create(control: &Pumped, root: &std::path::Path, name: &str) -> SessionInfo {
+pub(super) fn create(control: &Pumped, root: &std::path::Path, name: &str) -> SessionInfo {
     match command(control, SessionCommand::Create { folder: root.join(name), name: Some(name.into()), label: None }) {
         SessionReply::Updated(session) => session,
         reply => panic!("unexpected create reply: {reply:?}"),
     }
 }
 
-fn attached(window: Pumped) -> ClientState {
+pub(super) fn attached(window: Pumped) -> ClientState {
     let mut client = super::tests::client(window);
     client.link.send(ClientMsg::AttachTo { name: "A".into() }).unwrap();
     assert!(client.poll().unwrap().session_attached);

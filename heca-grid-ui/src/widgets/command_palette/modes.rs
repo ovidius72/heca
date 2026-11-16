@@ -2,6 +2,14 @@
 
 use super::*;
 
+/// A callback waiting for its mode to be entered ([`CommandPalette::on_mode_enter`]).
+pub(super) struct ModeEnter {
+    pub(super) scope: String,
+    pub(super) callback: std::rc::Rc<dyn Fn()>,
+    /// Whether it has run for the mode the palette is in now.
+    pub(super) announced: Cell<bool>,
+}
+
 impl CommandPalette {
     /// Declare a mode and all its commands together.
     ///
@@ -77,6 +85,59 @@ impl CommandPalette {
             self = self.query_in(Some(&scope), text);
         }
         self
+    }
+
+    /// Also match the **description** of this mode's rows, not only their title.
+    ///
+    /// Off by default, so a mode whose descriptions only explain a row already found (the command
+    /// list) is still searched by name. Turn it on for a mode whose second line is a thing a user
+    /// remembers — a session's folder, a notification's body. A title match still ranks above a
+    /// description-only match, and the highlight is drawn on whichever text matched
+    /// ([`SearchModel::rank_with_secondary`]).
+    #[heca_grid_ui_macros::host_only("a scope name, not a scalar")]
+    pub fn match_description_in(mut self, scope: impl Into<String>) -> Self {
+        let scope = scope.into();
+        if !self.describe_scopes.contains(&scope) {
+            self.describe_scopes.push(scope);
+        }
+        self.sync_marks();
+        self
+    }
+
+    /// Run `callback` whenever the palette **enters** the mode `scope` while it is open — when it
+    /// opens in it (a prefilled query, a named mode) and when the user types its sigil.
+    ///
+    /// For a mode whose rows are not known until asked for: the host starts the request here, so
+    /// there is one place that knows the mode was entered, whatever route led to it. Entering is
+    /// announced once; leaving the mode and coming back announces it again, and so does reopening.
+    #[heca_grid_ui_macros::host_only("a callback, not a scalar")]
+    pub fn on_mode_enter(mut self, scope: impl Into<String>, callback: impl Fn() + 'static) -> Self {
+        self.mode_enter.push(ModeEnter {
+            scope: scope.into(),
+            callback: std::rc::Rc::new(callback),
+            announced: Cell::new(false),
+        });
+        self.announce_mode();
+        self
+    }
+
+    /// Tell `mode_enter` which mode the open palette is now in, if it just changed.
+    pub(super) fn announce_mode(&self) {
+        if !self.is_open() {
+            return;
+        }
+        let (_, scope, _) = self.active();
+        if self.entered.borrow().as_deref() != Some(scope.as_str()) {
+            // A different mode: every callback may announce again the next time its own is entered.
+            *self.entered.borrow_mut() = Some(scope.clone());
+            self.mode_enter.iter().for_each(|enter| enter.announced.set(false));
+        }
+        // One at a time and only the ones not yet announced, so a callback registered after the
+        // mode was entered still hears about it, and none hears twice.
+        for enter in self.mode_enter.iter().filter(|enter| enter.scope == scope && !enter.announced.get()) {
+            enter.announced.set(true);
+            (enter.callback)();
+        }
     }
 
     /// The scope of the default mode — the first declared, or the model's own when none are.

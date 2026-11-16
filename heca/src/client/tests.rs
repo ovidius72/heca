@@ -100,6 +100,7 @@ pub(super) fn client(link: impl ClientLink + 'static) -> ClientState {
         feedback: Default::default(),
         session: info(1, "A"),
         sessions: Vec::new(),
+        notification_history: None,
         backends: BackendStore::new(),
         programs: Rc::new(ProgramsConfig::default()),
         link: Box::new(link),

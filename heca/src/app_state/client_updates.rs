@@ -44,6 +44,9 @@ impl AppState {
             self.rebuild_toasts();
             self.needs_redraw = true;
         }
+        if update.notification_history_answered {
+            crate::chrome::open_command_palette(self, Some(crate::chrome::MODE_NOTIFICATION), None, None);
+        }
         // A session change, or leaving one, resets what services show; then what they sent applies.
         let left = update.session_attached || update.session_deleted || update.session_detached;
         if left || !update.services.is_empty() {
