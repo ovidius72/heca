@@ -155,6 +155,29 @@ Two queries return JSON instead of running anything: `list-actions` and `describ
   and `(is heca running?)`; it does not start one.
 - The request must be answered within `request_timeout_ms`.
 
+**Writing a value that has a space, a quote or a backslash.** One argument after `rpc` is the whole
+line and goes out as it is: `heca rpc 'say text="ciao mondo"'`. Several arguments are the action and one
+value each, and `heca rpc` writes the line for you, quoting only what needs it:
+`heca rpc say 'text=ciao mondo'` sends `say text="ciao mondo"`, and a line that needed no quotes is sent
+exactly as before. The rules, all in [`rpc/line.rs`](../heca/src/rpc/line.rs):
+
+- Whitespace separates words, except inside quotes. A quote may start in the middle of a word:
+  `key="a b"` and `ab"c d"e` are one word each.
+- Inside `"…"` only `\"` and `\\` are escapes; any other backslash stays as written (`\n` is a backslash and an `n`).
+  Inside `'…'` everything is literal. A backslash outside quotes is literal, so `C:\dir\file` needs no
+  quotes. A Windows path that ends in a backslash is written `"C:\dir\\"` inside double quotes (`heca rpc`
+  does this itself when it writes the line).
+- `name=value` is a named argument when the text before the first unquoted `=` is a valid name: the
+  first character an ASCII letter or `_`, then ASCII letters, digits, `_` or `-`. Anything else is a
+  positional value, whole: `C:\x=y` and `"a=b"` are positional, `key="a=b"` is the name `key` with the
+  value `a=b`.
+- `""` and `''` are an empty value (`key=""`, or `key=`).
+- An unclosed quote, or a backslash ending the line inside `"…"`, answers `error:` before anything runs.
+- A carriage return, a line feed or a NUL inside a line is refused, on every way in (`heca rpc`, a
+  service's request, the socket). The newline that ends the request on the socket is not part of the line.
+- Nothing is expanded: no variables, no globs, no commands.
+- `--dock <id>` is recognized only as a bare `--dock`; `"--dock"` is an ordinary value.
+
 **Who runs the line.** A service's action runs in the service. A session-management action
 (create, rename, list) and `kill_server` run in the server. Otherwise the line goes to the most recently used session
 that has a window attached, and that window runs it and sends the answer back. With no window

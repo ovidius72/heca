@@ -15,6 +15,13 @@
 //! a menu entry hands the dispatcher — so the RPC reaches every action the moment it is
 //! registered, and nothing here has to be written for a new one. It used to keep its own list of
 //! 94 hand-written commands, each with its own spelling and argument parsing, beside the catalog.
+//!
+//! A value with a space, a quote or a Windows path is written in quotes —
+//! `rename_session_to session=demo name="my work"`. How a line is cut into words, and how a
+//! script's arguments are written as a line, is [`line`]'s and nobody else's; its module doc is
+//! the syntax: quotes, escapes, which `name=` is a name, and what is refused.
+
+pub mod line;
 
 /// Errors from reading or running an RPC line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,6 +49,8 @@ pub enum RpcError {
     MissingArgs(String),
     /// The action ran, but its owner rejected the requested operation.
     Failed(String),
+    /// The line itself could not be read (an open quote, a stray line break). Nothing ran.
+    BadLine(line::LineError),
     /// A service's action policy said this requester may not run it, and why. Nothing ran.
     Denied(String),
 }
@@ -72,12 +81,19 @@ impl std::fmt::Display for RpcError {
             ),
             RpcError::NotInitialized => write!(f, "app not initialized"),
             RpcError::Failed(message) => write!(f, "{message}"),
+            RpcError::BadLine(error) => write!(f, "cannot read the line: {error}"),
             RpcError::Denied(reason) => write!(f, "not permitted: {reason}"),
         }
     }
 }
 
 impl std::error::Error for RpcError {}
+
+impl From<line::LineError> for RpcError {
+    fn from(error: line::LineError) -> Self {
+        RpcError::BadLine(error)
+    }
+}
 
 /// **Action introspection** (action-task-C): answer a metadata *query* against the runtime
 /// [`ActionCatalog`](crate::actions::ActionCatalog), returning JSON. `None` if `input` is not an
@@ -91,14 +107,12 @@ pub fn introspect(
     catalog: &crate::actions::ActionCatalog,
     input: &str,
 ) -> Option<Result<String, RpcError>> {
-    let input = input.trim();
-    let mut parts = input.split_whitespace();
-    let cmd = parts.next()?.to_lowercase();
-    match cmd.as_str() {
-        LIST_ACTIONS => Some(to_json(&catalog.describe_all(), &cmd)),
-        DESCRIBE_ACTION => Some(match parts.next() {
-            Some(name) => match catalog.describe(name) {
-                Some(info) => to_json(&info, &cmd),
+    let (query, mut words) = query_of(input)?;
+    Some(match query {
+        LIST_ACTIONS => to_json(&catalog.describe_all(), query),
+        _ => match words.next().map(|word| word.arg.text()) {
+            Some(name) => match catalog.describe(&name) {
+                Some(info) => to_json(&info, query),
                 None => Err(RpcError::UnknownCommand(format!(
                     "describe-action: unknown action '{name}'"
                 ))),
@@ -107,9 +121,8 @@ pub fn introspect(
                 cmd: "describe-action".to_string(),
                 arg: "name".to_string(),
             }),
-        }),
-        _ => None,
-    }
+        },
+    })
 }
 
 const LIST_ACTIONS: &str = "list-actions";
@@ -118,8 +131,16 @@ const DESCRIBE_ACTION: &str = "describe-action";
 /// Whether `input` is a query ([`introspect`]) and not an action — read the same way `introspect`
 /// reads it, so the two can never disagree about what is one.
 pub(crate) fn is_query(input: &str) -> bool {
-    input.split_whitespace().next()
-        .is_some_and(|word| matches!(word.to_lowercase().as_str(), LIST_ACTIONS | DESCRIBE_ACTION))
+    query_of(input).is_some()
+}
+
+/// Which query `input` is, and the words after its name. A line that cannot be read is no query:
+/// it goes on to [`parse_rpc`], which says why.
+fn query_of(input: &str) -> Option<(&'static str, std::vec::IntoIter<line::Word>)> {
+    let mut words = line::tokenize(input).ok()?.into_iter();
+    let name = words.next()?.arg.text().to_lowercase();
+    let query = [LIST_ACTIONS, DESCRIBE_ACTION].into_iter().find(|query| *query == name)?;
+    Some((query, words))
 }
 
 fn to_json<T: serde::Serialize>(value: &T, cmd: &str) -> Result<String, RpcError> {
@@ -142,30 +163,32 @@ pub struct RpcCall {
 }
 
 /// Read one RPC line. Knows nothing about any action: which names exist and what they take is the
-/// catalog's, asked by [`RpcCall::into_intent`].
+/// catalog's, asked by [`RpcCall::into_intent`]. How the line is cut into words is [`line`]'s.
 pub fn parse_rpc(input: &str) -> Result<RpcCall, RpcError> {
-    let mut parts = input.split_whitespace();
-    let action = parts
+    let mut words = line::tokenize(input)?.into_iter();
+    let action = words
         .next()
         .ok_or_else(|| RpcError::UnknownCommand("<empty>".to_string()))?
-        .to_string();
+        .arg
+        .text();
     let mut call = RpcCall {
         action,
         positional: Vec::new(),
         named: Vec::new(),
         dock: None,
     };
-    while let Some(part) = parts.next() {
-        if part == "--dock" {
-            let id = parts.next().ok_or_else(|| RpcError::MissingArgument {
+    while let Some(word) = words.next() {
+        if word.is_dock_flag() {
+            let id = words.next().ok_or_else(|| RpcError::MissingArgument {
                 cmd: call.action.clone(),
                 arg: "--dock <id>".to_string(),
             })?;
-            call.dock = Some(id.to_string());
-        } else if let Some((key, value)) = part.split_once('=') {
-            call.named.push((key.to_string(), value.to_string()));
+            call.dock = Some(id.arg.text());
         } else {
-            call.positional.push(part.to_string());
+            match word.arg {
+                line::Arg::Named { name, value } => call.named.push((name, value)),
+                line::Arg::Positional(value) => call.positional.push(value),
+            }
         }
     }
     Ok(call)
@@ -308,6 +331,70 @@ mod tests {
             parse_rpc("focus_left --dock"),
             Err(RpcError::MissingArgument { .. })
         ));
+    }
+
+    /// Quoted values reach the call whole.
+    #[test]
+    fn quoted_values_reach_the_call_whole() {
+        let call = parse_rpc(r#"note "ciao mondo" text="a b" path="C:\my dir\\" empty="" "" n=1"#).unwrap();
+        assert_eq!(call.action, "note");
+        assert_eq!(call.positional, ["ciao mondo", ""]);
+        assert_eq!(
+            call.named,
+            [
+                ("text".to_string(), "a b".to_string()),
+                ("path".to_string(), r"C:\my dir\".to_string()),
+                ("empty".to_string(), String::new()),
+                ("n".to_string(), "1".to_string()),
+            ]
+        );
+        assert_eq!(call.dock, None);
+    }
+
+    /// A quoted `--dock` is a value, not the flag.
+    #[test]
+    fn the_dock_flag_works_around_quoted_values() {
+        let call = parse_rpc(r#"note "a b" --dock "docker right" text='x y'"#).unwrap();
+        assert_eq!(call.dock.as_deref(), Some("docker right"));
+        assert_eq!(call.positional, ["a b"]);
+        assert_eq!(call.named, [("text".to_string(), "x y".to_string())]);
+        let call = parse_rpc(r#"note "--dock" '--dock'"#).unwrap();
+        assert_eq!(call.positional, ["--dock", "--dock"]);
+        assert_eq!(call.dock, None);
+        assert!(matches!(
+            parse_rpc(r#"note "a b" --dock"#),
+            Err(RpcError::MissingArgument { .. })
+        ));
+    }
+
+    #[test]
+    fn a_windows_path_is_a_positional_value() {
+        let call = parse_rpc(r"open C:\dir\file=x D:\dir\ k=v").unwrap();
+        assert_eq!(call.positional, [r"C:\dir\file=x", r"D:\dir\"]);
+        assert_eq!(call.named, [("k".to_string(), "v".to_string())]);
+    }
+
+    #[test]
+    fn a_line_that_cannot_be_read_is_an_error_before_anything_runs() {
+        for line in [r#"note "open"#, "note 'open", r#"note "ends\"#, "note a\nb", "note a\rb", "note a\0b"] {
+            assert!(matches!(parse_rpc(line), Err(RpcError::BadLine(_))), "{line:?}");
+        }
+        assert_eq!(
+            parse_rpc(r#"note "open"#).unwrap_err().to_string(),
+            "cannot read the line: a \" quote was opened and never closed"
+        );
+    }
+
+    #[test]
+    fn queries_read_quoted_names_and_leave_unreadable_lines_to_the_parser() {
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        assert!(is_query("  list-actions "));
+        assert!(is_query(r#"describe-action "close""#));
+        assert!(!is_query("list-actions\n"));
+        let json = introspect(&catalog, r#"describe-action "close""#).unwrap().unwrap();
+        assert!(json.contains("\"name\":\"close\""), "{json}");
+        // An open quote is no query: `parse_rpc` is the one that says so.
+        assert!(introspect(&catalog, r#"describe-action "close"#).is_none());
     }
 
     #[test]
