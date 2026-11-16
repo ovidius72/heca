@@ -98,14 +98,6 @@
   },
   "acceptedDecisions": [
     {
-      "id": "legacy-project-decision-d0b3079cceb28d6c",
-      "title": "Usare il BACKLOG come fonte primaria e più aggiornata dello stato dei lavori.",
-      "decision": "Usare il BACKLOG come fonte primaria e più aggiornata dello stato dei lavori.",
-      "rationale": "Migrated from the legacy project decisions collection.",
-      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
-      "acceptedAt": "2026-09-02T07:55:24.685Z"
-    },
-    {
       "id": "legacy-project-decision-562ecc9e9efa1e83",
       "title": "Mantenere nel planner anche le feature completate, marcate come done.",
       "decision": "Mantenere nel planner anche le feature completate, marcate come done.",
