@@ -169,6 +169,7 @@ impl NotificationStore {
         let (_, update) = self.transition_at(now, |store, now| {
             let previous = store.notifications[&notification_id].placement;
             let mut replacement = draft.build(notification_id, now);
+            replacement.repeats = store.notifications[&notification_id].repeats.saturating_add(1);
             let projection_changed = match previous {
                 NotificationPlacement::Visible { .. } => {
                     replacement.placement = NotificationPlacement::Visible {

@@ -26,19 +26,23 @@ impl CommandPalette {
         // pane's process or a rename, and a list that shows one name while matching another is
         // worse than a stale one. The labels are short and there are a few hundred at most, so
         // materialising them per keystroke costs nothing measurable.
-        let items: Vec<(Option<&str>, String)> = of_mode
+        // The description is matched too, but only in a mode that said so
+        // ([`match_description_in`](Self::match_description_in)).
+        let describes = self.describe_scopes.contains(&scope);
+        let items: Vec<(Option<&str>, String, Option<&str>)> = of_mode
             .iter()
             .map(|&i| {
                 (
                     self.commands[i].id.as_deref(),
                     self.commands[i].completion.clone().unwrap_or_else(|| self.title_text[i].get_untracked()),
+                    self.commands[i].description.as_deref().filter(|_| describes),
                 )
             })
             .collect();
         let mut out = self
             .search
             .with_scope(scope)
-            .rank(&items, &query, |(id, text)| (*id, text.as_str()));
+            .rank_with_secondary(&items, &query, |(id, text, secondary)| (*id, text.as_str(), *secondary));
         for r in &mut out {
             r.index = of_mode[r.index];
             if self.commands[r.index].completion.as_ref()
@@ -131,15 +135,20 @@ impl CommandPalette {
 
     /// Move the match marks onto the title labels that matched.
     pub(super) fn sync_marks(&mut self) {
-        for signal in &self.title_marks {
+        for signal in self.title_marks.iter().chain(self.desc_marks.iter().flatten()) {
             signal.set(Vec::new());
         }
         for m in self.results() {
             self.title_marks[m.index].set(m.hits.clone());
+            if let Some(signal) = self.desc_marks[m.index] {
+                signal.set(m.secondary_hits.clone());
+            }
         }
     }
 
     pub(super) fn close(&mut self) {
+        *self.entered.borrow_mut() = None;
+        self.mode_enter.iter().for_each(|enter| enter.announced.set(false));
         self.named_prefill = None;
         self.open.set(false);
         self.query.set(String::new());
@@ -171,6 +180,7 @@ impl CommandPalette {
         self.scroll = 0;
         self.sync_marks();
         self.sync_wrap();
+        self.announce_mode();
     }
 
 }

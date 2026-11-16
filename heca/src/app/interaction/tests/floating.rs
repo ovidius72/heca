@@ -290,6 +290,22 @@ fn floating_allows_global_reload() {
     );
 }
 
+/// The notification history is `Global`: it only opens a list, so a floating pane must not stop it.
+#[test]
+fn floating_allows_the_notification_history() {
+    let mut session = test_session();
+    session.ws().set_focus_domain(FocusDomain::Floating);
+    assert_eq!(action_policy(&WmAction::NotificationHistory), ActionPolicy::Global);
+
+    let decision = route_in_domain(
+        session.l(),
+        session_domain(session.l()),
+        InteractionSource::Keyboard,
+        InteractionIntent::ActivateAction(WmAction::NotificationHistory),
+    );
+    assert!(matches!(decision, RouteDecision::Allow(_)), "got {decision:?}");
+}
+
 /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane,
 /// scrollback, selection actions) are still allowed.
 #[test]

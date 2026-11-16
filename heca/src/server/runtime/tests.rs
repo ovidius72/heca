@@ -65,6 +65,7 @@ fn a_server_deadline_wakes_an_otherwise_idle_owner() {
                 auto_dismiss: Duration::from_millis(100),
                 mode: Default::default(),
                 max_visible: 5,
+                history_limit: 100,
             }),
             Instant::now(),
         );

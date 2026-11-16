@@ -255,6 +255,20 @@ impl NotificationRuntime {
         self.shown.clone()
     }
 
+    /// Apply a new history size (`[settings.notification_system] history_limit`, the
+    /// `prefix+Shift+r` path). A smaller one forgets the oldest entries at once; `0` keeps none.
+    pub(crate) fn set_history_limit(&mut self, history_limit: usize) {
+        self.store.set_history_limit(history_limit);
+    }
+
+    /// The history for the window on connection `client`, newest first
+    /// ([`NotificationStore::history_records_for`]). Read from the clocks here, at the runtime
+    /// boundary, so the store stays a pure function of what it is given.
+    pub fn history_for(&self, client: u64) -> Vec<NotificationRecord> {
+        self.store
+            .history_records_for(client, Instant::now(), std::time::SystemTime::now())
+    }
+
     /// The cards on show for the window on connection `client`: the session-wide ones plus any
     /// addressed to that window. The retained `shown` list stays session-wide (queueing and
     /// lifecycle are a session concept); this reads the store to filter per window at send time.

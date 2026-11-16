@@ -34,6 +34,7 @@ impl CommandPalette {
         self.title_marks.clear();
         self.title_text.clear();
         self.desc_wrap.clear();
+        self.desc_marks.clear();
         self.natural_h.clear();
         if let Some(input) = input {
             self.base.children.push(input);
@@ -48,6 +49,38 @@ impl CommandPalette {
 mod tests {
     use super::*;
     use std::{cell::RefCell, rc::Rc};
+
+    /// The query is marked **where it matched**: in the title, in the description, or both — and a
+    /// description is marked only in a mode that matches it.
+    #[test]
+    fn marks_follow_whichever_text_matched() {
+        let build = |describe: bool| {
+            let p = CommandPalette::new()
+                .mode_with_commands('#', "session", [
+                    Command::new("billing", || {}).description("~/work/billing"),
+                    Command::new("api", || {}).description("~/work/billing"),
+                ]);
+            let p = if describe { p.match_description_in("session") } else { p };
+            p.query("bill").default_open(true)
+        };
+        let marks = |p: &CommandPalette, row: usize| {
+            (
+                p.title_marks[row].get_untracked(),
+                p.desc_marks[row].map(|m| m.get_untracked()).unwrap_or_default(),
+            )
+        };
+
+        let p = build(true);
+        let (title, description) = marks(&p, 0);
+        assert!(!title.is_empty() && !description.is_empty(), "matched on both: both marked");
+        let (title, description) = marks(&p, 1);
+        assert!(title.is_empty(), "`api` has no `bill`");
+        assert_eq!(description, [7, 8, 9, 10], "the folder's own characters, not the title's");
+
+        let p = build(false);
+        assert!(marks(&p, 0).1.is_empty(), "a mode that did not opt in marks no description");
+        assert_eq!(p.results().len(), 1, "and finds only by title");
+    }
 
     #[test]
     fn live_rows_follow_query_edits_and_activate_the_new_candidate() {

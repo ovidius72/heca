@@ -134,9 +134,20 @@ impl CommandPalette {
                 } else {
                     muted.lerp(foreground, 0.7)
                 };
-                cx.with_content_color(content, |cx| {
-                    crate::component::paint_child(self.row_child(m.index), cx)
-                });
+                // **Secondary text has its own ink on every row**, from the theme: the muted token on a
+                // plain row, and on the selected one the same foreground the title is drawn in, at
+                // the overlay-panel hint alpha — `muted` is nearly the colour of the selection fill,
+                // which is what made a selected row's second line unreadable.
+                let secondary = if is_sel {
+                    foreground.with_alpha(cx.theme().colors.interaction.menu_shortcut)
+                } else {
+                    muted
+                };
+                for (part, child) in self.row_child(m.index).base().children.iter().enumerate() {
+                    cx.with_content_color(if part == 0 { content } else { secondary }, |cx| {
+                        crate::component::paint_child(child.as_ref(), cx)
+                    });
+                }
                 // Bindings: one row of keycap chips per binding, stacked down the row, each
                 // right-aligned to the same reserved column so every command's chips line up.
                 let cap_font = self.keycap_font();

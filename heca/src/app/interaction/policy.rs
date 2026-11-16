@@ -214,6 +214,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::NotificationDismissAll
         | WmAction::NotificationDismissLast
         | WmAction::NotificationPick
+        | WmAction::NotificationHistory
         | WmAction::NotificationActionRelay { .. } => ActionPolicy::Global,
         // Forgetting a search memory touches no layout and no pane, so there is no domain in which
         // it should be refused.

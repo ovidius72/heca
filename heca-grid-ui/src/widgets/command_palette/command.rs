@@ -117,8 +117,12 @@ impl Command {
 
     /// An optional second line, muted — what the command does.
     ///
-    /// Filtering still matches the **label** only: the description explains a command the user has
-    /// already found, and matching it would rank a command whose label the query never mentioned.
+    /// Filtering matches the **label** only, unless the row's mode opted in with
+    /// [`CommandPalette::match_description_in`](super::CommandPalette::match_description_in): by
+    /// default the description explains a command the user has already found, and matching it
+    /// would rank a command whose label the query never mentioned. A mode whose description is a
+    /// thing people remember (a folder, a message body) turns it on, and then a label match still
+    /// ranks above a description-only one.
     #[heca_grid_ui_macros::prop]
     pub fn description(mut self, text: impl Into<String>) -> Self {
         self.description = Some(text.into());

@@ -231,6 +231,7 @@ reload_config   = "prefix+Shift+r"  # Reload config at runtime
 notification_pick          = "prefix+n"        # Scoped picker over visible toast actions/× (in addition to prefix+/, not instead)
 notification_dismiss_last  = "prefix+Shift+n"  # Dismiss the first eligible visible notification
 notification_dismiss_all   = "prefix+Alt+n"    # Dismiss every visible notification
+notification_history       = "prefix+Ctrl+Alt+n" # List the notifications still on screen and the ones dismissed or expired, newest first (palette `!` mode)
 # NB: `close_overlay` is NOT bound here. Closing an overlay is a **surface** key, and it lives in
 # the `layer` floor further down — see the `[[keys.mode]] name = "layer"` block. Bound globally, its
 # keys are taken from the program running in the pane whether or not an overlay is up: `q` shipped
@@ -275,7 +276,7 @@ scroll_to_bottom   = "Shift+End"
 scroll_line_up     = "Shift+Up"
 scroll_line_down   = "Shift+Down"
 # The palette opened in a mode. The sigil selects the list on the same surface:
-# @ panes, $ workspaces, # sessions. These bindings prefill that same query.
+# @ panes, $ workspaces, # sessions, ! notifications. These bindings prefill that same query.
 [[keys.bind]]
 keys   = "prefix+o"
 action = "command_palette"

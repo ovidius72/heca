@@ -284,9 +284,17 @@ No handles, no window types, no types from the terminal library.
   thread (`wire/socket.rs`) and a queue per direction of at most `queue_capacity` messages
   (`wire/queue.rs`). The server only ever polls these queues. If a queue is full, the send fails and
   the connection is closed.
+- **Notification history, on request.** A window that wants the list of notifications sends
+  `ClientMsg::NotificationHistory`; the server answers that window with
+  `ServerMsg::NotificationHistory`: plain `NotificationRecord`s, newest first — the same
+  `NotificationView` a toast is drawn from, plus the source, the raised time (seconds since the
+  Unix epoch) and whether it is still visible or was dismissed or expired. Only what that window
+  is meant to see, and only when asked, so a window that never opens it is never sent it. The server
+  keeps `[settings.notification_system] history_limit` of them. A newer answer replaces one still
+  waiting in the queue.
 - **Newer state replaces older.** When a message would overtake one still waiting in the queue, it
   takes its place instead of adding to the line. This applies to: `Content` (whole content), `Notifications`
-  (whole snapshot), `Feedback` for the same session, `Terminal` for the same terminal at the same
+  and `NotificationHistory` (whole snapshots), `Feedback` for the same session, `Terminal` for the same terminal at the same
   scroll offset, and `Changed` of `LayoutChanged`, `NamesChanged` or `NotificationsChanged`. Everything
   else — input, actions, other `Changed` facts, replies — keeps its order and is never merged away.
   Replacement never crosses a **boundary**: `Attached`, `ProjectionReady`, `SessionTerminated`,

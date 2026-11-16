@@ -42,5 +42,9 @@ declare_settings! {
         /// **wraps** onto further lines (a path folds after a `/`) instead of being cut; text that needs
         /// more than this ends with `…`. Default: 8. Clamped to at least 1.
         pub max_lines: usize,
+        /// How many dismissed or expired notifications the server keeps for the notification
+        /// history (`notification_history`). The oldest is dropped first; notifications still on
+        /// screen are not counted. `0` keeps none. Default: 100.
+        pub history_limit: usize,
     }
 }

@@ -116,6 +116,16 @@ pub struct CommandPalette {
     /// exploding to three lines a row and is why this is per-row state rather than a build-time
     /// property.
     desc_wrap: Vec<Option<Signal<bool>>>,
+    /// The marks signal of each row's description label, where it has one — what shows the query's
+    /// match **in the description** for a mode that matches it
+    /// ([`match_description_in`](Self::match_description_in)).
+    desc_marks: Vec<Option<Signal<Vec<usize>>>>,
+    /// Scopes whose rows are matched on their description as well as their title.
+    describe_scopes: Vec<String>,
+    /// What to do when a mode is entered ([`on_mode_enter`](Self::on_mode_enter)), by scope.
+    mode_enter: Vec<modes::ModeEnter>,
+    /// The scope the open palette was last seen in, so entering is announced once, not on every key.
+    entered: std::cell::RefCell<Option<String>>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -155,6 +165,10 @@ impl CommandPalette {
             title_marks: Vec::new(),
             title_text: Vec::new(),
             desc_wrap: Vec::new(),
+            desc_marks: Vec::new(),
+            describe_scopes: Vec::new(),
+            mode_enter: Vec::new(),
+            entered: Default::default(),
         }
     }
 
@@ -195,21 +209,22 @@ impl CommandPalette {
         self.title_text.push(title.text_signal());
         let mut column = Flex::column().child(title);
         self.desc_wrap.push(None);
+        self.desc_marks.push(None);
         if let Some(desc) = &c.description {
             // Cut by default, reflowed while selected — `sync_wrap` flips it. Because the height is
             // measured, the reflow moves every row below it.
             let d = Label::new(desc.clone())
                 .truncate(if c.description_path { Ellipsis::Start } else { Ellipsis::End })
-                .wrap(false)
-                .muted(true);
+                .wrap(false);
             if !c.description_path {
                 *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
             }
+            *self.desc_marks.last_mut().expect("just pushed") = Some(d.marks_signal());
             let d = if c.description_path { d.tooltip(desc.clone()) } else { d };
             column = column.child(d);
         }
         if let Some(detail) = &c.detail {
-            column = column.child(Label::new(detail.clone()).truncate(Ellipsis::End).wrap(false).muted(true));
+            column = column.child(Label::new(detail.clone()).truncate(Ellipsis::End).wrap(false));
         }
         self.base.children.insert(self.commands.len(), crate::WidgetModel::new(column));
         self.commands.push(c);
@@ -253,6 +268,7 @@ impl CommandPalette {
         self.sync_marks();
         self.sync_initial_selection();
         self.sync_wrap();
+        self.announce_mode();
         self
     }
 
@@ -265,6 +281,7 @@ impl CommandPalette {
         self.sync_marks();
         self.sync_initial_selection();
         self.sync_wrap();
+        self.announce_mode();
         self
     }
 

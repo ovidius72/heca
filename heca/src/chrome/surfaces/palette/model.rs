@@ -43,8 +43,21 @@ pub(crate) struct PaletteEntry {
     /// empty when unbound. The list, not a joined line: an action bound twice shows two rows.
     pub(crate) shortcuts: Vec<String>,
     /// What choosing it dispatches. A built-in is a plain `View` intent; a component's action is
-    /// aimed at the placement that owns it, focus first.
-    pub(crate) intent: InteractionIntent,
+    /// aimed at the placement that owns it, focus first. `None` for a row that only shows
+    /// something (a notification with nothing left to act on): choosing it just closes the palette.
+    pub(crate) intent: Option<InteractionIntent>,
+}
+
+/// The command palette that is up right now: which layer it is, and its live query and open state.
+///
+/// Kept so a palette can be **replaced by a fresher one** without losing what was typed — the
+/// notifications list is the server's, so a palette that entered it is swapped for one holding the
+/// answer, carrying the query across.
+#[derive(Clone)]
+pub(crate) struct OpenPalette {
+    pub(crate) id: OverlayId,
+    pub(crate) query: heca_grid_ui::reactive::Signal<String>,
+    pub(crate) open: heca_grid_ui::reactive::Signal<bool>,
 }
 
 /// What is known about the component owning an action, at the moment the palette opens.

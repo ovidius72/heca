@@ -5,6 +5,9 @@ use heca_grid_ui::widgets::{ToastAction, ToastSpec};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+mod record;
+pub use record::{NotificationRecord, notification_record};
+
 /// **The serializable projection of a visible notification** — what the server sends a window.
 ///
 /// The server owns the queue, lifecycle, timers and dedup; a window draws from this. It carries
@@ -43,10 +46,14 @@ impl NotificationView {
 /// `None` when the notification is not currently visible (`Queued` or `History`). This runs on the
 /// server side of the seam — it reads the canonical [`AppNotification`] and never builds a widget.
 pub fn notification_view(notification: &AppNotification) -> Option<NotificationView> {
-    if !notification.is_visible() {
-        return None;
-    }
-    Some(NotificationView {
+    notification.is_visible().then(|| entry_view(notification))
+}
+
+/// The [`NotificationView`] of any retained notification, whatever its placement — the one place
+/// a notification's presentation fields are copied, shared by the toast projection
+/// ([`notification_view`]) and the history ([`notification_record`]).
+fn entry_view(notification: &AppNotification) -> NotificationView {
+    NotificationView {
         id: notification.id,
         severity: notification.severity,
         title: notification.title.clone(),
@@ -57,7 +64,7 @@ pub fn notification_view(notification: &AppNotification) -> Option<NotificationV
             NotificationLifetime::Sticky => None,
         },
         actions: notification.actions.clone(),
-    })
+    }
 }
 
 /// Build the grid-ui [`ToastSpec`] a window draws, from a received [`NotificationView`].
