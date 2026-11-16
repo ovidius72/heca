@@ -96,3 +96,32 @@ fn a_second_server_on_the_same_address_is_refused() {
     assert!(RuntimeListener::bind(&served.address, handle, ConnectionConfig::default()).is_err());
     assert!(request_to(&served.address, "no_such_action").unwrap().starts_with("error:"));
 }
+
+/// What a script sent, byte for byte, and the one line the server answered.
+fn raw_request(served: &Served, bytes: &[u8]) -> String {
+    let mut stream = UnixStream::connect(&served.address).unwrap();
+    stream.write_all(bytes).unwrap();
+    let _ = stream.shutdown(std::net::Shutdown::Write);
+    let mut answer = String::new();
+    stream.read_to_string(&mut answer).unwrap();
+    answer
+}
+
+/// The line terminator ends the request and is not part of it, `\n` or `\r\n`; a line break left
+/// inside the line is refused.
+#[test]
+fn only_the_terminator_is_dropped_from_a_script_line() {
+    let served = Served::new();
+    assert_eq!(raw_request(&served, b"no_such_action\n").trim_end(), "error: unknown command: no_such_action");
+    assert_eq!(raw_request(&served, b"no_such_action\r\n").trim_end(), "error: unknown command: no_such_action");
+    let answer = raw_request(&served, b"no_such_action a\rb\n");
+    assert!(answer.starts_with("error: cannot read the line"), "got: {answer}");
+}
+
+/// A quote that never closes is answered before anything runs.
+#[test]
+fn an_open_quote_is_answered_with_an_error() {
+    let served = Served::new();
+    let answer = request_to(&served.address, r#"rename_session_to name="open"#).unwrap();
+    assert!(answer.starts_with("error: cannot read the line"), "got: {answer}");
+}
