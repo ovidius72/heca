@@ -25,10 +25,13 @@ pub enum ToastSeverity {
 #[heca_grid_ui_macros::props]
 impl ToastSeverity {
     /// The default leading glyph for this severity (overridable via [`Toast::icon`](super::Toast::icon)).
+    ///
+    /// Public so that a list of notifications that is **not** a toast (the history) draws the same
+    /// glyph for the same severity, from this one table, instead of keeping a copy that could drift.
     #[heca_grid_ui_macros::host_only(
         "carries no value — a property needs one; the equivalent is an explicit setting"
     )]
-    pub(crate) fn default_glyph(self) -> Glyph {
+    pub fn default_glyph(self) -> Glyph {
         match self {
             ToastSeverity::Info => Glyph::Info,
             ToastSeverity::Success => Glyph::Check,

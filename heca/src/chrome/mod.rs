@@ -76,7 +76,7 @@ pub(crate) use surfaces::overlay::{
     content_covered, open_modal, resolve as resolve_overlay, top_modal,
     discard_overlays,
 };
-pub(crate) use surfaces::palette::{open_command_palette, open_session_folder};
+pub(crate) use surfaces::palette::{MODE_NOTIFICATION, OpenPalette, open_command_palette, open_session_folder};
 
 // ── window ──
 pub use window::division::ChromeConfig;

@@ -450,6 +450,7 @@ pub(crate) async fn init_state(
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),
         notifications: Vec::new(),
+        open_palette: None,
         notification_hover_sent: false,
         toasts: heca_grid_ui::reactive::signal(Vec::new()),
         notification_max_lines: heca_grid_ui::reactive::signal(

@@ -181,13 +181,10 @@ impl SessionRuntime {
             super::ServerAction::ConfigureTerminals(Box::new(terminals)),
             now,
         );
-        let notifications = &config.config.settings.notification_system;
         self.state.execute(
-            super::ServerAction::Configure(super::NotificationSettings {
-                auto_dismiss: std::time::Duration::from_millis(notifications.auto_dismiss_ms),
-                mode: notifications.mode,
-                max_visible: notifications.max_visible,
-            }),
+            super::ServerAction::Configure(super::NotificationSettings::from(
+                &config.config.settings.notification_system,
+            )),
             now,
         )
     }
@@ -412,6 +409,13 @@ impl SessionRuntime {
                         .state
                         .execute(command.into_server_action(self.clients[i].id), now);
                     detached.extend(self.publish_notifications(&changes));
+                }
+                ClientMsg::NotificationHistory => {
+                    // Answered to the window that asked, with what that window is meant to see.
+                    let records = self.state.notification_history_for(self.clients[i].id);
+                    if self.clients[i].link.send(ServerMsg::NotificationHistory(records)).is_err() {
+                        detached.push(i);
+                    }
                 }
                 ClientMsg::AcknowledgeFeedback { session_id, pane_id, revision } => {
                     if session_id == self.session.id {

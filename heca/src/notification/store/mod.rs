@@ -344,6 +344,32 @@ impl NotificationStore {
             .collect()
     }
 
+    /// **The notification history**, newest first, for the window on connection `client`: every
+    /// notification still on screen and every retained archived one that window is meant to see
+    /// ([`Audience`]), as plain [`NotificationRecord`]s.
+    ///
+    /// "Newest" is when it was raised (`created_at`), not when it was archived, so a card that is
+    /// still up sits among the others where it arrived. Queued notifications are not included —
+    /// they were never shown. `now` and `wall` are the same moment on the monotonic and the wall
+    /// clock, given by the caller because the store reads no clock.
+    pub fn history_records_for(
+        &self,
+        client: u64,
+        now: Instant,
+        wall: std::time::SystemTime,
+    ) -> Vec<NotificationRecord> {
+        let mut retained: Vec<&AppNotification> = self
+            .history()
+            .chain(self.visible())
+            .filter(|notification| notification.audience.allows(client))
+            .collect();
+        retained.sort_by_key(|notification| std::cmp::Reverse((notification.created_at, notification.id)));
+        retained
+            .into_iter()
+            .filter_map(|notification| notification_record(notification, now, wall))
+            .collect()
+    }
+
     /// Whether the store holds no queued, visible, or retained notification.
     pub fn is_empty(&self) -> bool {
         self.notifications.is_empty()
@@ -380,3 +406,6 @@ mod tests_1;
 
 #[cfg(test)]
 mod tests_2;
+
+#[cfg(test)]
+mod history_tests;

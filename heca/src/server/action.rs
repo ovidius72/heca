@@ -24,6 +24,21 @@ pub(crate) struct NotificationSettings {
     pub(crate) mode: heca_config::settings::NotificationSystem,
     /// How many cards are up at once; the rest queue.
     pub(crate) max_visible: usize,
+    /// How many dismissed or expired notifications are kept for the history; `0` keeps none.
+    pub(crate) history_limit: usize,
+}
+
+impl From<&heca_config::settings::NotificationSystemConfig> for NotificationSettings {
+    /// The one reading of `[settings.notification_system]` — used at start-up and on reload, so a
+    /// setting is never read in one and forgotten in the other.
+    fn from(config: &heca_config::settings::NotificationSystemConfig) -> Self {
+        Self {
+            auto_dismiss: Duration::from_millis(config.auto_dismiss_ms),
+            mode: config.mode,
+            max_visible: config.max_visible,
+            history_limit: config.history_limit,
+        }
+    }
 }
 
 /// One command to the server.

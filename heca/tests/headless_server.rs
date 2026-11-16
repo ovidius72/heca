@@ -662,3 +662,56 @@ fn returning_to_a_session_types_into_its_previously_focused_pane() {
     cli(root.path(), &["rpc", "submit_overlay", "action=exit"]);
     wait_for_window_exit(&mut window);
 }
+
+/// A server started like `start_server`, its stderr kept in a file so a test can read what it said.
+fn start_logged_server() -> (tempfile::TempDir, Server, std::path::PathBuf, std::path::PathBuf) {
+    let (dir, path) = server_environment("[settings]\nshell_integration = false\nwindow_width = 640\nwindow_height = 280\n");
+    let log = dir.path().join("server.stderr");
+    let mut server = Server(isolated_command(dir.path()).env("SHELL", "/bin/sh").env("RUST_BACKTRACE", "1")
+        .arg("--server").arg(&path).stdin(Stdio::null()).stdout(Stdio::null())
+        .stderr(std::fs::File::create(&log).unwrap()).spawn().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        assert!(server.0.try_wait().unwrap().is_none(), "headless server exited at startup");
+        assert!(Instant::now() < deadline, "headless server did not bind");
+        if UnixStream::connect(&path).is_ok() { break; }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    (dir, server, path, log)
+}
+
+/// **Asking for the notification history over the real socket**, as a window does: with nothing in
+/// it, and with one notification dismissed and one still on screen. The server answers, stays up and
+/// says nothing on stderr; the window is never disconnected.
+#[test]
+fn the_notification_history_is_answered_over_the_real_socket() {
+    let (_dir, mut server, path, log) = start_logged_server();
+    let (mut client, _) = attach(&path);
+
+    send(&mut client, json!("NotificationHistory"));
+    let empty = until(&mut client, "NotificationHistory");
+    assert_eq!(empty, json!([]), "nothing raised yet");
+
+    // Raise two the way a window does (`heca rpc notify` raises through the window, which a headless
+    // server has none of), dismiss the first, and ask again.
+    let draft = |title: &str| json!({"title": title, "body": "the whole body", "source": {"kind": "app", "id": null},
+        "severity": "warning", "lifecycle": {"lifetime": "sticky", "dismissible": true}, "explicit_lifetime": true,
+        "dedup_key": null, "actions": [], "audience": "session"});
+    send(&mut client, json!({"Notify":{"Raise": draft("first")}}));
+    send(&mut client, json!({"Notify":{"Raise": draft("second")}}));
+    send(&mut client, json!({"Notify":"DismissLast"}));
+    send(&mut client, json!("NotificationHistory"));
+    let records = until(&mut client, "NotificationHistory");
+    let titles: Vec<(&str, &str)> = records.as_array().unwrap().iter()
+        .map(|r| (r["view"]["title"].as_str().unwrap(), r["standing"].as_str().map_or("archived", |s| s)))
+        .collect();
+    assert_eq!(titles.iter().map(|t| t.0).collect::<Vec<_>>(), ["second", "first"], "{records}");
+    assert_eq!(records[0]["view"]["body"], "the whole body");
+
+    assert!(server.0.try_wait().unwrap().is_none(), "the server ended");
+    let stderr = std::fs::read_to_string(&log).unwrap();
+    assert!(!stderr.contains("panicked"), "the server panicked:\n{stderr}");
+    // The same window can still talk to it.
+    send(&mut client, json!("NotificationHistory"));
+    assert_eq!(until(&mut client, "NotificationHistory").as_array().unwrap().len(), 2);
+}

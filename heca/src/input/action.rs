@@ -637,6 +637,10 @@ pub enum WmAction {
     /// Toggle the scoped `prefix+/`-style picker over the visible toast
     /// actions/× — in addition to their global pick letters, not instead.
     NotificationPick,
+    /// List the notifications the server remembers — still on screen, dismissed or expired —
+    /// newest first, in the command palette's notifications mode. Asks the server for the list;
+    /// the palette opens when the answer arrives.
+    NotificationHistory,
     /// Resolve `ToastStack::on_action(id, key)` into the notification's real `Intent` and fire
     /// it. Exists because a plain `ActionHandler` has no `&ActionRegistry` to dispatch an
     /// arbitrary Intent with, and the real intent cannot be known at mount time (a notification

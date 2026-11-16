@@ -388,6 +388,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[],
     },
     ActionDescriptor {
+        name: "notification_history",
+        side: Side::Client,
+        label: "Notification History",
+        description: "List the notifications still on screen and the ones dismissed or expired, newest first, with their level, full text and age. Search it by title or body; an entry still on screen offers its actions.",
+        icon: Some(Glyph::ChatCircleDots),
+        args: &[],
+    },
+    ActionDescriptor {
         name: "notification_action_relay",
         side: Side::Client,
         label: "Run Notification Action",

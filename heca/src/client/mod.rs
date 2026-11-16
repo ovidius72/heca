@@ -13,6 +13,8 @@ mod titles;
 mod tests;
 #[cfg(test)]
 mod reconnect_tests;
+#[cfg(test)]
+mod history_tests;
 pub(crate) use reads::ReadEffect;
 
 use std::{collections::HashMap, io, rc::Rc, sync::mpsc, time::Instant};
@@ -60,6 +62,9 @@ pub(crate) struct Update {
     /// The notifications on show, when the server sent a fresh projection this poll. The window
     /// builds its own toasts from it; `None` means the set did not change.
     pub(crate) notifications: Option<Vec<crate::notification::NotificationView>>,
+    /// The server answered a request for the notification history this poll
+    /// ([`ClientState::notification_history`] holds it); the window opens the notifications list.
+    pub(crate) notification_history_answered: bool,
     /// The session's window directory, when the server sent a fresh one this poll (join, leave or
     /// title change). The window uses it for the follow picker; `None` means it did not change.
     pub(crate) windows: Option<Vec<crate::server::sessions::WindowInfo>>,
@@ -97,6 +102,11 @@ pub struct ClientState {
     feedback: feedback::FeedbackView,
     pub(crate) session: crate::server::sessions::SessionInfo,
     pub(crate) sessions: Vec<crate::server::sessions::SessionInfo>,
+    /// **The notification history the server just sent this window**, newest first — the answer to
+    /// its last request, waiting for the palette that will list it. The palette takes it when it is
+    /// built (`Option::take`), so it is shown once and never kept: the next time the notifications
+    /// mode is entered it is asked for again.
+    pub(crate) notification_history: Option<Vec<crate::notification::NotificationRecord>>,
     /// Client-side terminal views only, never emulators or process handles.
     pub backends: BackendStore,
     pub programs: Rc<ProgramsConfig>,
@@ -159,7 +169,7 @@ impl ClientState {
         // Report this window's title so the server's session directory has it from the start.
         link.send(ClientMsg::ReportWindowTitle(title.clone()))?;
         let (outbox, requests) = outbox::channel(config.config.settings.connection.queue_capacity.get(), wake.clone());
-        Ok((Self { client_id, window_ordinal, title, title_fmt, title_fmt_numbered, followed: false, following: None, feedback: Default::default(), session, sessions: Vec::new(), backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
+        Ok((Self { client_id, window_ordinal, title, title_fmt, title_fmt_numbered, followed: false, following: None, feedback: Default::default(), session, sessions: Vec::new(), notification_history: None, backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
             link, local, data: Default::default(), outbox, requests, pending: HashMap::new(), next_request: 1,
             images: Default::default(), image_limit: config.config.settings.connection.max_image_bytes.get(), reads: Default::default(), failed: false,
             detached: false, switching: false, pending_selection: None,
@@ -251,6 +261,7 @@ impl ClientState {
                     if session.id != self.session.id { self.feedback = Default::default(); }
                     self.reset_projection();
                     self.detached = false;
+                    if session.id != self.session.id { self.notification_history = None; }
                     self.session = session;
                     self.client_id = client_id;
                     self.window_ordinal = window_ordinal;
@@ -311,6 +322,15 @@ impl ClientState {
                     }
                 }
                 ServerMsg::Notifications(views) => update.notifications = Some(views),
+                ServerMsg::NotificationHistory(records) => {
+                    // Keep the answer for the palette's notifications mode and say it has come: the
+                    // window opens the palette on it directly. It is not routed as a new action —
+                    // the request was already judged by the policy, and `command_palette` is refused
+                    // while a palette or a floating pane has the screen, which is exactly when a
+                    // typed `!` asks.
+                    self.notification_history = Some(records);
+                    update.notification_history_answered = true;
+                }
                 ServerMsg::Feedback { session_id, panes } => {
                     if session_id == self.session.id {
                         self.feedback.receive(panes);
@@ -404,6 +424,13 @@ impl ClientState {
     /// dedup and sends back a fresh projection ([`ServerMsg::Notifications`]).
     pub(crate) fn notify(&self, command: crate::server::NotificationCommand) {
         self.outbox.send(ClientMsg::Notify(command));
+    }
+
+    /// Ask the server for the notification history. The answer comes back as
+    /// [`ServerMsg::NotificationHistory`]; the server owns the list, so this window keeps only the
+    /// answer to its last question, for the palette to show.
+    pub(crate) fn request_notification_history(&self) {
+        self.outbox.send(ClientMsg::NotificationHistory);
     }
 
     /// Tell the server the config changed on disk, so it re-reads and re-applies its own terminal

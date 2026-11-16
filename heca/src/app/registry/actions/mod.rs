@@ -143,6 +143,7 @@ pub fn build_registry() -> ActionRegistry {
         handle_notification_dismiss_last,
     );
     registry.register(WmActionKind::NotificationPick, handle_notification_pick);
+    registry.register(WmActionKind::NotificationHistory, handle_notification_history);
     registry.register(
         WmActionKind::NotificationActionRelay,
         handle_notification_action_relay,

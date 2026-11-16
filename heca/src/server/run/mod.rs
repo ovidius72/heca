@@ -519,3 +519,5 @@ mod identity_tests;
 mod restore_tests;
 #[cfg(test)]
 mod resume_tests;
+#[cfg(test)]
+mod history_tests;

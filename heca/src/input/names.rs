@@ -132,6 +132,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "notification_dismiss_all" => Some(WmAction::NotificationDismissAll),
         "notification_dismiss_last" => Some(WmAction::NotificationDismissLast),
         "notification_pick" => Some(WmAction::NotificationPick),
+        "notification_history" => Some(WmAction::NotificationHistory),
         "clear_search_history" => Some(WmAction::ClearSearchHistory { scope: None }),
         "clear_search_ranking" => Some(WmAction::ClearSearchRanking { scope: None }),
         // Scrollback

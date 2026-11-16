@@ -1,7 +1,7 @@
 //! The part a widget embeds: ranks a caller's list with the matcher plus the
 //! scope's frecency, and drives history recall from the intents it forwards.
 
-use super::matcher::{fuzzy, MatchCase};
+use super::matcher::{fuzzy, Match, MatchCase};
 use super::store::SearchStore;
 use crate::component::WidgetIntent;
 use std::cell::RefCell;
@@ -14,8 +14,12 @@ pub struct Ranked {
     pub index: usize,
     /// Match score **plus** the frecency boost — what the order is by.
     pub score: i32,
-    /// The matched character indices, for a caller that marks them.
+    /// The matched character indices **in the item's own text**, for a caller that marks them.
     pub hits: Vec<usize>,
+    /// The matched character indices in the item's **secondary text**, when it offered one and the
+    /// query matched it ([`rank_with_secondary`](SearchModel::rank_with_secondary)); empty
+    /// otherwise. The item may match on either text or both, and a caller marks whichever it shows.
+    pub secondary_hits: Vec<usize>,
 }
 
 /// What a widget should do about an intent it forwarded.
@@ -97,29 +101,60 @@ impl SearchModel {
         query: &str,
         key: impl Fn(&T) -> (Option<&str>, &str),
     ) -> Vec<Ranked> {
+        self.rank_with_secondary(items, query, |item| {
+            let (id, text) = key(item);
+            (id, text, None)
+        })
+    }
+
+    /// [`rank`](Self::rank) for items that may also offer a **secondary text** — a description, a
+    /// folder, a body — which the query is matched against too.
+    ///
+    /// `key` yields `(id, text, secondary)`; an item with `None` for the secondary is matched on
+    /// its text alone, exactly as `rank` does, so a list opts in per item by what it supplies.
+    ///
+    /// **A match on the text always ranks above a match on the secondary text alone**, whatever
+    /// either scored and whatever the items' past use: the text is what the user is looking at and
+    /// naming, the secondary text is where a half-remembered word is found when the name does not
+    /// have it. Within each of the two groups the order is the usual score plus use. An item that
+    /// matches both is in the first group, and reports the hits on both texts so a caller can mark
+    /// each.
+    pub fn rank_with_secondary<T>(
+        &self,
+        items: &[T],
+        query: &str,
+        key: impl Fn(&T) -> (Option<&str>, &str, Option<&str>),
+    ) -> Vec<Ranked> {
         let case_sensitive = self.case.is_sensitive(query);
         let store = self.store.borrow();
         let frecency = store.scope(&self.scope).map(|s| &s.frecency);
-        let mut out: Vec<Ranked> = items
+        // `(secondary only, ranked)`: the first element is the group, so `false` sorts first.
+        let mut out: Vec<(bool, Ranked)> = items
             .iter()
             .enumerate()
             .filter_map(|(index, item)| {
-                let (id, text) = key(item);
-                let m = fuzzy(query, text, case_sensitive)?;
+                let (id, text, secondary) = key(item);
+                let on_text = fuzzy(query, text, case_sensitive);
+                let on_secondary = secondary.and_then(|secondary| fuzzy(query, secondary, case_sensitive));
+                let secondary_hits = on_secondary.as_ref().map(|m| m.hits.clone()).unwrap_or_default();
+                let (secondary_only, m) = match (on_text, on_secondary) {
+                    (Some(m), _) => (false, m),
+                    (None, Some(m)) => (true, Match { hits: Vec::new(), ..m }),
+                    (None, None) => return None,
+                };
                 let boost = match (id, frecency) {
                     (Some(id), Some(f)) => f.boost(id),
                     _ => 0,
                 };
-                Some(Ranked {
-                    index,
-                    score: m.score + boost,
-                    hits: m.hits,
-                })
+                Some((
+                    secondary_only,
+                    Ranked { index, score: m.score + boost, hits: m.hits, secondary_hits },
+                ))
             })
             .collect();
-        // Stable: within equal scores the caller's own order survives.
-        out.sort_by_key(|r| std::cmp::Reverse(r.score));
-        out
+        // Stable: within equal groups and scores the caller's own order survives.
+        out.sort_by_key(|(secondary_only, r)| (*secondary_only, std::cmp::Reverse(r.score)));
+        out.into_iter().map(|(_, ranked)| ranked).collect()
     }
 
     /// Handle a history intent. **This is the whole of history navigation** — a widget that matches

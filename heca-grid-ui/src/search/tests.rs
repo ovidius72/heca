@@ -237,3 +237,33 @@ fn only_a_run_is_remembered() {
         SearchAction::SetQuery("filter".to_string()),
     );
 }
+
+/// **A match on the text outranks a match on the secondary text alone**, however either scored and
+/// however much the secondary-only item has been used; an item that offers no secondary text is
+/// matched on its text alone, as `rank` does.
+#[test]
+fn a_text_match_outranks_a_secondary_only_match() {
+    let model = SearchModel::detached("s");
+    // (id, text, secondary)
+    let items = [
+        (Some("folder"), "api", Some("~/work/billing")),
+        (None, "billing", Some("~/work/other")),
+        (None, "none", None),
+    ];
+    for _ in 0..50 {
+        model.store().borrow_mut().scope_mut("s").frecency.record("folder");
+    }
+    let ranked = model.rank_with_secondary(&items, "bill", |i| (i.0, i.1, i.2));
+    assert_eq!(
+        ranked.iter().map(|r| r.index).collect::<Vec<_>>(),
+        [1, 0],
+        "the title match leads the much-used folder match; the item with no match is out",
+    );
+    assert!(!ranked[0].hits.is_empty());
+    assert!(ranked[1].hits.is_empty(), "it did not match on its text");
+    assert_eq!(ranked[1].secondary_hits, [7, 8, 9, 10], "it matched on its secondary text");
+
+    // Without a secondary text, `rank` is unchanged: the folder is not looked at.
+    let plain = model.rank(&items, "bill", |i| (i.0, i.1));
+    assert_eq!(plain.iter().map(|r| r.index).collect::<Vec<_>>(), [1]);
+}

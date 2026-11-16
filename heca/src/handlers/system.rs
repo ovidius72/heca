@@ -114,6 +114,12 @@ pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) {
     state.notification_pick_open.set(!open);
 }
 
+/// List the notification history. The server owns it, so this only asks; the palette's
+/// notifications mode opens when the answer arrives (`AppState::receive_client`).
+pub fn handle_notification_history(state: &mut AppState, _action: &WmAction) {
+    state.client.request_notification_history();
+}
+
 /// Resolve `ToastStack::on_action(id, key)` (relayed as this action by the mount, since a
 /// notification's real Intent cannot be known until the notification exists — see
 /// chrome::surfaces::notifications) into the notification's real `Intent` and fire it through the

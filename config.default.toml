@@ -306,6 +306,12 @@ max_visible = 5
 # that needs more than this ends with "…". Clamped to at least 1.
 max_lines = 8
 
+# How many dismissed or expired notifications the server remembers for the notification
+# history (`notification_history`, prefix+Ctrl+Alt+n). Once there are more, the oldest is
+# forgotten first. Notifications still on screen are not counted. 0 keeps none, so the
+# history only ever lists what is still on screen. Applied on config reload.
+history_limit = 100
+
 [settings.agents]
 # Master switch. Each program below stays off until the user enables it.
 enabled = true

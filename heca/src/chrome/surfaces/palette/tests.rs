@@ -50,7 +50,7 @@ fn a_components_action_is_scoped_and_focuses_first() {
     let entry = find(&rows, "docker.restart");
     assert_eq!(entry.label, "Containers › Restart Container");
     assert_eq!(entry.description, "Restart Container — what it does.");
-    match &entry.intent {
+    match entry.intent.as_ref().expect("an action row runs something") {
         InteractionIntent::FocusContainerThenAction { container, action } => {
             assert_eq!(
                 container, "docker.right",
@@ -105,6 +105,7 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
     let sources = modes::RowSources {
         sessions: &[],
         follow: &[],
+        notifications: &[],
         catalog: &catalog,
         owners: &owners,
         shortcuts: &shortcuts,
@@ -117,8 +118,10 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
     };
     let mut declared = modes::MODES.to_vec();
     declared.push(modes::Mode {
-        sigil: '!',
+        sigil: '%',
         scope: "custom",
+        search_description: false,
+        on_enter: None,
         rows: |sources| {
             workspace_entries(sources.layout, None)
                 .into_iter()
@@ -135,13 +138,13 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
             let ran = ran.clone();
             let id = row.id.clone();
             Command::new(row.label.clone(), move || *ran.borrow_mut() = id.clone())
-        });
+        }, |_| Box::new(|| {}));
         assert!(rows.iter().any(|row| row.id == "custom:ws:0"));
         assert_eq!(rows.len(), palette.label_signals().len());
         let mut palette = if named {
             palette.query_in(Some("custom"), "edit").default_open(true)
         } else {
-            palette.query("!edit").default_open(true)
+            palette.query("%edit").default_open(true)
         };
         heca_grid_ui::dispatch(&mut palette, &Event::Widget(WidgetIntent::Activate));
         assert_eq!(*ran.borrow(), "custom:ws:0", "named={named}");
@@ -240,7 +243,7 @@ fn a_pane_row_is_ranked_by_its_display_name_not_its_id() {
     );
     assert_eq!(renamed.description, "Editing", "no cwd: just the workspace");
 
-    match renamed.intent {
+    match renamed.intent.clone().expect("a pane row runs something") {
         InteractionIntent::FocusPane { pane_id } => {
             assert_eq!(
                 pane_id,
@@ -294,7 +297,7 @@ fn only_a_named_workspace_carries_a_rank_id() {
         unnamed.rank_id, None,
         "no durable identity: 'Workspace 2' is the index, and the index is reused",
     );
-    match unnamed.intent {
+    match unnamed.intent.clone().expect("a workspace row runs something") {
         InteractionIntent::ActivateAction(WmAction::FocusWorkspace { ws_idx }) => {
             assert_eq!(ws_idx, 1);
         }
@@ -354,7 +357,7 @@ fn a_word_list_argument_is_offered_once_per_distinct_word() {
         .iter()
         .find(|r| r.id == "set_region_visible region=bar.top")
         .expect("the top bar is offered");
-    let InteractionIntent::View(intent) = &row.intent else {
+    let Some(InteractionIntent::View(intent)) = &row.intent else {
         panic!("a built-in runs as a plain intent, got {:?}", row.intent);
     };
     assert_eq!(intent.action, "set_region_visible");
@@ -377,7 +380,7 @@ fn a_builtin_carries_no_scope_and_no_focus_step() {
     );
     let entry = find(&rows, "close");
     assert!(!entry.label.contains('›'), "no component owns `close`");
-    assert!(matches!(entry.intent, InteractionIntent::View(_)));
+    assert!(matches!(entry.intent, Some(InteractionIntent::View(_))));
 }
 
 /// The focused component's actions sort first — and **nothing is hidden**: an unfocused

@@ -57,7 +57,7 @@ pub(crate) fn pane_entries(
                 description_path: false,
                 detail: None,
                 shortcuts: Vec::new(),
-                intent: InteractionIntent::FocusPane { pane_id: pane.id },
+                intent: Some(InteractionIntent::FocusPane { pane_id: pane.id }),
             });
         }
     }
@@ -93,7 +93,7 @@ pub(crate) fn workspace_entries(
             description_path: false,
             detail: None,
             shortcuts: Vec::new(),
-            intent: InteractionIntent::ActivateAction(WmAction::FocusWorkspace { ws_idx }),
+            intent: Some(InteractionIntent::ActivateAction(WmAction::FocusWorkspace { ws_idx })),
         })
         .collect()
 }

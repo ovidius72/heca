@@ -53,7 +53,7 @@ impl NotificationId {
 ///   lazily by the store at promotion time.
 /// - `History` — dismissed/expired/archived; kept up to
 ///   `notification_history_limit` then dropped (FIFO).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NotificationArchiveCause {
     /// Removed through the user-facing dismiss path.
     Dismissed,
@@ -132,6 +132,10 @@ pub struct AppNotification {
     /// filters delivery by it (`visible_views_for`). Never crosses the wire — the window receives
     /// only the notifications meant for it.
     pub audience: Audience,
+    /// How many times this notification has been raised: `1` when it first arrives, one more each
+    /// time a notification with the same dedup key replaces it in place. The store counts it, in
+    /// one place; the history shows it.
+    pub repeats: u32,
 }
 
 impl AppNotification {
@@ -159,6 +163,7 @@ impl AppNotification {
             created_at,
             placement: NotificationPlacement::default(),
             audience: Audience::Session,
+            repeats: 1,
         }
     }
 

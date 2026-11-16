@@ -42,9 +42,9 @@ pub(super) fn entries(
                 )),
                 icon: None,
                 shortcuts: Vec::new(),
-                intent: InteractionIntent::ActivateAction(WmAction::SwitchSession {
+                intent: Some(InteractionIntent::ActivateAction(WmAction::SwitchSession {
                     name: session.name.clone(),
-                }),
+                })),
             }
         })
         .collect()
@@ -149,7 +149,7 @@ mod tests {
         assert_eq!(row.detail.as_deref(), Some("views=2; agents=3"));
         assert_eq!(row.rank_id.as_deref(), Some(session.name.as_str()));
         assert!(row.current);
-        assert!(matches!(&row.intent, InteractionIntent::ActivateAction(WmAction::SwitchSession { name }) if name == &session.name));
+        assert!(matches!(&row.intent, Some(InteractionIntent::ActivateAction(WmAction::SwitchSession { name })) if name == &session.name));
 
         let stopped = SessionInfo { status: SessionStatus::Terminated, ..session };
         let other = SessionInfo { id: SessionId(99), ..stopped.clone() };
