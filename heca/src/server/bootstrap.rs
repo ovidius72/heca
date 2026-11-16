@@ -1,7 +1,7 @@
 //! Construct the process owner from configuration, before or without any window.
 
 use heca_config::loader::AppConfig;
-use super::{ServerState, ServerWaker, identity::ServerIdentity, persist::SavedSession};
+use super::{ServerState, ServerWaker, identity::{ServerIdentity, ServerKind}, persist::SavedSession};
 use crate::{app::{backend_factory::{Launch, TerminalSettings}, backend_store::BackendStore}, notification::NotificationRuntime};
 use heca_core::layout::{Pane, PaneId, Rectangle, Session, SessionId, Size};
 use super::{Asker, run::{Machine, ServerLoop}};
@@ -38,6 +38,13 @@ impl ServerLoop {
     pub(super) fn boot(config: &AppConfig, identity: ServerIdentity, wake: ServerWaker, machine: Machine) -> std::io::Result<Self> {
         let mut server = Self::empty().on(machine);
         server.open_store(&identity, config);
+        // Before the services start, so a factory can see every action there is.
+        let conflicts = server.register_actions();
+        // A standalone window registers the same declarations in this process and reports what
+        // collided; the background server has no window to.
+        if identity.kind() == ServerKind::Background {
+            conflicts.report();
+        }
         server.start_services(config, identity, &wake);
         server.configure_factory(config.clone(), wake);
         server.restore_sessions(config);

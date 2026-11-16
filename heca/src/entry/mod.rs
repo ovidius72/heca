@@ -45,6 +45,7 @@ pub use extension::{Extension, extension};
 pub(crate) use extension::qualified_name;
 pub(crate) use layer::{AddedLayers, rebuild as rebuild_added_layer, register_queued_layers};
 pub use layer::{LayerBuilder, LayerCx};
+pub use crate::actions::ActionCatalogSnapshot;
 pub use service::{
     ActionCx, ActionRequest, ActionResult, ExtensionConfigError, ExternalRequest, Permit, ProjectCx, Projection,
     RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox, ServiceRegistration,

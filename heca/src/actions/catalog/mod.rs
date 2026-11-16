@@ -1,6 +1,9 @@
 //! The catalog — what actions exist and what each says about itself: its label, icon, category,
 //! arguments, policy and confirm. Every surface that renders an action reads it from here.
 
+mod snapshot;
+pub use snapshot::ActionCatalogSnapshot;
+
 use super::builtins::builtins_by_category;
 use super::confirm::builtin_confirm_specs;
 use super::{ConfirmSpec, DuplicateAction, builtins};

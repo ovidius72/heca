@@ -114,16 +114,22 @@ fn run_once(run: &Run, store: SharedChromeState, intent: &Intent) -> Vec<Intent>
     cx.drain()
 }
 
-/// Put every queued action into the catalog and registry, and close the queue. The host calls this
-/// once, as it starts, after the mounted components have registered theirs.
+/// Put every queued action into the catalog and registry, and close the queue. Each host calls this
+/// as it starts: the server before its services start (so a factory can see the catalog), and a
+/// window after its mounted components have registered theirs.
+///
+/// **Reads the queue, never takes it.** A standalone run is a server and a window in one process
+/// with one queue; taking it would leave whichever started second with nothing. Each host builds
+/// its own registry from the same declarations, so nothing is registered twice into one.
 pub(crate) fn register_queued_actions(
     registry: &mut ActionRegistry,
     catalog: &mut ActionCatalog,
     conflicts: &mut Conflicts,
 ) {
     let mut seen = std::collections::HashSet::new();
-    for declared in QUEUE.with(StartupQueue::take) {
-        let Declared { meta, run } = *declared;
+    let queued: Vec<(ActionMeta, Rc<Run>)> =
+        QUEUE.with(|q| q.close(|items| items.iter().map(|d| (d.meta.clone(), d.run.clone())).collect()));
+    for (meta, run) in queued {
         let id = meta.name.clone();
         // The registry lets a second registration replace the first (a dock remounting is meant
         // to). Two actions added under one name by one program is a mistake, so it is said.
