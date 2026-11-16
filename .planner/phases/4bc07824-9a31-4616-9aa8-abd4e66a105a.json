@@ -62,7 +62,8 @@
     "ed87d7cf-e9d6-436f-93bb-b82c673405ef",
     "992e7c43-e182-4a7c-9068-a99b0d17a456",
     "d72fd89e-2ea6-4dd9-b0a6-21beb72991b4",
-    "bc8f64dd-7925-4f48-8ca6-d786b7c5d949"
+    "bc8f64dd-7925-4f48-8ca6-d786b7c5d949",
+    "07672f5a-c213-40f4-a75c-fdeca95760fe"
   ],
   "tasks": [
     {
@@ -765,10 +766,103 @@
       "updatedAt": "2026-10-25T14:02:26.174Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "07672f5a-c213-40f4-a75c-fdeca95760fe",
+      "phaseId": "4bc07824-9a31-4616-9aa8-abd4e66a105a",
+      "number": 562,
+      "shortId": "GQQA9",
+      "priority": 10,
+      "shortName": "idle-window-burns-100-cpu-redr",
+      "title": "Idle window burns 100% CPU: redraws back to back and rebuilds every Terminal component each frame",
+      "status": "in-progress",
+      "description": "Found by Antonio on 2026-11-16: a window freshly started from main idles at ~109% CPU and ~8% GPU. Approved to fix immediately.\n\n## Evidence\n- A macOS `sample` of the idle window (3 s; saved in the orchestrator's scratchpad): 1622 of 1877 main-thread samples are in `app::events::handle_window_event` → `app::render::render_frame`, back to back, with no idle wait.\n- Inside each frame, `app::frame::begin` → `chrome::panes::workspace::seat::seat_workspace` → `workspace::gather::gather` → `chrome::panes::terminal::view_of` → `Terminal::clone` → `Terminal::of` → `terminal::search::SearchBar::new` dominates. So every frame rebuilds each pane's Terminal component, including a new SearchBar with new reactive signals and effects.\n- The background server is at 0%.\n\n## To do\n1. Find the exact chain: who requests the next redraw while idle, and why the Terminal component is rebuilt each frame instead of being retained. A read-only diagnosis is under way.\n2. Fix both at the source, following AGENTS.md (a component is retained and rebuilt only when its inputs change, and owns its state): the idle window must sleep.\n3. Add a headless test that runs several idle frames and asserts no redraw is requested and no Terminal/SearchBar rebuild happens.\n4. Antonio checks by eye that idle CPU is near zero and terminals, search and the header still work.",
+      "descriptionUpdatedAt": "2026-11-16T15:00:58.566Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "bcad0db9-c372-4b35-ab66-e882d92888b3",
+          "date": "2026-11-16T15:01:20.630Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "bdde003e-4b10-4162-ba12-fcde7eb111c4",
+          "date": "2026-11-16T15:32:49.082Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: heca-pro confirmed the RPC quoting rules and is blocked on them; T562 waits for Antonio's eye-check.\nWhat was being done: T562 fix implemented, all checks clean, break-it confirmed; waiting for Antonio's eye-check of the heca-feat-562 build.\nResume location: /Users/antonio/projects/heca-feat-562 (branch fix/t562-idle-redraw), uncommitted.\nHow to resume: On Antonio's eye-check OK: review the diff, run fmt, clippy (mac + xwin), tests as a separate command, commit, PR, gh run watch, then complete T562."
+        },
+        {
+          "id": "b5a7cb98-4096-402b-9749-997df0573d22",
+          "date": "2026-11-16T15:46:12.519Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from /Users/antonio/projects/heca-feat-562 (branch fix/t562-idle-redraw), uncommitted.. On Antonio's eye-check OK: review the diff, run fmt, clippy (mac + xwin), tests as a separate command, commit, PR, gh run watch, then complete T562."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "07672f5a-c213-40f4-a75c-fdeca95760fe-check-001-cause-chain-proven-who-requests-the-redraw-why-terminal-of-runs-per-frame-with-the-introducing-commit",
+          "number": 1,
+          "title": "Cause chain proven (who requests the redraw; why Terminal::of runs per frame), with the introducing commit",
+          "checked": false
+        },
+        {
+          "id": "07672f5a-c213-40f4-a75c-fdeca95760fe-check-002-fix-at-the-source-retained-terminal-component-no-per-frame-rebuild-idle-window-sleeps",
+          "number": 2,
+          "title": "Fix at the source: retained Terminal component, no per-frame rebuild, idle window sleeps",
+          "checked": false
+        },
+        {
+          "id": "07672f5a-c213-40f4-a75c-fdeca95760fe-check-003-headless-test-idle-frames-request-no-redraw-and-rebuild-nothing-break-it-confirmed",
+          "number": 3,
+          "title": "Headless test: idle frames request no redraw and rebuild nothing; break-it confirmed",
+          "checked": false
+        },
+        {
+          "id": "07672f5a-c213-40f4-a75c-fdeca95760fe-check-004-antonio-s-eye-check-idle-cpu-near-zero-terminals-search-and-header-still-work",
+          "number": 4,
+          "title": "Antonio's eye-check: idle CPU near zero; terminals, search and header still work",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "25ee73c5-9111-4102-a783-d42fc42b462b",
+          "reason": "heca-pro confirmed the RPC quoting rules and is blocked on them; T562 waits for Antonio's eye-check.",
+          "whatWasBeingDone": "T562 fix implemented, all checks clean, break-it confirmed; waiting for Antonio's eye-check of the heca-feat-562 build.",
+          "resumeLocation": "/Users/antonio/projects/heca-feat-562 (branch fix/t562-idle-redraw), uncommitted.",
+          "howToResume": "On Antonio's eye-check OK: review the diff, run fmt, clippy (mac + xwin), tests as a separate command, commit, PR, gh run watch, then complete T562.",
+          "relatedTaskId": "680f0887-fb39-442c-9ad9-00eda719a0de",
+          "pausedAt": "2026-11-16T15:32:49.082Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-11-16T15:01:20.630Z",
+      "completedAt": "",
+      "createdAt": "2026-11-16T15:00:58.030Z",
+      "updatedAt": "2026-11-16T15:46:12.519Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+          "createdAt": "2026-11-16T15:46:12.393Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438"
     }
   ],
   "createdAt": "2026-08-18T14:16:10.152Z",
-  "updatedAt": "2026-11-15T08:47:58.425Z",
+  "updatedAt": "2026-11-16T15:01:20.630Z",
   "handoff": "# T450 implementation verified; native header and rename review pending\n\nCreated at: 2026-08-28\nUpdated at: 2026-11-04T16:35:31.274Z\nReason: Preserve verified T450 implementation while awaiting Antonio's native review and window-opening approval; the task remains in-progress with no Git publication authorized.\nP094(F011)/T450 is in-progress, implementation ready for Antonio's native review,5/7 checked. Resume with C6/C7, not another task. Canonical planner ONLY /Users/antonio/projects/heca/.planner. Source /Users/antonio/projects/heca-feat-450, branch feat/t450-terminal-header, base9eb233c3 including merged T545/PR305. No commit/push/PR permission.\n\n## Current and partial state\nT517/T398 public foundation is merged; do not rebuild it. T448/T449/T451/T456 stay done. T450 now has generic PaneShell<C>/IntoChildren without a header field, terminal-owned Grid composition in chrome/panes/terminal/content.rs, and header data without pane_outer_frames/host width. Retain the existing Tag/Label left ellipsis/full tooltips and Keyed text/shape updates. Width was already ignored by the old header key; its dead parameter is removed rather than reintroducing buckets. Nested keyboard_to delegation is fixed in grid-ui/focus/handed with missing/hidden/disabled/self-area tests; no event forwarding.\nAntonio approved task decision d3901720-0607-4fa3-a439-d8747a3eae67: optional terminal title bar and its Rename menu, existing dialog, no new shortcut. Native Terminal::new(\"logs\").title(\"Logs\").header(true) returns ordinary Grid; keep a clone for rename/run/search. The described Terminal.header(true) uses the same host composition. Named custom labels are server metadata, owner-normalized across numeric client/server ids and sent to peers/new attachments. Precedence is user label > declaration.title > identity. Pane-owned terminal rename aliases the existing pane name/prefix+>, never a competing second name. Live Terminate/Restart captures this metadata; disk recovery remains T527.\nChanged owners: pane/shell, terminal/content.rs and title.rs, header inputs/key, workspace/column composition, grid-ui children/focus, shared rename/catalog/action routes, backend_store/titles.rs, server handlers/change/frame metadata, client/titles.rs, typed Terminal SDK/factory, docs/widgets.md and extend_heca.\nCurrent exact tree passed cargo test --workspace --quiet:2862 passed/92 suites/116 ignored; workspace all-target/all-feature Clippy -D warnings; RUSTDOCFLAGS=\"-D warnings\" cargo doc --workspace --no-deps; cargo build -p heca --example extend_heca; git diff --check. Only unchanged block0.1.6 future-warning and existing socket-probe diagnostics. Native UI and actual WASM are NOT claimed. Built example /Users/antonio/projects/heca/target/debug/examples/extend_heca.\n\n## Preservation constraints\nChat Italian, code/docs English. No commit or push without explicit permission, including planner/main; the earlier automatic-publication wording does not grant it. Keep other agents' dirty main/worktrees intact. Task implementation stays in its own heca-feat-<task> worktree; after approved PR/merge remove its folder/worktree/branch before the next task. Verified DONE precedes the code PR, but native acceptance must happen first.\nUse existing Component/Parent/IntoChildren, Grid/Flex/Surface, registry/catalog and capture/target/bubble. No Box/cast authoring, closed content enum, pane-only trait, extra terminal ScrollRegion, duplicated backend starter, hand-computed fitting or caller input forwarding. Preserve T449 process/resource identity, padding, input/search/link/scrollback and scene ordering, config-driven header actions/segments and live tooltips. Genuine WM drag/edge geometry stays WM-owned.\nT360/F012/P022 keep their owners; I009 is IDEA ONLY. P105/T527 owns JSON/harness resume; T452 consumes the shared managed lifecycle contract. T550 tabs are P106 with only their recorded prerequisites. Old heca-rendering worktree/checkpoint/stash directions are historical, not current execution authority; do not replay T286 or restore backup WIP blindly.\n\n## Supporting documents\nExisting .planner/docs/p094-pane-hosts-any-app.md is the phase contract; .planner/docs/p067-widget-model-and-registry.md is shared foundation background. Canonical task description/accepted decision/notes/checklist carry current T450 execution. Public API: docs/widgets.md, linked Provider/region guides. No new manual checkpoint document was created.\n\n## Blockers and risks\nC6/C7 need Antonio's real run: unchanged pane bar, correct owning-pane buttons/live tips, slow narrowing/left ellipsis/full tooltip, hidden header without a gap; pane prefix+> rename unchanged; dock Scratch shell title, right-click Rename, submit and Cancel/Escape without terminal reset. Automated UI host failed to start; do not claim screenshot/runtime acceptance.\nNo T450 window/server has been launched. An async question asks whether to open ONE isolated review window; await the answer and never use another agent's running app. Freeze/copy the built binary before starting it; a shared cargo target can be rebuilt by someone else.\nT455 still owns hint/pane geometry and actual tree input acceptance; T453 owns floating/Search parity and removal only after real readers migrate. Historical 07d28af9 click/header/divider/overlaid-float cursor symptoms are an acceptance matrix, not proven current bugs or fixes. Verify paired press/release, context targeting, zoom/occlusion, focus-follows-mouse, float/unfloat/frame/blur/letter/return slot when those tasks run.\n\n## How to resume\n1. Read P094(F011)/T450 full and this handoff; verify exact worktree/diff and the native-window approval answer. Do not restart T398 or select T527. Current MCP owner is mcp-process:80c7a347-1c2b-4500-ac1a-2fc174887129; recover only through official session lifecycle if needed.\n2. If Antonio approves, prepare the isolated extend_heca --standalone review using his real config/shell expectations and private runtime/data, with the Notes/Scratch shell dock. Do not touch other servers. Record binary/path/PID/config and actual operator results in the task.\n3. Fix any reproduced issue in its owning component/library, then rerun relevant tests/Clippy. Mark C6/C7 and task DONE only after native acceptance. Await explicit commit/push/PR permission, verify merge and safely clean the worktree.\n4. Continue the recorded P094 priority/dependency order: T455, T452, T453, T454, T457. T454's smallest second content and T457's pending sidebar/picker interaction need their own agreed choices. P105 can consume T452 later without a second registry or full Browser/IDE implementation.",
   "handoffUpdatedAt": "2026-11-04T16:35:31.274Z",
   "handoffAudit": {
@@ -1025,6 +1119,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+      "createdAt": "2026-11-16T15:46:12.393Z"
+    },
     {
       "sessionId": "mcp-process:30d1afc7-c737-4563-a538-d90426a3cf85",
       "createdAt": "2026-11-12T18:22:33.314Z"

@@ -17,11 +17,34 @@
   "phaseIds": [
     "dcf9ff70-cf6e-416e-8e46-8cc36b4ec233",
     "6d582a8a-3b10-4157-8009-2b2db2825e29",
-    "13be12b1-e912-4117-88bb-6ac85e230bcf"
+    "13be12b1-e912-4117-88bb-6ac85e230bcf",
+    "80f4610b-dc15-4e87-8be8-bc3090e2e7f0"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "f7cfadac-e332-447c-9f66-c895b1cc707f",
+      "date": "2026-11-16T14:44:40.016Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "e04f196b-1a05-4672-9242-c63626e6c0e9",
+      "date": "2026-11-16T15:01:20.802Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-09T13:08:19.438Z",
   "updatedAt": "2026-07-09T13:15:09.863Z",
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+      "createdAt": "2026-11-16T14:44:39.763Z"
+    }
+  ]
 }

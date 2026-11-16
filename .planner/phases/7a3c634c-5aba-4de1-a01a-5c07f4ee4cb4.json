@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "STUB. A top-bar Menu/menubar is a separate activity, similar to the contextual menu. Not scoped yet — recorded so the shared infrastructure built for context-menu is made reusable, not forked.",
   "description": "Top/Bottom Bar Widget System + mainmenu — vision registered under Pluggable Chrome (where it is born: reuses open_dropdown, Contribution, OverlayHost). To be split into separate phases in a later review; for now this single stub phase holds the whole vision.\n\nVISION (2026-07-09):\nA. Bar containers: TopBar and BottomBar become generic, pluggable widget containers — specular in functioning, each with independent widgets (like the VSCode bottom bar: icons, buttons, text, often from plugins). Today the TopBar hosts only 2 sidebar-toggle buttons and is misnamed \"tab bar\". Flesh out the placeholder Contribution::ToolbarGroup / Contribution::StatusSegment (chrome/contribution.rs) with real build hooks like ContainerContribution::build, OR introduce a generic Contribution::BarWidget { region: Top|Bottom, build: Fn(&ChromeCtx)->WidgetModel, weight }. Each bar hosts an ordered list of widgets.\n\nB. mainmenu widget (rename from \"menubar\"): the application menu, a built-in widget mounted in the TopBar. Minimal now — e.g. a \"Close\" entry that confirms via the central gate, following the standard action architecture (ActionRegistry + KeyBindingRegistry + RPC, like every WmAction). Future: conventional File/Edit/View/... top-level groups. Reuses (do NOT fork) context-menu infra: open_dropdown/DropdownSpec, entries-as-intents, ActionCatalog icon/label/tooltip, menu-nav (extended with left/right to move between top-level menus). Plugin entry contribution is Contribution::MainMenu, sibling of Contribution::ContextMenu (reuse the context-menu-5 dotted-context + weight Vec<i64> Dewey merge design).\n\nC. Plugin bar-widget contribution: plugins add buttons/widgets to top/bottom bars that execute EXISTING actions (icon+label from ActionCatalog). Plugins/developers must have an easy path to register new actions into ActionRegistry + KeyBindingRegistry from code (relates to plugin-04 dynamic action registry).\n\nD. Topbar enrichment: built-in widgets for operations on the current pane/column/workspace (action buttons).\n\nConfig-driven widget add/remove: users add/remove bar widgets from config.toml by listing widget kinds in order, analogous to [appearance.pane] title_actions = [\"split\",\"close\"] (Vec<PaneAction> enum, [] hides). E.g. [appearance.bar] top_widgets = [...].\n\nToken/placeholder integration (plugin-06): tmux-style tokens (#{pane}, #{fg:...}) let users build small widgets or alter labels, like tmux statusline replacement.\n\nPHASE SPLIT DEFERRED: this stub holds the vision; A/B/C/D + config surface + token integration will be split into separate phases when the work becomes active.",
+  "descriptionUpdatedAt": "2026-07-09T09:24:47.001Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -34,7 +35,8 @@
       "shortName": "topbar-menu-1",
       "title": "topbar-menu-1: scope top-bar menubar + reuse contract (STUB)",
       "status": "planned",
-      "description": "STUB task. When this becomes active: scope the top-bar menubar (File/Edit/View-style or heca-specific), activation key, region (TopBar). Reuse shared infra — do NOT fork: open_dropdown/DropdownSpec, entries-as-intents, menu-nav keys, ActionCatalog icon/label/tooltip, Contribution::Menu (sibling of Contribution::ContextMenu). Not scoped yet.",
+      "description": "STUB task. When this becomes active: scope the top-bar menubar (File/Edit/View-style or heca-specific), activation key, region (TopBar). Reuse shared infra — do NOT fork: open_dropdown/DropdownSpec, entries-as-intents, menu-nav keys, ActionCatalog icon/label/tooltip, Contribution::Menu (sibling of Contribution::ContextMenu). Not scoped yet.\n\n## Detail moved from BACKLOG.md (line 1293) — sidebar-fu-9, bottom bar\n- [ ] **sidebar-fu-9 — restyle the bottom (status) bar: badges + tabs + agreed style.**\n  The status bar is already a grid-ui component (`theming-task-28` done); rebuild its\n  content with `Badge`/`Tag` segments + a tab strip and a proper visual design. **Style TBD\n  — to agree before building.** Ties to the Pluggable-Chrome **bottom-bar region** rebuild\n  note (badges/tags/info + plugin extensions) and `plugin-task-28` (git-status provider in\n  the bottom bar).\n  - **BUILD IT AS A VECTOR-OF-ITEMS CONTAINER:** not a fixed layout — a container over an ordered\n    `Vec` of segments/buttons that plugins can append to / reorder, per the chrome-region principle\n    (`docs/chrome-and-ui.md` §2.8 chrome-wide + §3.2 region contributions + `plugin-task-16`).\n(Related: idea I001 bottom-bar quick-info widget; P040(F004)/T089 StatusBar canceled.)\n\n## Detail moved from BACKLOG.md (line 1319) — sidebar-fu-15, top bar\n- [ ] **sidebar-fu-15 — top bar: proper structured style (LATER — style to AGREE first).**\n  Today the top bar is an empty transparent band (the hand-drawn tab bar paints underneath) with\n  the fu-14 collapse toggles overlaid at the corners (no manual padding — the edge-inset waits on\n  the theme spacing token, see `gridui-styling-foundation`). Rebuild it as a real\n  grid-ui **container (`Flex`) with three sub-containers: `LEFT | MIDDLE | RIGHT`**, each hosting\n  **dynamic (state-driven) icons/widgets**:\n  - LEFT = the left-sidebar collapse toggle + future left-aligned chrome;\n  - MIDDLE = the workspace tabs (migrate the hand-drawn tab bar to grid-ui — see `gridui-task-03`);\n  - RIGHT = the right-sidebar collapse toggle + future right-aligned chrome/status.\n  \"Dynamic icons\" = reflect state (the collapse toggle already flips its arrow per fu-14). Ties to\n  the Pluggable-Chrome **top-bar region**. Design/style **TBD — agree before building**.\n  - **VECTOR-OF-ITEMS, PLUGIN-EXTENSIBLE:** each of the three sub-containers holds an ordered `Vec`\n    of items that plugins can append to / reorder — same chrome-region principle as fu-9\n    (`docs/chrome-and-ui.md` §2.8 + §3.2 + `plugin-task-16`), NOT a hardcoded set of buttons.",
+      "descriptionUpdatedAt": "2026-11-16T15:10:56.759Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -42,16 +44,32 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-09T09:25:14.679Z",
-      "updatedAt": "2026-07-09T09:25:14.679Z"
+      "updatedAt": "2026-11-16T15:10:56.758Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-09T09:24:47.001Z",
-  "updatedAt": "2026-07-27T11:40:15.514Z",
+  "updatedAt": "2026-11-16T15:10:56.758Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "75460cb8-914f-4f34-891e-256a33d5939b",
+      "date": "2026-11-16T15:10:56.795Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

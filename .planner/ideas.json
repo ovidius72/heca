@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 12,
+  "nextIdeaNumber": 23,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -50,6 +50,116 @@
       "promotion": null,
       "createdAt": "2026-10-29T08:54:12.083Z",
       "updatedAt": "2026-10-29T08:58:14.635Z"
+    },
+    {
+      "id": "ddf183a0-69eb-45a3-9f31-b15c8d2e2d46",
+      "number": 12,
+      "shortId": "PNQ2S",
+      "title": "Scratchpad panes: a floating pane that stays hidden until toggled",
+      "description": "To be discussed with Antonio one by one. Not approved work. Antonio may reject it: the niri column model has no scratchpad.\n\nOriginal text:\n- .planning/REQUIREMENTS.md:27 (LAY-03): \"Scratchpad panes - hidden by default, toggled visible as floating\". Also INP-05 (keyboard pane operations: kill, float, scratchpad, hide) and RPC-06 (pane.float, pane.embed, pane.scratchpad, pane.hide, pane.show).\n- .planning/phases/02-the-workspace/02-CONTEXT.md:26 (D-04): \"Distinct states with dedicated keybinds. Every pane is in exactly one state: Embedded, Floating, Scratchpad (hidden until toggled), or Hidden. Each transition has a keybind. No automatic state changes.\"\n- .planning/interaction-policy-plan.md:615: \"Scratchpad feature: may allow multiple floating panes\" (open decision, moot until this exists).\n\nState today: no code and no planner task. Floating panes exist; the Scratchpad pane state does not. Found by the T561 gap report (M1). Related idea: hide/show a pane without killing it.",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:07.447Z",
+      "updatedAt": "2026-11-16T15:10:07.447Z"
+    },
+    {
+      "id": "bbfe2535-3651-420d-9933-00efd20abd8c",
+      "number": 13,
+      "shortId": "A59N3",
+      "title": "Hide and show a pane without killing it",
+      "description": "To be discussed with Antonio one by one. Not approved work.\n\nOriginal text:\n- .planning/REQUIREMENTS.md:35 (LAY-11): \"Hide/show panes without killing them\".\n- .planning/phases/02-the-workspace/02-CONTEXT.md:26 (D-04): pane states are Embedded, Floating, Scratchpad (hidden until toggled), or Hidden, each with a keybind.\n- .planning/REQUIREMENTS.md:89 (RPC-06): pane.hide, pane.show.\n\nState today: no pane-hide action in heca/src/actions; only region hide exists (hide_layer, show_left_sidebar and so on). Found by the T561 gap report (M2). Related idea: scratchpad panes.",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:09.144Z",
+      "updatedAt": "2026-11-16T15:10:09.144Z"
+    },
+    {
+      "id": "690421ad-9b25-45f7-8a5f-c3763f8ec484",
+      "number": 14,
+      "shortId": "WNJMN",
+      "title": "Layout templates: predefined TOML layouts, save the current layout, and layout.apply / layout.save_current over RPC",
+      "description": "To be discussed with Antonio one by one. Not approved work. Written for the old BSP tree; would need a niri-column version.\n\nOriginal text:\n- .planning/REQUIREMENTS.md:28 (LAY-04): \"Predefined layout templates (TOML) applied to a tab\".\n- .planning/REQUIREMENTS.md:29 (LAY-05): \"Save current tab layout as a named template\".\n- .planning/REQUIREMENTS.md:90 (RPC-07): \"layout.apply, layout.save_current\".\n- .planning/phases/02-the-workspace/02-PLAN.md:435-462 (Task 4.3): load templates from config_dir()/layouts/*.toml, for example\n  name = \"dev-session\"\n  root = { dir = \"horizontal\", ratio = 0.6, children = [ { title = \"editor\", app = \"nvim\" }, { dir = \"vertical\", ratio = 0.5, children = [ { title = \"terminal\", app = \"terminal\" }, { title = \"files\", app = \"terminal\" } ] } ] }\n  with a serializable LayoutTemplate enum (Split, Pane { title, app }, Empty) and PaneTree::apply_template(template).\n- .planning/research/FEATURES.md lists predefined layouts as a differentiator.\n\nState today: no code, no planner task. Found by the T561 gap report (M3).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:11.867Z",
+      "updatedAt": "2026-11-16T15:10:11.867Z"
+    },
+    {
+      "id": "2b561844-cc00-4e8d-b1c1-3e3e18e57c7c",
+      "number": 15,
+      "shortId": "LHKAQ",
+      "title": "Neovim pane: show nvim's tabline in the chrome tab bar (ext_tabline)",
+      "description": "To be discussed with Antonio one by one. Not approved work. Would belong to F007 (Neovim GUI Pane) if approved.\n\nOriginal text: .planning/REQUIREMENTS.md:60 (PANE-08): \"Neovim pane handles ext_tabline by updating chrome tab bar\".\n\nState today: not in the planner; neovim-plan.md does not mention ext_tabline. Found by the T561 gap report (M4).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:13.117Z",
+      "updatedAt": "2026-11-16T15:10:13.117Z"
+    },
+    {
+      "id": "a676a000-2ec3-4838-90d1-1983010b4902",
+      "number": 16,
+      "shortId": "CFKF5",
+      "title": "Neovim pane: show nvim's command line and popup menu in chrome overlays (ext_cmdline, ext_popupmenu)",
+      "description": "To be discussed with Antonio one by one. Not approved work. Would belong to F007 (Neovim GUI Pane) if approved.\n\nOriginal text:\n- .planning/REQUIREMENTS.md:61 (PANE-09): \"Neovim pane handles ext_cmdline / ext_popupmenu in chrome overlays\".\n- neovim-plan.md:63: \"ext_messages / ext_cmdline / ext_popupmenu are optional and can come later if we want a fully native cmdline/messages UI.\"\n\nState today: only that \"optional\" line; no planner task. Found by the T561 gap report (M5).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:14.684Z",
+      "updatedAt": "2026-11-16T15:10:14.684Z"
+    },
+    {
+      "id": "c9707d70-4ac5-4cb0-8020-b9e44b1d0bc9",
+      "number": 17,
+      "shortId": "HJ7NR",
+      "title": "Browser pane (CEF offscreen) and embedding arbitrary GUI windows, with the research table",
+      "description": "To be discussed with Antonio one by one. Not approved work. The browser pane was deferred out of v1 on purpose (PROJECT.md:40 out of scope; decision \"browser deferred to v2, CEF highest risk\", PROJECT.md:64).\n\nOriginal requirements (.planning/REQUIREMENTS.md:105-107, 116):\n- BROW-01: Browser pane renders a real Chromium engine (CEF offscreen)\n- BROW-02: Browser pane supports toggling DevTools as a sub-pane or attached window\n- BROW-03: Browser pane forwards mouse and keyboard input to CEF\n- ADV-01: Window embedding for arbitrary GUI apps (X11 reparenting, Windows SetParent, macOS NSView)\n\nResearch, verbatim from .planning/research/STACK.md:28-35 (Browser Plugin v2):\n| Approach | Viability | Complexity | Notes |\n| CEF offscreen (cef-rs / wef) | High | Very High | Renders Chromium to a shared texture. Cross-platform but ~100MB+ binaries. DevTools supported. |\n| Platform WebView (wry) | Medium | High | Creates own window per webview. Hard to composite into our GPU surface without reparenting. |\n| OS Window Reparenting | Medium | Very High | X11 XReparentWindow, Windows SetParent, macOS NSView addSubview. Platform-specific, fragile on Wayland. |\nRecommendation: CEF offscreen for the browser plugin specifically. OS window embedding as a general plugin protocol for arbitrary GUI apps.\n\nPitfalls, verbatim from .planning/research/PITFALLS.md:\n- #7 (lines 47-52) CEF / Browser Plugin Blocking v1. Warning sign: spending months trying to embed Chromium before the core works. Prevention: Browser is explicitly v2. Do not touch CEF, webviews, or window reparenting until terminal + nvim + tiling are rock solid.\n- #9 (lines 59-63) Wayland Window Embedding Complexity. Warning sign: \"Window reparenting works on X11 and macOS but is impossible on Wayland.\" Prevention: Wayland does not allow arbitrary window reparenting. For Linux, prefer X11 for window-embedding plugins, or use xdg-shell surfaces with tight coordination. Document this limitation.\n\nAlso .planning/research/FEATURES.md:49-57 lists \"Browser pane (Chromium + DevTools): Very High, CEF offscreen rendering or window embedding\" and \"Out-of-process plugin protocol\" as v2.\n\nState today: no code, no planner task. Found by the T561 gap report (M6, M7, K4).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:19.513Z",
+      "updatedAt": "2026-11-16T15:10:19.513Z"
+    },
+    {
+      "id": "5f6ea567-9884-4324-9b89-c68b7cc8692f",
+      "number": 18,
+      "shortId": "LTXFK",
+      "title": "Advanced font features: variable font axes and stylistic sets",
+      "description": "To be discussed with Antonio one by one. Not approved work. Would sit under F001/F002.\n\nOriginal text: .planning/REQUIREMENTS.md:118 (ADV-03): \"Advanced font features (variable axes, stylistic sets)\".\n\nState today: the ligature policy exists (P007(F002), terminal-02); variable axes and stylistic sets do not. Found by the T561 gap report (M8).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:20.579Z",
+      "updatedAt": "2026-11-16T15:10:20.579Z"
+    },
+    {
+      "id": "05e273f4-3df8-426c-9351-6dddbd08de17",
+      "number": 19,
+      "shortId": "344RS",
+      "title": "Multi-monitor: move windows between monitors",
+      "description": "To be discussed with Antonio one by one. Not approved work.\n\nOriginal text: .planning/REQUIREMENTS.md:119 (ADV-04): \"Multi-monitor support (move windows between monitors)\".\n\nState today: P099(F012)/T545 gives several windows per session, but nothing moves a window between monitors. Found by the T561 gap report (M9).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:21.604Z",
+      "updatedAt": "2026-11-16T15:10:21.604Z"
+    },
+    {
+      "id": "ab0c15eb-280c-4f62-bfb5-2567501559d2",
+      "number": 20,
+      "shortId": "S3A7X",
+      "title": "Layouts beyond niri: horizontal panes in a column, tabbed or stacked columns, vertical column scrolling, grid, column groups",
+      "description": "To be discussed with Antonio one by one. Not approved work. It would be a heca-core layout feature (F006), and it is where the tab-bar slot on Pane (gridui-task-03, tabs.rs) would be consumed.\n\nOriginal text:\n- .planning/research/NIRI_ANALYSIS_AND_PLAN.md:160-170 \"What NIRI Does NOT Have\": horizontal arrangement within a column; vertical scrolling within columns (tiles always fit height); grid layouts; mixed layout modes in one column. Marked as heca plans (Phase 2, Phase 3 optional, Future).\n- NIRI_ANALYSIS_AND_PLAN.md:267-277 \"Phase 4: Advanced Layouts. Goal: extend beyond NIRI's model\": 4.1 Horizontal column layout (panes side-by-side within a column, medium); 4.2 Tabbed/stacked columns (only the active pane visible with a tab bar, small); 4.3 Vertical column scrolling (scroll within tall columns, medium); 4.4 Grid layout (rows x cols grid within a column, medium); 4.5 Floating panes (shipped); 4.6 Column groups (named groups of columns, like niri workspaces but horizontal, large).\n- BACKLOG.md:2263: \"New feature surfaced: stacked/tabbed pane layout (niri/i3) - a heca-core LAYOUT feature that would consume tabs.rs; track under App/Chrome, not here.\" (niri has ColumnDisplay::Tabbed.)\n\nAdjacent but different: P106(F011)/T550 (reusable multi-document tabs), P050(F006)/T542 (pinned column). State today: no code, no planner task. Found by the T561 gap report (M10).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:25.147Z",
+      "updatedAt": "2026-11-16T15:10:25.147Z"
+    },
+    {
+      "id": "4e748010-824e-4886-8571-182c4fa5d93a",
+      "number": 21,
+      "shortId": "BK8UZ",
+      "title": "Real-time collaboration (shared sessions) and physics-based resize animation",
+      "description": "To be discussed with Antonio one by one. Not approved work. Low priority. Collaboration may belong to heca-pro.\n\nOriginal text: .planning/research/FEATURES.md:49-57 \"v2 Features (Deferred)\":\n| Real-time collaboration / shared sessions | High | Multiple clients viewing the same session. |\n| Advanced animations (physics-based resize) | Medium | GPU makes this possible, but not v1-critical. |\n(The same table also lists the browser pane, out-of-process plugin protocol and plugin marketplace; the first is in the browser idea, the second was replaced by WASM plugins, the third is out of scope.)\n\nState today: not in the planner. Found by the T561 gap report (M11).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:26.848Z",
+      "updatedAt": "2026-11-16T15:10:26.848Z"
+    },
+    {
+      "id": "3d63588d-a76a-4467-9f07-10147e85d502",
+      "number": 22,
+      "shortId": "4YAJN",
+      "title": "Terminal scroll animation: sub-row pixel-smooth variant (B)",
+      "description": "To be discussed with Antonio one by one. Not approved work. Low priority polish.\n\nOriginal text: BACKLOG.md:341-352 (terminal-task-01d, locked approach): \"(A) integer-row step animated - visible_lines() keeps picking whole rows; the animated value rounds to the nearest row each frame. Zero renderer changes, Q6-safe (Full damage during the animation is fine). (B) sub-row pixel-smooth (renderer shifts content by a fractional row + clips partial rows) is DEFERRED to a follow-up - nicer but needs renderer work. Build A now; revisit B as polish.\" Only the discrete jumps animate (page up/down, line key, to-top, to-bottom); the wheel applies immediately; rapid scrolls re-target and never queue.\n\nState today: A shipped; heca-renderer has no fractional-row scroll. Found by the T561 gap report (M12, BACKLOG line 348).",
+      "promotion": null,
+      "createdAt": "2026-11-16T15:10:28.749Z",
+      "updatedAt": "2026-11-16T15:10:28.749Z"
     }
   ]
 }

@@ -8,7 +8,7 @@
     "sessionInfo": [
       {
         "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
-        "createdAt": "2026-11-14T14:04:37.006Z"
+        "createdAt": "2026-11-16T15:32:36.433Z"
       },
       {
         "sessionId": "mcp-process:30d1afc7-c737-4563-a538-d90426a3cf85",
@@ -136,6 +136,22 @@
       "rationale": "Antonio explicitly confirmed on 2026-10-24 that Box and casts must be removed from public APIs. This generalizes the existing Pane-specific authoring constraint without changing the decision that pane content is open component composition.",
       "implementationNotes": "Approved 2026-10-25: apply this ordinary constructor/fluent composition contract to ALL supported public native widgets/components, factories and return boundaries, not Terminal alone. Heterogeneous children may chain .child(a).child(b); shared child/metadata mechanisms and internal allocation are reused. Plugin identity handles remain acceptable; sandbox SDK descriptions and native live components expose equivalent capabilities without sharing runtime objects.\nCentralized implementation: P067(F003)/T517 (moved intact from P052) fixes generic parts/templates first; P067/T398 then owns registry/model migration, public constructors including standalone Terminal::new(\"shell\"), native binding and the exhaustive public-authoring acceptance. No caller boxing/casts/manual conversions or private host contexts.\nP094 retains terminal-header composition (T450), managed creation/lifecycle/restore consuming that API (T452), float/input audits (T453/T455), second-content proof (T454) and picker convergence (T457). Do not make T398 depend back on T452. P106(F011)/T550 now owns real multi-document tabs and retains its T452 task prerequisite; do not block tabs on closure of all P094.\nP052 retains T118/T122/T350 closeouts without duplicating the global API. T253/T305 remain deferred/on-demand; T251/T474/T520 and other completed foundations stay done. T360 review, F012 integration and P022 actual WASM loading/startup parity retain their owners. One canonical Provider/region reference is docs/widgets.md; other guides link there. Planner operations always use /Users/antonio/projects/heca/.planner. Task dependencies, task descriptions and the P067/P094 handoffs record the operational resume sequence; planning changes do not authorize implementation/task-start or claim runtime verification.",
       "acceptedAt": "2026-10-24T07:22:36.364Z"
+    },
+    {
+      "id": "e5a918b6-32bf-491e-97fc-4cab6c1bb9b0",
+      "title": "Terminal engine is wezterm-term over portable-pty, not alacritty_terminal or vte",
+      "decision": "heca's terminal stack is wezterm-term plus wezterm-surface (both pinned to wezterm git rev 891bed31b75f7a71b78e8f42ad07ae89bf99a7de) for emulation, and portable-pty 0.9.0 for the PTY. Verified in heca-core/Cargo.toml lines 14, 19, 20. It is NOT alacritty_terminal and NOT vte. Old source: .planning/PROJECT.md:63 (\"alacritty_terminal over Kitty/Ghostty\"), .planning/REQUIREMENTS.md PANE-01 and .planning/research/STACK.md:5-27 all say alacritty_terminal; they are out of date.",
+      "rationale": "The code moved from alacritty_terminal to wezterm-term, and the reason for the change was never written down anywhere in the repo, so none is recorded here. The pinned rev matters: at 891bed31 wezterm-term has AlertHandler/NotificationHandler (bells) and get_title() (OSC 0/2) but no general OSC-dispatch callback, which is why heca scans OSC 133/7 itself before advance_bytes (see the pane runtime state decision on P054(F006)).",
+      "implementationNotes": "Two docs still state the wrong engine: AGENTS.md:1162 (stack table says alacritty_terminal) and README.md:78 (says vte). Fix both in the T561 doc rewrite. Ask Antonio if he wants the original reason for the switch added.",
+      "acceptedAt": "2026-11-16T15:09:38.271Z"
+    },
+    {
+      "id": "9a27e49a-951f-4122-923d-2cd103f208dc",
+      "title": "Architecture principle: all state that fires an action or updates content flows through AppState, so plugins can see it",
+      "decision": "Source: BACKLOG.md:20-35 (\"Architecture principles (apply to every task)\"). Verbatim rule: all state that fires an action or updates content MUST flow through AppState / the reactive chrome store, never be local-only. Any behavior that changes app state or triggers an action has to be dispatched through AppState (mirrored into the reactive store, emitted on the ChromeEvent bus, exposed via the host API) so that plugins and other components can listen and react (for example render their own custom widget). Make it signal-aware: store the value in a Signal, guard the setter (emit only on a real change), and add a ChromeEvent plus a StateView selector. Reference implementations: the KeyHint pending-pick description (InputMode::pending_pick() -> WorkspacesContainerState.pending_pick signal -> ChromeEvent::PendingPickChanged -> host.pending_pick()) and the pane custom name (PaneCustomNameChanged / host.pane_custom_name). Anti-pattern: computing a value only for an internal render path (the way the pick prompt used to live only in status_mode_parts). \"If a plugin can't observe it, it's not done.\"",
+      "rationale": "AGENTS.md Rule Zero is the nearest text and does not state this rule. It is stated nowhere else once BACKLOG.md is deleted. Open work that applies it: P035(F003)/T506 and P085(F003)/T357.",
+      "implementationNotes": "Add one paragraph under Rule Zero in AGENTS.md during the T561 doc rewrite. Related: the pane runtime state decision on P054(F006) (one mutation point, signals plus event bus). Related idea I001 (status_note is the anti-pattern: a host-private string on AppState).",
+      "acceptedAt": "2026-11-16T15:09:44.847Z"
     }
   ],
   "nextFeatureNumber": 12,

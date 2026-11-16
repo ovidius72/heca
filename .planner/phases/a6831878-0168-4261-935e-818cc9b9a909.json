@@ -36,11 +36,20 @@
       "priority": 2,
       "shortName": "ui-font-size-actions",
       "title": "UI font size increase and decrease",
-      "status": "planned",
-      "description": "Controlli di incremento/decremento font UI.",
-      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
+      "status": "done",
+      "description": "Controlli di incremento/decremento font UI.\n\n---\n**Completion summary:**\nClosed during T561 cleanup: shipped. UI font size increase/decrease/reset exist as app actions app_font_increase/decrease/reset/zoom (heca/src/actions/builtins/system.rs); app_ui_font_size() is in heca/src/app_state/metrics.rs. BACKLOG app-task-11. Verified by reading the code, not by running the app.",
+      "descriptionUpdatedAt": "2026-11-16T15:11:51.509Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "262d15e2-e380-49bd-b207-26635e823dc7-check-001-planned-done",
+          "date": "2026-11-16T15:11:51.507Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed during T561 cleanup: shipped. UI font size increase/decrease/reset exist as app actions app_font_increase/decrease/reset/zoom (heca/src/actions/builtins/system.rs); app_ui_font_size() is in heca/src/app_state/metrics.rs. BACKLOG app-task-11. Verified by reading the code, not by running the app."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -48,10 +57,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-16T15:11:51.507Z",
+      "completedAt": "2026-11-16T15:11:51.507Z",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-16T15:11:51.507Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -63,11 +72,20 @@
       "priority": 1,
       "shortName": "app-wide-zoom-action",
       "title": "App-wide zoom WmAction",
-      "status": "planned",
-      "description": "Aggiungere le action per zoom globale.",
-      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
+      "status": "done",
+      "description": "Aggiungere le action per zoom globale.\n\n---\n**Completion summary:**\nClosed during T561 cleanup: shipped. App-wide zoom actions app_font_increase/decrease/reset/zoom exist in heca/src/actions/builtins/system.rs. BACKLOG app-task-10. Verified by reading the code, not by running the app.",
+      "descriptionUpdatedAt": "2026-11-16T15:11:52.284Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2c58342a-be3a-4591-befb-e7a947803bcc-check-001-planned-done",
+          "date": "2026-11-16T15:11:52.283Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed during T561 cleanup: shipped. App-wide zoom actions app_font_increase/decrease/reset/zoom exist in heca/src/actions/builtins/system.rs. BACKLOG app-task-10. Verified by reading the code, not by running the app."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -75,10 +93,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-16T15:11:52.283Z",
+      "completedAt": "2026-11-16T15:11:52.283Z",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-16T15:11:52.283Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -90,11 +108,20 @@
       "priority": 3,
       "shortName": "terminal-font-actions",
       "title": "Terminal font size increase and decrease",
-      "status": "planned",
-      "description": "Controlli di incremento/decremento font terminale.",
-      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
+      "status": "done",
+      "description": "Controlli di incremento/decremento font terminale.\n\n---\n**Completion summary:**\nClosed during T561 cleanup: shipped. Terminal font size actions pane_terminal_font_increase/decrease/reset exist in heca/src/actions/builtins/pane.rs. BACKLOG app-task-12. Verified by reading the code, not by running the app.",
+      "descriptionUpdatedAt": "2026-11-16T15:11:53.052Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "92548b51-e669-4f8f-84dd-c96c8becfbfa-check-001-planned-done",
+          "date": "2026-11-16T15:11:53.049Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed during T561 cleanup: shipped. Terminal font size actions pane_terminal_font_increase/decrease/reset exist in heca/src/actions/builtins/pane.rs. BACKLOG app-task-12. Verified by reading the code, not by running the app."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -102,21 +129,38 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-16T15:11:53.049Z",
+      "completedAt": "2026-11-16T15:11:53.049Z",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-16T15:11:53.049Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-10-19T16:16:54.701Z",
+  "updatedAt": "2026-11-16T15:11:53.049Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "b00f3a89-a1e4-40d6-b308-dd5cd05cf2d9",
+      "date": "2026-11-16T15:11:51.539Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "d033e79d-8e84-4252-8edc-d429f6f59183",
+      "date": "2026-11-16T15:11:53.078Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
   "sessionInfo": []
 }

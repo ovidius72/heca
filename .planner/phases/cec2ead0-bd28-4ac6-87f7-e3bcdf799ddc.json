@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "Plugin semplici definiti in `config.toml` con rendering testuale nelle regioni chrome.",
   "description": "Simple plugins defined in `config.toml`, rendered into the chrome regions.\n\n═══ THE POINT, AND THE CONSTRAINT IT INHERITS ═══\n\nThis is the **lowest rung of the extensibility ladder**: no code, no WASM, just TOML. It matters\nbecause it is the first thing an outsider will try, and because it is the cheapest possible test of\nwhether the declarative model really is complete — a config plugin can only use what a description\ncan express.\n\nSo the constraint from `AGENTS.md` ⭐⭐ RULE ZERO applies here in its sharpest form: whatever a\nconfig plugin renders must go through the **same** path the app's own chrome uses. Concretely:\n\n- Its content is a **`ViewNode`** (`heca-view`), realized by the **one** bridge\n  (`heca-view-realize`) — never a second, simpler renderer written \"just for config plugins\".\n  A parallel path cannot stay identical, and nothing fails when it drifts.\n- Its behaviour is **`Intent`s** (action id + args), so a click, a `prefix+/` pick, a menu entry, a\n  keybinding and RPC are one path, routed by the action's own policy and confirm gate.\n- It gets the same picker, menus and focus the native rows get, with nothing declared per plugin.\n\n**The old \"textual rendering\" phrasing in the original summary is the thing to avoid**, not the\nplan: if a config plugin can only produce text while a native container produces widgets, that is\nexactly the second-class path this feature exists to prevent.\n\n═══ WHAT IT CAN BUILD ON TODAY ═══\n\n`ViewNode` covers the whole widget vocabulary (guarded by a coverage test), styling is a prop that\nresolves against the theme, and the typed SDK (`heca-view/src/build.rs`) exists for a Rust author.\nThe gap a config plugin exposes first will be **which properties a description still cannot set** —\nsee `docs/chrome-and-ui.md` Part I §4, which is counted from the reasons on the builders themselves,\nnot written by hand.\n\nDesign record: `docs/chrome-and-ui.md` Part I (§0 for the intent, §5 for worked screens) ·\n`docs/widget-architecture.md` · F003's description.",
+  "descriptionUpdatedAt": "2026-07-01T18:09:59.862Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -37,6 +38,7 @@
       "title": "Document config plugins in README",
       "status": "planned",
       "description": "Documentazione utente ed esempi per i plugin semplici.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.211Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -44,10 +46,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "updatedAt": "2026-07-01T18:12:56.211Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "b4dd45d2-b67d-4887-8598-2aba54034212",
@@ -58,7 +64,8 @@
       "shortName": "plugins-toml-schema",
       "title": "Define and parse plugins TOML schema",
       "status": "planned",
-      "description": "Schema `[[plugins]]` con placement, weight e text.",
+      "description": "Schema `[[plugins]]` con placement, weight e text.\n\n## Detail moved from BACKLOG.md (line 2187)\n- [ ] **plugin-task-20** — Define and parse the `[[plugins]]` TOML schema:\n  ```toml\n  [[plugins]]\n  name = \"myplugin\"\n  placement = \"bottomBar\"\n  weight = 100\n  text = \"pane: ${paneProgram}\"\n  ```\n  Files: `heca-config/src/plugins.rs` (new), `heca-config/src/lib.rs`",
+      "descriptionUpdatedAt": "2026-11-16T15:10:59.555Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -66,10 +73,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "updatedAt": "2026-11-16T15:10:59.553Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "9b3e7f08-4786-4570-98d9-c925a75aed8c",
@@ -81,6 +92,7 @@
       "title": "Implement config plugin renderer",
       "status": "planned",
       "description": "Renderizzare contribution testuali da config nelle regioni.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.212Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -88,17 +100,32 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-01T18:12:56.212Z"
+      "updatedAt": "2026-07-01T18:12:56.212Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.862Z",
-  "updatedAt": "2026-08-11T06:57:44.269Z",
+  "updatedAt": "2026-11-16T15:10:59.553Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "c5a6342f-4472-4e72-90df-eb53e3c7f31f",
+      "date": "2026-11-16T15:10:59.583Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

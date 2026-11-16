@@ -292,11 +292,20 @@
       "priority": 3,
       "shortName": "workspace-lints-cargo",
       "title": "Workspace lints in Cargo.toml",
-      "status": "planned",
-      "description": "INVESTIGATION REFRESH — 2026-10-25, main code HEAD 6e3e6d36\n\nThe earlier investigation saying there was no workspace lint policy is superseded. Root Cargo.toml now contains [workspace.lints.rustdoc] with broken_intra_doc_links = \"deny\" and private_intra_doc_links = \"deny\". heca-grid-ui/Cargo.toml contains [lints] workspace = true. cargo metadata --no-deps --format-version 1 succeeds on the current workspace (9 members).\n\nThe original alignment goal now has an implementation to verify for closure; do not add another policy table or expand this into selecting new workspace-wide Rust/Clippy rules merely to keep the task open. Reconcile the original acceptance with the delivered settings and record the relevant existing checks before closing. No lint policy was changed by this investigation, and status remains planned pending that closeout.",
-      "descriptionUpdatedAt": "2026-10-25T09:07:06.815Z",
+      "status": "done",
+      "description": "INVESTIGATION REFRESH — 2026-10-25, main code HEAD 6e3e6d36\n\nThe earlier investigation saying there was no workspace lint policy is superseded. Root Cargo.toml now contains [workspace.lints.rustdoc] with broken_intra_doc_links = \"deny\" and private_intra_doc_links = \"deny\". heca-grid-ui/Cargo.toml contains [lints] workspace = true. cargo metadata --no-deps --format-version 1 succeeds on the current workspace (9 members).\n\nThe original alignment goal now has an implementation to verify for closure; do not add another policy table or expand this into selecting new workspace-wide Rust/Clippy rules merely to keep the task open. Reconcile the original acceptance with the delivered settings and record the relevant existing checks before closing. No lint policy was changed by this investigation, and status remains planned pending that closeout.\n\n---\n**Completion summary:**\nClosed during T561 cleanup: shipped. The root Cargo.toml has a [workspace.lints] table (line 15, [workspace.lints.rustdoc]) and heca-grid-ui/Cargo.toml inherits it with [lints] workspace = true (line 26). BACKLOG gridui-task-22. Not checked: whether the other crates also inherit it, or whether the table holds clippy/rust lints beyond rustdoc; no build was run.",
+      "descriptionUpdatedAt": "2026-11-16T15:11:54.508Z",
       "notes": "Investigation 2026-10-24 (requested by Antonio): root Cargo.toml defines no [workspace.lints] table, and no workspace member currently declares [lints] workspace = true. scripts/lint-changed.sh already runs changed crates through cargo clippy --all-targets -- -D warnings, so warnings are rejected by the existing gate. This task's original 'align the crate with the workspace' wording assumes a policy table that does not exist. Remaining decision: preserve/rewrite as one explicit workspace lint policy inherited by members, or cancel the obsolete alignment-only task. No new lint levels or policy changes were implemented.",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "ff38079b-e9d7-4ed1-a6fc-1cb05cbaddaa-check-001-planned-done",
+          "date": "2026-11-16T15:11:54.507Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed during T561 cleanup: shipped. The root Cargo.toml has a [workspace.lints] table (line 15, [workspace.lints.rustdoc]) and heca-grid-ui/Cargo.toml inherits it with [lints] workspace = true (line 26). BACKLOG gridui-task-22. Not checked: whether the other crates also inherit it, or whether the table holds clippy/rust lints beyond rustdoc; no build was run."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -304,10 +313,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-16T15:11:54.507Z",
+      "completedAt": "2026-11-16T15:11:54.507Z",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-10-25T09:07:06.813Z",
+      "updatedAt": "2026-11-16T15:11:54.507Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -407,7 +416,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-10-25T14:00:31.700Z",
+  "updatedAt": "2026-11-16T15:11:54.507Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

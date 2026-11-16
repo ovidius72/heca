@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "Token `${var}` per pane/column/workspace metadata in chrome e config.",
   "description": "",
+  "descriptionUpdatedAt": "",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -36,7 +37,8 @@
       "shortName": "token-syntax-registry",
       "title": "Define token syntax and registry",
       "status": "planned",
-      "description": "Definire `${var}` e registry dei token pane/column/workspace.",
+      "description": "Definire `${var}` e registry dei token pane/column/workspace.\n\n## Detail moved from BACKLOG.md (line 2172)\n- [ ] **plugin-task-17** — Define the token syntax (`${var}` form) and a token registry.\n  Initial tokens: `${paneIndex}`, `${prevPaneIndex}`, `${paneTitle}`, `${prevPaneTitle}`, `${panesCount}`, `${paneProgram}`, `${paneCwd}`, `${columnIndex}`, `${columnTitle}`, `${columnsCount}`, `${workspaceTitle}`, `${workspaceIndex}`, `${workspacesCount}`, `${leftSidebarStatus}`, `${rightSidebarStatus}`, `${pid}`.\n  Files: new `heca/src/tokens.rs` or `heca-config/src/tokens.rs`",
+      "descriptionUpdatedAt": "2026-11-16T15:10:58.402Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -44,10 +46,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "updatedAt": "2026-11-16T15:10:58.400Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "db20fa00-a387-4ef1-b035-53c50913d9a1",
@@ -59,6 +65,7 @@
       "title": "Wire token resolution into config paths",
       "status": "planned",
       "description": "Risoluzione token in label e path di configurazione.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.211Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -66,10 +73,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "updatedAt": "2026-07-01T18:12:56.211Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "deece3a4-e107-44fe-8e6d-f087ccb5daf5",
@@ -81,6 +92,7 @@
       "title": "Wire token resolution into pane info bar",
       "status": "planned",
       "description": "Risoluzione token nei segmenti dell'info bar del pane.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:56.211Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -88,16 +100,32 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "updatedAt": "2026-07-01T18:12:56.211Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.499Z",
+  "updatedAt": "2026-11-16T15:10:58.400Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "52ddb72a-de6c-4660-95fd-08afcac35712",
+      "date": "2026-11-16T15:10:58.432Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

@@ -37,6 +37,10 @@
   "updatedAt": "2026-11-12T18:39:06.342Z",
   "sessionInfo": [
     {
+      "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+      "createdAt": "2026-11-16T15:46:12.393Z"
+    },
+    {
       "sessionId": "mcp-process:30d1afc7-c737-4563-a538-d90426a3cf85",
       "createdAt": "2026-11-12T18:22:33.314Z"
     },

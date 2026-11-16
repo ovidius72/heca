@@ -28,7 +28,8 @@
     "d6d51e90-226f-4f01-b157-45f47790f589",
     "56fa2d18-77f4-4b59-8444-8a2709f32cf1",
     "9173e91f-1ca0-4387-8b12-20f8a2887283",
-    "910d4691-727c-45e8-b5aa-bdc0a2f470f9"
+    "910d4691-727c-45e8-b5aa-bdc0a2f470f9",
+    "680f0887-fb39-442c-9ad9-00eda719a0de"
   ],
   "tasks": [
     {
@@ -521,10 +522,59 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "680f0887-fb39-442c-9ad9-00eda719a0de",
+      "phaseId": "3bed2236-a07a-49d9-9492-72dba0084b04",
+      "number": 563,
+      "shortId": "GP7BP",
+      "priority": 7,
+      "shortName": "rpc-line-parser-and-cli-format",
+      "title": "RPC line parser and CLI formatter: quotes, escapes, named values",
+      "status": "done",
+      "description": "heca-pro needs RPC values with spaces, quotes and Windows paths. Today `parse_rpc` in heca/src/rpc.rs (and `introspect`, `is_query`) split the line with `split_whitespace`, so `text=\"ciao mondo\"` breaks. Replace it with ONE shared tokenizer and ONE shared formatter, used by the server, the CLI and every input path — never per action.\n\nRules agreed with heca-pro (2026-11-16):\n1. Inside \"...\": only \\\" and \\\\ are escapes; any other sequence stays literal (\\n is backslash+n).\n2. Inside '...': everything literal.\n3. Backslash outside quotes is literal (Windows paths: C:\\dir\\file).\n4. Quotes may sit mid-token: key=\"a b\" and ab\"c d\"e both form one token.\n5. name=value splits at the first UNQUOTED '='; it is a named value only when the part before '=' is a valid name: starts with a letter or '_', then letters, digits, '_' or '-'. Document these characters. Anything else is a positional value (C:\\x=y stays positional). \"a=b\" quoted is positional; key=\"a=b\" is named.\n6. \"\" or '' is an empty value.\n7. Unclosed quote or dangling escape = parse error before anything runs.\n8. No variable/glob/command expansion, no shell.\n9. Lines without quotes parse exactly as today; `--dock <id>` keeps its behaviour (placement, never an argument).\n10. CR, LF and NUL inside the line content are rejected by the shared parser (so for every input). The protocol line terminator itself is not affected.\n11. CLI `heca rpc`: exactly one argument after `rpc` = a whole RPC line, sent as is (heca rpc 'azione text=\"ciao mondo\"'). Several arguments = one token each; the formatter quotes ONLY the value of a named arg (text=\"ciao mondo\", never \"text=ciao mondo\") and the whole of a positional that needs it, escaping \\ and \". CR/LF/NUL in argv are rejected before sending.\n12. A Windows path ending in \\ inside double quotes must be written \"C:\\dir\\\\\"; the formatter does it itself. Document it.\n\nTests: every rule above, Windows paths (quoted and unquoted, trailing backslash), \"a=b\" positional, key=\"a=b\" named, empty values, unclosed quote, \\n literal, --dock with quoted values, formatter round-trip (format then parse gives the original argv).\n\n---\n**Completion summary:**\nDone. Shared RPC line reader and writer in heca/src/rpc/line.rs (tokenize, without_terminator, format_line, from_argv). parse_rpc, introspect and is_query use it; the socket strips the \\n / \\r\\n terminator before parsing; `heca rpc` sends one argument as the whole line and formats several with from_argv. All 12 agreed rules implemented and documented in the module doc and docs/server-client-architecture.md. Extra: an action name that would not read back as itself (empty, space, quote, =) is refused. Choices: `\"key\"=v` reads as name key; a bare `--dock` argv is the flag (a literal --dock value needs the single-line form \"--dock\"); a positional a=b cannot come from argv (single-line form \"a=b\"). Verified: cargo test -p heca rpc 58 passed, socket 39 passed, server_process/headless_server pass; clippy mac and xwin Windows clean; break-it (\\n as escape) failed a test. Commit 166b22d0 on feat/t563-rpc-quoting. Files: heca/src/rpc/line.rs, heca/src/rpc.rs, heca/src/server/socket/{mod,runtime,runtime_tests}.rs, docs/server-client-architecture.md.",
+      "descriptionUpdatedAt": "2026-11-16T15:45:32.449Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "d5a90067-95da-41ae-8243-347d8636e923",
+          "date": "2026-11-16T15:32:49.082Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "680f0887-fb39-442c-9ad9-00eda719a0de-check-002-in-progress-done",
+          "date": "2026-11-16T15:45:32.447Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Done. Shared RPC line reader and writer in heca/src/rpc/line.rs (tokenize, without_terminator, format_line, from_argv). parse_rpc, introspect and is_query use it; the socket strips the \\n / \\r\\n terminator before parsing; `heca rpc` sends one argument as the whole line and formats several with from_argv. All 12 agreed rules implemented and documented in the module doc and docs/server-client-architecture.md. Extra: an action name that would not read back as itself (empty, space, quote, =) is refused. Choices: `\"key\"=v` reads as name key; a bare `--dock` argv is the flag (a literal --dock value needs the single-line form \"--dock\"); a positional a=b cannot come from argv (single-line form \"a=b\"). Verified: cargo test -p heca rpc 58 passed, socket 39 passed, server_process/headless_server pass; clippy mac and xwin Windows clean; break-it (\\n as escape) failed a test. Commit 166b22d0 on feat/t563-rpc-quoting. Files: heca/src/rpc/line.rs, heca/src/rpc.rs, heca/src/server/socket/{mod,runtime,runtime_tests}.rs, docs/server-client-architecture.md."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-16T15:32:49.082Z",
+      "completedAt": "2026-11-16T15:45:32.447Z",
+      "createdAt": "2026-11-16T15:32:31.422Z",
+      "updatedAt": "2026-11-16T15:45:32.447Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+          "createdAt": "2026-11-16T15:32:49.011Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-14T09:59:01.452Z",
-  "updatedAt": "2026-11-16T09:22:06.795Z",
+  "updatedAt": "2026-11-16T15:45:32.447Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -626,12 +676,28 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "f7ed223c-4668-4cd9-9135-127484a3c881",
+      "date": "2026-11-16T15:32:49.294Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "3304eedc-2f8e-4082-80c0-d66586da7f20",
+      "date": "2026-11-16T15:45:32.490Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
-      "createdAt": "2026-11-16T09:10:21.153Z"
+      "createdAt": "2026-11-16T15:32:49.011Z"
     }
   ]
 }

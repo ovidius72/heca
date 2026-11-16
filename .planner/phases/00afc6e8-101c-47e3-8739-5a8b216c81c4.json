@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "Numerazione stabile dei pane visibili per workspace e azione FocusPaneByNumber.",
   "description": "",
+  "descriptionUpdatedAt": "",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -36,7 +37,8 @@
       "shortName": "focus-pane-number",
       "title": "FocusPaneByNumber action and chord binding",
       "status": "planned",
-      "description": "Azione e chord binding per focus via numero pane.",
+      "description": "Azione e chord binding per focus via numero pane.\n\n## Detail moved from BACKLOG.md (line 2426)\n- [ ] **app-task-15** — Add `WmAction::FocusPaneByNumber { ws: usize, pane: usize }` + handler + chord binding (`prefix+<ws-digit>+<pane-digit>`).\n  Follow \"Adding New Actions\" checklist.\n  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca-config/src/theme.rs`",
+      "descriptionUpdatedAt": "2026-11-16T15:11:10.150Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -44,10 +46,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-11-16T15:11:10.149Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "b2606b81-2852-4155-bc32-4fd825883c0e",
@@ -59,6 +65,7 @@
       "title": "Pane number display on sidebar cards",
       "status": "planned",
       "description": "Mostrare il numero pane sulle card della sidebar.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -66,10 +73,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "ea18b000-2176-4a9c-a8c5-b1afbb558043",
@@ -81,6 +92,7 @@
       "title": "Pane number computation per workspace",
       "status": "planned",
       "description": "Calcolare numbering stabile per workspace.",
+      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -88,16 +100,32 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
+      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.468Z",
+  "updatedAt": "2026-11-16T15:11:10.149Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "c112a4e1-3783-4d2a-b61e-b4bdebc5826e",
+      "date": "2026-11-16T15:11:10.180Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }
