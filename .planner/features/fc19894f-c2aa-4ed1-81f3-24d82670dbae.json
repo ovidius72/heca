@@ -34,8 +34,22 @@
     "941d82d3-2770-4e6f-b42f-76b36e160c37"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "a6b903c2-82b1-4275-8289-29cb7c9c86c0",
+      "date": "2026-11-15T18:28:30.877Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-03T22:49:39.780Z",
   "updatedAt": "2026-10-26T15:02:31.101Z",
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+      "createdAt": "2026-11-16T09:22:16.353Z"
+    }
+  ]
 }

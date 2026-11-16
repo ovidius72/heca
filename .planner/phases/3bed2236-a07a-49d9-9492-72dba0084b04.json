@@ -27,7 +27,8 @@
     "98ab3973-1e79-478e-80b8-b992951813ad",
     "d6d51e90-226f-4f01-b157-45f47790f589",
     "56fa2d18-77f4-4b59-8444-8a2709f32cf1",
-    "9173e91f-1ca0-4387-8b12-20f8a2887283"
+    "9173e91f-1ca0-4387-8b12-20f8a2887283",
+    "910d4691-727c-45e8-b5aa-bdc0a2f470f9"
   ],
   "tasks": [
     {
@@ -320,9 +321,9 @@
         {
           "id": "0be89c38-96fe-4da7-8f21-7f33e104d18b",
           "title": "Contract: action policy for every request and the external-request door (agreed with heca-pro T014)",
-          "decision": "Agreed with heca-pro (F001/P003/T014) and approved by Antonio on 2026-11-15. Clarified the same day, after implementation review: see points 1 and 3.\n\n1. **Policy.** `registration.action_policy(|service, cx, request| -> Permit /* Allow | Deny(reason) */)`.\n   - With no policy declared, behaviour stays as today: local requests pass, external requests are refused.\n   - With policies declared, every declared policy checks every request, local or external, and the first deny wins. An external request is also refused when its originating service has no policy.\n   - **Scope (clarified):** the policy covers every action the server executes, including reads such as listing sessions, not only actions that change shared state. It covers native, plugin, service and chained actions, and is consulted at execution time, so a revocation applies to queued requests.\n   - **Window-only view actions** (focus, scroll, menus and the like, which run inside a window and never reach the server) are outside the policy. An external sender can never run them, and never gets a privileged forward to a window. Any server action a chain produces is still checked with the original requester.\n   - The requester propagates to chained actions, so a chain never escalates.\n   - A local refusal shows as a notification in the window or as `error: …` for scripts.\n   - heca keeps no escape hatch. The default full-access local role is heca-pro's responsibility (their decision 63).\n2. **Requester and session.**\n   - `enum Requester { Local { window: Option<u64> }, External { service, sender } }`, where an external requester keeps its originating service.\n   - The request exposes `requester()`, `action()`, `args()`, `session() -> Option<SessionKey>` and `parent() -> Option<&str>`.\n   - A local request may have no session (global actions such as listing or creating sessions).\n   - `cx.sender()` on `ActionCx`.\n3. **External request door.** `cx.submit(ExternalRequest { sender, session, request_id, line }) -> Result<RequestRef, SubmitError>`, answering at once.\n   - `SubmitError` is `QueueFull`, `UnknownSession`, `DuplicateId` or `Refused(reason)`.\n   - The session is mandatory and verified; heca never invents a session or substitutes the last one.\n   - The queue capacity is configurable in `[settings.services]`; line length is bounded by `max_frame_bytes`.\n   - It uses the same parser, catalog, confirmations and execution as RPC, with no second path.\n   - **Confirmation (clarified):** an action that declares a confirmation (`ActionMeta.confirm` present) is always refused for an external sender, whatever the user's local confirmation setting, including when the user has turned that confirmation off. The rule keys on a declared confirmation, never on a \"danger\" colour or style. For local requests, the policy and the user's confirmation settings apply as before. The same rule holds inside chains, without losing the external identity.\n4. **Completion.** `Service::request_done(&mut self, cx, &RequestRef, RequestOutcome)`.\n   - `RequestRef` holds service, sender, session (SessionKey) and request_id.\n   - `RequestOutcome` is one of:\n     - `Done(Option<String>)`: done, only after every action and deferred ticket in the chain finishes;\n     - `Refused(reason)`: refused before anything ran;\n     - `Failed(reason)`: ended with an error, possibly after partial effects, including a refusal mid-chain; earlier actions are not undone;\n     - `Unknown`: the conclusion cannot be known.\n5. **Duplicates and restart.**\n   - heca refuses a request_id equal to a still-open request in the same service. It does not remember completed ids; persistent dedup is heca-pro's job, with its archive.\n   - The queue is not persisted. At shutdown, a request never started is `Refused(\"server stopped, not executed\")` and a request started but unfinished is `Unknown`.\n   - After a restart nothing is re-executed; `Unknown` never becomes a new execution.\n6. **Security limit, stated exactly.** Any process of the same user can open the socket directly. Without effective isolation, such as a different OS user, permissions limit requests received through cooperating integrations, not a hostile local process. Nothing more is promised. `Sender::new(...)` authenticates no one.\n7. **Who verifies what.**\n   - heca tests: the common policy across window, socket and helper; requester propagation; revocation; chains; the explicit session; deferred results; queue full; duplicates; the shutdown outcomes; a declared confirmation refused for an external sender even with that confirmation turned off, directly and in a chain.\n   - heca-pro verifies that the sender comes from trusted integration metadata, never from message content, and owns member→role mapping, RolePermissions, the message format and room replies.\n   - heca adds no Pro types.",
+          "decision": "Agreed with heca-pro (F001/P003/T014) and approved by Antonio on 2026-11-15. Clarified the same day, after implementation review: see points 1 and 3. Extended the same day: see point 8.\n\n1. **Policy.** `registration.action_policy(|service, cx, request| -> Permit /* Allow | Deny(reason) */)`.\n   - With no policy declared, behaviour stays as today: local requests pass, external requests are refused.\n   - With policies declared, every declared policy checks every request, local or external, and the first deny wins. An external request is also refused when its originating service has no policy.\n   - **Scope (clarified):** the policy covers every action the server executes, including reads such as listing sessions, not only actions that change shared state. It covers native, plugin, service and chained actions, and is consulted at execution time, so a revocation applies to queued requests.\n   - **Window-only view actions** (focus, scroll, menus and the like, which run inside a window and never reach the server) are outside the policy. An external sender can never run them, and never gets a privileged forward to a window. Any server action a chain produces is still checked with the original requester.\n   - The requester propagates to chained actions, so a chain never escalates.\n   - A local refusal shows as a notification in the window or as `error: …` for scripts.\n   - heca keeps no escape hatch. The default full-access local role is heca-pro's responsibility (their decision 63).\n2. **Requester and session.**\n   - `enum Requester { Local { window: Option<u64> }, External { service, sender } }`, where an external requester keeps its originating service.\n   - The request exposes `requester()`, `action()`, `args()`, `session() -> Option<SessionKey>` and `parent() -> Option<&str>`.\n   - A local request may have no session (global actions such as listing or creating sessions).\n   - `cx.sender()` on `ActionCx`.\n3. **External request door.** `cx.submit(ExternalRequest { sender, session, request_id, line }) -> Result<RequestRef, SubmitError>`, answering at once.\n   - `SubmitError` is `QueueFull`, `UnknownSession`, `DuplicateId` or `Refused(reason)`.\n   - The session is mandatory and verified; heca never invents a session or substitutes the last one.\n   - The queue capacity is configurable in `[settings.services]`; line length is bounded by `max_frame_bytes`.\n   - It uses the same parser, catalog, confirmations and execution as RPC, with no second path.\n   - **Confirmation (clarified):** an action that declares a confirmation (`ActionMeta.confirm` present) is always refused for an external sender, whatever the user's local confirmation setting, including when the user has turned that confirmation off. The rule keys on a declared confirmation, never on a \"danger\" colour or style. For local requests, the policy and the user's confirmation settings apply as before. The same rule holds inside chains, without losing the external identity.\n4. **Completion.** `Service::request_done(&mut self, cx, &RequestRef, RequestOutcome)`.\n   - `RequestRef` holds service, sender, session (SessionKey) and request_id.\n   - `RequestOutcome` is one of:\n     - `Done(Option<String>)`: done, only after every action and deferred ticket in the chain finishes;\n     - `Refused(reason)`: refused before anything ran;\n     - `Failed(reason)`: ended with an error, possibly after partial effects, including a refusal mid-chain; earlier actions are not undone;\n     - `Unknown`: the conclusion cannot be known.\n5. **Duplicates and restart.**\n   - heca refuses a request_id equal to a still-open request in the same service. It does not remember completed ids; persistent dedup is heca-pro's job, with its archive.\n   - The queue is not persisted. At shutdown, a request never started is `Refused(\"server stopped, not executed\")` and a request started but unfinished is `Unknown`.\n   - After a restart nothing is re-executed; `Unknown` never becomes a new execution.\n6. **Security limit, stated exactly.** Any process of the same user can open the socket directly. Without effective isolation, such as a different OS user, permissions limit requests received through cooperating integrations, not a hostile local process. Nothing more is promised. `Sender::new(...)` authenticates no one.\n7. **Who verifies what.**\n   - heca tests: the common policy across window, socket and helper; requester propagation; revocation; chains; the explicit session; deferred results; queue full; duplicates; the shutdown outcomes; a declared confirmation refused for an external sender even with that confirmation turned off, directly and in a chain.\n   - heca-pro verifies that the sender comes from trusted integration metadata, never from message content, and owns member→role mapping, RolePermissions, the message format and room replies.\n   - heca adds no Pro types.\n8. **Stopping the server is the catalog action `kill_server`** (extension, implemented in P108(F012)/T559).\n   - It is the one path for the CLI (`heca --kill-server`), the palette and any key binding. It has no default key and no new confirmation.\n   - The old raw socket line `kill-server` and every separate check for it are removed. Scripts use `heca rpc kill_server`, which replaces `heca rpc kill-server`.\n   - The action policy can forbid it for the local user. With no policy it behaves as before.\n   - External senders are always refused, also inside chains: a submitted request gets it as not runnable, whatever the policy says.\n   - Script queries `list-actions` and `describe-action` stay outside the policy for the local user and unreachable for senders.\n   - Nothing claims to stop the user ending the process from the operating system.",
           "rationale": "heca-pro needs room members to drive heca actions under roles, without duplicating heca's action path or trusting message content. A policy wired into the one execution path covers every surface and every chained action. Explicit outcomes, duplicates and restart behaviour remove guesswork on both sides. The security limit is stated so no isolation is promised that the local socket cannot give.",
-          "implementationNotes": "- Wire the policy in the shared path (`check_server_intent` / `execute_server_with` / `ServiceHost::invoke`), never per handler.\n- The requester travels with `SessionRef`/`Caller` and with `ServerStep` follow-ups.\n- Heca-Pro T014 links to this decision and does not duplicate it.\n- Implement after P105/T527.\n\nEXTENSION, agreed with heca-pro and approved by Antonio on 2026-11-15, implemented in P108(F012)/T559:\n8. **Stopping the server is the catalog action `kill_server`.**\n   - It is the one path for the CLI (`heca --kill-server`), the palette and any key binding. It has no default key and no new confirmation.\n   - The old raw socket line `kill-server` goes away, and so does every separate check for it. Scripts use `heca rpc kill_server`, documented as replacing `heca rpc kill-server`.\n   - The action policy can forbid it for the local user. With no policy it behaves as before.\n   - External senders are always refused, also inside chains. Like session management, it is a server action that a submitted request gets as not runnable, whatever the policy says.\n   - Script queries `list-actions` and `describe-action` stay outside the policy for the local user and unreachable for senders.\n   - Nothing claims to stop the user ending the process from the operating system.",
+          "implementationNotes": "- Wire the policy in the shared path (`check_server_intent` / `execute_server_with` / `ServiceHost::invoke`), never per handler.\n- The requester travels with `SessionRef`/`Caller` and with `ServerStep` follow-ups.\n- Heca-Pro T014 links to this decision and does not duplicate it.\n- Implemented in T557 (PR #314) and T559 (PR #315).",
           "acceptedAt": "2026-11-15T12:37:16.835Z"
         }
       ],
@@ -367,7 +368,7 @@
       "startedAt": "2026-11-15T12:52:46.968Z",
       "completedAt": "2026-11-15T17:38:44.319Z",
       "createdAt": "2026-11-15T12:37:00.341Z",
-      "updatedAt": "2026-11-15T17:45:22.438Z",
+      "updatedAt": "2026-11-15T18:30:16.987Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
@@ -443,10 +444,87 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "910d4691-727c-45e8-b5aa-bdc0a2f470f9",
+      "phaseId": "3bed2236-a07a-49d9-9492-72dba0084b04",
+      "number": 560,
+      "shortId": "J375R",
+      "priority": 6,
+      "shortName": "read-only-action-catalog-snaps",
+      "title": "Read-only action catalog snapshot for services (StartCx::action_catalog)",
+      "status": "done",
+      "description": "Requested by heca-pro (T014: their Role reader validates `Role.allow` against the real catalog). The contract was agreed on 2026-11-16 and approved by Antonio; it is the accepted decision on this task.\n\n## What exists\n- The catalog is `crate::actions::ActionCatalog` (heca/src/actions/catalog/mod.rs). Services cannot read it.\n- `ServerLoop::from_config` (heca/src/server/bootstrap.rs) starts the services (`start_services`) BEFORE the extension and service actions are registered:\n  - daemon: `register_extensions` runs after `from_config` (heca/src/server/runtime/headless.rs);\n  - standalone: the window installs its catalog later through `install_actions` (heca/src/client/local.rs, heca/src/lib.rs).\n- So a snapshot taken in a factory today would miss extension and service actions.\n\n## To build\n1. **Build the server's catalog before the factories run, on both paths.** Builtins, queued extension actions and service actions, through the existing `register_queued_actions` (heca/src/entry/action.rs). One place, used by `from_config` for daemon and standalone alike. No second registration path: a later `install_actions` from the window must not re-register or diverge.\n2. **`ActionCatalogSnapshot`**, a public opaque type: the canonical names, with `contains(&str) -> bool` and `names() -> impl Iterator<Item = &str>`. It is immutable, `Clone + Send + Sync` (for example `Arc<[String]>` or a sorted set inside) and `Debug`. It carries no handlers and gives no access to the registry.\n3. **`StartCx::action_catalog() -> ActionCatalogSnapshot`.** It is complete when the factory runs: native built-ins, extension (plugin) actions, service actions, `kill_server` included.\n4. **Docs** in docs/extending-heca.md: what the snapshot contains and does not contain; that it describes this run of the server only, is not persisted, and grants nothing.\n\n## Tests\n- A factory sees a built-in, `kill_server`, an extension action and its own and another service's action.\n- `contains` is false for an unknown name.\n- The snapshot can be sent to another thread and read there.\n- A window-only dock action is absent.\n- A server action that a dock's action produces is present, and is checked by the policy when it runs.\n- The snapshot is the same on the standalone path and the daemon path.\n\n---\n**Completion summary:**\nShipped in PR #316 (branch feat/t560-action-catalog). CI run 43838349760 is green on macOS, Linux and Windows.\n\n- **The API.** `StartCx::action_catalog() -> ActionCatalogSnapshot`, a sorted `Arc<[String]>` that is Clone + Send + Sync + Debug, with `contains` and `names`. It is built by `ActionCatalog::snapshot()` (actions/catalog/snapshot.rs) and exported from heca. `StartArgs` carries it to every factory.\n- **Start order.** `ServerLoop::boot` (from `from_config`, daemon and standalone) now runs `open_store`, then `register_actions` (built-ins plus queued extension and service actions), then `start_services`. `register_extensions` and its call in headless.rs are removed.\n- **No double registration.** `register_queued_actions` reads the plain-action queue with `close` instead of `take`, so in standalone the window still registers the plain actions after the server; each host builds its own registry from the same declarations. Only the background server reports conflicts (`ServerIdentity::kind`), because in standalone the window reports them.\n- **Docs:** extending-heca.md.\n- **Tests** in server/run/catalog_tests.rs:\n  - a factory sees every action;\n  - the snapshot can be read on another thread;\n  - a window-only action is absent and a later window install does not change what a service was told;\n  - both start paths give the same snapshot;\n  - a standalone window still registers and runs plain actions;\n  - two hosts reading the same declarations report no conflicts.\n- **Break-it:** restoring `take()` made two tests fail.\n- **Checks:** clippy, rustdoc and Windows clippy are clean; 1317 heca lib tests pass, re-run by me.\n\nAccepted deviation: in standalone, after the window installs its catalog, the server's live catalog also holds that window's dock actions. The snapshot already handed to services stays frozen without them. The dock-produced server action case is documented, not separately tested: such an action is an ordinary catalog action.",
+      "descriptionUpdatedAt": "2026-11-16T09:22:06.797Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "75c14ff6-30e3-49c5-9691-14ebc490cb07",
+          "date": "2026-11-16T09:10:21.224Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "910d4691-727c-45e8-b5aa-bdc0a2f470f9-check-002-in-progress-done",
+          "date": "2026-11-16T09:22:06.795Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped in PR #316 (branch feat/t560-action-catalog). CI run 43838349760 is green on macOS, Linux and Windows.\n\n- **The API.** `StartCx::action_catalog() -> ActionCatalogSnapshot`, a sorted `Arc<[String]>` that is Clone + Send + Sync + Debug, with `contains` and `names`. It is built by `ActionCatalog::snapshot()` (actions/catalog/snapshot.rs) and exported from heca. `StartArgs` carries it to every factory.\n- **Start order.** `ServerLoop::boot` (from `from_config`, daemon and standalone) now runs `open_store`, then `register_actions` (built-ins plus queued extension and service actions), then `start_services`. `register_extensions` and its call in headless.rs are removed.\n- **No double registration.** `register_queued_actions` reads the plain-action queue with `close` instead of `take`, so in standalone the window still registers the plain actions after the server; each host builds its own registry from the same declarations. Only the background server reports conflicts (`ServerIdentity::kind`), because in standalone the window reports them.\n- **Docs:** extending-heca.md.\n- **Tests** in server/run/catalog_tests.rs:\n  - a factory sees every action;\n  - the snapshot can be read on another thread;\n  - a window-only action is absent and a later window install does not change what a service was told;\n  - both start paths give the same snapshot;\n  - a standalone window still registers and runs plain actions;\n  - two hosts reading the same declarations report no conflicts.\n- **Break-it:** restoring `take()` made two tests fail.\n- **Checks:** clippy, rustdoc and Windows clippy are clean; 1317 heca lib tests pass, re-run by me.\n\nAccepted deviation: in standalone, after the window installs its catalog, the server's live catalog also holds that window's dock actions. The snapshot already handed to services stays frozen without them. The dock-produced server action case is documented, not separately tested: such an action is an ordinary catalog action."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "d707c933-ef4a-4895-b324-99c16ef296f0",
+          "title": "Contract: read-only action catalog snapshot for services (agreed with heca-pro T014)",
+          "decision": "Agreed with heca-pro (T014) and approved by Antonio on 2026-11-16.\n1. `StartCx::action_catalog() -> ActionCatalogSnapshot`, a public opaque type with `contains(name) -> bool` and an iterator over the canonical names.\n2. The snapshot is immutable, clonable, and usable from another thread, such as the worker that loads Roles.\n3. It is complete when the service factory runs: native built-ins, extension (plugin) actions, service actions, `kill_server` included. heca builds the server's catalog before it starts the factories, on the background server and in standalone alike, through the one existing registration path.\n4. **Dock actions.** The snapshot excludes only actions that run exclusively inside a window (the actions a dock mounted in a window declares and runs there). When a dock's action produces an action the server executes, that server action is in the server catalog and goes through the action policy.\n5. **What it is not.**\n   - It holds names only: no handlers, no access to the execution registry, no new authorization rule.\n   - That an action exists does not mean it is authorized; the action policy (decision 0be89c38 on T557) decides that.\n   - It describes the catalog of this run of the server: heca-pro does not persist it and does not treat it as a grant of permissions.",
+          "rationale": "heca-pro validates `Role.allow` against the real catalog without keeping its own copy, which would drift. The factories currently start before the catalog is complete, so the order must be fixed for the snapshot to be true.",
+          "implementationNotes": "- Fix the start order in `ServerLoop::from_config` (heca/src/server/bootstrap.rs) by registering queued actions (heca/src/entry/action.rs `register_queued_actions`) before `start_services`.\n- The window's later `install_actions` must not diverge.\n- Heca-Pro T014 links to this decision.",
+          "acceptedAt": "2026-11-16T09:10:17.828Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "910d4691-727c-45e8-b5aa-bdc0a2f470f9-check-001-server-catalog-complete-before-service-factories-run-on-daemon-and-standalone-one-registration-path-no-divergence-with-the-window-s-install-actions",
+          "number": 1,
+          "title": "Server catalog complete before service factories run, on daemon and standalone (one registration path, no divergence with the window's install_actions)",
+          "checked": true
+        },
+        {
+          "id": "910d4691-727c-45e8-b5aa-bdc0a2f470f9-check-002-public-actioncatalogsnapshot-names-contains-iterator-immutable-clone-send-sync-no-handlers-registry-and-startcx-action-catalog",
+          "number": 2,
+          "title": "Public ActionCatalogSnapshot (names, contains, iterator; immutable, Clone+Send+Sync; no handlers/registry) and StartCx::action_catalog()",
+          "checked": true
+        },
+        {
+          "id": "910d4691-727c-45e8-b5aa-bdc0a2f470f9-check-003-tests-built-in-kill-server-extension-service-actions-present-unknown-absent-other-thread-window-only-dock-action-absent-dock-produced-server-action-present-and-policy-checked-same-on-both-paths-and-docs",
+          "number": 3,
+          "title": "Tests (built-in, kill_server, extension, service actions present; unknown absent; other thread; window-only dock action absent; dock-produced server action present and policy-checked; same on both paths) and docs",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-16T09:10:21.224Z",
+      "completedAt": "2026-11-16T09:22:06.795Z",
+      "createdAt": "2026-11-16T09:10:07.972Z",
+      "updatedAt": "2026-11-16T09:22:06.795Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
+          "createdAt": "2026-11-16T09:10:21.153Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-14T09:59:01.452Z",
-  "updatedAt": "2026-11-15T18:24:57.575Z",
+  "updatedAt": "2026-11-16T09:22:06.795Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -532,12 +610,28 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "93280a7f-b61f-4938-b912-46d9aeef17f0",
+      "date": "2026-11-16T09:10:21.409Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "e5d5b7ce-9375-4f69-b37d-8676d1002516",
+      "date": "2026-11-16T09:22:06.836Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
-      "createdAt": "2026-11-15T17:45:37.656Z"
+      "createdAt": "2026-11-16T09:10:21.153Z"
     }
   ]
 }
