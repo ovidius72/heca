@@ -35,6 +35,10 @@
 //! 9. A carriage return, a line feed or a NUL anywhere in the line is an error. The protocol's own
 //!    line terminator is not part of the line: [`without_terminator`] takes it off first.
 //!
+//! Every error names where it is: the column, counted in characters from 1, of the quote that never
+//! closed, of the backslash left with nothing to escape, or of the refused character. A line that
+//! cannot be read is answered by the server itself, before any window is asked.
+//!
 //! ## Writing a line
 //!
 //! [`from_argv`] is `heca rpc`'s side. One argument is a whole line and goes out as it is. Several
@@ -50,12 +54,13 @@ use std::fmt;
 /// Why a line could not be read or written.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LineError {
-    /// A `'` or `"` was opened and the line ended before it was closed.
-    UnclosedQuote(char),
-    /// The line ended on a `\` inside double quotes: nothing is there to escape.
-    DanglingEscape,
-    /// A carriage return, line feed or NUL: they would end or garble the one-line request.
-    ControlCharacter(char),
+    /// A `'` or `"` was opened at `column` and the line ended before it was closed.
+    UnclosedQuote { quote: char, column: usize },
+    /// The line ended on the `\` at `column`, inside double quotes: nothing is there to escape.
+    DanglingEscape { column: usize },
+    /// A carriage return, line feed or NUL at `column`: they would end or garble the one-line
+    /// request.
+    ControlCharacter { character: char, column: usize },
     /// A named argument whose name is not a valid name (only the writer can be given one).
     InvalidName(String),
     /// An action name that would not read back as itself: empty, or with a space, a quote or a `=`.
@@ -65,22 +70,25 @@ pub enum LineError {
 impl fmt::Display for LineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LineError::UnclosedQuote(quote) => {
-                write!(f, "a {quote} quote was opened and never closed")
-            }
-            LineError::DanglingEscape => {
+            LineError::UnclosedQuote { quote, column } => {
                 write!(
                     f,
-                    "the line ends in a backslash inside double quotes; write \\\\ for a backslash"
+                    "a {quote} quote was opened at column {column} and never closed"
                 )
             }
-            LineError::ControlCharacter(c) => {
-                let what = match c {
+            LineError::DanglingEscape { column } => {
+                write!(
+                    f,
+                    "the line ends in a backslash at column {column} inside double quotes; write \\\\ for a backslash"
+                )
+            }
+            LineError::ControlCharacter { character, column } => {
+                let what = match character {
                     '\r' => "a carriage return",
                     '\n' => "a line break",
                     _ => "a NUL character",
                 };
-                write!(f, "{what} is not allowed in a line")
+                write!(f, "{what} at column {column} is not allowed in a line")
             }
             LineError::InvalidName(name) => write!(
                 f,
@@ -142,8 +150,8 @@ pub fn tokenize(line: &str) -> Result<Vec<Word>, LineError> {
     reject_control(line)?;
     let mut words = Vec::new();
     let mut building: Option<Building> = None;
-    let mut chars = line.chars();
-    while let Some(c) = chars.next() {
+    let mut chars = columns(line);
+    while let Some((column, c)) = chars.next() {
         if c.is_whitespace() {
             words.extend(building.take().map(Building::finish));
             continue;
@@ -152,11 +160,11 @@ pub fn tokenize(line: &str) -> Result<Vec<Word>, LineError> {
         match c {
             '"' => {
                 word.quoted = true;
-                read_double_quoted(&mut chars, &mut word.value)?;
+                read_double_quoted(&mut chars, column, &mut word.value)?;
             }
             '\'' => {
                 word.quoted = true;
-                read_single_quoted(&mut chars, &mut word.value)?;
+                read_single_quoted(&mut chars, column, &mut word.value)?;
             }
             '=' => {
                 word.split.get_or_insert(word.value.len());
@@ -273,39 +281,64 @@ fn is_name(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+/// Each character of `text` with its column, counted in characters from 1 — the position an error
+/// names.
+fn columns(text: &str) -> impl Iterator<Item = (usize, char)> + '_ {
+    text.chars().enumerate().map(|(index, c)| (index + 1, c))
+}
+
 fn reject_control(text: &str) -> Result<(), LineError> {
-    match text.chars().find(|c| matches!(c, '\r' | '\n' | '\0')) {
-        Some(c) => Err(LineError::ControlCharacter(c)),
+    match columns(text).find(|(_, c)| matches!(c, '\r' | '\n' | '\0')) {
+        Some((column, character)) => Err(LineError::ControlCharacter { character, column }),
         None => Ok(()),
     }
 }
 
-/// Up to the closing `"`; `\"` and `\\` are the only escapes, any other `\` is kept as written.
-fn read_double_quoted(chars: &mut std::str::Chars<'_>, into: &mut String) -> Result<(), LineError> {
+/// Up to the closing `"` opened at `opened`; `\"` and `\\` are the only escapes, any other `\` is
+/// kept as written.
+fn read_double_quoted(
+    chars: &mut impl Iterator<Item = (usize, char)>,
+    opened: usize,
+    into: &mut String,
+) -> Result<(), LineError> {
     loop {
         match chars.next() {
-            None => return Err(LineError::UnclosedQuote('"')),
-            Some('"') => return Ok(()),
-            Some('\\') => match chars.next() {
-                None => return Err(LineError::DanglingEscape),
-                Some(escaped @ ('"' | '\\')) => into.push(escaped),
-                Some(other) => {
+            None => {
+                return Err(LineError::UnclosedQuote {
+                    quote: '"',
+                    column: opened,
+                });
+            }
+            Some((_, '"')) => return Ok(()),
+            Some((column, '\\')) => match chars.next() {
+                None => return Err(LineError::DanglingEscape { column }),
+                Some((_, escaped @ ('"' | '\\'))) => into.push(escaped),
+                Some((_, other)) => {
                     into.push('\\');
                     into.push(other);
                 }
             },
-            Some(c) => into.push(c),
+            Some((_, c)) => into.push(c),
         }
     }
 }
 
-/// Up to the closing `'`; everything is literal.
-fn read_single_quoted(chars: &mut std::str::Chars<'_>, into: &mut String) -> Result<(), LineError> {
+/// Up to the closing `'` opened at `opened`; everything is literal.
+fn read_single_quoted(
+    chars: &mut impl Iterator<Item = (usize, char)>,
+    opened: usize,
+    into: &mut String,
+) -> Result<(), LineError> {
     loop {
         match chars.next() {
-            None => return Err(LineError::UnclosedQuote('\'')),
-            Some('\'') => return Ok(()),
-            Some(c) => into.push(c),
+            None => {
+                return Err(LineError::UnclosedQuote {
+                    quote: '\'',
+                    column: opened,
+                });
+            }
+            Some((_, '\'')) => return Ok(()),
+            Some((_, c)) => into.push(c),
         }
     }
 }
@@ -494,39 +527,74 @@ mod tests {
     fn an_unclosed_quote_is_an_error() {
         assert_eq!(
             tokenize(r#"say "hello"#),
-            Err(LineError::UnclosedQuote('"'))
+            Err(LineError::UnclosedQuote {
+                quote: '"',
+                column: 5
+            })
         );
-        assert_eq!(tokenize("say 'hello"), Err(LineError::UnclosedQuote('\'')));
+        assert_eq!(
+            tokenize("say 'hello"),
+            Err(LineError::UnclosedQuote {
+                quote: '\'',
+                column: 5
+            })
+        );
         assert_eq!(
             tokenize(r#"say key="a b"#),
-            Err(LineError::UnclosedQuote('"'))
+            Err(LineError::UnclosedQuote {
+                quote: '"',
+                column: 9
+            })
         );
         // An escaped quote does not close.
-        assert_eq!(tokenize(r#"say "a\""#), Err(LineError::UnclosedQuote('"')));
+        assert_eq!(
+            tokenize(r#"say "a\""#),
+            Err(LineError::UnclosedQuote {
+                quote: '"',
+                column: 5
+            })
+        );
+        // The column counts characters, not bytes.
+        assert_eq!(
+            tokenize(r#"dì "x"#),
+            Err(LineError::UnclosedQuote {
+                quote: '"',
+                column: 4
+            })
+        );
     }
 
     #[test]
     fn a_backslash_ending_the_line_inside_double_quotes_is_an_error() {
-        assert_eq!(tokenize(r#"say "abc\"#), Err(LineError::DanglingEscape));
+        assert_eq!(
+            tokenize(r#"say "abc\"#),
+            Err(LineError::DanglingEscape { column: 9 })
+        );
         // Inside single quotes, and outside quotes, it is only a character.
-        assert_eq!(tokenize(r"say 'abc\"), Err(LineError::UnclosedQuote('\'')));
+        assert_eq!(
+            tokenize(r"say 'abc\"),
+            Err(LineError::UnclosedQuote {
+                quote: '\'',
+                column: 5
+            })
+        );
         assert_eq!(args(r"say abc\"), [pos("say"), pos(r"abc\")]);
     }
 
     #[test]
     fn a_carriage_return_a_line_feed_or_a_nul_is_refused_even_inside_quotes() {
-        for (line, c) in [
-            ("a\nb", '\n'),
-            ("a\rb", '\r'),
-            ("a\0b", '\0'),
-            ("a \"x\ny\"", '\n'),
-            ("a 'x\ry'", '\r'),
-            ("a key=\"x\0\"", '\0'),
-            ("a\r\n", '\r'),
+        for (line, character, column) in [
+            ("a\nb", '\n', 2),
+            ("a\rb", '\r', 2),
+            ("a\0b", '\0', 2),
+            ("a \"x\ny\"", '\n', 5),
+            ("a 'x\ry'", '\r', 5),
+            ("a key=\"x\0\"", '\0', 9),
+            ("a\r\n", '\r', 2),
         ] {
             assert_eq!(
                 tokenize(line),
-                Err(LineError::ControlCharacter(c)),
+                Err(LineError::ControlCharacter { character, column }),
                 "{line:?}"
             );
         }
@@ -540,11 +608,17 @@ mod tests {
         // Only the terminator: one more is content, and still refused.
         assert_eq!(
             tokenize(without_terminator("a\n\n")),
-            Err(LineError::ControlCharacter('\n'))
+            Err(LineError::ControlCharacter {
+                character: '\n',
+                column: 2
+            })
         );
         assert_eq!(
             tokenize(without_terminator("a\r\r\n")),
-            Err(LineError::ControlCharacter('\r'))
+            Err(LineError::ControlCharacter {
+                character: '\r',
+                column: 2
+            })
         );
     }
 
@@ -637,19 +711,31 @@ mod tests {
     fn the_writer_refuses_what_a_line_cannot_hold() {
         assert_eq!(
             format_line("a", &[pos("x\ny")]),
-            Err(LineError::ControlCharacter('\n'))
+            Err(LineError::ControlCharacter {
+                character: '\n',
+                column: 2
+            })
         );
         assert_eq!(
             format_line("a", &[named("k", "x\ry")]),
-            Err(LineError::ControlCharacter('\r'))
+            Err(LineError::ControlCharacter {
+                character: '\r',
+                column: 2
+            })
         );
         assert_eq!(
             format_line("a", &[pos("x\0")]),
-            Err(LineError::ControlCharacter('\0'))
+            Err(LineError::ControlCharacter {
+                character: '\0',
+                column: 2
+            })
         );
         assert_eq!(
             format_line("a\n", &[]),
-            Err(LineError::ControlCharacter('\n'))
+            Err(LineError::ControlCharacter {
+                character: '\n',
+                column: 2
+            })
         );
         assert_eq!(
             format_line("a", &[named("1k", "v")]),
@@ -759,7 +845,7 @@ mod tests {
             &["say x\r"],
         ] {
             assert!(
-                matches!(from_argv(&argv(words)), Err(LineError::ControlCharacter(_))),
+                matches!(from_argv(&argv(words)), Err(LineError::ControlCharacter { .. })),
                 "{words:?}"
             );
         }

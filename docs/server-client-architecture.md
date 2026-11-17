@@ -172,7 +172,7 @@ exactly as before. The rules, all in [`rpc/line.rs`](../heca/src/rpc/line.rs):
   positional value, whole: `C:\x=y` and `"a=b"` are positional, `key="a=b"` is the name `key` with the
   value `a=b`.
 - `""` and `''` are an empty value (`key=""`, or `key=`).
-- An unclosed quote, or a backslash ending the line inside `"…"`, answers `error:` before anything runs.
+- An unclosed quote, or a backslash ending the line inside `"…"`, answers `error:` before anything runs, naming the column (in characters, from 1) where the problem is — for example `error: cannot read the line: a " quote was opened at column 17 and never closed`. The server answers it itself, even with a window attached.
 - A carriage return, a line feed or a NUL inside a line is refused, on every way in (`heca rpc`, a
   service's request, the socket). The newline that ends the request on the socket is not part of the line.
 - Nothing is expanded: no variables, no globs, no commands.

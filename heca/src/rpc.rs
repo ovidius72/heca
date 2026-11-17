@@ -381,7 +381,7 @@ mod tests {
         }
         assert_eq!(
             parse_rpc(r#"note "open"#).unwrap_err().to_string(),
-            "cannot read the line: a \" quote was opened and never closed"
+            "cannot read the line: a \" quote was opened at column 6 and never closed"
         );
     }
 
