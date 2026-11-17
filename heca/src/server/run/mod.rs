@@ -207,14 +207,23 @@ impl ServerLoop {
     }
 
     pub(super) fn begin_rpc(&mut self, line: String, reply: std::sync::mpsc::Sender<String>) {
+        // A line that cannot be read is answered here: no window or session can add anything to it,
+        // and sending it on would leave the asker waiting for an answer the server already has.
+        let parsed = match crate::rpc::parse_rpc(&line) {
+            Ok(command) => command.into_intent(&self.catalog),
+            Err(error) => {
+                let _ = reply.send(format!("error: {error}"));
+                return;
+            }
+        };
         // A service's action runs where the service is, whoever is attached.
-        if let Ok((intent, None)) = crate::rpc::parse_rpc(&line).and_then(|command| command.into_intent(&self.catalog))
+        if let Ok((intent, None)) = &parsed
             && self.services.borrow().owns(&intent.action) {
-            return self.rpc_service(&intent, reply);
+            return self.rpc_service(intent, reply);
         }
-        let owned = crate::rpc::parse_rpc(&line).and_then(|command| command.into_intent(&self.catalog))
+        let owned = parsed.as_ref()
             .is_ok_and(|(intent, dock)| dock.is_none()
-                && crate::input::resolve_action(&intent.action, &crate::app::interaction::intent_args_as_strings(&intent))
+                && crate::input::resolve_action(&intent.action, &crate::app::interaction::intent_args_as_strings(intent))
                     .is_some_and(|action| super::sessions::owns(action.kind())));
         if owned { let _ = reply.send(self.rpc(&line)); return; }
         if let Some(session) = self.recent_sessions.iter().rev()
@@ -223,7 +232,7 @@ impl ServerLoop {
         {
             // Creating an unattached session must not take commands away from a live window.
             self.sessions[session].begin_rpc(line, reply);
-        } else if crate::rpc::parse_rpc(&line).and_then(|command| command.into_intent(&self.catalog))
+        } else if parsed.as_ref()
             .is_ok_and(|(intent, _)| crate::actions::builtin_side(&intent.action)
                 != Some(crate::actions::Side::Server))
             && let Some(client) = self.clients.iter().find(|client| !client.is_closed()
