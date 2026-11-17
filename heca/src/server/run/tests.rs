@@ -291,6 +291,32 @@ fn an_rpc_answer_received_before_eof_is_delivered_before_disconnect() {
     assert!(server.clients.is_empty());
 }
 
+/// A line that cannot be read is answered by the server at once, even with a window attached: the
+/// window is never asked, so the asker never waits for it.
+#[test]
+fn a_line_that_cannot_be_read_is_answered_by_the_server_without_asking_the_window() {
+    let mut server = a_loop();
+    let client = server.connect();
+    client.send(ClientMsg::Attach).unwrap();
+    server.pump(Instant::now());
+    drain(&client);
+
+    for line in [r#"probe.echo text="unterminated"#, "", "note a\u{0}b"] {
+        let (reply, answer) = std::sync::mpsc::channel();
+        server.begin_rpc(line.into(), reply);
+        let answer = answer.try_recv().unwrap_or_else(|_| panic!("{line:?} was not answered at once"));
+        assert!(answer.starts_with("error: "), "{line:?}: {answer}");
+        assert!(drain(&client).iter().all(|message| !matches!(message, ServerMsg::Rpc { .. })),
+            "{line:?} was sent to the window");
+    }
+    let (reply, answer) = std::sync::mpsc::channel();
+    server.begin_rpc(r#"probe.echo text="unterminated"#.into(), reply);
+    assert_eq!(
+        answer.try_recv().unwrap(),
+        "error: cannot read the line: a \" quote was opened at column 17 and never closed"
+    );
+}
+
 #[test]
 fn an_action_before_attach_closes_the_connection() {
     let mut server = a_loop();
