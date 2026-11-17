@@ -1,6 +1,8 @@
 //! **Preparing the frame**: the window painted into a scene, and the terminals' render state and
 //! textures.
 
+use std::collections::HashSet;
+
 use heca_core::layout::PaneId;
 use heca_grid_ui::{Component, Scene as GuiScene};
 use heca_renderer::terminal::TerminalStyle;
@@ -72,35 +74,73 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
     scene
 }
 
+/// **The terminals a frame draws, by what holds them**: the active workspace's tiled panes and
+/// floating panes, and those no pane owns (a dock's, an overlay's). A pane in another workspace is
+/// not on screen, whatever it is printing.
+///
+/// The one answer to "is this terminal on screen", read by the frame that collects them and by the
+/// loop that decides whether a terminal's new output is worth a frame — so the two cannot
+/// disagree about which terminals count.
+pub(crate) struct OnScreen {
+    tiled: Vec<PaneId>,
+    floating: Vec<PaneId>,
+    /// In a stable order: the oldest id first.
+    unowned: Vec<TerminalId>,
+}
+
+impl OnScreen {
+    pub(crate) fn of(state: &AppState) -> Self {
+        let (tiled, floating): (Vec<PaneId>, Vec<PaneId>) = state
+            .layout()
+            .active_workspace()
+            .map(|ws| {
+                (
+                    ws.scroll()
+                        .panes_with_positions()
+                        .into_iter()
+                        .map(|(pane, _)| pane)
+                        .collect(),
+                    ws.floating_panes
+                        .iter()
+                        .map(|float| float.pane.id)
+                        .collect(),
+                )
+            })
+            .unwrap_or_default();
+        let mut unowned: Vec<TerminalId> = state
+            .terminals
+            .keys()
+            .copied()
+            .filter(|id| state.client.backends.pane_of(*id).is_none())
+            .collect();
+        unowned.sort_by_key(|id| id.0);
+        Self {
+            tiled,
+            floating,
+            unowned,
+        }
+    }
+
+    /// The ids of the terminals that are on screen — a pane with no terminal yet has none.
+    pub(crate) fn ids(&self, state: &AppState) -> HashSet<TerminalId> {
+        self.tiled
+            .iter()
+            .chain(&self.floating)
+            .filter_map(|pane| state.client.backends.identity_of(*pane))
+            .chain(self.unowned.iter().copied())
+            .collect()
+    }
+}
+
 /// **Every terminal this frame draws**: the tiled panes', the floating panes', and those no pane
 /// owns — a dock's, an overlay's — each with its snapshot and how see-through it is. Where each is
 /// drawn and what cuts it come from the scene, so nothing here says where it is.
 pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> FrameTerminals {
-    let (tiled, floating): (Vec<PaneId>, Vec<PaneId>) = state
-        .layout()
-        .active_workspace()
-        .map(|ws| {
-            (
-                ws.scroll()
-                    .panes_with_positions()
-                    .into_iter()
-                    .map(|(pane, _)| pane)
-                    .collect(),
-                ws.floating_panes
-                    .iter()
-                    .map(|float| float.pane.id)
-                    .collect(),
-            )
-        })
-        .unwrap_or_default();
-    // The terminals no pane owns, in a stable order: the oldest id first.
-    let mut unowned: Vec<TerminalId> = state
-        .terminals
-        .keys()
-        .copied()
-        .filter(|id| state.client.backends.pane_of(*id).is_none())
-        .collect();
-    unowned.sort_by_key(|id| id.0);
+    let OnScreen {
+        tiled,
+        floating,
+        unowned,
+    } = OnScreen::of(state);
     let mut terminals = Vec::new();
     let panes = tiled.into_iter().map(|pane| (pane, v.surface_alpha)).chain(
         floating

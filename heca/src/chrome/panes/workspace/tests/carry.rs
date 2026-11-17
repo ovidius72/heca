@@ -235,7 +235,7 @@ fn the_window_key_opens_a_link_on_a_click_and_carries_the_pane_on_a_drag() {
     // Every cell of pane 10's terminal is a link, so the click lands on one wherever it is.
     let mut model = two_columns();
     model.places = open_places();
-    let terminal = model.panes[&PaneId(10)].content.clone();
+    let terminal = model.panes[&PaneId(10)].content.node();
     terminal.show(&crate::chrome::panes::terminal::Viewport {
         rows: 12,
         scrollback_rows: 12,

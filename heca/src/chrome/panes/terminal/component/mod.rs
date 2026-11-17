@@ -31,7 +31,42 @@ pub struct Terminal {
     _controls: Rc<Controls>,
 }
 
+/// **A cheap hold on a terminal that is not a node.**
+///
+/// What a caller keeps when it only needs to say *which* terminal — the model the workspace is
+/// handed every frame. A [`Terminal`] is a whole node (its scrollback controls, its search bar and
+/// their signals), so cloning one to carry it around builds all of that again and throws it away.
+/// This is a reference count: [`node`](Self::node) is the one door to a node, and it is opened only
+/// where a pane is actually made.
+#[derive(Clone)]
+pub(crate) struct TerminalRef(Rc<Shared>);
+
+impl TerminalRef {
+    /// **A new node for a tree** showing this terminal. Builds the whole component, so it is asked
+    /// when something is placed, never when something is looked at.
+    pub(crate) fn node(&self) -> Terminal {
+        Terminal::of(self.0.clone())
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many nodes this thread has built, so a test can say what a frame costs.
+    static NODES_BUILT: Cell<usize> = const { Cell::new(0) };
+}
+
+/// How many [`Terminal`] nodes this thread has built so far.
+#[cfg(test)]
+pub(crate) fn nodes_built() -> usize {
+    NODES_BUILT.with(Cell::get)
+}
+
 impl Terminal {
+    /// A cheap hold on this terminal, to carry where a node is not wanted.
+    pub(crate) fn reference(&self) -> TerminalRef {
+        TerminalRef(self.shared.clone())
+    }
+
     /// An unbound visual handle; the server or declaration store supplies its process.
     pub(crate) fn unbound() -> Self {
         Self::of(Rc::new(Shared {
@@ -59,6 +94,8 @@ impl Terminal {
     }
 
     fn of(shared: Rc<Shared>) -> Self {
+        #[cfg(test)]
+        NODES_BUILT.with(|built| built.set(built.get() + 1));
         let mut base = Base::new();
         // It fills its parent, and says nothing more: a share of the box it is given, never a
         // measure of its own. Unset already stretches, but a leaf has no content to size it, so it
@@ -143,7 +180,8 @@ impl Terminal {
 
 impl Clone for Terminal {
     /// Another view of the same terminal: a separate node for a tree, the same name and the same
-    /// report of its size.
+    /// report of its size. **A whole new node** — its controls, its search bar and their signals —
+    /// so clone to place it, never to carry it: the app carries a `TerminalRef`, the cheap hold.
     fn clone(&self) -> Self {
         Self::of(self.shared.clone())
     }

@@ -14,6 +14,18 @@ struct Request {
     playback: Playback,
 }
 
+/// **The next time a flash needs a frame, and how long that stays worth waking for.**
+///
+/// Only a paint writes one, because only a paint knows the flash is on screen and what the theme
+/// says its timing is. `until` is the end of a whole cycle past `at`: a flash nobody paints any more
+/// (its row scrolled away, its pane in another workspace, the sidebar hidden) is not on screen, and a
+/// wake that is only ever overdue would wake the host again the moment it went back to sleep.
+#[derive(Clone, Copy, Debug)]
+struct Booked {
+    at: Instant,
+    until: Instant,
+}
+
 /// A cheap, copyable handle to semantic light pulses on one or more widgets.
 /// Bind it with [`FlashExt::flash`](crate::FlashExt::flash), then trigger it from an event,
 /// a reactive effect or an existing declared action. The framework owns timing and redraws.
@@ -29,7 +41,7 @@ struct Request {
 #[derive(Clone, Copy, Debug)]
 pub struct FlashHandle {
     request: Signal<Option<Request>>,
-    next_frame: Signal<Option<Instant>>,
+    next_frame: Signal<Option<Booked>>,
 }
 
 impl FlashHandle {
@@ -65,14 +77,16 @@ impl FlashHandle {
         if matches!(request.playback, Playback::Repeat { .. }) && request.playback != next {
             request.playback = next;
             self.request.set(Some(request));
-            self.next_frame.set(Some(Instant::now()));
             crate::request_frame();
         }
     }
 
     fn start(self, tone: Tone, playback: Playback) {
+        // **No wake is booked here.** The frame asked for below draws the flash, and the paint of a
+        // widget that is on screen books the next one. Booking "now" from here as well left a wake
+        // that only a paint could ever clear, so a flash on a widget nothing paints kept the host
+        // awake for ever.
         self.request.set(Some(Request { started: Instant::now(), tone, playback }));
-        self.next_frame.set(Some(Instant::now()));
         crate::request_frame();
     }
 
@@ -87,8 +101,11 @@ impl FlashHandle {
 /// Use the existing widget deadline walk, including when a custom widget owns `tick`.
 pub(crate) fn wake(base: &Base) -> Option<f32> {
     if base.style.layout.hidden || !base.visible.get_untracked() { return None }
-    base.flash?.next_frame.get_untracked().map(|at|
-        at.saturating_duration_since(Instant::now()).as_secs_f32())
+    let booked = base.flash?.next_frame.get_untracked()?;
+    let now = Instant::now();
+    // Overdue is still a wake — the host draws at once — but only for one cycle: past that, no paint
+    // has reached this widget since it asked, so it is not on screen and has nothing to draw.
+    (now <= booked.until).then(|| booked.at.saturating_duration_since(now).as_secs_f32())
 }
 
 impl Default for FlashHandle {
@@ -157,7 +174,10 @@ pub(crate) fn paint(base: &Base, cx: &mut PaintCx) {
     } else { cycle - phase };
     let remaining = lifetime(request, style) - now.saturating_duration_since(request.started).as_secs_f64();
     if let Some(handle) = base.flash {
-        handle.next_frame.set(Duration::try_from_secs_f64(delay.min(remaining).max(0.0)).ok().and_then(|delay| now.checked_add(delay)));
+        handle.next_frame.set(Duration::try_from_secs_f64(delay.min(remaining).max(0.0)).ok().and_then(|delay| {
+            let at = now.checked_add(delay)?;
+            Some(Booked { at, until: at.checked_add(Duration::try_from_secs_f64(cycle).ok()?)? })
+        }));
     }
     base.dirty_next_paint();
 }

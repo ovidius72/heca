@@ -425,3 +425,75 @@ fn logical_detach_keeps_rpc_working_and_allows_explicit_session_selection() {
     assert!(matches!(&messages[2], ClientMsg::RpcReply { request_id: 9, .. }));
     assert!(matches!(&messages[3], ClientMsg::AttachTo { name } if name == "B"));
 }
+
+/// A frame of the terminal `owner` runs, with `title` so two frames differ.
+fn terminal_frame(owner: &TerminalOwner, title: &str) -> ServerMsg {
+    use heca_core::backend::PaneBackend;
+    let backend = heca_core::backend::FakeBackend::new(20, 6);
+    ServerMsg::Terminal(Box::new(crate::server::wire::terminal::TerminalFrame {
+        id: 1, owner: owner.clone(), title: title.into(), display_title: None,
+        spec: TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (20, 6) },
+        screen: backend.terminal_snapshot().unwrap().to_wire(),
+        damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
+    }))
+}
+
+/// A client holding one terminal that has had its first frame, and the terminal's id.
+fn client_with_a_terminal() -> (ClientState, Arc<Mutex<VecDeque<ServerMsg>>>, TerminalOwner, crate::chrome::panes::terminal::TerminalId) {
+    let incoming = Arc::new(Mutex::new(VecDeque::new()));
+    let mut client = client(RecordingLink { sent: Default::default(), incoming: incoming.clone() });
+    let owner = TerminalOwner::Pane(heca_core::layout::PaneId(7));
+    incoming.lock().unwrap().push_back(terminal_frame(&owner, "one"));
+    client.poll().unwrap();
+    let id = client.backends.find_owner(&owner).unwrap();
+    (client, incoming, owner, id)
+}
+
+/// **A terminal on screen that nothing has drawn yet wakes the loop for what it was sent, once.**
+///
+/// Every view starts needing a paint. That is not new data: counting it as data kept the loop
+/// drawing for a view no frame ever collects, forever.
+#[test]
+fn a_terminal_wakes_the_loop_once_for_what_it_was_sent_and_not_again() {
+    let (mut client, incoming, owner, id) = client_with_a_terminal();
+    let on_screen = std::collections::HashSet::from([id]);
+    assert!(client.poll_views(&on_screen).has_data, "its first frame is news");
+    for _ in 0..5 {
+        assert!(!client.poll_views(&on_screen).has_data, "nothing new, nothing to draw for");
+    }
+    incoming.lock().unwrap().push_back(terminal_frame(&owner, "two"));
+    client.poll().unwrap();
+    assert!(client.poll_views(&on_screen).has_data, "more output is news");
+    assert!(!client.poll_views(&on_screen).has_data);
+}
+
+/// **Output in a pane nobody is looking at does not draw a frame**, and is on screen the moment it is shown.
+#[test]
+fn output_in_a_terminal_that_is_not_on_screen_wakes_nothing() {
+    let (mut client, incoming, owner, id) = client_with_a_terminal();
+    let nowhere = std::collections::HashSet::new();
+    assert!(!client.poll_views(&nowhere).has_data);
+    incoming.lock().unwrap().push_back(terminal_frame(&owner, "two"));
+    let update = client.poll().unwrap();
+    assert!(!update.effects.has_data, "receiving a frame is not a reason to draw");
+    assert!(!client.poll_views(&nowhere).has_data);
+    let (_, damage) = client.terminal_view(id, 1.0).unwrap();
+    assert_eq!(damage, TerminalDamage::Full, "what arrived meanwhile is painted once it is shown");
+}
+
+/// **A new size still gets its repaint**: the next time the terminal is drawn, in full, and the
+/// loop is told once.
+#[test]
+fn a_new_size_is_painted_on_the_next_draw_and_wakes_the_loop_once() {
+    let (mut client, _incoming, _owner, id) = client_with_a_terminal();
+    let on_screen = std::collections::HashSet::from([id]);
+    client.poll_views(&on_screen);
+    assert_eq!(client.terminal_view(id, 1.0).unwrap().1, TerminalDamage::Full);
+    assert_eq!(client.terminal_view(id, 1.0).unwrap().1, TerminalDamage::None);
+    assert!(!client.poll_views(&on_screen).has_data);
+
+    client.backends.get_mut_by_id(id).unwrap().set_size(90, 30);
+    assert!(client.poll_views(&on_screen).has_data, "the resize asks for a frame");
+    assert!(!client.poll_views(&on_screen).has_data, "once, not until something draws");
+    assert_eq!(client.terminal_view(id, 1.0).unwrap().1, TerminalDamage::Full);
+}

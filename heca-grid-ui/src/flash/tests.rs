@@ -211,3 +211,54 @@ fn shared_handles_follow_the_current_theme_and_clear_every_target() {
     handle.clear();
     assert!(borders(&scene(&second, &Theme::default())).is_empty());
 }
+
+/// A flash bound to a widget under a hidden ancestor: the paint walk skips it, so nothing ever
+/// reaches the flash to say it was drawn.
+fn under_a_hidden_ancestor(handle: FlashHandle) -> crate::widgets::Flex {
+    use crate::builders::{LayoutExt, Parent};
+    let mut inner = crate::widgets::Flex::column().width(120.0).height(40.0).child(widget(handle));
+    inner.base_mut().set_hidden(true);
+    let mut root = crate::widgets::Flex::column().width(120.0).height(40.0).child(inner);
+    LayoutEngine::new().compute(&mut root, Size::new(120.0, 40.0));
+    root
+}
+
+/// **A flash on a widget nothing paints asks the host for nothing.**
+///
+/// The wake used to be booked when the flash started and cleared only by a paint of a widget
+/// bound to it. A pane's row in a collapsed or hidden sidebar is bound and never painted, so the
+/// wake stayed "due now" for ever — and the host, woken at once every time it slept, drew a full
+/// frame in a loop until the app was closed.
+#[test]
+fn a_flash_on_a_widget_nothing_paints_books_no_wake() {
+    let theme = Theme::default();
+    for start in [FlashHandle::trigger, FlashHandle::pulse, FlashHandle::repeat] {
+        let handle = FlashHandle::new();
+        let root = under_a_hidden_ancestor(handle);
+        start(handle, Tone::Warning);
+        scene(&root, &theme);
+        assert_eq!(root.next_redraw(), None, "nothing on screen is waiting for a frame");
+        handle.request.update(|request| request.as_mut().unwrap().started -= Duration::from_secs(60));
+        scene(&root, &theme);
+        assert_eq!(root.next_redraw(), None, "and it is still not, long after the flash is over");
+    }
+}
+
+/// **A flash that stops being painted stops waking the host** a cycle after the paint that last
+/// booked it — and until then an overdue wake still draws, so a slow frame never loses a pulse.
+#[test]
+fn a_flash_that_stops_being_painted_stops_waking_the_host() {
+    let handle = FlashHandle::new();
+    let widget = widget(handle);
+    let theme = Theme::default();
+    handle.repeat(Tone::Warning);
+    scene(&widget, &theme);
+    assert!(widget.next_redraw().is_some(), "painted, it books its next frame");
+
+    let past = Instant::now() - Duration::from_secs(1);
+    handle.next_frame.set(Some(Booked { at: past, until: Instant::now() + Duration::from_secs(1) }));
+    assert_eq!(widget.next_redraw(), Some(0.0), "overdue but recent: draw now");
+
+    handle.next_frame.set(Some(Booked { at: past, until: past + Duration::from_millis(500) }));
+    assert_eq!(widget.next_redraw(), None, "overdue for a whole cycle: nothing is painting it");
+}
