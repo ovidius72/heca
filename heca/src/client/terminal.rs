@@ -12,7 +12,14 @@ pub(super) struct TerminalView {
     offset: usize,
     sequence: u64,
     painted: u64,
+    /// **The picture is stale**: the next draw repaints it whole. Cleared only by the draw
+    /// ([`take_terminal_damage`](PaneBackend::take_terminal_damage)); it says nothing about whether
+    /// the loop has anything to wake for.
     dirty: bool,
+    /// **A change this view made itself** (a new size, a scroll) that the loop has not yet been told
+    /// about. Read once by [`update`](PaneBackend::update), so it wakes the loop one time and not
+    /// on every pass until something draws.
+    unannounced: bool,
     grid: (usize, usize),
     cell: (f32, f32),
     scale: f32,
@@ -28,7 +35,7 @@ impl TerminalView {
         let grid = data.lock().unwrap_or_else(|error| error.into_inner()).frame(&owner, 0)
             .map_or(spec.grid, |(_, frame)| (frame.screen.cols, frame.screen.rows));
         Self { owner, data, outbox, title: String::new(), offset: 0, sequence: 0, painted: 0,
-            dirty: true, grid, cell, scale: 1.0, last_agent: None,
+            dirty: true, unannounced: false, grid, cell, scale: 1.0, last_agent: None,
             live_sequence: 0, live_top: None, visible: None }
     }
 
@@ -38,6 +45,7 @@ impl TerminalView {
 
     fn resize(&mut self) {
         self.dirty = true;
+        self.unannounced = true;
         self.tell(ProcessInput::Resize { cols: self.grid.0, rows: self.grid.1, cell: self.cell, scale: self.scale });
     }
 
@@ -48,6 +56,7 @@ impl TerminalView {
         if self.offset == offset { return; }
         self.offset = offset;
         self.dirty = true;
+        self.unannounced = true;
         self.outbox.send(ClientMsg::Viewport { owner: self.owner.clone(), offset: self.offset });
     }
 }
@@ -93,7 +102,10 @@ impl PaneBackend for TerminalView {
         }
         drop(data);
         if refresh { self.outbox.send(ClientMsg::Viewport { owner: self.owner.clone(), offset: self.offset }); }
-        changed || self.dirty
+        // **New data, or a change this view made** — never "still waiting to be drawn": a view no
+        // frame collects (a pane in another workspace) would stay waiting for ever and wake the
+        // loop on every pass.
+        changed | std::mem::take(&mut self.unannounced)
     }
     fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
         let data = self.data.lock().unwrap_or_else(|error| error.into_inner());

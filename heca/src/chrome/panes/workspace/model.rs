@@ -11,7 +11,7 @@ use heca_core::layout::{PaneId, Rectangle};
 use crate::chrome::panes::column::ColumnShellModel;
 use crate::chrome::panes::pane::PaneShellModel;
 use crate::chrome::panes::pane_header::PaneHeaderInput;
-use crate::chrome::panes::terminal::Terminal;
+use crate::chrome::panes::terminal::TerminalRef;
 
 /// What the columns and the floating panes are, this frame.
 pub(crate) struct WorkspaceModel {
@@ -53,8 +53,9 @@ pub(crate) enum PickMark {
 /// What one pane is handed besides its frame.
 pub(crate) struct PaneEntry {
     /// What runs in the pane: the same terminal every frame, so a rebuilt pane shows the process
-    /// that was already running.
-    pub(crate) content: Terminal,
+    /// that was already running. A reference, not a node: this is read every frame and a node is
+    /// made only for a pane that is new.
+    pub(crate) content: TerminalRef,
     /// What its header shows, when the info bar is on.
     pub(crate) header: Option<PaneHeaderInput>,
 }

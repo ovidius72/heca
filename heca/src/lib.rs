@@ -499,16 +499,19 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
                 if backend_poll.has_data || backend_poll.closed_any || chrome_runtime_changed {
                     state.mark_full_redraw();
+                    crate::app::frame_reasons::report("event BackendWake");
                     state.window.request_redraw();
                 }
             }
             AppEvent::RequestRedraw => {
                 state.needs_redraw = true;
+                crate::app::frame_reasons::report("event RequestRedraw");
                 state.window.request_redraw();
             }
             AppEvent::ChromeIntent { source, intent } => {
                 dispatch_intent(state, &self.registry, source, intent);
                 state.mark_full_redraw();
+                crate::app::frame_reasons::report("event ChromeIntent");
                 state.window.request_redraw();
             }
             AppEvent::TerminalInput { terminal, input } => {
@@ -519,12 +522,14 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                     input,
                 );
                 state.mark_full_redraw();
+                crate::app::frame_reasons::report("event TerminalInput");
                 state.window.request_redraw();
             }
             AppEvent::RaiseNotification { draft } => {
                 // `notification::raise` is the host's clock, on the event loop's own turn, never
                 // the caller's — shared with the name-keyed `notify` action.
                 crate::notification::raise(state, draft);
+                crate::app::frame_reasons::report("event RaiseNotification");
                 state.window.request_redraw();
             }
             // Answered before the state guard above (it must reply even while starting).

@@ -325,7 +325,7 @@ fn content_of(seams: &WorkspaceSeams, model: &WorkspaceModel, pane: PaneId) -> O
         .panes
         .get(&pane)
         .map(|e| heca_grid_ui::WidgetModel::new(crate::chrome::panes::terminal::content::compose(
-            seams.header_env.clone().map(PaneHeader::new), e.content.clone(),
+            seams.header_env.clone().map(PaneHeader::new), e.content.node(),
         )))
 }
 

@@ -6,6 +6,9 @@
 //!
 //! The same defect, one line below, was already fixed for the wake side: the loop picks its
 //! deadline from a list, not a chain. This is that treatment applied to the reasons.
+//!
+//! Set `HECA_FRAME_REASONS` in the environment to print, on stderr, the reasons behind every frame
+//! the loop asks for: a window that spins while idle then names what keeps asking.
 
 /// Every reason the loop has to draw. One field per reason, so which one asked is a value rather
 /// than something to work out by reading.
@@ -59,13 +62,29 @@ impl FrameReasons {
         self.all().into_iter().any(|(on, _)| on)
     }
 
+    /// Print the reasons on stderr when `HECA_FRAME_REASONS` is set.
+    pub(crate) fn report(self) {
+        if self.any() {
+            report(&self.named().join(" "));
+        }
+    }
+
     /// The reasons that were true, by name.
-    #[cfg(test)]
     fn named(self) -> Vec<&'static str> {
         self.all()
             .into_iter()
             .filter_map(|(on, name)| on.then_some(name))
             .collect()
+    }
+}
+
+/// Print why a frame was asked for, on stderr, when `HECA_FRAME_REASONS` is set. The loop's own
+/// reasons go through [`FrameReasons::report`]; an event that asks for a frame on its own names
+/// itself here. The switch is read once.
+pub(crate) fn report(reason: &str) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("HECA_FRAME_REASONS").is_some()) {
+        eprintln!("[heca] frame: {reason}");
     }
 }
 

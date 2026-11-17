@@ -20,6 +20,7 @@ mod host_work;
 mod panes;
 
 use host_work::{HostTargets, do_host_work};
+pub(crate) use panes::OnScreen;
 pub(super) use panes::{collect_panes, paint_window, sync_terminal_layers};
 
 /// What every phase of a frame reads, worked out once at the top.

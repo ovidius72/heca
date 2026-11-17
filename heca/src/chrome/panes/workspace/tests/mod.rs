@@ -49,7 +49,7 @@ fn model(columns: Vec<ColumnShellModel>, floats: Vec<PaneShellModel>) -> Workspa
             (
                 p.pane_id,
                 PaneEntry {
-                    content: Terminal::unbound(),
+                    content: Terminal::unbound().reference(),
                     header: None,
                 },
             )
@@ -145,6 +145,7 @@ fn named<'a>(parent: &'a dyn Component, key: &str) -> &'a dyn Component {
 }
 
 mod carry;
+mod idle;
 mod picking;
 mod placing;
 mod pointer;
