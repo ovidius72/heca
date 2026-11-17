@@ -532,8 +532,8 @@
       "shortName": "rpc-line-parser-and-cli-format",
       "title": "RPC line parser and CLI formatter: quotes, escapes, named values",
       "status": "done",
-      "description": "heca-pro needs RPC values with spaces, quotes and Windows paths. Today `parse_rpc` in heca/src/rpc.rs (and `introspect`, `is_query`) split the line with `split_whitespace`, so `text=\"ciao mondo\"` breaks. Replace it with ONE shared tokenizer and ONE shared formatter, used by the server, the CLI and every input path — never per action.\n\nRules agreed with heca-pro (2026-11-16):\n1. Inside \"...\": only \\\" and \\\\ are escapes; any other sequence stays literal (\\n is backslash+n).\n2. Inside '...': everything literal.\n3. Backslash outside quotes is literal (Windows paths: C:\\dir\\file).\n4. Quotes may sit mid-token: key=\"a b\" and ab\"c d\"e both form one token.\n5. name=value splits at the first UNQUOTED '='; it is a named value only when the part before '=' is a valid name: starts with a letter or '_', then letters, digits, '_' or '-'. Document these characters. Anything else is a positional value (C:\\x=y stays positional). \"a=b\" quoted is positional; key=\"a=b\" is named.\n6. \"\" or '' is an empty value.\n7. Unclosed quote or dangling escape = parse error before anything runs.\n8. No variable/glob/command expansion, no shell.\n9. Lines without quotes parse exactly as today; `--dock <id>` keeps its behaviour (placement, never an argument).\n10. CR, LF and NUL inside the line content are rejected by the shared parser (so for every input). The protocol line terminator itself is not affected.\n11. CLI `heca rpc`: exactly one argument after `rpc` = a whole RPC line, sent as is (heca rpc 'azione text=\"ciao mondo\"'). Several arguments = one token each; the formatter quotes ONLY the value of a named arg (text=\"ciao mondo\", never \"text=ciao mondo\") and the whole of a positional that needs it, escaping \\ and \". CR/LF/NUL in argv are rejected before sending.\n12. A Windows path ending in \\ inside double quotes must be written \"C:\\dir\\\\\"; the formatter does it itself. Document it.\n\nTests: every rule above, Windows paths (quoted and unquoted, trailing backslash), \"a=b\" positional, key=\"a=b\" named, empty values, unclosed quote, \\n literal, --dock with quoted values, formatter round-trip (format then parse gives the original argv).\n\n---\n**Completion summary:**\nDone. Shared RPC line reader and writer in heca/src/rpc/line.rs (tokenize, without_terminator, format_line, from_argv). parse_rpc, introspect and is_query use it; the socket strips the \\n / \\r\\n terminator before parsing; `heca rpc` sends one argument as the whole line and formats several with from_argv. All 12 agreed rules implemented and documented in the module doc and docs/server-client-architecture.md. Extra: an action name that would not read back as itself (empty, space, quote, =) is refused. Choices: `\"key\"=v` reads as name key; a bare `--dock` argv is the flag (a literal --dock value needs the single-line form \"--dock\"); a positional a=b cannot come from argv (single-line form \"a=b\"). Verified: cargo test -p heca rpc 58 passed, socket 39 passed, server_process/headless_server pass; clippy mac and xwin Windows clean; break-it (\\n as escape) failed a test. Commit 166b22d0 on feat/t563-rpc-quoting. Files: heca/src/rpc/line.rs, heca/src/rpc.rs, heca/src/server/socket/{mod,runtime,runtime_tests}.rs, docs/server-client-architecture.md.",
-      "descriptionUpdatedAt": "2026-11-16T15:45:32.449Z",
+      "description": "heca-pro needs RPC values with spaces, quotes and Windows paths. Today `parse_rpc` in heca/src/rpc.rs (and `introspect`, `is_query`) split the line with `split_whitespace`, so `text=\"ciao mondo\"` breaks. Replace it with ONE shared tokenizer and ONE shared formatter, used by the server, the CLI and every input path — never per action.\n\nRules agreed with heca-pro (2026-11-16):\n1. Inside \"...\": only \\\" and \\\\ are escapes; any other sequence stays literal (\\n is backslash+n).\n2. Inside '...': everything literal.\n3. Backslash outside quotes is literal (Windows paths: C:\\dir\\file).\n4. Quotes may sit mid-token: key=\"a b\" and ab\"c d\"e both form one token.\n5. name=value splits at the first UNQUOTED '='; it is a named value only when the part before '=' is a valid name: starts with a letter or '_', then letters, digits, '_' or '-'. Document these characters. Anything else is a positional value (C:\\x=y stays positional). \"a=b\" quoted is positional; key=\"a=b\" is named.\n6. \"\" or '' is an empty value.\n7. Unclosed quote or dangling escape = parse error before anything runs.\n8. No variable/glob/command expansion, no shell.\n9. Lines without quotes parse exactly as today; `--dock <id>` keeps its behaviour (placement, never an argument).\n10. CR, LF and NUL inside the line content are rejected by the shared parser (so for every input). The protocol line terminator itself is not affected.\n11. CLI `heca rpc`: exactly one argument after `rpc` = a whole RPC line, sent as is (heca rpc 'azione text=\"ciao mondo\"'). Several arguments = one token each; the formatter quotes ONLY the value of a named arg (text=\"ciao mondo\", never \"text=ciao mondo\") and the whole of a positional that needs it, escaping \\ and \". CR/LF/NUL in argv are rejected before sending.\n12. A Windows path ending in \\ inside double quotes must be written \"C:\\dir\\\\\"; the formatter does it itself. Document it.\n\nTests: every rule above, Windows paths (quoted and unquoted, trailing backslash), \"a=b\" positional, key=\"a=b\" named, empty values, unclosed quote, \\n literal, --dock with quoted values, formatter round-trip (format then parse gives the original argv).\n\n---\n**Completion summary:**\nDone. Shared RPC line reader and writer in heca/src/rpc/line.rs (tokenize, without_terminator, format_line, from_argv). parse_rpc, introspect and is_query use it; the socket strips the \\n / \\r\\n terminator before parsing; `heca rpc` sends one argument as the whole line and formats several with from_argv. All 12 agreed rules implemented and documented in the module doc and docs/server-client-architecture.md. Extra: an action name that would not read back as itself (empty, space, quote, =) is refused. Choices: `\"key\"=v` reads as name key; a bare `--dock` argv is the flag (a literal --dock value needs the single-line form \"--dock\"); a positional a=b cannot come from argv (single-line form \"a=b\"). Verified: cargo test -p heca rpc 58 passed, socket 39 passed, server_process/headless_server pass; clippy mac and xwin Windows clean; break-it (\\n as escape) failed a test. Commit 166b22d0 on feat/t563-rpc-quoting. Files: heca/src/rpc/line.rs, heca/src/rpc.rs, heca/src/server/socket/{mod,runtime,runtime_tests}.rs, docs/server-client-architecture.md.\n\n---\n**Completion summary:**\nDone (second round, after heca-pro review of PR #318). Fixes in PR #319, branch fix/t563-rpc-errors: (1) ServerLoop::begin_rpc reads the line once; a line that cannot be read is answered by the server at once, never forwarded to an attached window (it used to time out). Test server::run::tests::a_line_that_cannot_be_read_is_answered_by_the_server_without_asking_the_window, with an attached client; break-it confirmed. (2) LineError variants carry the column (characters from 1): UnclosedQuote{quote,column}, DanglingEscape{column}, ControlCharacter{character,column}; message e.g. `a \" quote was opened at column 17 and never closed`. Docs updated. rpc tests 58 passed, server::run 99 passed, clippy mac + xwin clean. First round: PR #318 (shared reader/writer heca/src/rpc/line.rs, 12 agreed rules).",
+      "descriptionUpdatedAt": "2026-11-17T12:12:54.038Z",
       "notes": "",
       "statusLog": [
         {
@@ -551,6 +551,22 @@
           "toStatus": "done",
           "title": "in-progress → done",
           "description": "Done. Shared RPC line reader and writer in heca/src/rpc/line.rs (tokenize, without_terminator, format_line, from_argv). parse_rpc, introspect and is_query use it; the socket strips the \\n / \\r\\n terminator before parsing; `heca rpc` sends one argument as the whole line and formats several with from_argv. All 12 agreed rules implemented and documented in the module doc and docs/server-client-architecture.md. Extra: an action name that would not read back as itself (empty, space, quote, =) is refused. Choices: `\"key\"=v` reads as name key; a bare `--dock` argv is the flag (a literal --dock value needs the single-line form \"--dock\"); a positional a=b cannot come from argv (single-line form \"a=b\"). Verified: cargo test -p heca rpc 58 passed, socket 39 passed, server_process/headless_server pass; clippy mac and xwin Windows clean; break-it (\\n as escape) failed a test. Commit 166b22d0 on feat/t563-rpc-quoting. Files: heca/src/rpc/line.rs, heca/src/rpc.rs, heca/src/server/socket/{mod,runtime,runtime_tests}.rs, docs/server-client-architecture.md."
+        },
+        {
+          "id": "2c83caa8-1803-4f2f-91d4-3a64b9b1ae45",
+          "date": "2026-11-17T12:12:36.038Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "done → in-progress (reopened)",
+          "description": "Reopened through the confirmed lifecycle operation; prior completion evidence is retained."
+        },
+        {
+          "id": "680f0887-fb39-442c-9ad9-00eda719a0de-check-004-in-progress-done",
+          "date": "2026-11-17T12:12:54.036Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Done (second round, after heca-pro review of PR #318). Fixes in PR #319, branch fix/t563-rpc-errors: (1) ServerLoop::begin_rpc reads the line once; a line that cannot be read is answered by the server at once, never forwarded to an attached window (it used to time out). Test server::run::tests::a_line_that_cannot_be_read_is_answered_by_the_server_without_asking_the_window, with an attached client; break-it confirmed. (2) LineError variants carry the column (characters from 1): UnclosedQuote{quote,column}, DanglingEscape{column}, ControlCharacter{character,column}; message e.g. `a \" quote was opened at column 17 and never closed`. Docs updated. rpc tests 58 passed, server::run 99 passed, clippy mac + xwin clean. First round: PR #318 (shared reader/writer heca/src/rpc/line.rs, 12 agreed rules)."
         }
       ],
       "decisions": [],
@@ -561,9 +577,9 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-11-16T15:32:49.082Z",
-      "completedAt": "2026-11-16T15:45:32.447Z",
+      "completedAt": "2026-11-17T12:12:54.036Z",
       "createdAt": "2026-11-16T15:32:31.422Z",
-      "updatedAt": "2026-11-16T15:45:32.447Z",
+      "updatedAt": "2026-11-17T12:12:54.036Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
@@ -574,7 +590,7 @@
     }
   ],
   "createdAt": "2026-11-14T09:59:01.452Z",
-  "updatedAt": "2026-11-16T15:45:32.447Z",
+  "updatedAt": "2026-11-17T12:12:54.036Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -688,6 +704,22 @@
     {
       "id": "3304eedc-2f8e-4082-80c0-d66586da7f20",
       "date": "2026-11-16T15:45:32.490Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "b1244161-b821-488f-8865-3b424e164798",
+      "date": "2026-11-17T12:12:36.076Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "62b18e82-f0cd-4d7e-8f4d-1bada20fa9e3",
+      "date": "2026-11-17T12:12:54.070Z",
       "fromStatus": "in-progress",
       "toStatus": "done",
       "title": "in-progress → done",
