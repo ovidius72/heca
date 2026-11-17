@@ -457,7 +457,7 @@ are already 16 and they are being deleted.
 - **The library is fixed ONLY on a proposal the maintainer reviews and accepts.** If a widget/theme
   lacks a variant, token, or method you need, do **NOT** hand-calculate a workaround and do **NOT**
   change `heca-grid-ui` unilaterally — **propose** the addition (what + why), get the OK, then
-  implement. Track pending gaps in the plan (e.g. BACKLOG `gridui-styling-foundation`).
+  implement. Track pending gaps in the planner.
 
 ### 2. Behavior/keys → register through the registries. NEVER hardcode
 
@@ -827,7 +827,7 @@ in.
 3. Add a spot-check assertion (`assert_eq!(action_policy(&WmAction::X), ActionPolicy::Y)`) and routing tests (tiled allows it, floating blocks/allows it as appropriate).
 
 
-See `.planning/interaction-policy-plan.md` for the intent-routing roadmap (Phase B/C).
+The intent-routing roadmap (Phase B/C) is tracked in the planner.
 
 ---
 
@@ -892,7 +892,7 @@ args = { target = "column", axis = "x", amount = "-50" }
   (`terminal`, `file_code`, `folder_open`, `git_branch`, …), not raw glyph strings.
 - Built-in catalog defaults live in `config.default.toml` `[program]` (the single
   source — `ProgramsConfig::default()` parses it); if you change them, update
-  `README.md` in the same patch.
+  `docs/configuration.md` ("Process Catalog") in the same patch.
 - Users remove a built-in program mapping with `disabled = true`. Do not invent
   empty-string semantics for inherited defaults.
 
@@ -903,7 +903,7 @@ pane is") and **action buttons** (right). Both are driven by config lists under
 `[appearance.pane]` — `title_segments` and `title_actions` (fields of
 `PaneAppearance`). Order in the list = render order. Empty list hides that side;
 both empty ⇒ no bar and no reserved space. User-facing list of supported values
-lives in `README.md` ("Pane Info Bar"); keep it in sync when you change the enums.
+lives in `docs/configuration.md` ("Pane Info Bar"); keep it in sync when you change the enums.
 
 Both are **named, not typed**: `title_segments` (chips) and `title_actions` (buttons) are lists of
 names, and which names exist is a registry in `heca/src/chrome/panes/pane_items/` (F012/T520) — heca's own
@@ -923,7 +923,7 @@ rewrites itself in place (`heca/src/providers/workspaces/row_lines.rs`); registe
 name, and a function of `PaneFacts` (plain data about the pane; add a named field there if it needs
 one) returning a `PaneChip` or `None`. A chip with no data for a pane must return `None` (no empty
 pill). A chip whose text is a path says `Fit::PathLeft` so it is what gives way when the bar is
-narrow. Then update `README.md` (supported-chips table) + `config.default.toml`.
+narrow. Then update `docs/configuration.md` (supported-chips table) + `config.default.toml`.
 
 **To add a new button:**
 
@@ -939,7 +939,7 @@ narrow. Then update `README.md` (supported-chips table) + `config.default.toml`.
 3. Per the action checklist, the action must already be reachable from keyboard +
    RPC; the button just adds the mouse/UI path.
 4. Update the showcase pane-header demo + `docs/widgets.md` (grid-ui rule),
-   `README.md` (supported-actions table), and `config.default.toml`.
+   `docs/configuration.md` (supported-actions table), and `config.default.toml`.
 
 ### Chrome buttons → action, tooltip, KeyHint (centralized — do NOT hand-roll)
 
@@ -1154,28 +1154,11 @@ To remove a default binding, add it to `[keys.unbind]`:
 
 ## Stack
 
-| Layer | Crate | Version | Why |
-| ------- | ------- | --------- | ----- |
-| Windowing | `winit` | 0.30+ | De-facto Rust standard, cross-platform, HiDPI. |
-| GPU API | `wgpu` | 0.25+ | Cross-platform (Vulkan/Metal/DX12/WebGPU), safe Rust. |
-| Text layout | `cosmic-text` | 0.14+ | Best pure-Rust text stack; atlas caching, ligatures, variable fonts. |
-| Terminal emulation | `alacritty_terminal` | 0.25+ | Battle-tested VT parser library. |
-| PTY spawning | `portable-pty` | 0.9+ | Cross-platform PTY creation. |
-| Async runtime | `tokio` | 1.40+ | All IO (PTY, Neovim socket, RPC server). |
-| MsgPack | `rmpv` | 1.3+ | Neovim msgpack-RPC protocol. |
-| Config | `serde` + `toml` | latest | TOML parsing. |
-| Session IO | `bincode` or JSON | — | Session persistence format. |
-| Plugin runtime | WASM host/runtime (planned) | — | Preferred long-term plugin boundary for pluggable chrome containers and actions; safer than native Rust dylibs. |
-
-### What NOT to use
-
-| Technology | Reason |
-| ------------ | -------- |
-| Dioxus / Tauri / Electron | WebView-based; can't own the GPU render loop freely. |
-| GTK / Qt | Fight you for custom GPU surfaces. Heavy cross-platform packaging. |
-| egui / iced | Immediate-mode or over-constrained layout; we need to own pane rectangle assignment. |
-| Bevy | Game engine ECS fights traditional GUI event loops. |
-| skia-safe | Proven (Neovide) but requires C++ toolchain. Rust-native is lighter. |
+The technology stack — windowing, GPU, text, terminal emulation, the PTY, config — is written down
+once, in [`docs/architecture.md` → Technology](docs/architecture.md#technology), together with the
+technologies that were ruled out and why. Do not restate it here: a second copy is how this file
+came to name a terminal library heca never used. Crate versions and the pinned wezterm revision are
+in the `Cargo.toml` files.
 
 ### z=0 background frost model (heca-owned, cross-platform)
 
@@ -1240,7 +1223,7 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/window/theme.rs
 
 ## heca-grid-ui — Grid UI Component Library
 
-> Full plan: `grid-ui-plan.md`. Developed on the **`heca-grid-ui`** branch.
+> Widget catalog: [`docs/widgets.md`](docs/widgets.md). Outstanding work is in the planner. Developed on the **`heca-grid-ui`** branch.
 
 `heca-grid-ui` is a **GPU-free, signal-driven, composable component library** that gives heca a *Tron/GridCN* visual identity (glow, corner brackets, scanlines, HUD typography). It is a *component framework*, not a theme.
 
@@ -1310,6 +1293,15 @@ rule exists to forbid. `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Bas
 
 This is what made `.context_menu()` replace `context_path` + a builder registry + a `key` nobody
 remembered. When you touch a capability, check its neighbours for the same shape.
+
+**State that fires an action or updates content goes through the store, never local-only.** All of
+it flows through `AppState` and the reactive chrome store: kept in a `Signal` with a change-guarded
+setter, emitted as a `ChromeEvent`, and readable through a `StateView` selector — so a plugin or
+another component can observe it and react. **If a plugin can't observe it, it's not done.**
+Reference implementations: the KeyHint pending pick (`InputMode::pending_pick` →
+`WorkspacesContainerState.pending_pick` → `ChromeEvent::PendingPickChanged` →
+`host.pending_pick()`) and the pane custom name (`ChromeEvent::PaneCustomNameChanged` →
+`host.pane_custom_name()`).
 
 ---
 
@@ -1584,7 +1576,7 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 ```
 myvim/
 ├── AGENTS.md              ← This file
-├── README.md              ← User-facing documentation
+├── README.md              ← Landing page: what heca is, install, first run, link to docs/
 ├── config.default.toml        ← Default settings/appearance/font/program (embedded, single source)
 ├── keybindings.default.toml   ← Default keybindings (embedded, single source)
 ├── Cargo.toml             ← Workspace root
@@ -1613,7 +1605,7 @@ myvim/
 │   │   │   └── session.rs ← Session, WorkspaceSwitch
 │   │   ├── backend/
 │   │   │   ├── mod.rs     ← PaneBackend trait, BackendRenderData
-│   │   │   ├── terminal.rs  ← TerminalBackend (PTY + vte)
+│   │   │   ├── terminal/    ← TerminalBackend (PTY + terminal emulation; stack: docs/architecture.md)
 │   │   │   └── fake.rs    ← FakeBackend (no PTY, for layout testing)
 │   │   ├── pane.rs        ← DEPRECATED old BSP tree code (kept for reference)
 │   │   └── types.rs       ← Old Rect type (for BSP legacy)
@@ -1639,14 +1631,9 @@ myvim/
 │   │   └── widgets/       ← Flex, Grid, Stack, Label, Button, Card, Hud, Gauge,
 │   │                        CornerBrackets, StatusBar, Sidebar, Pane, ...
 │   └── Cargo.toml
-├── docs/
+├── docs/                   ← All documentation; docs/README.md is the index
 │   └── niri-wiki/          ← NIRI documentation (structured wiki reference)
-├── .planning/              ← GSD planning artifacts
-│   ├── PROJECT.md          ← Project overview
-│   ├── REQUIREMENTS.md     ← v1/v2 requirements
-│   ├── ROADMAP.md          ← Phase roadmap
-│   ├── STATE.md            ← Current execution state
-│   └── research/           ← Research docs (NIRI analysis, architecture, stack, etc.)
+├── .planner/               ← Planner state: features, phases, tasks, decisions (`/planner load`)
 ├── .agents/
 │   └── skills/
 │       └── niri/SKILL.md   ← NIRI knowledge skill
@@ -1776,7 +1763,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 8b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
 8c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` — a separate field, because one spec can govern several `WmAction` variants, though every built-in uses its own action name; users toggle it under `[confirm]`.
 9. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate. Metadata is discoverable via RPC introspection (`list-actions` / `describe-action <name>`, `ActionCatalog::describe_all/describe`).
-10. Document examples in `README.md` and `keybindings.default.toml`
+10. Document examples in `docs/keybindings.md` (and `docs/actions.md` if it changes how an action is added) and `keybindings.default.toml`
 
 > A **name-keyed** action (contributed by a provider/plugin, no `WmAction` variant) skips steps 1–3 and 7: register it at runtime with `register_dynamic(registry, catalog, meta, handler)`. Full guide with examples: `docs/widgets.md` → "Registering a custom (name-keyed) action".
 
@@ -1950,7 +1937,7 @@ Each task is done in its **own git worktree**, in its own folder, branched from 
 
 ### When Reading Code
 
-1. Read `.planning/research/ARCHITECTURE.md` and `.planning/PROJECT.md` for context first.
+1. Read `docs/architecture.md` for context first, and load the planner (`/planner load`) for what is being worked on.
 2. Read `.agents/skills/niri/SKILL.md` when working on layout features.
 3. Check `heca/src/input/` and `heca-config/src/theme.rs` for keybinding concerns.
 4. Check `heca/src/main.rs` for registry setup and bypasses.

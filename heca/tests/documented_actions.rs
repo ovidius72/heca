@@ -4,8 +4,8 @@
 //! plugin's action can be bound before the plugin loads. The cost is that a wrong name in the docs
 //! produces a key that silently does nothing, and nothing anywhere says so.
 //!
-//! That is not hypothetical: the README documented `spawn_pane` and `float_active_at` in its live
-//! configuration examples for months. Neither has ever existed — the README itself called
+//! That is not hypothetical: the README (its configuration section now lives in `docs/`) documented
+//! `spawn_pane` and `float_active_at` in its live configuration examples for months. Neither has ever existed — the README itself called
 //! `spawn_pane` "planned" a thousand lines further down — and every reader who copied one got a
 //! dead key with no error to search for. Bindings in `keybindings.default.toml` are checked against
 //! the registry at startup; the prose was checked by nobody.
@@ -47,6 +47,15 @@ fn actions_named_in(doc: &str) -> Vec<(usize, String)> {
         .collect()
 }
 
+/// The pages that carry copyable `action = "…"` examples.
+const DOCS: &[&str] = &[
+    "README.md",
+    "docs/keybindings.md",
+    "docs/keyboard-commands.md",
+    "docs/configuration.md",
+    "docs/actions.md",
+];
+
 /// A doc may describe an action that is deliberately not built — but it has to SAY so, in the
 /// section the reader is in. These are the ones marked as planned; everything else must be real.
 const KNOWN_PLANNED: &[&str] = &["spawn_pane", "float_active_at"];
@@ -60,7 +69,7 @@ fn every_action_named_in_the_docs_exists() {
     );
 
     let mut dead = Vec::new();
-    for doc in ["README.md", "docs/keybindings.md"] {
+    for doc in DOCS {
         for (line, action) in actions_named_in(doc) {
             // A dotted id belongs to a plugin or provider and registers at runtime, so the static
             // catalog cannot know it — that is the whole point of late resolution.
@@ -88,10 +97,10 @@ fn every_action_named_in_the_docs_exists() {
 /// licence to document fiction.
 #[test]
 fn an_unbuilt_action_is_marked_as_unbuilt_where_it_is_documented() {
-    let readme = std::fs::read_to_string(repo("README.md")).expect("read the README");
+    let actions = std::fs::read_to_string(repo("docs/actions.md")).expect("read docs/actions.md");
     assert!(
-        readme.contains("`spawn_pane` DOES NOT EXIST"),
-        "the README documents `spawn_pane` with no warning that it is unbuilt — that is how it came \
-         to sit in copyable examples for months",
+        actions.contains("`spawn_pane` DOES NOT EXIST"),
+        "docs/actions.md documents `spawn_pane` with no warning that it is unbuilt — that is how it \
+         came to sit in copyable examples for months",
     );
 }

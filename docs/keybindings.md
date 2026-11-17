@@ -35,7 +35,34 @@ close_pane = true         # close the pane when lazygit exits
 
 `[[keys.command]]` is for launching a program and names no action. Two more fields:
 `keep_on_error = true` keeps the pane when the command fails, `keep_on_success = true` when it
-succeeds — useful when you want to read what it printed.
+succeeds — useful when you want to read what it printed. Each overrides `close_pane` for that exit
+outcome.
+
+More examples:
+
+```toml
+[[keys.command]]
+keys = "prefix+g"
+command = "lazygit"
+float = true
+close_pane = true
+
+[[keys.command]]
+keys = "prefix+t"
+command = "btm"  # bottom system monitor
+close_pane = true
+keep_on_error = true
+
+[[keys.command]]
+keys = "Alt+Enter"   # no prefix — a global key
+command = "alacritty"
+```
+
+- `kind = "terminal"` is the default. `app` and `plugin` are reserved and currently report
+  "not yet implemented".
+- `float = true` opens a centered floating pane.
+- Commands run in a real PTY using the user's shell (`-ic` on Unix, `/C` on Windows), so existing
+  shell-style command strings keep working and the shell stays interactive.
 
 Merged by `keys`, like every other binding list: an entry with the same combo replaces that
 default, and the rest are left alone.
@@ -74,8 +101,18 @@ Free a default key:
 
 ```toml
 [keys.unbind]
-"prefix+f" = true
+"prefix+f" = true        # Disable float toggle
+"prefix+q" = true        # Disable pane select
+"prefix+Shift+q" = true  # Disable swap pane
 ```
+
+Why unbind: to free a key for a binding of your own, to turn off a feature you do not use, or to
+resolve a conflict with a custom binding. The action still exists — you can rebind it to a
+different key in `[keys]`. For example, after unbinding `prefix+f` (float) you can rebind it to
+`prefix+Shift+f`.
+
+A key written without `prefix+` is **global**: it is checked in normal mode before the key is
+forwarded to the terminal.
 
 ## 2. A key that carries arguments — `[[keys.bind]]`
 
@@ -137,6 +174,103 @@ args   = { command = "lazydocker", float = "true" }
 into it, but **replaces** `trigger` and `sticky` — so repeat them exactly, or `resize` quietly stops
 answering `prefix+r`.
 
+### Built-in modes
+
+heca ships six: `resize` (`prefix+r`), `app_font_size` (`prefix+!`), `pane_font_size` (`prefix+@`),
+`selection`, `layer` and `focus`. The last three have an empty `trigger` — something else in heca
+puts you there: `selection` is entered with the `enter_selection_mode` action (`prefix+s`) or by
+scrolling up at a prompt (its keys are in [Keyboard commands](keyboard-commands.md#terminal-scrollback--selection)),
+`layer` while an overlay holds the keyboard and `focus` while a dock does.
+
+**`resize`** is sticky. In it the key points the way the **divider** travels, whichever column or
+pane is active. The *target* decides the axis — a column is resized across, a pane down — so only
+`amount` and, optionally, `edge` are needed. Positive is right / down:
+
+- `h` / `l` — move the column's right edge left / right (narrower / wider)
+- `j` / `k` — move the pane's divider down / up
+- the arrow keys work too, and `Escape` / `Enter` exit the mode
+
+A pane's divider is the one below it, or the one above when it is the **last** pane — so on the
+last pane `j` moves that divider down and the pane gets shorter. `prefix+Shift+=` and
+`prefix+Shift+-` are the size verbs instead: they grow and shrink the active pane whichever edge
+has to move.
+
+*Choosing the edge.* A pane has two horizontal edges, and `edge` says which one moves. Omit it and
+you get the one above. `edge = "top"` takes the pane's upper edge instead, so the defaults are
+`Shift+j` / `Shift+k` — move the pane's **top** edge down / up. Positive is still down the screen,
+so `Shift+j` shrinks the pane from above. Nothing happens on the first pane, which has no edge
+above it.
+
+```toml
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Shift+k"
+args = { target = "pane", amount = "-40", edge = "top" }
+```
+
+The same holds on the x axis. A column's **left** edge is where the column before it ends, so
+`edge = "left"` moves that boundary: `Shift+h` / `Shift+l` move the column's left edge left / right.
+Positive is still right, so `Shift+l` shrinks the column from the left. Nothing happens on the
+first column, which has nothing to its left. `edge` accepts `"auto"` (the default), `"top"`,
+`"bottom"`, `"left"` and `"right"`.
+
+*Moving while still resizing.* The mode is sticky — it runs an action and stays until `Escape` or
+`Enter` — so a focus action bound inside it moves the focus without leaving: `Ctrl+h/j/k/l` (and
+`Ctrl+arrows`) focus another column or pane, still resizing. Nothing special is needed for this:
+any action can be bound inside a mode, and a sticky mode keeps running.
+
+### Custom modes
+
+```toml
+[[keys.mode]]
+name = "my_mode"
+trigger = "prefix+o"      # Key that enters the mode; "" = no key of its own
+sticky = true             # true = stay until Esc (default); false = one key, then exit
+
+[[keys.mode.bindings]]
+action = "focus_left"
+keys = "h"
+
+[[keys.mode.bindings]]
+action = "focus_right"
+keys = "l"
+```
+
+A **sticky** mode (`sticky = true`) stays until `Escape` or `Enter`; `resize` is one. A non-sticky
+one (`sticky = false`, or a chord) runs one action and exits.
+
+### Adding a key to a built-in mode
+
+A built-in mode is merged back in by name, so you can add a key without redeclaring the whole
+mode — but the fields are not merged the same way:
+
+| field | when you redefine a built-in mode |
+| --- | --- |
+| `bindings` | **added** to the built-in ones — you keep every default key |
+| `trigger`, `sticky` | **replace** the built-in values |
+| `unbind = ["…"]` | takes keys **out** of the mode, the shipped ones included |
+
+So repeat `trigger` and `sticky` exactly as the default file has them. Omitting `trigger` sets it
+to `""`, which for a mode like `resize` silently means `prefix+r` stops entering it.
+
+```toml
+# Add `p` as a second "previous search match" key, keeping every other selection key.
+[[keys.mode]]
+name = "selection"
+trigger = ""      # as in keybindings.default.toml — omitting it would clear the trigger
+sticky = true     # as in keybindings.default.toml — omitting it would reset stickiness
+
+[[keys.mode.bindings]]
+action = "search_prev_match"
+keys = "p"
+```
+
+`unbind` is how the way out of a dock or an overlay is moved (see the `focus` and `layer` blocks):
+bind the action to another key, then unbind `Escape`.
+
+These blocks work in `config.toml` as well as `keybindings.toml`: both files are merged into one
+configuration before it is read.
+
 ## 4. A surface's own keys — `[[keys.surface]]`
 
 A dock and an overlay are the same thing to the keyboard: something that holds it for a while and
@@ -183,11 +317,89 @@ args   = { command = "lazygit", float = "true" }
 "x" = true
 ```
 
-`[[keys.component]]` is the older spelling of `[[keys.surface]]` and still works.
+`[[keys.component]]` is the older spelling of `[[keys.surface]]` and still works unchanged — the two are read as one list. New entries should use `[[keys.surface]]`.
 
-**Two keys every surface has, with nothing declared:** `global_focus` (bind it to take the keyboard;
-press it again to give it back) and `Escape`, which always hands the keyboard back and **cannot be
-unbound** — a surface must always be leavable without the mouse.
+**While a surface holds the keyboard**, the app's own bindings behind it are refused — `prefix+j`
+does not move the pane behind the map — except for actions that are app-level in every context
+(`reload_config`, `close_overlay`, the `prefix+/` picker, `prefix+>`). Which those are is a property
+of the **action**, not of the binding, because the same action is reached from a key, a menu entry,
+the palette, a button and RPC.
+
+`name` says which surface — a **field**, not the table name, so a surface may be called `unbind` or
+`widgets` without colliding with a config keyword. An overlay declares its keys the same way,
+naming itself by the addressable name `show_layer` and `hide_layer` use. The `id` narrows an entry
+to one placement, because cursor, scroll position and focus are per placement anyway.
+
+Binding names are **short**: under `name = "docker"`, `restart_selected` means the action id
+`docker.restart_selected`. You never repeat the component on every line of its own block. An id
+heca already knows keeps its own name — a component *binds* existing actions rather than
+redeclaring them.
+
+```toml
+[[keys.surface]]
+name             = "docker"
+restart_selected = "r"        # → docker.restart_selected
+next_pane        = "n"        # …an EXISTING action id, simply bound here — never redeclared
+
+[[keys.surface]]              # the same surface, one placement only
+name = "docker"
+id   = "docker.right"
+restart_selected = "R"        # everything else is inherited from the entry above
+```
+
+**A way out of a surface** is declared once for every surface of that kind, not per surface: the
+`[[keys.mode]] name = "layer"` block is the floor every overlay answers (`Escape`, `q` and `Ctrl+q`
+as shipped), and `name = "focus"` is the same thing for a focused dock (`Escape`). Declared there
+they exist **only while that kind of surface holds the keyboard**, so the program running in a pane
+keeps those keys — `:q` still quits vim, and `Ctrl+q` still reaches readline. That is what makes
+them different from the global `[keys]` map, which is consulted whether or not anything is in front.
+
+**Merge rules, and why the two forms differ.** A TOML table already merges per key, so changing one
+`action = "key"` entry keeps every other default. An **array** is replaced wholesale, which for
+`[[keys.surface.bind]]` would mean adding one binding silently drops every shipped default — so
+those merge **by their `keys` field** instead: a keymap *is* a map from combo to action, so merging
+on the combo is the ordinary table rule applied to what the array is really keyed by. `unbind` is
+applied last and keyed by the **combo**, so it retires a binding whatever it points at.
+
+**Where the defaults are.** heca's own components ship their keys in `keybindings.default.toml`, in
+this same shape, at the bottom of the file — one place a key is written and one place to change it.
+A **plugin** has no entry in that merge, so it registers its keys at runtime instead; whatever your
+config says still wins, and a registration never overwrites a combo you bound or gives a rebound
+action a second key. Binding an id whose component is not mounted is not an error: like every
+binding it resolves at press time, and simply does nothing until that component appears. Nor is an
+`id` for a placement that never exists.
+
+The workspaces dock's own keys are listed in
+[Keyboard commands](keyboard-commands.md#the-workspaces-docks-own-keys).
+
+**Two keys every surface has, with nothing declared:**
+
+- **`global_focus`** — written in its `[[keys.surface]]` entry, but it applies while the container
+  does *not* have focus, which is the only time it is useful. heca therefore binds it in the global
+  map rather than the container's own layer. With an `id` it aims at that seating; without one it
+  names the component and lands on the seating you were last in. Pressing it again while that
+  container holds the keyboard gives it back. The name is reserved — a component cannot have an
+  action called `global_focus`. Two components asking for the same `global_focus` combo is reported
+  at startup like any other collision.
+- **`Escape`** — gives the keyboard back to the main region. Bound for every container as shipped
+  (the `focus` block of `keybindings.default.toml`), so a dock that declares nothing is still
+  leavable without the mouse. **Every panel always has a way out, and by default it is `Escape`**:
+  to move it, bind `unfocus_dock` to another key (`unfocus_dock = "prefix+Escape"`, or in the block)
+  and give `Escape` up with `unbind`:
+
+  ```toml
+  [[keys.mode]]
+  name = "focus"
+  unbind = ["Escape"]
+  [[keys.mode.bindings]]
+  action = "unfocus_dock"
+  keys = "Ctrl+g"
+  ```
+
+  A config that leaves a floor with no key — in the block or behind the prefix — is refused for
+  that floor, `Escape` is put back, and the start-up report says so. With `Escape` given up, it
+  reaches whatever is typed into inside the dock (a terminal's program, say) like any key nobody
+  claimed. The same holds for overlays (`name = "layer"`, `close_overlay`).
 
 ---
 
@@ -230,8 +442,9 @@ Modifiers: `Ctrl`, `Shift`, `Alt`, `Super` (also `Win` / `Cmd`).
 `Alt+…` works on macOS. Option rewrites the character a key produces — Option+L types `¬` — so heca
 reads the key off the keyboard itself whenever the character it was handed is not one a binding
 could name. A layout that produces an ordinary character keeps its own answer.
-Named keys: `Enter`, `Tab`, `Escape`, `Backspace`, `ArrowLeft/Right/Up/Down`, `Home`, `End`,
-`PageUp`, `PageDown`, `F1`–`F12`, `ContextMenu`.
+Named keys: `Enter`, `Tab`, `Escape`, `Backspace`, `Space`, `Delete`, `ArrowLeft/Right/Up/Down`,
+`Home`, `End`, `PageUp`, `PageDown`, `F1`–`F12`, `ContextMenu`. A function key alone is a global
+binding: `F1` is the F1 key with no prefix.
 
 Change the prefix itself:
 
@@ -253,6 +466,61 @@ prefix_timeout_ms = 1000   # default
 It governs [modes](#3-a-mode--a-sub-keymap-behind-one-key) too, which is the same question one key
 later. Raise it if the second key keeps arriving too late; lower it if a stray prefix sits there
 waiting.
+
+---
+
+## Widget navigation and editing — `[keys.widgets]`
+
+One generic, cross-widget vocabulary drives every interactive widget and overlay — the context menu,
+command palette, `Select` lists, `Tabs`, and `Dialog` focus. These apply **only while such a
+widget or overlay is focused**; they never affect normal-mode input. They are split by **axis**.
+The defaults:
+
+```toml
+[keys.widgets]
+# Horizontal (left/right) — Tabs, a dialog's button row.
+item_previous = ["ArrowLeft", "Ctrl+h"]   # vim Ctrl+h
+item_next     = ["ArrowRight", "Ctrl+l"]   # vim Ctrl+l
+# Vertical (up/down) — menus, Select lists, the command palette.
+menu_up       = ["ArrowUp", "Ctrl+k"]      # vim Ctrl+k
+menu_down     = ["ArrowDown", "Ctrl+j"]    # vim Ctrl+j
+menu_history_up   = ["Shift+ArrowUp", "Ctrl+p"]     # older query
+menu_history_down = ["Shift+ArrowDown", "Ctrl+n"]   # newer query / back to the draft
+complete = "Tab"                           # complete a selected suggestion; otherwise normal focus traversal
+# Shared.
+activate      = ["Enter", "Space"]         # commit / submit the selected entry or primary action
+dismiss       = "Escape"                   # close / cancel the overlay
+# Text-input editing shortcuts (plain typing / Backspace / arrows / word-motion are built in).
+edit_delete_back          = "Ctrl+h"                 # delete one char before the caret
+edit_delete_to_line_start = "Ctrl+u"                 # delete from the caret to line start
+edit_select_all           = ["Ctrl+a", "Super+a"]    # select the whole field (Cmd+a on macOS)
+```
+
+- **Tab / Shift+Tab** traverse focus and stay inside a modal dialog. A selected suggestion may
+  consume Tab through `complete`; without a completion, normal focus traversal remains available.
+- A focused text field keeps its own keys first (**field-first**): `←` moves the caret inside an
+  `Input` but navigates when a button is focused. The shared `Ctrl+h` disambiguates by focus — it
+  deletes in an `Input` but is `item_previous` on a `Tabs`/dialog.
+- Menu and palette entries with a quick-pick letter can also be run by typing that letter; in the
+  command palette, all other keys type into its filter field.
+
+## Zooming the active column
+
+By default, `prefix+z` toggles the active column between its normal stored width and a
+viewport-wide zoomed width. Each column tracks its own zoom state, so you can zoom several columns
+independently. Press `prefix+z` again on the active column to restore that column's previous width.
+
+## Binding precedence in the scrolling area
+
+For a key pressed while the panes hold the keyboard, heca checks bindings in this order:
+
+1. **Mode bindings** — if in a mode, the mode's own keymap.
+2. **Prefix mode** — if in prefix mode, the normal keymap for `prefix+key` combos.
+3. **Global bindings** — in normal mode, the global keymap for direct `Alt+key` / `Super+key` combos.
+4. **Forward to the terminal** — if no binding matched, the key goes to the focused pane's backend.
+
+[Which surface answers a key](#which-surface-answers-a-key) says what happens before this, when a
+layer or a dock is in front.
 
 ---
 
@@ -311,4 +579,6 @@ startup state, not actions. The command palette offers the new action once per r
 
 - `keybindings.default.toml` — every default, with its comments. The single source of truth.
 - `heca --keys-show` — every binding and the key it resolves to, per layer.
-- [`README.md`](../README.md) — the configuration reference.
+- [Keyboard commands](keyboard-commands.md) — the default keys, the docks' keys, scrollback and selection.
+- [Configuration](configuration.md) — the configuration reference.
+- [Actions](actions.md) — how an action is dispatched, and how to add one.

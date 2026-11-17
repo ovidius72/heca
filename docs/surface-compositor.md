@@ -434,10 +434,10 @@ sidebar** — handled by the global rules above, not by the DockView selector.
 
 > **Note (2026-07-11):** "DockView" here is the **selector** concept (which mounted Provider is
 > shown), not a widget — the mounted unit is a **Provider** (see
-> [`plugin-authoring.md`](./plugin-authoring.md)). Sidebar **display modes** are a separate axis:
+> [`plugins.md`](./plugins.md)). Sidebar **display modes** are a separate axis:
 > a region is **Expanded ⇄ Hidden** (the collapsed icon rail is dropped for now), so there is no
 > collapsed-rail hint-visibility case to model. Full sidebar Provider / display-mode design:
-> **[`sidebar-provider-modes.md`](./sidebar-provider-modes.md)**.
+> [`chrome-and-ui.md` § 2.5](./chrome-and-ui.md#25-chromeregion--sidebar-shell-generic-all-4-regions) and the planner, phase P083(F003).
 
 ---
 

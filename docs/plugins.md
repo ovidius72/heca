@@ -21,7 +21,7 @@ containers are built — is not your business and lives in
 | the rules an author actually trips over | [§3](#3-the-rules) |
 | what a description cannot set today, and why | [§4](#4-what-a-description-cannot-set-today-and-why) |
 | worked screens — a panel, a table, a modal with a form, menus and hints | [§5](#5-writing-a-screen) |
-| values: sizes, spaces, colours, enums | [§6](#6-values) — and the full references are [`widgets.md` → Writing a size](widgets.md#writing-a-size--one-vocabulary-native-and-described-alike) and [→ Writing a space](widgets.md#writing-a-space) |
+| values: sizes, spaces, colours, enums | [§6](#6-values) — and the full references are [`widgets.md` → Writing a size](widgets.md#writing-a-size--one-vocabulary-native-and-described-alike) and [→ Writing a space](widgets.md#writing-a-space--one-vocabulary-native-and-described-alike) |
 | every widget's own properties and events | [`widgets.md`](widgets.md) |
 | a plugin that is only a config file | [the section at the end of the map](#the-plugin-that-needs-no-code-at-all) |
 ---
@@ -509,7 +509,7 @@ nothing for the letter to run.
 > **Correction.** This paragraph used to say `.hintable(false)` *"was written here as the
 > opt-out and never existed. There is nothing to opt out of."* That was wrong, and how the decision
 > was lost the first time: automatic-plus-opt-out was the original documented design (quoted in
-> `BACKLOG.md:1490`), the native side only ever implemented explicit opt-in, and a later session
+> an earlier plan), the native side only ever implemented explicit opt-in, and a later session
 > rewrote **the documentation to match the code** rather than the other way round. When the code and
 > a decision disagree, the code is what changes. Full record: `docs/hint-architecture.md` § 2.
 
@@ -534,7 +534,7 @@ nothing for the letter to run.
 
   One parser reads these and the app's own builders take the identical spellings, so what you write
   is what native code gets. They are **not a plugin dialect**. Full reference:
-  [`widgets.md` → Writing a space](widgets.md#writing-a-space).
+  [`widgets.md` → Writing a space](widgets.md#writing-a-space--one-vocabulary-native-and-described-alike).
 
   ⚠️ The retired names `gap_spacing`, `pad_spacing_x` and `pad_spacing_y` are still read so older
   trees keep working. Nothing writes them; do not use them in anything new.

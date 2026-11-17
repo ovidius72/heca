@@ -22,7 +22,7 @@
 │  │   └── Animation (easing, springs)    │
 │  └── backend/                           │
 │      ├── PaneBackend trait              │
-│      ├── TerminalBackend (PTY + vte)    │
+│      ├── TerminalBackend (PTY+wezterm)  │
 │      └── FakeBackend (layout testing)   │
 ├─────────────────────────────────────────┤
 │  heca-config                            │
@@ -35,7 +35,7 @@
 ```
 myvim/
 ├── AGENTS.md              ← This file
-├── README.md              ← User-facing documentation
+├── README.md              ← Landing page: what heca is, install, first run, link to docs/
 ├── config.default.toml        ← Default settings/appearance/font/program (embedded)
 ├── keybindings.default.toml   ← Default keybindings (embedded)
 ├── Cargo.toml             ← Workspace root
@@ -63,7 +63,7 @@ myvim/
 │   │   │   └── session.rs ← Session, OverviewState, WorkspaceSwitch
 │   │   ├── backend/
 │   │   │   ├── mod.rs     ← PaneBackend trait, BackendRenderData
-│   │   │   ├── terminal.rs  ← TerminalBackend (PTY + vte)
+│   │   │   ├── terminal/    ← TerminalBackend (PTY + terminal emulation; see docs/architecture.md)
 │   │   │   └── fake.rs    ← FakeBackend (no PTY, for layout testing)
 │   │   ├── pane.rs        ← DEPRECATED old BSP tree code (kept for reference)
 │   │   └── types.rs       ← Old Rect type (for BSP legacy)
@@ -81,12 +81,7 @@ myvim/
 │   └── Cargo.toml
 ├── docs/
 │   └── niri-wiki/          ← NIRI documentation (structured wiki reference)
-├── .planning/              ← GSD planning artifacts
-│   ├── PROJECT.md          ← Project overview
-│   ├── REQUIREMENTS.md     ← v1/v2 requirements
-│   ├── ROADMAP.md          ← Phase roadmap
-│   ├── STATE.md            ← Current execution state
-│   └── research/           ← Research docs (NIRI analysis, architecture, stack, etc.)
+├── .planner/               ← Planner state: features, phases, tasks, decisions (`/planner load`)
 ├── .agents/
 │   └── skills/
 │       └── niri/SKILL.md   ← NIRI knowledge skill
@@ -95,18 +90,7 @@ myvim/
 
 ## Stack
 
-| Layer | Crate | Version | Why |
-|-------|-------|---------|-----|
-| Windowing | `winit` | 0.30+ | De-facto Rust standard, cross-platform, HiDPI. |
-| GPU API | `wgpu` | 0.25+ | Cross-platform (Vulkan/Metal/DX12/WebGPU), safe Rust. |
-| Text layout | `cosmic-text` | 0.14+ | Best pure-Rust text stack; atlas caching, ligatures, variable fonts. |
-| Terminal emulation | `alacritty_terminal` | 0.25+ | Battle-tested VT parser library. |
-| PTY spawning | `portable-pty` | 0.9+ | Cross-platform PTY creation. |
-| Async runtime | `tokio` | 1.40+ | All IO (PTY, Neovim socket, RPC server). |
-| MsgPack | `rmpv` | 1.3+ | Neovim msgpack-RPC protocol. |
-| Config | `serde` + `toml` | latest | TOML parsing. |
-| Session IO | `bincode` or JSON | — | Session persistence format. |
-| Dynamic loading | `libloading` | 0.8+ | In-process plugin loading. |
+The stack is written down once, in `docs/architecture.md` ("Technology").
 
 ## Commands
 
@@ -153,11 +137,4 @@ cargo watch -x check
 
 ## Roadmap
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| **1 — The Shell** | ✅ Complete | GPU window, text rendering, theme system |
-| **2 — The Workspace** | ✅ Complete | NIRI layout, animations, input, sidebar |
-| **3 — The Content** | 🔄 In Progress | Terminal backend, Neovim msgpack-RPC |
-| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC, plugins |
-
-See `.planning/ROADMAP.md` for detailed requirements.
+What is planned and in progress lives in the project planner (`.planner/`, loaded with `/planner load`).

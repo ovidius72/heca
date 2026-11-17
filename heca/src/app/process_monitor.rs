@@ -2,8 +2,8 @@
 //! and emitting `pane.exited{code}`.
 //!
 //! Detection itself lives in `TerminalBackend::update` (event-driven on the
-//! terminal-output / reader-EOF wake, debounced — **no periodic timer** per
-//! `pane-runtime-state-plan.md` §0.2). This module only copies each backend's
+//! terminal-output / reader-EOF wake, debounced — **no periodic timer**; see the planner decision
+//! "pane runtime state" on P054 (F006), id `a19f9ed0`). This module only copies each backend's
 //! cached `PaneBackend::runtime()` snapshot onto the canonical layout `Pane` and
 //! drains one-shot exit codes via `take_exit_code`. The existing
 //! `sync_pane_runtime_state` (in `chrome/mod.rs`) then mirrors `Pane.runtime` →

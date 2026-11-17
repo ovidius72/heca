@@ -131,7 +131,7 @@ pub(super) fn on_wheel(
     // documented no-op: Shift's contract is "bypass the TUI, host-only", so we
     // never silently scroll the TUI. wezterm does not expose the main screen's
     // preserved history while the alt screen is active, so host scrollback in
-    // alt-screen TUIs is an inherent limitation (see README).
+    // alt-screen TUIs is an inherent limitation (see docs/keyboard-commands.md).
     let host_can_scroll = state
         .client
         .backends

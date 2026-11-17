@@ -5,7 +5,7 @@
 > *before* re-implementing actual DnD. Domain-neutral, theme-driven, widget-integrated,
 > zero app concepts in the crate. Then DnD (F4.5) is wired on top.
 
-Branch: `grid-ui-chrome-integration`. Constrained by RESUME-ws-a.md §0 rules
+Branch: `grid-ui-chrome-integration`. Constrained by the rules of the earlier grid-ui work stream
 (generic + theme-driven widgets; foundation before style; no `cargo fmt`; fix all warnings).
 
 ---

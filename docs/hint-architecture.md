@@ -49,7 +49,7 @@ be nothing for the letter to run.
 
 ### This was already the design, and it was deleted
 
-`BACKLOG.md:1490` quotes what `docs/chrome-and-ui.md` used to say:
+An earlier plan quoted what `docs/chrome-and-ui.md` used to say:
 
 > *"KeyHint is the host's universal leader/vimium overlay… any widget that exposes an `on_press`
 > intent is automatically hintable; the leader assigns letters to every clickable target (app +

@@ -31,7 +31,7 @@ impl AppState {
     }
 
     /// Effective left-sidebar width for layout/hit-testing: `0.0` while the region is hidden,
-    /// otherwise the (resizable) width. There is no icon rail — see `docs/sidebar-provider-modes.md`.
+    /// otherwise the (resizable) width. There is no icon rail — see `docs/chrome-and-ui.md` § 2.5.
     pub fn left_sidebar_width(&self) -> f32 {
         if self
             .chrome_state

@@ -1682,7 +1682,7 @@ and FlashHandle remain client-local. A server-granted sound is played once per p
 not per animation cycle or window, using the configured status sound and
 `[settings] notification_sound` (enabled by default). The default `notification_flash` is 8000ms.
 For accepted values, examples, config precedence and reload behaviour, see
-[Pane Feedback Settings](../README.md#pane-feedback-settings). The timeout is the total flashing
+[Pane Feedback Settings](configuration.md#pane-feedback-settings). The timeout is the total flashing
 time, not the theme's per-pulse duration; `0` is endless, not disabled. Sound accepts only
 unquoted `true`/`false` and can be muted without stopping the visual feedback.
 
@@ -2303,7 +2303,7 @@ that: the tree delivers the key to the widget that holds the keyboard, and the t
 In a dock the terminal gets the key first, as any focused widget does, and the dock's own keys (the
 sidebar's `j`/`k`/`Enter`, the `focus` floor's paging keys) act on what it did not take — so a vim in
 a docked terminal gets its PageUp. The one reserved key is the way out: `Escape` leaves the dock as
-shipped, ahead of the terminal, so it cannot trap you. Move it in the `focus` block (see the README)
+shipped, ahead of the terminal, so it cannot trap you. Move it in the `focus` block (see [Keybindings](keybindings.md#4-a-surfaces-own-keys--keyssurface))
 and `Escape` reaches the program like any other key.
 
 **Selecting, links and font size work wherever it is placed.** Shift+drag selects in it and the
@@ -3636,7 +3636,7 @@ to the focused field):
 | `EditSelectAll` | `Ctrl+a` / `Super+a` (`edit_select_all`) | select the whole field |
 
 App wiring: `build_widget_keymap` → `AppState.widget_keymap` (`heca_grid_ui::Keymap`), dispatched in
-the overlay key branch (`heca/src/app/events.rs`). See the `widget-keys-config` requirement and README.
+the overlay key branch (`heca/src/app/events.rs`). See the `widget-keys-config` requirement and [Keybindings](keybindings.md#widget-navigation-and-editing--keyswidgets).
 
 ```rust
 let name = Input::new().placeholder("CALLSIGN")
@@ -5181,7 +5181,7 @@ Per the chrome plan's *read-via-signals, write-via-actions* rule, it reacts to a
 - **Accessors / intents**: `.mode_signal() -> Signal<RegionMode>` (binding point — share it with
   rail-aware Docks before `.dock(...)`), `.toggle()` (flip Expanded ⇄ CollapsedRail).
 - **`RegionMode`**: `Expanded`, `CollapsedRail` (thin icon rail), `Hidden` (`display: none`). The
-  library supports all three; **the heca app currently uses only `Expanded` and `Hidden`** (the collapsed rail was dropped — see [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md)).
+  library supports all three; **the heca app currently uses only `Expanded` and `Hidden`** (the collapsed rail was dropped — see [`chrome-and-ui.md` § 2.5](chrome-and-ui.md#25-chromeregion--sidebar-shell-generic-all-4-regions) and the planner, phase P083(F003)).
 
 ```rust
 let sidebar = ChromeRegion::vertical().expanded_size(320.0).rail_size(64.0)
@@ -5208,7 +5208,7 @@ ownership of the halo's *reach* — only it knows how big it is.
 > **Not currently mounted in the app.** The heca sidebar collapsed rail was dropped
 > (a region is Expanded ⇄ Hidden), so nothing in the app builds `RailCell`s today. It remains a
 > supported library widget, reserved for a future generic Provider icon rail — see
-> [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md) §4. If a future rail needs
+> the planner, phase P083(F003) and [`chrome-and-ui.md` § 2.5](chrome-and-ui.md#25-chromeregion--sidebar-shell-generic-all-4-regions). If a future rail needs
 > a `name`/`number` cell (a short text label instead of a glyph) or a `nav_selected` cursor state,
 > those are additions to make then.
 
@@ -7660,7 +7660,7 @@ stated": heca compares every call against this list and reports an argument that
 or malformed, so a plugin or a script gets told what it got wrong.
 
 For the full **in-tree** built-in checklist (a `WmAction` variant, `action_policy` classification, a
-default binding, RPC parity), see **[README → Actions System](../README.md#actions-system)**.
+default binding, RPC parity), see **[Actions](actions.md)**.
 
 ---
 

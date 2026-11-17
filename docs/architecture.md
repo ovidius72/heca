@@ -10,6 +10,41 @@ app binary.
 > Note: the top-level `src/` directory is the **mdBook source** (`book/` is its
 > built output) — it is not a crate and is excluded from this map.
 
+## Technology
+
+| Layer | Technology | Purpose |
+| ------- | ----------- | --------- |
+| **Windowing** | [winit](https://github.com/rust-windowing/winit) | Cross-platform window creation, input events |
+| **GPU API** | [wgpu](https://wgpu.rs/) | Vulkan/Metal/DX12/WebGPU abstraction |
+| **Text** | [cosmic-text](https://github.com/pop-os/cosmic-text) | Font shaping, glyph atlas, ligatures |
+| **Terminal emulation** | `wezterm-term` and `wezterm-surface` | The VT parser, screen and scrollback model, taken from [wezterm](https://github.com/wezterm/wezterm) |
+| **PTY** | [portable-pty](https://github.com/wezterm/wezterm/tree/main/pty) | Cross-platform PTY creation (ConPTY on Windows) |
+| **Config** | [serde](https://serde.rs/) + TOML | User configuration; sessions are saved as JSON |
+| **Language** | Rust | |
+
+This is the single place the stack is written down. The wezterm crates come from a **pinned git
+revision**, and the exact revision is set in
+[`heca-core/Cargo.toml`](../heca-core/Cargo.toml); crate versions are read from the `Cargo.toml`
+files, not from here. Terminal emulation and the PTY both live in `heca-core`
+(`backend/terminal/`). heca does not use `alacritty_terminal` or `vte`.
+
+Technologies that were ruled out, and why:
+
+| Technology | Reason |
+| ------------ | -------- |
+| Dioxus / Tauri / Electron | WebView-based; can't own the GPU render loop freely. |
+| GTK / Qt | Fight you for custom GPU surfaces. Heavy cross-platform packaging. |
+| egui / iced | Immediate-mode or over-constrained layout; we need to own pane rectangle assignment. |
+| Bevy | Game engine ECS fights traditional GUI event loops. |
+| skia-safe | Proven (Neovide) but requires C++ toolchain. Rust-native is lighter. |
+
+### Platform notes
+
+- **macOS**: uses `WaitUntil` event loop control flow to avoid 100% CPU busy loops. Physical key
+  fallback for empty `key_text` on winit.
+- **Linux**: native Wayland/X11 via winit. PTYs come from `portable-pty`.
+- **Windows**: wgpu DX12 backend. PTYs come from `portable-pty` (ConPTY).
+
 ## Crate dependency graph
 
 ```mermaid
@@ -276,3 +311,19 @@ Composition rules (see `docs/surface-compositor.md`):
 - **Overlays/modals** are realized either from native `heca-grid-ui` trees or from a
   `heca-view` `ViewNode` (through `heca-view-realize`), so plugin-described layers
   are painted, input-routed, and hintable for free (`docs/surface-compositor.md` §9).
+
+---
+
+## Design decisions
+
+- **NIRI layout engine**: Horizontal scrolling columns, not BSP trees. Column widths are independent.
+- **Separation of concerns**: Layout in `heca-core`, GPU in `heca-renderer`, orchestration in `heca`.
+- **ActionRegistry**: All WM commands go through one dispatch point. Today that is centered on `WmAction`; the long-term direction is toward dynamic/string-based actions for pluggable chrome containers too.
+- **KeymapRegistry**: Mode-specific keymaps. Modes are groups of bindings active until Esc/Enter.
+- **Prefix mode**: Intentionally tmux-style to avoid conflicts with hosted applications.
+- **PaneBackend trait**: All content sources (terminal, Neovim, browser) implement the same interface.
+- **Sidebar shell vs container**: a **widget** is a component, placeable anywhere. A **container** (dock) holds widgets. A **sidebar** is a shell that hosts containers and knows almost nothing about them — *left and right are only positions*, and the same container behaves identically in either. What differs between the two sidebars is their content, not what they are. Placing a container is placing it: a second placement is one call (`WorkspacesContainerProvider::placed(id, region)`), not a second implementation, and the content comes from the shared store while state that is per placement — its scroll position — is keyed by mount id.
+- **Containers share a region by fraction, never by fixed size**: a container declares its share of the region as a flex grow factor, defaulting to an equal share. One container takes the whole region, two take half each, `2.0` beside `1.0` takes two thirds, and `0.0` means content-sized. It is the region that applies the share, because a share only means something relative to siblings a container cannot see. A fraction survives a window resize; a pixel height does not. See [`widgets.md`](widgets.md#a-containers-share-of-its-region).
+- **Scrolling is composed, not owned**: a scroll area *is* a container, so it is nested wherever content should scroll — including inside another container. Two containers in one sidebar scroll independently because each nests its own; the shell does not wrap them in a viewport, because a viewport measures content at its natural height and would leave the containers with no height to divide. Nesting decides which one acts: the innermost that can move on that axis, for the wheel and the keyboard alike. See [`widgets.md`](widgets.md#scrolling-is-composed--nest-a-scroll-area-where-the-scrolling-belongs).
+- **Action reachability**: important actions should be reachable from mouse/UI, keybindings, and RPC when meaningful on those surfaces.
+- **Surface compositor (layering)**: on-screen surfaces (background, panes, sidebar, floating panes, overlays/modals, future exposé) form a **tree** whose position defines z-order — no hardcoded levels. One uniform rule (context activation + geometric occlusion) decides what is interactive, starting with the universal KeyHint picker (`prefix+/`). See [`surface-compositor.md`](surface-compositor.md) — the contract for adding any new layer, surface, overlay, or button.
