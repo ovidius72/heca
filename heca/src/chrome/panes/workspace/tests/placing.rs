@@ -132,7 +132,7 @@ fn a_floats_terminal_comes_after_the_tiled_ones_in_the_scene() {
     let mut model = two_columns_and_a_float();
     for (pane, process) in [(10, 1), (20, 2), (30, 3)] {
         if let Some(entry) = model.panes.get_mut(&PaneId(pane)) {
-            entry.content = crate::chrome::panes::terminal::testing::attached(process);
+            entry.content = crate::chrome::panes::terminal::testing::attached(process).reference();
         }
     }
     let (window, ws) = laid_out(&model);
@@ -159,5 +159,30 @@ fn a_floats_terminal_comes_after_the_tiled_ones_in_the_scene() {
         order.last(),
         Some(&3),
         "the float is last, so it is on top: {order:?}"
+    );
+}
+
+/// **A frame that changes nothing builds no terminal.** The model is handed to the workspace every
+/// frame; a pane that is still there keeps its node, so none is made for it. A node is made once,
+/// for a pane that arrives.
+#[test]
+fn an_unchanged_workspace_builds_no_terminal_node() {
+    let model = two_columns_and_a_float();
+    let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams()));
+    let before = crate::chrome::panes::terminal::nodes_built();
+    assert!(ws.set_props(&model));
+    assert_eq!(
+        crate::chrome::panes::terminal::nodes_built() - before,
+        4,
+        "one node for each of the four panes"
+    );
+    let built = crate::chrome::panes::terminal::nodes_built();
+    for _ in 0..20 {
+        assert!(ws.set_props(&model));
+    }
+    assert_eq!(
+        crate::chrome::panes::terminal::nodes_built(),
+        built,
+        "twenty more frames of the same session built nothing"
     );
 }

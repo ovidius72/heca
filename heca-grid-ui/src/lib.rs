@@ -23,7 +23,7 @@
 //!     .child(Label::new("ONLINE"));
 //! ```
 //!
-//! See `grid-ui-plan.md` for the full phase plan.
+//! The widget catalog is `docs/widgets.md`; outstanding work is in the planner.
 
 // So the generated `impl ::heca_grid_ui::SetProp` from `#[props]` resolves inside this crate too,
 // not only in downstream ones. Without it the macro would need a different path when used here.

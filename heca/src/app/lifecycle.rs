@@ -24,7 +24,8 @@ pub(crate) struct BackendPollResult {
 }
 
 pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
-    let poll = state.client.poll_views();
+    let on_screen = super::frame::OnScreen::of(state).ids(state);
+    let poll = state.client.poll_views(&on_screen);
     let result = BackendPollResult {
         has_data: poll.has_data,
         bell_any: poll.bell_any,
@@ -262,6 +263,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         widget_due,
     };
     if reasons.any() && state.client.projection_ready() {
+        reasons.report();
         state.window.request_redraw();
     }
 

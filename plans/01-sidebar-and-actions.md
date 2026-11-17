@@ -733,7 +733,7 @@ This plan builds the action registry and the `CommandPalette` action hook. The a
 
 ## Requirements Added/Updated
 
-These should be merged into `.planning/REQUIREMENTS.md`:
+These should be merged into the planner's requirements:
 
 ### New Layout Requirements
 

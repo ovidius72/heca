@@ -71,3 +71,17 @@ pub(crate) fn attached(id: u64) -> super::Terminal {
     terminal.attach(super::TerminalId(id));
     terminal
 }
+
+/// A terminal bound to recording seams, as the host binds the one a pane shows: it says what it
+/// asks of its owner, and the list it said it to comes back with it.
+pub(crate) fn bound(
+    id: u64,
+) -> (
+    super::Terminal,
+    std::rc::Rc<std::cell::RefCell<Vec<super::input::TerminalInput>>>,
+) {
+    let terminal = attached(id);
+    let (seams, said) = recording();
+    terminal.bind(seams);
+    (terminal, said)
+}

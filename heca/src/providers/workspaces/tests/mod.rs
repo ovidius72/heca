@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 mod build;
 mod cursor;
+mod idle;
 mod names;
 
 /// One workspace, one column, one (active) pane — the smallest tree that still

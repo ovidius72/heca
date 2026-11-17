@@ -44,7 +44,7 @@ pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
 
 /// Make `region` visible if it is currently hidden, so something seated in it can be seen.
 ///
-/// A region is shown or hidden (no icon rail — see `docs/sidebar-provider-modes.md`). A region that
+/// A region is shown or hidden (no icon rail — see `docs/chrome-and-ui.md` § 2.5). A region that
 /// is already shown keeps its (possibly user-resized) width, and revealing it again is free.
 fn reveal_region(state: &mut AppState, region: crate::chrome::RegionId) {
     set_region_visibility(state, region, crate::input::RegionVisibility::Show);

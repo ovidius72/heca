@@ -354,7 +354,6 @@ impl ClientState {
                 ServerMsg::Dispatch { intents } => update.intents.extend(intents),
                 ServerMsg::Service(service) => update.services.push(service),
                 ServerMsg::BackendEffects(effects) => {
-                    update.effects.has_data |= effects.has_data;
                     update.effects.bell_any |= effects.bell_any;
                     update.effects.clipboard_writes.extend(effects.clipboard_writes);
                 }
@@ -365,7 +364,6 @@ impl ClientState {
                     self.data.lock().map_err(|error| io::Error::other(error.to_string()))?.receive(*frame);
                     self.ensure_view(owner.clone(), spec, cell).map_err(|error| io::Error::other(error.to_string()))?;
                     if let Some(id) = self.backends.find_owner(&owner) { self.backends.set_custom_title(id, display_title); }
-                    update.effects.has_data = true;
                 }
                 ServerMsg::ImageInfo(info) => self.images.begin(info, self.image_limit, &self.outbox)?,
                 ServerMsg::ImageChunk(chunk) => {
@@ -407,10 +405,15 @@ impl ClientState {
             .into_iter().chain(self.projection_deadline.filter(|_| !self.failed)).min()
     }
 
-    pub(crate) fn poll_views(&mut self) -> BackendPoll {
+    /// **Bring every view up to date, and say whether anything on screen needs a frame.**
+    ///
+    /// Every view takes what it was sent, but only a terminal in `on_screen` can wake the loop:
+    /// output from a pane in another workspace is kept for when it is shown, and draws nothing now.
+    pub(crate) fn poll_views(&mut self, on_screen: &std::collections::HashSet<crate::chrome::panes::terminal::TerminalId>) -> BackendPoll {
         let mut result = BackendPoll::default();
-        for view in self.backends.values_mut() {
-            result.has_data |= view.update();
+        for (id, view) in self.backends.iter_mut() {
+            let changed = view.update();
+            result.has_data |= changed && on_screen.contains(&id);
             result.terminal_animating |= view.tick_animation();
         }
         result

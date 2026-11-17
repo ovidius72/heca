@@ -1,19 +1,9 @@
 # heca — Development Backlog
 
-> **How to use this file:**
-> Follow the phase/tasks you have been assigned. Read the status. Take the next open task.
->
-> **Before starting any task:**
-> 1. Pull/sync `main`: `git fetch origin && git merge origin/main`
-> 2. Create a new feature branch off `main` and start working using the Rust skill (`~/.agents/skills/rust/SKILL.md`)
-> 3. When done, wait for a review
-> 4. The user will give you the result of the review
-> 5. If it's OK: commit and push, open PR → main
-> 6. If it's not OK: fix the issues and wait for user feedback
-> 7. Follow all rules in `AGENTS.md`
-> 8. Act as a Rust expert developer — no shortcuts, no partial implementations, no silent deferrals
->
-> **Status key:** `[ ]` = not started · `[~]` = in progress · `[x]` = done · `[⏸]` = deferred/parked
+> **Historical archive — not maintained.** This file is kept for reference only. Its statuses
+> and task lists are out of date and are not a source of truth. Current work, decisions and
+> open items live in the project planner (`.planner/`, loaded with `/planner load`); everything
+> still open here was carried into it on 2026-11-16. How heca works is documented in `docs/`.
 
 ---
 

@@ -39,6 +39,9 @@ pub(crate) mod testing;
 mod viewport;
 
 pub use component::Terminal;
+#[cfg(test)]
+pub(crate) use component::nodes_built;
+pub(crate) use component::TerminalRef;
 use input::TerminalCommand;
 pub(crate) use input::{Cell, Grid, Page, Search, TerminalInput};
 pub(crate) use model::TerminalId;
@@ -53,23 +56,35 @@ use crate::app_state::AppState;
 ///
 /// It is found by the terminal's id, which the store issues to the pane the first time it is asked,
 /// before any process runs: a pane whose shell starts after its first tree still shows it.
-pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
+///
+/// Asked for every pane every frame, so it hands back a [`TerminalRef`] and builds nothing: the
+/// node is made where a pane is made.
+pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> TerminalRef {
     let id = state.client.backends.id_for(pane_id);
     let proxy = state.event_proxy.clone();
-    // The padding is config's, and a terminal is made once: say it now, and again
-    // whenever the terminal is looked at, so a reload does not leave an old value.
     let p = state.appearance.terminal.effective_terminal_padding();
-    let placed = state
-        .terminals
-        .entry(id)
-        .or_insert_with(|| {
-            let terminal = Terminal::unbound();
-            terminal.attach(id);
-            terminal.bind(seams(proxy, Some(pane_id), id));
-            terminal
-        });
-    placed.set_content_padding(p.top, p.bottom, p.left, p.right);
-    placed.clone()
+    kept(&mut state.terminals, id, (p.top, p.bottom, p.left, p.right), || {
+        seams(proxy, Some(pane_id), id)
+    })
+}
+
+/// The terminal kept for `id`: made from `seams` the first time, found every time after. The
+/// padding is config's and a terminal is made once, so it is said now, and again whenever the
+/// terminal is looked at, so a reload does not leave an old value.
+fn kept(
+    terminals: &mut std::collections::HashMap<TerminalId, Terminal>,
+    id: TerminalId,
+    padding: (f64, f64, f64, f64),
+    seams: impl FnOnce() -> input::Seams,
+) -> TerminalRef {
+    let placed = terminals.entry(id).or_insert_with(|| {
+        let terminal = Terminal::unbound();
+        terminal.attach(id);
+        terminal.bind(seams());
+        terminal
+    });
+    placed.set_content_padding(padding.0, padding.1, padding.2, padding.3);
+    placed.reference()
 }
 
 /// **Start the terminals extensions declared**, once each, and show each the process it got.
@@ -317,5 +332,31 @@ mod drawn_tests {
         drawn.record(&at(400.0, true));
         drawn.record(&at(100.0, false));
         assert_eq!(drawn.0.get(&7).map(|r| r.loc.x), Some(100.0));
+    }
+}
+
+#[cfg(test)]
+mod kept_tests {
+    use super::*;
+
+    /// **Looking at a pane's terminal every frame builds nothing.** `view_of` runs for every pane on
+    /// every frame; a node (controls, search bar, signals) built for each was thrown away
+    /// at once. Only the first look makes the terminal, and nothing after it makes a node.
+    #[test]
+    fn asking_for_a_panes_terminal_every_frame_builds_no_node_after_the_first() {
+        let mut terminals = std::collections::HashMap::new();
+        let id = TerminalId(5);
+        let before = nodes_built();
+        let _ = kept(&mut terminals, id, (0.0, 0.0, 0.0, 0.0), || testing::recording().0);
+        assert_eq!(nodes_built() - before, 1, "the terminal is made once");
+        let first = nodes_built();
+        for _ in 0..50 {
+            let looked_at = kept(&mut terminals, id, (1.0, 1.0, 1.0, 1.0), || {
+                unreachable!("a kept terminal is not made again")
+            });
+            assert_eq!(looked_at.node().id(), Some(id), "it is the same terminal");
+        }
+        // The only nodes built were the ones this test asked for with `node()`.
+        assert_eq!(nodes_built() - first, 50, "looking builds none; only `node()` does");
     }
 }

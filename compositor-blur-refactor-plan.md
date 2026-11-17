@@ -44,7 +44,7 @@ the tasks, summarized here):
 3. **`content_canvas_fill()` stopgap.** `heca/src/app/render.rs` now paints a
    theme-background fill over pane-less content area (helpers `FillRect` /
    `subtract_fill_rect` / `uncovered_fill_rects` + tests) in the exact slot z=0
-   will occupy. `theming-plan.md` flags it as a stopgap to fold into z=0. This
+   will occupy. the old theming plan flags it as a stopgap to fold into z=0. This
    plan did not reference it. → New Task 3.4b added to remove it alongside z=0.
 4. **Clippy baseline is now 0**, not 9 (the pre-merge "9 pre-existing lints"
    from PR #125 are gone as of PR #160). → Phase 0.2 + 6.2 updated.
@@ -430,7 +430,7 @@ build incrementally and review the diff carefully.
   paints `theme.background` at `appearance.opacity()` over pane-less content
   area, via `content_canvas_fill()` + `FillRect` / `subtract_fill_rect()` /
   `uncovered_fill_rects()` (+ unit tests `content_canvas_fill_*` and
-  `uncovered_fill_rects_exclude_pane_rectangles`). `theming-plan.md` flags this
+  `uncovered_fill_rects_exclude_pane_rectangles`). the old theming plan flags this
   as a stopgap to fold into the z=0 model. It sits in the exact pre-stencil slot
   z=0 now owns, so leaving it in place would produce **two competing background
   layers**. Once 3.3 wires z=0:
@@ -438,14 +438,14 @@ build incrementally and review the diff carefully.
     `uncovered_fill_rects`, and the uncovered-region fill pass in `render_frame`;
   - delete the associated unit tests in `heca/src/app/render.rs::tests`;
   - confirm `rg "content_canvas_fill|FillRect|uncovered_fill_rects|subtract_fill_rect" --glob '!*.md'`
-    returns no code references (only `theming-plan.md` historical mentions may
+    returns no code references (only the old theming plan's historical mentions may
     remain — update them in Phase 4).
-  - **Done (PR #169):** all four helpers + the uncovered-region fill pass + the 3 unit tests (`content_canvas_fill_is_none_when_window_is_opaque`, `content_canvas_fill_uses_theme_background_and_app_opacity`, `uncovered_fill_rects_exclude_pane_rectangles`) deleted; the `use super::{...}` import in the test module trimmed to `status_mode_parts`. Grep `rg "content_canvas_fill|FillRect|uncovered_fill_rects|subtract_fill_rect" --glob '!*.md'` → no code references (exit 1). `theming-plan.md` historical pointer update is Phase 4 (task 4.1b).
+  - **Done (PR #169):** all four helpers + the uncovered-region fill pass + the 3 unit tests (`content_canvas_fill_is_none_when_window_is_opaque`, `content_canvas_fill_uses_theme_background_and_app_opacity`, `uncovered_fill_rects_exclude_pane_rectangles`) deleted; the `use super::{...}` import in the test module trimmed to `status_mode_parts`. Grep `rg "content_canvas_fill|FillRect|uncovered_fill_rects|subtract_fill_rect" --glob '!*.md'` → no code references (exit 1). The old theming plan's historical pointer update is Phase 4 (task 4.1b).
   - Relations: 3.3 (z=0 must replace it).
   - Check: `cargo build -p heca` green; `cargo test -p heca` green; grep clean. ✅
 
 - [x] **3.5 Remove old tint config (`heca-config/src/appearance.rs`)** — delete `terminal_frost_color`, `terminal_frost_opacity()`, and `effective_terminal_frost_color()`. Update any remaining references (grep `terminal_frost` across the workspace).
-  - **Done (PR #169):** removed `terminal_frost_color` (AppearanceConfig **and** `Theme` fields), `terminal_frost_opacity()`, `terminal_floating_frost_opacity()`, `effective_terminal_frost_color()`. Also removed `terminal_blur` / `terminal_blur_radius()` / `default_terminal_blur` — dead after Pass A removal; grill-me Q3 mandates dropping tiled `terminal_blur`, and leaving it would break the 0-warning baseline. Fixed `latte.toml` `terminal_background #e6e9ef00 → #e6e9ef` (grill-me Q1 opaque-theme fix, inline TOML comment added). Stripped `terminal_blur` + `terminal_frost_color` from `example.config.toml`. Updated the `terminal_floating_blur` doc comment (it still referenced the removed tiled `terminal_blur`). Doc-only references (`theming-documentation.md` etc.) are Phase 4 (task 4.1b).
+  - **Done (PR #169):** removed `terminal_frost_color` (AppearanceConfig **and** `Theme` fields), `terminal_frost_opacity()`, `terminal_floating_frost_opacity()`, `effective_terminal_frost_color()`. Also removed `terminal_blur` / `terminal_blur_radius()` / `default_terminal_blur` — dead after Pass A removal; grill-me Q3 mandates dropping tiled `terminal_blur`, and leaving it would break the 0-warning baseline. Fixed `latte.toml` `terminal_background #e6e9ef00 → #e6e9ef` (grill-me Q1 opaque-theme fix, inline TOML comment added). Stripped `terminal_blur` + `terminal_frost_color` from `example.config.toml`. Updated the `terminal_floating_blur` doc comment (it still referenced the removed tiled `terminal_blur`). Doc-only references (the old theming documentation etc.) are Phase 4 (task 4.1b).
   - Relations: 3.4 (render.rs no longer uses them).
   - Check (post-PR-#160):
     - [x] `cargo build --workspace --all-targets` green.
@@ -456,7 +456,7 @@ build incrementally and review the diff carefully.
       must have the key removed (not just docs). `Theme` uses per-field
       `#[serde(default)]` with no `deny_unknown_fields`, so stale keys won't
       break loading, but they must still be stripped to avoid shipping a dead
-      knob. Doc-only references (`theming-documentation.md` etc.) are fixed in
+      knob. Doc-only references (the old theming documentation etc.) are fixed in
       Phase 4. (Also `rg "terminal_blur"` clean in code.)
 
 - [x] **3.6 Floating backdrop-100% fix (`heca/src/app/render.rs`)** — in the floating-pane loop, change the `backdrop.draw` opacity argument from `floating_frost_opacity` → `1.0` (the blurred tiled content fully replaces the raw behind — no sharp leak). Drop `floating_frost_opacity` (and `terminal_floating_frost_opacity()` if it exists); floating frost visibility is now driven solely by `terminal_floating_transparency` (cell surface alpha).
@@ -495,11 +495,11 @@ build incrementally and review the diff carefully.
 - [x] **4.1b Strip removed knobs from theme TOMLs + config examples (new, post-PR-#160)** — Task 3.5 removes `terminal_frost_color` from code; the merge left stale references that must be cleaned in the same doc pass:
   - `heca-theme/src/themes/latte.toml` — remove `terminal_frost_color = "#e6e9ef"` (line ~45).
   - `example.config.toml` — remove the commented `# terminal_frost_color = "#1e1e2e"` block (~line 29).
-  - `theming-documentation.md` — remove/replace the `terminal_frost_color` entries in the bundled-theme value tables and the latte section (lines ~152, ~300, ~443, ~488).
-  - `theming-plan.md` — update the `content_canvas_fill()` stopgap note to point to this plan's Task 3.4b as the folding target (the note currently says "fold into z=0" without naming the task).
-  - **Done (this PR):** `latte.toml` `terminal_frost_color` was already stripped in Phase 3 (3.5); `example.config.toml` commented block was already stripped in Phase 3 and is now replaced by the z=0 block (4.1). `theming-documentation.md` — removed all 4 `terminal_frost_color` entries (grid_tron example, field list, latte block, latte field list) AND fixed the stale `terminal_background = "#e6e9ef00"` → opaque `#e6e9ef` in the latte block. `theming-plan.md` — both `content_canvas_fill` notes (§ stopgaps + 3C.3) now point to Phase 3 Task 3.4b as the folding target and marked done (PR #169).
+  - the old theming documentation — remove/replace the `terminal_frost_color` entries in the bundled-theme value tables and the latte section (lines ~152, ~300, ~443, ~488).
+  - the old theming plan — update the `content_canvas_fill()` stopgap note to point to this plan's Task 3.4b as the folding target (the note currently says "fold into z=0" without naming the task).
+  - **Done (this PR):** `latte.toml` `terminal_frost_color` was already stripped in Phase 3 (3.5); `example.config.toml` commented block was already stripped in Phase 3 and is now replaced by the z=0 block (4.1). The old theming documentation — removed all 4 `terminal_frost_color` entries (grid_tron example, field list, latte block, latte field list) AND fixed the stale `terminal_background = "#e6e9ef00"` → opaque `#e6e9ef` in the latte block. The old theming plan — both `content_canvas_fill` notes (§ stopgaps + 3C.3) now point to Phase 3 Task 3.4b as the folding target and marked done (PR #169).
   - Relations: 3.5.
-  - Check: `rg "terminal_frost_color" --glob '!compositor-blur-refactor-plan.md'` returns no references outside historical/migration notes; `rg "content_canvas_fill"` only in `theming-plan.md` as a historical pointer to Task 3.4b. ✅ (verified — remaining hits are README/AGENTS/example.config migration notes + BACKLOG/resume-handoff historical; `theming-documentation.md` clean.)
+  - Check: `rg "terminal_frost_color" --glob '!compositor-blur-refactor-plan.md'` returns no references outside historical/migration notes; `rg "content_canvas_fill"` only in the old theming plan as a historical pointer to Task 3.4b. ✅ (verified — remaining hits are README/AGENTS/example.config migration notes + old backlog/resume-handoff historical; the old theming documentation clean.)
 
 - [x] **4.2 `README.md`** — update the appearance / blur section to the z-layer model.
   - **Done (this PR):** added a new `### Appearance & Frost (z=0 background layer)` section after the Theme section — documents the heca-owned z=0 gradient, the `background_blur`/`background_transparency`/gradient knobs, how tiled vs floating frost is produced, and the `terminal_blur`/`terminal_frost_color` migration note. Reload via `prefix+Shift+r` noted.
@@ -511,20 +511,20 @@ build incrementally and review the diff carefully.
   - Relations: 4.1.
   - Check: review. ✅
 
-- [x] **4.4 `.planning/research/ARCHITECTURE.md`** — document the z-layer model, `BackgroundLayer`, static blur cache, and the cross-platform rationale (app vs compositor).
+- [x] **4.4 The architecture research note** — document the z-layer model, `BackgroundLayer`, static blur cache, and the cross-platform rationale (app vs compositor).
   - **Done (this PR):** updated §3 (Compositor/Renderer) — rewrote the Composite step to the actual z=0 pipeline order (clear → z=0 blit pre-stencil → tiled stencil + translucent content → borders → floating blur capture + backdrop(100%) → grid-ui chrome → overlays → present) and added a `#### z=0 background frost model (heca-owned, cross-platform)` subsection covering `BackgroundLayer`'s `z0_tex`/`cache_tex`/dirty cache + snapshot contract, the translucency channel, removed knobs, and the app-vs-compositor rationale (why heca can't blur the desktop cross-platform).
   - Relations: 4.1.
   - Check: review. ✅
 
 ### Phase 4 exit — review together
-- [x] Docs consistent across all four files; no stale references to the tint approach in code-facing docs. Proceed to Phase 5. ✅ (gate verified: `rg "terminal_frost_color"` / `content_canvas_fill` outside the plan return only historical/migration notes; `theming-documentation.md` clean.)
+- [x] Docs consistent across all four files; no stale references to the tint approach in code-facing docs. Proceed to Phase 5. ✅ (gate verified: `rg "terminal_frost_color"` / `content_canvas_fill` outside the plan return only historical/migration notes; the old theming documentation clean.)
 
 ---
 
 ## Phase 4b / 4c — Follow-on phases (landed)
 
 Two phases were discovered during Phase 4 and landed as follow-ons before
-Phase 5. They are tracked in `BACKLOG.md` as `compositor-04b` / `compositor-04c`;
+Phase 5. They were tracked in the old backlog as `compositor-04b` / `compositor-04c` and now live in the planner;
 this section records them here so the plan reflects what actually shipped.
 
 ### `compositor-04b` — `intensity` / `glow_size` `[appearance]` override + glow/scanline separation ✅
@@ -538,7 +538,7 @@ this section records them here so the plan reflects what actually shipped.
   resolvers; `Intensity::glow_scale()` removed from both `heca-theme` and
   `heca-grid-ui`, replaced by `GlowLevel::strength_scale()` (curve preserved
   exactly); override wired at the `chrome_gui_theme(state)` choke point; token
-  doc audit across `theming-documentation.md` / `README` / `AGENTS` /
+  doc audit across the old theming documentation / `README` / `AGENTS` /
   `example.config.toml`.
 - **PR:** #172 (`feat(compositor): add intensity/glow appearance overrides`).
 - **Source:** `handoff-intensity-glow.md`, discussion 2026-06-22.
@@ -608,9 +608,9 @@ has tested, per AGENTS.md).
   - Relations: 6.2.
   - Check: all tests green. **Done 2026-06-22** — `cargo test --workspace`: heca-core 57/57 (the previously env-dependent `terminal_backend_bash_integration…` test now passes after isolating the test shell from the user's `~/.bashrc` — committed on `feature/compositor-05-06-finalize`), heca-grid-ui lib 47/47, heca-renderer 241/241, heca 61/61. The only remaining failure is the pre-existing `heca-grid-ui::toast_action_press_flashes_only_the_action_not_the_whole_card`, which fails on plain `main` too (unrelated to the blur refactor).
 
-- [x] **6.4 Planning docs update** — update `.planning/STATE.md` + the planner — mark the blur refactor done; reference this plan file.
+- [x] **6.4 Planning docs update** — update the planner — mark the blur refactor done; reference this plan file.
   - Relations: 6.3.
-  - Check: docs updated. **Done 2026-06-22** — Phase 6 tasks + plan status + `BACKLOG.md` compositor note updated; `STATE.md` notes the bash-test fix + clippy/test gates.
+  - Check: docs updated. **Done 2026-06-22** — Phase 6 tasks + plan status + the old backlog's compositor note updated; the old state file notes the bash-test fix + clippy/test gates.
 
 - [x] **6.5 Commit + push + PR** — stage the change in clean, behavior-preserving slices; commit with a clear message; push `feature/compositor-blur-refactor`; open PR to `main`. **Do not commit until the user has tested and approved** (AGENTS.md gate).
   - Relations: 6.3 + user approval.

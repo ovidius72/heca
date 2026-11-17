@@ -266,13 +266,15 @@ and clears the displayed agent state. Running shells and programs are preserved.
 
 ### Configurable sounds
 
-Playback is off by default. When enabled, the bundled defaults are `completed` for Finished,
+Playback is on by default (`[settings] notification_sound = true`; `false` mutes it). The bundled defaults are `completed` for Finished,
 `error` for Error, `locked` for Waiting for permission and `attention` for Waiting for input.
 `success` is also available for custom selection. Working/compacting/subagent progress stays silent.
 
 ```toml
+[settings]
+notification_sound = true   # the one switch; false mutes every sound
+
 [settings.agents.sounds]
-enabled = true
 volume = 0.7
 
 [settings.agents.statuses.finished]
@@ -288,7 +290,7 @@ enabled = false
 Each status can select a registered asset (`asset:name`) or a local filename, set its own volume
 from 0 to 1, or disable playback. An omitted per-status volume inherits the global one. Existing
 `sound = "/path/to/file.wav"` settings still work. The normal config/project merge applies; changing
-`source` replaces the choice while preserving other controls. The global switch overrides all
+`source` replaces the choice while preserving other controls. `[settings] notification_sound` overrides all
 per-status choices. Repeated reports, title/model updates and agent clearing do not replay a sound.
 
 The pack is embedded in the library; no runtime path points at a source checkout or Downloads.
