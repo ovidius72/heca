@@ -7,6 +7,10 @@
     "updatedAt": "2026-11-04T09:37:22.968Z",
     "sessionInfo": [
       {
+        "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
+        "createdAt": "2026-11-17T12:49:30.127Z"
+      },
+      {
         "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
         "createdAt": "2026-11-16T15:32:36.433Z"
       },
@@ -65,10 +69,6 @@
       {
         "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
         "createdAt": "2026-10-26T14:09:51.052Z"
-      },
-      {
-        "sessionId": "mcp-process:6e8788ec-e96d-4bdc-a7c0-5707c50017cf",
-        "createdAt": "2026-10-26T07:48:32.075Z"
       }
     ]
   },
@@ -140,7 +140,7 @@
     {
       "id": "e5a918b6-32bf-491e-97fc-4cab6c1bb9b0",
       "title": "Terminal engine is wezterm-term over portable-pty, not alacritty_terminal or vte",
-      "decision": "heca's terminal stack is wezterm-term plus wezterm-surface (both pinned to wezterm git rev 891bed31b75f7a71b78e8f42ad07ae89bf99a7de) for emulation, and portable-pty 0.9.0 for the PTY. Verified in heca-core/Cargo.toml lines 14, 19, 20. It is NOT alacritty_terminal and NOT vte. Old source: .planning/PROJECT.md:63 (\"alacritty_terminal over Kitty/Ghostty\"), .planning/REQUIREMENTS.md PANE-01 and .planning/research/STACK.md:5-27 all say alacritty_terminal; they are out of date.",
+      "decision": "heca's terminal stack is wezterm-term plus wezterm-surface (both pinned to wezterm git rev 891bed31b75f7a71b78e8f42ad07ae89bf99a7de) for emulation, and portable-pty 0.9.0 for the PTY. Verified in heca-core/Cargo.toml lines 14, 19, 20. It is NOT alacritty_terminal and NOT vte. The old planning files (the project file at line 63 \"alacritty_terminal over Kitty/Ghostty\", the requirements file entry PANE-01 and the stack research file at lines 5-27, all now deleted) said alacritty_terminal; they were out of date.",
       "rationale": "The code moved from alacritty_terminal to wezterm-term, and the reason for the change was never written down anywhere in the repo, so none is recorded here. The pinned rev matters: at 891bed31 wezterm-term has AlertHandler/NotificationHandler (bells) and get_title() (OSC 0/2) but no general OSC-dispatch callback, which is why heca scans OSC 133/7 itself before advance_bytes (see the pane runtime state decision on P054(F006)).",
       "implementationNotes": "Two docs still state the wrong engine: AGENTS.md:1162 (stack table says alacritty_terminal) and README.md:78 (says vte). Fix both in the T561 doc rewrite. Ask Antonio if he wants the original reason for the switch added.",
       "acceptedAt": "2026-11-16T15:09:38.271Z"
@@ -148,8 +148,8 @@
     {
       "id": "9a27e49a-951f-4122-923d-2cd103f208dc",
       "title": "Architecture principle: all state that fires an action or updates content flows through AppState, so plugins can see it",
-      "decision": "Source: BACKLOG.md:20-35 (\"Architecture principles (apply to every task)\"). Verbatim rule: all state that fires an action or updates content MUST flow through AppState / the reactive chrome store, never be local-only. Any behavior that changes app state or triggers an action has to be dispatched through AppState (mirrored into the reactive store, emitted on the ChromeEvent bus, exposed via the host API) so that plugins and other components can listen and react (for example render their own custom widget). Make it signal-aware: store the value in a Signal, guard the setter (emit only on a real change), and add a ChromeEvent plus a StateView selector. Reference implementations: the KeyHint pending-pick description (InputMode::pending_pick() -> WorkspacesContainerState.pending_pick signal -> ChromeEvent::PendingPickChanged -> host.pending_pick()) and the pane custom name (PaneCustomNameChanged / host.pane_custom_name). Anti-pattern: computing a value only for an internal render path (the way the pick prompt used to live only in status_mode_parts). \"If a plugin can't observe it, it's not done.\"",
-      "rationale": "AGENTS.md Rule Zero is the nearest text and does not state this rule. It is stated nowhere else once BACKLOG.md is deleted. Open work that applies it: P035(F003)/T506 and P085(F003)/T357.",
+      "decision": "Source: the \"Architecture principles (apply to every task)\" section of the old backlog file (now deleted). Verbatim rule: all state that fires an action or updates content MUST flow through AppState / the reactive chrome store, never be local-only. Any behavior that changes app state or triggers an action has to be dispatched through AppState (mirrored into the reactive store, emitted on the ChromeEvent bus, exposed via the host API) so that plugins and other components can listen and react (for example render their own custom widget). Make it signal-aware: store the value in a Signal, guard the setter (emit only on a real change), and add a ChromeEvent plus a StateView selector. Reference implementations: the KeyHint pending-pick description (InputMode::pending_pick() -> WorkspacesContainerState.pending_pick signal -> ChromeEvent::PendingPickChanged -> host.pending_pick()) and the pane custom name (PaneCustomNameChanged / host.pane_custom_name). Anti-pattern: computing a value only for an internal render path (the way the pick prompt used to live only in status_mode_parts). \"If a plugin can't observe it, it's not done.\"",
+      "rationale": "AGENTS.md Rule Zero is the nearest text and does not state this rule. It is stated nowhere else now that the old backlog file is deleted. Open work that applies it: P035(F003)/T506 and P085(F003)/T357.",
       "implementationNotes": "Add one paragraph under Rule Zero in AGENTS.md during the T561 doc rewrite. Related: the pane runtime state decision on P054(F006) (one mutation point, signals plus event bus). Related idea I001 (status_note is the anti-pattern: a host-private string on AppState).",
       "acceptedAt": "2026-11-16T15:09:44.847Z"
     }

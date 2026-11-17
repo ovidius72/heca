@@ -47,8 +47,8 @@
       "shortName": "column-pick-keycaps",
       "title": "Column-level pick keycaps",
       "status": "planned",
-      "description": "Supporto per pick keycaps a livello colonna.\n\n## Detail moved from BACKLOG.md (line 2546)\n- [ ] **app-task-30** — F4.4 column-level pick keycaps: pane pick keycaps already work; columns have no\n  pick candidates today, so this needs NEW candidate computation in `heca/src/app/input.rs`, then project\n  the candidates onto a per-column hint signal each frame. `KeyHint` stays universal — do NOT make it\n  column-specific (memory `grid-ui-keyhint-universal`).\n  NOTE (2026-06-23): the per-column `KeyHint` + candidate infra now exists (`ChromeSignals.col_hint`,\n  `WorkspacesContainerState.col_pick_candidates`, built in `app-12`). This task is now just adding the\n  *column-as-pick-target* candidate computation for move/swap/take that act ON a column.\n  Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`",
-      "descriptionUpdatedAt": "2026-11-16T15:11:11.811Z",
+      "description": "Supporto per pick keycaps a livello colonna.\n\n## Detail carried over from the old backlog file, now deleted\n- [ ] **app-task-30** — F4.4 column-level pick keycaps: pane pick keycaps already work; columns have no\n  pick candidates today, so this needs NEW candidate computation in `heca/src/app/input.rs`, then project\n  the candidates onto a per-column hint signal each frame. `KeyHint` stays universal — do NOT make it\n  column-specific (memory `grid-ui-keyhint-universal`).\n  NOTE (2026-06-23): the per-column `KeyHint` + candidate infra now exists (`ChromeSignals.col_hint`,\n  `WorkspacesContainerState.col_pick_candidates`, built in `app-12`). This task is now just adding the\n  *column-as-pick-target* candidate computation for move/swap/take that act ON a column.\n  Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`",
+      "descriptionUpdatedAt": "2026-11-17T13:59:58.709Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -61,7 +61,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-11-16T15:11:11.809Z",
+      "updatedAt": "2026-11-17T13:59:58.707Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -628,7 +628,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-16T15:11:11.809Z",
+  "updatedAt": "2026-11-17T13:59:58.707Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,

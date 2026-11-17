@@ -37,11 +37,23 @@
       "toStatus": "planned",
       "title": "in-progress → planned",
       "description": ""
+    },
+    {
+      "id": "c0aeee2b-241b-48e3-b377-4dbba81fc5d8",
+      "date": "2026-11-17T12:49:42.560Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
   "createdAt": "2026-07-09T13:08:19.438Z",
   "updatedAt": "2026-07-09T13:15:09.863Z",
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
+      "createdAt": "2026-11-17T12:49:37.967Z"
+    },
     {
       "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
       "createdAt": "2026-11-16T14:44:39.763Z"
