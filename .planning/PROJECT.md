@@ -1,3 +1,8 @@
+> **Historical archive — not maintained.** This file belongs to the old planning tool and is
+> kept for reference only. It is out of date and is not a source of truth: current work and
+> decisions live in the project planner (`.planner/`, loaded with `/planner load`), and how
+> heca works is documented in `docs/`.
+
 # heca
 
 ## What This Is

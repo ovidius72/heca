@@ -63,7 +63,7 @@ Instead:
   > rail is dropped** for now, and a shown region is resizable (width passed to the mounted Provider). The generic
   > "Provider renders an icon rail when collapsed" model — where a Provider describes its content once
   > and the host renders it per mode (write once) — is a **future** item. Full design + rationale:
-  > **the planner (F003/P020) — see the planner (F003/P020)**.
+  > **the planner, phase P083(F003)**.
 - it hosts one or more mounted containers
 - the workspace tree becomes a **WorkspacesContainer** mounted inside that shell
 - other containers may also be present in the same sidebar, in a specific order, top-to-bottom
@@ -279,7 +279,7 @@ that trade is the author's to make.
 
 > The old rule read "styling is not a free prop: colors/fonts/alphas come from the
 > `Theme`/config, never from raw values passed by the plugin." **It is dead — do not
-> restore it.** Full model: [`docs/declarative-ui.md`](docs/declarative-ui.md) R2.
+> restore it.** Full model: [`plugins.md`](plugins.md) R2.
 
 **D) Interaction is intent-based, not callbacks across the boundary.** A
 `Button::on_press` does not run plugin code during paint. It carries an **intent**
@@ -1342,7 +1342,7 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 > (the "two rail flavors", `RailCell`-per-item, `KeyHint`-over-cells) is **deferred**: it is the
 > *future generic* design to build only when a Provider needs an always-visible status rail. `RailCell`
 > and `KeyHint` remain shipped grid-ui widgets, but nothing in the app mounts a rail. Authoritative
-> decision + rationale + the full future spec: **the planner (F003/P020) — see the planner (F003/P020)**.
+> decision + rationale + the full future spec: **the planner, phase P083(F003)**.
 
 - **Oriented** shell: vertical (sidebars) or horizontal (top/bottom bars). One widget covers all four regions.
 - Toggle/collapse, **mode-aware**: informs children of the display mode via a signal. **In the app today
@@ -1488,7 +1488,7 @@ a hand-written `F00x/P00y` in prose is almost certainly invented. Ask the planne
 **Resolved 2026-06-09:** sequencing (vocabulary now) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (build on shipped `src/drag/`, extend additively) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
 
 **Remaining:**
-- **DnD ↔ action bridge signature** — define the `DockFrame`/region hook → `dispatch(action)` shape on top of `DragContext`; align with the `ActionSink` opaque-id design (grid-ui-plan §12) so DnD + shortcuts share one path.
+- **DnD ↔ action bridge signature** — define the `DockFrame`/region hook → `dispatch(action)` shape on top of `DragContext`; align with the `ActionSink` opaque-id design so DnD + shortcuts share one path.
 - **Closed-enum ↔ plugins** — when non-WM Docks / plugins arrive, add `DragItemKind::Custom(..)` / `DragSurfaceId::Plugin(..)` (additive; chrome-plan Phase 9). Don't genericize now.
 - **Icon font choice** — which family + licensing; confirm renderer 2nd-font registration.
 - **`Grid` surface detail** — how much of taffy grid to expose (min-viable: tracks + areas + span).
@@ -1518,7 +1518,7 @@ a hand-written `F00x/P00y` in prose is almost certainly invented. Ask the planne
 **Resolved 2026-06-09:** sequencing (vocabulary now) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (build on shipped `src/drag/`, extend additively) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
 
 **Remaining:**
-- **DnD ↔ action bridge signature** — define the `DockFrame`/region hook → `dispatch(action)` shape on top of `DragContext`; align with the `ActionSink` opaque-id design (grid-ui-plan §12) so DnD + shortcuts share one path.
+- **DnD ↔ action bridge signature** — define the `DockFrame`/region hook → `dispatch(action)` shape on top of `DragContext`; align with the `ActionSink` opaque-id design so DnD + shortcuts share one path.
 - **Closed-enum ↔ plugins** — when non-WM Docks / plugins arrive, add `DragItemKind::Custom(..)` / `DragSurfaceId::Plugin(..)` (additive; chrome-plan Phase 9). Don't genericize now.
 - **Icon font choice** — which family + licensing; confirm renderer 2nd-font registration.
 - **`Grid` surface detail** — how much of taffy grid to expose (min-viable: tracks + areas + span).
@@ -1574,7 +1574,7 @@ are the one exception — see the note at the top of Part II.)
 | "Behaviour is an Intent — never a closure" | Still true on the wire. A plugin in TypeScript may *write* a function; its kit stores it and sends a reference. Part I R4. |
 | "Adding a `WidgetId` is host-side work — the widget, a mapper arm, the docs" | Still true that plugins cannot invent widgets. It does **not** require a fixed enum — a host-filled registry satisfies the same rule in one step. Part I R5. |
 | "Until a first-class `Table` exists, a table is composed" | Still true. **F003/P011/T007** deferred 2026-07-26: no consumer. |
-| Collapsed icon rail, `RailCell` per item, rail flavours (§15) | **Dropped 2026-07-11.** A region is Expanded or Hidden. `RailCell` and `KeyHint` still ship; nothing mounts a rail. See the planner (F003/P020). |
+| Collapsed icon rail, `RailCell` per item, rail flavours (§15) | **Dropped 2026-07-11.** A region is Expanded or Hidden. `RailCell` and `KeyHint` still ship; nothing mounts a rail. See the planner, phase P083(F003). |
 | "G1–G8" task ids (§19 references them) | **Removed 2026-07-26.** All eight were built. Only G7 ever had a planner id (**P019(F004)**, gridui-01). |
 | Open questions: icon font, `Grid` surface detail (§19) | Both shipped. `Icon` and `Grid` are live widgets. |
 | `Column::new()` / `Row::new()` as the layout boxes | **Renamed 2026-07-27 (F003/P017/T006).** The vocabulary's boxes are `VStack` / `HStack`; `Row` is now the **clickable, selectable** widget it always was in `heca-grid-ui`. Examples in both parts use the new names. |

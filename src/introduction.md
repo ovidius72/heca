@@ -49,7 +49,7 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 | **Windowing** | [winit](https://github.com/rust-windowing/winit) | Cross-platform window creation, input events |
 | **GPU API** | [wgpu](https://wgpu.rs/) | Vulkan/Metal/DX12/WebGPU abstraction |
 | **Text** | [cosmic-text](https://github.com/pop-os/cosmic-text) | Font shaping, glyph atlas, ligatures |
-| **Terminal** | [vte](https://github.com/alacritty/vte) + PTY | ANSI terminal emulation |
+| **Terminal** | wezterm-term + portable-pty | Terminal emulation and PTY |
 | **Config** | [serde](https://serde.rs/) + TOML | User configuration |
 | **Language** | Rust | Memory-safe, zero-cost abstractions |
 
@@ -501,7 +501,7 @@ This creates a new pane with the command as its title. When PTY support is fully
 │  │   └── Animation (easing, springs)    │
 │  └── backend/                           │
 │      ├── PaneBackend trait              │
-│      ├── TerminalBackend (PTY + vte)    │
+│      ├── TerminalBackend (PTY+wezterm)  │
 │      └── FakeBackend (layout testing)   │
 ├─────────────────────────────────────────┤
 │  heca-config                            │
@@ -522,14 +522,7 @@ This creates a new pane with the command as its title. When PTY support is fully
 
 ## Roadmap
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| **1 — The Shell** | ✅ Complete | GPU window, text rendering, theme system |
-| **2 — The Workspace** | ✅ Complete | NIRI layout, animations, input, sidebar |
-| **3 — The Content** | 🔄 In Progress | Terminal backend, Neovim msgpack-RPC |
-| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC, plugins |
-
-See `.planning/ROADMAP.md` for detailed requirements.
+What is planned and in progress lives in the project planner (`.planner/`, loaded with `/planner load`).
 
 ---
 

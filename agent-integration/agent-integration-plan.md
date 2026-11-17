@@ -131,7 +131,7 @@ configurable transition sounds — all without the user editing agent config.
 - Display widgets (agent status row alongside program/git).
 - Sounds (rodio, config, per-event + per-agent, agent-indicator-aligned).
 - WASM plugin contract surface (design + trait adapter stub) — real wiring after plugin plan Phase 9.
-- Docs (`keybindings.toml`, `AGENTS.md`, `README.md`, `.planning/research/ARCHITECTURE.md`).
+- Docs (`keybindings.toml`, `AGENTS.md`, `docs/configuration.md`, `docs/architecture.md`).
 
 ### Out of scope (explicitly deferred)
 - Codex `notify`-adapter chain-merge into `~/.codex/config.toml` for richer Codex states (v1 = native
@@ -682,10 +682,10 @@ plugin states. Proceed to Phase 12.
   `config.toml` and it parses.
 - [ ] **12.2 `AGENTS.md`** — add an "Agent Integration" section (the trait + registry + transport +
   event + sound model; the "new agent = a driver, built-in or WASM plugin" rule).
-- [ ] **12.3 `README.md` + `.planning/research/ARCHITECTURE.md`** — user-facing blurb + the
+- [ ] **12.3 `docs/configuration.md` + `docs/architecture.md`** — user-facing blurb + the
   data-flow diagram from §5.
 - [ ] **12.4 Board finalize** — tick all phases in `agent-integration-tasks.md`; mark the initiative
-  Accepted; update `PLAN.md` status snapshot + `.planning/STATE.md` Last Action.
+  Accepted; update `PLAN.md` status snapshot + the planner.
 
 **Phase 12 exit** — [ ] docs reviewed + clippy green. **Final rust-skill review** of the whole
 initiative against `/Users/antonio/.agents/skills/rust/SKILL.md` (§13 below).

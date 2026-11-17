@@ -3,7 +3,7 @@
 > Coordination board for the **agent-integration** initiative. **Full context + research + task
 > checklists live in `agent-integration/agent-integration-plan.md`** — read the referenced phase
 > section before starting; this board is only assignment + status + responses. (Separate from
-> `.planning/archive/pane-runtime-tasks.md` and `shared-tasks.md` — do not mix them.)
+> the pane-runtime task board and `shared-tasks.md` — do not mix them.)
 >
 > **Starts only after** `pluggable-chrome-plugin-plan.md` is complete (ChromeHost + dynamic actions +
 > built-in providers + WASM runtime exist). Agent drivers are built-in providers now and WASM
@@ -139,8 +139,8 @@ parseSidechannel, display})` in the WASM host SDK; `WasmAgentDriver` adapter wra
 ## Phase 12 — Docs + plan/board finalize
 **Status:** Open · **Assigned:** — · **Depends-on:** Phases 9, 10, 11 · **Plan:** §7 Phase 12
 **One-liner:** `keybindings.toml` (settings + sounds examples); `AGENTS.md` (Agent Integration
-section); `README.md` + `.planning/research/ARCHITECTURE.md` (data-flow); tick the board;
-update `PLAN.md` status + `.planning/STATE.md`. Final rust-skill review of the whole initiative.
+section); `docs/configuration.md` + `docs/architecture.md` (data-flow); tick the board;
+update `PLAN.md` status + the planner. Final rust-skill review of the whole initiative.
 **Agent Completion:** —
 **Reviewer Decision:** — · **Reviewer Notes:** —
 

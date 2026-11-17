@@ -1,8 +1,8 @@
 //! OS-native foreground-process detection for a PTY.
 //!
-//! Event-first per `pane-runtime-state-plan.md` §0.2: this shim is called from
-//! [`update`](crate::backend::PaneBackend::update) on the terminal-output / reader-EOF wake,
-//! debounced to [`FOREGROUND_DEBOUNCE`]. It does **not** poll on a periodic
+//! Event-first, per the planner decision "pane runtime state" on P054 (F006), id `a19f9ed0`: this
+//! shim is called from [`update`](crate::backend::PaneBackend::update) on the terminal-output /
+//! reader-EOF wake, debounced to [`FOREGROUND_DEBOUNCE`]. It does **not** poll on a periodic
 //! timer — the deferred periodic-poll fallback is intentionally absent.
 //!
 //! OS specifics are `#[cfg(unix)]`; non-Unix builds get a no-op stub so the

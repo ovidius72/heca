@@ -219,7 +219,7 @@ pub(in crate::chrome) fn build_region_content(
 /// sidebar column. This is **one component, two instances**: the left and right
 /// sidebars are the same shell differing only by width/position and the `content`
 /// mounted inside. Per the chrome plan (`pluggable-chrome-plugin-plan.md` §2.1 / §2.8,
-/// `docs/sidebar-provider-modes.md`) the sidebar is a *shell* that hosts a Provider's
+/// `docs/chrome-and-ui.md` § 2.5) the sidebar is a *shell* that hosts a Provider's
 /// content — and that is now literally true: `content` is whatever
 /// [`ChromeHost::contributions`] seats in the region (see [`build_region_content`]), so
 /// the shell knows nothing about workspaces. A region with no provider mounted passes
@@ -565,7 +565,7 @@ pub(crate) fn build_chrome_root(
     );
 
     // Expanded ⇄ Hidden: width is 0 when the region is Hidden (no icon rail — see
-    // `docs/sidebar-provider-modes.md`), so a positive width means Expanded.
+    // `docs/chrome-and-ui.md` § 2.5), so a positive width means Expanded.
     // Left and right are two instances of the SAME `build_sidebar_shell` (one
     // component), differing only by width and mounted content: the left hosts the
     // `WorkspacesContainer`, the right is an empty placeholder until it gains a Provider.

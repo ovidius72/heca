@@ -31,7 +31,7 @@ pub(crate) fn combo_to_grid(
 /// interactive widget/overlay consults. User bindings win when set (arrays replace wholesale),
 /// else the bundled default. These names are **not** `WmAction`s, so `build_keymap` skips them —
 /// they live only here and never hijack normal-mode input. `edit_*` entries are bound **first**
-/// so a focused `Input` wins the `Ctrl+h` overload (field-first). See `docs/widgets.md` + README.
+/// so a focused `Input` wins the `Ctrl+h` overload (field-first). See `docs/widgets.md` + `docs/keybindings.md`.
 pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui::Keymap {
     use heca_grid_ui::WidgetIntent;
     let defaults = heca_config::theme::KeysConfig::default();
