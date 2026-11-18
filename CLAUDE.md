@@ -2,6 +2,28 @@
 
 *Agent profile for this project.*
 
+## ⭐ THE SYNTAX — every widget and component is written like this
+
+Declarative and nested, in one expression: the shape of Flutter and SwiftUI, with DOM-shaped events.
+
+```rust
+Component::new()
+    .prop_a(..)                                    // its own typed properties, as builders
+    .prop_b(..)
+    .child(
+        Grid::new()
+            .template_row("auto 1fr")              // the arrangement is a track template
+            .child([header, body]),                // children in order, composed to any depth
+    )
+    .on_click(|ev| ev.dispatch(Intent::new("an_action")))   // behaviour lives on the widget
+```
+
+**Never:** find a child by its position (`children[0]`), write a style, a bound or a position by
+hand, rebuild a widget to change one of its properties, or put a number in the code. If what you
+need cannot be written in this shape, the library is missing a builder — propose it (⭐⭐ RULE
+ZERO); never work around it. Real examples: [`docs/layout.md` § The one rule](docs/layout.md),
+[`docs/widgets.md` → Grid](docs/widgets.md#grid).
+
 ## Read these before writing any code
 
 1. **[`AGENTS.md`](AGENTS.md)** — in full. It is the operating guide for every agent on this
