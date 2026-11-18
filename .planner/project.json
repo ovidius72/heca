@@ -152,6 +152,22 @@
       "rationale": "AGENTS.md Rule Zero is the nearest text and does not state this rule. It is stated nowhere else now that the old backlog file is only a historical archive. Open work that applies it: P035(F003)/T506 and P085(F003)/T357.",
       "implementationNotes": "Add one paragraph under Rule Zero in AGENTS.md during the T561 doc rewrite. Related: the pane runtime state decision on P054(F006) (one mutation point, signals plus event bus). Related idea I001 (status_note is the anti-pattern: a host-private string on AppState).",
       "acceptedAt": "2026-11-16T15:09:44.847Z"
+    },
+    {
+      "id": "05a2ed0c-c57e-4784-b789-354f114ca720",
+      "title": "The syntax: every widget and component is declarative and nested — Component::new().props(..).child(Grid/Flex::new().child([a, b]).template(..))",
+      "decision": "Every widget and component in heca (library, app, plugins) is written in one declarative, nested expression, Flutter/SwiftUI-shaped with DOM-shaped events: `Component::new().prop_a(..).child(Grid::new().template_row(\"auto 1fr\").child([header, body])).on_click(|ev| ev.dispatch(Intent::new(\"an_action\")))`. Never: find a child by position (children[0]), write a style/bound/position by hand, rebuild a widget to change one property, or put a number in the code. If something cannot be written in this shape, the library is missing a builder — propose it (RULE ZERO), never work around it.",
+      "rationale": "Antonio, 2026-11-18, after a review showed much of the code (the command palette, the terminal component, ~20 library widgets) built imperatively: \"la sintassi deve essere: Component::new().props(...).child(Flex.new().child([Comp1, comp2]).template....) … Metti in rilievo quella sintassi dove serve altrimenti nessuno la segue.\" The examples already existed (docs/layout.md:35, docs/widgets.md:2342) but were not where every reader starts.",
+      "implementationNotes": "The block is written at the top of CLAUDE.md (loaded in every session), at the start of AGENTS.md § 0 and at the top of docs/widgets.md (branch docs/declarative-syntax, worktree heca-feat-syntax). For Button/IconButton `.on_click(|ev| ev.dispatch(..))` works fully only after P087(F011)/T565 (one click path). A declarative child list bound to data (ForEach-like) is not in the library yet; Keyed / on_props / reconcile_keyed are the low-level mechanisms underneath.",
+      "acceptedAt": "2026-11-18T18:15:06.456Z"
+    },
+    {
+      "id": "15ec67fc-98f3-4af6-9c0a-ed6b2ab8bfac",
+      "title": "heca's public surface used by heca-pro stays compatible; heca-pro follows the same declarative syntax",
+      "decision": "The surface F012 \"Ready for heca-pro\" delivered (heca as a library and its extension entry point, server/client split and wire protocol, sessions, the RPC line format, extension services, the widgets) stays API-compatible: no silent breaking change — add the new form beside the old, mark the old deprecated, and agree the removal with Antonio and heca-pro. heca-pro itself follows the same declarative syntax (decision 05a2ed0c) and states the same rule in its own AGENTS.md.",
+      "rationale": "Antonio, 2026-11-18: \"La feature ready for heca pro deve mantenere la compatibilità delle api. Heca pro stesso dovrà aderire alla sintassi e riportare nel suo agent.md la stessa regola sulla sintassi del codice.\"",
+      "implementationNotes": "Written into heca's AGENTS.md § 0 (branch docs/declarative-syntax, worktree heca-feat-syntax, next to THE SYNTAX block). heca-pro's own AGENTS.md (/Users/antonio/projects/heca-pro/AGENTS.md) still has to receive the syntax rule.",
+      "acceptedAt": "2026-11-18T21:43:31.125Z"
     }
   ],
   "nextFeatureNumber": 12,

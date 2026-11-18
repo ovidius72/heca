@@ -1,0 +1,23 @@
+{
+  "id": "c341a6ae-446f-44d5-80fd-d115272a2b68",
+  "number": 13,
+  "shortId": "N9FCN",
+  "priority": 3,
+  "name": "Declarative codebase: every widget and component written in the one syntax",
+  "description": "Approved by Antonio 2026-11-18 after a review showed much of the UI code built imperatively. Target syntax (project decision 05a2ed0c, also at the top of CLAUDE.md, AGENTS.md § 0, docs/widgets.md): `Component::new().prop(..).child(Grid::new().template_row(\"auto 1fr\").child([a, b])).on_click(|ev| ev.dispatch(Intent::new(..)))`. Never: children found by position (children[0]), styles/bounds/positions written by hand, a widget rebuilt to change one property, numbers in code.\n\nCURRENT STATE (grep scan on main 2026-11-18, indicative only — the full review is step 1):\n- Library widgets with children found by position: dialog 13, input 9, tree_layout 6, overlay 5, tile 4, command_palette 3, flex 3, resizable 3, message_list 2, tag 2, visibility 2.\n- Library widgets positioning by hand (bounds writes / shift_subtree): command_palette 4, select 4, overlay 2, context_menu 2, scroll_region 2 (scroll_region/motion.rs:66), scroll_bar 2, toast 2, marker_group 2, badge_button 1, flex 1.\n- Many numeric literals: key_hint 18, overlay 16, button 13, item 11, command_palette 11; Pane padding 8.0 (heca-grid-ui/src/widgets/pane/mod.rs:60).\n- App: terminal component lays itself out by writing style fields (heca/src/chrome/panes/terminal/component/mod.rs:103-108; search/mod.rs:218-220, focus by index :267); chrome/window; sidebar spots (providers/workspaces/column_group.rs:137 writes bounds; row_lines.rs:228, pane_row.rs:552 children by index); heca/src/components 6 index reads; the command palette (P087(F011)/T469, in progress, uncommitted rewrite in heca-feat-469 still imperative).\n- Library gaps: no declarative child list bound to data (ForEach-like) — Keyed / on_props / reconcile_keyed (docs/widgets.md:5743, :5767) are low-level and imperative, Keyed host-only; many props lack a signal-bound form (Input placeholder/value); described plugins have only press/change/toggle events (docs/widgets.md:7259); Button/IconButton keep a private click path (P087(F011)/T565 owns the fix: one click path, all events to plugins, event origin, 3 actions, the hand-sent sites).\n\nPLAN (agreed):\n1. Read-only review of every library widget (~60) and every app component against the syntax: per item, defects with file:line and a verdict (ok / fix / rewrite). Then one task per item to fix, created with Antonio's consent.\n2. Library first: declarative child list (proposal first), signal-bound props where needed, T565. Most-used widgets first (dialog, input, overlay, select, scroll_region, flex, tree_layout, tile, button, command_palette), then app (terminal, window, sidebar, palette).\n3. Each item: done by the orchestrator without sub-agents, reviewed line by line against the syntax before Antonio's eye-check, one PR each.\nESTIMATE (2026-11-18, before the review): ~40–80 hours of work + 25–35 PRs to eye-check (~6–12 full days), revised after step 1.",
+  "descriptionUpdatedAt": "2026-11-18T18:34:46.538Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-11-18T18:34:46.404Z",
+  "updatedAt": "2026-11-18T18:34:46.404Z",
+  "sessionInfo": []
+}
