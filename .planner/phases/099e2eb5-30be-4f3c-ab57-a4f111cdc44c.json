@@ -37,8 +37,8 @@
       "shortName": "token-syntax-registry",
       "title": "Define token syntax and registry",
       "status": "planned",
-      "description": "Definire `${var}` e registry dei token pane/column/workspace.\n\n## Detail carried over from the old backlog file, now deleted\n- [ ] **plugin-task-17** — Define the token syntax (`${var}` form) and a token registry.\n  Initial tokens: `${paneIndex}`, `${prevPaneIndex}`, `${paneTitle}`, `${prevPaneTitle}`, `${panesCount}`, `${paneProgram}`, `${paneCwd}`, `${columnIndex}`, `${columnTitle}`, `${columnsCount}`, `${workspaceTitle}`, `${workspaceIndex}`, `${workspacesCount}`, `${leftSidebarStatus}`, `${rightSidebarStatus}`, `${pid}`.\n  Files: new `heca/src/tokens.rs` or `heca-config/src/tokens.rs`",
-      "descriptionUpdatedAt": "2026-11-17T14:00:00.311Z",
+      "description": "Definire `${var}` e registry dei token pane/column/workspace.\n\n## Detail carried over from the old backlog file, now a historical archive\n- [ ] **plugin-task-17** — Define the token syntax (`${var}` form) and a token registry.\n  Initial tokens: `${paneIndex}`, `${prevPaneIndex}`, `${paneTitle}`, `${prevPaneTitle}`, `${panesCount}`, `${paneProgram}`, `${paneCwd}`, `${columnIndex}`, `${columnTitle}`, `${columnsCount}`, `${workspaceTitle}`, `${workspaceIndex}`, `${workspacesCount}`, `${leftSidebarStatus}`, `${rightSidebarStatus}`, `${pid}`.\n  Files: new `heca/src/tokens.rs` or `heca-config/src/tokens.rs`",
+      "descriptionUpdatedAt": "2026-11-17T15:10:57.049Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -51,7 +51,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-11-17T14:00:00.309Z",
+      "updatedAt": "2026-11-17T15:10:57.047Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -111,7 +111,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-17T14:00:00.309Z",
+  "updatedAt": "2026-11-17T15:10:57.047Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

@@ -37,8 +37,8 @@
       "shortName": "focus-pane-number",
       "title": "FocusPaneByNumber action and chord binding",
       "status": "planned",
-      "description": "Azione e chord binding per focus via numero pane.\n\n## Detail carried over from the old backlog file, now deleted\n- [ ] **app-task-15** — Add `WmAction::FocusPaneByNumber { ws: usize, pane: usize }` + handler + chord binding (`prefix+<ws-digit>+<pane-digit>`).\n  Follow \"Adding New Actions\" checklist.\n  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca-config/src/theme.rs`",
-      "descriptionUpdatedAt": "2026-11-17T14:00:06.977Z",
+      "description": "Azione e chord binding per focus via numero pane.\n\n## Detail carried over from the old backlog file, now a historical archive\n- [ ] **app-task-15** — Add `WmAction::FocusPaneByNumber { ws: usize, pane: usize }` + handler + chord binding (`prefix+<ws-digit>+<pane-digit>`).\n  Follow \"Adding New Actions\" checklist.\n  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca-config/src/theme.rs`",
+      "descriptionUpdatedAt": "2026-11-17T15:10:55.281Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -51,7 +51,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-11-17T14:00:06.975Z",
+      "updatedAt": "2026-11-17T15:10:55.279Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -111,7 +111,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-17T14:00:06.975Z",
+  "updatedAt": "2026-11-17T15:10:55.279Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

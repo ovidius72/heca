@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "Write the widget-vs-component boundary into AGENTS and docs, and make \"an app file composing widgets inline\" something a check can see rather than something a reviewer must notice.",
   "description": "An extraction that is not defended gets undone by the next feature written in a hurry. This phase is what keeps `components/` from becoming another folder nobody remembers.\n\n## What to write down\n\n- **The boundary**, in AGENTS' ⛔ block beside the existing pre-flight: a **widget** is primitive, generic and self-contained and lives in `heca-grid-ui` — *if it can be built there, it belongs there* (a UI library ships `CommandPalette`, `ContextMenu`, `Select`, `Dialog`). A **component** composes widgets **and binds app concepts** (`Intent`, an action name, a drag id, a hint id, a chrome signal, a nav key) and lives in `heca/src/components/`. A composition binding none of those is a widget in the wrong crate.\n- **In `docs/chrome-and-ui.md`**: the component catalog — what exists, what each takes, what it must never take (`&AppState`).\n- The existing \"Chrome buttons → action, tooltip, KeyHint\" recipe in AGENTS becomes \"use the component\", with the recipe kept only as the explanation of what it does internally.\n\n## What to make mechanical\n\n`heca-grid-ui/tests/prop_drift.rs` is the precedent: a test that fails when a widget grows a builder without a generated property surface, with an **explicit exception list** naming each escape and why. The same shape here — an allowlist of app files permitted to compose widgets inline (`components/` itself, plus whatever genuinely cannot move yet), each with a reason, so a new inline composition is a deliberate edit to that list rather than the silent default.\n\nScope it to what a test can actually see (e.g. `Flex::`/`Item::new`/`Row::new` occurrences per file outside the allowlist). A blunt check that is honest beats a clever one that rots.\n\n## Behaviors to preserve\n\nThe guard must not fight the plugin path: `realize()` builds widget trees from `ViewNode` for anyone, and a provider describing its own body is not an inline composition to be flagged.",
+  "descriptionUpdatedAt": "2026-07-30T13:28:16.724Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -33,10 +34,20 @@
       "priority": 1,
       "shortName": "a-test-sees-inline-composition",
       "title": "A test sees inline composition — the allowlist, in the style of prop_drift",
-      "status": "planned",
+      "status": "canceled",
       "description": "An extraction nobody defends is undone by the next feature written in a hurry. This makes \"an app file composing widgets inline\" something a check reports rather than something a reviewer must notice.\n\n## The precedent to copy\n\n`heca-grid-ui/tests/prop_drift.rs` — `every_builder_bearing_widget_has_a_generated_property_surface` plus `every_exception_still_names_a_real_type`: a scan with an **explicit exception list**, each entry carrying a reason, and a second test proving the exceptions still refer to something real (so the list cannot rot into lies).\n\n## What to build\n\nThe same shape for app-level composition: scan `heca/src/**` for widget-construction sites (`Flex::`, `Item::new`, `Row::new`, `Label::new`, `Icon::new` …) and fail on any file outside the allowlist. The allowlist starts as `heca/src/components/**` plus every file that genuinely cannot move yet — each with a written reason and, where it applies, the planner id of the task that will move it.\n\nKeep the check blunt and honest rather than clever: a per-file count of construction sites is something a reviewer can verify by eye. A precise AST-level rule that nobody trusts is worse than a crude one that fails loudly.\n\n## Edge cases — do not let the guard fight the architecture\n\n- `realize()` (heca-view-realize) builds widget trees from `ViewNode` for anyone: a provider **describing** its own body is not inline composition and must not be flagged.\n- Test modules construct widgets constantly — scan non-test code, or exclude `#[cfg(test)]` blocks.\n- `heca-grid-ui` itself is out of scope: composing widgets is what the library is for.\n\n## Also in this task\n\n- The boundary + how-to already live in the project `globalRules` and AGENTS § 0/0b — **link** them from `docs/chrome-and-ui.md`; do not paste a third copy.\n- Add the component catalog to `docs/chrome-and-ui.md`: what exists, what each takes, and what none of them may take (`&AppState`).",
+      "descriptionUpdatedAt": "2026-07-30T13:39:06.078Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "cae20e83-bcb3-4faa-88fa-6935614db0a1-check-001-planned-canceled",
+          "date": "2026-11-17T19:52:30.439Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Antonio, 2026-11-17: dropped. A test scanning heca/src for inline widget composition is a discipline check, not an app capability; the rule already lives in AGENTS.md § 0/0b and is enforced in review.",
+          "description": "Antonio, 2026-11-17: dropped. A test scanning heca/src for inline widget composition is a discipline check, not an app capability; the rule already lives in AGENTS.md § 0/0b and is enforced in review."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -67,17 +78,32 @@
       ],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-30T13:39:06.078Z",
-      "updatedAt": "2026-07-30T13:39:06.078Z"
+      "updatedAt": "2026-11-17T19:52:30.439Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-30T13:28:16.724Z",
-  "updatedAt": "2026-07-30T13:39:06.078Z",
+  "updatedAt": "2026-11-17T19:52:30.439Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "71d3e517-05f2-4b12-be69-7804eebc7773",
+      "date": "2026-11-17T19:52:30.471Z",
+      "fromStatus": "draft",
+      "toStatus": "rejected",
+      "title": "draft → rejected",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

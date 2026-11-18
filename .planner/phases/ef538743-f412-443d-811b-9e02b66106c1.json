@@ -42,8 +42,8 @@
       "shortName": "nested-scroll-hit",
       "title": "Nested scroll hit-testing for wheel",
       "status": "deferred",
-      "description": "Hit-testing innermost scrollable per wheel routing.\n\n## Detail carried over from the old backlog file, now deleted\n- [ ] **gridui-task-32** — **DEFER (2026-07-02): until a real consumer.** `ScrollRegion` **nested-region wheel hit-testing**. Today the wheel is hover-gated for a single inline region; with multiple nested scroll regions the host must find the innermost scrollable under the cursor and route the wheel to it. Likely a host-side helper walking the tree. Files: `heca-grid-ui/src/widgets/scroll_region.rs` + host wiring.",
-      "descriptionUpdatedAt": "2026-11-17T13:59:54.766Z",
+      "description": "Hit-testing innermost scrollable per wheel routing.\n\n## Detail carried over from the old backlog file, now a historical archive\n- [ ] **gridui-task-32** — **DEFER (2026-07-02): until a real consumer.** `ScrollRegion` **nested-region wheel hit-testing**. Today the wheel is hover-gated for a single inline region; with multiple nested scroll regions the host must find the innermost scrollable under the cursor and route the wheel to it. Likely a host-side helper walking the tree. Files: `heca-grid-ui/src/widgets/scroll_region.rs` + host wiring.",
+      "descriptionUpdatedAt": "2026-11-17T15:11:41.339Z",
       "notes": "",
       "statusLog": [
         {
@@ -65,7 +65,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-11-17T13:59:54.764Z",
+      "updatedAt": "2026-11-17T15:11:41.329Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -257,8 +257,8 @@
       "shortName": "scrollable-pick-mode",
       "title": "Scrollable region pick mode",
       "status": "planned",
-      "description": "Mode per selezionare rapidamente una regione scrollabile.\n\n## Detail carried over from the old backlog file, now deleted\n- [ ] **gridui-task-34** — **KEEP (small/optional).** **Pick-a-scrollable-region mode** (app-level, larger): `prefix+<key>` → a `KeyHint` overlay enumerating every scrollable region → pick one → enter a sticky scroll/nav mode bound to it (`j`/`k`/arrows/PgUp/PgDn/Home/End → `WmAction::ScrollFocused`). Needs the full \"Adding New Actions\" checklist: `WmAction::EnterScrollSelect` + `WmAction::ScrollFocused`, `InputMode::ScrollSelect` + `InputMode::Scroll`, action-registry registration, default binding + descriptor, RPC, `action_policy()` classification, `default-keybindings.toml`/`README.md`. Only needed once multiple scrollable regions compete for `j`/`k`. Run `/grill-me` first (key choice, sticky vs one-shot, pick→focus vs pick→mode). Files: `heca/src/input.rs`, `heca/src/actions.rs`, `heca/src/app/registry.rs`, `heca/src/handlers.rs`, `heca/src/app_state.rs`.",
-      "descriptionUpdatedAt": "2026-11-17T13:59:56.974Z",
+      "description": "Mode per selezionare rapidamente una regione scrollabile.\n\n## Detail carried over from the old backlog file, now a historical archive\n- [ ] **gridui-task-34** — **KEEP (small/optional).** **Pick-a-scrollable-region mode** (app-level, larger): `prefix+<key>` → a `KeyHint` overlay enumerating every scrollable region → pick one → enter a sticky scroll/nav mode bound to it (`j`/`k`/arrows/PgUp/PgDn/Home/End → `WmAction::ScrollFocused`). Needs the full \"Adding New Actions\" checklist: `WmAction::EnterScrollSelect` + `WmAction::ScrollFocused`, `InputMode::ScrollSelect` + `InputMode::Scroll`, action-registry registration, default binding + descriptor, RPC, `action_policy()` classification, `default-keybindings.toml`/`README.md`. Only needed once multiple scrollable regions compete for `j`/`k`. Run `/grill-me` first (key choice, sticky vs one-shot, pick→focus vs pick→mode). Files: `heca/src/input.rs`, `heca/src/actions.rs`, `heca/src/app/registry.rs`, `heca/src/handlers.rs`, `heca/src/app_state.rs`.",
+      "descriptionUpdatedAt": "2026-11-17T15:11:43.932Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -271,7 +271,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.224Z",
-      "updatedAt": "2026-11-17T13:59:56.972Z",
+      "updatedAt": "2026-11-17T15:11:43.930Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -304,7 +304,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.860Z",
-  "updatedAt": "2026-11-17T13:59:56.972Z",
+  "updatedAt": "2026-11-17T15:11:43.930Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

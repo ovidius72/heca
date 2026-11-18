@@ -17,7 +17,6 @@
   "phaseIds": [
     "dcf9ff70-cf6e-416e-8e46-8cc36b4ec233",
     "6d582a8a-3b10-4157-8009-2b2db2825e29",
-    "13be12b1-e912-4117-88bb-6ac85e230bcf",
     "80f4610b-dc15-4e87-8be8-bc3090e2e7f0"
   ],
   "dependsOn": [],
@@ -44,6 +43,14 @@
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "bf722c97-1ca8-4025-9b90-cd33cb993815",
+      "date": "2026-11-17T19:40:35.833Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],

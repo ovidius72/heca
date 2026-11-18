@@ -27,7 +27,8 @@
     "bbd49c69-6b48-41cd-9bb9-4b95ef1cd53d",
     "f28d24ba-d38b-4333-8ba7-a91698a7ae7f",
     "2b99d64d-2c7d-4d11-831f-c94a72aea714",
-    "7d906da8-2cf2-4359-8b85-3519931aa24c"
+    "7d906da8-2cf2-4359-8b85-3519931aa24c",
+    "766a9858-6124-4bfb-84f9-bca4a65322ae"
   ],
   "tasks": [
     {
@@ -84,11 +85,28 @@
       "priority": 2,
       "shortName": "the-chrome-action-button-becom",
       "title": "The chrome action button becomes a component — one call, not a two-step recipe",
-      "status": "planned",
-      "description": "The first extraction of the chrome action button — the composition the app repeats most, and the one AGENTS already has to explain step by step.\n\n⚠️ DESCRIPTION CORRECTED 2026-08-24 against the code. Everything below is verified; the previous text described a deleted API, the wrong file, and a premise that is no longer true. What changed is recorded at the bottom so nobody re-derives it.\n\n## What exists — verified 2026-08-24\n\n**`heca/src/components/` is NOT empty.** It holds `folder_line.rs` and `pane_name.rs` alongside `mod.rs`. The feature and phase text saying \"nothing has moved into it yet\" is stale; the contract and the headless-test pattern in `mod.rs` have live users to read.\n\n**The two-step recipe every caller still performs by hand** (AGENTS § \"Chrome buttons → action, tooltip, KeyHint\"):\n\n1. `action_tooltip(button, action_name, label, &state.action_shortcuts)` — **`heca/src/chrome/pane_header.rs:451`**, not chrome/mod.rs. Composes `\"<label>  <shortcut>\"` from the action's **name**, resolving through `ActionShortcuts` so a rebind updates every tip.\n2. The click and the pick, declared separately:\n       let fire = chrome::fires(intent, emit);              // chrome/mod.rs:1417\n       let hint = chrome::picks(mount, intent, emit);        // chrome/mod.rs:1441\n       KeyHint::new(button.on_click(fire)).on_hint(hint)\n   **A pick is not a click** — they are different gestures and a region may answer them differently; the two collapse only when the act genuinely is the same, which for a header button it is.\n\n**Call sites doing this by hand, verified:**\n- `build_pane_header()` — `heca/src/chrome/pane_header.rs:697`, per configured `PaneAction` via `pane_action_spec()` at `pane_header.rs:489`.\n- `sidebar_toggle_button()` — `heca/src/chrome/mod.rs:827` (the AGENTS-cited complete example).\n- the overlay's dialog buttons — `heca/src/chrome/overlay.rs:559`, which already funnels through `action_tooltip`.\n\n`pane_action_spec` also returns **`needs_focus`**: an active-targeted button (zoom/float — the `WmAction` carries no pane id) must emit a `FocusPane` before its action, while pane-parameterized ones (close/move/split, which carry the pane) just activate. The events are queued and processed in order, so the focus lands on this pane first. The component has to carry that distinction, not flatten it.\n\n## What to build\n\nAn action-button component taking: the action **name**, the `Intent` it fires, a label, an optional explicit glyph (default: `ActionCatalog::icon(name)`), a `WidgetSize`, and the seams (`&ActionShortcuts`, the emitter, the mount for `picks`). It returns the tooltip-wrapped, hint-declaring, click-wired button as one value.\n\nThen **delete the hand-wiring at all three call sites in this same task** — an extraction that leaves the recipe behind has achieved nothing and is two sources of truth.\n\n**Where it lives:** `heca/src/components/`, not beside a surface. The location rule says a component moves there on the SECOND caller; this one has three on day one (pane header, sidebar toggle, overlay), so it is born shared.\n\n## Test (headless, asserts the visible thing)\n\n- The tooltip text carries the action's **live** shortcut from `ActionShortcuts`, and is the label alone when unbound.\n- The click and the pick carry the **same** intent when — and only when — they are the same act.\n- With `needs_focus`, a `FocusPane` is emitted before the action.\n- The glyph comes from `ActionCatalog::icon(name)` when none is passed.\n\n## Behaviors to preserve\n\n- **Pixel-identical buttons** — Antonio verifies by eye, and green tests found none of this phase's earlier failures.\n- `pane_action_spec` stays the single source of what a header button is.\n- The config's `[pane] title_actions` (and any future plugin-added button) keeps flowing through the same dynamic vector — never a per-action `match` in the build loop.\n- A component never spells a shortcut or picks a glyph itself: name the action, and the catalog plus `ActionShortcuts` answer.\n\n## What was corrected on 2026-08-24, and why\n\nThe previous description said step 2 was `let hint_id = hints.register(InteractionIntent::…)` then `.hint_target(hint_id)`, tested \"a hint target was registered\", and listed \"hint ids stay monotonic and their ranges are removed when a tree rebuilds (`HintTargetRegistry::remove_range`)\" as a behaviour to preserve.\n\n**That API is deleted.** `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Base::hint_target` and `named_press` were removed by F004/P084/T399 under ⭐⭐ RULE ZERO, because a plugin could construct none of them. Grepped 2026-08-24: none of those names exists in heca/src or heca-grid-ui/src. Nothing is registered any more, so there is no monotonicity and no un-registration to preserve — the framework collects declarations out of the laid-out tree (`heca_grid_ui::collect_hints`, hint/collect.rs:101) and runs one (`fire_hint`, hint/fire.rs:20).\n\nThe phase text carries this warning already but spells the API `on_peek` / `collect_peeks` / `fire_peek`. The live names are **`on_hint`** (builders.rs:809), **`collect_hints`**, **`fire_hint`** — peek was renamed to hint.\n\nAlso corrected: `action_tooltip`, `pane_action_spec` and `build_pane_header` live in `heca/src/chrome/pane_header.rs`, not `chrome/mod.rs`; every line number in the old text pointed at the wrong file. And `heca/src/chrome/expose.rs` is no longer one 2028-line file — it is the `chrome/expose/` folder (T420 landed), so the feature's \"current state\" section overstates what is left inline. Current sizes: chrome/mod.rs 3265 lines (not 5270), providers/workspaces/mod.rs 1703 (not 2200).",
-      "descriptionUpdatedAt": "2026-08-24T15:24:19.912Z",
+      "status": "done",
+      "description": "The first extraction of the chrome action button — the composition the app repeats most, and the one AGENTS already has to explain step by step.\n\n⚠️ DESCRIPTION CORRECTED 2026-08-24 against the code. Everything below is verified; the previous text described a deleted API, the wrong file, and a premise that is no longer true. What changed is recorded at the bottom so nobody re-derives it.\n\n## What exists — verified 2026-08-24\n\n**`heca/src/components/` is NOT empty.** It holds `folder_line.rs` and `pane_name.rs` alongside `mod.rs`. The feature and phase text saying \"nothing has moved into it yet\" is stale; the contract and the headless-test pattern in `mod.rs` have live users to read.\n\n**The two-step recipe every caller still performs by hand** (AGENTS § \"Chrome buttons → action, tooltip, KeyHint\"):\n\n1. `action_tooltip(button, action_name, label, &state.action_shortcuts)` — **`heca/src/chrome/pane_header.rs:451`**, not chrome/mod.rs. Composes `\"<label>  <shortcut>\"` from the action's **name**, resolving through `ActionShortcuts` so a rebind updates every tip.\n2. The click and the pick, declared separately:\n       let fire = chrome::fires(intent, emit);              // chrome/mod.rs:1417\n       let hint = chrome::picks(mount, intent, emit);        // chrome/mod.rs:1441\n       KeyHint::new(button.on_click(fire)).on_hint(hint)\n   **A pick is not a click** — they are different gestures and a region may answer them differently; the two collapse only when the act genuinely is the same, which for a header button it is.\n\n**Call sites doing this by hand, verified:**\n- `build_pane_header()` — `heca/src/chrome/pane_header.rs:697`, per configured `PaneAction` via `pane_action_spec()` at `pane_header.rs:489`.\n- `sidebar_toggle_button()` — `heca/src/chrome/mod.rs:827` (the AGENTS-cited complete example).\n- the overlay's dialog buttons — `heca/src/chrome/overlay.rs:559`, which already funnels through `action_tooltip`.\n\n`pane_action_spec` also returns **`needs_focus`**: an active-targeted button (zoom/float — the `WmAction` carries no pane id) must emit a `FocusPane` before its action, while pane-parameterized ones (close/move/split, which carry the pane) just activate. The events are queued and processed in order, so the focus lands on this pane first. The component has to carry that distinction, not flatten it.\n\n## What to build\n\nAn action-button component taking: the action **name**, the `Intent` it fires, a label, an optional explicit glyph (default: `ActionCatalog::icon(name)`), a `WidgetSize`, and the seams (`&ActionShortcuts`, the emitter, the mount for `picks`). It returns the tooltip-wrapped, hint-declaring, click-wired button as one value.\n\nThen **delete the hand-wiring at all three call sites in this same task** — an extraction that leaves the recipe behind has achieved nothing and is two sources of truth.\n\n**Where it lives:** `heca/src/components/`, not beside a surface. The location rule says a component moves there on the SECOND caller; this one has three on day one (pane header, sidebar toggle, overlay), so it is born shared.\n\n## Test (headless, asserts the visible thing)\n\n- The tooltip text carries the action's **live** shortcut from `ActionShortcuts`, and is the label alone when unbound.\n- The click and the pick carry the **same** intent when — and only when — they are the same act.\n- With `needs_focus`, a `FocusPane` is emitted before the action.\n- The glyph comes from `ActionCatalog::icon(name)` when none is passed.\n\n## Behaviors to preserve\n\n- **Pixel-identical buttons** — Antonio verifies by eye, and green tests found none of this phase's earlier failures.\n- `pane_action_spec` stays the single source of what a header button is.\n- The config's `[pane] title_actions` (and any future plugin-added button) keeps flowing through the same dynamic vector — never a per-action `match` in the build loop.\n- A component never spells a shortcut or picks a glyph itself: name the action, and the catalog plus `ActionShortcuts` answer.\n\n## What was corrected on 2026-08-24, and why\n\nThe previous description said step 2 was `let hint_id = hints.register(InteractionIntent::…)` then `.hint_target(hint_id)`, tested \"a hint target was registered\", and listed \"hint ids stay monotonic and their ranges are removed when a tree rebuilds (`HintTargetRegistry::remove_range`)\" as a behaviour to preserve.\n\n**That API is deleted.** `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Base::hint_target` and `named_press` were removed by F004/P084/T399 under ⭐⭐ RULE ZERO, because a plugin could construct none of them. Grepped 2026-08-24: none of those names exists in heca/src or heca-grid-ui/src. Nothing is registered any more, so there is no monotonicity and no un-registration to preserve — the framework collects declarations out of the laid-out tree (`heca_grid_ui::collect_hints`, hint/collect.rs:101) and runs one (`fire_hint`, hint/fire.rs:20).\n\nThe phase text carries this warning already but spells the API `on_peek` / `collect_peeks` / `fire_peek`. The live names are **`on_hint`** (builders.rs:809), **`collect_hints`**, **`fire_hint`** — peek was renamed to hint.\n\nAlso corrected: `action_tooltip`, `pane_action_spec` and `build_pane_header` live in `heca/src/chrome/pane_header.rs`, not `chrome/mod.rs`; every line number in the old text pointed at the wrong file. And `heca/src/chrome/expose.rs` is no longer one 2028-line file — it is the `chrome/expose/` folder (T420 landed), so the feature's \"current state\" section overstates what is left inline. Current sizes: chrome/mod.rs 3265 lines (not 5270), providers/workspaces/mod.rs 1703 (not 2200).\n\n---\n**Completion summary:**\nClosed 2026-11-18 (Antonio) with NO code change; main is unchanged. An ActionButton component was built and then rejected in design review: the widget library must not be tied to heca's actions; the established form is `.on_click(|ev| ev.dispatch(Intent::new(..)))` (docs/widgets.md:3090, heca-grid-ui/src/event/handlers.rs:47-65), tooltip via `.tooltip(text)` or `action_tooltip` (heca/src/chrome/panes/pane_header/shortcuts.rs:148), `prefix+/` picks automatic. Converting the 3 chrome-button sites (scene/mod.rs sidebar toggle, pane_header/build.rs, overlay/modal.rs) to that form loses behaviour today, verified with temporary tests: Button/IconButton have their own `on_click(Fn())` (button/builders.rs:199, icon_button.rs:127) separate from EventExt::on_click; with only the event form Enter/activate() and the ButtonGroup ⋮ overflow row (button_group.rs:187) do nothing and IconButton stops being focusable; a hint can carry only a closure (intent::dispatch is pub(crate), heca-grid-ui/src/intent.rs:29) so the policy filter on picks is lost; SubmitOverlay{overlay: Some(id)} cannot be expressed as an Intent (input/action.rs:604-611, input/build/chrome.rs:82-85). All of this moved to P087(F011)/T565 (library fix first, then the sites). The rejected attempt is saved as scratchpad t374-v1.patch.\n\nForced completion overrode 6 unchecked checklist item(s): component takes an action NAME + intent + label + optional glyph + the seams, icon defaults to ActionCatalog::icon(name); shortcut from ActionShortcuts; tooltip via the one composer, hint target and on_click carry the SAME intent; needs_focus emits the focus-then-act composite, every hand-wired call site converted and deleted (build_pane_header, sidebar_toggle_button, overlay buttons), headless test: tooltip shortcut, hint/click intent identity, focus-first variant, catalog glyph, AGENTS recipe section rewritten to 'use the component' (the steps stay only as the explanation). Motivation: Closed by Antonio 2026-11-18 without code changes: the ActionButton extraction was rejected in design review (a widget must not be tied to actions; the established form is on_click(|ev| ev.dispatch(Intent))). Converting the 3 sites is blocked by library gaps, moved into P087(F011)/T565 as its first step.",
+      "descriptionUpdatedAt": "2026-11-18T08:59:26.721Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2ee850c1-0436-4012-95b7-1bab01b8497c",
+          "date": "2026-11-17T19:59:14.131Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "bbd49c69-6b48-41cd-9bb9-4b95ef1cd53d-check-002-in-progress-done",
+          "date": "2026-11-18T08:59:26.719Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Closed 2026-11-18 (Antonio) with NO code change; main is unchanged. An ActionButton component was built and then rejected in design review: the widget library must not be tied to heca's actions; the established form is `.on_click(|ev| ev.dispatch(Intent::new(..)))` (docs/widgets.md:3090, heca-grid-ui/src/event/handlers.rs:47-65), tooltip via `.tooltip(text)` or `action_tooltip` (heca/src/chrome/panes/pane_header/shortcuts.rs:148), `prefix+/` picks automatic. Converting the 3 chrome-button sites (scene/mod.rs sidebar toggle, pane_header/build.rs, overlay/modal.rs) to that form loses behaviour today, verified with temporary tests: Button/IconButton have their own `on_click(Fn())` (button/builders.rs:199, icon_button.rs:127) separate from EventExt::on_click; with only the event form Enter/activate() and the ButtonGroup ⋮ overflow row (button_group.rs:187) do nothing and IconButton stops being focusable; a hint can carry only a closure (intent::dispatch is pub(crate), heca-grid-ui/src/intent.rs:29) so the policy filter on picks is lost; SubmitOverlay{overlay: Some(id)} cannot be expressed as an Intent (input/action.rs:604-611, input/build/chrome.rs:82-85). All of this moved to P087(F011)/T565 (library fix first, then the sites). The rejected attempt is saved as scratchpad t374-v1.patch.\n\nForced completion overrode 6 unchecked checklist item(s): component takes an action NAME + intent + label + optional glyph + the seams, icon defaults to ActionCatalog::icon(name); shortcut from ActionShortcuts; tooltip via the one composer, hint target and on_click carry the SAME intent; needs_focus emits the focus-then-act composite, every hand-wired call site converted and deleted (build_pane_header, sidebar_toggle_button, overlay buttons), headless test: tooltip shortcut, hint/click intent identity, focus-first variant, catalog glyph, AGENTS recipe section rewritten to 'use the component' (the steps stay only as the explanation). Motivation: Closed by Antonio 2026-11-18 without code changes: the ActionButton extraction was rejected in design review (a widget must not be tied to actions; the established form is on_click(|ev| ev.dispatch(Intent))). Converting the 3 sites is blocked by library gaps, moved into P087(F011)/T565 as its first step."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -133,11 +151,16 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-17T19:59:14.131Z",
+      "completedAt": "2026-11-18T08:59:26.719Z",
       "createdAt": "2026-07-30T13:37:53.780Z",
-      "updatedAt": "2026-08-24T15:24:19.910Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-18T08:59:26.719Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
+          "createdAt": "2026-11-17T19:59:13.996Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -175,11 +198,20 @@
       "priority": 4,
       "shortName": "folderline-s-gap-and-icon-size",
       "title": "FolderLine's gap and icon size are raw pixels — make them tokens before they are copied",
-      "status": "planned",
-      "description": "**Small, and it matters because the file is shared.** `heca/src/components/folder_line.rs` (new 2026-08-21) carries:\n\n```rust\nconst GAP: f32 = 6.0;\nconst ICON: f32 = 12.0;\n```\n\nThey were moved **verbatim** from `heca/src/providers/workspaces/pane_row.rs`, where the cwd line was written inline, because the extraction had to be a move and not a behaviour change (the sidebar's row and the exposé's card now share the component). But AGENTS.md is explicit: sizes and colours come from tokens — \"hardcode nothing … border width, radius, glow\" — and this now sits in `components/`, which is the shelf other surfaces copy from. Two callers today, and every future one inherits the literals.\n\n**Build.**\n- `GAP` → a `Spacing` token (`Spacing::Xs` is the gap the exposé's cards use); the gap between a glyph and its label is the same idea everywhere.\n- `ICON` → derived from the surrounding text rather than fixed: the line already takes `font_scale`, so the glyph should follow it (a metadata line at 0.85 of the body should not carry a body-sized glyph). Check what `Icon::size` expects and whether a theme font size is reachable from the component's `&GuiTheme`.\n- The colours are already tokens (`theme.colors.foreground`) — leave them.\n\n**Verification.** This changes how two surfaces look, so it is Antonio's eye, not a test: the sidebar's cwd row and the exposé card's folder line, at more than one font size (`prefix+Shift+r` after changing `[font] size`). A test can only assert that no literal remains.\n\n**Why here.** F011/P087 is where a shape becomes shared; this is the first component that arrived on the shelf carrying numbers from the surface it came from, and the rule is worth enforcing on the way in.",
-      "descriptionUpdatedAt": "2026-08-21T11:28:37.851Z",
+      "status": "done",
+      "description": "**Small, and it matters because the file is shared.** `heca/src/components/folder_line.rs` (new 2026-08-21) carries:\n\n```rust\nconst GAP: f32 = 6.0;\nconst ICON: f32 = 12.0;\n```\n\nThey were moved **verbatim** from `heca/src/providers/workspaces/pane_row.rs`, where the cwd line was written inline, because the extraction had to be a move and not a behaviour change (the sidebar's row and the exposé's card now share the component). But AGENTS.md is explicit: sizes and colours come from tokens — \"hardcode nothing … border width, radius, glow\" — and this now sits in `components/`, which is the shelf other surfaces copy from. Two callers today, and every future one inherits the literals.\n\n**Build.**\n- `GAP` → a `Spacing` token (`Spacing::Xs` is the gap the exposé's cards use); the gap between a glyph and its label is the same idea everywhere.\n- `ICON` → derived from the surrounding text rather than fixed: the line already takes `font_scale`, so the glyph should follow it (a metadata line at 0.85 of the body should not carry a body-sized glyph). Check what `Icon::size` expects and whether a theme font size is reachable from the component's `&GuiTheme`.\n- The colours are already tokens (`theme.colors.foreground`) — leave them.\n\n**Verification.** This changes how two surfaces look, so it is Antonio's eye, not a test: the sidebar's cwd row and the exposé card's folder line, at more than one font size (`prefix+Shift+r` after changing `[font] size`). A test can only assert that no literal remains.\n\n**Why here.** F011/P087 is where a shape becomes shared; this is the first component that arrived on the shelf carrying numbers from the surface it came from, and the rule is worth enforcing on the way in.\n\n---\n**Completion summary:**\nClosed 2026-11-17 (Antonio): already done by later work. heca/src/components/folder_line.rs no longer has the raw GAP/ICON pixel constants: the gap is the Spacing token (`.gap(Spacing::Sm)`), the indent is a Spacing field, and the icon follows the WidgetSize variant (`.size(self.size)`). Verified by reading the file on main 2026-11-17.",
+      "descriptionUpdatedAt": "2026-11-17T19:52:29.422Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2b99d64d-2c7d-4d11-831f-c94a72aea714-check-001-planned-done",
+          "date": "2026-11-17T19:52:29.420Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed 2026-11-17 (Antonio): already done by later work. heca/src/components/folder_line.rs no longer has the raw GAP/ICON pixel constants: the gap is the Spacing token (`.gap(Spacing::Sm)`), the indent is a Spacing field, and the icon follows the WidgetSize variant (`.size(self.size)`). Verified by reading the file on main 2026-11-17."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -187,10 +219,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-17T19:52:29.420Z",
+      "completedAt": "2026-11-17T19:52:29.420Z",
       "createdAt": "2026-08-21T11:28:37.817Z",
-      "updatedAt": "2026-08-21T11:28:37.817Z",
+      "updatedAt": "2026-11-17T19:52:29.420Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -220,10 +252,37 @@
       "updatedAt": "2026-09-16T14:25:15.595Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "766a9858-6124-4bfb-84f9-bca4a65322ae",
+      "phaseId": "66b0de41-be11-474f-badf-f2b9b934eaf9",
+      "number": 565,
+      "shortId": "HJ9LY",
+      "priority": 6,
+      "shortName": "widgets-act-through-ev-dispatc",
+      "title": "Widgets act through ev.dispatch(Intent), not hand-sent events: audit and fix every site",
+      "status": "planned",
+      "description": "Requested by Antonio 2026-11-18.\n\nTHE ESTABLISHED FORM (docs/widgets.md:3090, :1176; heca-grid-ui/src/event/handlers.rs:47-65): a widget acts with `.on_click(|ev| ev.dispatch(Intent::new(\"name\").arg(..)))` (native) or `.on_press(Intent::new(..))` (described). The Intent (heca-view: a name plus args) goes to the sink the host installs (`install_intent_sink`, heca-grid-ui/src/intent.rs:24) and through the normal action door (permissions, confirmations). `move` only when the closure captures an outside value. The widget knows nothing of heca's actions. `prefix+/` picks are automatic for anything with a click (docs/widgets.md:3130).\n\nSTEP 1 — FIX THE LIBRARY FIRST (found in T374, verified with temporary tests 2026-11-18). Today the established form does not work for buttons:\n- Button and IconButton have their OWN `on_click(impl Fn())` (heca-grid-ui/src/widgets/button/builders.rs:199, icon_button.rs:127), separate from the generic EventExt::on_click(|ev|). With only the event form: Enter / `Component::activate()` / WidgetIntent::Activate send nothing; the ButtonGroup ⋮ overflow row runs the button's own click handle (button_group.rs:187, button/builders.rs:71) and does nothing; IconButton stops being focusable and a single click target. Mouse click and `prefix+/` still work. Goal: ONE click path — a button given `on_click(|ev| ev.dispatch(..))` keeps Enter, the ⋮ row, focus and single-target behaviour.\n- A hint (`prefix+/` pick) can carry only a closure; `intent::dispatch` is pub(crate) (heca-grid-ui/src/intent.rs:29), so a pick cannot be named by an Intent and the host's policy filter (hide the letter when the action is refused — today done by action_tooltip setting hint.intent, heca/src/chrome/panes/pane_header/shortcuts.rs:172-176) cannot work through the established form. Goal: a pick that carries the same Intent as the click, so the picker can ask the policy.\n- Dialog buttons send SubmitOverlay{overlay: Some(id)}: `overlay` is #[serde(skip)] (heca/src/input/action.rs:604-611) and the sink builds overlay: None = front-most modal (heca/src/input/build/chrome.rs:82-85); the sink always stamps MouseContent (heca/src/app/startup.rs:192-196) while the layer emitter stamps Surface(key). Decide with Antonio how a dialog button names its own dialog as an Intent.\n\nSTEP 2 — THE SITES that send events by hand (grep on main 2026-11-18: `emit.fire(` / `proxy.send_event(AppEvent::ChromeIntent`):\n- chrome/window/scene/mod.rs:98, :319 (sidebar toggle)\n- chrome/panes/pane_header/build.rs:226, :239 (header buttons; focus-first for zoom/float — zoom has zoom_column_at_index{ws_idx,col_idx} (actions/builtins/layout.rs:173); float has no pane-targeted form (pane.rs:45); focus_pane{pane_id} exists (navigation.rs:100))\n- chrome/surfaces/overlay/modal.rs (dialog buttons)\n- chrome/panes/pane/mod.rs:111; chrome/panes/terminal/mod.rs:169, :188; chrome/panes/column/mod.rs:43\n- providers/workspaces/pane_row.rs:211, :216; providers/workspaces/workspace_frame.rs:71\n- chrome/surfaces/expose/wiring.rs:42, :59, :65, :75\n- chrome/surfaces/overlay/spec.rs:25, :41\n- chrome/surfaces/palette/mod.rs:273; chrome/surfaces/palette/sessions.rs:120\n- app/startup.rs:193 (not a widget — check whether it belongs here at all)\nHeader builtins map to catalog names: add_pane_to_column{ws_idx,col_idx}, move_pane_left/right{pane_id}, close_pane_by_id{pane_id}, zoom_column, float (T374 audit).\n\nFOR EACH SITE: what it sends (a catalogued action, or an InteractionIntent that is not an action, e.g. ExposeCursor, FocusPane) and whether it can be written as ev.dispatch(Intent). Report the ones that cannot, with the reason, before changing them; fix centrally, never per site. Convert the rest, delete hand-sending code and unused emitter plumbing. Tests per surface: a click (and Enter, and the ⋮ row where relevant) produces the expected Intent at the sink. Update docs/widgets.md if the catalog changes.\n\nHistory: P087(F011)/T374 (closed 2026-11-18 without changes) built and rejected an ActionButton component; patch kept in the orchestrator scratchpad as t374-v1.patch.",
+      "descriptionUpdatedAt": "2026-11-18T08:59:44.331Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-18T07:04:11.623Z",
+      "updatedAt": "2026-11-18T08:59:44.329Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-30T13:27:19.410Z",
-  "updatedAt": "2026-09-16T14:25:15.595Z",
+  "updatedAt": "2026-11-18T08:59:44.329Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -239,5 +298,10 @@
       "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
+      "createdAt": "2026-11-17T19:59:13.996Z"
+    }
+  ]
 }

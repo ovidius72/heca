@@ -24,8 +24,8 @@
     {
       "id": "55cca124-d4e2-4269-8ee4-ab86d0359901",
       "title": "Grid UI pruning decisions (2026-07-02): HUD Frame, Accordion, Search Input, Metric Row and scroll items are cut",
-      "decision": "Source: the \"PRUNING DECISIONS (2026-07-02), verified against the code\" section of the old backlog file (now deleted). The section stalled because it held speculative widgets with no consumer plus items already covered by existing widgets.\nCUT, already covered: scrollbar color token (gridui-task-30; scroll_bar.rs exists); Pane header slot and CornerBrackets/Reticle (gridui-task-02/04; the terminal pane shell already draws the header and the focus-ring bracket; terminal-05 done); HUD Frame (gridui-task-17; the bracketed Pane covers it); Accordion (gridui-task-20; DockFrame/ItemGroup already collapse); Search Input widget (gridui-task-19; the base Input and the CommandPalette filter input already give search; sidebar search is just wiring tied to plugin-03); Metric Row (gridui-task-18, removed; the stat-card look exists in the showcase through a local card(label, value) helper composing a bracketed Pane plus Label, and the app has no consumer).\nCUT, no consumer: ScrollRegion horizontal scroll (gridui-task-29; the column strip already scrolls horizontally through ViewOffset); DrawCommand::Custom (gridui-task-14; not present, a YAGNI escape hatch).\nDEFER until a real consumer: full-scene bloom (gridui-task-13); visual-regression tests (gridui-task-12; heavy infra, low return); nested-region wheel hit-testing (gridui-task-32).\nKEEP: Status bar rebuild (gridui-task-05; today text-only, must gain badges/tags/info plus plugin extensions, ties to the bottom-bar region); Tab-bar slot (gridui-task-03; for stacked/tabbed pane layout, tabs.rs is the building block, the layout itself is a separate heca-core feature); multi-select Select (gridui-task-16); Item DnD reorder (gridui-task-15; small, the drag framework is ready); sidebar scroll wiring (gridui-task-33); pick-a-scrollable-region (gridui-task-34; small and optional, only a ScrollFocused action and a scroll mode are new; do it only when several regions compete for j/k); NF icons (gridui-03), showcase audit (gridui-task-11) and all gridui-07 crate debt.\nWidget cleanup note: gauge.rs was thought unused; it is used (heca-view-realize display::gauge plus showcase), so it stays.",
-      "rationale": "The planner still lists P028(F004)/T092 (HUD Frame), T094 (Metric Row), T097 (Accordion), T104 (Search Input) and P018(F004)/T099 (DrawCommand::Custom) as planned, which contradicts the cut. The reasons used to be only in the old backlog file, which is now deleted; they are recorded in this decision.",
+      "decision": "Source: the \"PRUNING DECISIONS (2026-07-02), verified against the code\" section of the old backlog file (now a historical archive). The section stalled because it held speculative widgets with no consumer plus items already covered by existing widgets.\nCUT, already covered: scrollbar color token (gridui-task-30; scroll_bar.rs exists); Pane header slot and CornerBrackets/Reticle (gridui-task-02/04; the terminal pane shell already draws the header and the focus-ring bracket; terminal-05 done); HUD Frame (gridui-task-17; the bracketed Pane covers it); Accordion (gridui-task-20; DockFrame/ItemGroup already collapse); Search Input widget (gridui-task-19; the base Input and the CommandPalette filter input already give search; sidebar search is just wiring tied to plugin-03); Metric Row (gridui-task-18, removed; the stat-card look exists in the showcase through a local card(label, value) helper composing a bracketed Pane plus Label, and the app has no consumer).\nCUT, no consumer: ScrollRegion horizontal scroll (gridui-task-29; the column strip already scrolls horizontally through ViewOffset); DrawCommand::Custom (gridui-task-14; not present, a YAGNI escape hatch).\nDEFER until a real consumer: full-scene bloom (gridui-task-13); visual-regression tests (gridui-task-12; heavy infra, low return); nested-region wheel hit-testing (gridui-task-32).\nKEEP: Status bar rebuild (gridui-task-05; today text-only, must gain badges/tags/info plus plugin extensions, ties to the bottom-bar region); Tab-bar slot (gridui-task-03; for stacked/tabbed pane layout, tabs.rs is the building block, the layout itself is a separate heca-core feature); multi-select Select (gridui-task-16); Item DnD reorder (gridui-task-15; small, the drag framework is ready); sidebar scroll wiring (gridui-task-33); pick-a-scrollable-region (gridui-task-34; small and optional, only a ScrollFocused action and a scroll mode are new; do it only when several regions compete for j/k); NF icons (gridui-03), showcase audit (gridui-task-11) and all gridui-07 crate debt.\nWidget cleanup note: gauge.rs was thought unused; it is used (heca-view-realize display::gauge plus showcase), so it stays.",
+      "rationale": "The planner still lists P028(F004)/T092 (HUD Frame), T094 (Metric Row), T097 (Accordion), T104 (Search Input) and P018(F004)/T099 (DrawCommand::Custom) as planned, which contradicts the cut. The reasons used to be only in the old backlog file, which is now a historical archive; they are recorded in this decision.",
       "implementationNotes": "Closes T092, T094, T097, T104 (this phase) and T099 (P018(F004), see the matching decision there). Gridui-task numbers are the old backlog ids. The stacked/tabbed pane layout is tracked as a separate idea.",
       "acceptedAt": "2026-11-16T15:09:55.132Z"
     }
@@ -123,8 +123,8 @@
       "shortName": "item-dnd-reorder",
       "title": "Item DnD reorder within ItemGroup",
       "status": "planned",
-      "description": "Riordino drag-and-drop di item dentro ItemGroup.\n\n## Detail carried over from the old backlog file, now deleted\n- [ ] **gridui-task-15** — `Item` DnD reorder: wire the existing `DragExt` framework to allow items within `ItemGroup` to be reordered by drag. Add `description` field + `custom_background` option to `Item`.\n  Files: `heca-grid-ui/src/widgets/item.rs`, `heca-grid-ui/src/widgets/item_group.rs`",
-      "descriptionUpdatedAt": "2026-11-17T14:00:07.905Z",
+      "description": "Riordino drag-and-drop di item dentro ItemGroup.\n\n## Detail carried over from the old backlog file, now a historical archive\n- [ ] **gridui-task-15** — `Item` DnD reorder: wire the existing `DragExt` framework to allow items within `ItemGroup` to be reordered by drag. Add `description` field + `custom_background` option to `Item`.\n  Files: `heca-grid-ui/src/widgets/item.rs`, `heca-grid-ui/src/widgets/item_group.rs`",
+      "descriptionUpdatedAt": "2026-11-17T15:11:35.054Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -137,7 +137,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-11-17T14:00:07.903Z",
+      "updatedAt": "2026-11-17T15:11:35.052Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -314,7 +314,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-17T14:03:32.130Z",
+  "updatedAt": "2026-11-17T15:11:35.052Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

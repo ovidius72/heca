@@ -24,7 +24,7 @@
     {
       "id": "4cd2800a-3d68-425f-b3f3-fedd4650f51e",
       "title": "DrawCommand::Custom is cut (2026-07-02): YAGNI escape hatch, no consumer",
-      "decision": "Source: the old backlog file (now deleted), entry gridui-task-14 and its pruning decisions of 2026-07-02. DrawCommand::Custom is CUT: it is not present in the code and is a YAGNI escape hatch with no consumer. Full-scene bloom (gridui-task-13, P018(F004)/T100) is deferred until a real consumer exists. The full list of Grid UI pruning decisions and their reasons is on P028(F004).",
+      "decision": "Source: the old backlog file (now a historical archive), entry gridui-task-14 and its pruning decisions of 2026-07-02. DrawCommand::Custom is CUT: it is not present in the code and is a YAGNI escape hatch with no consumer. Full-scene bloom (gridui-task-13, P018(F004)/T100) is deferred until a real consumer exists. The full list of Grid UI pruning decisions and their reasons is on P028(F004).",
       "rationale": "No widget needs to draw a raw custom command; adding an open escape hatch with no user invites bypassing the typed draw commands.",
       "implementationNotes": "Closes P018(F004)/T099 as cut. T100 (bloom) stays planned but deferred until a consumer exists.",
       "acceptedAt": "2026-11-16T15:09:57.628Z"
@@ -101,7 +101,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.860Z",
-  "updatedAt": "2026-11-17T14:03:20.204Z",
+  "updatedAt": "2026-11-17T15:11:26.558Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

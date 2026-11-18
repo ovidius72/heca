@@ -2147,9 +2147,9 @@
       "priority": 7,
       "shortName": "split-heca-grid-ui-src-widgets",
       "title": "Split heca-grid-ui/src/widgets/scroll_region.rs (2565) — viewport, scrollbar, wheel and the offset door",
-      "status": "deferred",
-      "description": "Found while adding the layout sweeps (F003/P082/T438, 2026-08-24) and reported to Antonio, who asked for it to be filed. AGENTS § 0 rule 4: aim under 400 lines, above 600 agree a split first. This is the list and the proposal, NOT a licence.\n\nCURRENT: heca-grid-ui/src/widgets/scroll_region.rs, 2565 lines. Not in T468's list.\n\nWHY IT MATTERS: it is the only widget that answers `clips_children` (:1356), which is now load-bearing in THREE walks — paint, input (`pointer::hit_test`) and the picker (`hint::collect`) — plus the layout pass, where F003/P082/T438 added \"a viewport's content does not give way\" keyed off it. A widget that four subsystems consult should be readable in one sitting.\n\nTHE JOBS IN IT\n- The viewport widget itself: layout, the baked shift (`on_layout` resets it), clipping via `with_clip`, `clips_children`.\n- **The offset door**: `set_offset_y` (:558) is documented as the ONE way the offset moves — every path (wheel, thumb drag, held track press, scroll-into-view, the public API) funnels through it. `scroll_to` (:554), `scroll_by`, `scroll_to_x`, `ensure_visible`, `scroll_to_child`.\n- The scrollbar: track/thumb geometry, the gutter, the widened grab lane, the drag state machine, `content_clip` narrowing (:1286-1296).\n- Input: wheel routing (hover-gated, viewport-proportional), thumb drag, held track press.\n- A large in-file test module.\n\nPROPOSED SPLIT — same shape as widgets/overlay/ and the two hint folders:\n  heca-grid-ui/src/widgets/scroll_region/\n  ├── mod.rs        the widget: Base, layout, paint, clips_children\n  ├── offset.rs     the one door — set_offset_y and every public mover that funnels through it\n  ├── scrollbar.rs  track/thumb geometry, gutter, grab lane, drag state\n  ├── input.rs      wheel + thumb + track-press routing\n  └── tests.rs\n\nEDGE CASES\n- The offset door must stay ONE function with one owner: the doc says a listener cannot miss a movement and a new way to scroll cannot forget to announce itself. If the split leaves two paths writing the offset, the split is wrong.\n- `clips_children` must stay on the widget itself (mod.rs), since four subsystems ask it there.\n- A move, never a rewrite: test counts before and after must match. Gate: `cargo test -p heca-grid-ui` + `./scripts/lint-changed.sh`.",
-      "descriptionUpdatedAt": "2026-08-24T13:58:03.146Z",
+      "status": "done",
+      "description": "Found while adding the layout sweeps (F003/P082/T438, 2026-08-24) and reported to Antonio, who asked for it to be filed. AGENTS § 0 rule 4: aim under 400 lines, above 600 agree a split first. This is the list and the proposal, NOT a licence.\n\nCURRENT: heca-grid-ui/src/widgets/scroll_region.rs, 2565 lines. Not in T468's list.\n\nWHY IT MATTERS: it is the only widget that answers `clips_children` (:1356), which is now load-bearing in THREE walks — paint, input (`pointer::hit_test`) and the picker (`hint::collect`) — plus the layout pass, where F003/P082/T438 added \"a viewport's content does not give way\" keyed off it. A widget that four subsystems consult should be readable in one sitting.\n\nTHE JOBS IN IT\n- The viewport widget itself: layout, the baked shift (`on_layout` resets it), clipping via `with_clip`, `clips_children`.\n- **The offset door**: `set_offset_y` (:558) is documented as the ONE way the offset moves — every path (wheel, thumb drag, held track press, scroll-into-view, the public API) funnels through it. `scroll_to` (:554), `scroll_by`, `scroll_to_x`, `ensure_visible`, `scroll_to_child`.\n- The scrollbar: track/thumb geometry, the gutter, the widened grab lane, the drag state machine, `content_clip` narrowing (:1286-1296).\n- Input: wheel routing (hover-gated, viewport-proportional), thumb drag, held track press.\n- A large in-file test module.\n\nPROPOSED SPLIT — same shape as widgets/overlay/ and the two hint folders:\n  heca-grid-ui/src/widgets/scroll_region/\n  ├── mod.rs        the widget: Base, layout, paint, clips_children\n  ├── offset.rs     the one door — set_offset_y and every public mover that funnels through it\n  ├── scrollbar.rs  track/thumb geometry, gutter, grab lane, drag state\n  ├── input.rs      wheel + thumb + track-press routing\n  └── tests.rs\n\nEDGE CASES\n- The offset door must stay ONE function with one owner: the doc says a listener cannot miss a movement and a new way to scroll cannot forget to announce itself. If the split leaves two paths writing the offset, the split is wrong.\n- `clips_children` must stay on the widget itself (mod.rs), since four subsystems ask it there.\n- A move, never a rewrite: test counts before and after must match. Gate: `cargo test -p heca-grid-ui` + `./scripts/lint-changed.sh`.\n\n---\n**Completion summary:**\nDone (closed 2026-11-17, Antonio). The single scroll_region.rs no longer exists: heca-grid-ui/src/widgets/scroll_region/ holds mod.rs (344 lines), geometry (447), scroll (222), component (254), builders (209), motion, reveal and tests/part_1.rs, part_2.rs — landed with commit 80cdac96 (\"files under 400 lines\") and earlier work. Deferred 2026-08-28 because P097 (dispatch) and P094 (Terminal) were reshaping the scroll/offset path; both are done. Verified by reading the tree on main 2026-11-17, not by a dedicated review.",
+      "descriptionUpdatedAt": "2026-11-17T19:40:48.061Z",
       "notes": "",
       "statusLog": [
         {
@@ -2159,6 +2159,14 @@
           "toStatus": "deferred",
           "title": "Parked 2026-08-28 with the other file splits (see T468). `scroll_region.rs` owns the wheel and offset path, which P097's one-dispatch walk delivers into, and P094's Terminal sits inside a ScrollRegion its content owns — so both reshape it. Resume after. No user-visible behaviour waits on it.",
           "description": "Parked 2026-08-28 with the other file splits (see T468). `scroll_region.rs` owns the wheel and offset path, which P097's one-dispatch walk delivers into, and P094's Terminal sits inside a ScrollRegion its content owns — so both reshape it. Resume after. No user-visible behaviour waits on it."
+        },
+        {
+          "id": "6e46956d-0432-4aa1-a476-114c07d33d93-check-002-deferred-done",
+          "date": "2026-11-17T19:40:48.056Z",
+          "fromStatus": "deferred",
+          "toStatus": "done",
+          "title": "deferred → done",
+          "description": "Done (closed 2026-11-17, Antonio). The single scroll_region.rs no longer exists: heca-grid-ui/src/widgets/scroll_region/ holds mod.rs (344 lines), geometry (447), scroll (222), component (254), builders (209), motion, reveal and tests/part_1.rs, part_2.rs — landed with commit 80cdac96 (\"files under 400 lines\") and earlier work. Deferred 2026-08-28 because P097 (dispatch) and P094 (Terminal) were reshaping the scroll/offset path; both are done. Verified by reading the tree on main 2026-11-17, not by a dedicated review."
         }
       ],
       "decisions": [],
@@ -2168,10 +2176,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-17T19:40:48.056Z",
+      "completedAt": "2026-11-17T19:40:48.056Z",
       "createdAt": "2026-08-24T13:58:03.101Z",
-      "updatedAt": "2026-08-28T08:23:03.078Z",
+      "updatedAt": "2026-11-17T19:40:48.056Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -3617,9 +3625,9 @@
       "priority": 54,
       "shortName": "split-heca-core-src-backend-te",
       "title": "Split heca-core/src/backend/terminal/engine.rs (2249) — one impl block is 970 lines",
-      "status": "deferred",
-      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request.\n\nCURRENT STATE (line numbers 2026-09-04). The file is five small trait adapters and then one enormous impl:\n\n- `SharedWriter` :31 with its `Write` :48 — the PTY write half.\n- `BellHandler` :71 implementing `AlertHandler` — the visual/audible bell.\n- `OscClipboard` :91 implementing `Clipboard` — OSC 52.\n- `HecaTerminalConfig` :112 implementing `TerminalConfiguration` — the palette and options handed to wezterm-term.\n- **`impl TerminalEngine` :186 — running to :1156, about 970 lines in one block.**\n- `GraphicsCollector` :1156 — inline images.\n\nThe four adapters at the top are each one job and one page; they are already separable with no judgement required. The `TerminalEngine` impl is the real subject: it holds spawning and the PTY, feeding bytes to the parser, the snapshot the renderer reads, damage tracking, resize/reflow, scrollback and search, selection, and config reload.\n\nDESIRED STATE. `heca-core/src/backend/terminal/engine/` — `mod.rs` (the struct and its construction), `adapters.rs` (`SharedWriter`, `BellHandler`, `OscClipboard`, `HecaTerminalConfig`), `snapshot.rs` (what the renderer reads, plus damage), `resize.rs`, `scrollback.rs` (search included), `graphics.rs` (`GraphicsCollector`).\n\nSTEPS. (1) Move the four adapters out first — the no-judgement part, and it takes ~150 lines off immediately. (2) `GraphicsCollector` next, also self-contained. (3) Then carve the impl block by job, one `impl TerminalEngine` per file (Rust allows several impl blocks for one type across a module's files, which is what makes this a pure move).\n\nEDGE CASES. ⚠️ Known trap in this file, recorded under the `terminal-theming` requirement: wezterm-term's `set_config` swaps the config Arc but does NOT reset a FORKED palette, so a theme reload leaves `palette()` returning the stale fork for any program that used a dynamic-colour escape. Whatever `reload_config` does about that must move intact — do not tidy it. Also `retained_damage_to_apply` in `heca/src/app/terminal_render.rs` depends on this file's damage reporting; the contract between them is what the retained-layer optimisation rests on.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca-core` then `./scripts/lint-changed.sh`.\n\n⚠️ Check `P094(F011)` first — the Terminal-as-a-component work (`T449`) reshapes this area.",
-      "descriptionUpdatedAt": "2026-09-04T14:02:46.235Z",
+      "status": "done",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request.\n\nCURRENT STATE (line numbers 2026-09-04). The file is five small trait adapters and then one enormous impl:\n\n- `SharedWriter` :31 with its `Write` :48 — the PTY write half.\n- `BellHandler` :71 implementing `AlertHandler` — the visual/audible bell.\n- `OscClipboard` :91 implementing `Clipboard` — OSC 52.\n- `HecaTerminalConfig` :112 implementing `TerminalConfiguration` — the palette and options handed to wezterm-term.\n- **`impl TerminalEngine` :186 — running to :1156, about 970 lines in one block.**\n- `GraphicsCollector` :1156 — inline images.\n\nThe four adapters at the top are each one job and one page; they are already separable with no judgement required. The `TerminalEngine` impl is the real subject: it holds spawning and the PTY, feeding bytes to the parser, the snapshot the renderer reads, damage tracking, resize/reflow, scrollback and search, selection, and config reload.\n\nDESIRED STATE. `heca-core/src/backend/terminal/engine/` — `mod.rs` (the struct and its construction), `adapters.rs` (`SharedWriter`, `BellHandler`, `OscClipboard`, `HecaTerminalConfig`), `snapshot.rs` (what the renderer reads, plus damage), `resize.rs`, `scrollback.rs` (search included), `graphics.rs` (`GraphicsCollector`).\n\nSTEPS. (1) Move the four adapters out first — the no-judgement part, and it takes ~150 lines off immediately. (2) `GraphicsCollector` next, also self-contained. (3) Then carve the impl block by job, one `impl TerminalEngine` per file (Rust allows several impl blocks for one type across a module's files, which is what makes this a pure move).\n\nEDGE CASES. ⚠️ Known trap in this file, recorded under the `terminal-theming` requirement: wezterm-term's `set_config` swaps the config Arc but does NOT reset a FORKED palette, so a theme reload leaves `palette()` returning the stale fork for any program that used a dynamic-colour escape. Whatever `reload_config` does about that must move intact — do not tidy it. Also `retained_damage_to_apply` in `heca/src/app/terminal_render.rs` depends on this file's damage reporting; the contract between them is what the retained-layer optimisation rests on.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca-core` then `./scripts/lint-changed.sh`.\n\n⚠️ Check `P094(F011)` first — the Terminal-as-a-component work (`T449`) reshapes this area.\n\n---\n**Completion summary:**\nDone (closed 2026-11-17, Antonio). terminal/engine.rs is now heca-core/src/backend/terminal/engine/: mod.rs (342 lines), convert, images (GraphicsCollector), links, read, viewport and tests/ — last touched by commit 80cdac96 (2026-10-14). Deferred 2026-09-04 because P094/T449 reshaped the area; T449 is done. Not done as specified: the adapters SharedWriter, BellHandler, OscClipboard and HecaTerminalConfig remain in engine/mod.rs:26-106 rather than a separate adapters.rs, and the task's \"pure move\" review checklist was not re-run. Verified by reading the tree on main 2026-11-17.",
+      "descriptionUpdatedAt": "2026-11-17T19:40:50.907Z",
       "notes": "",
       "statusLog": [
         {
@@ -3629,6 +3637,14 @@
           "toStatus": "deferred",
           "title": "Parked on creation (2026-09-04). P094(F011)/T449 — the terminal becoming a component — reshapes exactly this area, and its damage contract is what `heca/src/app/terminal_render.rs` depends on. Splitting the engine first means P094 re-carves freshly split files. Resume once P094's terminal work lands. Nothing here is a defect.",
           "description": "Parked on creation (2026-09-04). P094(F011)/T449 — the terminal becoming a component — reshapes exactly this area, and its damage contract is what `heca/src/app/terminal_render.rs` depends on. Splitting the engine first means P094 re-carves freshly split files. Resume once P094's terminal work lands. Nothing here is a defect."
+        },
+        {
+          "id": "073f4e71-0b10-4a50-9e42-66eafdf4de7d-check-002-deferred-done",
+          "date": "2026-11-17T19:40:50.903Z",
+          "fromStatus": "deferred",
+          "toStatus": "done",
+          "title": "deferred → done",
+          "description": "Done (closed 2026-11-17, Antonio). terminal/engine.rs is now heca-core/src/backend/terminal/engine/: mod.rs (342 lines), convert, images (GraphicsCollector), links, read, viewport and tests/ — last touched by commit 80cdac96 (2026-10-14). Deferred 2026-09-04 because P094/T449 reshaped the area; T449 is done. Not done as specified: the adapters SharedWriter, BellHandler, OscClipboard and HecaTerminalConfig remain in engine/mod.rs:26-106 rather than a separate adapters.rs, and the task's \"pure move\" review checklist was not re-run. Verified by reading the tree on main 2026-11-17."
         }
       ],
       "decisions": [],
@@ -3638,10 +3654,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-17T19:40:50.903Z",
+      "completedAt": "2026-11-17T19:40:50.903Z",
       "createdAt": "2026-09-04T14:02:46.187Z",
-      "updatedAt": "2026-09-04T14:29:21.241Z",
+      "updatedAt": "2026-11-17T19:40:50.903Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -4005,8 +4021,8 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-26T19:14:19.642Z",
-  "handoff": "# T468 census splits under way — hint tests split proposed, not yet agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-10-17T10:29:04.837Z\nReason: Antonio asked for a handoff after the appearance split was committed and the next split (the hint library's tests) was proposed. The session's context is long; a cold agent needs the exact resume point, the proposed split, the commits so far and the rules Antonio enforced today.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: P082(F003)/T468 — Split the files that are doing several jobs (in progress; checklist 58/71)\n- Exact resume point: step C45 — `heca-grid-ui/src/hint/tests.rs` (1449 lines, 50 tests). Split PROPOSED to Antonio, **not yet agreed**. Ask him \"is this split OK?\" before moving anything.\n\n### Proposed split for C45 (pure move; every test keeps its name `hint::tests::<section>::<test>`)\nThe file already holds 10 inline `mod` blocks; each becomes its own file under `heca-grid-ui/src/hint/tests/`:\n| file | covers | ~lines (source lines) |\n|---|---|---|\n| tests/mod.rs | description + section list | 15 |\n| declarations.rs | which widgets get a letter: declarations, wrappers, containers, names | 405 (4–411) |\n| actionable.rs | anything actionable is lettered | 45 (412–455) |\n| pick_delivery.rs | a pick is an event: who runs it, listening, stopping | 120 (456–576) |\n| offer.rs | handing a letter by name | 80 (577–657) |\n| clipped_away.rs | rows scrolled out of view lose their letter | 150 (658–807) |\n| by_surface.rs | letters grouped by owning surface | 230 (808–1037) |\n| visibility.rs | widgets squeezed to nothing | 165 (1038–1202) |\n| scoped_pickers.rs | a picker's own scope | 175 (1203–1376) |\n| keyed_walk.rs | writes by name leave hidden parts alone | 35 (1377–1410) |\n| a_pick_is_a_press.rs | picking a field/row gives it the keyboard | 40 (1411–1449) |\nThen review each file (repeated helpers, stale notes), each fix its own checklist step.\n\n## Current and partial state\n- Branch `refactor/split-chrome-mod`, NOT pushed past `9eadf394`. Commits this session (all on Antonio's word): `29bc9e14` overlay split + one-door fixes; `1e2d5b8f` pane letter + `keyboard_to` library setting; `81827a60` extending-heca doc (other agent's fix); `71a8f6d6` event split + review fixes + plugin kit `keyboard_to`/`area`/`column`/`row`/spans; `2bb21691` renderer text split + fixes, AGENTS.md \"stay under 800\"; `5242c439` terminal backend split + fixes + docs on how a terminal process starts; `c81d7bf1` prefix+q releases the dock (goes into the terminal from anywhere); `c8cb985d` appearance split + fixes + terminal named \"terminal\".\n- Census steps left: C45–C57 (16 files ≥ 800 lines; C42–C44 done). Files 601–743 lines are dropped from T468 (accepted decision on T468, list in its notes).\n- Working tree clean except `.planning/STATE.md` (a hook's timestamp — never commit it) and `.DS_Store`.\n- Abandoned on Antonio's call (do not redo): a separate \"type here\" letter on the terminal with its own colour, and changing the sidebar pane row's letter to \"go and type\". Final design: `prefix+/` row letter = look and stay in the sidebar (j/k); `prefix+q` = go into the terminal. The removed work is saved at `/private/tmp/claude-501/-Users-antonio-projects-heca/16da7337-196c-4d78-9a0a-53a9de8c904d/scratchpad/t468/type_here/work.diff` (scratch, may vanish).\n\n## Preservation constraints\n- Antonio's rules: plain short English, no function names in replies, answer a question and WAIT; tell him before any change; end replies with \"For you: …\". Fix in the library, nothing hardcoded, composition/DOM-like builders, one path per rule.\n- Every split: propose the shape → OK → move only (same tests by name, clippy `-p <crates> --all-targets --all-features -D warnings`, `cargo doc --no-deps --document-private-items`) → review → each fix its own checklist step with a test seen red first (pure tidy-ups say so). Commit only on \"commit\"; Rust skill review before commit.\n- Read the phase + task in the planner before starting work (Antonio insisted).\n- Cargo is scoped by `.claude/hooks/cargo-scope.sh`; pass crates with literal `-p` (not via a variable). Full workspace only with `HECA_FULL_WORKSPACE=1` on Antonio's word.\n- Never `git checkout --` / restore a whole `git diff --name-only` list: it once reset the planner file. Back up first; exclude `.planner/`.\n- No GUI launch by the agent; Antonio checks by eye.\n\n## Supporting documents\n- None needed: `.planner/docs/t468-oversized-files.md` and `.planner/docs/oversized-files-2026-09-04.md` hold the original census; T468's checklist names each remaining file.\n\n## Blockers and risks\n- No end-to-end test harness for picks (needs full AppState); pick behaviour is checked by eye.\n- `heca-grid-ui/src/widgets/key_hint.rs` (910) and `hint/tests.rs` are census items; keep edits there small until split.\n- AGENTS.md now says \"aim under 400, stay under 800 — above 800 agree a split\"; older planner notes still say 600 (dated records, left as they are).\n\n## How to resume\n1. `planner-task-show T468 full=true`; read P082 phase. Ask Antonio whether the C45 split above is OK.\n2. On OK: back up the file, record `cargo test -p heca-grid-ui -- --list`, move each `mod` block to its file (dedent 4), keep `use super::*` chains, compare test names, run gates.\n3. Review, propose fixes, wait; then C46 (`heca/src/app/selection_model.rs`, 1424) — propose its split first.",
+  "updatedAt": "2026-11-17T19:40:50.903Z",
+  "handoff": "",
   "handoffUpdatedAt": "2026-10-17T10:29:04.837Z",
   "handoffAudit": {
     "version": 1,
@@ -4244,6 +4260,11 @@
   "handoffReadAt": "2026-10-17T10:29:08.360Z",
   "handoffHistory": [
     {
+      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-11-17T19-40-50-946Z.md",
+      "clearedAt": "2026-11-17T19:40:50.946Z",
+      "reason": "phase-done"
+    },
+    {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-09-23T08-58-18-900Z.md",
       "clearedAt": "2026-09-23T08:58:18.900Z",
       "reason": "manual"
@@ -4261,11 +4282,6 @@
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-21T17-01-21-877Z.md",
       "clearedAt": "2026-08-21T17:01:21.877Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-21T15-28-54-679Z.md",
-      "clearedAt": "2026-08-21T15:28:54.679Z",
       "reason": "superseded"
     }
   ],
@@ -4348,6 +4364,14 @@
       "fromStatus": "in-progress",
       "toStatus": "deferred",
       "title": "in-progress → deferred",
+      "description": ""
+    },
+    {
+      "id": "358d0003-8397-4288-8050-a0ae43d7d060",
+      "date": "2026-11-17T19:40:51.020Z",
+      "fromStatus": "deferred",
+      "toStatus": "done",
+      "title": "deferred → done",
       "description": ""
     }
   ],

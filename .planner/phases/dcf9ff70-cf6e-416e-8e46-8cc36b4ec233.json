@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "",
   "description": "Surface app feedback to the user via a lightweight toast/notification surface, with two immediate hooks: (1) notify when a keybinding/action is blocked by the interaction policy (today silently discarded with only a debug log — AGENTS §Interaction Policy), and (2) notify on config reload outcome (success vs warning when the reload failed, replacing the `eprintln!`-only path in `main.rs::reload_config`).\n\nArchitecture: the `heca-grid-ui` `Toast` widget (`heca-grid-ui/src/widgets/toast.rs`, `toast_stack.rs`) already exists but is NOT mounted in the app today — no toast host is wired (`grep ToastStack heca/src/` = empty). So this phase must first wire a toast host (a retained overlay band or chrome region that owns a `ToastStack` and exposes a `push_toast` API reachable from handlers), then add the two hooks. The full notification architecture lives in the separate Notification System feature (fc19894f); this phase delivers a minimal, reusable toast surface and the two QoL hooks, not the full store/lifecycle/routing system.\n\nCode refs (verified 2026-07-09):\n- Blocked path: `heca/src/app/interaction.rs` — `route_action` (~:471) returns `RouteDecision::Block` for policy-blocked actions (arms at :427/:435/:443/:450/:458 and floating-domain blocks at :491/:501/:508); `dispatch_action`/`dispatch_intent` are the chokepoints where a blocked action is silently dropped (AGENTS: \"silently discarded — debug log\"). The notification should fire here with the blocked action's label (from `ActionCatalog`).\n- Reload path: `heca/src/main.rs:96` `HecaApp::reload_config` — error arm `eprintln!(\"[heca] reload failed: {e}\")` (:101) and success arm (continues at :108+). `heca/src/handlers.rs:2312` `handle_reload_config` just sets `pending_reload = true`; the actual reload + outcome is in `main.rs::reload_config` (called from :240 on `pending_reload`).\n- Toast widget: `heca-grid-ui/src/widgets/toast.rs`, `toast_stack.rs`; chrome refs in `heca/src/chrome/realize.rs` + `view.rs`.",
+  "descriptionUpdatedAt": "2026-07-09T13:08:26.141Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -34,19 +35,33 @@
       "priority": 1,
       "shortName": "notify-blocked-keybinding",
       "title": "notify-blocked-keybinding: Notification when an action is blocked by policy",
-      "status": "planned",
+      "status": "canceled",
       "description": "Show a toast notification when a user-triggered action is blocked by the interaction policy (FocusDomain::Floating blocking TiledOnly/WorkspaceLevel/AlwaysAllowed actions, or any other RouteDecision::Block).\n\nPREREQUISITE (shared with the config-reload task): wire a toast host in the app — the `heca-grid-ui` `Toast`/`ToastStack` widgets exist (`heca-grid-ui/src/widgets/toast.rs`, `toast_stack.rs`) but NO host is mounted today (`grep ToastStack heca/src/` = empty). Mount a `ToastStack` as a retained overlay band (or chrome region) and expose a `push_toast`/notification API reachable from the interaction dispatch path. Keep it minimal and reusable (the full Notification System feature fc19894f owns the richer store/lifecycle/routing — do not duplicate that).\n\nHOOK: in `heca/src/app/interaction.rs`, the policy block happens in `route_action` (~:471) returning `RouteDecision::Block` (arms at :427/:435/:443/:450/:458 + floating-domain blocks :491/:501/:508). The blocked action is silently discarded at the `dispatch_action`/`dispatch_intent` chokepoints (AGENTS: \"silently discarded — debug log\"). Fire the toast there with the blocked action's user-facing label (resolve via `ActionCatalog::label`) — e.g. \"Float toggle blocked (floating pane active)\" or a generic \"Action blocked by policy\". Must be reachable from keyboard + mouse + RPC sources (the block already spans all sources). No hardcoded text — use the ActionCatalog label + a configurable template if needed.\n\nVerify: cargo test + clippy --workspace --all-targets --all-features clean; manual check (open a floating pane, press a TiledOnly binding like prefix+Enter/split → toast appears).",
+      "descriptionUpdatedAt": "2026-07-09T13:08:33.508Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "ede93e46-85f2-403a-b49a-677775dd7cc4-check-001-planned-canceled",
+          "date": "2026-11-17T19:40:14.671Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Antonio, 2026-11-17: dropped. A toast for every blocked action would be noisy (e.g. while a floating pane is up); the block stays a debug-log line (heca/src/app/interaction/dispatch.rs).",
+          "description": "Antonio, 2026-11-17: dropped. A toast for every blocked action would be noisy (e.g. while a floating pane is up); the block stays a debug-log line (heca/src/app/interaction/dispatch.rs)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-09T13:08:33.508Z",
-      "updatedAt": "2026-07-09T13:08:33.508Z"
+      "updatedAt": "2026-11-17T19:40:14.671Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "eb1cd685-873e-4ed5-a047-8a92b147e211",
@@ -56,25 +71,59 @@
       "priority": 2,
       "shortName": "notify-config-reload",
       "title": "notify-config-reload: Success/warning notification on config reload outcome",
-      "status": "planned",
-      "description": "Show a toast notification on config reload (`prefix+Shift+r` / `WmAction::ReloadConfig`): a SUCCESS toast when the reload applied the new config, a WARNING toast when the reload failed (bad config.toml) so the user knows the working config was kept and what to fix.\n\nPREREQUISITE (shared with the blocked-keybinding task): wire a toast host in the app — `heca-grid-ui` `Toast`/`ToastStack` exist but no host is mounted today. Same host as the blocked-keybinding task; build it once.\n\nHOOK: `heca/src/main.rs:96` `HecaApp::reload_config` — today the error arm only `eprintln!(\"[heca] reload failed: {e}\")` (:101) and `eprintln!(\"[heca] fix config.toml and press prefix+Shift+r to retry\")`; the success arm has no user feedback at all (silent). Replace/augment the `eprintln!` with a warning toast (including the error message) on failure, and add a success toast (\"Config reloaded\") on the success path. `heca/src/handlers.rs:2312` `handle_reload_config` sets `pending_reload = true`; the actual reload runs in `main.rs::reload_config` (called from :240). The toast API must be reachable from `main.rs` (push via `event_proxy` or a state field).\n\nNo hardcoded text where a config/template can live — keep the toast messages in one place, configurable if practical. Must be reachable from keyboard (the ReloadConfig binding) and RPC.\n\nVerify: cargo test + clippy --workspace --all-targets --all-features clean; manual check (good config → success toast on prefix+Shift+r; bad config → warning toast with the error, working config preserved).",
+      "status": "done",
+      "description": "Show a toast notification on config reload (`prefix+Shift+r` / `WmAction::ReloadConfig`): a SUCCESS toast when the reload applied the new config, a WARNING toast when the reload failed (bad config.toml) so the user knows the working config was kept and what to fix.\n\nPREREQUISITE (shared with the blocked-keybinding task): wire a toast host in the app — `heca-grid-ui` `Toast`/`ToastStack` exist but no host is mounted today. Same host as the blocked-keybinding task; build it once.\n\nHOOK: `heca/src/main.rs:96` `HecaApp::reload_config` — today the error arm only `eprintln!(\"[heca] reload failed: {e}\")` (:101) and `eprintln!(\"[heca] fix config.toml and press prefix+Shift+r to retry\")`; the success arm has no user feedback at all (silent). Replace/augment the `eprintln!` with a warning toast (including the error message) on failure, and add a success toast (\"Config reloaded\") on the success path. `heca/src/handlers.rs:2312` `handle_reload_config` sets `pending_reload = true`; the actual reload runs in `main.rs::reload_config` (called from :240). The toast API must be reachable from `main.rs` (push via `event_proxy` or a state field).\n\nNo hardcoded text where a config/template can live — keep the toast messages in one place, configurable if practical. Must be reachable from keyboard (the ReloadConfig binding) and RPC.\n\nVerify: cargo test + clippy --workspace --all-targets --all-features clean; manual check (good config → success toast on prefix+Shift+r; bad config → warning toast with the error, working config preserved).\n\n---\n**Completion summary:**\nClosed 2026-11-17 by Antonio's decision: already implemented by P062(F009) Reload Config Producer. heca/src/lib.rs notify_reload_outcome raises \"Configuration reloaded\" (auto-dismiss) and a sticky danger \"Config reload failed\" with the error and a Retry action (called after reload). Verified: tests a_successful_reload_raises_an_auto_dismissing_confirmation and a_failed_reload_raises_a_sticky_danger_with_retry pass (13 reload-notification tests passed, 2026-11-17).",
+      "descriptionUpdatedAt": "2026-11-17T19:40:25.455Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "eb1cd685-873e-4ed5-a047-8a92b147e211-check-001-planned-done",
+          "date": "2026-11-17T19:40:25.454Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed 2026-11-17 by Antonio's decision: already implemented by P062(F009) Reload Config Producer. heca/src/lib.rs notify_reload_outcome raises \"Configuration reloaded\" (auto-dismiss) and a sticky danger \"Config reload failed\" with the error and a Retry action (called after reload). Verified: tests a_successful_reload_raises_an_auto_dismissing_confirmation and a_failed_reload_raises_a_sticky_danger_with_retry pass (13 reload-notification tests passed, 2026-11-17)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-17T19:40:25.454Z",
+      "completedAt": "2026-11-17T19:40:25.454Z",
       "createdAt": "2026-07-09T13:08:39.843Z",
-      "updatedAt": "2026-07-09T13:08:39.843Z"
+      "updatedAt": "2026-11-17T19:40:25.454Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-09T13:08:26.141Z",
-  "updatedAt": "2026-07-27T11:40:15.461Z",
+  "updatedAt": "2026-11-17T19:40:25.454Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "eea8a3ae-7f84-49ea-a274-cf6cd2d4e5d5",
+      "date": "2026-11-17T19:40:14.704Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "bdae7aaa-0b1a-4c2d-a9fc-238f69083dc5",
+      "date": "2026-11-17T19:40:25.486Z",
+      "fromStatus": "planned",
+      "toStatus": "done",
+      "title": "planned → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

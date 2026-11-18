@@ -81,8 +81,8 @@
     {
       "id": "e1783092-86cc-421a-9bf7-95c652ca2b61",
       "title": "The server/client design is borrowed from herdr (state split, socket API names, session persistence)",
-      "decision": "Source: the old research summary (a planning file, now deleted). \"Herdr inspiration: borrow the client/server state split, socket API namespacing, and session persistence model, but replace the TUI renderer with a GPU compositor and the BSP tree with niri-inspired scrolling columns.\" Herdr is the project the F012 server/client architecture started from.",
-      "rationale": "docs/server-client-architecture.md has no mention of herdr, so the origin of the design would be lost with the deleted planning folder. Low value but cheap to keep.",
+      "decision": "Source: the old research summary (a planning file, now a historical archive). \"Herdr inspiration: borrow the client/server state split, socket API namespacing, and session persistence model, but replace the TUI renderer with a GPU compositor and the BSP tree with niri-inspired scrolling columns.\" Herdr is the project the F012 server/client architecture started from.",
+      "rationale": "docs/server-client-architecture.md has no mention of herdr, so the origin of the design would be lost once the planning folder, now only a historical archive, stops being read. Low value but cheap to keep.",
       "implementationNotes": "Add one sentence to docs/server-client-architecture.md during the T561 doc rewrite. Note: the original RPC plan (session.*, window.*, tab.* namespaces) was not built as written; RPC today is one command per action.",
       "acceptedAt": "2026-11-16T15:09:47.486Z"
     }
@@ -230,7 +230,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:05.026Z",
-  "updatedAt": "2026-11-17T14:03:22.202Z",
+  "updatedAt": "2026-11-17T15:11:18.992Z",
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6d6865ac-0560-4033-aab5-eb8c8c7ce438",
