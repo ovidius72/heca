@@ -12,6 +12,42 @@ Code reusability and splitting principles guide how you break software into smal
 
 These are made over and over. **Violating any = redo.**
 
+### ⭐ THE SYNTAX — every widget and component is written like this
+
+Declarative and nested, in one expression: the shape of Flutter and SwiftUI, with DOM-shaped events.
+
+```rust
+Component::new()
+    .prop_a(..)                                    // its own typed properties, as builders
+    .prop_b(..)
+    .child(
+        Grid::new()
+            .template_row("auto 1fr")              // the arrangement is a track template
+            .child([header, body]),                // children in order, composed to any depth
+    )
+    .on_click(|ev| ev.dispatch(Intent::new("an_action")))   // behaviour lives on the widget
+```
+
+**Never:** find a child by its position (`children[0]`), write a style, a bound or a position by
+hand, rebuild a widget to change one of its properties, or put a number in the code. If what you
+need cannot be written in this shape, the library is missing a builder — propose it (⭐⭐ RULE
+ZERO); never work around it. Real examples: [`docs/layout.md` § The one rule](docs/layout.md),
+[`docs/widgets.md` → Grid](docs/widgets.md#grid).
+
+### ⭐ heca-pro builds on heca — keep its API compatible, and it follows the same syntax
+
+heca-pro (the commercial edition, a separate repository) is built on top of heca through what
+feature F012 "Ready for heca-pro" delivered: heca as a library and its extension entry point, the
+server/client split and its wire protocol, sessions, the RPC line format, extension services and
+the widgets.
+
+- **That surface stays compatible.** A change that would break heca-pro's code or its connection to
+  a heca server — renaming or removing a public type, function or builder, changing an RPC line, a
+  wire message or an event's shape — is not made silently. Add the new form beside the old one, say
+  which is deprecated, and agree the removal with Antonio and heca-pro first.
+- **heca-pro follows the same syntax** (above): every widget and component it writes is declarative
+  and nested in the same shape, and its own `AGENTS.md` states the same rule.
+
 ### 0. THE PRE-FLIGHT — three answers and two rules, BEFORE the first line of code
 
 Not a mindset. Three questions with written answers, in the task or the PR body. No answer = you are
