@@ -37,6 +37,28 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 > a space and an alignment, and the traps that cost real defects. Read it before arranging anything
 > with more than one part.
 
+## ⭐ THE SYNTAX — every widget and component is written like this
+
+Declarative and nested, in one expression: the shape of Flutter and SwiftUI, with DOM-shaped events.
+
+```rust
+Component::new()
+    .prop_a(..)                                    // its own typed properties, as builders
+    .prop_b(..)
+    .child(
+        Grid::new()
+            .template_row("auto 1fr")              // the arrangement is a track template
+            .child([header, body]),                // children in order, composed to any depth
+    )
+    .on_click(|ev| ev.dispatch(Intent::new("an_action")))   // behaviour lives on the widget
+```
+
+**Never:** find a child by its position (`children[0]`), write a style, a bound or a position by
+hand, rebuild a widget to change one of its properties, or put a number in the code. If what you
+need cannot be written in this shape, the library is missing a builder — propose it (⭐⭐ RULE
+ZERO); never work around it. Real examples: [`docs/layout.md` § The one rule](layout.md),
+[`docs/widgets.md` → Grid](#grid).
+
 ## Mental model
 
 ```
