@@ -171,6 +171,8 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
         Some(crate::chrome::PropValue::Text(id)) => Some(id.clone()),
         _ => None,
     };
+    // Read only by the debug report below; a release build has no use for it.
+    #[cfg(debug_assertions)]
     let addressed = named.is_some();
     let Some(mount) = named.or_else(|| owning_mount(state, &intent.action)) else {
         #[cfg(debug_assertions)]

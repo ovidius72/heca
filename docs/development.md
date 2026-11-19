@@ -100,3 +100,23 @@ CPU and the average number of render passes it began:
 
 It is CPU time only: the GPU runs after the frame is submitted, so work moved from the CPU to the GPU
 looks like a win here. Off unless the variable is set.
+
+To find **which step is slow** — a single long frame, or a server turn that stalls typing — set
+`HECA_SLOW_MS` to a threshold in milliseconds. Every timed step that takes at least that long prints
+one line on stderr, with the seconds since start; inner steps come before the outer ones that contain
+them:
+
+```sh
+HECA_SLOW_MS=8 cargo run --release -p heca -- --standalone 2> slow.log
+```
+
+```text
+[slow]    12.004s    18.8 ms  frame.chrome_layout
+[slow]    12.004s    44.7 ms  frame.paint_window
+```
+
+Steps are named by where they run: `frame.*` (drawing), `client.*` (the window's event loop),
+`server.*` and `session.*` (the server's turn). Use `--standalone` to see the server's steps: a
+background server writes its output nowhere. Add a step with `let _slow = slow_steps::step("name");`
+(`heca/src/slow_steps.rs`). `HECA_FRAME_REASONS=1` prints why each frame was asked for, on the same
+stream. Off unless the variable is set.

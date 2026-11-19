@@ -22,6 +22,7 @@ mod rpc;
 mod search_state;
 mod server;
 mod shortcut;
+mod slow_steps;
 mod state_file;
 
 // ── What another crate builds on ─────────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ struct HecaApp {
 
 impl HecaApp {
     fn receive_server(&mut self) {
+        let _slow = crate::slow_steps::step("client.receive_server");
         let calls = match self.state.as_mut() {
             Some(state) => match state.client.poll() {
                 Ok(update) => state.receive_client(update),
@@ -463,10 +465,12 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             None => return,
         };
 
+        let _slow = crate::slow_steps::step("client.window_event");
         handle_window_event(event_loop, &self.registry, &self.keymaps, state, event);
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let _slow = crate::slow_steps::step("client.about_to_wait");
         self.receive_server();
         // Config reload requested via keybinding — do it before borrowing state.
         let reload = self.state.as_mut().and_then(|state| state.pending_reload.take());
@@ -497,8 +501,8 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         match event {
             AppEvent::CloseWindow => event_loop.exit(),
             AppEvent::BackendWake => {
-                let backend_poll = poll_backends(state);
-                let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
+                let backend_poll = { let _slow = crate::slow_steps::step("client.poll_backends"); poll_backends(state) };
+                let chrome_runtime_changed = { let _slow = crate::slow_steps::step("client.sync_chrome_state"); crate::chrome::sync_chrome_state(state) };
                 if backend_poll.has_data || backend_poll.closed_any || chrome_runtime_changed {
                     state.mark_full_redraw();
                     crate::app::frame_reasons::report("event BackendWake");
@@ -517,6 +521,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.window.request_redraw();
             }
             AppEvent::TerminalInput { terminal, input } => {
+                let _slow = crate::slow_steps::step("client.terminal_input");
                 crate::app::terminal_host::on_terminal_input(
                     state,
                     &self.registry,
