@@ -53,6 +53,41 @@ carries the same event. **Never** a signal, a polling loop, a dedicated trait me
 per-consumer callback in its place; a change nobody can listen to is not done. (Project decision
 f639e662; the contract is P054(F006)'s "Pane runtime state", section 0.1.)
 
+### ⭐ HOW TO BUILD A COMPONENT — the steps, every time
+
+The same steps heca-pro follows (its AGENTS.md, "How to build a component"). In order, every time:
+
+1. **Draw it first as grid areas** — the parts and where they sit, like CSS `grid-template-areas`.
+   A room member:
+
+   ```text
+   status  handle   program
+   .       details  details
+   ```
+
+2. **Build it with `Grid`** when it has more than one part, **`Flex`** for a row or column of like
+   things. Each part says its own area (`.area("handle")`); columns are tracks (`"auto 1fr auto"`).
+
+   ```rust
+   Grid::new()
+       .template_column("auto 1fr auto")
+       .template_area(["status handle program", ". details details"])
+       .gap(Spacing::Xs)
+       .child([dot.area("status"), name.area("handle"), program.area("program"), details.area("details")])
+   ```
+
+3. **The parts are the small widgets**: `Label`, `Icon`, `StatusDot`, `Badge`, `Button`, `Input`.
+   **Never use a ready-made composite as the layout** because it happens to show text — `ItemGroup`,
+   `Tag`, `Card`, `Select` are complete widgets with their own look. Use one only when it is exactly
+   the thing in the design, and say why.
+4. **Nothing written by hand.** Text size is a variant (`WidgetSize::Caption`), space is a theme step
+   (`Spacing::Xs`), colour comes from the theme. No background, alpha, radius, padding or pixel number
+   at the call site. A look two places need (the pane card) is a variant or builder in
+   `heca-grid-ui`, never a copy.
+5. **Look like the closest existing surface** and reuse its pieces — the workspaces dock for a dock
+   (`DockFrame` per group, `Badge` count), its pane row for a row.
+6. **See it running before calling it done.** A green test proves the words, not the look.
+
 ### ⭐ heca-pro builds on heca — keep its API compatible, and it follows the same syntax
 
 heca-pro (the commercial edition, a separate repository) is built on top of heca through what

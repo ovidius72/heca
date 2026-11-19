@@ -111,3 +111,15 @@ fn installed_command_hooks_forward_native_metadata_through_the_actual_host() {
     assert!(invoke("claude", &reports, b"{}").status.success());
     assert!(!endpoint.exists(), "closing a pane must not recreate its reporting file");
 }
+
+/// **A driver's icon reads by its id, with its integration switched off** — the default config
+/// switches every program off, and the icon is still there; an unknown id has none.
+#[test]
+fn an_agent_icon_reads_by_driver_id_even_when_its_integration_is_off() {
+    let config = heca_config::settings::AgentsConfig::default();
+    assert!(config.programs.get("claude").is_none_or(|program| program.enabled != Some(true)), "off by default");
+    for id in ["claude", "codex", "pi", "opencode"] {
+        assert!(heca::agent::icon(&config, id).is_some(), "{id} has its icon");
+    }
+    assert!(heca::agent::icon(&config, "no-such-agent").is_none());
+}
