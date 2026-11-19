@@ -24,7 +24,8 @@
   "completionCriteria": [],
   "taskIds": [
     "f33a9488-f3fe-4a84-9aaf-a30fb758d040",
-    "81b690a4-ce53-408e-8fb3-bf9a359c1dc4"
+    "81b690a4-ce53-408e-8fb3-bf9a359c1dc4",
+    "f3c4909e-1640-4f10-8402-2da1083a1399"
   ],
   "tasks": [
     {
@@ -121,11 +122,20 @@
       "priority": 2,
       "shortName": "a-child-list-bound-to-a-value",
       "title": "A child list bound to a value: a dock built from a service's data stays current",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Asked by heca-pro (session heca-pro-dev, 2026-11-19) for its rooms dock (heca-pro T015); Antonio decided 2026-11-19: build the DEFINITIVE fix (a declarative child list bound to a value), not a dock-rebuild stopgap; after the pending work (T568 merged, planner committed). heca-pro waits on it and adds no workaround.\n\n## The defect (verified 2026-11-19)\nA dock body that reads a reactive value while it is built never updates when the value changes. heca-pro's dock reads its `ServiceState` (from `ServiceRegistration::client(..)`, heca/src/entry/service/client.rs:19-45, a `Signal<C>`) inside `ContainerContribution::new(self, |ctx, build| state.with(|view| body(view)))`. The retained chrome tree is rebuilt only when `chrome_signature` changes (heca/src/chrome/window/retained.rs:38 — window size, font zoom, sidebar widths, pane lines, the workspace tree); a `ServiceState` change is not in it, so a new room or member shows only after a restart. docs/extending-heca.md:355 promises \"In a component: it redraws when the value changes\" — true for a widget bound to a signal (a label's text), false for a body whose STRUCTURE comes from the value (a list of rooms). Today every extension dock showing service data would have to wrap its body in `Keyed` plus an effect by hand — a rule each author must remember.\n\n## Wanted — the definitive shape\nA widget in heca-grid-ui that renders a collection held in a signal and keeps its children in step when the collection changes: added items get a child, removed ones lose theirs, unchanged ones keep their widget (and its focus, hover, scroll, inner state), reordered ones move — keyed by an identity the caller gives per item. In THE SYNTAX, e.g. (name and exact builders to be agreed with Antonio BEFORE code):\n```rust\nList::new(rooms_signal)                       // Signal<Vec<T>> or anything readable as a list (ServiceState included)\n    .key(|room| room.id.clone())              // identity per item\n    .child(|room| RoomRow::new(room))         // how one item is shown\n```\n- Builds on what exists, no second mechanism: `Keyed` / `IdentityExt::on_props` (heca-grid-ui/src/builders/identity.rs:30, props/mod.rs) and `reconcile_keyed` (heca-grid-ui/src/reconcile.rs:66). Check whether one of them already is most of this.\n- Placed like any widget, in any tree (a dock body, an overlay, a pane) — a component owns its own input; nothing registered with the host.\n- `ServiceState<C>` is readable by it directly (a projection `|view| &view.rooms`), so an extension writes no glue.\n- Decision 05a2ed0c names this gap (\"A declarative child list bound to data (ForEach-like) is not in the library yet\"); P087(F011)/T469 (the palette rewrite) consumes the same widget — design it for both.\n- Plugins: a ViewNode cannot carry a signal (AGENTS ⭐ SETTLED); the plugin-side counterpart is P085(F003)/T360 (per-mount values). Say how the two meet; do not build T360 here.\n- Fix docs/extending-heca.md:355 to show the real way (the list widget), plus the widget's rustdoc, docs/widgets.md entry (native example) and the showcase.\n\n## Tests\nHeadless: change the signal → children added/removed/reordered with unchanged ones keeping their widget identity (a child's own state survives); a dock built once with the widget updates without a chrome rebuild; break the reconcile on purpose and see the tests go red. Eye-check: heca-pro's rooms dock adds a room live.",
       "descriptionUpdatedAt": "2026-11-19T12:27:10.140Z",
-      "notes": "",
-      "statusLog": [],
+      "notes": "2026-11-19 — agreed with Antonio: name `List`; source = a closure reading any reactive value (`List::new(move || state.with(|v| v.rooms.clone()))`); a child is rebuilt when its item's data differ (T: PartialEq); native only (plugins via T360). `.key(..)` is OPTIONAL — without it an item is its own identity; examples and docs show it only where it is explained (the description's example with `.key` is superseded).\nBuilt in /Users/antonio/projects/heca-feat-569 (branch feat/t569-bound-list), uncommitted: heca-grid-ui/src/widgets/list.rs (List: new/child/key/row, LayoutExt; places in remeasure; keyed + changed item → set_props or rebuild); heca-grid-ui/src/reconcile.rs (one generic matcher `reconcile_matching`, used by the existing reconcile and by List — no second path); exports in widgets/mod.rs and lib.rs root + prelude; docs/widgets.md `List` entry; docs/extending-heca.md:355 corrected; showcase demo (page/connections_and_text.rs: Add item / Remove first); heca/tests/public_authoring.rs + heca/tests/extension_sessions.rs (List over a ServiceState).\nFound while doing it (Antonio approved the fix, same task): ScrollRegion followed a focused/selected widget whenever it MOVED, so a click that grew a list above a row selected far off screen dragged the page there (showcase sweep test). Fix: a pointer press pauses layout-only following, a key/typing resumes it (browser rule) — heca-grid-ui/src/widgets/scroll_region/{component.rs,reveal.rs,mod.rs}; test a_pointer_press_pauses_following_a_target_it_only_pushed (scroll_region/tests/part_2.rs).\nChecks: lint-changed clippy + tests clean (all heca-grid-ui, heca, heca-renderer showcase tests); sabotage of List matching/props and of the press pause turned the right tests red; cargo xwin clippy clean; cargo doc -D warnings clean. Pending: Antonio's eye-check of the showcase demo and of scrolling; PR; heca-pro API + live check of its rooms dock.",
+      "statusLog": [
+        {
+          "id": "498ee7f8-94b4-4136-b606-5adc8ed654da",
+          "date": "2026-11-19T12:35:52.962Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -133,19 +143,19 @@
           "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-001-read-keyed-on-props-reconcile-keyed-propose-the-widget-s-name-and-builders-to-antonio-and-agree-them",
           "number": 1,
           "title": "Read Keyed / on_props / reconcile_keyed; propose the widget's name and builders to Antonio and agree them",
-          "checked": false
+          "checked": true
         },
         {
           "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-002-build-the-widget-in-heca-grid-ui-with-servicestate-readable-directly-headless-tests-sabotage",
           "number": 2,
           "title": "Build the widget in heca-grid-ui with ServiceState readable directly; headless tests + sabotage",
-          "checked": false
+          "checked": true
         },
         {
           "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-003-docs-rustdoc-docs-widgets-md-showcase-fix-docs-extending-heca-md-355",
           "number": 3,
           "title": "docs: rustdoc, docs/widgets.md, showcase; fix docs/extending-heca.md:355",
-          "checked": false
+          "checked": true
         },
         {
           "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-004-tell-heca-pro-the-api-eye-check-its-rooms-dock-live-pr",
@@ -158,16 +168,67 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-11-19T12:35:52.962Z",
       "completedAt": "",
       "createdAt": "2026-11-19T12:27:09.960Z",
-      "updatedAt": "2026-11-19T12:27:09.960Z",
+      "updatedAt": "2026-11-19T13:04:48.475Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
+          "createdAt": "2026-11-19T12:35:52.846Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2"
+    },
+    {
+      "id": "f3c4909e-1640-4f10-8402-2da1083a1399",
+      "phaseId": "92a3b192-0f65-406a-aba4-1c4f496ee973",
+      "number": 570,
+      "shortId": "YF5X8",
+      "priority": 3,
+      "shortName": "a-program-s-agent-icon-read-by",
+      "title": "A program's agent icon, read by name — extensions draw the harness icon heca draws",
+      "status": "planned",
+      "description": "Asked by heca-pro (heca-pro-dev, 2026-11-19) for its rooms dock (heca-pro T015): each member is shown with its harness icon, drawn with heca's Image widget like heca's agent line does. Antonio chose option (a) on 2026-11-19: a public read \"program → icon of the registered driver\" (plugin/extension drivers included), so no extension copies heca's SVGs. API name to be agreed with Antonio before code.\n\n## What exists (verified 2026-11-19)\n- `heca::agent::AgentIcon` is public (heca-core/src/agent/icon.rs:9: File(PathBuf) | Svg(String)); re-exported in heca/src/agent/mod.rs:11-14.\n- Every driver implements `heca::agent::AgentDriver` (heca-core/src/agent/driver.rs:44-60): `id()` (stable identity, e.g. \"claude\", the key of `[settings.agents.programs.<id>]`), `name()`, `icon() -> Option<AgentIcon>`, `programs()` (executable names), `recognizes(program)` (basename match, `program_name`, driver.rs:99).\n- Built-in drivers live in heca/src/agent/drivers/ (private; assets in drivers/assets/icons: claude, codex, pi, opencode); extensions add drivers with `heca::extension(..).agent_driver(..)` (heca/src/agent/registration/).\n- There is NO public lookup from a program to its icon; an extension sees PaneFacts (with the running agent's state/icon) only inside pane_line/pane_chip.\n- CAVEAT: a built-in driver is constructed only when its program is enabled in config (`configured()` returns None unless `enabled: Some(true)`, heca/src/agent/drivers/mod.rs:33-36), and config.default.toml ships every program disabled (`[settings.agents.programs.*] enabled = false`). A lookup over the live driver list would find no icon for a program whose integration is off. The icon is static data: the lookup must answer for every known driver, enabled or not — decide with Antonio how (e.g. the icons registered beside the drivers regardless of enablement).\n- Naming of the key: heca-pro says \"claude-code\"; heca's driver id is \"claude\" and its executable \"claude\". The lookup should accept what heca already uses (driver id or an executable the driver recognizes); heca-pro passes one of those.\n\n## Wanted\nOne public read in heca::agent: program (driver id or executable) → the icon heca would draw (driver's icon; for an unknown program, None, and the caller shows heca's generic terminal glyph as the agent line does). Built once, from the same registry the agent line uses — no second list. Docs in docs/extending-heca.md (Terminal agent drivers section); a test from outside the crate (heca/tests) that reads a built-in driver's icon with its integration disabled and an extension driver's icon.",
+      "descriptionUpdatedAt": "2026-11-19T13:44:37.040Z",
+      "notes": "Decided with Antonio 2026-11-19: (1) the key is the DRIVER ID (\"claude\", \"codex\", \"pi\", \"opencode\", an extension driver's id) — not the executable: a driver can have several executables, the user changes them in config (`executables = [...]`), while the id is unique, stable and the config key. (2) The icon does not depend on whether the driver's integration is enabled: it is returned for every known driver, enabled or not. API name still to agree before code.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f3c4909e-1640-4f10-8402-2da1083a1399-check-001-agree-the-name-and-the-key-driver-id-executable-with-antonio-settle-the-disabled-driver-caveat",
+          "number": 1,
+          "title": "Agree the name and the key (driver id / executable) with Antonio; settle the disabled-driver caveat",
+          "checked": false
+        },
+        {
+          "id": "f3c4909e-1640-4f10-8402-2da1083a1399-check-002-implement-the-read-over-the-one-driver-registry-enabled-or-not-tests-incl-outside-crate",
+          "number": 2,
+          "title": "Implement the read over the one driver registry, enabled or not; tests incl. outside-crate",
+          "checked": false
+        },
+        {
+          "id": "f3c4909e-1640-4f10-8402-2da1083a1399-check-003-docs-extending-heca-md-tell-heca-pro-the-api-pr",
+          "number": 3,
+          "title": "Docs (extending-heca.md); tell heca-pro the API; PR",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-19T13:44:36.971Z",
+      "updatedAt": "2026-11-19T13:50:50.408Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-19T11:15:37.223Z",
-  "updatedAt": "2026-11-19T12:34:30.389Z",
+  "updatedAt": "2026-11-19T13:50:50.408Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -186,7 +247,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
-      "createdAt": "2026-11-19T11:16:41.043Z"
+      "createdAt": "2026-11-19T12:35:52.846Z"
     }
   ]
 }
