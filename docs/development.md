@@ -56,7 +56,33 @@ locally, use those same two commands. They build the whole workspace and take a 
 day to day scope cargo to the crates you changed, for example `./scripts/lint-changed.sh` and
 `./scripts/lint-changed.sh test`.
 
-## Frame timing
+## Releasing
+
+A release is made **only** by pushing a version tag: `vX.Y.Z`, equal to the workspace version in
+`Cargo.toml` (a pre-release such as `v0.1.0-rc1` needs that exact version there too).
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) then checks the tag against
+`Cargo.toml` (and stops if they differ), builds heca for macOS (Apple Silicon and Intel), Linux and
+Windows, makes the installers with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager)
+— `.dmg` and `.app`, `.deb` and `.AppImage`, `.msi` — and an archive per system with the program,
+the licences and the README, and publishes them all in a GitHub Release with the notes in
+[`.github/release-notes.md`](../.github/release-notes.md). A tag with a `-` is published as a
+pre-release. The installer settings are in `heca/Cargo.toml` under `[package.metadata.packager]`.
+
+To try the installers locally (macOS shown):
+
+```bash
+cargo install cargo-packager --locked
+cargo build -p heca --release
+cargo packager -p heca --release -f app,dmg -o dist
+```
+
+
 
 For tuning the render path, run heca with `HECA_FRAME_TIMES` set (any value):
 

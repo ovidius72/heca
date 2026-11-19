@@ -340,21 +340,36 @@ fn command_for_shell(
     for (key, value) in env {
         cmd.env(key, value);
     }
+    let kind = shell_kind(shell);
     let Some(assets) = shell_integration else {
+        if LOGIN_SHELL && kind.is_some() {
+            cmd.arg("-l");
+        }
         return cmd;
     };
 
-    match shell_kind(shell) {
+    match kind {
         Some(ShellKind::Bash) => {
+            // `--init-file` is ignored by a login bash, so the init file itself reads the login
+            // files when asked to (`HECA_LOGIN_SHELL`).
+            if LOGIN_SHELL {
+                cmd.env("HECA_LOGIN_SHELL", "1");
+            }
             cmd.arg("--init-file");
             cmd.arg(&assets.bash_init);
         }
         Some(ShellKind::Zsh) => {
+            if LOGIN_SHELL {
+                cmd.arg("-l");
+            }
             let old_zdotdir = std::env::var("ZDOTDIR").unwrap_or_default();
             cmd.env("OLD_ZDOTDIR", old_zdotdir);
             cmd.env("ZDOTDIR", &assets.zsh_zdotdir);
         }
         Some(ShellKind::Fish) => {
+            if LOGIN_SHELL {
+                cmd.arg("-l");
+            }
             cmd.arg("-C");
             cmd.arg(format!("source {}", assets.fish_init.display()));
         }
@@ -363,6 +378,15 @@ fn command_for_shell(
 
     cmd
 }
+
+/// **Whether the user's shell starts as a login shell** — on macOS, as Terminal.app and iTerm2 do.
+///
+/// An app started from the Dock or the Finder gets launchd's bare `PATH`, not the one a terminal
+/// has; the user's `PATH` (Homebrew's `brew shellenv`, for one) is set in the login files
+/// (`~/.zprofile`, `~/.bash_profile`, fish's login config). A login shell reads them, so a command
+/// typed in heca is found however heca was started. Linux desktops start a session from a login
+/// shell already, and terminals there start ordinary shells.
+const LOGIN_SHELL: bool = cfg!(target_os = "macos");
 
 fn command_for_spawned_command(shell: &str, command: &str, cwd: Option<&Path>) -> CommandBuilder {
     let mut cmd = CommandBuilder::new(shell);
@@ -377,7 +401,11 @@ fn command_for_spawned_command(shell: &str, command: &str, cwd: Option<&Path>) -
     #[cfg(not(windows))]
     {
         // Use interactive command mode so terminal-first programs keep shell UX
-        // features such as job control and interactive rc sourcing.
+        // features such as job control and interactive rc sourcing — and a login shell where
+        // the user's shell starts as one, so the command is found on the user's `PATH`.
+        if LOGIN_SHELL && shell_kind(shell).is_some() {
+            cmd.arg("-l");
+        }
         cmd.arg("-ic");
         cmd.arg(command);
     }
@@ -573,5 +601,59 @@ mod tests {
                 .to_string(),
             "boom"
         );
+    }
+
+    mod login_shell {
+        use super::super::{LOGIN_SHELL, ShellIntegrationAssets, command_for_shell};
+        use std::path::PathBuf;
+
+        fn assets() -> ShellIntegrationAssets {
+            ShellIntegrationAssets {
+                bash_init: PathBuf::from("/heca/bash_init.sh"),
+                fish_init: PathBuf::from("/heca/fish_init.fish"),
+                zsh_zdotdir: PathBuf::from("/heca/zsh"),
+            }
+        }
+
+        fn argv(cmd: &portable_pty::CommandBuilder) -> Vec<String> {
+            cmd.get_argv().iter().map(|a| a.to_string_lossy().into_owned()).collect()
+        }
+
+        /// **On macOS the user's shell is a login shell**, so it reads the login files (Homebrew's
+        /// `PATH`, for one) however heca was started — from the Dock it gets launchd's bare `PATH`.
+        /// Elsewhere it is an ordinary shell, as terminals there start it.
+        #[test]
+        fn the_users_shell_is_a_login_shell_where_terminals_start_one() {
+            let assets = assets();
+            for shell in ["/bin/zsh", "/opt/homebrew/bin/fish"] {
+                let cmd = command_for_shell(shell, Some(&assets), false, &[], None);
+                assert_eq!(argv(&cmd).contains(&"-l".to_string()), LOGIN_SHELL, "{shell}: {:?}", argv(&cmd));
+            }
+            for shell in ["/bin/zsh", "/bin/bash", "/opt/homebrew/bin/fish"] {
+                let bare = command_for_shell(shell, None, false, &[], None);
+                assert_eq!(argv(&bare).contains(&"-l".to_string()), LOGIN_SHELL, "{shell} without integration");
+            }
+        }
+
+        /// A login bash ignores `--init-file`, so heca keeps the init file and asks it to read the
+        /// login files instead.
+        #[test]
+        fn bash_keeps_its_init_file_and_is_asked_to_read_the_login_files() {
+            let assets = assets();
+            let cmd = command_for_shell("/bin/bash", Some(&assets), false, &[], None);
+            let args = argv(&cmd);
+            assert!(!args.contains(&"-l".to_string()), "{args:?}");
+            assert!(args.contains(&"--init-file".to_string()), "{args:?}");
+            assert_eq!(cmd.get_env("HECA_LOGIN_SHELL").is_some(), LOGIN_SHELL);
+        }
+
+        /// A command run in a pane (lazygit, an agent) is found on the same `PATH` as one typed.
+        #[cfg(not(windows))]
+        #[test]
+        fn a_command_runs_under_the_same_kind_of_shell() {
+            let cmd = super::super::command_for_spawned_command("/bin/zsh", "lazygit", None);
+            assert_eq!(argv(&cmd).contains(&"-l".to_string()), LOGIN_SHELL, "{:?}", argv(&cmd));
+            assert!(argv(&cmd).ends_with(&["-ic".to_string(), "lazygit".to_string()]));
+        }
     }
 }

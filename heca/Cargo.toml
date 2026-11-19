@@ -58,3 +58,11 @@ windows-sys = { version = "0.61", features = [
 
 [lints]
 workspace = true
+
+# Release installers (cargo-packager): name, version and description come from this package.
+[package.metadata.packager]
+product-name = "heca"
+identifier = "dev.heca.heca"
+binaries = [{ path = "heca", main = true }]
+license-file = "../LICENSE-MIT"
+icons = ["assets/icon/heca.icns", "assets/icon/heca.png"]
