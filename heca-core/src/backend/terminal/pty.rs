@@ -185,6 +185,10 @@ impl PtyHandle {
     ) -> Result<Self, PtyError> {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        // A shell with no locale miscounts every non-ASCII character in its prompt — see `locale`.
+        if let Some(lang) = super::locale::missing_lang() {
+            cmd.env("LANG", lang);
+        }
         // Advertise WezTerm-compatible image support. heca embeds wezterm-term and
         // genuinely renders the same inline-image protocols WezTerm does (iTerm2
         // `OSC 1337` + Sixel), but tools pick their image protocol by sniffing the

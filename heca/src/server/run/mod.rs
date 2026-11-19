@@ -280,6 +280,7 @@ impl ServerLoop {
     }
 
     pub(crate) fn pump(&mut self, now: Instant) {
+        let _slow = crate::slow_steps::step("server.pump");
         let mut received = Vec::new();
         for client in &self.clients {
             loop {
@@ -392,13 +393,13 @@ impl ServerLoop {
                 }
             }
         }
-        self.pump_sessions(now);
-        self.pump_services();
+        { let _s = crate::slow_steps::step("server.pump_sessions"); self.pump_sessions(now) };
+        { let _s = crate::slow_steps::step("server.pump_services"); self.pump_services() };
         for client in &self.clients { client.expire_rpc(now); }
         self.clients.retain(|c| !c.is_closed());
-        self.publish_directory();
+        { let _s = crate::slow_steps::step("server.publish_directory"); self.publish_directory() };
         self.flush_notices();
-        self.autosave(now);
+        { let _s = crate::slow_steps::step("server.autosave"); self.autosave(now) };
     }
 
     fn publish_directory(&mut self) {

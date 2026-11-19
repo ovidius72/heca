@@ -440,10 +440,14 @@ fn chrome_root(
 /// Re-run every frame; cheap and creates no signals (those live in the retained tree).
 pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiTheme) -> Scene {
     let mut scene = Scene::new();
-    LayoutEngine::new()
-        .theme(theme)
-        .compute(root, Size::new(w as f64, h as f64));
     {
+        let _s = crate::slow_steps::step("frame.chrome_layout");
+        LayoutEngine::new()
+            .theme(theme)
+            .compute(root, Size::new(w as f64, h as f64));
+    }
+    {
+        let _s = crate::slow_steps::step("frame.chrome_paint");
         let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
         heca_grid_ui::paint_child(root, &mut cx);
     }

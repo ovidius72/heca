@@ -224,6 +224,7 @@ impl SessionRuntime {
     /// One turn of the loop: drain every client, do what it asked, and send back what changed;
     /// then let time pass (notification deadlines). Detached clients are dropped.
     pub(crate) fn pump(&mut self, now: Instant) {
+        let _slow = crate::slow_steps::step("session.pump");
         // Drain first (borrows the client ends), then act (borrows the state + session), so the two
         // borrows never overlap.
         let mut pending: Vec<(usize, ClientMsg)> = Vec::new();
@@ -614,18 +615,20 @@ impl SessionRuntime {
             }
         }
 
-        let ticks = self.state.tick(now);
+        let ticks = { let _s = crate::slow_steps::step("session.tick"); self.state.tick(now) };
         detached.extend(self.publish_notifications(&ticks));
-        let poll = self.state.poll_backends();
-        self.state.collect_feedback(&self.session);
+        let poll = { let _s = crate::slow_steps::step("session.poll_backends"); self.state.poll_backends() };
+        { let _s = crate::slow_steps::step("session.collect_feedback"); self.state.collect_feedback(&self.session) };
+        let _reconcile = crate::slow_steps::step("session.reconcile_processes");
         let (process_changes, exits) = self.state.reconcile_processes(
             &mut self.session,
             poll.closing_panes.clone(),
             self.rpc_asker,
         );
+        drop(_reconcile);
         detached.extend(self.broadcast(&process_changes));
         detached.extend(self.publish_feedback());
-        self.state.refresh_git(&mut self.session, now);
+        { let _s = crate::slow_steps::step("session.refresh_git"); self.state.refresh_git(&mut self.session, now) };
         for (pane, code) in exits {
             for (i, client) in self.clients.iter().enumerate() {
                 if matches!(client.attachment.get(), Attachment::Attached)
@@ -652,6 +655,7 @@ impl SessionRuntime {
             }
         }
 
+        let _publish = crate::slow_steps::step("session.publish_terminals");
         if publish_terminals {
             let owners: Vec<_> = self
                 .state
