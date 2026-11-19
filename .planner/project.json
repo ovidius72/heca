@@ -168,6 +168,14 @@
       "rationale": "Antonio, 2026-11-18: \"La feature ready for heca pro deve mantenere la compatibilità delle api. Heca pro stesso dovrà aderire alla sintassi e riportare nel suo agent.md la stessa regola sulla sintassi del codice.\"",
       "implementationNotes": "Written into heca's AGENTS.md § 0 (branch docs/declarative-syntax, worktree heca-feat-syntax, next to THE SYNTAX block). heca-pro's own AGENTS.md (/Users/antonio/projects/heca-pro/AGENTS.md) still has to receive the syntax rule.",
       "acceptedAt": "2026-11-18T21:43:31.125Z"
+    },
+    {
+      "id": "14fb2bc2-5b9e-4c89-b156-ed48829187d5",
+      "title": "Release installers are built with cargo-packager; zips by a workflow step",
+      "decision": "heca's release installers (.dmg/.app on macOS, .deb + AppImage on Linux, .msi on Windows) are produced by cargo-packager (crabnebula-dev). The zip / tar.gz archives are made by a step of the release workflow. cargo-dist was not chosen.",
+      "rationale": "Antonio approved 2026-11-18. cargo-packager covers every installer asked for with one tool and one config (and also emits a pacman PKGBUILD, reusable for AUR, idea I025). cargo-dist covers zips and msi but has no dmg (future), no deb and no AppImage (axodotdev cargo-dist book, installers page).",
+      "implementationNotes": "Workflow and configuration in P110(F010)/T566. Whether each format must be built on its own OS is to be verified in the v0.1.0-rc1 test release.",
+      "acceptedAt": "2026-11-18T22:35:06.653Z"
     }
   ],
   "nextFeatureNumber": 12,

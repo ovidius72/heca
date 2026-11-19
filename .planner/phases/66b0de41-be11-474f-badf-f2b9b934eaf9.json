@@ -234,7 +234,7 @@
       "priority": 5,
       "shortName": "commandpalette-composes-instea",
       "title": "CommandPalette composes instead of computing — put-and-use, like every other widget",
-      "status": "in-progress",
+      "status": "planned",
       "description": "Antonio, 2026-08-24, after the showcase's palette rendered with empty rows while the app's was correct: \"another sign we are not using the widget and component pattern to build things.\"\n\nTHE TARGET — the line an author writes, anywhere, including a plugin:\n\n  let cp = CommandPalette::new().items(...);\n  // later, from anywhere:\n  button.on_click(move || cp.open());\n  // or, bound to a key / reachable over RPC, with no host code:\n  CommandPalette::new().items(...).opens_on(\"palette.open\")\n\nSame shape as every other surface. Nothing to wire, nothing to position, no host pass.\n\nWHERE IT IS NOW\n- heca-grid-ui/src/widgets/command_palette.rs (1363 lines) — already ONE widget in the library. This is NOT a duplication problem: the app (heca/src/chrome/palette.rs:360) and the showcase (heca-renderer/examples/showcase.rs:319) both call CommandPalette::new(). heca/src/chrome/palette.rs's 758 lines are host wiring (which commands exist, how one dispatches), not a second palette.\n- The defect is that the widget COMPUTES ITS OWN GEOMETRY. command_palette.rs:733 writes `child.base_mut().bounds = target` after calling `crate::component::shift_subtree(child, dx, dy)` (:725-733), and it anchors itself against PaintCx::viewport (see :998, :1303 writing `q.base_mut().bounds`). visible_rows (:588) decides how many rows fit by measuring.\n- Consequence, observed: a widget that positions itself renders whatever its host's layout pass happens to hand it. The app lays it out inside a definite window and it is correct; the showcase lays it out in its own detached overlay pass (showcase.rs:2737-2741) and the rows came out empty with two labels drawn over the input. It is also why a framework-level rule (max-width: 100%, layout.rs) landed on one host and not the other — see F003/P082/T438.\n\nWHAT IT VIOLATES (Antonio, 2026-08-24, stating the principles he wants applied)\n- SRP / Separation of Concerns: one 1363-line widget owns filtering, selection, row composition, layout, placement, panel sizing, keyboard handling and open state. Each of those has a different reason to change.\n- Composition over inheritance/bespoke: placement, clipping and scrolling are already widgets in this library, and the palette re-implements all three.\n- DRY: Overlay already owns \"centred over the page, capped to the viewport, arrives and leaves\" (Presence + Animation, open()/hide()/toggle()); ScrollRegion already owns clip + scroll + ensure_visible. The palette is a second implementation of both.\n\nTHE SPLIT\n1. Rows become a real composition — a column of rows inside a ScrollRegion, laid out by the engine. Delete the manual pass: no shift_subtree, no writing bounds. This is the bulk of the work.\n2. Placement moves to Overlay (heca-grid-ui/src/widgets/overlay/): the palette becomes a panel inside one, so \"centred, capped, animated in and out\" is asked for rather than reimplemented. Its open/close verbs then come from the vocabulary that already exists — open() / hide() / toggle(), the same one F003/P082/T436 gave KeyHintGroup via opens_on(action_name), which is exactly the pseudocode above and already works end to end for the exposé.\n3. Scrolling and \"keep the selected row visible\" become ScrollRegion::ensure_visible instead of visible_rows arithmetic.\n4. What legitimately STAYS the widget's own: fuzzy filtering, the match marks, reflowing the selected row's description, cursor movement. That is behaviour, not geometry. Split it further per SRP: the filter should be a pure function over items (testable with no widget at all), separate from the view that renders its result.\n\nEDGE CASES / WHAT MUST NOT REGRESS\n- The reflow of the selected row's description IS the selection's visual: the row grows and the rows below slide down (command_palette.rs, and Label::wrap's doc). It changes the label's MEASURE, so it must survive the move to engine-driven layout.\n- Keycap rows: one per binding, stacked, in a column reserved across the list.\n- [settings] command_palette_size (560/700/1000px, 6/8/12 rows) currently feeds panel_size; under Overlay this becomes the panel's own size, not a row count the widget computes.\n- The palette must still hold the keyboard while open and dismiss through [keys.widgets], as every other modal widget does.\n\nWHEN IT IS DONE\n- The same picture in the app, the showcase and a plugin's panel, because none of them positions it.\n- It falls under the two sweeps added by F003/P082/T438 automatically (nothing paints outside its box; content never renders as nothing), so \"the palette paints outside its box\" becomes a test failure rather than a screenshot.\n- The file is well under the 400-line aim; command_palette.rs at 1363 is itself over the AGENTS.md threshold and this split is what brings it down.",
       "descriptionUpdatedAt": "2026-08-24T13:52:59.568Z",
       "notes": "THE SHAPE \"COMPOSES INSTEAD OF COMPUTES\" NOW HAS A NAME (added 2026-09-16).\n\nheca-grid-ui's Grid speaks CSS as of today, so \"composes\" has a concrete spelling rather than being\na direction:\n\n    Grid::new().template_row(\"auto 1fr auto\").child([input, results, footer])\n\n- Each axis is named — `.template_row(..)` / `.template_column(..)` — and takes one stylesheet line\n  (\"auto 1fr\", \"repeat(3, 1fr)\") or a list.\n- A child that needs a particular place says so ABOUT ITSELF, as in CSS: `.area(\"results\")`,\n  `.column(\"1 / -1\")`, `.row(2)`, `.column_span(Span::All)`. There is no `.cell(child, …)` on the\n  parent any more — a parent writing a position into its child was the inversion that got removed.\n- Names and `1 / -1` are resolved during layout, against whichever grid holds the child.\n- A share is `.grow(w).basis(0.0).shrink(1.0)` — real CSS `flex: 1 1 0`, see P052(F004)/T350.\n\nWHY IT BEARS ON THIS TASK: the palette computes its own geometry today, and the alternative was\npreviously \"compose with Flex\", which is the shape that made the exposé own every term. A template\nsays the arrangement in one line, and the part that is missing is a missing row rather than a number\nthat needs revisiting. Full vocabulary and the traps: docs/layout.md.\n\n⚠️ THE COUNTING FAILURE TO WATCH FOR while doing this: command_palette.rs is among the files that\nfind a part by its POSITION in `base.children`. A template removes the question.",
@@ -262,6 +262,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress (resume checkpoint)",
           "description": "Resumed from /Users/antonio/projects/heca-feat-469 (branch feat/t469-palette-composes), uncommitted.. First agree with Antonio a library proposal: signal-bound props (Input placeholder/value first) and a child list that follows a signal (ForEach-like), plus a Keycap widget and how the chord column aligns across rows. Then rewrite the palette declaratively on them, move every literal to theme/config, drop or get approval for each unapproved library addition. Work without sub-agents; review line by line against AGENTS.md before reporting."
+        },
+        {
+          "id": "0fdb5401-61e3-4149-9968-6794739a3598",
+          "date": "2026-11-18T22:25:02.961Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio decided the release workflow comes first (2026-11-18); T469 waits for the F013 review and a library proposal.\nWhat was being done: Nothing running: uncommitted imperative rewrite in heca-feat-469 with the defects listed in the T469 checkpoint of 2026-11-18.\nResume location: /Users/antonio/projects/heca-feat-469 (branch feat/t469-palette-composes), uncommitted.\nHow to resume: After T566 and the F013 review: agree the library proposal (declarative child list, signal-bound props, Keycap widget), rewrite the palette in THE SYNTAX (CLAUDE.md), no literals, drop unapproved library additions; review line by line before Antonio's eye-check."
         }
       ],
       "decisions": [],
@@ -269,7 +277,16 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "pauseSnapshot": null,
+      "pauseSnapshot": {
+        "id": "62b8b6f6-5bdb-4d52-8260-62891e350f27",
+        "reason": "Antonio decided the release workflow comes first (2026-11-18); T469 waits for the F013 review and a library proposal.",
+        "whatWasBeingDone": "Nothing running: uncommitted imperative rewrite in heca-feat-469 with the defects listed in the T469 checkpoint of 2026-11-18.",
+        "resumeLocation": "/Users/antonio/projects/heca-feat-469 (branch feat/t469-palette-composes), uncommitted.",
+        "howToResume": "After T566 and the F013 review: agree the library proposal (declarative child list, signal-bound props, Keycap widget), rewrite the palette in THE SYNTAX (CLAUDE.md), no literals, drop unapproved library additions; review line by line before Antonio's eye-check.",
+        "relatedTaskId": "efcabb13-b1e1-4fc8-8e29-1b66f50e79ac",
+        "pausedAt": "2026-11-18T22:25:02.961Z",
+        "pausedBy": ""
+      },
       "pauseHistory": [
         {
           "id": "82d5d2a6-3d11-4940-9ced-cdb49d36ec53",
@@ -280,19 +297,29 @@
           "relatedTaskId": "",
           "pausedAt": "2026-11-18T17:36:18.300Z",
           "pausedBy": ""
+        },
+        {
+          "id": "62b8b6f6-5bdb-4d52-8260-62891e350f27",
+          "reason": "Antonio decided the release workflow comes first (2026-11-18); T469 waits for the F013 review and a library proposal.",
+          "whatWasBeingDone": "Nothing running: uncommitted imperative rewrite in heca-feat-469 with the defects listed in the T469 checkpoint of 2026-11-18.",
+          "resumeLocation": "/Users/antonio/projects/heca-feat-469 (branch feat/t469-palette-composes), uncommitted.",
+          "howToResume": "After T566 and the F013 review: agree the library proposal (declarative child list, signal-bound props, Keycap widget), rewrite the palette in THE SYNTAX (CLAUDE.md), no literals, drop unapproved library additions; review line by line before Antonio's eye-check.",
+          "relatedTaskId": "efcabb13-b1e1-4fc8-8e29-1b66f50e79ac",
+          "pausedAt": "2026-11-18T22:25:02.961Z",
+          "pausedBy": ""
         }
       ],
       "startedAt": "2026-11-18T09:47:52.906Z",
       "completedAt": "",
       "createdAt": "2026-08-24T13:52:59.526Z",
-      "updatedAt": "2026-11-18T17:37:32.821Z",
+      "updatedAt": "2026-11-18T22:25:02.961Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
           "createdAt": "2026-11-18T17:37:32.489Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398"
+      "activeOwnerSession": ""
     },
     {
       "id": "766a9858-6124-4bfb-84f9-bca4a65322ae",

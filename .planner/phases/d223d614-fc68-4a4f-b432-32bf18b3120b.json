@@ -34,11 +34,20 @@
       "priority": 1,
       "shortName": "release-workflow-every-v-tag-b",
       "title": "Release workflow: every v* tag builds heca for all systems and publishes zips and installers",
-      "status": "planned",
-      "description": "Agreed with Antonio 2026-11-18.\n\n- TRIGGER: every tag `v*` (e.g. v0.1.0). The workflow checks that the tag equals the version in Cargo.toml and fails with a clear error if not.\n- SYSTEMS: all — macOS Apple Silicon + Intel, Linux x86_64 (ARM if it does not complicate), Windows x86_64.\n- PUBLISHES a GitHub Release with, per system: a zip (tar.gz on Linux) holding the binary, LICENSE-MIT, LICENSE-APACHE and README; and installers — .dmg on macOS, .msi on Windows, and on Linux BOTH a .deb and an AppImage (Antonio, 2026-11-18).\n- NO signing / notarization for now. The release page explains how to open an unsigned app on macOS (\"unidentified developer\") and Windows (SmartScreen).\n- FIRST STEP, before writing the workflow: choose the tool (e.g. cargo-dist vs our own scripts) by verifying what each really supports for zips, .dmg, .msi, .deb and AppImage; bring the choice and the reason to Antonio. Do not assume.\n- CHECK: the packaged app carries everything it needs (fonts, default config/keybinding files — embedded today? verify —, the server process, which is the same binary) and starts on each system.\n- DOCS: README \"Download\" section; docs/development.md \"How to release\"; AGENTS.md gets a \"Release\" section stating that a new version is published ONLY by pushing a tag vX.Y.Z equal to the Cargo.toml version (written when the workflow exists, so it is true).\n- VERIFY: a test release from a tag like v0.1.0-rc1; Antonio downloads and installs at least on macOS; then the test release is deleted.\n- Out of scope (idea I025): Homebrew, AUR, winget/Chocolatey; signing/notarization.\nExisting CI to reuse: .github/workflows/ci.yml (T555), Linux system packages pkg-config libasound2-dev libssl-dev.",
-      "descriptionUpdatedAt": "2026-11-18T18:45:05.466Z",
+      "status": "in-progress",
+      "description": "Agreed with Antonio 2026-11-18.\n\n- TRIGGER: every tag `v*` (e.g. v0.1.0). The workflow checks that the tag equals the version in Cargo.toml (workspace version, Cargo.toml:6, today 0.1.0) and fails with a clear error if not.\n- SYSTEMS: all — macOS Apple Silicon + Intel, Linux x86_64 (ARM if it does not complicate), Windows x86_64.\n- PUBLISHES a GitHub Release with, per system: a zip (tar.gz on Linux) holding the binary, LICENSE-MIT, LICENSE-APACHE and README; and installers — .dmg on macOS, .msi on Windows, and on Linux BOTH a .deb and an AppImage (Antonio, 2026-11-18).\n- NO signing / notarization for now. The release page explains how to open an unsigned app on macOS (\"unidentified developer\") and Windows (SmartScreen).\n- DOCS: README \"Download\" section; docs/development.md \"How to release\"; AGENTS.md gets a \"Release\" section stating that a new version is published ONLY by pushing a tag vX.Y.Z equal to the Cargo.toml version (written when the workflow exists, so it is true).\n- VERIFY: a test release from a tag like v0.1.0-rc1; Antonio downloads and installs at least on macOS; then the test release is deleted.\n- Out of scope (idea I025): Homebrew, AUR, winget/Chocolatey; signing/notarization.\n- Existing CI to reuse: .github/workflows/ci.yml (T555), Linux system packages pkg-config libasound2-dev libssl-dev.\n\nSTEP 1 DONE (2026-11-18) — FINDINGS:\n- heca is ONE self-contained binary (package `heca`, heca/Cargo.toml): fonts (heca-grid-ui/src/font.rs:31,35,56; heca-renderer/src/font.rs:21,25), sounds (heca/src/audio/assets.rs), default config/keybindings (heca-config/src/loader/mod.rs), shell-integration snippets (heca/src/app/backend_factory.rs:21-23) and agent assets are embedded with include_bytes!/include_str!. The server is the same binary (`heca --server`). Installers carry only the binary.\n- cargo-dist (axodotdev.github.io/cargo-dist/book/installers): tarballs/zips, msi, shell/powershell scripts, homebrew, npm. NO dmg (listed as future), NO deb, NO AppImage.\n- cargo-packager (github.com/crabnebula-dev/cargo-packager): macOS .dmg + .app; Linux .deb, AppImage, Pacman (tar.gz + PKGBUILD); Windows .msi (WiX) + .exe (NSIS). Its README does not say whether each format must be built on its own OS — verify in the test release.\n- PROPOSAL (awaiting Antonio's approval): cargo-packager for all installers; zips/tar.gz made by a workflow step. Workflow shape: tag v* → version check → matrix build on GitHub runners (macOS arm64, macOS x86_64, ubuntu x86_64, windows x86_64) → cargo-packager per OS + archive step → upload all to the GitHub Release of the tag with the unsigned-app note. The PKGBUILD output is reusable later for AUR (I025).\nWorktree: /Users/antonio/projects/heca-feat-566 (branch feat/t566-release-workflow).",
+      "descriptionUpdatedAt": "2026-11-18T22:28:09.949Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "402156b2-26ab-45d9-82d2-6bc8535173b8",
+          "date": "2026-11-18T22:25:02.961Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -46,16 +55,21 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-11-18T22:25:02.961Z",
       "completedAt": "",
       "createdAt": "2026-11-18T18:41:07.022Z",
-      "updatedAt": "2026-11-18T18:45:05.464Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-11-18T22:28:09.947Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
+          "createdAt": "2026-11-18T22:25:02.891Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398"
     }
   ],
   "createdAt": "2026-11-18T18:40:53.598Z",
-  "updatedAt": "2026-11-18T18:45:05.464Z",
+  "updatedAt": "2026-11-18T22:28:09.947Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -69,7 +83,20 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "bf305f12-b04a-49bc-b7b7-1deb2daca33c",
+      "date": "2026-11-18T22:25:03.148Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
+      "createdAt": "2026-11-18T22:25:02.891Z"
+    }
+  ]
 }
