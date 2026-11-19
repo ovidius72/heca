@@ -64,6 +64,7 @@ mod declared;
 mod inbox;
 mod request;
 mod session_key;
+mod sessions;
 #[cfg(test)]
 mod tests;
 
@@ -71,12 +72,13 @@ pub use client::ServiceState;
 pub use config::ExtensionConfigError;
 pub use cx::{ActionCx, ProjectCx, ServiceCx, StartCx};
 pub(crate) use cx::Effects;
-pub(crate) use declared::{ActionFn, Declaration, PolicyFn};
+pub(crate) use declared::{ActionFn, Declaration, ListenFn, PolicyFn};
 pub use inbox::{ServiceInbox, ServiceSendError};
 pub use request::{
     ActionRequest, ExternalRequest, Permit, RequestOutcome, RequestRef, Requester, Sender, SubmitError,
 };
 pub use session_key::SessionKey;
+pub use sessions::{ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions};
 
 use declared::Declared;
 
@@ -190,6 +192,7 @@ impl super::Extension {
             factory: Box::new(factory),
             actions: RefCell::new(Vec::new()),
             policies: RefCell::new(Vec::new()),
+            listeners: RefCell::new(Vec::new()),
         });
         if let Err(late) = SERVICES.with(|q| q.add(declared.clone())) {
             warn_author(format!(
@@ -269,6 +272,49 @@ impl<S: Service> ServiceRegistration<S> {
             return;
         }
         declared.policies.borrow_mut().push(Rc::new(policy));
+    }
+
+    /// **Listen for an event on the server** — THE EVENTS: the same `on("name", …)` heca's own
+    /// components, extensions and plugins use. `"*"` listens for every event. `listen` is handed
+    /// the service itself, so it updates its own state and republishes when windows should see it.
+    ///
+    /// ```ignore
+    /// rooms.on("session.changed", |rooms, cx, ev| {
+    ///     let Some(ev) = ev.as_session() else { return };
+    ///     match ev.kind() {
+    ///         SessionChange::Created | SessionChange::Deleted => rooms.regroup(ev.sessions()),
+    ///         SessionChange::Renamed => rooms.rename(ev.session()),
+    ///         _ => return,
+    ///     }
+    ///     cx.republish();
+    /// });
+    /// ```
+    ///
+    /// A name heca does not have ([`ServerEvent::NAMES`]) is refused out loud, so a typo never
+    /// listens for nothing in silence.
+    pub fn on(
+        &self,
+        event: &str,
+        listen: impl Fn(&mut S, &mut ServiceCx<'_, S::Message>, &ServerEvent) + 'static,
+    ) {
+        let Some(declared) = &self.declared else { return };
+        if event != "*" && !ServerEvent::NAMES.contains(&event) {
+            warn_author(format!(
+                "[heca] service '{}' listens for '{event}', which is not an event — the events are {}, or \"*\"",
+                declared.name,
+                ServerEvent::NAMES.join(", ")
+            ));
+            return;
+        }
+        if SERVICES.with(StartupQueue::is_closed) {
+            warn_author(format!(
+                "[heca] a listener of service '{}' was added after the app started, so it does nothing — add it \
+                 before `heca::run()`",
+                declared.name
+            ));
+            return;
+        }
+        declared.listeners.borrow_mut().push((event.to_owned(), Rc::new(listen)));
     }
 
     /// **What this service shows a window, as a value components read.** `initial` is what a

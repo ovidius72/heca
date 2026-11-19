@@ -3,6 +3,25 @@
 > **Laying things out — [`layout.md`](layout.md).** Every size, space, track and alignment
 > spelling below is the one the app's own builders take; that guide is the full reference.
 
+## ⭐ THE EVENTS — one way to listen, everywhere
+
+A state change is heard with one line, the same in heca's own components, in an extension and in a
+plugin (WASM included):
+
+```rust
+cx.on("pane.cwd.changed", |ev| …)        // a component or provider, in a window
+rooms.on("session.changed", |rooms, cx, ev| …)   // an extension's service, on the server
+// a plugin: the same on("name", …) through the event bridge (F003/T79)
+```
+
+`"*"` listens for every event. Names are dotted (`pane.status.changed`, `session.changed`). Where
+changes are rare and a listener wants them together, one event carries a `kind` saying what happened
+(`session.changed`: `created` · `renamed` · `terminated` · `restarted` · `deleted`) and the data a
+listener needs. Each event is raised from ONE place, and the scripts' stream (`heca rpc --events`)
+carries the same event. **Never** a signal, a polling loop, a dedicated trait method or a
+per-consumer callback in its place; a change nobody can listen to is not done. (Project decision
+f639e662; the contract is P054(F006)'s "Pane runtime state", section 0.1.)
+
 
 **The plugin author's manual.** Everything here is about the interface *you* write and what the host
 does with it. The chrome's own architecture — how the sidebar, the regions, the overlays and the

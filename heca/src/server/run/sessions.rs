@@ -18,6 +18,7 @@ impl ServerLoop {
     }
 
     fn run_session_command(&mut self, command: SessionCommand) -> Result<SessionReply, String> {
+        use crate::entry::service::SessionChange;
         match command {
             SessionCommand::List => Ok(SessionReply::List(
                 self.sessions.iter().map(SessionRuntime::info).collect(),
@@ -26,9 +27,11 @@ impl ServerLoop {
                 folder,
                 name,
                 label,
-            } => self
-                .create_session(folder, name, label)
-                .map(SessionReply::Updated),
+            } => {
+                let info = self.create_session(folder, name, label)?;
+                self.announce_changed(SessionChange::Created, &info.name);
+                Ok(SessionReply::Updated(info))
+            }
             SessionCommand::Rename { name, new_name } => {
                 crate::server::sessions::validate_name(&new_name)?;
                 if self
@@ -42,12 +45,14 @@ impl ServerLoop {
                 let mut info = self.sessions[i].info();
                 info.name = new_name;
                 self.sessions[i].set_identity(info);
+                self.announce_session(SessionChange::Renamed, self.sessions[i].service_entry());
                 Ok(SessionReply::Updated(self.sessions[i].info()))
             }
             SessionCommand::Terminate { name } => {
                 let i = self.named(&name)?;
                 if self.sessions[i].info().status == SessionStatus::Active {
                     self.sessions[i].terminate();
+                    self.announce_session(SessionChange::Terminated, self.sessions[i].service_entry());
                 }
                 Ok(SessionReply::Updated(self.sessions[i].info()))
             }
@@ -59,11 +64,13 @@ impl ServerLoop {
                     self.sessions[i].raise_lasting(draft);
                 }
                 result?;
+                self.announce_session(SessionChange::Restarted, self.sessions[i].service_entry());
                 Ok(SessionReply::Updated(self.sessions[i].info()))
             }
             SessionCommand::Delete { name } => {
                 let i = self.named(&name)?;
                 let id = self.sessions[i].info().id;
+                let gone = self.sessions[i].service_entry();
                 for client in &self.clients {
                     if client.session.get() == Some(id) {
                         let _ = client.link.send(ServerMsg::SessionDeleted { id });
@@ -75,7 +82,7 @@ impl ServerLoop {
                 }
                 self.sessions[i].shutdown();
                 self.sessions.remove(i);
-                self.sessions_changed();
+                self.announce_session(SessionChange::Deleted, gone);
                 if self.last_session == Some(id) {
                     self.recent_sessions.retain(|recent| *recent != id);
                     self.last_session = self.recent_sessions.last().copied();
@@ -84,6 +91,13 @@ impl ServerLoop {
                 }
                 Ok(SessionReply::Deleted(id))
             }
+        }
+    }
+
+    /// Announce `kind` for the session called `name`, when it exists.
+    fn announce_changed(&self, kind: crate::entry::service::SessionChange, name: &str) {
+        if let Ok(i) = self.named(name) {
+            self.announce_session(kind, self.sessions[i].service_entry());
         }
     }
 

@@ -184,17 +184,10 @@ impl PaneCard<'_> {
             .child({
                 // The name, and under it where the pane is — one column so a card with no folder
                 // to show lays out exactly as it did before (a one-child column adds no gap).
-                let folder = crate::components::FolderLine {
-                    path: self.folder,
-                    // Nothing to show *is* the setting being off — `model` resolved both into the
-                    // same absence, so a card has one question to answer rather than two.
-                    show: true,
-                    size: heca_grid_ui::style::WidgetSize::Caption,
-                    // A card centres its content, so there is nothing to step in from.
-                    indent: heca_grid_ui::style::Spacing::None,
-                    theme,
-                }
-                .build();
+                // Nothing to show *is* the setting being off — `model` resolved both into the same
+                // absence, an empty path, so a card has one question to answer rather than two. A
+                // card centres its content, so there is nothing to step in from (no indent).
+                let folder = crate::components::FolderLine::new(theme).path(self.folder.unwrap_or_default());
                 Flex::column()
                     .align("center")
                     .gap(heca_grid_ui::style::Spacing::Hairline)
@@ -218,7 +211,7 @@ impl PaneCard<'_> {
                         .build()
                         .widget,
                     )
-                    .child(folder.widget)
+                    .child(folder)
             });
         // **Type a letter to jump to any card**. One line on the widget, which is
         // the whole of it: the framework collects the declaration out of the laid-out tree
