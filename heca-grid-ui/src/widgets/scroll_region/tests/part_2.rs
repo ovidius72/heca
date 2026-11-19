@@ -335,6 +335,29 @@ use super::*;
             "a renewed navigation request still brings its row into view");
     }
 
+    /// **A click that pushes a selected row does not drag the view after it** — the browser's rule.
+    /// A row selected far below is moved by content growing above it after a press (a list gaining
+    /// a row); the view stays. A key afterwards resumes following it.
+    #[test]
+    fn a_pointer_press_pauses_following_a_target_it_only_pushed() {
+        let mut r = region_with_children(&[40.0, 400.0, 40.0]);
+        let mut row = crate::widgets::Row::new().nav_selected(true);
+        row.base_mut().bounds = r.base.children[2].base().bounds;
+        r.base.children[2] = crate::WidgetModel::new(row);
+        r.follow_revealed();
+        let at = r.scroll_offset.get_untracked();
+
+        r.on_event_capture(&Event::PointerDown(crate::event::PointerEvent::at(Point::new(10.0, 10.0))));
+        r.base.children[2].base_mut().bounds.loc.y += 200.0;
+        r.follow_revealed();
+        assert_eq!(r.scroll_offset.get_untracked(), at, "a click that pushed the row must not move the view");
+
+        r.on_event_capture(&Event::TextInput("x".into()));
+        r.base.children[2].base_mut().bounds.loc.y += 20.0;
+        r.follow_revealed();
+        assert!(r.scroll_offset.get_untracked() > at, "typing resumes following it");
+    }
+
     #[test]
     fn manual_scrolling_pauses_reflow_following_until_typing_moves_the_target() {
         let mut r = region_with_children(&[40.0, 400.0, 40.0]);

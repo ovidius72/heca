@@ -375,8 +375,10 @@ rooms.action(
 // 3. What a window shows. `apply` folds each snapshot or delta into the value.
 let shown = rooms.client(RoomsView::default(), |view, update| view.apply(update));
 
-// In a component: it redraws when the value changes.
-let count = shown.with(|view| view.rooms.len());
+// In a component: a list in it is children that follow it — the rows of the rooms still there are
+// kept, new ones made, gone ones dropped. A single fact is a widget bound to it. Reading it once while
+// a dock is built shows what it was then, and nothing rebuilds that dock when it changes.
+Flex::column().gap(Spacing::Sm).child(shown.map(|view| &view.rooms, RoomRow::new))
 ```
 
 `Rooms` implements `Service`:

@@ -18,6 +18,7 @@
 //!
 //! [`Component`]: crate::component::Component
 
+mod bound;
 mod children;
 mod drag;
 mod events;
@@ -34,6 +35,8 @@ mod tooltip;
 #[cfg(test)]
 mod tests;
 
+pub use bound::{BoundChildren, MapChildren};
+pub(crate) use bound::{Bound, apply as apply_bound};
 pub use children::{IntoChildren, IntoComponent, IntoContextMenu, Parent};
 pub use drag::DragExt;
 pub use events::EventExt;

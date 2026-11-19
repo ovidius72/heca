@@ -54,6 +54,7 @@ impl LayoutEngine {
         // and from any widget measuring its own padding. It used to be copied back into the px
         // fields here, which destroyed the authored step after the first pass: a font change then
         // had nothing left to re-resolve.
+        crate::builders::apply_bound(c.base_mut());
         c.remeasure();
         let mut style = c.taffy_style();
         // Replaced content is measured from the final constrained width, so max-width does

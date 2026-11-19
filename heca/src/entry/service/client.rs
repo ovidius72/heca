@@ -14,8 +14,12 @@ use crate::server::wire::service::{ServiceUpdate, ServiceUpdateKind};
 
 use super::{Service, Update};
 
-/// **What a service shows this window**, as a reactive value. Copy it into any component; reading
-/// it while building or painting redraws that component when it changes.
+/// **What a service shows this window**, as a reactive value. Copy it into any component.
+///
+/// A list in it becomes children that follow it with [`map`](Self::map):
+/// `Flex::column().child(shown.map(|view| &view.rooms, RoomRow::new))`. A single fact is shown by a
+/// widget bound to it. Reading it once while a tree is built shows what it was then, and nothing
+/// builds that tree again when it changes.
 pub struct ServiceState<C: 'static> {
     value: Signal<C>,
 }
@@ -44,6 +48,27 @@ impl<C: 'static> ServiceState<C> {
         C: Clone,
     {
         self.value.get()
+    }
+
+    /// **A list in it, as children that follow it**: `pick` says where the list is, `make` how one
+    /// item is shown. Hand the result to a container's `.child(..)`; when the service sends a new
+    /// value, the children of the items still there are kept, new ones are made and gone ones
+    /// dropped.
+    ///
+    /// ```ignore
+    /// Flex::column().gap(Spacing::Sm).child(shown.map(|view| &view.rooms, RoomRow::new))
+    /// ```
+    pub fn map<T, W>(
+        &self,
+        pick: impl Fn(&C) -> &Vec<T> + 'static,
+        make: impl Fn(&T) -> W + 'static,
+    ) -> heca_grid_ui::BoundChildren
+    where
+        T: Clone + PartialEq + 'static,
+        W: heca_grid_ui::builders::IntoComponent,
+    {
+        let value = self.value;
+        heca_grid_ui::BoundChildren::new(move || value.with(|view| pick(view).clone()), make)
     }
 }
 
