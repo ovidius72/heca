@@ -37,6 +37,18 @@ const ZSH_FILES: [(&str, &str); 4] = [
     (".zlogin", include_str!("../../../../heca/assets/shell-integration/zsh/.zlogin")),
 ];
 
+/// How heca's `.zshenv` begins, in every heca version: what tells a heca zsh folder from the user's.
+const ZSH_HEADER: &str = "# heca shell integration:";
+
+/// **Is this folder a heca zsh folder** — this heca's or that of another heca, of any version? It
+/// is what a shell inside a heca pane has as its `ZDOTDIR`.
+pub(super) fn is_heca_zsh_folder(dir: &std::path::Path) -> bool {
+    use std::io::Read;
+    let mut start = [0; ZSH_HEADER.len()];
+    std::fs::File::open(dir.join(".zshenv")).and_then(|mut file| file.read_exact(&mut start))
+        .is_ok_and(|()| start == ZSH_HEADER.as_bytes())
+}
+
 impl ShellIntegrationAssets {
     /// Write the integration files under `root` (only those whose content changed) and say where
     /// they are.

@@ -488,6 +488,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             handle_about_to_wait(event_loop, state);
             // After this turn's input and server updates, relay our view if a window follows us,
             // and report where we are looking for the `--events` stream.
+            let _s = crate::slow_steps::step("wait.report_view");
             state.report_view_if_followed();
             state.report_presence_if_changed();
         }

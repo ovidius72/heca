@@ -7,18 +7,21 @@ impl AppState {
     /// A selected pane is not observed while another window, overlay or dock owns input.
     pub(crate) fn input_focused_pane(&self) -> Option<heca_core::layout::PaneId> {
         effective_pane(self.window_focused, self.layers.top_modal_id(&self.window_root).is_some(),
-            self.window_keyboard_terminal().and_then(|id| self.client.backends.pane_of(id)))
+            self.keyboard_terminal().and_then(|id| self.client.backends.pane_of(id)))
     }
 
     /// The terminal the keyboard acts on: while selecting or searching, the terminal being selected
-    /// in or searched; otherwise the terminal holding the window's keyboard — in a pane, a dock, an
-    /// overlay, anywhere. When no terminal holds it (a sidebar list does, say), the focused pane's.
+    /// in or searched; while the keyboard is with the panes, the focused pane's — where typing goes;
+    /// otherwise the terminal holding the window's keyboard in a dock or an overlay. When no terminal
+    /// holds it (a sidebar list does, say), the focused pane's.
     ///
     /// A selection left on screen does not hold the keyboard: once its mode is left, the next key
     /// goes where the keyboard is, not to the terminal that still shows a highlight.
     ///
-    /// One definition, used by every terminal key. They must agree: a search started for one
-    /// terminal while its steps went to another would find nothing to step.
+    /// One definition, used by every terminal key — typing, paste, search, selection, scrolling.
+    /// They must agree: a paste that asked the tree while typing asked the focused pane went to
+    /// another pane whenever the two drifted apart, and a search started for one terminal while its
+    /// steps went to another would find nothing to step.
     pub fn keyboard_terminal(&self) -> Option<crate::chrome::panes::terminal::TerminalId> {
         match self.input_mode {
             InputMode::Search { terminal } => return Some(terminal),
@@ -31,8 +34,10 @@ impl AppState {
             }
             _ => {}
         }
-        self.window_keyboard_terminal()
-            .or_else(|| self.client.backends.identity_of(self.focused_pane?))
+        let with_panes = matches!(crate::app::input::focused_surface(self), crate::app::input::FocusedSurface::Panes);
+        let focused = || self.client.backends.identity_of(self.focused_pane?);
+        if with_panes { return focused(); }
+        self.window_keyboard_terminal().or_else(focused)
     }
 
     /// **The terminal holding the window's keyboard**, wherever it is placed — asked of the window,

@@ -135,7 +135,7 @@ is **never** removed and the second server fails to start. When a server stops i
 but only if the file is still the one it created. Code: `heca/src/server/socket/listener.rs`.
 
 **One door, three kinds of visitor.** The listener reads the first line of each connection. That line
-is `@heca-attach 1` (a window attaching — see below), `@heca-events 1` (a script subscribing to
+is `@heca-attach 2` (a window attaching — see below), `@heca-events 1` (a script subscribing to
 events) or anything else, which is a one-shot script request. The line is limited to
 `max_frame_bytes` and must arrive within `request_timeout_ms`, so a silent peer cannot hold a
 handshake thread. Each connection is handled on its own thread, so a slow one never delays the next.
@@ -222,7 +222,11 @@ no display and no GPU. `heca --kill-server` (the `kill_server` action) stops it.
 1. It connects to the socket (`heca/src/server/socket/connect.rs`, the one connect function). If nothing answers it starts
    `heca --server` as a detached daemon, then retries every `connect_retry_ms` until the socket
    answers, the daemon exits, or `request_timeout_ms` passes.
-2. It sends `@heca-attach 1`, then `ClientMsg::Attach` — or `AttachTo { name }` for
+2. It sends `@heca-attach 2` and waits for the server's `@heca-attach ok`. The number is the
+   protocol version: a server of another version answers `@heca-attach refused 2` (or, if it is older
+   than this rule, anything else), and the window stops with "the running heca server is another
+   version of heca: stop it with `heca --kill-server` and open heca again" instead of misreading what
+   it is sent. Then it sends `ClientMsg::Attach` — or `AttachTo { name }` for
    `heca --attach <name>`. `heca --new` first asks the server to create the session, then attaches to it.
    `--attach`, `--new` and `--sessions` start the background server the same way when none runs (its
    sessions come back with it), through that one function (`Start::IfMissing`); `--kill`,
@@ -303,10 +307,21 @@ No handles, no window types, no types from the terminal library.
   length (big-endian) followed by JSON (`wire/frame.rs`). A zero length, or one over
   `max_frame_bytes`, closes the connection. **In process** (standalone) the same values move through
   a queue with no serialization at all (`wire/mod.rs`).
-- **A stalled peer is dropped, never waited on.** Each socket end has a reader thread and a writer
-  thread (`wire/socket.rs`) and a queue per direction of at most `queue_capacity` messages
-  (`wire/queue.rs`). The server only ever polls these queues. If a queue is full, the send fails and
-  the connection is closed.
+- **A terminal travels as the rows that changed.** The writer of a connection remembers the last
+  screen it sent for each terminal and sends only the rows that differ — the whole screen the first
+  time, after a change of height, and after the terminal is closed and opened again. The reader keeps
+  the same screens and puts the rows back, so the window receives the whole `TerminalFrame` the server
+  made and nothing above the socket knows. Each row is written compactly: cells of one style are one
+  run, a style is written once per frame, and a run of one-column single characters is one string.
+  Code: `wire/rows.rs`, chosen per direction by `Carried` in `wire/frame.rs`.
+- **Input is never lost; a window that stops reading is dropped.** Each socket end has a reader
+  thread and a writer thread (`wire/socket.rs`) and a queue per direction of `queue_capacity`
+  messages (`wire/queue.rs`). The server only ever polls these queues. A **reader** whose queue is
+  full waits for room: it stops reading, the peer's writes wait in the socket, and nothing it sent is
+  lost. What a **window** sends — keys, pastes, actions — is queued even past the capacity: it is
+  small and made at human speed. What the **server** sends to a window whose queue is full (after
+  newer state has replaced older) fails the send, and that window is dropped; it attaches again with
+  a fresh copy. Which of the two a message gets is said once, by its type (`Message::WHEN_FULL`).
 - **Notification history, on request.** A window that wants the list of notifications sends
   `ClientMsg::NotificationHistory`; the server answers that window with
   `ServerMsg::NotificationHistory`: plain `NotificationRecord`s, newest first — the same

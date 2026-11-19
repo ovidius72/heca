@@ -183,6 +183,23 @@ impl TerminalEngine {
         self.terminal.current_seqno()
     }
 
+    /// **A number that changes whenever the live screen would draw differently**: the program
+    /// printed anything (every batch of its output moves the terminal's sequence number, cursor
+    /// moves and colour changes included), the screen was scrolled or resized, or heca changed how
+    /// it is drawn. Equal numbers mean an equal [`snapshot`](Self::snapshot_at) at the same offset.
+    pub(in crate::backend::terminal) fn screen_version(&self, cell_size: (f32, f32)) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.terminal.current_seqno().hash(&mut hasher);
+        self.viewport_offset.hash(&mut hasher);
+        self.visible_top_stable_row().hash(&mut hasher);
+        let size = self.terminal.get_size();
+        (size.cols, size.rows).hash(&mut hasher);
+        (cell_size.0.to_bits(), cell_size.1.to_bits()).hash(&mut hasher);
+        self.settings_generation.hash(&mut hasher);
+        hasher.finish()
+    }
+
     pub(in crate::backend::terminal) fn visible_top_stable_row(&self) -> isize {
         // wezterm's `visible_row_to_stable_row(0)` reports the LIVE viewport top
         // (offset 0). heca scrolls the host viewport by `viewport_offset` rows

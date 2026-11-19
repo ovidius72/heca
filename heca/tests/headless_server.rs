@@ -16,14 +16,54 @@ fn send(stream: &mut UnixStream, value: Value) {
     stream.write_all(&data).unwrap();
 }
 
+/// One message from the server, as the window's reader sees it: a plain message is unwrapped, and a
+/// terminal's changed rows are put back onto the screen last read on this stream
+/// (`heca/src/server/wire/rows.rs` is the format), so a frame here always has every line.
 fn receive(stream: &mut UnixStream) -> Value {
+    use std::os::fd::AsRawFd;
     let mut header = [0; 4];
     stream.read_exact(&mut header).unwrap();
     let length = u32::from_be_bytes(header) as usize;
     assert!(length <= heca_config::settings::ConnectionConfig::default().max_frame_bytes.get());
     let mut data = vec![0; length];
     stream.read_exact(&mut data).unwrap();
-    serde_json::from_slice(&data).unwrap()
+    let mut message: Value = serde_json::from_slice(&data).unwrap();
+    if let Some(plain) = message.get_mut("m") { return plain.take(); }
+    let packed = message.get_mut("t").expect("a server message is plain or a terminal");
+    let mut frame = packed["f"].take();
+    let styles = packed["s"].as_array().unwrap().len();
+    SCREENS.with(|screens| {
+        let mut screens = screens.borrow_mut();
+        let screen = screens.entry((stream.as_raw_fd(), frame["owner"].to_string())).or_default();
+        let height = frame["screen"]["rows"].as_u64().unwrap() as usize;
+        if packed["a"].as_bool().unwrap() || screen.len() != height { *screen = vec![json!({ "cells": [] }); height]; }
+        for row in packed["r"].as_array().unwrap() {
+            let mut cells = Vec::new();
+            for run in row["r"].as_array().unwrap() {
+                assert!((run["s"].as_u64().unwrap() as usize) < styles, "a run names a style that was sent");
+                match run.get("c").and_then(Value::as_str) {
+                    Some(chars) => cells.extend(chars.chars().map(|ch| json!({ "text": ch.to_string() }))),
+                    None => cells.extend(run["t"].as_array().unwrap().iter().map(|cell| json!({ "text": cell[0] }))),
+                }
+            }
+            screen[row["y"].as_u64().unwrap() as usize] = json!({ "cells": cells });
+        }
+        frame["screen"]["lines"] = Value::Array(screen.clone());
+    });
+    json!({ "Terminal": frame })
+}
+
+thread_local! {
+    /// The screens read so far, per stream and terminal.
+    static SCREENS: std::cell::RefCell<std::collections::HashMap<(i32, String), Vec<Value>>> = Default::default();
+}
+
+/// The attach line, and the server's answer to it.
+fn attach_line(stream: &mut UnixStream) {
+    stream.write_all(b"@heca-attach 2\n").unwrap();
+    let mut answer = [0; b"@heca-attach ok\n".len()];
+    stream.read_exact(&mut answer).unwrap();
+    assert_eq!(&answer, b"@heca-attach ok\n");
 }
 
 fn attach(path: &Path) -> (UnixStream, Value) {
@@ -33,7 +73,7 @@ fn attach(path: &Path) -> (UnixStream, Value) {
 fn attach_named(path: &Path, request: Value) -> (UnixStream, Value) {
     let mut stream = UnixStream::connect(path).unwrap();
     stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-    stream.write_all(b"@heca-attach 1\n").unwrap();
+    attach_line(&mut stream);
     send(&mut stream, request);
     let attached = receive(&mut stream);
     assert!(attached.get("Attached").is_some(), "{attached}");
@@ -147,7 +187,7 @@ fn until(stream: &mut UnixStream, variant: &str) -> Value {
 fn control(path: &Path, command: Value) -> Value {
     let mut stream = UnixStream::connect(path).unwrap();
     stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-    stream.write_all(b"@heca-attach 1\n").unwrap();
+    attach_line(&mut stream);
     send(&mut stream, json!({"Session":{"request_id":1,"command":command}}));
     let reply = receive(&mut stream);
     assert_eq!(reply["Sessions"]["request_id"], 1);

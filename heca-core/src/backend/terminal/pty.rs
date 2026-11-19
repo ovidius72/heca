@@ -366,8 +366,7 @@ fn command_for_shell(
             if LOGIN_SHELL {
                 cmd.arg("-l");
             }
-            let old_zdotdir = std::env::var("ZDOTDIR").unwrap_or_default();
-            cmd.env("OLD_ZDOTDIR", old_zdotdir);
+            cmd.env("OLD_ZDOTDIR", users_zdotdir(std::env::var_os("ZDOTDIR"), std::env::var_os("OLD_ZDOTDIR")));
             cmd.env("ZDOTDIR", &assets.zsh_zdotdir);
         }
         Some(ShellKind::Fish) => {
@@ -507,8 +506,44 @@ fn resolve_shell(shell: Option<String>, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// **The user's own zsh config folder**, for heca's startup files to read first.
+///
+/// It is the inherited `ZDOTDIR` — unless that is a heca folder ([`is_heca_zsh_folder`](super::launch::is_heca_zsh_folder): this
+/// heca's, or that of any heca whose pane started this one, whatever its version), which is what a
+/// shell started inside a heca pane inherits. Handing a heca folder on would make heca's `.zshenv`
+/// read heca's again — itself, until zsh gives up ("job table full or recursion limit exceeded") —
+/// so the folder the outer heca saved in `OLD_ZDOTDIR` is the user's.
+fn users_zdotdir(inherited: Option<std::ffi::OsString>, saved: Option<std::ffi::OsString>) -> std::ffi::OsString {
+    let is_heca = |dir: &std::ffi::OsStr| super::launch::is_heca_zsh_folder(std::path::Path::new(dir));
+    match inherited {
+        Some(dir) if is_heca(&dir) => saved.filter(|saved| !is_heca(saved)).unwrap_or_default(),
+        Some(dir) => dir,
+        None => Default::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_shell_started_inside_heca_still_reads_the_users_own_zsh_folder() {
+        use std::ffi::OsString;
+        let root = tempfile::tempdir().unwrap();
+        let heca = super::super::launch::ShellIntegrationAssets::write_to(root.path()).unwrap().zsh_zdotdir;
+        let heca = heca.to_str().unwrap();
+        let own = root.path().join("own");
+        std::fs::create_dir_all(&own).unwrap();
+        std::fs::write(own.join(".zshenv"), "export EDITOR=vim\n").unwrap();
+        let own = own.to_str().unwrap();
+        let users = |inherited: Option<&str>, saved: Option<&str>| {
+            super::users_zdotdir(inherited.map(OsString::from), saved.map(OsString::from))
+        };
+        assert_eq!(users(None, None), "");
+        assert_eq!(users(Some(own), None), own);
+        assert_eq!(users(Some(heca), Some(own)), own, "inside a heca pane, the folder the outer heca saved");
+        assert_eq!(users(Some(heca), Some("")), "");
+        assert_eq!(users(Some(heca), Some(heca)), "");
+    }
+
     use super::read_ends_the_reader;
 
     /// **An interrupted read must not end the reader thread**.

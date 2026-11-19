@@ -12,7 +12,8 @@ declare_settings! {
     pub struct ConnectionConfig {
         /// Largest serialized message accepted from either peer, in bytes.
         pub max_frame_bytes: NonZeroUsize,
-        /// Maximum number of queued messages per direction.
+        /// Queued messages per direction before the peer counts as behind. What a window sends
+        /// is kept past it and never lost; what the server sends past it drops that window.
         pub queue_capacity: NonZeroUsize,
         /// Maximum time to identify a peer or await a one-shot RPC response.
         pub request_timeout_ms: NonZeroU64,

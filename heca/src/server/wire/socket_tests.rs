@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use heca_core::layout::{LayoutOptions, Session, SessionId};
 use crate::server::Change;
+use crate::server::wire::frame;
 
 fn limits() -> TransportLimits {
     TransportLimits {
@@ -94,26 +95,36 @@ fn dropping_a_peer_interrupts_an_incomplete_frame() {
 }
 
 #[test]
-fn a_full_queue_reports_backpressure_instead_of_blocking() {
+fn a_full_queue_refuses_what_the_server_sends_instead_of_blocking() {
     let (sender, _receiver) = queue::channel(NonZeroUsize::new(1).unwrap());
-    sender.send(ClientMsg::Attach).unwrap();
-    assert_eq!(sender.send(ClientMsg::Detach).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    sender.send(ServerMsg::Followed { active: true }).unwrap();
+    assert_eq!(sender.send(ServerMsg::Followed { active: false }).unwrap_err().kind(), io::ErrorKind::WouldBlock);
 }
 
 #[test]
-fn an_incoming_flood_closes_instead_of_dropping_messages_silently() {
-    let (a, mut b) = UnixStream::pair().unwrap();
+fn an_incoming_flood_waits_for_room_and_every_message_arrives_in_order() {
+    use crate::server::wire::terminal::ProcessInput;
+    let (a, b) = UnixStream::pair().unwrap();
     let limits = TransportLimits { queue_capacity: NonZeroUsize::new(1).unwrap(), ..limits() };
     let server = SocketServer::new(a, limits, wake()).unwrap();
-    frame::write(&mut b, &ClientMsg::Attach, limits.max_frame_bytes).unwrap();
-    frame::write(&mut b, &ClientMsg::Attach, limits.max_frame_bytes).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while server.connection_status().is_ok() {
-        assert!(Instant::now() < deadline, "flood did not close connection");
-        thread::sleep(Duration::from_millis(1));
+    let client = SocketClient::new(b, limits, wake()).unwrap();
+    let owner = crate::app::backend_store::TerminalOwner::Pane(heca_core::layout::PaneId(1));
+    let typed: Vec<u8> = (0..2000u32).map(|i| b'a' + (i % 26) as u8).collect();
+    for byte in &typed {
+        client.send(ClientMsg::Terminal { owner: owner.clone(), input: ProcessInput::Bytes(vec![*byte]) }).unwrap();
     }
-    assert!(matches!(server.poll().unwrap(), Some(ClientMsg::Attach)));
-    assert_eq!(server.poll().unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    let mut received = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while received.len() < typed.len() {
+        assert!(Instant::now() < deadline, "only {} of {} arrived", received.len(), typed.len());
+        match server.poll().unwrap() {
+            Some(ClientMsg::Terminal { input: ProcessInput::Bytes(bytes), .. }) => received.extend(bytes),
+            Some(other) => panic!("unexpected {other:?}"),
+            None => thread::sleep(Duration::from_millis(1)),
+        }
+    }
+    assert_eq!(received, typed);
+    assert!(server.connection_status().is_ok() && client.connection_status().is_ok());
 }
 
 #[test]

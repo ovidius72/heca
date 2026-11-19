@@ -144,9 +144,9 @@ pub(crate) fn handle_keyboard_input(
                 return;
             }
 
-            if let Some(pane_id) = state.focused_pane
-                && let Some(backend) = state.client.backends.get_mut(pane_id)
-            {
+            // The one answer to "which terminal are the keys for", the one paste and search read too.
+            let modifiers = state.modifiers;
+            if let Some(backend) = state.keyboard_backend_mut() {
                 // Snap to live bottom when user sends keyboard input (Q5).
                 // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that
                 // e.g. Shift+click mouse selection works after scrolling
@@ -157,7 +157,7 @@ pub(crate) fn handle_keyboard_input(
                     backend.scroll_to_bottom();
                 }
 
-                let handled = winit_key_to_backend_event(ctx.logical_key, state.modifiers)
+                let handled = winit_key_to_backend_event(ctx.logical_key, modifiers)
                     .is_some_and(|event| backend.process_key_event(&event));
                 let input_bytes =
                     winit_key_to_terminal_input(ctx.logical_key, ctx.key_text, ctx.is_ctrl);
