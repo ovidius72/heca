@@ -73,3 +73,18 @@ fn an_extension_places_the_folder_line_and_updates_it_in_place() {
     assert_eq!(card.base().children[1].base().bounds.size.h, 0.0, "an empty path takes nothing");
     assert_eq!(path.get_untracked(), "");
 }
+
+/// **A dock body shows a list in a service's window-side value** with `.child(shown.map(..))`, which
+/// keeps its rows in step when the value changes — no rebuild of the dock, nothing to wire.
+#[test]
+fn an_extension_lists_its_service_value_in_a_dock_body() {
+    let pro = heca::extension("rooms-list-demo");
+    let rooms = pro.service("rooms", |_| Ok(Rooms::default()));
+    struct View { members: Vec<String> }
+    let shown = rooms.client(std::rc::Rc::new(View { members: Vec::new() }), |view, update| {
+        if let heca::Update::Snapshot(groups) = update { *view = std::rc::Rc::new(View { members: groups.concat() }); }
+    });
+    let mut body = Flex::column().child(shown.map(|view| &view.members, |name: &String| Label::new(name.clone())));
+    LayoutEngine::new().base_font(15.0).compute(&mut body, Size::new(300.0, 200.0));
+    assert!(body.base().children.is_empty(), "nothing shown before the first snapshot");
+}

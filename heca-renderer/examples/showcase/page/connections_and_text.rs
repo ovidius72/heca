@@ -1,6 +1,6 @@
 //! P103: connections, a nested tree, a growing editor and a live message feed.
 use super::*;
-use heca_grid_ui::{Line, MessageList, Resizable, TreeLayout};
+use heca_grid_ui::{Line, MapChildren, MessageList, Resizable, TreeLayout};
 use heca_grid_ui::scene::ArrowHeads;
 
 pub(super) fn build(theme: &Theme) -> Grid {
@@ -17,7 +17,16 @@ pub(super) fn build(theme: &Theme) -> Grid {
         let message = text.get_untracked();
         if !message.is_empty() { feed.message(message); text.set(String::new()); }
     });
-    Grid::new().template_column("1fr 1fr").template_row("auto auto")
+    // A list kept in step with a value: add and remove items, and the rows still there are kept.
+    let items = signal(vec!["first".to_string(), "second".to_string()]);
+    let added = signal(2usize);
+    let add = Button::secondary("Add item").on_click(move || {
+        added.update(|n| *n += 1);
+        items.update(|list| list.push(format!("item {}", added.get_untracked())));
+    });
+    let remove = Button::secondary("Remove first").on_click(move || items.update(|list| { if !list.is_empty() { list.remove(0); } }));
+    let list = Flex::column().gap("xs").child(items.map(|item: &String| Label::new(item.clone())));
+    Grid::new().template_column("1fr 1fr").template_row("auto auto auto")
         .gap("lg").width("100%")
         .child(Grid::new().template_row("auto auto").gap("md")
             .child(Label::new("Line and arrows"))
@@ -31,6 +40,10 @@ pub(super) fn build(theme: &Theme) -> Grid {
             .child(Flex::row().justify("end").child(send)))
         .child(Grid::new().template_row("auto 1fr").gap("sm")
             .child(Label::new("MessageList")).child(messages))
+        .child(Grid::new().template_row("auto auto auto").gap("sm")
+            .child(Label::new("Children that follow a value"))
+            .child(Flex::row().gap("sm").child(add).child(remove))
+            .child(list))
 }
 
 #[cfg(test)]
