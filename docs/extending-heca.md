@@ -155,6 +155,17 @@ demo.agent_driver(MyDriver::new());
 heca::run();
 ```
 
+**An agent's icon, by its driver id** — to draw the same harness icon heca draws, in your own dock:
+
+```rust,ignore
+let icon = heca::agent::icon(&cx.config().config.settings.agents, "claude"); // Option<AgentIcon>
+```
+
+The id is the driver's (`claude`, `codex`, `pi`, `opencode`, or `<extension>.<id>` for an added
+driver). The icon is there whether or not the user switched the integration on, and the user's own
+`icon` setting wins, as in heca's sidebar. `None` for an id heca does not know: show the generic
+terminal glyph, as the agent line does.
+
 `AgentSetup` adds arguments and environment for that invocation; the original arguments remain.
 Read current command settings from `AgentLaunchContext.environment` and `cwd`. Launch setup never edits
 personal settings. A side-channel driver writes newline-delimited reports to the supplied `endpoint`; an OSC
