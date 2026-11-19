@@ -291,6 +291,23 @@ impl RealizeCx<'_> {
     }
 
     fn build(&mut self, node: &ViewNode) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+        let (own, tooltip) = without_tooltip_child(node);
+        let mut built = self.build_kind(&own)?;
+        self.attach_tooltip(built.as_mut(), node, tooltip)?;
+        Ok(built)
+    }
+
+    /// The child in `node`'s `tooltip` slot (at `index`), realized and set as what the built widget
+    /// shows on hover.
+    fn attach_tooltip(&mut self, built: &mut dyn Component, node: &ViewNode, index: Option<usize>) -> Result<(), RealizeError> {
+        let Some(index) = index else { return Ok(()) };
+        let content = self.at_child(node, index, |child, cx| cx.build(child))?;
+        built.base_mut().tooltip = Some(heca_grid_ui::widgets::tooltip::Tip::of(content));
+        crate::apply_tip_options(built, node);
+        Ok(())
+    }
+
+    fn build_kind(&mut self, node: &ViewNode) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
         let definition = self.registry.get(&node.kind).ok_or_else(|| RealizeError {
             kind: RealizeErrorKind::UnknownWidget(node.kind.clone()), path: self.path.clone(),
         })?;
@@ -316,8 +333,10 @@ impl RealizeCx<'_> {
 
     pub(crate) fn typed_child<C: Component + SetProp>(&mut self, parent: &ViewNode, index: usize, build: impl FnOnce(&ViewNode, &mut Self) -> Result<C, RealizeError>) -> Result<C, RealizeError> {
         self.at_child(parent, index, |node, cx| {
-            let mut built = crate::style::with_props(build(node, cx)?, node, cx.theme);
+            let (own, tooltip) = without_tooltip_child(node);
+            let mut built = crate::style::with_props(build(&own, cx)?, node, cx.theme);
             crate::apply_common_props(&mut built, node, cx.theme, cx.emit, cx.forms);
+            cx.attach_tooltip(&mut built, node, tooltip)?;
             Ok(built)
         })
     }
@@ -334,5 +353,21 @@ impl RealizeCx<'_> {
 
     pub fn children(&mut self, parent: &ViewNode) -> Result<Vec<heca_grid_ui::WidgetModel>, RealizeError> {
         (0..parent.children.len()).map(|index| self.child(parent, index)).collect()
+    }
+}
+
+/// **A child in the `tooltip` slot is what the node shows on hover**, for every kind: `node` as the
+/// kind's factory sees it — without that child, so no factory has to know the slot exists — and
+/// where the child was.
+fn without_tooltip_child(node: &ViewNode) -> (std::borrow::Cow<'_, ViewNode>, Option<usize>) {
+    let index = node.children.iter()
+        .position(|child| crate::intents::slot_of(child) == Some(crate::intents::TOOLTIP_SLOT));
+    match index {
+        Some(index) => {
+            let mut own = node.clone();
+            own.children.remove(index);
+            (std::borrow::Cow::Owned(own), Some(index))
+        }
+        None => (std::borrow::Cow::Borrowed(node), None),
     }
 }

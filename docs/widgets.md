@@ -5887,15 +5887,25 @@ has, so **no widget opts in and no host paints on their behalf**.
 
 | builder | what it does |
 | --- | --- |
-| `.tooltip(text)` | what this widget says on hover. Unset = it says nothing, and costs nothing. |
-| `.tooltip_signal(Signal<String>)` | the same, from a live signal — an action's current keybinding, a changing status — so the bubble follows without the widget being rebuilt. |
+| `.tooltip(..)` | what this widget says on hover — **words** (they wrap and keep their line breaks: `"zsh\npane-1"` is two lines), a **`Signal<String>`** the bubble follows live without the widget being rebuilt, or a **whole widget** (a segmented `Tag`, a row of parts). One door: `impl IntoTip`. Unset = it says nothing, and costs nothing. |
+| `.tooltip_signal(Signal<String>)` | the same as `.tooltip(signal)`, which is the form to write; kept so code written against it keeps working. |
 | `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
 | `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
 | `.tooltip_quick(true)` | the library's shorter rest (`QUICK_DELAY`, half the default) — a name instead of a number, for a tip that carries what the widget had to cut short (a branch name in a narrow row). No-op with no tooltip declared. In a described tree: `.prop("tooltip_quick", PropValue::Bool(true))`. |
 
-All four are on `TooltipExt`, so they apply to **every** widget — and the first, third and fourth
-have the described spellings below. `tooltip_signal` is native-only, because a signal is a live host
-value a description cannot name.
+All of them are on `TooltipExt`, so they apply to **every** widget — and `tooltip` (with words),
+`tooltip_side`, `tooltip_delay` and `tooltip_quick` have the described spellings below. A signal or a
+widget as the content is native-only: a description carries words.
+
+```rust
+Button::new("Close").tooltip("Close the pane");                        // words
+PaneName::new(..).tooltip(title);                                      // a Signal<String>, followed live
+row.tooltip(Tag::new(program).segment_text(model).segment_text(folder)); // a widget
+```
+
+**The bubble is widgets, laid out by the engine**: a panel (the overlay family's own surface, see
+below) holding the content, padded with steps of the theme's rhythm. Words are a wrapping `Label`
+that keeps their line breaks. Nothing in it is measured by hand, so whatever it holds fits.
 
 > ⚠️ **The bubble is drawn by `paint_child`, not by the widget's own `paint`.** Anything that paints
 > a tree with a bare `.paint(cx)` shows the widget and none of the three things the framework draws
@@ -5972,9 +5982,25 @@ Button::new("Close").tooltip("Close the pane").tooltip_side(ViewTooltipSide::Bot
 | `tooltip` | text | *(none)* | what the node says on hover. Absent = it says nothing. |
 | `tooltip_side` | `"top"` \| `"bottom"` \| `"left"` \| `"right"` | `"top"` | which side to prefer; flipped when there is no room. Ignored with no `tooltip`. |
 | `tooltip_delay` | number | `0.5` | seconds the pointer must rest. An integer is accepted as well as a fraction. Ignored with no `tooltip`. |
+| child with `slot: "tooltip"` | any node | *(none)* | a widget as the tooltip, instead of words. On every kind. |
+
+**A widget as the tooltip: a child in the `tooltip` slot** — on any kind, a leaf included. It is what
+the node shows on hover (natively `.tooltip(widget)`), not one of its children, and it wins over the
+`tooltip` words. `tooltip_side`, `tooltip_delay` and `tooltip_quick` apply to it the same way:
+
+```rust
+ViewNode::new(WidgetId::Label)
+    .text("claude")
+    .prop("tooltip_side", PropValue::Text("bottom".into()))
+    .child(ViewNode::new(WidgetId::Tag).text("claude")             // shown in the bubble
+        .prop("slot", PropValue::Text("tooltip".into())))
+```
+
+The slot is taken by `realize` before the node's own kind is built, so no kind knows it exists.
 
 There is no declarative `tooltip_signal`: a signal is a live host value, and a description has no way
-to name one. A described tooltip whose words change is a re-described node.
+to name one. A described tooltip whose words change is a re-described node, until a described value
+can be bound (P085(F003)/T360).
 
 In the heca app an action button's tip is derived from its `WmAction` centrally (next section),
 never authored per call site.

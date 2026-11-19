@@ -25,15 +25,18 @@
 //! looks like, so the user's `overlay_border_style` governs the tooltip exactly as it governs a
 //! dialog or a dropdown.
 
-use crate::builders::{LayoutExt, Parent, StyleExt};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::builders::{IntoComponent, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, PaintCx, paint_child};
-use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::style::Length;
+use crate::scene::Glow;
+use crate::style::{Length, Space, Spacing};
 use crate::widgets::overlay::{
     BesideSide, PanelChrome, PanelElevation, paint_panel_chrome, place_beside,
 };
+use crate::widgets::{Flex, Label};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Smallest rect containing both `a` and `b` (widget bounds ∪ bubble rect).
@@ -58,90 +61,142 @@ pub const DEFAULT_DELAY: f32 = 0.5;
 /// purpose (a branch name in a narrow row) that the reader goes to the pointer for.
 /// See [`TooltipExt::tooltip_quick`](crate::builders::TooltipExt::tooltip_quick).
 pub const QUICK_DELAY: f32 = DEFAULT_DELAY / 2.0;
-/// Gap between the target and the bubble (logical px).
-const GAP: f64 = 6.0;
-/// Bubble inner padding.
-const PAD_X: f64 = 8.0;
-const PAD_Y: f64 = 5.0;
-/// Halo falloff on the bubble — the tooltip's own accent identity, layered onto the shared panel
-/// chrome. Deliberately tighter/fainter than a dropdown's: a hover bubble should read as a light
-/// surface, not a panel demanding attention.
-const BUBBLE_GLOW_RADIUS: f32 = 5.0;
-const BUBBLE_GLOW_INTENSITY: f32 = 0.2;
+/// The air between the target and the bubble, and inside the bubble around what it holds — steps
+/// of the theme's rhythm, so they follow the font like every other space.
+const GAP: Spacing = Spacing::Sm;
+const PAD_X: Spacing = Spacing::Sm;
+const PAD_Y: Spacing = Spacing::Sm;
+/// The bubble's halo is the theme's own, one level lighter: a hover bubble should read as a light
+/// surface, not a panel demanding attention. The user's `glow_size` still scales it on top, as it
+/// does every glow.
+const BUBBLE_GLOW: crate::theme::GlowLevel = crate::theme::GlowLevel::Thin;
+/// The name the bubble's own panel answers to inside the tree that lays it out.
+const BUBBLE: &str = "tooltip.bubble";
 
 /// **What a widget says on hover** — the declaration held in [`Base::tooltip`].
 ///
-/// Built by [`TooltipExt::tooltip`](crate::builders::TooltipExt::tooltip); a widget that
-/// declares none has `None` here and costs nothing.
+/// Built by [`TooltipExt::tooltip`](crate::builders::TooltipExt::tooltip) from words, a live
+/// signal or a whole widget ([`IntoTip`]); a widget that declares none has `None` here and costs
+/// nothing.
+///
+/// **The bubble is widgets, laid out by the engine** — a panel holding the content, padded with
+/// steps of the theme's rhythm — so anything fits: two lines, a segmented [`Tag`](super::Tag), a
+/// row of parts. Words are a wrapping [`Label`] that keeps their line breaks.
 #[derive(Clone)]
 pub struct Tip {
-    /// The words. A signal, so a tooltip that tracks live state (an action's current keybinding)
-    /// updates without rebuilding the widget.
+    /// The words — what the bubble's [`Label`] shows, followed live. Empty for a tip whose content
+    /// is a widget, and an empty word tip shows nothing.
     pub text: Signal<String>,
     /// Which side of the widget to anchor to. Flipped automatically when there is no room.
     pub side: TooltipSide,
     /// Seconds the pointer must rest before the bubble appears.
     pub delay: f32,
+    /// Whether the content is a widget rather than the words.
+    widget: bool,
+    /// The bubble's tree, kept across reveals: laid out and painted only while it shows.
+    bubble: Rc<RefCell<Flex>>,
+    /// Where the bubble was last **painted** (`None`: not painted) — what is on screen once that
+    /// frame is shown.
+    drawn: Rc<std::cell::Cell<Option<Rectangle>>>,
+    /// What a repaint was last told about ([`damage`]). Appearing, moving and going are each a
+    /// change to repaint — with every place it was or is included — in any host that repaints only
+    /// what changed, whether it paints before or after it asks.
+    announced: Rc<std::cell::Cell<Option<Rectangle>>>,
 }
 
 impl Tip {
     /// A tip with the default side and delay.
     pub fn new(text: impl Into<String>) -> Self {
-        Self {
-            text: signal(text.into()),
-            side: TooltipSide::default(),
-            delay: DEFAULT_DELAY,
-        }
+        Self::from_signal(signal(text.into()))
     }
 
     /// A tip whose words are a live signal.
     pub fn from_signal(text: Signal<String>) -> Self {
-        Self {
-            text,
-            side: TooltipSide::default(),
-            delay: DEFAULT_DELAY,
-        }
+        let words = Label::new("").with_text_signal(text).wrap(true).preserve_whitespace(true);
+        Self::holding(text, false, words.into_component())
+    }
+
+    /// A tip whose bubble holds `content` — any widget.
+    pub fn of(content: impl IntoComponent) -> Self {
+        Self::holding(signal(String::new()), true, content.into_component())
+    }
+
+    fn holding(text: Signal<String>, widget: bool, content: crate::WidgetModel) -> Self {
+        // The bubble hugs what it holds: placed at the start of a row that spans the room it may
+        // use, so the panel is its content's size and not the room's.
+        let panel = Flex::column().padding_x(PAD_X).padding_y(PAD_Y).area(BUBBLE).child(content);
+        let room = Flex::row().align("start").child(panel);
+        Self { text, side: TooltipSide::default(), delay: DEFAULT_DELAY, widget, bubble: Rc::new(RefCell::new(room)),
+            drawn: Rc::default(), announced: Rc::default() }
+    }
+
+    /// Whether there is anything to show: a widget, or words that are not empty.
+    fn says_something(&self) -> bool {
+        self.widget || !self.text.get_untracked().is_empty()
     }
 }
 
-/// The bubble's size for `text` at `font` (logical px).
-fn bubble_size(text: &str, font: f32) -> (f64, f64) {
-    let chars = text.chars().count() as f64;
-    let w = chars * (font * MONO_ADVANCE_RATIO) as f64 + 2.0 * PAD_X;
-    let h = (font * MONO_LINE_RATIO) as f64 + 2.0 * PAD_Y;
-    (w, h)
+/// **What `.tooltip(..)` takes** — the same door for words, live words and a whole widget:
+///
+/// ```ignore
+/// Button::new("Close").tooltip("Close the pane");               // words
+/// Label::new(path).tooltip(full_path);                          // a Signal<String>: followed live
+/// row.tooltip(Tag::new().segment(program).segment(folder));     // a widget
+/// ```
+pub trait IntoTip {
+    /// The tip this makes.
+    fn into_tip(self) -> Tip;
 }
 
-/// **Is this widget's bubble up?** Hovered, declared, non-empty, and rested past the delay.
+impl IntoTip for &str {
+    fn into_tip(self) -> Tip { Tip::new(self) }
+}
+
+impl IntoTip for String {
+    fn into_tip(self) -> Tip { Tip::new(self) }
+}
+
+impl IntoTip for &String {
+    fn into_tip(self) -> Tip { Tip::new(self.clone()) }
+}
+
+impl IntoTip for Signal<String> {
+    fn into_tip(self) -> Tip { Tip::from_signal(self) }
+}
+
+impl<C: IntoComponent> IntoTip for C {
+    fn into_tip(self) -> Tip { Tip::of(self) }
+}
+
+/// The font a bubble is drawn at: **the surface's, not the control's**. A bubble is a small panel
+/// beside the widget rather than part of it, so an emphasized button must not get emphasized words
+/// floating over it.
+fn surface_font(base: &Base) -> f32 {
+    if base.root_font > 0.0 { base.root_font } else { base.font }
+}
+
+/// **Is this widget's bubble up?** Hovered, declared, with something to say, and rested past the
+/// delay.
 ///
 /// One answer, read by the paint, the damage and the wake — so a bubble is never drawn in a frame
 /// that was not repainted for it, and never leaves a ghost behind.
-fn shown(base: &Base) -> Option<(String, f32)> {
+fn shown(base: &Base) -> Option<&Tip> {
     let tip = base.tooltip.as_ref()?;
     let rested = base.pointer.hovered_for()?;
-    if rested < tip.delay {
-        return None;
-    }
-    let text = tip.text.get_untracked();
-    // **The surface's font, not the control's.** A bubble is a small panel beside the widget rather
-    // than part of it, so an emphasized button must not get emphasized words floating over it.
-    let font = if base.root_font > 0.0 {
-        base.root_font
-    } else {
-        base.font
-    };
-    (!text.is_empty()).then_some((text, font))
+    (rested >= tip.delay && tip.says_something()).then_some(tip)
 }
 
-/// Where this widget's bubble sits, if it is up.
-fn rect_of(base: &Base, viewport: Size) -> Option<(String, Rectangle)> {
-    let (text, font) = shown(base)?;
-    let (w, h) = bubble_size(&text, font);
-    let tip = base.tooltip.as_ref()?;
-    Some((
-        text,
-        place_beside(base.bounds, Size::new(w, h), viewport, GAP, tip.side),
-    ))
+/// Lay the bubble out for `base` and place it beside the widget, inside `viewport`. The panel ends
+/// up where it is drawn; its rect is returned.
+fn place_bubble(base: &Base, tip: &Tip, viewport: Size) -> Option<Rectangle> {
+    let font = surface_font(base);
+    let mut room = tip.bubble.borrow_mut();
+    crate::LayoutEngine::new().base_font(font).compute(&mut *room, viewport);
+    let laid = crate::component::area(&*room, BUBBLE)?.base().bounds;
+    let gap = Space::Step(GAP).resolve(font) as f64;
+    let rect = place_beside(base.bounds, laid.size, viewport, gap, tip.side);
+    crate::component::shift_subtree(&mut *room, rect.loc.x - laid.loc.x, rect.loc.y - laid.loc.y);
+    Some(rect)
 }
 
 /// **Draw the widget's tooltip, if it has one and the pointer has rested on it.**
@@ -151,25 +206,21 @@ fn rect_of(base: &Base, viewport: Size) -> Option<(String, Rectangle)> {
 /// from state it already keeps, so nothing opts in.
 pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
     let base = c.base();
-    if !base.visible.get_untracked() || base.children.iter().any(|child| owns_hover_tip(child.as_ref())) {
-        return;
-    }
-    let Some((text, rect)) = rect_of(base, cx.viewport()) else {
-        return;
-    };
-    let (accent, glow_c, foreground, tip_border) = {
+    let Some(declared) = base.tooltip.as_ref() else { return };
+    let tip = (base.visible.get_untracked()
+        && !base.children.iter().any(|child| owns_hover_tip(child.as_ref())))
+        .then(|| shown(base)).flatten();
+    let rect = tip.and_then(|tip| place_bubble(base, tip, cx.viewport()));
+    declared.drawn.set(rect);
+    let (Some(tip), Some(rect)) = (tip, rect) else { return };
+    let (accent, glow, tip_border) = {
         let t = cx.theme();
-        (
-            cx.accent(),
-            t.colors.glow,
-            t.colors.foreground,
-            t.colors.interaction.tooltip_border,
-        )
-    };
-    let font = if base.root_font > 0.0 {
-        base.root_font
-    } else {
-        base.font
+        let glow = Glow {
+            color: t.colors.glow,
+            radius: t.colors.active_glow_radius * BUBBLE_GLOW.radius_scale(),
+            intensity: t.colors.active_glow_strength * BUBBLE_GLOW.strength_scale(),
+        };
+        (cx.accent(), glow, t.colors.interaction.tooltip_border)
     };
     // Drawn on the overlay layer so it sits above later siblings and is never clipped.
     cx.with_overlay(|cx| {
@@ -182,24 +233,16 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
             rect,
             PanelChrome {
                 border,
-                glow: Some(Glow {
-                    color: glow_c,
-                    radius: BUBBLE_GLOW_RADIUS,
-                    intensity: BUBBLE_GLOW_INTENSITY,
-                }),
+                glow: Some(glow),
                 // A hover bubble is not at dialog depth: the panel shadow was tuned for surfaces
                 // hundreds of px across and, unscaled, is bigger than this ~30px bubble.
                 elevation: PanelElevation::Hover,
             },
         );
-        cx.text(
-            rect,
-            &text,
-            foreground,
-            font,
-            TextAlign::Center,
-            TextStyle::REGULAR,
-        );
+        let room = tip.bubble.borrow();
+        if let Some(panel) = crate::component::area(&*room, BUBBLE) {
+            paint_child(panel, cx);
+        }
     });
 }
 
@@ -208,7 +251,7 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
 fn owns_hover_tip(c: &dyn Component) -> bool {
     let base = c.base();
     base.visible.get_untracked() && base.hovered()
-        && (base.tooltip.as_ref().is_some_and(|tip| !tip.text.get_untracked().is_empty())
+        && (base.tooltip.as_ref().is_some_and(Tip::says_something)
             || base.children.iter().any(|child| owns_hover_tip(child.as_ref())))
 }
 
@@ -219,20 +262,40 @@ fn owns_hover_tip(c: &dyn Component) -> bool {
 /// bubble appears on time even when the pointer has stopped moving and nothing else would.
 pub(crate) fn wake(base: &Base) -> Option<f32> {
     let tip = base.tooltip.as_ref()?;
-    let rested = base.pointer.hovered_for()?;
-    (rested < tip.delay).then_some(tip.delay - rested)
+    if let Some(rested) = base.pointer.hovered_for()
+        && rested < tip.delay
+    {
+        return Some(tip.delay - rested);
+    }
+    // Due, but not painted where it should be yet — it came due after this frame was painted: one
+    // more frame, now.
+    (bubble_now(base) != tip.drawn.get()).then_some(0.0)
 }
 
-/// **The rect a repaint must cover** for this widget — its own bounds, plus its bubble when one is
-/// up, because the bubble draws on the overlay layer well outside them.
+/// Where this widget's bubble is now, if it is up — against the viewport the tree was last laid out
+/// against, published onto every widget by the layout engine, the same number the paint pass uses.
+fn bubble_now(base: &Base) -> Option<Rectangle> {
+    shown(base).and_then(|tip| place_bubble(base, tip, base.viewport))
+}
+
+/// **Whether the bubble appeared, moved or went since a repaint last asked** — so the widget counts
+/// as needing paint at that moment, with nothing marking it: the reveal comes on a timed wake, when
+/// no event touched the widget, and a host that repaints only what changed would otherwise draw the
+/// bubble cut to whatever else changed, or not at all.
+pub(crate) fn bubble_changed(base: &Base) -> bool {
+    let Some(tip) = base.tooltip.as_ref() else { return false };
+    let drawn = tip.drawn.get();
+    drawn != tip.announced.get() || bubble_now(base) != drawn
+}
+
+/// **The rect a repaint must cover** for this widget — its own bounds, plus its bubble where it is
+/// now and where it was last announced, because the bubble draws on the overlay layer well outside
+/// them and a bubble that moved or went must be painted over in its old place.
 pub(crate) fn damage(base: &Base) -> Rectangle {
-    // The viewport the tree was last laid out against, published onto every widget by the layout
-    // engine — the same number the paint pass will use, so the damaged rect and the drawn bubble
-    // cannot disagree.
-    match rect_of(base, base.viewport) {
-        Some((_, bubble)) => union(base.bounds, bubble),
-        None => base.bounds,
-    }
+    let Some(tip) = base.tooltip.as_ref() else { return base.bounds };
+    let (now, drawn) = (bubble_now(base), tip.drawn.get());
+    let before = tip.announced.replace(drawn);
+    [now, drawn, before].into_iter().flatten().fold(base.bounds, union)
 }
 
 /// **A tooltip on a region that is not a widget you can put a builder on.**
