@@ -10,9 +10,13 @@
 The archive holds the `heca` program, the licences and the README. Everything heca needs is inside
 the program.
 
-## These builds are not signed yet
+## These builds are not notarized yet
 
-- **macOS** says the app "cannot be opened because the developer cannot be verified". Open it once
-  with right-click → **Open**, or run `xattr -dr com.apple.quarantine /Applications/heca.app`.
+- **macOS** says Apple cannot verify that the `.dmg` (or the app) is free of malware. Choose
+  **Done**, then open **System Settings → Privacy & Security** and press **Open Anyway** next to the
+  message about heca; do the same for the app the first time it starts. Or, in Terminal, remove the
+  download mark before opening it: `xattr -d com.apple.quarantine ~/Downloads/heca_*.dmg` (and
+  `xattr -dr com.apple.quarantine /Applications/heca.app` for the installed app). The app carries an
+  ad-hoc signature, so it is never reported as damaged.
 - **Windows** SmartScreen may say "Windows protected your PC". Choose **More info** → **Run anyway**.
 - **Linux AppImage**: make it executable first — `chmod +x heca-*.AppImage`.
