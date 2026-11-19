@@ -17,7 +17,6 @@ pub(super) use super::program::reconcile_exit_state;
 pub(super) use super::{ShellIntegrationAssets, TerminalBackend, TerminalBackendOptions};
 pub(super) use crate::backend::{DEFAULT_CELL_SIZE, PaneBackend, TerminalDamage};
 pub(super) use crate::runtime::ProcessStatus;
-use std::fs;
 use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -200,32 +199,5 @@ pub(super) fn write_shell_integration_assets_for_test() -> ShellIntegrationAsset
         std::process::id(),
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
     ));
-    let zsh_dir = root.join("zsh");
-    fs::create_dir_all(&zsh_dir).expect("temp shell integration dir");
-
-    let bash_init = root.join("bash_init.sh");
-    let fish_init = root.join("fish_init.fish");
-    let zsh_rc = zsh_dir.join(".zshrc");
-
-    fs::write(
-        &bash_init,
-        include_str!("../../../../../heca/assets/shell-integration/bash_init.sh"),
-    )
-    .expect("write bash init");
-    fs::write(
-        &fish_init,
-        include_str!("../../../../../heca/assets/shell-integration/fish_init.fish"),
-    )
-    .expect("write fish init");
-    fs::write(
-        &zsh_rc,
-        include_str!("../../../../../heca/assets/shell-integration/zsh/.zshrc"),
-    )
-    .expect("write zsh rc");
-
-    ShellIntegrationAssets {
-        bash_init,
-        fish_init,
-        zsh_zdotdir: zsh_dir,
-    }
+    ShellIntegrationAssets::write_to(&root).expect("write shell integration files")
 }
