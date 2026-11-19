@@ -197,9 +197,9 @@
       "priority": 3,
       "shortName": "a-program-s-agent-icon-read-by",
       "title": "A program's agent icon, read by name — extensions draw the harness icon heca draws",
-      "status": "in-progress",
-      "description": "Asked by heca-pro (heca-pro-dev, 2026-11-19) for its rooms dock (heca-pro T015): each member is shown with its harness icon, drawn with heca's Image widget like heca's agent line does. Antonio chose option (a) on 2026-11-19: a public read \"program → icon of the registered driver\" (plugin/extension drivers included), so no extension copies heca's SVGs. API name to be agreed with Antonio before code.\n\n## What exists (verified 2026-11-19)\n- `heca::agent::AgentIcon` is public (heca-core/src/agent/icon.rs:9: File(PathBuf) | Svg(String)); re-exported in heca/src/agent/mod.rs:11-14.\n- Every driver implements `heca::agent::AgentDriver` (heca-core/src/agent/driver.rs:44-60): `id()` (stable identity, e.g. \"claude\", the key of `[settings.agents.programs.<id>]`), `name()`, `icon() -> Option<AgentIcon>`, `programs()` (executable names), `recognizes(program)` (basename match, `program_name`, driver.rs:99).\n- Built-in drivers live in heca/src/agent/drivers/ (private; assets in drivers/assets/icons: claude, codex, pi, opencode); extensions add drivers with `heca::extension(..).agent_driver(..)` (heca/src/agent/registration/).\n- There is NO public lookup from a program to its icon; an extension sees PaneFacts (with the running agent's state/icon) only inside pane_line/pane_chip.\n- CAVEAT: a built-in driver is constructed only when its program is enabled in config (`configured()` returns None unless `enabled: Some(true)`, heca/src/agent/drivers/mod.rs:33-36), and config.default.toml ships every program disabled (`[settings.agents.programs.*] enabled = false`). A lookup over the live driver list would find no icon for a program whose integration is off. The icon is static data: the lookup must answer for every known driver, enabled or not — decide with Antonio how (e.g. the icons registered beside the drivers regardless of enablement).\n- Naming of the key: heca-pro says \"claude-code\"; heca's driver id is \"claude\" and its executable \"claude\". The lookup should accept what heca already uses (driver id or an executable the driver recognizes); heca-pro passes one of those.\n\n## Wanted\nOne public read in heca::agent: program (driver id or executable) → the icon heca would draw (driver's icon; for an unknown program, None, and the caller shows heca's generic terminal glyph as the agent line does). Built once, from the same registry the agent line uses — no second list. Docs in docs/extending-heca.md (Terminal agent drivers section); a test from outside the crate (heca/tests) that reads a built-in driver's icon with its integration disabled and an extension driver's icon.",
-      "descriptionUpdatedAt": "2026-11-19T13:44:37.040Z",
+      "status": "done",
+      "description": "Asked by heca-pro (heca-pro-dev, 2026-11-19) for its rooms dock (heca-pro T015): each member is shown with its harness icon, drawn with heca's Image widget like heca's agent line does. Antonio chose option (a) on 2026-11-19: a public read \"program → icon of the registered driver\" (plugin/extension drivers included), so no extension copies heca's SVGs. API name to be agreed with Antonio before code.\n\n## What exists (verified 2026-11-19)\n- `heca::agent::AgentIcon` is public (heca-core/src/agent/icon.rs:9: File(PathBuf) | Svg(String)); re-exported in heca/src/agent/mod.rs:11-14.\n- Every driver implements `heca::agent::AgentDriver` (heca-core/src/agent/driver.rs:44-60): `id()` (stable identity, e.g. \"claude\", the key of `[settings.agents.programs.<id>]`), `name()`, `icon() -> Option<AgentIcon>`, `programs()` (executable names), `recognizes(program)` (basename match, `program_name`, driver.rs:99).\n- Built-in drivers live in heca/src/agent/drivers/ (private; assets in drivers/assets/icons: claude, codex, pi, opencode); extensions add drivers with `heca::extension(..).agent_driver(..)` (heca/src/agent/registration/).\n- There is NO public lookup from a program to its icon; an extension sees PaneFacts (with the running agent's state/icon) only inside pane_line/pane_chip.\n- CAVEAT: a built-in driver is constructed only when its program is enabled in config (`configured()` returns None unless `enabled: Some(true)`, heca/src/agent/drivers/mod.rs:33-36), and config.default.toml ships every program disabled (`[settings.agents.programs.*] enabled = false`). A lookup over the live driver list would find no icon for a program whose integration is off. The icon is static data: the lookup must answer for every known driver, enabled or not — decide with Antonio how (e.g. the icons registered beside the drivers regardless of enablement).\n- Naming of the key: heca-pro says \"claude-code\"; heca's driver id is \"claude\" and its executable \"claude\". The lookup should accept what heca already uses (driver id or an executable the driver recognizes); heca-pro passes one of those.\n\n## Wanted\nOne public read in heca::agent: program (driver id or executable) → the icon heca would draw (driver's icon; for an unknown program, None, and the caller shows heca's generic terminal glyph as the agent line does). Built once, from the same registry the agent line uses — no second list. Docs in docs/extending-heca.md (Terminal agent drivers section); a test from outside the crate (heca/tests) that reads a built-in driver's icon with its integration disabled and an extension driver's icon.\n\n---\n**Completion summary:**\nDONE 2026-11-19. PR #329 (https://github.com/ovidius72/heca/pull/329) MERGED into main as fc6f88b4 (code commit be00a420). Worktree heca-feat-570 and branch removed after verifying the commit is in origin/main and nothing was left uncommitted.\n\nShipped:\n- heca::agent::icon(config: &AgentsConfig, id: &str) -> Option<AgentIcon> (heca/src/agent/mod.rs): the icon heca draws for a driver id (\"claude\", \"codex\", \"pi\", \"opencode\", \"<extension>.<id>\"), read from `known(config)` — every driver, built-in and extension, enabled or not; the user's `[settings.agents.programs.<id>] icon` wins (the driver wrappers already apply it); None for an unknown id. Decided with Antonio: key = driver id; icon independent of enablement; signature takes the agents config so the user's own icon is honoured (option a). Documented in docs/extending-heca.md (Terminal agent drivers).\n- Same PR (Antonio: one PR): FolderLine is a real widget (implements Component, transparent wrapper built on first layout; hides its own box with no path; tick picks up a path that arrives later) — heca/src/components/folder_line.rs; sidebar cwd line (heca/src/providers/workspaces/row_lines.rs) returns it. Fixes heca-pro's report that FolderLine had no .area(..).\n- Same PR: AGENTS.md § 0 \"HOW TO BUILD A COMPONENT — the steps, every time\" (aligned with heca-pro's AGENTS.md).\n\nVerification: lint-changed clippy + tests clean; outside-crate test heca/tests/agent_reporting.rs::an_agent_icon_reads_by_driver_id_even_when_its_integration_is_off (red when the read returns None on purpose); FolderLine tests incl. a Grid area and no gap when empty; cargo xwin clippy and cargo doc -D warnings clean; Antonio eye-checked FolderLine in the sidebar (cargo run -p heca -- --standalone, started with ZDOTDIR/OLD_ZDOTDIR unset).\n\nFound during the eye-check, not fixed here: heca started from inside a heca terminal inherits ZDOTDIR pointing at heca's zsh integration, stores it as OLD_ZDOTDIR (heca-core/src/backend/terminal/pty.rs:366), and the integration's .zshenv:7 then sources itself forever (\"job table full or recursion limit exceeded\") — no OSC 7, so no cwd anywhere. Proposed to Antonio for T567.",
+      "descriptionUpdatedAt": "2026-11-19T16:14:59.128Z",
       "notes": "Decided with Antonio 2026-11-19: (1) the key is the DRIVER ID (\"claude\", \"codex\", \"pi\", \"opencode\", an extension driver's id) — not the executable: a driver can have several executables, the user changes them in config (`executables = [...]`), while the id is unique, stable and the config key. (2) The icon does not depend on whether the driver's integration is enabled: it is returned for every known driver, enabled or not. API name still to agree before code.",
       "statusLog": [
         {
@@ -209,6 +209,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "f3c4909e-1640-4f10-8402-2da1083a1399-check-002-in-progress-done",
+          "date": "2026-11-19T16:14:59.127Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-11-19. PR #329 (https://github.com/ovidius72/heca/pull/329) MERGED into main as fc6f88b4 (code commit be00a420). Worktree heca-feat-570 and branch removed after verifying the commit is in origin/main and nothing was left uncommitted.\n\nShipped:\n- heca::agent::icon(config: &AgentsConfig, id: &str) -> Option<AgentIcon> (heca/src/agent/mod.rs): the icon heca draws for a driver id (\"claude\", \"codex\", \"pi\", \"opencode\", \"<extension>.<id>\"), read from `known(config)` — every driver, built-in and extension, enabled or not; the user's `[settings.agents.programs.<id>] icon` wins (the driver wrappers already apply it); None for an unknown id. Decided with Antonio: key = driver id; icon independent of enablement; signature takes the agents config so the user's own icon is honoured (option a). Documented in docs/extending-heca.md (Terminal agent drivers).\n- Same PR (Antonio: one PR): FolderLine is a real widget (implements Component, transparent wrapper built on first layout; hides its own box with no path; tick picks up a path that arrives later) — heca/src/components/folder_line.rs; sidebar cwd line (heca/src/providers/workspaces/row_lines.rs) returns it. Fixes heca-pro's report that FolderLine had no .area(..).\n- Same PR: AGENTS.md § 0 \"HOW TO BUILD A COMPONENT — the steps, every time\" (aligned with heca-pro's AGENTS.md).\n\nVerification: lint-changed clippy + tests clean; outside-crate test heca/tests/agent_reporting.rs::an_agent_icon_reads_by_driver_id_even_when_its_integration_is_off (red when the read returns None on purpose); FolderLine tests incl. a Grid area and no gap when empty; cargo xwin clippy and cargo doc -D warnings clean; Antonio eye-checked FolderLine in the sidebar (cargo run -p heca -- --standalone, started with ZDOTDIR/OLD_ZDOTDIR unset).\n\nFound during the eye-check, not fixed here: heca started from inside a heca terminal inherits ZDOTDIR pointing at heca's zsh integration, stores it as OLD_ZDOTDIR (heca-core/src/backend/terminal/pty.rs:366), and the integration's .zshenv:7 then sources itself forever (\"job table full or recursion limit exceeded\") — no OSC 7, so no cwd anywhere. Proposed to Antonio for T567."
         }
       ],
       "decisions": [],
@@ -230,7 +238,7 @@
           "id": "f3c4909e-1640-4f10-8402-2da1083a1399-check-003-docs-extending-heca-md-tell-heca-pro-the-api-pr",
           "number": 3,
           "title": "Docs (extending-heca.md); tell heca-pro the API; PR",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -238,16 +246,16 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-11-19T15:11:12.176Z",
-      "completedAt": "",
+      "completedAt": "2026-11-19T16:14:59.127Z",
       "createdAt": "2026-11-19T13:44:36.971Z",
-      "updatedAt": "2026-11-19T15:23:52.877Z",
+      "updatedAt": "2026-11-19T16:14:59.127Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
           "createdAt": "2026-11-19T15:11:12.028Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2"
+      "activeOwnerSession": ""
     },
     {
       "id": "2d8f506d-2992-41fb-8b93-97b42f31304c",
@@ -309,7 +317,7 @@
     }
   ],
   "createdAt": "2026-11-19T11:15:37.223Z",
-  "updatedAt": "2026-11-19T15:23:52.877Z",
+  "updatedAt": "2026-11-19T16:14:59.127Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
