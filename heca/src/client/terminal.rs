@@ -27,6 +27,8 @@ pub(super) struct TerminalView {
     live_sequence: u64,
     live_top: Option<isize>,
     visible: Option<std::sync::Arc<crate::server::wire::terminal::TerminalFrame>>,
+    /// The frame the last draw was handed, so the next one redraws only the rows that differ.
+    drawn: Option<std::sync::Arc<crate::server::wire::terminal::TerminalFrame>>,
 }
 
 impl TerminalView {
@@ -36,7 +38,7 @@ impl TerminalView {
             .map_or(spec.grid, |(_, frame)| (frame.screen.cols, frame.screen.rows));
         Self { owner, data, outbox, title: String::new(), offset: 0, sequence: 0, painted: 0,
             dirty: true, unannounced: false, grid, cell, scale: 1.0, last_agent: None,
-            live_sequence: 0, live_top: None, visible: None }
+            live_sequence: 0, live_top: None, visible: None, drawn: None }
     }
 
     fn tell(&self, input: ProcessInput) {
@@ -118,10 +120,20 @@ impl PaneBackend for TerminalView {
         Some(snapshot)
     }
     fn take_terminal_damage(&mut self) -> TerminalDamage {
-        let changed = self.dirty || self.painted != self.sequence;
+        let damage = if self.dirty {
+            TerminalDamage::Full
+        } else if self.painted == self.sequence {
+            TerminalDamage::None
+        } else {
+            match (&self.drawn, &self.visible) {
+                (Some(drawn), Some(now)) => changed_rows(&drawn.screen, &now.screen),
+                _ => TerminalDamage::Full,
+            }
+        };
         self.painted = self.sequence;
         self.dirty = false;
-        if changed { TerminalDamage::Full } else { TerminalDamage::None }
+        self.drawn.clone_from(&self.visible);
+        damage
     }
     fn render_data(&self) -> BackendRenderData {
         let snapshot = self.terminal_snapshot();
@@ -150,3 +162,33 @@ impl PaneBackend for TerminalView {
     fn scroll_to_top(&mut self) { self.show(usize::MAX); }
     fn scroll_to_bottom(&mut self) { self.show(0); }
 }
+
+/// **The rows of `now` that differ from `drawn`**, the screen the last draw was handed: a row whose
+/// cells changed, or whose links did (a link is drawn with its row). Anything that moves or
+/// recolours the whole grid — its size, its scroll position, its default colours — is the whole
+/// screen. The cursor is not a row: it is drawn over the grid every frame.
+fn changed_rows(drawn: &heca_core::backend::WireSnapshot, now: &heca_core::backend::WireSnapshot) -> TerminalDamage {
+    use heca_core::backend::TerminalRowRange;
+    let same_grid = drawn.cols == now.cols && drawn.rows == now.rows && drawn.lines.len() == now.lines.len()
+        && drawn.viewport_offset == now.viewport_offset
+        && drawn.viewport_top_stable_row == now.viewport_top_stable_row
+        && drawn.default_fg == now.default_fg && drawn.default_bg == now.default_bg;
+    if !same_grid { return TerminalDamage::Full; }
+    let mut changed: Vec<bool> = drawn.lines.iter().zip(&now.lines).map(|(before, after)| before != after).collect();
+    for link in drawn.hyperlinks.iter().filter(|link| !now.hyperlinks.contains(link))
+        .chain(now.hyperlinks.iter().filter(|link| !drawn.hyperlinks.contains(link))) {
+        if let Some(row) = changed.get_mut(link.row) { *row = true; }
+    }
+    let mut ranges: Vec<TerminalRowRange> = Vec::new();
+    for row in (0..changed.len()).filter(|row| changed[*row]) {
+        match ranges.last_mut() {
+            Some(last) if last.end == row => last.end = row + 1,
+            _ => ranges.push(TerminalRowRange::new(row, row + 1)),
+        }
+    }
+    if ranges.is_empty() { TerminalDamage::None } else { TerminalDamage::Rows(ranges) }
+}
+
+#[cfg(test)]
+#[path = "terminal_damage_tests.rs"]
+mod damage_tests;
