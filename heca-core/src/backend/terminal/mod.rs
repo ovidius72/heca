@@ -17,6 +17,7 @@
 use crate::backend::PaneBackend;
 mod engine;
 mod launch;
+mod locale;
 mod osc;
 mod pane;
 mod process;

@@ -67,18 +67,20 @@ pub(crate) fn status_mode_parts(
 /// Render the full frame for the current app state: the phases of [`frame`], in the order they are
 /// drawn.
 pub(crate) fn render_frame(state: &mut AppState) {
-    let Some(v) = frame::begin(state) else {
+    use crate::slow_steps::step;
+    let _slow = step("frame");
+    let Some(v) = ({ let _s = step("frame.begin"); frame::begin(state) }) else {
         return;
     };
-    let scene = frame::paint_window(state, &v);
-    let terminals = frame::collect_panes(state, &v);
-    frame::sync_terminal_layers(state, &v, &terminals);
-    let Some(mut frame) = frame::Frame::open(state, v) else {
+    let scene = { let _s = step("frame.paint_window"); frame::paint_window(state, &v) };
+    let terminals = { let _s = step("frame.collect_panes"); frame::collect_panes(state, &v) };
+    { let _s = step("frame.sync_terminal_layers"); frame::sync_terminal_layers(state, &v, &terminals) };
+    let Some(mut frame) = ({ let _s = step("frame.open"); frame::Frame::open(state, v) }) else {
         return;
     };
-    frame.clear_and_background(state);
-    frame.flush_window(state, &scene, &terminals);
-    frame.finish(state, &terminals);
+    { let _s = step("frame.clear_and_background"); frame.clear_and_background(state) };
+    { let _s = step("frame.flush_window"); frame.flush_window(state, &scene, &terminals) };
+    { let _s = step("frame.finish"); frame.finish(state, &terminals) };
 }
 
 /// Update session viewport to match current chrome/content area size.
