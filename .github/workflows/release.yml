@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # The tag is the version plus an optional pre-release suffix (v0.1.0-rc1 releases 0.1.0-rc1);
+      # The tag is the version plus an optional pre-release number (v0.1.0-1 releases 0.1.0-1);
       # Cargo.toml must carry the same version, so the installers and the tag cannot disagree.
       - name: Compare the tag with the workspace version
         shell: bash
@@ -29,6 +29,12 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match the version in Cargo.toml ($version)."
             exit 1
           fi
+          # The Windows installer (.msi) takes only numbers after the dash: 0.1.0-1, not 0.1.0-rc1.
+          case "$version" in
+            *-*[!0-9]*)
+              echo "::error::Pre-release version $version: the part after the dash must be a number (e.g. 0.1.0-1), which the Windows installer requires."
+              exit 1 ;;
+          esac
 
   build:
     name: build (${{ matrix.target }})
@@ -38,8 +44,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, target: aarch64-apple-darwin, formats: "app,dmg", archive: zip }
-          - { os: macos-14, target: x86_64-apple-darwin, formats: "app,dmg", archive: zip }
+          - { os: macos-latest, target: aarch64-apple-darwin, formats: "app,dmg", archive: zip }
+          - { os: macos-latest, target: x86_64-apple-darwin, formats: "app,dmg", archive: zip }
           - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, formats: "deb,appimage", archive: tar.gz }
           - { os: windows-latest, target: x86_64-pc-windows-msvc, formats: "wix", archive: zip }
     steps:
