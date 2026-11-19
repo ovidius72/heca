@@ -76,7 +76,15 @@ jobs:
 
       - name: Build the installers
         shell: bash
-        run: cargo packager -p heca --release --target ${{ matrix.target }} -f ${{ matrix.formats }} -o "$GITHUB_WORKSPACE/dist"
+        # hdiutil on GitHub's macOS machines sometimes fails with "Resource busy" while making a
+        # .dmg; a second or third attempt succeeds, so the step tries up to three times.
+        run: |
+          for attempt in 1 2 3; do
+            cargo packager -p heca --release --target ${{ matrix.target }} -f ${{ matrix.formats }} -o "$GITHUB_WORKSPACE/dist" && exit 0
+            echo "::warning::Packaging attempt $attempt failed; retrying."
+            sleep 10
+          done
+          exit 1
 
       # The archive holds the program, the licences and the README — everything heca needs is
       # already inside the binary (fonts, sounds, default config).
