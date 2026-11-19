@@ -442,9 +442,11 @@ by the only other thing that says where input is aimed: **`Base::focused`**.
 
 - **The target is the deepest focused widget.** Capture runs from the root down its ancestor chain,
   then handlers and `on_event` run back up — the same target-and-bubble walk the pointer uses.
-- **A key or typed text stops at the owner.** It belongs to one widget. This is the rule that stops
-  the first row in a list eating an Enter meant for the row the cursor is on; seven widgets used to
-  patch that by hand, six of them by forgetting to.
+- **A key or typed text bubbles up from the focused widget, and never goes down into its
+  children** — the DOM's rule: the browser does not hand a key to the children of
+  `document.activeElement` either. This is what stops the first row in a list eating an Enter meant
+  for the row the cursor is on; seven widgets used to patch that by hand, six of them by forgetting
+  to.
 - **A `Widget` intent enters the focused region.** An intent is not a key — it is what a key
   *resolved to*, a capability named out loud (`ScrollPageDown`, `Dismiss`). It is addressed to the
   focused region, so that subtree is walked and whichever widget owns the capability answers, and a

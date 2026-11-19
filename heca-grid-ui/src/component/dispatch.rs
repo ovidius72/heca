@@ -114,16 +114,16 @@ pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
 /// Capture down `path`, then handlers and [`on_event`](Component::on_event) back up — the same
 /// target-and-bubble walk the pointer uses, for an event whose target is the focus owner.
 ///
-/// An empty path means `node` **is** the target, and the walk turns around there. **Its children
-/// are not visited**, for keys, for typed text and for intents alike: the target is the widget that
-/// answers, exactly as it is for the pointer. The difference is only in how each one is found —
+/// An empty path means `node` **is** the target, and the walk turns around there. **A key and typed
+/// text never visit its children**: the target is the widget that answers, exactly as it is for the
+/// pointer, and the event bubbles back up from it. The difference is only in how each one is found —
 /// hit-testing walks to the deepest widget under the cursor, and focus is asserted by the deepest
 /// widget that holds it.
 ///
-/// The alternative — letting an intent descend into the target's subtree — was tried and taken out.
-/// It made a whole region answer for a capability nobody in it had claimed, so two widgets that
-/// both handled one intent was not an error, and reading the tree could not tell you where a key
-/// landed.
+/// **A [`Event::Widget`] intent is the one exception**: at the target it is offered to the target's
+/// subtree, children last-first, before bubbling — an intent is a capability named out loud
+/// (`ScrollPageDown`, `Dismiss`), addressed to the focused region, and whichever widget in there
+/// owns it answers. A [`Event::Hint`] runs the target's own pick and nothing below it.
 pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
     if node.on_event_capture(ev) == Handled::Yes {
         return Handled::Yes;
