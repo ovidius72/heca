@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # The tag is the version plus an optional pre-release suffix (v0.1.0-rc1 releases 0.1.0-rc1);
+      # The tag is the version plus an optional pre-release number (v0.1.0-1 releases 0.1.0-1);
       # Cargo.toml must carry the same version, so the installers and the tag cannot disagree.
       - name: Compare the tag with the workspace version
         shell: bash
@@ -29,6 +29,12 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match the version in Cargo.toml ($version)."
             exit 1
           fi
+          # The Windows installer (.msi) takes only numbers after the dash: 0.1.0-1, not 0.1.0-rc1.
+          case "$version" in
+            *-*[!0-9]*)
+              echo "::error::Pre-release version $version: the part after the dash must be a number (e.g. 0.1.0-1), which the Windows installer requires."
+              exit 1 ;;
+          esac
 
   build:
     name: build (${{ matrix.target }})
@@ -38,8 +44,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, target: aarch64-apple-darwin, formats: "app,dmg", archive: zip }
-          - { os: macos-14, target: x86_64-apple-darwin, formats: "app,dmg", archive: zip }
+          - { os: macos-latest, target: aarch64-apple-darwin, formats: "app,dmg", archive: zip }
+          - { os: macos-latest, target: x86_64-apple-darwin, formats: "app,dmg", archive: zip }
           - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, formats: "deb,appimage", archive: tar.gz }
           - { os: windows-latest, target: x86_64-pc-windows-msvc, formats: "wix", archive: zip }
     steps:
@@ -60,7 +66,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libasound2-dev libssl-dev libfuse2
+          sudo apt-get install -y --no-install-recommends pkg-config libasound2-dev libfuse2
 
       - name: Build heca
         run: cargo build -p heca --release --target ${{ matrix.target }}
@@ -70,7 +76,15 @@ jobs:
 
       - name: Build the installers
         shell: bash
-        run: cargo packager -p heca --release --target ${{ matrix.target }} -f ${{ matrix.formats }} -o "$GITHUB_WORKSPACE/dist"
+        # hdiutil on GitHub's macOS machines sometimes fails with "Resource busy" while making a
+        # .dmg; a second or third attempt succeeds, so the step tries up to three times.
+        run: |
+          for attempt in 1 2 3; do
+            cargo packager -p heca --release --target ${{ matrix.target }} -f ${{ matrix.formats }} -o "$GITHUB_WORKSPACE/dist" && exit 0
+            echo "::warning::Packaging attempt $attempt failed; retrying."
+            sleep 10
+          done
+          exit 1
 
       # The archive holds the program, the licences and the README — everything heca needs is
       # already inside the binary (fonts, sounds, default config).

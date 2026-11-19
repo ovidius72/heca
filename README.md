@@ -54,7 +54,7 @@ or copy it somewhere on your `PATH`.
 On Linux, install the system packages first (Debian/Ubuntu names):
 
 ```bash
-sudo apt-get install pkg-config libasound2-dev libssl-dev
+sudo apt-get install pkg-config libasound2-dev
 ```
 
 ## Start developing

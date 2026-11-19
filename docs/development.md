@@ -59,7 +59,8 @@ day to day scope cargo to the crates you changed, for example `./scripts/lint-ch
 ## Releasing
 
 A release is made **only** by pushing a version tag: `vX.Y.Z`, equal to the workspace version in
-`Cargo.toml` (a pre-release such as `v0.1.0-rc1` needs that exact version there too).
+`Cargo.toml`. A pre-release takes a **number** after the dash — `v0.1.0-1`, not `v0.1.0-rc1` —
+because the Windows installer accepts nothing else; it needs that exact version in `Cargo.toml` too.
 
 ```bash
 git tag v0.1.0
