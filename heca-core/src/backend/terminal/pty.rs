@@ -508,7 +508,7 @@ fn resolve_shell(shell: Option<String>, fallback: &str) -> String {
 
 /// **The user's own zsh config folder**, for heca's startup files to read first.
 ///
-/// It is the inherited `ZDOTDIR` — unless that is a heca folder ([`is_heca_zsh_folder`]: this
+/// It is the inherited `ZDOTDIR` — unless that is a heca folder ([`is_heca_zsh_folder`](super::launch::is_heca_zsh_folder): this
 /// heca's, or that of any heca whose pane started this one, whatever its version), which is what a
 /// shell started inside a heca pane inherits. Handing a heca folder on would make heca's `.zshenv`
 /// read heca's again — itself, until zsh gives up ("job table full or recursion limit exceeded") —
