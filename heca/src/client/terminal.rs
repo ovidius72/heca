@@ -26,7 +26,7 @@ pub(super) struct TerminalView {
     last_agent: Option<heca_core::agent::AgentState>,
     live_sequence: u64,
     live_top: Option<isize>,
-    visible: Option<crate::server::wire::terminal::TerminalFrame>,
+    visible: Option<std::sync::Arc<crate::server::wire::terminal::TerminalFrame>>,
 }
 
 impl TerminalView {

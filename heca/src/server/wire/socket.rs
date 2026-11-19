@@ -5,9 +5,7 @@ use std::net::Shutdown;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 
-use serde::{Serialize, de::DeserializeOwned};
-
-use super::{ClientLink, ClientMsg, ServerLink, ServerMsg, frame, queue};
+use super::{ClientLink, ClientMsg, ServerLink, ServerMsg, frame::Carried, queue};
 use crate::server::ServerWaker;
 use crate::server::socket::local::UnixStream;
 
@@ -21,6 +19,7 @@ type Failure = Arc<Mutex<Option<(io::ErrorKind, String)>>>;
 enum WriteRequest<T> { Message(T), Flush(mpsc::SyncSender<()>) }
 
 impl<T: queue::Message> queue::Message for WriteRequest<T> {
+    const WHEN_FULL: queue::WhenFull = T::WHEN_FULL;
     fn is_boundary(&self) -> bool {
         match self { Self::Message(message) => message.is_boundary(), Self::Flush(_) => true }
     }
@@ -44,8 +43,8 @@ pub(crate) struct SocketPeer<Outgoing, Incoming> {
 
 impl<Outgoing, Incoming> SocketPeer<Outgoing, Incoming>
 where
-    Outgoing: Serialize + queue::Message + Send + 'static,
-    Incoming: DeserializeOwned + queue::Message + Send + 'static,
+    Outgoing: Carried + queue::Message + Send + 'static,
+    Incoming: Carried + queue::Message + Send + 'static,
 {
     pub(crate) fn new(stream: UnixStream, limits: TransportLimits, wake: ServerWaker) -> io::Result<Self> {
         let (outgoing, outbound) = queue::channel::<WriteRequest<Outgoing>>(limits.queue_capacity);
@@ -59,8 +58,11 @@ where
             .name("heca-connection-reader".into())
             .spawn(move || {
                 let result = (|| {
-                    while let Some(message) = frame::read(&mut reader, limits.max_frame_bytes)? {
-                        inbound.send(message)?;
+                    let mut memory = Incoming::Memory::default();
+                    while let Some(message) = Incoming::read_from(&mut memory, &mut reader, limits.max_frame_bytes)? {
+                        // Wait for room: while this thread waits it does not read, and the peer's
+                        // writes wait in the socket — nothing it sent is lost.
+                        inbound.send_wait(message)?;
                         read_wake.wake();
                     }
                     Err(io::Error::new(io::ErrorKind::BrokenPipe, "peer disconnected"))
@@ -73,9 +75,10 @@ where
             .name("heca-connection-writer".into())
             .spawn(move || {
                 let result = (|| {
+                    let mut memory = Outgoing::Memory::default();
                     while let Some(message) = outbound.recv()? {
                         match message {
-                            WriteRequest::Message(message) => frame::write(&mut writer, &message, limits.max_frame_bytes)?,
+                            WriteRequest::Message(message) => message.write_to(&mut memory, &mut writer, limits.max_frame_bytes)?,
                             WriteRequest::Flush(done) => { let _ = done.send(()); }
                         }
                     }

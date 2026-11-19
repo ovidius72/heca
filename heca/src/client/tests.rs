@@ -88,7 +88,7 @@ fn terminal_title_snapshots_peer_changes_and_own_replies_use_owner_identity() {
 pub(super) fn client(link: impl ClientLink + 'static) -> ClientState {
     let connection = heca_config::settings::ConnectionConfig::default();
     let wake = ServerWaker::new(|| {});
-    let (outbox, requests) = outbox::channel(connection.queue_capacity.get(), wake.clone());
+    let (outbox, requests) = outbox::channel(wake.clone());
     ClientState {
         client_id: 1,
         window_ordinal: 1,

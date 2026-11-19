@@ -264,6 +264,8 @@ stop_following = "Stop following"
 [settings.connection]
 # Per-connection transport limits. Queue overflow must never block the server.
 max_frame_bytes = 16777216
+# Queued messages per direction. A full queue never loses what a window sends (keys, pastes,
+# actions); a window that stops reading what the server sends is dropped and attaches again.
 queue_capacity = 64
 request_timeout_ms = 5000
 connect_retry_ms = 20

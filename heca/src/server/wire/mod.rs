@@ -14,6 +14,7 @@ use std::io;
 
 mod frame;
 mod queue;
+mod rows;
 mod wait;
 pub(crate) use wait::await_message;
 pub(crate) mod terminal;
