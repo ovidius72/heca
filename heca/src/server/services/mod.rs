@@ -15,7 +15,7 @@ use heca_config::loader::AppConfig;
 use heca_core::layout::SessionId;
 
 use crate::chrome::Intent;
-use crate::entry::service::{ActionResult, ProjectCx, ServiceTicket, SessionKey, Stop};
+use crate::entry::service::{ActionResult, ProjectCx, ServerEvent, ServiceTicket, SessionKey, Sessions, Stop};
 
 use super::connection::{Attachment, Connection};
 use super::identity::ServerIdentity;
@@ -98,6 +98,8 @@ pub(crate) struct ServiceHost {
     nudge: Option<Receiver<()>>,
     /// Reports raised while starting, before anything could show them.
     held: Vec<crate::notification::NotificationDraft>,
+    /// Every session, as the server last said — what each context hands a service.
+    sessions: Sessions,
 }
 
 impl ServiceHost {
@@ -202,6 +204,15 @@ impl ServiceHost {
         }
     }
 
+    /// **An event on the server, to every service that listens for it** — the one door services
+    /// hear events through.
+    pub(crate) fn announce(&mut self, event: &ServerEvent) {
+        for index in 0..self.services.len() {
+            self.services[index].listen(self.epoch, event);
+            self.settle(index);
+        }
+    }
+
     /// Hand every service what its inbox holds.
     pub(crate) fn drain(&mut self) {
         for index in 0..self.services.len() {
@@ -246,6 +257,7 @@ impl ServiceHost {
                         session: group.session.0, session_key: group.key, client: client.id,
                         config: group.config.unwrap_or(&server_config),
                         extension: self.services[index].extension(), epoch: self.epoch, since,
+                        sessions: &self.sessions,
                     };
                     let revision = match self.services[index].project(&cx) {
                         Ok(Projected::Unchanged) => since,

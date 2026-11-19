@@ -43,7 +43,9 @@ pub use entry::{
     Permit, ProjectCx, Projection, RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox,
     ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop,
     SubmitError, Update, extension, register_widget,
+    ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
 };
+pub use components::FolderLine;
 pub use heca_view_realize::WidgetDefinition;
 pub use heca_view::{Intent, PropMap, PropValue};
 pub use notification::{Notification, NotificationAction};

@@ -29,6 +29,12 @@ pub(crate) enum StreamEvent {
     Workspace { window: u64, workspace: usize },
     /// A window attached to or switched to a session.
     Session { window: u64, session: SessionId, name: String },
+    /// `session.changed`: a session was created, renamed, terminated, restarted or deleted — the
+    /// same event the services hear (THE EVENTS).
+    SessionChanged {
+        kind: crate::entry::service::SessionChange,
+        session: crate::entry::service::SessionEntry,
+    },
 }
 
 /// The subscribers' sending ends, shared by the owner loop and its sessions. Cheap to clone (an

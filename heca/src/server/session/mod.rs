@@ -134,6 +134,18 @@ impl SessionRuntime {
         super::services::SessionRef { id: self.session.id, key: self.key }
     }
 
+    /// **This session as a service reads it** — the one place its key, name, folder and state are
+    /// put together for the services and the events.
+    pub(crate) fn service_entry(&self) -> crate::entry::service::SessionEntry {
+        use crate::entry::service::SessionState;
+        let info = self.info();
+        let state = match info.status {
+            super::sessions::SessionStatus::Active => SessionState::Active,
+            super::sessions::SessionStatus::Terminated => SessionState::Terminated,
+        };
+        crate::entry::service::SessionEntry::new(self.key, info.name, info.folder, state)
+    }
+
     /// This session's attached windows, for the services to show.
     pub(super) fn audience(&self) -> super::services::Audience<'_> {
         super::services::Audience {

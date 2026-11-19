@@ -1,64 +1,89 @@
-//! [`FolderLine`] — a pane's working directory, as a line of metadata under its name.
+//! [`FolderLine`] — a working directory, as a line of metadata under a name.
 
-use heca_grid_ui::builders::{LayoutExt, Parent, TooltipExt};
-use heca_grid_ui::reactive::Signal;
+use heca_grid_ui::WidgetModel;
+use heca_grid_ui::builders::{IntoComponent, LayoutExt, Parent, TooltipExt};
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 
-/// **Where a pane is** — a folder glyph and the home-relative path beside it.
+/// **Where something is** — a folder glyph and a path beside it, cut from the front so the end of
+/// the path survives, with the whole path on hover.
 ///
-/// The sidebar's pane row and the exposé's pane card both show it, which is why it lives here
-/// rather than inside either of them: one shape, so the map and the dock cannot end up describing
-/// the same pane two different ways (`components` — the second caller is the move).
+/// heca's sidebar pane row and the exposé's pane card show a pane's directory with it, and an
+/// extension shows a folder the same way by placing the same line — one shape, so two surfaces
+/// cannot describe the same folder two different ways.
 ///
-/// The **text and the visibility come back as signals**, because a cwd changes without the tree
-/// being rebuilt: a `cd` in the shell updates the path in place, and the caller's setting
-/// turns the line on and off the same way. A caller that has nothing to bind can ignore them.
-pub(crate) struct FolderLine<'a> {
-    /// The path to show, already home-relative (`crate::chrome::home_relative_path`). `None` draws
-    /// nothing — a pane whose backend never reported a directory.
-    pub(crate) path: Option<&'a str>,
-    /// Whether the line is shown at all — the caller's setting and its own reasons.
-    pub(crate) show: bool,
-    /// The size variant of the line: metadata sits under the name, never beside it in weight, so a
-    /// caller says `Caption`. The glyph and the path both take it from the row (a variant cascades to
-    /// what is composed inside), so they cannot disagree.
-    pub(crate) size: WidgetSize,
-    /// **How far the line sits in from the name above it** — a token, resolved from the font, and
-    /// applied *inside* this line's own visibility so the inset disappears with the line.
-    ///
-    /// It is a property because it is the surrounding card's taste, not the line's: the dock's
-    /// card steps its metadata in under the name, the exposé's centres it and steps nothing.
-    /// It lives here rather than in a wrapper the caller adds because a wrapper does not vanish
-    /// when the line hides — a row holding a hidden line is still a row, and the column above it
-    /// still spends a gap on it.
-    pub(crate) indent: Spacing,
-    pub(crate) theme: &'a GuiTheme,
+/// ```ignore
+/// use heca::FolderLine;
+/// use heca_grid_ui::style::{Spacing, WidgetSize};
+///
+/// let line = FolderLine::new(theme).path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
+/// let path = line.path_signal();            // keep it to follow a `cd` without a rebuild
+/// let card = Flex::column().child(name).child(line);
+/// path.set("~/projects/other".into());      // the line updates in place
+/// path.set(String::new());                  // an empty path hides the line, and its gap
+/// ```
+///
+/// **An empty path is no line at all**, not an empty row with a folder in it: the line takes no
+/// space while it has nothing to say, and comes back when a path arrives — so place it always,
+/// even before the directory is known.
+pub struct FolderLine {
+    path: Signal<String>,
+    size: WidgetSize,
+    indent: Spacing,
+    color: heca_grid_ui::Color,
 }
 
-/// What [`FolderLine::build`] hands back: the widget, plus the two signals a host binds when the
-/// path or its visibility can change under it.
-pub(crate) struct BuiltFolderLine {
-    pub(crate) widget: Visibility,
-    pub(crate) text: Signal<String>,
-    pub(crate) visible: Signal<bool>,
-}
+impl FolderLine {
+    /// A line with no path yet, in the theme's foreground colour — readable, because "where is
+    /// this" is a primary fact, not a muted one.
+    pub fn new(theme: &GuiTheme) -> Self {
+        Self {
+            path: signal(String::new()),
+            size: WidgetSize::Caption,
+            indent: Spacing::None,
+            color: theme.colors.foreground,
+        }
+    }
 
-impl FolderLine<'_> {
-    pub(crate) fn build(self) -> BuiltFolderLine {
-        // Readable, matching the sibling git-branch line: `muted` is too dim for a primary piece of
-        // information about a pane, which is what "where am I" is.
-        // **Cut from the FRONT, so the tail survives**: `~/projects/heca` says less than
-        // `…/projects/heca`, and a path's last components are the ones that tell two panes apart.
-        // Without it the line keeps its natural width and takes its whole card with it — a card
-        // 80px wide drew a 120px path, pushing the name out with it. Here rather than at each
-        // surface, for the same reason the line itself is here.
-        let label = Label::new(self.path.unwrap_or_default())
-            .color(self.theme.colors.foreground)
+    /// The path to show, as the user should read it (heca shows a pane's directory home-relative).
+    /// Default: empty, which hides the line.
+    pub fn path(self, path: impl Into<String>) -> Self {
+        self.path.set(path.into());
+        self
+    }
+
+    /// The size variant. Default [`WidgetSize::Caption`]: metadata sits under a name, never beside
+    /// it in weight. The glyph and the path both take it, so they cannot disagree.
+    pub fn size(mut self, size: WidgetSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// **How far the line sits in from the name above it.** Default [`Spacing::None`]. It is
+    /// applied inside the line, so the inset disappears with it — a wrapper around the line would
+    /// keep its box when the line hides.
+    pub fn indent(mut self, indent: Spacing) -> Self {
+        self.indent = indent;
+        self
+    }
+
+    /// **The live path**: set it and the line follows, in place, without rebuilding the tree; set it
+    /// empty and the line hides.
+    pub fn path_signal(&self) -> Signal<String> {
+        self.path
+    }
+
+    /// The line as a widget, for a caller that has to name its type.
+    pub(crate) fn widget(self) -> Visibility {
+        let label = Label::new("")
+            .with_text_signal(self.path)
+            .color(self.color)
+            // **Cut from the FRONT, so the tail survives**: `…/projects/heca` says more than
+            // `~/projects/he…`, and a path's last components are the ones that tell two apart.
             .truncate(Ellipsis::Start);
-        let text = label.text_signal();
-        let label = label.tooltip_signal(text).tooltip_quick(true);
+        let label = label.tooltip_signal(self.path).tooltip_quick(true);
         let widget = Visibility::new(
             Flex::row()
                 .align("center")
@@ -74,16 +99,24 @@ impl FolderLine<'_> {
                 // thing on a card and the first that should give way — without this the line keeps
                 // its natural width and takes the card with it.
                 .shrink(1.0)
-                .child(Icon::new(Glyph::Folder).color(self.theme.colors.foreground))
+                .child(Icon::new(Glyph::Folder).color(self.color))
                 .child(label),
-            self.show && self.path.is_some(),
+            !self.path.get_untracked().is_empty(),
         );
-        let visible = widget.visible_signal();
-        BuiltFolderLine {
-            widget,
-            text,
-            visible,
-        }
+        let (path, visible) = (self.path, widget.visible_signal());
+        create_effect(move |_| {
+            let shown = !path.get().is_empty();
+            if visible.get_untracked() != shown {
+                visible.set(shown);
+            }
+        });
+        widget
+    }
+}
+
+impl IntoComponent for FolderLine {
+    fn into_component(self) -> WidgetModel {
+        WidgetModel::new(self.widget())
     }
 }
 
@@ -91,17 +124,9 @@ impl FolderLine<'_> {
 mod tests {
     use super::*;
     use heca_grid_ui::Component;
-    use heca_grid_ui::reactive::SignalGet;
 
-    fn built(path: Option<&str>, show: bool) -> BuiltFolderLine {
-        FolderLine {
-            path,
-            show,
-            size: WidgetSize::Caption,
-            indent: Spacing::None,
-            theme: &GuiTheme::default(),
-        }
-        .build()
+    fn line(path: &str) -> FolderLine {
+        FolderLine::new(&GuiTheme::default()).path(path)
     }
 
     /// **Metadata is smaller than the name above it** — measured, not assumed: the line's text and
@@ -109,10 +134,7 @@ mod tests {
     #[test]
     fn the_line_is_smaller_than_the_name_it_sits_under() {
         use heca_grid_ui::LayoutEngine;
-        use heca_grid_ui::builders::Parent;
-        use heca_grid_ui::widgets::Label;
-        let line = built(Some("~/projects/heca"), true);
-        let mut column = Flex::column().child(Label::new("name")).child(line.widget);
+        let mut column = Flex::column().child(Label::new("name")).child(line("~/projects/heca"));
         LayoutEngine::new()
             .base_font(15.0)
             .compute(&mut column, heca_grid_ui::Size::new(400.0, 200.0));
@@ -127,38 +149,35 @@ mod tests {
     /// It draws the path it was given, and it is a glyph plus that path — nothing else.
     #[test]
     fn it_shows_the_folder_and_the_path() {
-        let line = built(Some("~/projects/heca"), true);
-        assert!(line.visible.get_untracked());
-        assert_eq!(line.text.get_untracked(), "~/projects/heca");
-        assert_eq!(
-            line.widget.base().children[0].base().children.len(),
-            2,
-            "a glyph and a path",
-        );
+        let widget = line("~/projects/heca").widget();
+        assert!(widget.visible_signal().get_untracked());
+        let row = &widget.base().children[0];
+        assert_eq!(row.base().children.len(), 2, "a glyph and a path");
     }
 
     #[test]
     fn the_tooltip_keeps_the_full_path_and_follows_directory_changes() {
-        use heca_grid_ui::reactive::SignalUpdate;
-        let line = built(Some("~/projects/a/long/folder"), true);
-        let label = &line.widget.base().children[0].base().children[1];
+        let line = line("~/projects/a/long/folder");
+        let path = line.path_signal();
+        let widget = line.widget();
+        let label = &widget.base().children[0].base().children[1];
         let tip = label.base().tooltip.as_ref().expect("the path owns its tooltip");
         assert_eq!(tip.text.get_untracked(), "~/projects/a/long/folder");
-        line.text.set("~/projects/another/folder".into());
+        path.set("~/projects/another/folder".into());
         assert_eq!(tip.text.get_untracked(), "~/projects/another/folder");
     }
 
-    /// **Nothing to say, nothing shown** — a pane with no directory, and the setting turned off,
-    /// are the same absence rather than an empty row with a folder icon in it.
+    /// **Nothing to say, nothing shown** — and a path that arrives later shows the line, in place.
     #[test]
-    fn it_is_hidden_when_there_is_no_path_or_the_setting_is_off() {
-        assert!(
-            !built(None, true).visible.get_untracked(),
-            "no cwd reported"
-        );
-        assert!(
-            !built(Some("~/x"), false).visible.get_untracked(),
-            "setting off"
-        );
+    fn an_empty_path_hides_the_line_until_one_arrives() {
+        let line = line("");
+        let path = line.path_signal();
+        let widget = line.widget();
+        let visible = widget.visible_signal();
+        assert!(!visible.get_untracked(), "no path yet");
+        path.set("~/x".into());
+        assert!(visible.get_untracked(), "a directory reported later shows it");
+        path.set(String::new());
+        assert!(!visible.get_untracked(), "and an empty one hides it again");
     }
 }

@@ -9,8 +9,8 @@ use heca_config::loader::AppConfig;
 
 use crate::chrome::Intent;
 use crate::entry::service::{
-    ActionCx, ActionFn, ActionRequest, ActionResult, Effects, Permit, PolicyFn, ProjectCx, Projection, RequestOutcome,
-    RequestRef, Requester, Service, ServiceCx, ServiceInbox, SessionKey, Stop,
+    ActionCx, ActionFn, ActionRequest, ActionResult, Effects, ListenFn, Permit, PolicyFn, ProjectCx, Projection,
+    RequestOutcome, RequestRef, Requester, ServerEvent, Service, ServiceCx, ServiceInbox, SessionKey, Sessions, Stop,
 };
 use crate::server::{ServerWaker, identity::ServerIdentity, wire::service::ServiceUpdateKind};
 
@@ -81,6 +81,10 @@ pub(crate) trait Hosted {
     fn project(&self, cx: &ProjectCx<'_>) -> Result<Projected, String>;
     fn stop(&mut self, epoch: u64) -> Stop;
     fn effects(&mut self) -> &mut Effects;
+    /// The sessions as they are now, for every context it is handed from here on.
+    fn know_sessions(&mut self, sessions: &Sessions);
+    /// An event on the server: run every listener for its name, and every `"*"` one.
+    fn listen(&mut self, epoch: u64, event: &ServerEvent);
 }
 
 pub(crate) struct Running<S: Service> {
@@ -90,14 +94,17 @@ pub(crate) struct Running<S: Service> {
     messages: Receiver<S::Message>,
     actions: HashMap<String, Rc<ActionFn<S>>>,
     policies: Vec<Rc<PolicyFn<S>>>,
+    listeners: Vec<(String, Rc<ListenFn<S>>)>,
     effects: Effects,
     capacity: usize,
+    sessions: Sessions,
 }
 
 /// What a declared service brings to the host besides the service itself.
 pub(crate) struct Brought<S: Service> {
     pub(crate) actions: HashMap<String, Rc<ActionFn<S>>>,
     pub(crate) policies: Vec<Rc<PolicyFn<S>>>,
+    pub(crate) listeners: Vec<(String, Rc<ListenFn<S>>)>,
     pub(crate) effects: Effects,
     /// Messages one turn delivers from the inbox.
     pub(crate) capacity: usize,
@@ -111,14 +118,20 @@ impl<S: Service> Running<S> {
         messages: Receiver<S::Message>,
         declared: Brought<S>,
     ) -> Self {
-        let Brought { actions, policies, effects, capacity } = declared;
-        Self { home, service, inbox, messages, actions, policies, effects, capacity }
+        let Brought { actions, policies, listeners, effects, capacity } = declared;
+        Self { home, service, inbox, messages, actions, policies, listeners, effects, capacity, sessions: Sessions::default() }
     }
 
     /// The service, what it is handed at each call, and who it is: borrowed apart so a call can
     /// hold all three.
     fn call(&mut self, epoch: u64) -> (&mut S, ServiceCx<'_, S::Message>, &Home) {
-        let cx = ServiceCx { epoch, inbox: &self.inbox, effects: &mut self.effects, data_dir: &self.home.data_dir };
+        let cx = ServiceCx {
+            epoch,
+            inbox: &self.inbox,
+            effects: &mut self.effects,
+            data_dir: &self.home.data_dir,
+            sessions: &self.sessions,
+        };
         (&mut self.service, cx, &self.home)
     }
 
@@ -219,5 +232,20 @@ impl<S: Service> Hosted for Running<S> {
 
     fn effects(&mut self) -> &mut Effects {
         &mut self.effects
+    }
+
+    fn know_sessions(&mut self, sessions: &Sessions) {
+        self.sessions = sessions.clone();
+    }
+
+    fn listen(&mut self, epoch: u64, event: &ServerEvent) {
+        let listeners: Vec<_> = self.listeners.iter()
+            .filter(|(name, _)| name == "*" || name == event.name())
+            .map(|(_, listen)| listen.clone())
+            .collect();
+        for listen in listeners {
+            let (service, mut cx, _) = self.call(epoch);
+            listen(service, &mut cx, event);
+        }
     }
 }
