@@ -23,7 +23,8 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "efcabb13-b1e1-4fc8-8e29-1b66f50e79ac"
+    "efcabb13-b1e1-4fc8-8e29-1b66f50e79ac",
+    "25b8c84f-6a93-48ea-9206-ceb249b4c21b"
   ],
   "tasks": [
     {
@@ -66,10 +67,37 @@
         }
       ],
       "activeOwnerSession": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398"
+    },
+    {
+      "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b",
+      "phaseId": "d223d614-fc68-4a4f-b432-32bf18b3120b",
+      "number": 567,
+      "shortId": "ZACHG",
+      "priority": 2,
+      "shortName": "findings-from-using-the-instal",
+      "title": "Findings from using the installed app (2026-11-19): fix and investigate each point",
+      "status": "planned",
+      "description": "Antonio tested heca installed from the v0.1.0-1 test release (.dmg, launched from the Dock) on 2026-11-19. Every point below with what was checked (file:line) and his decision. Work it in a new session, one point at a time, verifying by running; each fix centralized and in THE SYNTAX (CLAUDE.md).\n\n1. DELETE THE CURRENT WORKSPACE — DO. `delete_workspace` exists but requires `ws_idx` (heca/src/actions/builtins/workspace.rs ~37-40); its only key is `d` inside the workspaces dock surface (keybindings.default.toml:869). No palette/shortcut way to delete the current one. Precedent: collapse_current_workspace. Prefer making ws_idx optional (default: the current workspace) over a second action; default key binding + palette reachable.\n2. TERMINAL ICON GLYPHS RENDER WRONG — INVESTIGATE. Claude Code's round status dots (e.g. ⏺/●) render as green squares in heca, round in Ghostty (screenshots 2026-11-19). heca-renderer loads system fonts via cosmic_text::FontSystem::new() (heca-renderer/src/font.rs:34), so not a plain missing font: find how that codepoint is drawn (block/box-drawing path? fallback choice?).\n3. PASTE IN THE TERMINAL'S RIGHT-CLICK MENU — DO. paste_clipboard exists on Super+v, Ctrl+Shift+v, prefix+Shift+p (keybindings.default.toml:252); add it to the terminal context menu (declared on the widget, the menu system in docs/widgets.md Menus).\n4. macOS \"heca was prevented from modifying apps\" — NO ACTION. Raised when `brew upgrade` run inside heca updated apps in /Applications; macOS attributes it to the hosting terminal (App Management privacy). Document it in the release notes / docs if useful.\n5. ZOOM A SPLIT PANE — ANALYZE. The header zoom button runs zoom_column (heca/src/chrome/panes/pane_items/buttons.rs ~339-347): it widens the column; a pane in a split column stays cut vertically. Float could stand in but limits many commands. Need a design for \"zoom this pane\" (fill the viewport, restore after) — bring options to Antonio.\n6. WHERE THE DEFAULT SESSION IS CREATED WHEN LAUNCHED FROM THE ICON — ANSWER AND FIX IF NEEDED. Plain `heca` sends ClientMsg::Attach (heca/src/client/mod.rs ~157): it attaches to the most recent session of the default server — which is why the test sessions ~/tmp/prova-a and ~/tmp/prova-b (heca.sessions.json, default server) show up. When no session exists the server creates one in its own current folder; an app started from the Finder/Dock has cwd \"/\" (to verify) — the default should be the home folder. Verify and fix centrally.\n7. FIT THE COLUMNS INTO THE VIEWPORT — STUDY. No such command today. Study a command that resizes the visible workspace's columns so they all fit the viewport (niri-like), and how it relates to zoom.\n8. zsh AUTOSUGGESTIONS / SYNTAX HIGHLIGHTING NOT SHOWN — VERIFY. Plugins load through oh-my-zsh (~/.zshrc:15: zsh-autosuggestions, zsh-syntax-highlighting, fast-syntax-highlighting); they work in Ghostty. Check: suggestion colour (fg=8, bright black) vs heca's theme background; heca's ZDOTDIR wrapper (heca/assets/shell-integration/zsh/) and the login-shell change of T566; also the TAB-COMPLETION CURSOR BUG: typing `c` then Tab shows the completion list but the cursor lands one cell past the `c` (screenshot 2026-11-19) — a width/cursor-position mismatch in the terminal, possibly the same cause as the earlier \"[zs]\" characters.\n9. AGENT FINISHED IN AN UNFOCUSED PANE ON ANOTHER WORKSPACE, NO FEEDBACK — INVESTIGATE. Claude finished (/planner load) with no sound and no flash. Check: heca's hooks are absent from ~/.claude/settings.json (integration installed? how claude was started — typed in the shell vs the catalog); and the T562 flash change (a booked flash wake lapses when its row is not painted — heca-grid-ui/src/flash/mod.rs) must not suppress the attention feedback for a row on another workspace; sound must play regardless.\n10. TRANSPARENT LOGO — DONE in PR #325 (heca/assets/icon/heca.png from heca-web/assets/logo-heca.png, heca.icns regenerated; verified the .icns corner is transparent).\n11. DROP A FILE ON THE TERMINAL — DO. Not implemented at all: no WindowEvent::DroppedFile / HoveredFile handling in heca/src. Dropping a file on a terminal pastes its path (shell-quoted), like other terminals; an image could later be pasted as an image (decide with Antonio). Also a drop target capability on the widget, not app-specific.\n12. MOUSE WHEEL SCROLL IN THE TERMINAL IS SLOW — DO. Config terminal_wheel_scroll_lines = 3 per notch (config.default.toml:198); trackpad pixel deltas are divided by 20 (heca/src/app/events.rs:389, a hardcoded number). Measure against Ghostty, make the speed come from config only, fix.\n   Found 2026-11-19 (Antonio: still slow inside Claude Code even with terminal_wheel_scroll_lines = 6; better in the plain shell). Cause: heca/src/app/terminal_host/wheel.rs has TWO calculations of one gesture. (a) Host scrollback (wheel.rs ~152-176) uses host_scroll_notches (trackpad pixels / cell height) × terminal_wheel_scroll_lines. (b) When the program grabs the mouse (Claude Code, nvim, less), forward_wheel_to_terminal (wheel.rs ~196-209) sends ONE wheel press per winit event; push_wheel_buttons puts round(delta) into WheelUp(n) — for a trackpad that is raw pixels — but wezterm-term ignores n: term/src/terminalstate/mouse.rs (rev 891bed3) writes one report per event (SGR `\\x1b[<64;..M`), or in alt-screen without mouse tracking alternate_buffer_wheel_scroll_speed arrow keys. So the program gets one report per event whatever the size, and the setting has no effect. Fix: one notch calculation for both paths (accumulate trackpad pixels by cell height, keep the remainder), and the forwarded path sends notches × terminal_wheel_scroll_lines reports (decide with Antonio whether the forwarded multiplier is the same setting or its own). Test: a forwarded wheel of N notches produces N × lines reports; a trackpad gesture below one cell produces none until it adds up.\n13. OLD CONFIG KEYS ARE SILENTLY IGNORED — DO. heca never reports a config key it does not know, so a retired key just stops working without a word. Example in Antonio's config: `[settings] confirm_close_pane / confirm_delete_column / confirm_delete_workspace` are no longer read at all (only mentioned in a comment, heca-config/src/confirm.rs:11; the real keys are `[confirm] close / delete_column / delete_workspace`) — had he written false, the prompt would still appear. Fix, in this order: (a) at load, list every unknown or retired key once in the start-up report / a notification, naming the key that replaced it (one table of retired → current names in heca-config, read by the loader; no per-field code); (b) then remove the old spellings still accepted, each one added to that table so its user is told: the kebab-case serde aliases in heca-config/src/settings/mod.rs (terminal-wheel-scroll-lines, pane-size, … ~25 of them), keys.rs `prefix_key` (211), `command_type` (122), programs.rs `icons` (88), loader/mod.rs `program` alias (163), confirm.rs RENAMED `delete_pane` → `close` (25-29), and the deprecated `[settings] pane_show_cwd` (settings/mod.rs:174, now `[appearance.expose] show_cwd`). Update config.default.toml and docs/configuration.md where they mention the old names (docs/configuration.md:325). Test: a config with a retired key loads, applies nothing for it, and the report names the replacement; a misspelled key is reported as unknown.\n\nNot in this task: signing/notarization (idea I025 area); the \"damaged\" message on Apple Silicon needs at least an ad-hoc signature (codesign -s -) in the release workflow — raise with Antonio as part of T566 follow-up.",
+      "descriptionUpdatedAt": "2026-11-19T11:06:34.272Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-19T10:17:09.901Z",
+      "updatedAt": "2026-11-19T11:06:34.270Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-18T18:40:53.598Z",
-  "updatedAt": "2026-11-18T22:28:09.947Z",
+  "updatedAt": "2026-11-19T11:06:34.270Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

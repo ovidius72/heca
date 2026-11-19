@@ -1,11 +1,15 @@
 {
   "name": "Heca",
-  "goal": "Consolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.\nThe gates before any code\n- §0 pre-flight, three written answers, per thing touched: which existing widget does this → if none, which planner task covers it (quote the id) → if neither, it is a proposal, not a commit.\n- §0b widget vs component: if it can be built inside heca-grid-ui, it belongs there. A component only leaves the library because it binds an app concept.\n- §0c the event system is DOM-shaped — capture → target → bubble, keys do bubble, a widget never hit-tests and never forwards, nothing focused means nothing delivered, and a cursor inside a container is not focus. Reach for a handler before an intent, a policy arm or a registry.\n- ⭐⭐ Rule Zero: write the line a plugin author would type. A registry, an id or a crate-private type means the API is missing. HintTargetRegistry, HintTargets, HintTargetId, Base::hint_target, named_press are gone and must not come back.",
+  "goal": "MANDATORY: read AGENTS.md in full.\nConsolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.\nThe gates before any code\n- §0 pre-flight, three written answers, per thing touched: which existing widget does this → if none, which planner task covers it (quote the id) → if neither, it is a proposal, not a commit.\n- §0b widget vs component: if it can be built inside heca-grid-ui, it belongs there. A component only leaves the library because it binds an app concept.\n- §0c the event system is DOM-shaped — capture → target → bubble, keys do bubble, a widget never hit-tests and never forwards, nothing focused means nothing delivered, and a cursor inside a container is not focus. Reach for a handler before an intent, a policy arm or a registry.\n- ⭐⭐ Rule Zero: write the line a plugin author would type. A registry, an id or a crate-private type means the API is missing. HintTargetRegistry, HintTargets, HintTargetId, Base::hint_target, named_press are gone and must not come back.",
   "description": "Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.",
   "projectGuidelines": {
     "content": "- do not fix at call site. Always try to fix at library (widget/ component) side.\n- use css like syntax for laying down components: Flex, Grid, Surface etc...\n- prefer composition and reusability. DO NOT HARDCODE anything.\n\n## Worktree Lifecycle (Antonio, 2026-10-27)\n\n- From the next coding activity, start every new task in its own new worktree and branch from the latest synchronized main. Name its folder heca-feat-[num]. Do not reuse another task's worktree or edit application code/assets directly in main.\n- Finish implementation and verification, mark the task DONE with durable completion evidence, and commit/push the canonical planner updates on main before opening the code PR toward main. After the merge is verified, the same agent removes its worktree, folder and merged branch. Do not leave cleanup or an unlanded task to Antonio or another agent.\n- Verify cleanliness, merged content and active use before removing anything. Preserve all other agents' work and shared dirty changes.\n- Leave the current worktrees as they are; do not retroactively rename or remove them to enforce the new naming rule.\n- The canonical shared planner remains /Users/antonio/projects/heca/.planner; use planner tools there rather than independent worktree copies. Commit and push its updates from main so every developer/agent receives the same task, phase, feature and decision state by pull. Never replace it with a stale worktree planner or graphify copy.",
     "updatedAt": "2026-11-04T09:37:22.968Z",
     "sessionInfo": [
+      {
+        "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
+        "createdAt": "2026-11-19T10:20:39.918Z"
+      },
       {
         "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
         "createdAt": "2026-11-17T12:49:30.127Z"
@@ -65,10 +69,6 @@
       {
         "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
         "createdAt": "2026-10-26T14:36:39.457Z"
-      },
-      {
-        "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
-        "createdAt": "2026-10-26T14:09:51.052Z"
       }
     ]
   },
@@ -90,7 +90,7 @@
   ],
   "tools": [],
   "contentLanguage": "English",
-  "chatLanguage": "English",
+  "chatLanguage": "Italian",
   "workflowRules": {
     "beforePhaseStart": [],
     "beforeTaskStart": [],
