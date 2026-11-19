@@ -66,3 +66,9 @@ identifier = "dev.heca.heca"
 binaries = [{ path = "heca", main = true }]
 license-file = "../LICENSE-MIT"
 icons = ["assets/icon/heca.icns", "assets/icon/heca.png"]
+
+# macOS: an ad-hoc signature ("-": no developer account, no certificate). Without any signature,
+# Apple Silicon reports the downloaded app as "damaged" instead of "from an unidentified developer".
+# Notarization is skipped (no credentials); the release notes say how to open an unsigned app.
+[package.metadata.packager.macos]
+signing-identity = "-"
