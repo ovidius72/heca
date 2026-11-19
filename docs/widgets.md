@@ -5788,6 +5788,35 @@ header.texts(vec![("hdr.seg:location".into(), facts.cwd())]);
   builds for it — a rebuilt parent gets its child back.
 - Host-only: it holds the caller's closures and state, so it is not described declaratively.
 
+### Children that follow a value
+
+`.child(..)` is the one door for children, and it also takes a **list mapped to widgets**: the
+container makes a child per item and keeps them in step with the value. A tree is built once and
+kept, so children made from data otherwise go stale when the data changes — nothing builds them
+again.
+
+```rust
+let rooms = signal(vec![Room::new("lobby")]);
+Flex::column().gap(Spacing::Sm).child(rooms.map(RoomRow::new))
+
+// a list inside a service's window-side value: say where it is
+Flex::column().child(shown.map(|view| &view.rooms, RoomRow::new))
+```
+
+- `signal.map(make)` on a `Signal<Vec<T>>`, `shown.map(pick, make)` on a `ServiceState` (heca).
+  `T: Clone + PartialEq`. The general form both are built on is `BoundChildren::new(read, make)`,
+  where `read` is any function that reads values that change.
+- **Which child an item keeps**: an item is its own identity. An item equal to one already shown
+  keeps that child wherever it moved — focus, hover, its own scroll and state included; a gone item
+  loses its child; a new one gets one; an item whose data changed is a new item and its child is
+  made again.
+- The children sit **directly in the container**, in the place `.child(..)` was called — between the
+  children written before and after it — so a `Flex` gap, a `Grid` track and a hint letter treat them
+  like any other child.
+- The frame after the value changes shows it: the container asks for its own layout pass.
+- Host-only: it holds closures and reads signals, which a described tree cannot carry. A plugin's
+  counterpart is per-mount values (F003/T360).
+
 ### Props — new facts for a widget that is already there
 
 A parent that holds a child across frames hands it new facts instead of rebuilding it. The child

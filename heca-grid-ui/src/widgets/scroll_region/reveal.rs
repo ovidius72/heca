@@ -115,10 +115,13 @@ impl ScrollRegion {
     /// the point of it living here: "make the view follow the cursor" is not something each host
     /// wires for each list, forgets in the next one, and rediscovers as a bug.
     ///
-    /// It moves when the target moves or its viewport changes size. The remembered position is
-    /// the target's natural one, so scrolling by hand does not change it and the view does not snap back — the
-    /// user can always look somewhere else, including while resizing the viewport. Resizing
-    /// only follows the same target while following has not been paused by explicit scrolling.
+    /// It moves when a **new** target asks (focus moves to another widget, a list's cursor to
+    /// another row), and when the same target moves or the viewport changes size — but the last two
+    /// only while following is not paused. Scrolling by hand pauses it, so the view never snaps
+    /// back; **a pointer press pauses it too** — the browser's rule: a click that makes content
+    /// grow or shrink does not drag the view after a focused widget it merely pushed (a list
+    /// gaining a row above a row selected far off screen once pulled the whole page down to it).
+    /// A key or typed text resumes it: typing moves the caret, and the view follows the caret.
     ///
     /// [`reveal_align`](Self::reveal_align) decides *where* it lands: minimally in view, or centred.
     pub(super) fn follow_revealed(&mut self) {
