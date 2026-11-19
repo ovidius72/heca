@@ -16,12 +16,12 @@ pub(super) struct Replica {
 pub(super) type SharedReplica = Arc<Mutex<Replica>>;
 
 impl Replica {
-    pub(super) fn receive(&mut self, frame: TerminalFrame) {
+    pub(super) fn receive(&mut self, frame: Arc<TerminalFrame>) {
         self.sequence = self.sequence.wrapping_add(1);
         if frame.screen.viewport_offset != 0 {
             self.terminals.retain(|(owner, offset), _| owner != &frame.owner || *offset == 0);
         }
-        self.terminals.insert((frame.owner.clone(), frame.screen.viewport_offset), (self.sequence, Arc::new(frame)));
+        self.terminals.insert((frame.owner.clone(), frame.screen.viewport_offset), (self.sequence, frame));
     }
 
     pub(super) fn receive_image(&mut self, image: heca_core::backend::TerminalImage) {

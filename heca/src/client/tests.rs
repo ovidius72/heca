@@ -42,7 +42,7 @@ fn terminal_title_snapshots_peer_changes_and_own_replies_use_owner_identity() {
     client.backends.id_for(TerminalOwner::Named("unrelated".into()));
     let owner = TerminalOwner::Named("demo.logs".into());
     let backend = heca_core::backend::FakeBackend::new(20, 6);
-    incoming.lock().unwrap().push_back(ServerMsg::Terminal(Box::new(TerminalFrame {
+    incoming.lock().unwrap().push_back(ServerMsg::Terminal(Arc::new(TerminalFrame {
         id: 90, owner: owner.clone(), title: "program title".into(), display_title: Some("Logs".into()),
         spec: TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 6) },
         screen: backend.terminal_snapshot().unwrap().to_wire(), damage: TerminalDamage::Full,
@@ -260,7 +260,7 @@ fn session_projection_is_not_presented_between_attach_and_the_last_snapshot() {
         screen: backend.terminal_snapshot().unwrap().to_wire(),
         damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
     };
-    incoming.lock().unwrap().push_back(ServerMsg::Terminal(Box::new(frame)));
+    incoming.lock().unwrap().push_back(ServerMsg::Terminal(Arc::new(frame)));
     client.poll().unwrap();
     assert!(!client.projection_ready(), "an early terminal snapshot must not end the batch");
     assert!(client.backends.find_owner(&owner).is_some());
@@ -315,7 +315,7 @@ fn recreating_a_terminal_view_never_restores_its_original_launch_grid() {
         let owner = TerminalOwner::Pane(heca_core::layout::PaneId(7));
         let backend = heca_core::backend::FakeBackend::new(grid.0, grid.1);
         let incoming = Arc::new(Mutex::new(VecDeque::from([
-            ServerMsg::Terminal(Box::new(TerminalFrame {
+            ServerMsg::Terminal(Arc::new(TerminalFrame {
                 id: 1, owner: owner.clone(), title: "shell".into(), display_title: None,
                 spec: TerminalSpec { program: crate::app::backend_store::Program::Shell,
                     cwd: None, grid: (80, 24) },
@@ -430,7 +430,7 @@ fn logical_detach_keeps_rpc_working_and_allows_explicit_session_selection() {
 fn terminal_frame(owner: &TerminalOwner, title: &str) -> ServerMsg {
     use heca_core::backend::PaneBackend;
     let backend = heca_core::backend::FakeBackend::new(20, 6);
-    ServerMsg::Terminal(Box::new(crate::server::wire::terminal::TerminalFrame {
+    ServerMsg::Terminal(Arc::new(crate::server::wire::terminal::TerminalFrame {
         id: 1, owner: owner.clone(), title: title.into(), display_title: None,
         spec: TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (20, 6) },
         screen: backend.terminal_snapshot().unwrap().to_wire(),

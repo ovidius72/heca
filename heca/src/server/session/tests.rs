@@ -322,3 +322,50 @@ fn an_empty_or_terminated_session_also_finishes_its_projection() {
         assert_eq!(ready, 1);
     }
 }
+
+/// **A terminal whose screen did not change is not snapshotted or sent again** — to a window that
+/// already has it — while a window that attaches later still gets it, and a change of screen is
+/// sent to everyone.
+#[test]
+fn an_unchanged_terminal_is_sent_only_to_a_window_that_does_not_have_it() {
+    use crate::app::backend_store::TerminalOwner;
+    use crate::server::wire::{ClientLink, in_process, terminal::ProcessInput};
+    let mut state = ServerState::for_tests(Default::default());
+    let owner = TerminalOwner::Named("demo.logs".into());
+    state.backends.ensure(owner.clone(), TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 6) },
+        |_| Ok(Box::new(FakeBackend::new(20, 6)))).unwrap();
+    let mut runtime = SessionRuntime::new(state, Session::new(SessionId(42), Default::default()));
+    let attach = |runtime: &mut SessionRuntime, id: u64| {
+        let (client, server) = in_process();
+        let connection = Rc::new(Connection::new(id, Box::new(server)));
+        connection.queue(ClientMsg::Attach);
+        runtime.add_connection(connection.clone());
+        (client, connection)
+    };
+    let frames = |client: &crate::server::wire::InProcessClient| {
+        let mut count = 0;
+        while let Some(message) = client.poll().unwrap() {
+            if matches!(message, ServerMsg::Terminal(ref frame) if frame.owner == owner) { count += 1; }
+        }
+        count
+    };
+    let (first, connection) = attach(&mut runtime, 1);
+    runtime.pump(Instant::now());
+    assert_eq!(frames(&first), 1, "attaching sends the terminal");
+
+    // Input makes the server publish its terminals; the screen did not change.
+    connection.queue(ClientMsg::Terminal { owner: owner.clone(), input: ProcessInput::Bytes(b"x".to_vec()) });
+    runtime.pump(Instant::now());
+    assert_eq!(frames(&first), 0, "an unchanged screen is not sent again");
+
+    let (second, _connection) = attach(&mut runtime, 2);
+    runtime.pump(Instant::now());
+    assert_eq!(frames(&second), 1, "a window that attaches later gets it");
+    assert_eq!(frames(&first), 0);
+
+    connection.queue(ClientMsg::Terminal { owner: owner.clone(),
+        input: ProcessInput::Resize { cols: 30, rows: 8, cell: (8.0, 16.0), scale: 1.0 } });
+    runtime.pump(Instant::now());
+    assert_eq!(frames(&first), 1, "a changed screen goes to every window");
+    assert_eq!(frames(&second), 1);
+}

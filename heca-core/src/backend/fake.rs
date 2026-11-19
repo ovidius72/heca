@@ -114,6 +114,14 @@ impl PaneBackend for FakeBackend {
         false // never has "new" data since it's static
     }
 
+    /// Its screen is made from its size alone, so the size is its version.
+    fn screen_version(&self) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (self.cols, self.rows, self.cell_w.to_bits(), self.cell_h.to_bits()).hash(&mut hasher);
+        Some(hasher.finish())
+    }
+
     fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
         let blank_row = || {
             let mut cells = Vec::with_capacity(self.cols);

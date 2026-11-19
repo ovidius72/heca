@@ -361,7 +361,7 @@ impl ClientState {
                     for placement in &frame.screen.graphics { self.images.need(placement.image_id, &self.outbox); }
                     let (owner, spec, cell) = (frame.owner.clone(), frame.spec.clone(), (frame.screen.cell_w, frame.screen.cell_h));
                     let display_title = frame.display_title.clone();
-                    self.data.lock().map_err(|error| io::Error::other(error.to_string()))?.receive(*frame);
+                    self.data.lock().map_err(|error| io::Error::other(error.to_string()))?.receive(frame);
                     self.ensure_view(owner.clone(), spec, cell).map_err(|error| io::Error::other(error.to_string()))?;
                     if let Some(id) = self.backends.find_owner(&owner) { self.backends.set_custom_title(id, display_title); }
                 }

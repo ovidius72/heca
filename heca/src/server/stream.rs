@@ -1,7 +1,7 @@
 //! Process requests and plain snapshots, independent of any client's view.
 
 use crate::app::backend_store::TerminalOwner;
-use heca_core::backend::{TerminalDamage, TerminalSnapshot};
+use heca_core::backend::TerminalDamage;
 use super::sizing::Grid;
 use super::{ServerState, wire::terminal::{ProcessInput, TerminalFrame}};
 
@@ -75,17 +75,42 @@ impl ServerState {
         self.sizing.forget_terminal(owner);
     }
 
-    pub(super) fn viewport(&self, owner: &TerminalOwner, offset: usize) -> Option<(TerminalFrame, TerminalSnapshot)> {
+    /// The terminal's [`screen_version`](heca_core::backend::PaneBackend::screen_version): equal
+    /// numbers, equal live screens.
+    pub(super) fn screen_version(&self, owner: &TerminalOwner) -> Option<u64> {
+        self.backends.get_by_id(self.backends.find_owner(owner)?)?.screen_version()
+    }
+
+    /// Whether `frame` still says everything about the terminal but its screen — its id, title,
+    /// launch spec, runtime facts (`runtime`, else the process's own) and mouse grab — so a frame
+    /// whose screen did not change either need not be sent again.
+    pub(super) fn facts_unchanged(&self, owner: &TerminalOwner, frame: &TerminalFrame,
+        runtime: Option<&heca_core::runtime::PaneRuntime>) -> bool {
+        let Some(id) = self.backends.find_owner(owner) else { return false };
+        let Some(backend) = self.backends.get_by_id(id) else { return false };
+        let same_runtime = match runtime {
+            Some(runtime) => frame.runtime == *runtime,
+            None => frame.runtime == backend.runtime(),
+        };
+        frame.id == id.0 && frame.title == backend.title()
+            && frame.display_title.as_deref() == self.backends.custom_title(id)
+            && self.backends.spec_of(id) == Some(&frame.spec)
+            && same_runtime && frame.mouse_grabbed == backend.is_mouse_grabbed()
+    }
+
+    /// The terminal's screen at `offset` rows above its live bottom, as a frame, and the decoded
+    /// images it shows (which travel apart).
+    pub(super) fn viewport(&self, owner: &TerminalOwner, offset: usize) -> Option<(TerminalFrame, Vec<heca_core::backend::TerminalImage>)> {
         let id = self.backends.find_owner(owner)?;
         let backend = self.backends.get_by_id(id)?;
-        let screen = backend.terminal_snapshot_at(offset)?;
+        let (screen, images) = backend.terminal_snapshot_at(offset)?.into_wire();
         let frame = TerminalFrame {
             id: id.0, owner: owner.clone(), title: backend.title().into(),
             display_title: self.backends.custom_title(id).map(str::to_owned),
             spec: self.backends.spec_of(id)?.clone(),
-            screen: screen.to_wire(), damage: TerminalDamage::Full,
+            screen, damage: TerminalDamage::Full,
             runtime: backend.runtime(), mouse_grabbed: backend.is_mouse_grabbed(),
         };
-        Some((frame, screen))
+        Some((frame, images))
     }
 }

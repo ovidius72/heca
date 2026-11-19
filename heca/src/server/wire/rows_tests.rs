@@ -11,12 +11,12 @@ fn line(text: &str) -> TerminalLine {
     TerminalLine { cells: text.chars().enumerate().map(|(i, ch)| cell(&ch.to_string(), 1, (i % 3) as f32 / 2.0)).collect() }
 }
 
-fn frame(owner: &TerminalOwner, lines: Vec<TerminalLine>) -> Box<TerminalFrame> {
+fn frame(owner: &TerminalOwner, lines: Vec<TerminalLine>) -> Arc<TerminalFrame> {
     let backend = heca_core::backend::FakeBackend::new(20, lines.len());
     let mut screen = backend.terminal_snapshot().unwrap().to_wire();
     screen.rows = lines.len();
     screen.lines = lines;
-    Box::new(TerminalFrame {
+    Arc::new(TerminalFrame {
         id: 1, owner: owner.clone(), title: "shell".into(), display_title: None,
         spec: TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 3) },
         screen, damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
@@ -24,7 +24,7 @@ fn frame(owner: &TerminalOwner, lines: Vec<TerminalLine>) -> Box<TerminalFrame> 
 }
 
 /// Through JSON, as the socket carries it.
-fn carry(writer: &mut Screens, reader: &mut Screens, frame: Box<TerminalFrame>) -> (usize, Box<TerminalFrame>) {
+fn carry(writer: &mut Screens, reader: &mut Screens, frame: Arc<TerminalFrame>) -> (usize, Arc<TerminalFrame>) {
     let packed = writer.pack(frame);
     let rows = packed.rows.len();
     let bytes = serde_json::to_vec(&Outgoing::Terminal(&packed)).unwrap();

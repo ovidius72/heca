@@ -281,6 +281,13 @@ pub trait PaneBackend: Send {
         self.terminal_snapshot().filter(|snapshot| snapshot.viewport_offset == offset)
     }
 
+    /// **A number that changes whenever [`terminal_snapshot`](Self::terminal_snapshot) would**, so
+    /// a caller that already holds the snapshot for a number need not build it again. `None` when
+    /// the backend cannot tell — the caller then builds it every time.
+    fn screen_version(&self) -> Option<u64> {
+        None
+    }
+
     /// Acknowledge terminal damage after a consumer has finished using the
     /// current terminal state for rendering.
     ///

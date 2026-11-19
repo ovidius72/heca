@@ -50,6 +50,7 @@ impl TerminalEngine {
     ) {
         self.scrollback_size
             .store(scrollback_size, Ordering::Relaxed);
+        self.settings_generation += 1;
         let config = terminal_config(palette_defaults, &self.scrollback_size);
         // Force the freshly-configured palette to win. `set_config` only swaps the config
         // Arc — wezterm keeps any palette a program forked via dynamic-color escapes (OSC

@@ -11,6 +11,7 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::sync::Arc;
 
 use heca_core::backend::{TerminalCell, TerminalLine, TerminalUnderlineStyle};
 use serde::{Deserialize, Serialize};
@@ -19,9 +20,10 @@ use crate::app::backend_store::TerminalOwner;
 use super::{ServerMsg, terminal::TerminalFrame};
 
 /// The screens one end of a connection last carried, per terminal. The writer and the reader of
-/// one stream each hold one, and they agree because the stream keeps order.
+/// one stream each hold one, and they agree because the stream keeps order. Each is the shared
+/// frame itself — the one the server sent, the one handed to the window — never a copy of it.
 #[derive(Default)]
-pub(crate) struct Screens(HashMap<TerminalOwner, Vec<TerminalLine>>);
+pub(crate) struct Screens(HashMap<TerminalOwner, Arc<TerminalFrame>>);
 
 /// What one server message is on the socket.
 #[derive(Serialize)]
@@ -93,39 +95,60 @@ fn is_false(value: &bool) -> bool { !*value }
 
 impl Screens {
     /// Pack a terminal frame against the screen last written for its terminal, and remember this one.
-    pub(super) fn pack(&mut self, mut frame: Box<TerminalFrame>) -> Packed {
-        let lines = std::mem::take(&mut frame.screen.lines);
-        let previous = self.0.get(&frame.owner).filter(|previous| previous.len() == lines.len());
+    pub(super) fn pack(&mut self, frame: Arc<TerminalFrame>) -> Packed {
+        let lines = &frame.screen.lines;
+        let previous = self.0.get(&frame.owner).map(|previous| &previous.screen.lines)
+            .filter(|previous| previous.len() == lines.len());
         let full = previous.is_none();
         let mut styles = Vec::new();
         let rows = lines.iter().enumerate()
             .filter(|(at, line)| previous.is_none_or(|previous| previous[*at] != **line))
             .map(|(at, line)| Row { at, runs: runs(line, &mut styles) })
             .collect();
-        self.0.insert(frame.owner.clone(), lines);
-        Packed { frame, full, styles, rows }
+        let head = Box::new(without_lines(&frame));
+        self.0.insert(frame.owner.clone(), frame);
+        Packed { frame: head, full, styles, rows }
     }
 
     /// Put a packed frame's rows back onto the screen last read for its terminal.
-    pub(super) fn unpack(&mut self, packed: Packed) -> io::Result<Box<TerminalFrame>> {
+    pub(super) fn unpack(&mut self, packed: Packed) -> io::Result<Arc<TerminalFrame>> {
         let Packed { mut frame, full, styles, rows } = packed;
         let height = frame.screen.rows;
         let mut lines = match self.0.get(&frame.owner) {
             _ if full => vec![TerminalLine { cells: Vec::new() }; height],
-            Some(previous) if previous.len() == height => previous.clone(),
+            Some(previous) if previous.screen.lines.len() == height => previous.screen.lines.clone(),
             _ => return Err(invalid("terminal rows arrived for a screen this connection never carried")),
         };
         for row in rows {
             let line = lines.get_mut(row.at).ok_or_else(|| invalid("terminal row outside the screen"))?;
             *line = cells(row.runs, &styles)?;
         }
-        self.0.insert(frame.owner.clone(), lines.clone());
         frame.screen.lines = lines;
+        let frame: Arc<TerminalFrame> = Arc::from(frame);
+        self.0.insert(frame.owner.clone(), frame.clone());
         Ok(frame)
     }
 
     /// A terminal is gone: forget its screen.
     pub(super) fn forget(&mut self, owner: &TerminalOwner) { self.0.remove(owner); }
+}
+
+/// Everything of a frame but its screen's lines, which travel as rows.
+fn without_lines(frame: &TerminalFrame) -> TerminalFrame {
+    let screen = &frame.screen;
+    TerminalFrame {
+        id: frame.id, owner: frame.owner.clone(), spec: frame.spec.clone(), title: frame.title.clone(),
+        display_title: frame.display_title.clone(), damage: frame.damage.clone(), runtime: frame.runtime.clone(),
+        mouse_grabbed: frame.mouse_grabbed,
+        screen: heca_core::backend::WireSnapshot {
+            cols: screen.cols, rows: screen.rows, cell_w: screen.cell_w, cell_h: screen.cell_h,
+            default_fg: screen.default_fg, default_bg: screen.default_bg, cursor_color: screen.cursor_color,
+            cursor: screen.cursor, lines: Vec::new(), viewport_offset: screen.viewport_offset,
+            at_bottom: screen.at_bottom, scrollback_rows: screen.scrollback_rows,
+            viewport_top_stable_row: screen.viewport_top_stable_row,
+            hyperlinks: screen.hyperlinks.clone(), graphics: screen.graphics.clone(),
+        },
+    }
 }
 
 fn runs(line: &TerminalLine, styles: &mut Vec<Style>) -> Vec<Run> {

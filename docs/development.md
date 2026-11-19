@@ -116,6 +116,7 @@ HECA_SLOW_MS=8 cargo run --release -p heca -- --standalone 2> slow.log
 ```
 
 Steps are named by where they run: `frame.*` (drawing), `client.*` (the window's event loop),
+`wait.*` (the window's turn between events: ticks, focus, polling the terminals),
 `server.*` and `session.*` (the server's turn). Use `--standalone` to see the server's steps: a
 background server writes its output nowhere. Add a step with `let _slow = slow_steps::step("name");`
 (`heca/src/slow_steps.rs`). `HECA_FRAME_REASONS=1` prints why each frame was asked for, on the same
