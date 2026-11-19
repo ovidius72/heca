@@ -152,6 +152,10 @@ fn finish(result: io::Result<()>, stream: &UnixStream, failure: &Failure) {
 impl<Outgoing, Incoming> Drop for SocketPeer<Outgoing, Incoming> {
     fn drop(&mut self) {
         self.outgoing.take();
+        // A reader waiting for room in the incoming queue is not woken by closing the socket — it
+        // is not reading it. Closing the queue tells it the connection is gone, so the join below
+        // returns instead of waiting for a room nobody will make.
+        self.incoming.close();
         let _ = self.stream.shutdown(Shutdown::Both);
         for worker in self.workers.drain(..) {
             let _ = worker.join();
