@@ -32,29 +32,16 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
 /// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
 /// pane_lines`, and nothing else.
 fn cwd_line(cx: &LineCx<'_>) -> Visibility {
-    let line = crate::components::FolderLine {
-        path: None,
-        show: false,
-        size: WidgetSize::Caption,
-        indent: META_INDENT,
-        theme: cx.theme,
-    }
-    .build();
-    let (text, visible) = (line.text, line.visible);
+    let line = crate::components::FolderLine::new(cx.theme).size(WidgetSize::Caption).indent(META_INDENT);
+    let path = line.path_signal();
     let facts = cx.facts.clone();
     create_effect(move |_| {
-        let cwd = facts().cwd;
         // Cut to a home-relative form here, at the binding, so there is one spelling of "where this
-        // pane is".
-        set_if_changed(
-            text,
-            cwd.as_deref()
-                .map(crate::chrome::home_relative_path)
-                .unwrap_or_default(),
-        );
-        set_if_changed(visible, cwd.is_some());
+        // pane is". No directory is an empty path, which hides the line.
+        let cwd = facts().cwd;
+        set_if_changed(path, cwd.as_deref().map(crate::chrome::home_relative_path).unwrap_or_default());
     });
-    line.widget
+    line.widget()
 }
 
 /// **The git state**: branch (cut for a narrow sidebar, the full name on hover) and the counts of

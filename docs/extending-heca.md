@@ -1,5 +1,26 @@
 # Building on heca — adding to it from another crate
 
+## ⭐ THE EVENTS — one way to listen, everywhere
+
+A state change is heard with one line, the same in heca's own components, in an extension and in a
+plugin (WASM included):
+
+```rust
+cx.on("pane.cwd.changed", |ev| …)        // a component or provider, in a window
+rooms.on("session.changed", |rooms, cx, ev| …)   // an extension's service, on the server
+// a plugin: the same on("name", …) through the event bridge (F003/T79)
+```
+
+`"*"` listens for every event. Names are dotted (`pane.status.changed`, `session.changed`). Where
+changes are rare and a listener wants them together, one event carries a `kind` saying what happened
+(`session.changed`: `created` · `renamed` · `terminated` · `restarted` · `deleted`) and the data a
+listener needs. Each event is raised from ONE place, and the scripts' stream (`heca rpc --events`)
+carries the same event. **Never** a signal, a polling loop, a dedicated trait method or a
+per-consumer callback in its place; a change nobody can listen to is not done. (Project decision
+f639e662; the contract is P054(F006)'s "Pane runtime state", section 0.1.)
+
+---
+
 `heca` is a library plus a one-line program. Plain heca is:
 
 ```rust
@@ -111,6 +132,8 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
 | a service | `demo.service("s", factory)` | server | something that lives inside the server, once; see [A service inside the server](#a-service-inside-the-server) |
+| a listener | `service.on("session.changed", \|svc, cx, ev\| …)` | server | THE EVENTS on a service; see [Sessions and their projects](#sessions-and-their-projects) |
+| a folder line | `heca::FolderLine::new(theme).path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
 | a terminal agent driver | `demo.agent_driver(MyDriver::new())` | terminal owner | implements `heca::agent::AgentDriver`; scoped as `demo.<driver id>` and used by the same launch/report path as built-in drivers |
 
 Dock and layer factories return ordinary components. For a dock, implement
@@ -544,6 +567,53 @@ fn request_done(&mut self, cx: &mut ServiceCx<'_, Msg>, request: &RequestRef, ou
 | `request_queue_capacity` | `64` | requests one service may have open at once, waiting to run or waiting on a deferred answer |
 
 Declare services and their actions before `heca::run()`; later ones are reported and dropped. Code: `heca/src/entry/service/` (what you write), `heca/src/server/services/` (the host).
+
+## Sessions and their projects
+
+Every context a service is handed — `ServiceCx` (and so `ActionCx`) and `ProjectCx` — reads
+**every session the server holds** with `cx.sessions()`: its key (the same for its whole life), its
+name, its project folder and whether it is running. Terminated sessions are listed; the caller
+decides what to show.
+
+```rust
+let mine = cx.session_key();
+let folder = cx.sessions().folder_of(mine);                      // None: made without a folder
+let siblings = cx.sessions().same_project(mine);                 // this session and the others on its project
+let on_heca = cx.sessions().of_project(Path::new("~/projects/heca"));
+```
+
+Folders are compared as the file system resolves them, so a project reached through a symbolic link
+or written with a trailing slash is the same project.
+
+**To hear when sessions change, listen** (THE EVENTS): `session.changed` carries what happened
+(`ev.kind()`: `Created`, `Renamed`, `Terminated`, `Restarted`, `Deleted`), the session it happened to
+(as it was just before, for a deleted one) and every session after the change.
+
+```rust
+rooms.on("session.changed", |rooms, cx, ev| {
+    let Some(ev) = ev.as_session() else { return };
+    match ev.kind() {
+        SessionChange::Created | SessionChange::Deleted => rooms.regroup(ev.sessions()),
+        SessionChange::Renamed => rooms.rename(ev.session()),
+        _ => return,
+    }
+    cx.republish();
+});
+```
+
+A name heca has no event for is refused out loud at start-up. `heca rpc --events` streams the same
+event to scripts, as `{"SessionChanged":{"kind":"created","session":{…}}}`.
+
+**Showing a folder the way heca does** is `heca::FolderLine` — a folder glyph and the path, cut from
+the front so the end survives, the whole path on hover. Place it like any widget; its path follows a
+signal, and an empty path hides the line and its gap:
+
+```rust
+let line = heca::FolderLine::new(theme).path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
+let path = line.path_signal();
+let card = Flex::column().child(Label::new(member)).child(line);
+path.set(new_folder);           // in place, no rebuild
+```
 
 ## Where the code lives
 

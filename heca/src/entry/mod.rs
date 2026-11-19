@@ -50,4 +50,5 @@ pub use service::{
     ActionCx, ActionRequest, ActionResult, ExtensionConfigError, ExternalRequest, Permit, ProjectCx, Projection,
     RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox, ServiceRegistration,
     ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, SubmitError, Update,
+    ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
 };
