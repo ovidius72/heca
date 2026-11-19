@@ -1,0 +1,128 @@
+name: Release
+
+# A version tag is the only way a release is made: pushing `vX.Y.Z` (equal to the workspace version
+# in Cargo.toml) builds heca for every system and publishes the archives and installers.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The tag is the version plus an optional pre-release suffix (v0.1.0-rc1 releases 0.1.0-rc1);
+      # Cargo.toml must carry the same version, so the installers and the tag cannot disagree.
+      - name: Compare the tag with the workspace version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "heca") | .version')"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the version in Cargo.toml ($version)."
+            exit 1
+          fi
+
+  build:
+    name: build (${{ matrix.target }})
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, target: aarch64-apple-darwin, formats: "app,dmg", archive: zip }
+          - { os: macos-14, target: x86_64-apple-darwin, formats: "app,dmg", archive: zip }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, formats: "deb,appimage", archive: tar.gz }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, formats: "wix", archive: zip }
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml is the one place the version is pinned; rustup reads it here.
+      - name: Install the pinned Rust toolchain and the target
+        shell: bash
+        run: |
+          rustup toolchain install
+          rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install Linux system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libasound2-dev libssl-dev libfuse2
+
+      - name: Build heca
+        run: cargo build -p heca --release --target ${{ matrix.target }}
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - name: Build the installers
+        shell: bash
+        run: cargo packager -p heca --release --target ${{ matrix.target }} -f ${{ matrix.formats }} -o "$GITHUB_WORKSPACE/dist"
+
+      # The archive holds the program, the licences and the README — everything heca needs is
+      # already inside the binary (fonts, sounds, default config).
+      - name: Build the archive
+        shell: bash
+        run: |
+          name="heca-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "stage/$name"
+          exe="heca"; [ "${{ runner.os }}" = "Windows" ] && exe="heca.exe"
+          cp "target/${{ matrix.target }}/release/$exe" LICENSE-MIT LICENSE-APACHE README.md "stage/$name/"
+          cd stage
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            if [ "${{ runner.os }}" = "Windows" ]; then
+              7z a "$GITHUB_WORKSPACE/dist/$name.zip" "$name" > /dev/null
+            else
+              zip -qr "$GITHUB_WORKSPACE/dist/$name.zip" "$name"
+            fi
+          else
+            tar -czf "$GITHUB_WORKSPACE/dist/$name.tar.gz" "$name"
+          fi
+
+      # The .app is a folder, so only the files a user downloads are uploaded.
+      - name: Collect what is published
+        shell: bash
+        run: |
+          mkdir -p publish
+          find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.msi' -o -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} publish/ \;
+          ls -l publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heca-${{ matrix.target }}
+          path: publish/*
+          if-no-files-found: error
+
+  release:
+    name: publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" artifacts/* $prerelease \
+            --title "heca $GITHUB_REF_NAME" \
+            --notes-file .github/release-notes.md

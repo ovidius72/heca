@@ -1827,6 +1827,12 @@ Behavior contract for float/unfloat:
 
 ---
 
+## Release
+
+A new version is published **only** by pushing a tag `vX.Y.Z` equal to the workspace version in
+`Cargo.toml`; nothing else makes a release. The workflow and the steps are in
+[`docs/development.md` § Releasing](docs/development.md).
+
 ## Commands
 
 ```bash
