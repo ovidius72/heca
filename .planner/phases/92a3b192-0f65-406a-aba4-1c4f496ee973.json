@@ -1,0 +1,184 @@
+{
+  "id": "92a3b192-0f65-406a-aba4-1c4f496ee973",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 111,
+  "shortId": "P6J7J",
+  "priority": 10,
+  "slug": "ready-08-what-heca-pro-s-rooms-dock-needs-session-projects-and-a-public-folderline",
+  "title": "ready-08: what heca-pro's rooms dock needs — session projects and a public FolderLine",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Generic heca pieces heca-pro T015 (rooms dock) waits on: a typed session→project read for services, and FolderLine on the public surface.",
+  "description": "Requested by heca-pro (session heca-pro-dev, for heca-pro T015, its rooms dock) on 2026-11-19, checked against heca 50ba6d7 and re-checked on c8206ffe. Antonio approved 2026-11-19: do it now, before P110(F010)/T567, to unblock heca-pro. Nothing here is heca-pro specific; every piece is for any extension.\n\nConstraint: decision 15ec67fc (heca's public surface used by heca-pro stays compatible; add beside, never break) and decision 05a2ed0c (THE SYNTAX: declarative, nested builders).\n\nScope:\n1. A service can read which project (folder) a session belongs to, and the live sessions with their project — typed, on the service contexts (heca/src/entry/service/cx.rs: StartCx/ServiceCx/ActionCx/ProjectCx), instead of submitting `list_sessions` and parsing its text. Source of truth: heca/src/server/sessions/mod.rs `SessionInfo { id, name, folder, status, … }` (crate-private today).\n2. `FolderLine` (heca/src/components/folder_line.rs, `pub(crate)`; `mod components` is private in heca/src/lib.rs:10) moves to heca's public surface — heca-pro is its second caller, and by heca's rule the second caller is the move, never a copy.\n\nNot here: the first-run region of an extension dock from config — added to P045(F006)/T528 (dock placement saved across runs), which heca-pro also waits on.",
+  "descriptionUpdatedAt": "2026-11-19T11:15:37.312Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "f33a9488-f3fe-4a84-9aaf-a30fb758d040",
+    "81b690a4-ce53-408e-8fb3-bf9a359c1dc4"
+  ],
+  "tasks": [
+    {
+      "id": "f33a9488-f3fe-4a84-9aaf-a30fb758d040",
+      "phaseId": "92a3b192-0f65-406a-aba4-1c4f496ee973",
+      "number": 568,
+      "shortId": "6Q5H7",
+      "priority": 1,
+      "shortName": "services-read-a-session-s-proj",
+      "title": "Services read a session's project and the sessions of a project; FolderLine becomes public",
+      "status": "in-progress",
+      "description": "For heca-pro T015 (rooms dock): it shows, in one window, the rooms of every session open on the same project, and a member's working folder the way heca shows it. Antonio approved 2026-11-19, before T567. Compatibility: decision 15ec67fc (add, never break); shape: decision 05a2ed0c (THE SYNTAX).\n\n## 1. A session's project, read by a service\nToday: the service contexts in heca/src/entry/service/cx.rs give only the session — `ActionCx::session()/session_key()` (~139-210), `ProjectCx::session()/session_key()` (~208-250); `ServiceCx` (~85) and `StartCx` (~33) give neither. The only way to learn a session's folder or the other live sessions is to `submit` `list_sessions` (heca/src/input/build/session.rs:8, heca/src/server/sessions/mod.rs:143 `SessionCommand::List`) and parse its text — every extension would repeat that parser.\nSource of truth: `SessionInfo { id, name, folder: Option<PathBuf>, label, status, windows, agents }` (heca/src/server/sessions/mod.rs:13-22, pub(crate)); contexts are built in heca/src/server/services/running.rs (~121 ServiceCx, ~170 ActionCx, ~210 ProjectCx) and heca/src/server/services/mod.rs:245 (ProjectCx).\nWanted: one typed read reachable from every context that knows a session, answering (a) the project folder of a session (by `SessionKey`; `None` when it has no folder), (b) the live sessions — key, name, folder, status — so a service can group the sessions of one project. One public read type, built from the server's session list in ONE place and handed to the contexts by reference — no per-context copy of the lookup. Folder equality: compare canonical paths (same project reached through a symlink or a trailing slash is the same project). A terminated session is listed with its status, not hidden (the caller decides). Keyed by `SessionKey` (stable for the session's life), never the per-run number.\nAlso: when sessions change (create, rename, folder, terminate, delete), a service that shows them must be able to republish — check whether services already hear session changes; if not, say so to Antonio before adding an event.\nTests: a service reads its own session's folder; two sessions on one folder (one via a symlink) group together; a terminated session reports its status; a session with no folder reads None.\n\n## 2. FolderLine on the public surface\nToday: heca/src/components/folder_line.rs (164 lines) is `pub(crate)`, built as a struct literal `FolderLine { path, show, size, indent, theme }.build()` returning `BuiltFolderLine { widget, text: Signal<String>, visible: Signal<bool> }`; callers: the sidebar pane row and the exposé pane card. `mod components` is private (heca/src/lib.rs:10); public re-exports sit at lib.rs:30-50.\nWanted: heca-pro can write `FolderLine` and get the same line heca draws. Public form in THE SYNTAX — a constructor and typed builders (path, show, size, indent), the theme read the way other public components get it, signals readable from the built line — and the two in-crate callers move to that same form (one path, never two). Export from lib.rs next to the other public components. Rustdoc complete with a native example; docs/extending-heca.md gains the entry. Ask Antonio before changing the shape in any way the current callers would notice.\n\n## Done when\nBoth reachable from a crate outside heca (an example or test in heca/examples or tests that uses only the public API), lint-changed clean, tests green, heca-pro told the API (session heca-pro-dev).",
+      "descriptionUpdatedAt": "2026-11-19T11:15:54.008Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "2f494ccd-cf65-4721-8c34-59284a74f30e",
+          "date": "2026-11-19T11:16:41.219Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f33a9488-f3fe-4a84-9aaf-a30fb758d040-check-001-read-the-service-contexts-and-the-session-list-design-the-one-typed-session-read-confirm-with-antonio-if-a-new-event-is-needed",
+          "number": 1,
+          "title": "Read the service contexts and the session list; design the one typed session read; confirm with Antonio if a new event is needed",
+          "checked": true
+        },
+        {
+          "id": "f33a9488-f3fe-4a84-9aaf-a30fb758d040-check-002-implement-the-session-read-on-the-contexts-with-tests",
+          "number": 2,
+          "title": "Implement the session read on the contexts, with tests",
+          "checked": true
+        },
+        {
+          "id": "f33a9488-f3fe-4a84-9aaf-a30fb758d040-check-003-folderline-public-in-the-syntax-move-both-in-crate-callers-to-it",
+          "number": 3,
+          "title": "FolderLine public in THE SYNTAX; move both in-crate callers to it",
+          "checked": true
+        },
+        {
+          "id": "f33a9488-f3fe-4a84-9aaf-a30fb758d040-check-004-outside-crate-example-test-using-only-the-public-api-docs-rustdoc-docs-extending-heca-md",
+          "number": 4,
+          "title": "Outside-crate example/test using only the public API; docs (rustdoc, docs/extending-heca.md)",
+          "checked": true
+        },
+        {
+          "id": "f33a9488-f3fe-4a84-9aaf-a30fb758d040-check-005-lint-changed-tests-pr-tell-heca-pro-the-api",
+          "number": 5,
+          "title": "lint-changed + tests; PR; tell heca-pro the API",
+          "checked": false
+        },
+        {
+          "id": "f33a9488-f3fe-4a84-9aaf-a30fb758d040-check-006-the-events-project-decision-f639e662-services-listen-with-cx-on-session-changed-ev-one-event-with-kind-created-renamed-folder-changed-terminated-restarted-deleted-emitted-from-one-point-also-on-heca-rpc-events-add-the-the-events-block-to-claude-md-agents-md-0-docs-plugins-md-docs-extending-heca-md",
+          "number": 6,
+          "title": "THE EVENTS (project decision f639e662): services listen with cx.on(\"session.changed\", |ev| …) — one event with kind created|renamed|folder_changed|terminated|restarted|deleted, emitted from one point, also on `heca rpc --events`; add the ⭐ THE EVENTS block to CLAUDE.md, AGENTS.md § 0, docs/plugins.md, docs/extending-heca.md",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-19T11:16:41.219Z",
+      "completedAt": "",
+      "createdAt": "2026-11-19T11:15:53.949Z",
+      "updatedAt": "2026-11-19T11:54:49.243Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
+          "createdAt": "2026-11-19T11:16:41.043Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2"
+    },
+    {
+      "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4",
+      "phaseId": "92a3b192-0f65-406a-aba4-1c4f496ee973",
+      "number": 569,
+      "shortId": "73PQQ",
+      "priority": 2,
+      "shortName": "a-child-list-bound-to-a-value",
+      "title": "A child list bound to a value: a dock built from a service's data stays current",
+      "status": "planned",
+      "description": "Asked by heca-pro (session heca-pro-dev, 2026-11-19) for its rooms dock (heca-pro T015); Antonio decided 2026-11-19: build the DEFINITIVE fix (a declarative child list bound to a value), not a dock-rebuild stopgap; after the pending work (T568 merged, planner committed). heca-pro waits on it and adds no workaround.\n\n## The defect (verified 2026-11-19)\nA dock body that reads a reactive value while it is built never updates when the value changes. heca-pro's dock reads its `ServiceState` (from `ServiceRegistration::client(..)`, heca/src/entry/service/client.rs:19-45, a `Signal<C>`) inside `ContainerContribution::new(self, |ctx, build| state.with(|view| body(view)))`. The retained chrome tree is rebuilt only when `chrome_signature` changes (heca/src/chrome/window/retained.rs:38 — window size, font zoom, sidebar widths, pane lines, the workspace tree); a `ServiceState` change is not in it, so a new room or member shows only after a restart. docs/extending-heca.md:355 promises \"In a component: it redraws when the value changes\" — true for a widget bound to a signal (a label's text), false for a body whose STRUCTURE comes from the value (a list of rooms). Today every extension dock showing service data would have to wrap its body in `Keyed` plus an effect by hand — a rule each author must remember.\n\n## Wanted — the definitive shape\nA widget in heca-grid-ui that renders a collection held in a signal and keeps its children in step when the collection changes: added items get a child, removed ones lose theirs, unchanged ones keep their widget (and its focus, hover, scroll, inner state), reordered ones move — keyed by an identity the caller gives per item. In THE SYNTAX, e.g. (name and exact builders to be agreed with Antonio BEFORE code):\n```rust\nList::new(rooms_signal)                       // Signal<Vec<T>> or anything readable as a list (ServiceState included)\n    .key(|room| room.id.clone())              // identity per item\n    .child(|room| RoomRow::new(room))         // how one item is shown\n```\n- Builds on what exists, no second mechanism: `Keyed` / `IdentityExt::on_props` (heca-grid-ui/src/builders/identity.rs:30, props/mod.rs) and `reconcile_keyed` (heca-grid-ui/src/reconcile.rs:66). Check whether one of them already is most of this.\n- Placed like any widget, in any tree (a dock body, an overlay, a pane) — a component owns its own input; nothing registered with the host.\n- `ServiceState<C>` is readable by it directly (a projection `|view| &view.rooms`), so an extension writes no glue.\n- Decision 05a2ed0c names this gap (\"A declarative child list bound to data (ForEach-like) is not in the library yet\"); P087(F011)/T469 (the palette rewrite) consumes the same widget — design it for both.\n- Plugins: a ViewNode cannot carry a signal (AGENTS ⭐ SETTLED); the plugin-side counterpart is P085(F003)/T360 (per-mount values). Say how the two meet; do not build T360 here.\n- Fix docs/extending-heca.md:355 to show the real way (the list widget), plus the widget's rustdoc, docs/widgets.md entry (native example) and the showcase.\n\n## Tests\nHeadless: change the signal → children added/removed/reordered with unchanged ones keeping their widget identity (a child's own state survives); a dock built once with the widget updates without a chrome rebuild; break the reconcile on purpose and see the tests go red. Eye-check: heca-pro's rooms dock adds a room live.",
+      "descriptionUpdatedAt": "2026-11-19T12:27:10.140Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-001-read-keyed-on-props-reconcile-keyed-propose-the-widget-s-name-and-builders-to-antonio-and-agree-them",
+          "number": 1,
+          "title": "Read Keyed / on_props / reconcile_keyed; propose the widget's name and builders to Antonio and agree them",
+          "checked": false
+        },
+        {
+          "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-002-build-the-widget-in-heca-grid-ui-with-servicestate-readable-directly-headless-tests-sabotage",
+          "number": 2,
+          "title": "Build the widget in heca-grid-ui with ServiceState readable directly; headless tests + sabotage",
+          "checked": false
+        },
+        {
+          "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-003-docs-rustdoc-docs-widgets-md-showcase-fix-docs-extending-heca-md-355",
+          "number": 3,
+          "title": "docs: rustdoc, docs/widgets.md, showcase; fix docs/extending-heca.md:355",
+          "checked": false
+        },
+        {
+          "id": "81b690a4-ce53-408e-8fb3-bf9a359c1dc4-check-004-tell-heca-pro-the-api-eye-check-its-rooms-dock-live-pr",
+          "number": 4,
+          "title": "Tell heca-pro the API; eye-check its rooms dock live; PR",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-19T12:27:09.960Z",
+      "updatedAt": "2026-11-19T12:27:09.960Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-11-19T11:15:37.223Z",
+  "updatedAt": "2026-11-19T12:27:09.960Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "a68c08c4-67e4-4db4-b284-ca59785fbdef",
+      "date": "2026-11-19T11:16:41.340Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
+      "createdAt": "2026-11-19T11:16:41.043Z"
+    }
+  ]
+}
