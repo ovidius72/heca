@@ -128,6 +128,14 @@ impl TerminalConfiguration for HecaTerminalConfig {
     fn enable_kitty_graphics(&self) -> bool {
         true
     }
+
+    /// **One arrow key per wheel report** in a full-screen program that does not take the mouse
+    /// (`less`, `man`). The host already sends `terminal_wheel_scroll_lines` reports per notch; the
+    /// terminal library's own multiplier (3) on top of that would make the setting mean three times
+    /// what it says there and only there.
+    fn alternate_buffer_wheel_scroll_speed(&self) -> u8 {
+        1
+    }
 }
 
 pub(super) struct TerminalEngine {

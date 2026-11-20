@@ -104,5 +104,7 @@ Session dialog text is configurable under `[settings.session_text]`.
 
 **A new pane starts where you are.** A pane made from a pane — a split (`split_horizontal`,
 `split_vertical`), a pane added to a column, a new column — opens its shell in the folder the
-focused pane is in at that moment (what its shell last reported). With no focused pane, or no folder
-known for it, and for a new workspace, the shell starts in its default folder.
+focused pane is in at that moment (what its shell last reported); with no focused pane, or no folder
+known for it, the shell starts in its default folder. A new workspace is not made from a pane: its
+shell starts in `[settings] new_workspace_cwd` (default `"~"`, the home folder; a path, `~` or `~/…`),
+and a folder that does not exist falls back to the home folder with a notice.

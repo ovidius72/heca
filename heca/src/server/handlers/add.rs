@@ -70,14 +70,15 @@ pub(super) fn split_vertical(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<C
     with_shell(cx, added)
 }
 
-/// Make a workspace, after the last, with a pane in it. Its shell is given no folder — a new
-/// workspace is not made from a pane — so it starts where a shell starts by default.
+/// Make a workspace, after the last, with a pane in it. A new workspace is not made from a pane, so
+/// its shell starts in the configured folder (`[settings] new_workspace_cwd`).
 pub(super) fn create_workspace(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     cx.layout.add_workspace();
     let index = cx.layout.workspaces.len() - 1;
     let added = cx.layout.add_column(index, 0);
+    let cwd = cx.terminals.new_workspace_cwd();
     [Change::WorkspaceAdded { index }]
         .into_iter()
-        .chain(start_shell_in(cx, added, None))
+        .chain(start_shell_in(cx, added, cwd))
         .collect()
 }

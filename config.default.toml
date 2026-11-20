@@ -168,6 +168,12 @@ swap_modifier = "Shift"
 # cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
 
+# The folder a new workspace's shell starts in: a path, "~" or "~/..." for the
+# home folder. A folder that does not exist falls back to the home folder (with a
+# notice). A pane made from a pane (a split, a new column) starts in that pane's
+# current folder instead.
+new_workspace_cwd = "~"
+
 # When a pane has a custom name (set via rename), also show its process/program
 # name next to it, e.g. `MyPane (nvim)` — in the sidebar (small and dimmed), the
 # command palette and the exposé. The process label is not part of the name — it is
@@ -194,7 +200,9 @@ terminal_scrollback_lines = 3500
 # Terminal-ONLY — does not affect `settings.mouse` (chrome interaction).
 terminal_mouse = true
 
-# Number of scrollback rows per wheel notch.
+# Lines per wheel notch in a terminal: the rows its history scrolls, and the
+# wheel steps a program that takes the mouse (Claude Code, vim, less) receives.
+# A trackpad counts one notch per cell height it travels.
 terminal_wheel_scroll_lines = 3
 
 # Points added/removed per font-zoom step. Drives the whole-app zoom

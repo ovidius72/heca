@@ -264,11 +264,12 @@ interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 float_size = 0.95             # Share of the working area a pane takes when it floats with nowhere given
 move_slide_reach = 0.9        # How far (fraction of the window) a moved or swapped pane animates in from; 0 = jump
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
+new_workspace_cwd = "~"       # Folder a new workspace's shell starts in: a path, "~" or "~/..."; missing → home
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
 pane_name_delay = 1000        # Display-name delay in milliseconds; 0 updates immediately
 # pane_show_cwd is now [appearance.expose] show_cwd (still read; see below)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
-terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
+terminal_wheel_scroll_lines = 3  # Lines per wheel notch: history rows, and wheel steps sent to a program (Claude Code, vim)
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
 pane_size = "latest"          # When several windows show the SAME pane at once, the one running
                               # terminal still has a single size, so the windows must agree on it:

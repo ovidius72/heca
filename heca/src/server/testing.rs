@@ -30,6 +30,7 @@ fn terminal_settings() -> TerminalSettings {
         link_detection: false,
         images: false,
         pane_size: Default::default(),
+        new_workspace_cwd: "~".into(),
     }
 }
 

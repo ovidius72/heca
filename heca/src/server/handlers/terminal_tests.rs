@@ -207,7 +207,7 @@ fn a_closed_pane_has_its_process_ended() {
 
 /// **A pane made from a pane starts where that pane is**: the new shell opens in the folder the
 /// asker's focused pane reports — for a split, a pane under it, a new column. A new workspace is
-/// not made from a pane, so it is given no folder and starts where a shell starts by default.
+/// not made from a pane, so it starts in `[settings] new_workspace_cwd` (the test server's is `~`).
 #[test]
 fn a_pane_made_from_a_pane_starts_in_that_panes_folder() {
     use crate::app::backend_store::{Program, TerminalOwner, TerminalSpec};
@@ -230,5 +230,21 @@ fn a_pane_made_from_a_pane_starts_in_that_panes_folder() {
         Some(folder.clone()),
         "a new column"
     );
-    assert_eq!(started_in(WmAction::CreateWorkspace), None, "a new workspace is given no folder");
+    assert_eq!(started_in(WmAction::CreateWorkspace), dirs::home_dir(), "a new workspace: `~`, the home folder");
+}
+
+/// **A new workspace starts in `[settings] new_workspace_cwd`** — a folder that exists is used as
+/// written; one that does not starts the shell in the home folder.
+#[test]
+fn a_new_workspace_starts_in_the_configured_folder_or_home() {
+    let started_in = |cwd: &str| {
+        let (mut server, mut w) = (server(), two_workspaces_of_two_columns());
+        server.terminal_settings.new_workspace_cwd = cwd.into();
+        let pane = made(&run_on(&mut server, &mut w, None, WmAction::CreateWorkspace)).expect("a pane");
+        let id = server.backends.identity_of(pane).expect("its terminal");
+        server.backends.spec_of(id).and_then(|spec| spec.cwd.clone())
+    };
+    let folder = std::env::temp_dir();
+    assert_eq!(started_in(folder.to_str().unwrap()), Some(folder.clone()), "a folder that exists");
+    assert_eq!(started_in("/no/such/folder/for/heca"), dirs::home_dir(), "one that does not: home");
 }

@@ -52,6 +52,14 @@ impl Terminals<'_> {
         }
     }
 
+    /// **The folder a new workspace's shell starts in** — `[settings] new_workspace_cwd`, with `~`
+    /// read as the home folder. A folder that is not there is [`start`](Self::start)'s to handle:
+    /// the shell starts in the home folder and the user is told once.
+    pub(crate) fn new_workspace_cwd(&self) -> Option<PathBuf> {
+        let home = dirs::home_dir()?;
+        crate::server::sessions::resolve_folder(Some(&self.settings.new_workspace_cwd), &home).ok()
+    }
+
     /// **The folder `pane`'s program is in now** — what its shell last reported (OSC 7) or heca
     /// read from its process. `None` when the pane has no terminal or nothing is known.
     pub(crate) fn cwd_of(&self, pane: PaneId) -> Option<std::path::PathBuf> {
