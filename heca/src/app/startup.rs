@@ -320,26 +320,16 @@ pub(crate) async fn init_state(
     // container to the right region and its UI goes with it.
     use crate::chrome::regions;
     use crate::providers::WorkspacesContainerProvider as Workspaces;
-    regions("sidebar.left").append(Workspaces::new("workspaces"));
-    // A **second placement** of the same container, in the right sidebar. Not
-    // scaffolding: with one dock on screen none of this phase is observable — not
-    // a letter per dock, not focus moving between them, not "the focused one answers and every
-    // other declines", not two cursors, not two scroll positions. And a terminal has no horizontal
-    // scroll at all, so the horizontal keys have nothing to act on without it.
-    //
-    // It is also the only thing that exercises the kind/mount split for real: same content, same
-    // bindings, separate cursor / scroll / focus, because those are keyed by mount id.
-    regions("sidebar.right").append(Workspaces::new("workspaces.right"));
-    // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
-    // never shows whether two of them divide the height, hold their own space as one folds, or line
-    // their title rows up with each other — which is the whole of what a region has to get right.
-    // **Each dock says its own size**; saying nothing is one equal part, so two docks are halves.
-    regions("sidebar.left").append(Workspaces::new("workspaces.left2"));
+    // `sidebar.left` is only where it goes when the user's `[docks]` says nothing; the shipped
+    // default (`workspaces = "sidebar.left"`) is in config.default.toml, the one place for defaults.
+    // A recipe, so a reload that brings the dock back from `"none"` can make it again.
+    regions("sidebar.left").append(|| Workspaces::new("workspaces"));
 
     // Everything named above is queued — which is the point: a plugin adding a container at load
-    // time writes the same call and does not have to find the host. This applies it, once; a
-    // `regions(..)` call after this is refused out loud.
-    chrome_host.mount_pending(&crate::providers::ChromeCtx::new(&chrome_state));
+    // time writes the same call and does not have to find the host. This applies it, once, with the
+    // user's `[docks]` table deciding where each dock starts; a `regions(..)` call after this is
+    // refused out loud.
+    chrome_host.mount_pending(&crate::providers::ChromeCtx::new(&chrome_state), &app_config.config.docks);
 
     // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
     // unknown-version file is simply an empty store, so a first run and a broken file behave

@@ -150,6 +150,11 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // received and a fresh ask is meaningful again. Anything marking itself further down this pass
     // is asking for the *next* frame and must be able to wake us.
     heca_grid_ui::frame_served();
+    // Docks added or taken out with `regions(..)` since the last pass — a plugin may do it while
+    // the app runs.
+    if state.chrome_host.apply_pending(&crate::providers::ChromeCtx::new(&state.chrome_state)) {
+        state.mark_full_redraw();
+    }
     let prefix_timeout = state.prefix.timeout;
     let should_timeout = matches!(
         state.input_mode,

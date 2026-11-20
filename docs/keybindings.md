@@ -292,7 +292,9 @@ delete_pane = "x"
 pick        = "s"
 ```
 
-An optional `id` narrows an entry to **one placement**, layered over the entry without one:
+An optional `id` narrows an entry to **one placement**, layered over the entry without one — for a
+dock placed more than once (heca starts with one workspaces dock; a program built on heca may add
+another, e.g. `workspaces.right`):
 
 ```toml
 [[keys.surface]]

@@ -65,8 +65,12 @@ impl Provider for Notes {
 fn main() {
     let demo = heca::extension("demo");
 
-    // The dock. A default: where you put it, and whether it shows, is yours to decide.
-    regions("sidebar.right").append(Notes::new("notes", demo.clone()));
+    // The dock. A default: where you put it, and whether it shows, is yours to decide (`[docks]`).
+    // A recipe, so heca can make it again when a reload brings it back from "none".
+    regions("sidebar.right").append({
+        let demo = demo.clone();
+        move || Notes::new("notes", demo.clone())
+    });
 
     // The action. It belongs to no dock, so it is declared here; the handler can only read the app
     // and ask for other actions, which go out the same door a key press does.

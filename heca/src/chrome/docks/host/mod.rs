@@ -6,6 +6,7 @@
 //! by [`ChromeHost::mount_pending`]; the render path then asks each one for its body.
 
 mod mounted;
+mod placing;
 
 #[cfg(test)]
 mod region_list_tests;
@@ -16,7 +17,7 @@ use std::collections::HashMap;
 
 use super::contribution::ContainerId;
 use crate::chrome::{ChromeEvent, ChromeEventBus, RegionId};
-use crate::providers::{ChromeCtx, Provider, ProviderHandles};
+use crate::providers::{Provider, ProviderHandles};
 
 pub use mounted::MountedContribution;
 
@@ -71,6 +72,11 @@ impl std::error::Error for MoveError {}
 pub struct ChromeHost {
     /// One list of containers per region.
     regions: super::regions::RegionMap<RegionHost>,
+    /// Every dock `regions(..)` declared, with how to make it again — what a reload of `[docks]`
+    /// works from ([`placing`]).
+    declared: Vec<placing::Declared>,
+    /// The user's `[docks]` table as last applied: a dock's id → a region or `"none"`.
+    docks: std::collections::BTreeMap<String, String>,
     /// Reverse index: which region each container currently lives in.
     placement: HashMap<ContainerId, RegionId>,
     /// What each region was told about arranging its own contents, by [`RegionId::index`].
@@ -82,10 +88,10 @@ impl ChromeHost {
     /// A new host with four empty regions, wired to the chrome event bus (from
     /// `SharedChromeState::events()`).
     pub fn new(events: ChromeEventBus) -> Self {
-        // A new host is starting, so `regions(..)` calls are taken again until it mounts them.
-        super::regions::open_for_startup();
         Self {
             regions: super::regions::RegionMap::from_fn(|_| RegionHost::new()),
+            declared: Vec::new(),
+            docks: std::collections::BTreeMap::new(),
             placement: HashMap::new(),
             layouts: Default::default(),
             events,
@@ -106,6 +112,7 @@ impl ChromeHost {
         let super::regions::Placed {
             provider,
             placement,
+            ..
         } = placed;
         let id = self.free_mount_id(provider.id());
         if !provider.supported_regions().contains(region) {
@@ -171,57 +178,6 @@ impl ChromeHost {
                 return candidate;
             }
             n += 1;
-        }
-    }
-
-    /// **Apply every `regions(..)` call made so far**, in the order they were made, and close the
-    /// queue.
-    ///
-    /// A caller names a region before this host exists — a plugin loading at startup, the app's own
-    /// wiring — so the changes wait and are applied here, once, as the app starts. A change made
-    /// after this is refused out loud by [`regions`](fn@crate::chrome::regions); regions that change while the
-    /// app runs are not built yet.
-    ///
-    /// Then every seated dock is started — its [`Provider::on_activate`] runs once, reading the app
-    /// through `ctx` — and what it subscribed to lives as long as it stays seated.
-    pub fn mount_pending(&mut self, ctx: &ChromeCtx) {
-        use super::regions::RegionOp;
-        for (region, op) in super::regions::take_for_startup() {
-            match op {
-                RegionOp::Append(p) => self.seat(region, p, false),
-                RegionOp::Prepend(p) => self.seat(region, p, true),
-                RegionOp::Remove(id) => {
-                    if self.unseat_where(region, |m| m != id) == 0 {
-                        crate::chrome::input::identity::warn_author(format!(
-                            "[heca] nothing called '{id}' is in region '{}' to remove — it holds: {}",
-                            region.as_str(),
-                            self.names_in(region),
-                        ));
-                    }
-                }
-                RegionOp::Retain(keep) => {
-                    self.unseat_where(region, keep);
-                }
-                RegionOp::Gap(gap) => self.layouts[region].gap = Some(gap),
-            }
-        }
-        // Started once everything is seated, so a dock that was added and then removed never runs.
-        for mounted in self
-            .regions
-            .iter_mut()
-            .flat_map(|r| r.contributions.iter_mut())
-        {
-            mounted.activate(ctx);
-        }
-    }
-
-    /// The names in `region`, for a message a person reads.
-    fn names_in(&self, region: RegionId) -> String {
-        let names: Vec<&str> = self.contributions(region).iter().map(|m| m.id()).collect();
-        if names.is_empty() {
-            "nothing".to_string()
-        } else {
-            names.join(", ")
         }
     }
 

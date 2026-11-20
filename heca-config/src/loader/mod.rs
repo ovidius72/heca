@@ -167,6 +167,14 @@ pub struct Config {
     /// `[confirm]` — per-action confirmation toggles (generic, keyed by action name).
     #[serde(default)]
     pub confirm: crate::confirm::ConfirmConfig,
+    /// `[docks]` — **where each dock starts**, by the name it is added under (its mount id):
+    /// `workspaces = "sidebar.left"`, `"rooms" = "sidebar.right"`, `notes = "none"`. A region is
+    /// `sidebar.left`, `sidebar.right`, `bar.top` or `bar.bottom`; `none` leaves the dock out (its
+    /// keyboard actions still work). A dock not named here starts where the code that adds it says.
+    /// A name with a dot is quoted, as TOML wants: `"workspaces.right" = "sidebar.right"`. Applied as
+    /// the window starts and again on every reload, to the docks whose entry changed.
+    #[serde(default)]
+    pub docks: std::collections::BTreeMap<String, String>,
     /// `[extensions.<name>]` — one table per extension, whose shape only that extension knows. heca
     /// keeps them as written and layers them like every other table; the extension reads its own
     /// with [`Config::extension`].

@@ -239,7 +239,7 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
         Sized("big", 3.0, None).flex(1.0).order(1),
         Sized("small", 1.0, Some((-1).into())).flex(3.0).order(0),
     ]);
-    host.mount_pending(&ctx);
+    host.mount_pending(&ctx, &Default::default());
     let body = super::build_region_content(
         &host,
         super::RegionId::LeftSidebar,

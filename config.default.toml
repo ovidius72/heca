@@ -448,6 +448,17 @@ terminate_session = true # stop processes, keep the session for explicit restart
 delete_session = true    # remove the session, never project files
 
 # ─────────────────────────────────────────────────────────────────────────────
+[docks]
+# ─────────────────────────────────────────────────────────────────────────────
+# Where each dock starts, by the name it is added under:
+#   <dock> = "sidebar.left" | "sidebar.right" | "bar.top" | "bar.bottom" | "none"
+# "none" leaves the dock out of the window; its keyboard actions still work.
+# A dock not listed starts where the program that adds it says. A name with a
+# dot is quoted: "rooms.team" = "sidebar.right". A reload (prefix+Shift+r)
+# moves, removes or brings back each dock whose line changed.
+workspaces = "sidebar.left"  # the workspaces and their panes
+
+# ─────────────────────────────────────────────────────────────────────────────
 [font]
 # ─────────────────────────────────────────────────────────────────────────────
 # Fonts are decoupled from the color theme (system-local), so a theme never

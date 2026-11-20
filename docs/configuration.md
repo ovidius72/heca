@@ -331,6 +331,28 @@ apply on `prefix+Shift+r`.
 > for the pane you work in; **Delete** removes a container or session. Terminating
 > a session stops its processes but retains its definition.
 
+## Where docks start
+
+A dock is a panel in a sidebar or a bar — heca's workspaces, and any dock a program built on heca
+adds. The `[docks]` table says where each one starts, by the name it is added under:
+
+```toml
+[docks]
+workspaces = "sidebar.right"     # heca's workspaces dock on the right
+rooms = "sidebar.left"           # a dock another program adds
+"notes.team" = "none"            # a name with a dot is quoted; "none" leaves the dock out
+```
+
+| Value | Meaning |
+|---|---|
+| `"sidebar.left"`, `"sidebar.right"`, `"bar.top"`, `"bar.bottom"` | the region it starts in |
+| `"none"` | not shown at all; its keyboard actions still work |
+
+A dock not listed starts where the program that adds it says. A region name heca does not know is
+reported and the dock goes where its program says. A reload (`prefix+Shift+r`) applies changes:
+each dock whose entry changed is moved, taken out, or brought back; a dock whose entry did not
+change stays where it is, even if you moved it by hand. Default: `workspaces = "sidebar.left"`.
+
 ## Notifications
 
 heca shows short **toast notifications** in the top-right corner — a pane was

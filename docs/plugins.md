@@ -70,7 +70,7 @@ A plugin never puts a surface in the tree itself. It offers one, exactly as it o
 ### Adding a dock to a region
 
 A **`Provider` contributes a dock**; the host mounts its content in a named region. The canonical
-[Providers and startup regions reference](widgets.md#providers-and-startup-regions) contains the
+[Providers and regions reference](widgets.md#providers-and-regions) contains the
 add/remove/order API, required methods, identities, runnable example and startup cutoff.
 
 Native code can use that API now. Sandbox plugins send typed descriptions through a host adapter;

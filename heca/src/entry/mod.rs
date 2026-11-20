@@ -3,7 +3,7 @@
 //!
 //! ```ignore
 //! fn main() {
-//!     heca::regions("sidebar.left").append(Planner::new("planner")); // a dock
+//!     heca::regions("sidebar.left").append(|| Planner::new("planner")); // a dock
 //!     let demo = heca::extension("demo");                               // who this program is
 //!     demo.action("start_worker").label("Start worker").run(start);    // `demo.start_worker`
 //!     demo.layer("planner").view(planner_overlay);                     // `demo.planner`

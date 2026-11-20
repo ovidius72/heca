@@ -27,7 +27,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
-- [Providers and startup regions](#providers-and-startup-regions) — add, remove and order docks; placement identity; native/plugin availability
+- [Providers and regions](#providers-and-regions) — add, remove and order docks; placement identity; native/plugin availability
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
 
@@ -2764,7 +2764,7 @@ adds a dock after the app built its own — so a size list written on the region
 one more dock arrives. Each dock carries its own part, and a new one brings its own.
 
 **Where to write it: on the body the container builds** — or, when you are adding a dock someone
-else wrote, on the dock as you add it: `regions("sidebar.left").append(Docker::new("d").flex(3.0).order(-1))`.
+else wrote, on the dock as you add it: `regions("sidebar.left").append(|| Docker::new("d").flex(3.0).order(-1))`.
 `.flex` and `.order` are there on every dock type, built once. What the adder says wins over what
 the dock's body says.
 
@@ -2786,7 +2786,7 @@ regions("sidebar.left").append(git);   // brings its own part; the others keep t
 There is no size method on the provider and no size list on the region — a `fn grow()` on the
 provider and a `template_row` on the region both existed and were removed (P082(F003)/T518). The
 region says only the air between its docks, with `regions(..).gap(..)` (see
-[Providers and startup regions](#providers-and-startup-regions)); unset, the theme's `"sm"`
+[Providers and regions](#providers-and-regions)); unset, the theme's `"sm"`
 step. A rule is drawn between two docks; it asks for no part, so the docks divide what is left
 exactly as asked.
 
@@ -5131,7 +5131,7 @@ marker bar is an indicator; the rows inside carry their own intents.
 ### DockFrame
 
 For adding, removing or ordering a dock in the application, use the
-[Provider and startup region API](#providers-and-startup-regions). `DockFrame` supplies the UI frame;
+[Provider and startup region API](#providers-and-regions). `DockFrame` supplies the UI frame;
 the host mounts the provider.
 
 A titled, collapsible, bracket-framed shell for a Dock: a title bar (drag-handle grip + chevron
@@ -7046,7 +7046,7 @@ toasts.update(|v| v.push(
 
 Dialog panels use the theme’s `[dialog] max_width_em` cap (40 font units) and remain bounded by narrow windows. The common `.max_width(..)` overrides that cap. Legacy `.panel_size(width, height)` and `.panel_max_width(width)` remain compatibility aliases. Width, height and constraints belong to the visible panel; the modal scrim and input coverage still fill the viewport. The composed Overlay preserves explicit panel maximum dimensions.
 
-## Providers and startup regions
+## Providers and regions
 
 This section documents the **Heca host API** (`heca`), separate from the GPU-free widget library.
 
@@ -7054,14 +7054,17 @@ A **widget** builds a piece of UI. A **`Provider`** contributes a dock to the wi
 host builds and mounts its content. You do not construct or access the workspace's internal
 `DockView` to add your own dock. Compose its content from the public widgets instead.
 
-Write a provider, then place it **before `heca::run(..)`**:
+Write a provider, then place it — usually **before `heca::run(..)`**, but a call made while the app
+runs is applied too, at the next frame:
 
 ```rust,ignore
 use heca::{PlaceDock, regions};
 
-regions("sidebar.right").append(MyDock::new("tools"));
-regions("sidebar.left").prepend(MyOtherDock::new("outline"));
-regions("sidebar.right").append(MyDock::new("logs").flex(2.0).order(-1));
+regions("sidebar.right").append(|| MyDock::new("tools"));    // a recipe: heca can make it again
+regions("sidebar.right").append(MyDock::new("scratch"));     // the dock itself: it works, but once
+                                                              // out it comes back only on restart
+regions("sidebar.left").prepend(|| MyOtherDock::new("outline"));
+regions("sidebar.right").append(|| MyDock::new("logs").flex(2.0).order(-1));
 regions("sidebar.left").remove("workspaces");
 regions("sidebar.right").retain(|id| id != "notes");
 
@@ -7076,16 +7079,24 @@ label and a Terminal, then adds that dock to `sidebar.right`.
 | What you want | Public API | Meaning |
 |---|---|---|
 | Add at the end | `regions(name).append(provider)` | One provider or an array/`Vec` with a common element type. Chain calls for different types. |
+| Add a dock heca can make again | `regions(name).append(\|\| Provider::new(..))` | A recipe instead of the dock: when the user's `[docks]` brings it back after a reload (`"none"` → a region), heca makes it again. |
 | Add at the start | `regions(name).prepend(provider)` | A collection keeps its own order. |
-| Remove a dock | `regions(name).remove(id)` | Remove the placement with that id from this region. |
+| Remove a dock | `regions(name).remove(id)` | Remove the dock with that id, **whichever region holds it** (the user may have moved it). Not made again by a reload. |
 | Keep selected docks | `regions(name).retain(predicate)` | Filter the region's current list by placement id. |
 | Choose visual order | `provider.order(value)` | Lower first; ties keep insertion order. Accepts a number or an order path such as `[0, 5]`. |
 | Choose a share | `provider.flex(parts)` | Overrides the share requested by the provider's body. |
 | Set space between docks | `regions(name).gap("md")` | Uses the shared spacing vocabulary. |
 
 Region names are `sidebar.left`, `sidebar.right`, `bar.top` and `bar.bottom`. An unknown name is
-reported and changes nothing. These calls queue defaults for startup; calls after startup are
-reported and refused. They do not dynamically load or unload providers.
+reported and changes nothing. Calls are queued and applied as the window starts, then at every frame,
+so a dock can be added or removed while the app runs.
+
+**Where a dock starts is the user's word first.** The config's `[docks]` table names a region, or
+`"none"`, by dock id ([configuration](configuration.md#where-docks-start)); the region in
+`regions(..)` is used only when the user said nothing. On a reload (`prefix+Shift+r`) each dock
+whose `[docks]` entry changed is moved, taken out, or — if it was added as a recipe — made again; a
+dock added as itself comes back only with a restart. Docks whose entry did not change stay where
+they are. A dock's cursor, scroll and folded state are kept by its id, so one made again finds them.
 
 The older `left-sidebar` / `left` spellings are also read by the shared region-name parser.
 `retain` changes the existing list; Rust's `filter` would instead build another collection. Regions

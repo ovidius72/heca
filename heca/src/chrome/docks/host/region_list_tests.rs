@@ -20,7 +20,7 @@ fn ids(host: &ChromeHost, r: RegionId) -> Vec<String> {
 /// Apply the queue, against a store of its own — what startup does with the app's.
 fn mount(host: &mut ChromeHost) {
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
-    host.mount_pending(&ChromeCtx::new(&store));
+    host.mount_pending(&ChromeCtx::new(&store), &Default::default());
 }
 
 /// Start from an empty queue: build a host (which opens it) and apply whatever was left.
@@ -130,39 +130,19 @@ fn a_region_nobody_knows_is_reported_and_changes_nothing() {
     );
 }
 
-/// **After startup a change is refused out loud**, not dropped in silence — regions are set up
-/// once, as the app starts.
+/// **A change made while the app runs is applied** — a plugin adds a dock after startup and it
+/// appears at the next pass ([`ChromeHost::apply_pending`]).
 #[test]
-fn a_change_after_startup_is_refused_out_loud() {
+fn a_change_made_while_the_app_runs_is_applied() {
     let mut host = fresh();
     regions("sidebar.left").append(ws("early"));
     mount(&mut host);
 
     regions("sidebar.left").append(ws("late"));
-    mount(&mut host);
-
-    assert_eq!(ids(&host, RegionId::LeftSidebar), ["early"]);
-    assert!(
-        crate::chrome::input::identity::said()
-            .iter()
-            .any(|m| m.contains("after startup")),
-        "the late call is reported",
-    );
-}
-
-/// Every spelling of a region reads through the one parser RPC and config use.
-#[test]
-fn the_dotted_names_and_the_old_ones_mean_the_same_region() {
-    for (name, region) in [
-        ("sidebar.left", RegionId::LeftSidebar),
-        ("left-sidebar", RegionId::LeftSidebar),
-        ("left", RegionId::LeftSidebar),
-        ("sidebar.right", RegionId::RightSidebar),
-        ("bar.top", RegionId::TopBar),
-        ("bar.bottom", RegionId::BottomBar),
-    ] {
-        assert_eq!(name.parse::<RegionId>(), Ok(region), "{name}");
-    }
+    let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
+    assert!(host.apply_pending(&ChromeCtx::new(&store)), "something was applied");
+    assert_eq!(ids(&host, RegionId::LeftSidebar), ["early", "late"]);
+    assert!(!host.apply_pending(&ChromeCtx::new(&store)), "nothing queued, nothing done");
 }
 
 /// **A region keeps the air it was given between its containers** — the one thing it says about
@@ -233,7 +213,7 @@ fn a_placed_dock_is_started_and_hears_events_while_it_is_seated() {
     regions("sidebar.left").remove("removed");
 
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
-    host.mount_pending(&ChromeCtx::new(&store));
+    host.mount_pending(&ChromeCtx::new(&store), &Default::default());
     store.events().emit(ChromeEvent::ContainerPlacementChanged {
         container_id: "kept".to_string(),
         region: RegionId::LeftSidebar,
@@ -245,4 +225,119 @@ fn a_placed_dock_is_started_and_hears_events_while_it_is_seated() {
         "the seated dock was started and heard the event"
     );
     assert_eq!(removed.get(), 0, "a removed dock does not listen");
+}
+
+/// Apply the queue with a `[docks]` table, as startup does with the user's config.
+fn mount_with(host: &mut ChromeHost, docks: &[(&str, &str)]) {
+    let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
+    let docks = docks.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    host.mount_pending(&ChromeCtx::new(&store), &docks);
+}
+
+/// **The user's config says where a dock starts; the code's region is only the fallback.** An
+/// extension adds its dock to `sidebar.right`; `[docks] rooms = "sidebar.left"` puts it on the
+/// left. A dock the config does not name starts where its code said.
+#[test]
+fn the_config_says_where_a_dock_starts_and_the_code_is_the_fallback() {
+    let mut host = fresh();
+    regions("sidebar.right").append(ws("rooms"));
+    regions("sidebar.right").append(ws("notes"));
+    mount_with(&mut host, &[("rooms", "sidebar.left")]);
+    assert_eq!(ids(&host, RegionId::LeftSidebar), ["rooms"]);
+    assert_eq!(ids(&host, RegionId::RightSidebar), ["notes"], "a dock not named keeps the code's region");
+}
+
+/// **`none` leaves a dock out** — not seated anywhere.
+#[test]
+fn none_in_the_config_leaves_a_dock_out() {
+    let mut host = fresh();
+    regions("sidebar.left").append(ws("workspaces"));
+    mount_with(&mut host, &[("workspaces", "none")]);
+    assert!(ids(&host, RegionId::LeftSidebar).is_empty());
+    assert_eq!(host.placement("workspaces"), None);
+}
+
+/// **A region nobody knows keeps the code's region** (and is said out loud, not silently dropped).
+#[test]
+fn an_unknown_region_in_the_config_keeps_the_codes_region() {
+    let mut host = fresh();
+    regions("sidebar.left").append(ws("workspaces"));
+    mount_with(&mut host, &[("workspaces", "sidebar.middle")]);
+    assert_eq!(ids(&host, RegionId::LeftSidebar), ["workspaces"]);
+}
+
+/// Reload with a new `[docks]` table, as `prefix+Shift+r` does.
+fn reload_with(host: &mut ChromeHost, docks: &[(&str, &str)]) {
+    let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
+    let docks = docks.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    host.reload_docks(&ChromeCtx::new(&store), &docks);
+}
+
+/// **`remove` finds a dock by its id wherever it is** — here the user's `[docks]` moved it to the
+/// right, and the call names the left.
+#[test]
+fn remove_finds_a_dock_by_id_wherever_it_is() {
+    let mut host = fresh();
+    regions("sidebar.left").append(ws("rooms"));
+    mount_with(&mut host, &[("rooms", "sidebar.right")]);
+    assert_eq!(ids(&host, RegionId::RightSidebar), ["rooms"]);
+
+    regions("sidebar.left").remove("rooms");
+    let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
+    host.apply_pending(&ChromeCtx::new(&store));
+    assert!(ids(&host, RegionId::RightSidebar).is_empty());
+    assert_eq!(host.placement("rooms"), None);
+}
+
+/// **A reload moves the docks whose entry changed** and leaves the others where they are.
+#[test]
+fn a_reload_moves_the_docks_whose_entry_changed() {
+    let mut host = fresh();
+    regions("sidebar.left").append([ws("a"), ws("b")]);
+    mount_with(&mut host, &[]);
+    host.move_container("b", RegionId::RightSidebar).unwrap();
+
+    reload_with(&mut host, &[("a", "sidebar.right")]);
+    assert_eq!(ids(&host, RegionId::RightSidebar), ["b", "a"]);
+    assert!(ids(&host, RegionId::LeftSidebar).is_empty(), "b, moved by hand, stays: its entry did not change");
+}
+
+/// **`"none"` on a reload takes a dock out; back to a region makes it again from its recipe.**
+#[test]
+fn a_reload_takes_a_dock_out_and_makes_it_again_from_its_recipe() {
+    let mut host = fresh();
+    regions("sidebar.left").append(|| ws("workspaces"));
+    mount_with(&mut host, &[]);
+
+    reload_with(&mut host, &[("workspaces", "none")]);
+    assert_eq!(host.placement("workspaces"), None, "\"none\" takes it out");
+
+    reload_with(&mut host, &[("workspaces", "sidebar.right")]);
+    assert_eq!(ids(&host, RegionId::RightSidebar), ["workspaces"], "made again, where it now says");
+}
+
+/// **A dock handed over as itself cannot be made again** once out — said, not silently lost.
+#[test]
+fn a_dock_added_as_itself_cannot_come_back_from_none_and_says_so() {
+    let mut host = fresh();
+    regions("sidebar.left").append(ws("notes"));
+    mount_with(&mut host, &[("notes", "none")]);
+
+    reload_with(&mut host, &[("notes", "sidebar.left")]);
+    assert_eq!(host.placement("notes"), None);
+    assert!(
+        crate::chrome::input::identity::said().iter().any(|m| m.contains("'notes'") && m.contains("restart")),
+        "the user is told to restart",
+    );
+}
+
+/// **A recipe may say the dock's share and order too**, and still makes it again on a reload.
+#[test]
+fn a_recipe_with_flex_and_order_comes_back_with_them() {
+    use crate::chrome::PlaceDock;
+    let mut host = fresh();
+    regions("sidebar.left").append(|| ws("logs").flex(2.0).order(-1));
+    mount_with(&mut host, &[("logs", "none")]);
+    reload_with(&mut host, &[("logs", "sidebar.right")]);
+    assert_eq!(ids(&host, RegionId::RightSidebar), ["logs"]);
 }

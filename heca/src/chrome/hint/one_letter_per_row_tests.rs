@@ -77,7 +77,7 @@ fn pick_in_two_docks(lower_dock_scrolled: f32) {
     *chrome.workspaces.tree_mut() = eight_panes();
     chrome.workspaces.set_active_pane(Some(PaneId(5)));
 
-    // Two docks in one sidebar, as the app starts today.
+    // Two docks in one sidebar — a fixture: the app itself starts with one.
     let mut host = ChromeHost::new(chrome.events());
     host.register(Box::new(WorkspacesContainerProvider::new("workspaces")));
     host.register(Box::new(WorkspacesContainerProvider::new(

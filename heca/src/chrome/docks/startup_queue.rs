@@ -65,6 +65,7 @@ impl<T> StartupQueue<T> {
 
     /// A new host is starting: accept again. What was declared before it started is kept — that is
     /// what the new host is about to take.
+    #[cfg(test)]
     pub(crate) fn reopen(&self) {
         self.taken.set(false);
     }

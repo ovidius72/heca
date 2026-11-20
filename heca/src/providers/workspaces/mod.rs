@@ -71,8 +71,8 @@ impl WorkspacesContainerProvider {
     /// nothing you write can reach.
     ///
     /// ```ignore
-    /// regions("sidebar.left").append(Workspaces::new("workspaces"));
-    /// regions("sidebar.right").append(Workspaces::new("workspaces.right"));
+    /// regions("sidebar.left").append(|| Workspaces::new("workspaces"));
+    /// regions("sidebar.right").append(|| Workspaces::new("workspaces.right"));
     /// ```
     pub fn new(name: impl Into<String>) -> Self {
         Self {

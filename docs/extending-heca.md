@@ -43,7 +43,7 @@ fn main() {
 ```
 
 **Docks are contributed through Providers.** The canonical
-[Provider and startup region reference](widgets.md#providers-and-startup-regions) documents adding,
+[Provider and startup region reference](widgets.md#providers-and-regions) documents adding,
 removing and ordering them from native Heca/library code, plus the sandbox-plugin startup parity
 requirement and current availability.
 
@@ -97,7 +97,7 @@ described/sandbox path and its current availability.
 
 ## Providers and docks at startup
 
-The canonical [Provider and region API reference](widgets.md#providers-and-startup-regions) explains
+The canonical [Provider and region API reference](widgets.md#providers-and-regions) explains
 how to add, remove and order docks, the required `Provider` methods, placement identity, startup
 cutoff and native/plugin availability. Use that reference for the operation contract.
 
@@ -142,7 +142,7 @@ Dock and layer factories return ordinary components. For a dock, implement
 for a named layer use `demo.layer("details").view(|cx| widget)`. Neither needs author-side boxing,
 casts or storage conversions. The complete compiling program is
 [`extend_heca.rs`](../heca/examples/extend_heca.rs); the shared reference is
-[Providers and startup regions](widgets.md#providers-and-startup-regions).
+[Providers and regions](widgets.md#providers-and-regions).
 
 ## Terminal agent drivers
 
