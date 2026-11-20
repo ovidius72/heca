@@ -12,6 +12,96 @@ Code reusability and splitting principles guide how you break software into smal
 
 These are made over and over. **Violating any = redo.**
 
+### ⭐ THE SYNTAX — every widget and component is written like this
+
+Declarative and nested, in one expression: the shape of Flutter and SwiftUI, with DOM-shaped events.
+
+```rust
+Component::new()
+    .prop_a(..)                                    // its own typed properties, as builders
+    .prop_b(..)
+    .child(
+        Grid::new()
+            .template_row("auto 1fr")              // the arrangement is a track template
+            .child([header, body]),                // children in order, composed to any depth
+    )
+    .on_click(|ev| ev.dispatch(Intent::new("an_action")))   // behaviour lives on the widget
+```
+
+**Never:** find a child by its position (`children[0]`), write a style, a bound or a position by
+hand, rebuild a widget to change one of its properties, or put a number in the code. If what you
+need cannot be written in this shape, the library is missing a builder — propose it (⭐⭐ RULE
+ZERO); never work around it. Real examples: [`docs/layout.md` § The one rule](docs/layout.md),
+[`docs/widgets.md` → Grid](docs/widgets.md#grid).
+
+### ⭐ THE EVENTS — one way to listen, everywhere
+
+A state change is heard with one line, the same in heca's own components, in an extension and in a
+plugin (WASM included):
+
+```rust
+cx.on("pane.cwd.changed", |ev| …)        // a component or provider, in a window
+rooms.on("session.changed", |rooms, cx, ev| …)   // an extension's service, on the server
+// a plugin: the same on("name", …) through the event bridge (F003/T79)
+```
+
+`"*"` listens for every event. Names are dotted (`pane.status.changed`, `session.changed`). Where
+changes are rare and a listener wants them together, one event carries a `kind` saying what happened
+(`session.changed`: `created` · `renamed` · `terminated` · `restarted` · `deleted`) and the data a
+listener needs. Each event is raised from ONE place, and the scripts' stream (`heca rpc --events`)
+carries the same event. **Never** a signal, a polling loop, a dedicated trait method or a
+per-consumer callback in its place; a change nobody can listen to is not done. (Project decision
+f639e662; the contract is P054(F006)'s "Pane runtime state", section 0.1.)
+
+### ⭐ HOW TO BUILD A COMPONENT — the steps, every time
+
+The same steps heca-pro follows (its AGENTS.md, "How to build a component"). In order, every time:
+
+1. **Draw it first as grid areas** — the parts and where they sit, like CSS `grid-template-areas`.
+   A room member:
+
+   ```text
+   status  handle   program
+   .       details  details
+   ```
+
+2. **Build it with `Grid`** when it has more than one part, **`Flex`** for a row or column of like
+   things. Each part says its own area (`.area("handle")`); columns are tracks (`"auto 1fr auto"`).
+
+   ```rust
+   Grid::new()
+       .template_column("auto 1fr auto")
+       .template_area(["status handle program", ". details details"])
+       .gap(Spacing::Xs)
+       .child([dot.area("status"), name.area("handle"), program.area("program"), details.area("details")])
+   ```
+
+3. **The parts are the small widgets**: `Label`, `Icon`, `StatusDot`, `Badge`, `Button`, `Input`.
+   **Never use a ready-made composite as the layout** because it happens to show text — `ItemGroup`,
+   `Tag`, `Card`, `Select` are complete widgets with their own look. Use one only when it is exactly
+   the thing in the design, and say why.
+4. **Nothing written by hand.** Text size is a variant (`WidgetSize::Caption`), space is a theme step
+   (`Spacing::Xs`), colour comes from the theme. No background, alpha, radius, padding or pixel number
+   at the call site. A look two places need (the pane card) is a variant or builder in
+   `heca-grid-ui`, never a copy.
+5. **Look like the closest existing surface** and reuse its pieces — the workspaces dock for a dock
+   (`DockFrame` per group, `Badge` count), its pane row for a row.
+6. **See it running before calling it done.** A green test proves the words, not the look.
+
+### ⭐ heca-pro builds on heca — keep its API compatible, and it follows the same syntax
+
+heca-pro (the commercial edition, a separate repository) is built on top of heca through what
+feature F012 "Ready for heca-pro" delivered: heca as a library and its extension entry point, the
+server/client split and its wire protocol, sessions, the RPC line format, extension services and
+the widgets.
+
+- **That surface stays compatible.** A change that would break heca-pro's code or its connection to
+  a heca server — renaming or removing a public type, function or builder, changing an RPC line, a
+  wire message or an event's shape — is not made silently. Add the new form beside the old one, say
+  which is deprecated, and agree the removal with Antonio and heca-pro first.
+- **heca-pro follows the same syntax** (above): every widget and component it writes is declarative
+  and nested in the same shape, and its own `AGENTS.md` states the same rule.
+
 ### 0. THE PRE-FLIGHT — three answers and two rules, BEFORE the first line of code
 
 Not a mindset. Three questions with written answers, in the task or the PR body. No answer = you are
@@ -729,7 +819,7 @@ pub enum WmAction {
 }
 ```
 
-### Input Modes (`heca/src/app_state.rs`)
+### Input Modes (`heca/src/app_state/input_mode.rs`)
 
 ```rust
 pub enum InputMode {
@@ -1223,7 +1313,7 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/window/theme.rs
 
 ## heca-grid-ui — Grid UI Component Library
 
-> Widget catalog: [`docs/widgets.md`](docs/widgets.md). Outstanding work is in the planner. Developed on the **`heca-grid-ui`** branch.
+> Widget catalog: [`docs/widgets.md`](docs/widgets.md). Outstanding work is in the planner.
 
 `heca-grid-ui` is a **GPU-free, signal-driven, composable component library** that gives heca a *Tron/GridCN* visual identity (glow, corner brackets, scanlines, HUD typography). It is a *component framework*, not a theme.
 
@@ -1379,10 +1469,11 @@ Button::destructive("Delete")
   forwards one to its children.** If you are writing `bounds.contains(pos)` in a widget, stop.
 - **The keyboard routes by focus, exactly as the pointer routes by position.** The target of a
   `Key`, a `TextInput` or a `Widget` intent is the **deepest focused widget**: capture down its
-  ancestor chain, handlers and `on_event` back up. A **key or typed text stops at the owner** (one
-  key, one widget — the rule that stops the first row in a list eating an Enter meant for the
-  cursor); a **`Widget` intent enters the focused region's subtree**, because an intent is a
-  capability named out loud rather than a character aimed at whatever is typing. **Nothing focused,
+  ancestor chain, handlers and `on_event` back up — the DOM's walk. A **key or typed text never goes
+  down into the focused widget's children** (the browser does not either): it reaches the focused
+  widget and bubbles up through its ancestors, which is what stops the first row in a list eating an
+  Enter meant for the cursor. A **`Widget` intent also enters the focused region's subtree**, because
+  an intent is a capability named out loud rather than a character aimed at whatever is typing. **Nothing focused,
   nothing delivered.** The focus walk takes the **topmost** claim (children last-first, like
   hit-testing), because an open layer and the button clicked before it both carry the flag.
 - **A surface that wants keys holds focus**, and a caller wires nothing:
@@ -1506,7 +1597,7 @@ mistakes): `docs/widget-architecture.md` (same content, with rationale); `docs/p
 
 ### Creating new widgets / components (MANDATORY — read before adding ANY UI element)
 
-Any new visual or interactive element belongs in **`heca-grid-ui` as a proper widget** — **never** as ad-hoc inline composition in the app (`heca/src/chrome.rs`, sidebar, …) with hardcoded sizes/colors/alphas. **Plan the widget, build it in `heca-grid-ui`, integrate it into the catalog — then have the app compose it.** It must also follow **THE WIDGET ARCHITECTURE** above — composed content, `ViewNode`-realizable, refactor-toward-composition when touched.
+Any new visual or interactive element belongs in **`heca-grid-ui` as a proper widget** — **never** as ad-hoc inline composition in the app (`heca/src/chrome/`, a provider, …) with hardcoded sizes/colors/alphas. **Plan the widget, build it in `heca-grid-ui`, integrate it into the catalog — then have the app compose it.** It must also follow **THE WIDGET ARCHITECTURE** above — composed content, `ViewNode`-realizable, refactor-toward-composition when touched.
 
 A new widget **MUST**:
 
@@ -1540,9 +1631,9 @@ is incomplete — and the task is not done — unless it documents:
 Keep the two in sync (cross-reference them). This is in addition to the showcase-demo requirement
 above. A widget landed with thin docs, or documented for only one audience, is unfinished work.
 
-The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widgets and project app state into them** — it must not invent visual primitives or hardcode styling inline.
+The app side (`heca/src/chrome/`, the providers) must **only compose existing widgets and project app state into them** — it must not invent visual primitives or hardcode styling inline.
 
-**Why this is non-negotiable (a real mistake, and it shipped):** the sidebar column "marker bar" + pane cards were built as inline `Flex`/`Surface` composition in `heca/src/chrome.rs` with hardcoded widths/alphas/colors (e.g. `Surface::new().width(Length::Px(3.0))…with_alpha(90)`, `theme.accent.with_alpha(28)`). Result: they do **not** inherit `Base` props, do **not** read font/theme/colors from config, **ignore** the `[appearance]` transparency, and have **no** consistent active/inactive border/width/radius — silently breaking theming, font changes, and transparency, and bloating the codebase with un-reusable, untested one-offs. Always build the widget properly in `heca-grid-ui` instead. The ad-hoc `.frameless()` added to `DockFrame` is the kind of unplanned escape-hatch to avoid; widget options must be deliberate + theme-driven.
+**Why this is non-negotiable (a real mistake, and it shipped):** the sidebar column "marker bar" + pane cards were built as inline `Flex`/`Surface` composition in the app's chrome with hardcoded widths/alphas/colors (e.g. `Surface::new().width(Length::Px(3.0))…with_alpha(90)`, `theme.accent.with_alpha(28)`). Result: they do **not** inherit `Base` props, do **not** read font/theme/colors from config, **ignore** the `[appearance]` transparency, and have **no** consistent active/inactive border/width/radius — silently breaking theming, font changes, and transparency, and bloating the codebase with un-reusable, untested one-offs. Always build the widget properly in `heca-grid-ui` instead. The ad-hoc `.frameless()` added to `DockFrame` is the kind of unplanned escape-hatch to avoid; widget options must be deliberate + theme-driven.
 
 ### Using the widgets
 
@@ -1573,102 +1664,48 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 
 ## Project Structure
 
+One crate per job. The folders below are the ones a change usually lands in; each has a `mod.rs`
+that says what it holds.
+
 ```
-myvim/
-├── AGENTS.md              ← This file
-├── README.md              ← Landing page: what heca is, install, first run, link to docs/
-├── config.default.toml        ← Default settings/appearance/font/program (embedded, single source)
-├── keybindings.default.toml   ← Default keybindings (embedded, single source)
-├── Cargo.toml             ← Workspace root
-├── heca/                  ← Main binary (event loop, app state, rendering)
-│   ├── src/
-│   │   ├── main.rs        ← HecaApp, ApplicationHandler, render(), registry setup
-│   │   ├── app_state/     ← AppState (state.rs), InputMode (input_mode.rs), MouseState, the layout door (layout_door.rs)
-│   │   ├── input/         ← action.rs (WmAction + its derived WmActionKind), names.rs (action_from_name), build.rs (build_action), vocabulary.rs (argument word lists)
-│   │   ├── keymap.rs      ← KeymapRegistry, KeyCombo, event_combo_matches()
-│   │   ├── args.rs        ← The argument model (ArgDescriptor, ArgSpec, check_args) — actions and the CLI share it
-│   │   ├── actions/       ← registry.rs (what runs), catalog.rs (what exists), confirm.rs, builtins/ (one file per category)
-│   │   ├── handlers/      ← All action handlers, one file per thing they act on (navigation, move_swap, docks, …)
-│   │   ├── sidebar.rs     ← Current workspace-tree container façade (`model`, `hit_test`, `render`, `tests`); future built-in `WorkspacesContainer`
-│   │   └── chrome.rs      ← Current chrome config; future pluggable chrome host will generalize left/right/top/bottom regions
-│   └── Cargo.toml
-├── heca-core/             ← Layout engine + backends (no GPU code)
-│   ├── src/
-│   │   ├── layout/
-│   │   │   ├── mod.rs     ← Module re-exports
-│   │   │   ├── types.rs   ← Shared geometry types (Point, Size, Rectangle, ColumnWidth, etc.)
-│   │   │   ├── animation.rs  ← Animation, SwipeTracker, easing functions
-│   │   │   ├── view_offset.rs  ← ViewOffset (Static/Animation/Gesture)
-│   │   │   ├── column.rs  ← Column, Pane, height distribution
-│   │   │   ├── scrolling/    ← ScrollingSpace, focus, add/remove, view positions
-│   │   │   ├── workspace/    ← Workspace, FloatingPane
-│   │   │   └── session.rs ← Session, WorkspaceSwitch
-│   │   ├── backend/
-│   │   │   ├── mod.rs     ← PaneBackend trait, BackendRenderData
-│   │   │   ├── terminal/    ← TerminalBackend (PTY + terminal emulation; stack: docs/architecture.md)
-│   │   │   └── fake.rs    ← FakeBackend (no PTY, for layout testing)
-│   │   ├── pane.rs        ← DEPRECATED old BSP tree code (kept for reference)
-│   │   └── types.rs       ← Old Rect type (for BSP legacy)
-│   └── Cargo.toml
-├── heca-renderer/          ← GPU rendering (wgpu)
-│   ├── src/
-│   │   ├── lib.rs         ← Renderer init
-│   │   ├── primitive.rs   ← PrimitiveRenderer (rects, borders)
-│   │   └── text.rs        ← TextRenderer (cosmic-text atlas)
-│   └── Cargo.toml
-├── heca-config/            ← Configuration loading
-│   ├── src/
-│   │   ├── lib.rs         ← Module exports
-│   │   └── theme.rs       ← Config, AppConfig, Theme, keybinding defaults
-│   └── Cargo.toml
-├── heca-grid-ui/                ← Grid UI component library (GPU-free, signals + taffy) [heca-grid-ui branch]
-│   ├── src/
-│   │   ├── reactive/      ← Signal/Memo/Effect facade over floem_reactive
-│   │   ├── scene.rs       ← Scene + DrawCommand display list (visual vocabulary)
-│   │   ├── style.rs       ← Style (taffy::Style wrapper) + Theme tokens + builders
-│   │   ├── component/     ← Component trait, Base struct, event dispatch, paint walk, PaintCx
-│   │   ├── layout.rs      ← taffy tree sync + compute → Base.bounds
-│   │   └── widgets/       ← Flex, Grid, Stack, Label, Button, Card, Hud, Gauge,
-│   │                        CornerBrackets, StatusBar, Sidebar, Pane, ...
-│   └── Cargo.toml
-├── docs/                   ← All documentation; docs/README.md is the index
-│   └── niri-wiki/          ← NIRI documentation (structured wiki reference)
-├── .planner/               ← Planner state: features, phases, tasks, decisions (`/planner load`)
-├── .agents/
-│   └── skills/
-│       └── niri/SKILL.md   ← NIRI knowledge skill
-└── review.md               ← Previous code review
+heca/                          ← workspace root
+├── AGENTS.md                  ← this file
+├── README.md                  ← landing page: what heca is, install, first run, link to docs/
+├── config.default.toml        ← default settings/appearance/font/program (embedded, single source)
+├── keybindings.default.toml   ← default keybindings (embedded, single source)
+├── scripts/lint-changed.sh    ← clippy / test only the crates you changed
+├── heca/                      ← the app: event loop, AppState, actions, chrome, server/client
+│   └── src/
+│       ├── app/               ← the app's host wiring (registry setup: app/registry/actions/)
+│       ├── app_state/         ← AppState (state.rs), InputMode (input_mode.rs), the layout door (layout_door.rs)
+│       ├── input/             ← WmAction (action.rs), action_from_name (names.rs), build_action (build/)
+│       ├── keymap.rs          ← KeymapRegistry, KeyCombo
+│       ├── actions/           ← registry/ (what runs), catalog/ (what exists), builtins/ (one file per category)
+│       ├── handlers/          ← action handlers, one file per thing they act on
+│       ├── chrome/            ← docks/, input/, panes/, surfaces/, window/, state/, hint/ (see § 0b)
+│       ├── components/        ← compositions shared by a second surface
+│       └── providers/         ← what a dock shows (the workspaces tree, …)
+├── heca-core/                 ← layout engine + backends, no GPU (layout/, backend/, runtime/, agent/)
+├── heca-renderer/             ← GPU rendering with wgpu; the showcase is in examples/showcase/
+├── heca-config/               ← config loading (settings/, appearance/, keys.rs, font.rs, loader/)
+├── heca-theme/                ← themes (theme/, loader.rs, themes/*.toml)
+├── heca-grid-ui/              ← the widget library: GPU-free, signals + taffy (widgets/, component/, …)
+├── heca-grid-ui-macros/       ← derive macros for heca-grid-ui
+├── heca-view/                 ← ViewNode: a widget tree described as data
+├── heca-view-realize/         ← realize(): ViewNode → live widgets
+├── docs/                      ← all documentation; docs/README.md is the index (niri-wiki/ inside)
+└── .planner/                  ← planner state (`/planner load`)
 ```
 
 ---
 
 ## Available Skills
 
-### `niri` (`.agents/skills/niri/SKILL.md`)
+### niri reference (`docs/niri-wiki/`)
 
-**Activate when:** Working on layout engine, ViewOffset, scrolling, workspaces, overview mode, or any feature inspired by niri's scrollable-tiling model.
-
-Contains:
-
-- Complete niri architecture reference (ScrollingSpace, Column, ViewOffset, Workspace)
-- Scrolling model (horizontal continuous + snap, vertical discrete)
-- Column width management (no normalization)
-- Workspace system (dynamic, named, addressing)
-- Animation types (spring vs easing) and parameters
-- Full action reference for keybindings
-- Window rules, layer rules, output config
-- IPC protocol
-- Fractional layout (physical pixel alignment)
-- Animation timing (LazyClock) and redraw loop (RedrawState)
-- Source file references into niri's actual codebase
-
-### `pi-intercom` (for multi-session coordination)
-
-Use when delegating tasks to other pi sessions.
-
-### `pi-subagents` (for subagent workflows)
-
-Use for multi-step analysis, advisory review, or parallel implementation tasks.
+**Read when:** working on the layout engine, `ViewOffset`, scrolling, workspaces, the exposé, or any
+feature inspired by niri's scrollable-tiling model. Start at `docs/niri-wiki/README.md`; the layout
+internals are in `docs/niri-wiki/architecture.md`.
 
 ---
 
@@ -1791,6 +1828,12 @@ Behavior contract for float/unfloat:
 
 ---
 
+## Release
+
+A new version is published **only** by pushing a tag `vX.Y.Z` equal to the workspace version in
+`Cargo.toml`; nothing else makes a release. The workflow and the steps are in
+[`docs/development.md` § Releasing](docs/development.md).
+
 ## Commands
 
 ```bash
@@ -1817,15 +1860,12 @@ cargo test -p heca-renderer
 ./scripts/lint-changed.sh clippy main  # diff against a different base
 DRY_RUN=1 ./scripts/lint-changed.sh    # print the crate list, run nothing
 
-# Full workspace lint -- only before opening a PR, not in the edit loop.
-cargo clippy --workspace --all-targets --all-features
-
 # Docs -- before opening a PR: a broken or private doc link fails the build. Private items too,
 # so a link in a private item's comment is checked like any other.
 cargo doc --workspace --no-deps --document-private-items
 
-# Fix auto-fixable issues
-cargo clippy --fix --workspace --all-targets --all-features
+# Fix auto-fixable issues -- scoped to the crate you touched
+cargo clippy --fix -p <crate> --all-targets --all-features
 
 # Watch (auto-rebuild on changes)
 cargo watch -x check
@@ -1890,7 +1930,6 @@ See `niri-compatibility-review.md` for full details. Key issues:
 ## Key NIRI References
 
 - `docs/niri-wiki/` — Structured NIRI wiki documentation (architecture, config, usage, development)
-- `.agents/skills/niri/SKILL.md` — NIRI knowledge skill with source references
 - `docs/niri-wiki/architecture.md` — Full architecture reference (layout engine internals, data flow)
 - `docs/niri-wiki/04-development/design-principles.md` — NIRI's 5 design principles
 - `docs/niri-wiki/04-development/fractional-layout.md` — Physical pixel alignment strategy
@@ -1938,9 +1977,9 @@ Each task is done in its **own git worktree**, in its own folder, branched from 
 ### When Reading Code
 
 1. Read `docs/architecture.md` for context first, and load the planner (`/planner load`) for what is being worked on.
-2. Read `.agents/skills/niri/SKILL.md` when working on layout features.
+2. Read `docs/niri-wiki/` when working on layout features.
 3. Check `heca/src/input/` and `heca-config/src/theme.rs` for keybinding concerns.
-4. Check `heca/src/main.rs` for registry setup and bypasses.
+4. Check `heca/src/app/registry/actions/` for registry setup and bypasses.
 5. Run `cargo check` before and after changes — the project must compile.
 
 ### When Writing Code
@@ -1950,9 +1989,9 @@ Each task is done in its **own git worktree**, in its own folder, branched from 
 3. **Every WM action goes through `registry.execute()`** — no direct function calls in event handlers.
 4. Add new keybindings to both `keybindings.default.toml` (defaults) and `heca/src/input/` (the action enum and its name / argument builders); every keybinding and theme variable must be configurable from `config.toml`/`keybindings.toml`.
 5. Test prefix mode: verify both plain key and Ctrl-modified key bindings work.
-6. Do NOT remove or refactor layout code without consulting the NIRI skill.
+6. Do NOT remove or refactor layout code without consulting `docs/niri-wiki/`.
 7. **NEVER add `#[allow(dead_code)]` without a clear reason.** Remove dead code instead. If a lint must be suppressed, add a `//` comment explaining why right above the attribute.
-8. **After every task, run `cargo clippy --workspace --all-targets --all-features` and fix all warnings.** The codebase must stay clippy-clean. Use `cargo clippy --fix` for auto-fixable issues.
+8. **After every task, run `./scripts/lint-changed.sh` (clippy on the crates you touched) and `./scripts/lint-changed.sh test`, and fix all warnings.** Never lint every crate: it costs 20+ minutes and `.claude/hooks/cargo-scope.sh` refuses it (see § Commands).
 9. **Load `/Users/antonio/.agents/skills/rust/SKILL.md` and run a formal review against its rules before EVERY commit.** This is non-negotiable. Then run clippy, then commit. Never skip this.
 
 ## graphify

@@ -14,6 +14,7 @@ use std::io;
 
 mod frame;
 mod queue;
+mod rows;
 mod wait;
 pub(crate) use wait::await_message;
 pub(crate) mod terminal;
@@ -109,7 +110,9 @@ pub(crate) enum ServerMsg {
     Refused(Refusal),
     /// Process output changed, or a process emitted a client-side effect.
     BackendEffects(super::BackendPoll),
-    Terminal(Box<terminal::TerminalFrame>),
+    /// A terminal's screen. Shared, so every window it goes to — and the socket writer that keeps
+    /// it as the screen to compare the next one with — holds the same one, never a copy.
+    Terminal(std::sync::Arc<terminal::TerminalFrame>),
     Content { content: SessionContent },
     /// The notifications on show, as plain serializable data — the window builds its own toasts
     /// from them. Sent on attach and whenever the visible set changes; a newer one replaces a

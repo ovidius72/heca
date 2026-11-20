@@ -1,11 +1,15 @@
 {
   "name": "Heca",
-  "goal": "Consolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.\nThe gates before any code\n- §0 pre-flight, three written answers, per thing touched: which existing widget does this → if none, which planner task covers it (quote the id) → if neither, it is a proposal, not a commit.\n- §0b widget vs component: if it can be built inside heca-grid-ui, it belongs there. A component only leaves the library because it binds an app concept.\n- §0c the event system is DOM-shaped — capture → target → bubble, keys do bubble, a widget never hit-tests and never forwards, nothing focused means nothing delivered, and a cursor inside a container is not focus. Reach for a handler before an intent, a policy arm or a registry.\n- ⭐⭐ Rule Zero: write the line a plugin author would type. A registry, an id or a crate-private type means the API is missing. HintTargetRegistry, HintTargets, HintTargetId, Base::hint_target, named_press are gone and must not come back.",
+  "goal": "MANDATORY: read AGENTS.md in full.\nConsolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.\nThe gates before any code\n- §0 pre-flight, three written answers, per thing touched: which existing widget does this → if none, which planner task covers it (quote the id) → if neither, it is a proposal, not a commit.\n- §0b widget vs component: if it can be built inside heca-grid-ui, it belongs there. A component only leaves the library because it binds an app concept.\n- §0c the event system is DOM-shaped — capture → target → bubble, keys do bubble, a widget never hit-tests and never forwards, nothing focused means nothing delivered, and a cursor inside a container is not focus. Reach for a handler before an intent, a policy arm or a registry.\n- ⭐⭐ Rule Zero: write the line a plugin author would type. A registry, an id or a crate-private type means the API is missing. HintTargetRegistry, HintTargets, HintTargetId, Base::hint_target, named_press are gone and must not come back.",
   "description": "Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.",
   "projectGuidelines": {
     "content": "- do not fix at call site. Always try to fix at library (widget/ component) side.\n- use css like syntax for laying down components: Flex, Grid, Surface etc...\n- prefer composition and reusability. DO NOT HARDCODE anything.\n\n## Worktree Lifecycle (Antonio, 2026-10-27)\n\n- From the next coding activity, start every new task in its own new worktree and branch from the latest synchronized main. Name its folder heca-feat-[num]. Do not reuse another task's worktree or edit application code/assets directly in main.\n- Finish implementation and verification, mark the task DONE with durable completion evidence, and commit/push the canonical planner updates on main before opening the code PR toward main. After the merge is verified, the same agent removes its worktree, folder and merged branch. Do not leave cleanup or an unlanded task to Antonio or another agent.\n- Verify cleanliness, merged content and active use before removing anything. Preserve all other agents' work and shared dirty changes.\n- Leave the current worktrees as they are; do not retroactively rename or remove them to enforce the new naming rule.\n- The canonical shared planner remains /Users/antonio/projects/heca/.planner; use planner tools there rather than independent worktree copies. Commit and push its updates from main so every developer/agent receives the same task, phase, feature and decision state by pull. Never replace it with a stale worktree planner or graphify copy.",
     "updatedAt": "2026-11-04T09:37:22.968Z",
     "sessionInfo": [
+      {
+        "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
+        "createdAt": "2026-11-19T10:20:39.918Z"
+      },
       {
         "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
         "createdAt": "2026-11-17T12:49:30.127Z"
@@ -65,10 +69,6 @@
       {
         "sessionId": "mcp-process:917600c2-dc2f-404b-8ca8-080a73ec15ff",
         "createdAt": "2026-10-26T14:36:39.457Z"
-      },
-      {
-        "sessionId": "mcp-process:b4ad2847-a5ef-4090-b381-221b87ad5353",
-        "createdAt": "2026-10-26T14:09:51.052Z"
       }
     ]
   },
@@ -90,7 +90,7 @@
   ],
   "tools": [],
   "contentLanguage": "English",
-  "chatLanguage": "English",
+  "chatLanguage": "Italian",
   "workflowRules": {
     "beforePhaseStart": [],
     "beforeTaskStart": [],
@@ -152,6 +152,46 @@
       "rationale": "AGENTS.md Rule Zero is the nearest text and does not state this rule. It is stated nowhere else now that the old backlog file is only a historical archive. Open work that applies it: P035(F003)/T506 and P085(F003)/T357.",
       "implementationNotes": "Add one paragraph under Rule Zero in AGENTS.md during the T561 doc rewrite. Related: the pane runtime state decision on P054(F006) (one mutation point, signals plus event bus). Related idea I001 (status_note is the anti-pattern: a host-private string on AppState).",
       "acceptedAt": "2026-11-16T15:09:44.847Z"
+    },
+    {
+      "id": "05a2ed0c-c57e-4784-b789-354f114ca720",
+      "title": "The syntax: every widget and component is declarative and nested — Component::new().props(..).child(Grid/Flex::new().child([a, b]).template(..))",
+      "decision": "Every widget and component in heca (library, app, plugins) is written in one declarative, nested expression, Flutter/SwiftUI-shaped with DOM-shaped events: `Component::new().prop_a(..).child(Grid::new().template_row(\"auto 1fr\").child([header, body])).on_click(|ev| ev.dispatch(Intent::new(\"an_action\")))`. Never: find a child by position (children[0]), write a style/bound/position by hand, rebuild a widget to change one property, or put a number in the code. If something cannot be written in this shape, the library is missing a builder — propose it (RULE ZERO), never work around it.",
+      "rationale": "Antonio, 2026-11-18, after a review showed much of the code (the command palette, the terminal component, ~20 library widgets) built imperatively: \"la sintassi deve essere: Component::new().props(...).child(Flex.new().child([Comp1, comp2]).template....) … Metti in rilievo quella sintassi dove serve altrimenti nessuno la segue.\" The examples already existed (docs/layout.md:35, docs/widgets.md:2342) but were not where every reader starts.",
+      "implementationNotes": "The block is written at the top of CLAUDE.md (loaded in every session), at the start of AGENTS.md § 0 and at the top of docs/widgets.md (branch docs/declarative-syntax, worktree heca-feat-syntax). For Button/IconButton `.on_click(|ev| ev.dispatch(..))` works fully only after P087(F011)/T565 (one click path). A declarative child list bound to data (ForEach-like) is not in the library yet; Keyed / on_props / reconcile_keyed are the low-level mechanisms underneath.",
+      "acceptedAt": "2026-11-18T18:15:06.456Z"
+    },
+    {
+      "id": "15ec67fc-98f3-4af6-9c0a-ed6b2ab8bfac",
+      "title": "heca's public surface used by heca-pro stays compatible; heca-pro follows the same declarative syntax",
+      "decision": "The surface F012 \"Ready for heca-pro\" delivered (heca as a library and its extension entry point, server/client split and wire protocol, sessions, the RPC line format, extension services, the widgets) stays API-compatible: no silent breaking change — add the new form beside the old, mark the old deprecated, and agree the removal with Antonio and heca-pro. heca-pro itself follows the same declarative syntax (decision 05a2ed0c) and states the same rule in its own AGENTS.md.",
+      "rationale": "Antonio, 2026-11-18: \"La feature ready for heca pro deve mantenere la compatibilità delle api. Heca pro stesso dovrà aderire alla sintassi e riportare nel suo agent.md la stessa regola sulla sintassi del codice.\"",
+      "implementationNotes": "Written into heca's AGENTS.md § 0 (branch docs/declarative-syntax, worktree heca-feat-syntax, next to THE SYNTAX block). heca-pro's own AGENTS.md (/Users/antonio/projects/heca-pro/AGENTS.md) still has to receive the syntax rule.",
+      "acceptedAt": "2026-11-18T21:43:31.125Z"
+    },
+    {
+      "id": "14fb2bc2-5b9e-4c89-b156-ed48829187d5",
+      "title": "Release installers are built with cargo-packager; zips by a workflow step",
+      "decision": "heca's release installers (.dmg/.app on macOS, .deb + AppImage on Linux, .msi on Windows) are produced by cargo-packager (crabnebula-dev). The zip / tar.gz archives are made by a step of the release workflow. cargo-dist was not chosen.",
+      "rationale": "Antonio approved 2026-11-18. cargo-packager covers every installer asked for with one tool and one config (and also emits a pacman PKGBUILD, reusable for AUR, idea I025). cargo-dist covers zips and msi but has no dmg (future), no deb and no AppImage (axodotdev cargo-dist book, installers page).",
+      "implementationNotes": "Workflow and configuration in P110(F010)/T566. Whether each format must be built on its own OS is to be verified in the v0.1.0-rc1 test release.",
+      "acceptedAt": "2026-11-18T22:35:06.653Z"
+    },
+    {
+      "id": "f639e662-e51c-480b-8fcc-75a71b7887bc",
+      "title": "THE EVENTS: one way to listen, everywhere — on(\"name\", |ev| …)",
+      "decision": "Every listener in heca — heca's own components and providers, an extension (native, including its server services) and a plugin (WASM included) — subscribes to a state change with the same line: `on(\"dotted.name\", …)`, plus `\"*\"` for every event. Names are dotted, `<subject>.<what>.changed` style (pane.cwd.changed, chrome.container.focus.changed, session.changed). One event per subject when the changes are rare and a listener wants them together; it carries a `kind` field naming what happened (session.changed: created | renamed | terminated | restarted | deleted) and the data a listener needs, so it does not have to read state back. Never a signal, a polling loop, a dedicated trait method or a per-consumer callback in its place. Each event is emitted from ONE mutation point, and the same event reaches the scripts' stream (`heca rpc --events`). Handler shape follows the place it is declared: a window component `cx.on(name, |ev| …)`; a server service `service.on(name, |service, cx, ev| …)`, handed the service itself like the service's actions and policies.",
+      "rationale": "Antonio, 2026-11-19: \"deve essere chiaro che anche nei plugins sarà questa la sintassi. È evidenziato?\" The contract already existed — P054(F006) decision \"Pane runtime state … (locked 2026-06-18)\", section 0.1: a typed event bus so plugins and providers react with app.on(name, handler), because plugins cannot subscribe to internal signals — but it was written only in that decision and deep in docs/chrome-and-ui.md (244, 287, 780, 1182, 1236), so an agent designing the server-side session event proposed a new trait method instead. On a single event versus one per case, Antonio: one event is fine only with a `kind` field, so a listener can skip what it does not need.",
+      "implementationNotes": "Client side exists: ChromeCtx::on (heca/src/providers/mod.rs:391) over app.on; names in heca/src/chrome/state/events.rs:235. Server side done in P111(F012)/T568: ServiceRegistration::on (heca/src/entry/service/mod.rs), ServerEvent/SessionEvent (heca/src/entry/service/sessions.rs), raised only by ServerLoop::announce_session (heca/src/server/run/mod.rs), also StreamEvent::SessionChanged (heca/src/server/events.rs). `folder_changed` dropped from the kinds: no command changes a session's folder today; add it with the command that does. Plugins: F003/T79 (event bus bridge to WASM) must expose exactly this line. Highlighted as \"⭐ THE EVENTS\" in CLAUDE.md, AGENTS.md § 0, docs/plugins.md and docs/extending-heca.md (T568).",
+      "acceptedAt": "2026-11-19T11:44:43.111Z"
+    },
+    {
+      "id": "06ac6e43-256e-461c-86bf-960e9beb0e8a",
+      "title": "The window's widget tree is laid out every frame; skipping layout when nothing changed is not done",
+      "decision": "heca-grid-ui keeps laying out the whole window tree on every frame (heca/src/chrome/window/scene/mod.rs paint_chrome_root → LayoutEngine::compute). A \"layout only when something asked\" pass was studied in P110(F010)/T572 (point D) and dropped with Antonio on 2026-11-19.",
+      "rationale": "Measured with macOS `sample` under a heavy load: layout is ~6% of the window's main thread, and the window is GPU-bound (most time waits in nextDrawable), so the gain is small. Skipping safely needs every layout-affecting change to announce itself. Signals read while a widget is measured can be tracked once in the engine (layout/build.rs remeasure/taffy_style/measure_text), but many changes bypass signals: ~210 direct assignments to style.layout in heca-grid-ui (+13 in heca), ~90 places that push/remove/replace children, and Label text changes do not mark needs_layout today (layout every frame is what keeps them right). Two ways were weighed: make each of those places announce the change (a rule every author must remember — rejected), or compare every widget's style and measure inputs with the previous frame (generic, but costs a large part of the layout itself, leaving perhaps half of the 6%). Neither is worth the risk of stale text and sizes that tests cannot see. heca-pro asked nothing about it (checked the planner).",
+      "implementationNotes": "If it is ever revisited: make Base's needs_layout start true for a new widget, track signal reads around the measure block in layout/build.rs, and compare style.layout + child count + measure_text/intrinsic_size per node for everything else; measure the compare walk against LayoutEngine::compute before switching. Layout spikes of ~19 ms come from full chrome rebuilds, which need a layout anyway.",
+      "acceptedAt": "2026-11-19T20:49:05.855Z"
     }
   ],
   "nextFeatureNumber": 12,

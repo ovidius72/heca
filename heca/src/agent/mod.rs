@@ -38,6 +38,19 @@ pub fn integrations_in(
     integration::Integrations::new(known(config), context, config_file)
 }
 
+/// **The icon heca draws for the agent driver `id`** — `"claude"`, `"codex"`, `"pi"`, `"opencode"`, or
+/// an extension's driver (`"<extension>.<id>"`) — whether or not the user has switched its
+/// integration on. The user's own icon (`[settings.agents.programs.<id>] icon`) wins over the
+/// driver's, as everywhere heca draws it. `None` for an id heca does not know, or a driver with no
+/// icon: show heca's generic terminal glyph then, as the agent line does.
+///
+/// ```ignore
+/// let icon = heca::agent::icon(&cx.config().config.settings.agents, "claude");
+/// ```
+pub fn icon(config: &heca_config::settings::AgentsConfig, id: &str) -> Option<AgentIcon> {
+    known(config).driver(id).and_then(|driver| driver.icon())
+}
+
 /// **Every driver heca knows** — built in and declared by an extension — whether or not the user has
 /// switched it on. For saying what a program *is* (and installing its integration), never for
 /// reporting: only [`options`]'s drivers report.

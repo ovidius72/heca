@@ -8,8 +8,6 @@ use heca_core::backend::{
     FakeBackend, PaneBackend, ShellIntegrationAssets, TerminalBackend, TerminalBackendOptions,
     TerminalPaletteDefaults,
 };
-use std::fs;
-use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use crate::app::backend_store::{Program, SpawnError, TerminalSpec};
@@ -18,9 +16,6 @@ use heca_config::theme::AppConfig;
 use heca_core::layout::Size;
 
 pub(crate) const FALLBACK_TERMINAL_GRID: (usize, usize) = (80, 24);
-const BASH_SNIPPET: &str = include_str!("../../assets/shell-integration/bash_init.sh");
-const FISH_SNIPPET: &str = include_str!("../../assets/shell-integration/fish_init.fish");
-const ZSH_RC_SNIPPET: &str = include_str!("../../assets/shell-integration/zsh/.zshrc");
 
 /// **The grid a terminal's box will hold**, worked out by the one rule that fits cells to a box
 /// (`Grid::fit`) so the size a process starts with is the size the terminal later reports. Until the
@@ -266,29 +261,7 @@ fn materialize_shell_integration_assets() -> Result<ShellIntegrationAssets, Stri
     let root = heca_config::loader::config_dir()
         .join("runtime")
         .join("shell-integration");
-    let zsh_dir = root.join("zsh");
-    fs::create_dir_all(&zsh_dir).map_err(|err| err.to_string())?;
-
-    let bash_init = root.join("bash_init.sh");
-    let fish_init = root.join("fish_init.fish");
-    let zsh_rc = zsh_dir.join(".zshrc");
-
-    write_if_changed(&bash_init, BASH_SNIPPET).map_err(|err| err.to_string())?;
-    write_if_changed(&fish_init, FISH_SNIPPET).map_err(|err| err.to_string())?;
-    write_if_changed(&zsh_rc, ZSH_RC_SNIPPET).map_err(|err| err.to_string())?;
-
-    Ok(ShellIntegrationAssets {
-        bash_init,
-        fish_init,
-        zsh_zdotdir: zsh_dir,
-    })
-}
-
-fn write_if_changed(path: &Path, content: &str) -> std::io::Result<()> {
-    if fs::read_to_string(path).ok().as_deref() == Some(content) {
-        return Ok(());
-    }
-    fs::write(path, content)
+    ShellIntegrationAssets::write_to(&root).map_err(|err| err.to_string())
 }
 
 #[cfg(test)]

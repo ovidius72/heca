@@ -34,9 +34,15 @@ impl IntoComponent for crate::WidgetModel {
 /// This replaced a `child` / `children` pair. Two names for one idea is the shape this codebase
 /// treats as a defect: the tests exercise one, the caller reaches for whichever name they saw
 /// first, and the two drift.
-pub trait IntoChildren {
+pub trait IntoChildren: Sized {
     /// The owned subtrees.
     fn into_children(self) -> Vec<crate::WidgetModel>;
+
+    /// **Put them in `base`** — what [`Parent::child`] does. A fixed set is appended; a list that
+    /// follows a value ([`BoundChildren`](super::BoundChildren)) is kept in step with it.
+    fn attach(self, base: &mut crate::component::Base) {
+        base.children.extend(self.into_children());
+    }
 }
 
 impl<C: IntoComponent> IntoChildren for C {
@@ -75,9 +81,10 @@ pub trait Parent: Component + Sized {
     /// Flex::column().child(header).child(body)
     /// Flex::column().child([header, body])
     /// DockFrame::new(name).child(ws.columns.iter().map(build).collect::<Vec<_>>())
+    /// Flex::column().child(rooms.map(RoomRow::new))   // children that follow a value
     /// ```
     fn child(mut self, c: impl IntoChildren) -> Self {
-        self.base_mut().children.extend(c.into_children());
+        c.attach(self.base_mut());
         self
     }
 }

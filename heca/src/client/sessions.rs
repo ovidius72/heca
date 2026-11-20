@@ -34,7 +34,7 @@ impl ClientState {
     /// An attach is a projection boundary. Old pane ids and outboxes must not reach the new one.
     pub(super) fn reset_projection(&mut self) {
         let (outbox, requests) =
-            outbox::channel(self.connection.queue_capacity.get(), self.wake.clone());
+            outbox::channel(self.wake.clone());
         self.outbox = outbox;
         self.requests = requests;
         self.pending.clear();

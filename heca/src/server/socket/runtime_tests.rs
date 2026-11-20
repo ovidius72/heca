@@ -72,6 +72,41 @@ fn a_window_attaches_over_the_socket() {
     client.send(ClientMsg::Detach).unwrap();
 }
 
+/// A window of another version is refused with an answer it can read, and the server keeps serving.
+#[test]
+fn a_window_of_another_version_is_refused_and_the_server_keeps_serving() {
+    let served = Served::new();
+    let mut old = UnixStream::connect(&served.address).unwrap();
+    old.write_all(b"@heca-attach 1\n").unwrap();
+    old.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut answer = String::new();
+    BufReader::new(old).read_line(&mut answer).unwrap();
+    assert_eq!(answer, "@heca-attach refused 2\n");
+    assert!(request_to(&served.address, "no_such_action").unwrap().starts_with("error:"));
+}
+
+/// A server that does not answer the attach line with "ok" — an older one takes it for a script line
+/// — stops the window with a message saying what to do.
+#[cfg(unix)]
+#[test]
+fn a_server_of_another_version_stops_the_window_with_what_to_do() {
+    let folder = tempfile::tempdir().unwrap();
+    let address = folder.path().join("old.sock");
+    let listener = std::os::unix::net::UnixListener::bind(&address).unwrap();
+    let older = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut line = String::new();
+        BufReader::new(stream.try_clone().unwrap()).read_line(&mut line).unwrap();
+        stream.write_all(b"error: unknown action\n").unwrap();
+    });
+    let wake = ServerWaker::new(|| {});
+    let error = crate::server::wire::socket::SocketClient::connect(&address, ConnectionConfig::default(), wake)
+        .map(|_| ()).unwrap_err();
+    older.join().unwrap();
+    assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
+    assert!(error.to_string().contains("heca --kill-server"), "got: {error}");
+}
+
 /// `heca rpc --events`: the preface subscribes, and the stream ends when the server does.
 #[test]
 fn an_events_subscriber_is_kept_until_the_server_ends() {

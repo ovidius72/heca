@@ -2,9 +2,9 @@
 //! kept open while a deferred answer is owed, and told to the service that handed it in when it
 //! ends. The book of one service is [`Requests`]; this is what joins the books to the services.
 
-use crate::entry::service::{RequestOutcome, ServiceTicket};
+use crate::entry::service::{RequestOutcome, ServiceTicket, SessionEntry, Sessions};
 
-use super::{Call, Handle, Owed, Queued, Requests, ServiceHost, SessionRef};
+use super::{Call, Handle, Owed, Queued, Requests, ServiceHost};
 
 impl ServiceHost {
     /// The book of the service at `index`.
@@ -35,12 +35,15 @@ impl ServiceHost {
         }
     }
 
-    /// The sessions that exist now, so a request for one that does not is turned away at once.
-    pub(crate) fn know_sessions(&mut self, sessions: &[SessionRef]) {
-        let keys: Vec<_> = sessions.iter().map(|session| session.key).collect();
+    /// The sessions that exist now: what every context hands a service, and what turns a request
+    /// for a session that does not exist away at once.
+    pub(crate) fn know_sessions(&mut self, sessions: &Sessions) {
+        let keys: Vec<_> = sessions.iter().map(SessionEntry::key).collect();
         for index in 0..self.services.len() {
+            self.services[index].know_sessions(sessions);
             self.book(index).know_sessions(&keys);
         }
+        self.sessions = sessions.clone();
     }
 
     /// Every request waiting to run, now started. The server runs them, one by one.

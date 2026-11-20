@@ -251,6 +251,20 @@ impl TerminalSnapshot {
         );
     }
 
+    /// This snapshot as plain data for the wire, and its decoded images apart — moved, not
+    /// copied: a server sending a screen has no use for the snapshot after.
+    pub fn into_wire(self) -> (WireSnapshot, Vec<TerminalImage>) {
+        let wire = WireSnapshot {
+            cols: self.cols, rows: self.rows, cell_w: self.cell_w, cell_h: self.cell_h,
+            default_fg: self.default_fg, default_bg: self.default_bg, cursor_color: self.cursor_color,
+            cursor: self.cursor, lines: self.lines, viewport_offset: self.viewport_offset,
+            at_bottom: self.at_bottom, scrollback_rows: self.scrollback_rows,
+            viewport_top_stable_row: self.viewport_top_stable_row,
+            hyperlinks: self.hyperlinks, graphics: self.graphics,
+        };
+        (wire, self.images)
+    }
+
     /// This snapshot as plain data for the wire: every field but the decoded image
     /// bytes. See [`WireSnapshot`].
     pub fn to_wire(&self) -> WireSnapshot {

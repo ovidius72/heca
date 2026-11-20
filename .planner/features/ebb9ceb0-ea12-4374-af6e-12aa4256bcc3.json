@@ -12,7 +12,7 @@
   "startDate": "",
   "endDate": "",
   "workDone": "T398 approved opaque owned Model, direct native/described placement, private allocation, plain factories and migrated examples are implemented and scoped gates pass; uncommitted worktree only.",
-  "workRemaining": "T398 foundation still lacks bootstrap/resource adapters, full coverage, common Dialog sizing, Provider audit and native visual acceptance. No loaded-WASM/downstream pane completion claim.",
+  "workRemaining": "Plugin events follow THE EVENTS (project decision, 2026-11-19): a plugin listens with exactly `on(\"dotted.name\", |ev| …)` (and \"*\"), the same line as heca's own components and extensions — T79 (event bus bridge to WASM) owns exposing it to WASM.",
   "acceptedDecisions": [],
   "phaseIds": [
     "09bcb3cf-f8ea-454a-913e-ea377c53d37e",
@@ -53,7 +53,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-10-29T08:57:40.489Z",
+  "updatedAt": "2026-11-19T11:44:44.470Z",
   "sessionInfo": [
     {
       "sessionId": "mcp-process:768e3b80-32e0-48ab-9733-01238db93a65",

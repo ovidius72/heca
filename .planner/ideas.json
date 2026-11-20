@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 25,
+  "nextIdeaNumber": 26,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -180,6 +180,16 @@
       "promotion": null,
       "createdAt": "2026-11-17T19:35:02.483Z",
       "updatedAt": "2026-11-17T19:35:02.483Z"
+    },
+    {
+      "id": "1905b5eb-20b3-4c11-b66f-f173586cac01",
+      "number": 25,
+      "shortId": "AX9KY",
+      "title": "Package managers: Homebrew, maybe AUR, maybe winget or Chocolatey",
+      "description": "From Antonio, 2026-11-18, while planning the first release workflow (phase \"Build and release\" in F010). After the GitHub Release with zips and installers exists: publish heca through package managers — Homebrew (macOS, and Linux), maybe AUR (Arch Linux), maybe winget or Chocolatey (Windows). Each would consume the release's artifacts on every tag. Not approved work; to discuss when the release workflow is in use. Related: signing/notarization (also deferred) affects Homebrew casks and winget.",
+      "promotion": null,
+      "createdAt": "2026-11-18T18:40:55.649Z",
+      "updatedAt": "2026-11-18T18:40:55.649Z"
     }
   ]
 }

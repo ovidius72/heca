@@ -70,7 +70,7 @@ pub use animation::{
 };
 pub use builders::{
     DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
-    StyleExt, ToneExt, TooltipExt, FlashExt,
+    StyleExt, ToneExt, TooltipExt, FlashExt, BoundChildren, MapChildren,
 };
 pub use color::Color;
 pub use component::{
@@ -133,7 +133,7 @@ pub mod prelude {
     };
     pub use crate::builders::{
         DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
-        StyleExt, ToneExt, TooltipExt, FlashExt,
+        StyleExt, ToneExt, TooltipExt, FlashExt, BoundChildren, MapChildren,
     };
     pub use crate::color::Color;
     pub use crate::component::{Component, WidgetModel, Event, GridKey, Handled, Modifiers, WidgetIntent};

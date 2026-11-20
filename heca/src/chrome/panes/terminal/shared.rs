@@ -63,8 +63,6 @@ pub(super) struct Shared {
     /// The window's identity of the node drawn on the last frame (its focus identity), `0` before
     /// one is drawn. Read with `placed`: a terminal not drawn has no node on screen.
     pub(super) node: Cell<u64>,
-    /// Asked to take the keyboard before it was drawn: the next node drawn takes it.
-    pub(super) wants_keyboard: Cell<bool>,
 }
 
 /// **What an extension declared about a terminal it placed.** The name is the identity and never

@@ -100,37 +100,52 @@ fn reconcile_named(
         .iter()
         .map(|c| c.base().built_from.clone())
         .collect();
+    let same = |i: usize, (name, version): &(String, Option<String>)| {
+        names[i].as_deref() == Some(name.as_str())
+            && version.as_ref().is_none_or(|v| versions[i].as_ref() == Some(v))
+    };
+    reconcile_matching(&mut parent.children, wanted, same, |(name, _)| build(name)).0
+}
+
+/// **The one matcher every reconcile here goes through**: `children` are put back in
+/// `wanted`'s order, each wanted entry taking the first child not yet taken that `same(child index,
+/// entry)` accepts — kept as it is, still holding its signals, its letter, its focus — and an entry
+/// no child answers is built with `build`. Children nobody asked for are dropped, after the wanted
+/// ones are back, so a child that merely moved is never destroyed on the way.
+///
+/// Returns whether anything was added, removed or moved, and for each wanted entry the index the
+/// kept child had before (`None` for one built now), so a caller can hand a kept child what changed
+/// about it.
+pub(crate) fn reconcile_matching<W>(
+    children: &mut Vec<crate::WidgetModel>,
+    wanted: &[W],
+    mut same: impl FnMut(usize, &W) -> bool,
+    mut build: impl FnMut(&W) -> crate::WidgetModel,
+) -> (bool, Vec<Option<usize>>) {
     // Take the children out so each can be put back at most once — `Option` makes that true by
     // construction rather than by care.
-    let mut held: Vec<Option<crate::WidgetModel>> = parent.children.drain(..).map(Some).collect();
+    let mut held: Vec<Option<crate::WidgetModel>> = children.drain(..).map(Some).collect();
     let mut changed = held.len() != wanted.len();
+    let mut from = Vec::with_capacity(wanted.len());
 
-    for (at, (name, version)) in wanted.iter().enumerate() {
-        let found = held.iter().enumerate().position(|(i, c)| {
-            c.is_some()
-                && names[i].as_deref() == Some(name.as_str())
-                && version
-                    .as_ref()
-                    .is_none_or(|v| versions[i].as_ref() == Some(v))
-        });
-        match found {
-            Some(i) => {
+    for (at, entry) in wanted.iter().enumerate() {
+        let found = (0..held.len()).find(|&i| held[i].is_some() && same(i, entry));
+        match found.and_then(|i| held[i].take().map(|child| (i, child))) {
+            Some((i, child)) => {
                 changed |= i != at;
-                // `position` only yields a live child, so there is always one to put back.
-                if let Some(child) = held[i].take() {
-                    parent.children.push(child);
-                }
+                children.push(child);
+                from.push(Some(i));
             }
             None => {
-                parent.children.push(build(name));
+                children.push(build(entry));
                 changed = true;
+                from.push(None);
             }
         }
     }
-    // Whatever is left was not asked for. Dropping it here, after the wanted ones are back, means a
-    // child that merely MOVED is never destroyed on the way.
-    changed |= held.iter().any(|c| c.is_some());
-    changed
+    // Whatever is left was not asked for.
+    changed |= held.iter().any(Option::is_some);
+    (changed, from)
 }
 
 #[cfg(test)]

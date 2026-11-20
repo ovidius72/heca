@@ -83,6 +83,13 @@ pub(crate) fn handle_window_event(
             update_session_viewport(state);
             after_mutation_change(state, MutationKind::Config);
         }
+        // Drawing waits for a surface the system does not give a hidden window; what changed while
+        // hidden is drawn in one frame when it shows again.
+        WindowEvent::Occluded(occluded) => {
+            state.window_occluded = occluded;
+            if !occluded { state.mark_full_redraw(); state.window.request_redraw(); }
+        }
+        WindowEvent::RedrawRequested if state.window_occluded => state.needs_redraw = true,
         WindowEvent::RedrawRequested => {
             state.needs_redraw = true;
             state.frame_times.start();

@@ -305,7 +305,7 @@ pub struct ScrollRegion {
     last_revealed: Vec<(u64, f64, f64)>,
     /// Shrinking the viewport must keep the same cursor in view too.
     last_reveal_viewport: Option<Size>,
-    /// Explicit scrolling pauses layout-only following until navigation or typing.
+    /// Explicit scrolling, or a pointer press, pauses layout-only following until a key or typing.
     reveal_paused: bool,
     /// The **natural rect** of whatever last asked to be revealed — what [`center_pad`](Self::center_pad) keeps
     /// centring while nothing is asking.

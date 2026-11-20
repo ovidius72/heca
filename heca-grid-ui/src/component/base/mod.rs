@@ -535,4 +535,6 @@ pub struct Base {
     /// a repaint is per-frame and cheap, a layout pass walks and re-measures the whole tree. A
     /// widget that merely changed colour must not trigger one.
     needs_layout: Cell<bool>,
+    /// Ranges of the children that follow a value (`.child(items.map(..))`).
+    pub(crate) bound: Vec<crate::builders::Bound>,
 }

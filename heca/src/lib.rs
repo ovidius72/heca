@@ -22,6 +22,7 @@ mod rpc;
 mod search_state;
 mod server;
 mod shortcut;
+mod slow_steps;
 mod state_file;
 
 // ── What another crate builds on ─────────────────────────────────────────────────────────────────
@@ -43,7 +44,9 @@ pub use entry::{
     Permit, ProjectCx, Projection, RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox,
     ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop,
     SubmitError, Update, extension, register_widget,
+    ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
 };
+pub use components::FolderLine;
 pub use heca_view_realize::WidgetDefinition;
 pub use heca_view::{Intent, PropMap, PropValue};
 pub use notification::{Notification, NotificationAction};
@@ -92,6 +95,7 @@ struct HecaApp {
 
 impl HecaApp {
     fn receive_server(&mut self) {
+        let _slow = crate::slow_steps::step("client.receive_server");
         let calls = match self.state.as_mut() {
             Some(state) => match state.client.poll() {
                 Ok(update) => state.receive_client(update),
@@ -461,10 +465,12 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             None => return,
         };
 
+        let _slow = crate::slow_steps::step("client.window_event");
         handle_window_event(event_loop, &self.registry, &self.keymaps, state, event);
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let _slow = crate::slow_steps::step("client.about_to_wait");
         self.receive_server();
         // Config reload requested via keybinding — do it before borrowing state.
         let reload = self.state.as_mut().and_then(|state| state.pending_reload.take());
@@ -482,6 +488,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             handle_about_to_wait(event_loop, state);
             // After this turn's input and server updates, relay our view if a window follows us,
             // and report where we are looking for the `--events` stream.
+            let _s = crate::slow_steps::step("wait.report_view");
             state.report_view_if_followed();
             state.report_presence_if_changed();
         }
@@ -495,8 +502,8 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         match event {
             AppEvent::CloseWindow => event_loop.exit(),
             AppEvent::BackendWake => {
-                let backend_poll = poll_backends(state);
-                let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
+                let backend_poll = { let _slow = crate::slow_steps::step("client.poll_backends"); poll_backends(state) };
+                let chrome_runtime_changed = { let _slow = crate::slow_steps::step("client.sync_chrome_state"); crate::chrome::sync_chrome_state(state) };
                 if backend_poll.has_data || backend_poll.closed_any || chrome_runtime_changed {
                     state.mark_full_redraw();
                     crate::app::frame_reasons::report("event BackendWake");
@@ -515,6 +522,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.window.request_redraw();
             }
             AppEvent::TerminalInput { terminal, input } => {
+                let _slow = crate::slow_steps::step("client.terminal_input");
                 crate::app::terminal_host::on_terminal_input(
                     state,
                     &self.registry,

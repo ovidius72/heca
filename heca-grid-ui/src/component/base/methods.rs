@@ -195,6 +195,7 @@ impl Base {
             needs_paint: Cell::new(true),
             // A fresh widget is laid out by the pass that mounts it; it has nothing to re-request.
             needs_layout: Cell::new(false),
+            bound: Vec::new(),
         }
     }
 
@@ -289,7 +290,7 @@ impl Base {
 
     /// Whether this widget's tree changed and wants a layout pass.
     pub fn needs_layout(&self) -> bool {
-        self.needs_layout.get()
+        self.needs_layout.get() || self.bound.iter().any(crate::builders::Bound::is_dirty)
     }
 
     /// Clear the relayout flag — [`needs_layout`] does this as it walks.
