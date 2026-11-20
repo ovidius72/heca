@@ -54,11 +54,13 @@ The attach response carries `session` (`SessionInfo`), `client_id`, `window_ordi
 identify physical connections and remain unchanged when switching sessions. Display ordinals start
 at one within each session, permit gaps and remain stable through a restart of that session.
 
-Each window titles itself from the session folder and its ordinal: the first window on a session
-reads `~/projects/heca` and each later one adds its number — `~/projects/heca #2`. The two formats
-are `[settings.session_text] window_title` (default `{folder}`) and `window_title_numbered`
-(default `{folder} #{number}`); `{folder}` is the folder shown home-relative, or the session name
-when it has none. The window shows its title in the top bar and reports it to the server, which
+Each window titles itself from the program's name, the session folder and its ordinal: the first
+window on a session reads `heca - ~/projects/heca` and each later one adds its number —
+`heca - ~/projects/heca - #2`. The two formats are `[settings.session_text] window_title` (default
+`{app} - {folder}`) and `window_title_numbered` (default `{app} - {folder} - #{number}`); `{app}` is
+the program's fixed name (`heca`, or `Heca Pro` for heca-pro — given by the program to
+`heca::run(..)`, not a setting), `{folder}` the folder shown home-relative, or the session name when
+it has none. Before it attaches to a session a window is titled with the program's name alone. The window shows its title in the top bar and reports it to the server, which
 keeps a per-session window directory (each window's id, ordinal and title) and sends it to every
 window on join, leave and title change — the list a follow picker chooses a target from.
 

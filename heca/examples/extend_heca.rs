@@ -1,8 +1,8 @@
 //! **A program built on heca** — the whole of what another crate writes to add its own dock, action
 //! and overlay to heca. Run it with `cargo run -p heca --example extend_heca`.
 //!
-//! Plain heca is `fn main() { heca::run(); }`. This says who it is (`demo`) and adds three things first, each through the door
-//! heca already has for it, and then calls the same `heca::run()`:
+//! Plain heca is `fn main() { heca::run("heca"); }`. This says who it is (`demo`) and adds three things first, each through the door
+//! heca already has for it, and then calls the same `heca::run(..)`:
 //!
 //! - a **dock** in the right sidebar — placed by you like any dock: move it, hide it, and your
 //!   choice wins over the line below. It holds a **terminal**, `demo.terminal("shell")`: type in it,
@@ -65,8 +65,12 @@ impl Provider for Notes {
 fn main() {
     let demo = heca::extension("demo");
 
-    // The dock. A default: where you put it, and whether it shows, is yours to decide.
-    regions("sidebar.right").append(Notes::new("notes", demo.clone()));
+    // The dock. A default: where you put it, and whether it shows, is yours to decide (`[docks]`).
+    // A recipe, so heca can make it again when a reload brings it back from "none".
+    regions("sidebar.right").append({
+        let demo = demo.clone();
+        move || Notes::new("notes", demo.clone())
+    });
 
     // The action. It belongs to no dock, so it is declared here; the handler can only read the app
     // and ask for other actions, which go out the same door a key press does.
@@ -115,7 +119,7 @@ fn main() {
             .default_open(false)
     });
 
-    heca::run();
+    heca::run("heca");
 }
 
 /// `name=<layer>` — the argument `toggle_layer` takes.

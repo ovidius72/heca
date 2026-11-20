@@ -10,7 +10,8 @@
 use heca_core::layout::PaneId;
 use heca_grid_ui::Component;
 use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::style::{Length, Spacing};
+use heca_grid_ui::style::Length;
+use heca_grid_ui::RowVariant;
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, Row};
 
@@ -113,20 +114,12 @@ impl PaneCard<'_> {
             // cards vanished into the scrim, pale `foreground` text and all. An opaque `surface` is
             // a box in every theme, and `foreground` on `surface` is legible by the palette's own
             // construction.
-            .background(theme.colors.surface)
-            .radius(theme.colors.control_radius())
-            .padding(Spacing::Xs)
+            .variant(RowVariant::Filled)
             // **The name sits in the middle of the card.** A card in the map is a picture of a
             // pane, not a row in a list: there is no column of names to align down, and a label
             // against the left edge reads as the start of a list item. `Row` already centres on its
             // cross axis; this is the main one.
             .justify("center")
-            // **The card fills the wrapper the parent sized.** `KeyHint` is transparent and hugs
-            // its child, so the share or the rect the parent handed the wrapper has to be passed on
-            // deliberately — a card left to hug its own label would collapse to the width of the
-            // word in it, whatever the column was given.
-            .width(Length::FULL)
-            .height(Length::FULL)
             .active(self.active)
             .previous(self.previous)
             // **A card has a scale of its own.** The theme's default previous mark is tuned for a

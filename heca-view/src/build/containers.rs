@@ -153,6 +153,10 @@ impl Row {
     pub fn marker(self, m: ViewMarker) -> Self {
         self.prop("marker", m)
     }
+    /// Its background at rest, from the theme: a veil (`Tinted`) or a solid box (`Filled`).
+    pub fn variant(self, v: crate::ViewRowVariant) -> Self {
+        self.prop("variant", v)
+    }
     /// Show the navigation cursor on this row.
     pub fn nav_selected(self, on: bool) -> Self {
         self.prop("nav_selected", on)
@@ -204,6 +208,18 @@ impl DockFrame {
     /// Drop the frame's own border.
     pub fn frameless(self, on: bool) -> Self {
         self.prop("frameless", on)
+    }
+    /// The header's shape: a dock's (the default) or a section's.
+    pub fn variant(self, v: crate::ViewDockFrameVariant) -> Self {
+        self.prop("variant", v)
+    }
+    /// Whether the user can fold it; `false` keeps it open and hides the chevron.
+    pub fn collapsible(self, on: bool) -> Self {
+        self.prop("collapsible", on)
+    }
+    /// Whether a dock-shaped header shows its drag grip.
+    pub fn grip(self, on: bool) -> Self {
+        self.prop("grip", on)
     }
     /// Show as the current one.
     pub fn active(self, on: bool) -> Self {

@@ -77,7 +77,7 @@ impl ActionMeta {
         if let Err(late) = QUEUE.with(|q| q.add(Box::new(declared))) {
             crate::chrome::warn_author(format!(
                 "[heca] action '{}' was added after the app started, so it does nothing — add it \
-                 before `heca::run()`",
+                 before `heca::run(..)`",
                 late.meta.name
             ));
         }

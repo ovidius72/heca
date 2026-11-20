@@ -40,7 +40,7 @@ fn a_realized_typed_builder_places_directly_and_preserves_its_native_input_targe
 
 #[test]
 fn specialized_slots_accept_a_realized_tree_without_author_conversions() {
-    let visible = Visibility::new(dynamic_button(), true);
+    let visible = Visibility::new().visible(true).child(dynamic_button());
     assert_eq!(visible.base().children[0].text_summary().as_deref(), Some("Dynamic"));
     let tooltip = Tooltip::new(dynamic_button(), "Details");
     assert_eq!(tooltip.base().children[0].text_summary().as_deref(), Some("Dynamic"));

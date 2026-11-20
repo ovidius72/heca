@@ -15,29 +15,38 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
-use crate::style::{Align, Direction, Justify, Length};
+use crate::style::{Align, Direction, Justify, Space, Spacing};
 use crate::widgets::{Flex, Label};
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Row height (logical px).
-const ROW_H: f32 = 38.0;
-/// Horizontal inner padding.
-const PAD_H: f64 = 14.0;
+/// Inner padding at the sides — where a row's content starts.
+const PAD_X: Spacing = Spacing::Md;
+/// Inner padding above and below. A row has no fixed height: it is its content plus this, as a
+/// CSS box is, so it follows the font and a taller slot.
+const PAD_Y: Spacing = Spacing::Sm;
+/// **Where a row's content starts**, from its own left edge. A part placed beside rows — a
+/// [`DockFrame`](super::DockFrame)'s leading part or a title row of its caller's — starts here
+/// too, so its left edge lines up with every row's content.
+pub(crate) const ROW_INSET: Spacing = PAD_X;
+/// **A row's padding above and below.** A title row written by a [`DockFrame`](super::DockFrame)'s
+/// caller takes it too, so it is as tall as a Dock's own title row (an `Item`) for the same content.
+pub(crate) const ROW_PAD_Y: Spacing = PAD_Y;
 /// Gap between a slot and the label.
-const GAP: f64 = 10.0;
-/// Label font size.
-const FONT_SIZE: f32 = 15.0;
+const GAP: Spacing = Spacing::Sm;
 /// Width of the left accent bar shown when active.
 const ACTIVE_BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
 const ACTIVE_BAR_FRAC: f64 = 0.65;
+/// The active bar's halo, as shares of the theme's glow radius and strength.
+const BAR_GLOW_RADIUS_SCALE: f32 = 0.8;
+const BAR_GLOW_STRENGTH_SCALE: f32 = 0.3;
 /// Padding the optional slot border adds around the slot content.
-const SLOT_BORDER_PAD_X: f64 = 7.0;
-const SLOT_BORDER_PAD_Y: f64 = 4.0;
+const SLOT_BORDER_PAD_X: Spacing = Spacing::Sm;
+const SLOT_BORDER_PAD_Y: Spacing = Spacing::Xs;
 
 /// Inset of the active/hover selection pill from the row edges, so its corners
 /// never contend with a rounded container's corners.
-const SEL_INSET: f64 = 4.0;
+const SEL_INSET: Spacing = Spacing::Xs;
 
 /// Size of the [`ActiveMarker::Check`] pip (logical px).
 const CHECK_SIZE: f64 = 10.0;
@@ -104,9 +113,9 @@ impl Item {
         base.style.layout.direction = Direction::Row;
         base.style.layout.justify = Justify::Start; // the growing label pushes the trailing slot right
         base.style.layout.align = Align::Center; // center slots vertically (kbd hint, dot)
-        base.style.layout.padding = (PAD_H as f32).into();
-        base.style.layout.gap = (GAP as f32).into();
-        base.style.layout.height = Length::Px(ROW_H);
+        base.style.layout.padding = PAD_Y.into();
+        base.style.layout.padding_x = Some(PAD_X.into());
+        base.style.layout.gap = GAP.into();
         // One control = one Tab stop: focus never descends into the composed content.
         base.focus_barrier = true;
 
@@ -116,9 +125,17 @@ impl Item {
         let label = Label::new(label).align(TextAlign::Start).grow(1.0);
         let text = label.text_signal();
         let label_bold = label.bold_signal();
-        base.children.push(crate::WidgetModel::new(Flex::empty()));
+        // An empty slot is out of the layout, as an absent element is: otherwise the row's gap is
+        // spent on nothing and the label of a row without a leading part starts one gap further
+        // right than every other row's content.
+        let empty_slot = || {
+            let mut slot = Flex::empty();
+            slot.base_mut().set_hidden(true);
+            crate::WidgetModel::new(slot)
+        };
+        base.children.push(empty_slot());
         base.children.push(crate::WidgetModel::new(label));
-        base.children.push(crate::WidgetModel::new(Flex::empty()));
+        base.children.push(empty_slot());
 
         Self {
             base,
@@ -243,11 +260,6 @@ impl Component for Item {
         &mut self.base
     }
 
-    /// Row height scales with the resolved font (keeps the default 38px at 15px).
-    fn remeasure(&mut self) {
-        self.base.style.layout.height = Length::Px(self.base.font * (ROW_H / FONT_SIZE));
-    }
-
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
@@ -267,13 +279,15 @@ impl Component for Item {
             )
         };
         let b = self.base.bounds;
+        let font = self.base.font;
+        let step = |s: Spacing| Space::from(s).resolve(font) as f64;
 
         // Row background: tinted when active, faint on hover. Drawn as an *inset* selection pill
         // (not full-bleed) so its rounded corners never contend with a rounded container's corners
         // at any radius — a full-bleed fill in a heavily-rounded Pane leaves notches at the corners.
         // Clamped to this item's own padding so the pill never crops its content
         // (`Base::highlight_rect`).
-        let sel = self.base.highlight_rect(SEL_INSET);
+        let sel = self.base.highlight_rect(step(SEL_INSET));
         let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
         if active {
             cx.rect(
@@ -307,14 +321,14 @@ impl Component for Item {
                         (ACTIVE_BAR_W / 2.0) as f32,
                         Some(Glow {
                             color: glow_c,
-                            radius: 8.0,
-                            intensity: 0.16,
+                            radius: cx.theme().colors.active_glow_radius * BAR_GLOW_RADIUS_SCALE,
+                            intensity: cx.theme().colors.active_glow_strength * BAR_GLOW_STRENGTH_SCALE,
                         }),
                     );
                 }
                 ActiveMarker::Check => {
                     // Small accent pip centered in the left gutter.
-                    let pip_x = b.loc.x + PAD_H / 2.0 - CHECK_SIZE / 2.0;
+                    let pip_x = b.loc.x + step(PAD_X) / 2.0 - CHECK_SIZE / 2.0;
                     let pip_y = b.loc.y + (b.size.h - CHECK_SIZE) / 2.0;
                     cx.rect(
                         Rectangle::new(Point::new(pip_x, pip_y), Size::new(CHECK_SIZE, CHECK_SIZE)),
@@ -341,18 +355,19 @@ impl Component for Item {
         };
 
         // Optional chip border around a present slot (drawn behind its content).
+        let (border_x, border_y) = (step(SLOT_BORDER_PAD_X), step(SLOT_BORDER_PAD_Y));
         let slot_border = |cx: &mut PaintCx, slot: Rectangle| {
             if slot.size.w <= 0.1 {
                 return;
             }
             let frame = Rectangle::new(
                 Point::new(
-                    slot.loc.x - SLOT_BORDER_PAD_X,
-                    slot.loc.y - SLOT_BORDER_PAD_Y,
+                    slot.loc.x - border_x,
+                    slot.loc.y - border_y,
                 ),
                 Size::new(
-                    slot.size.w + 2.0 * SLOT_BORDER_PAD_X,
-                    slot.size.h + 2.0 * SLOT_BORDER_PAD_Y,
+                    slot.size.w + 2.0 * border_x,
+                    slot.size.h + 2.0 * border_y,
                 ),
             );
             cx.rect(

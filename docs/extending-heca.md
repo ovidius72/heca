@@ -24,11 +24,12 @@ f639e662; the contract is P054(F006)'s "Pane runtime state", section 0.1.)
 `heca` is a library plus a one-line program. Plain heca is:
 
 ```rust
-fn main() { heca::run(); }
+fn main() { heca::run("heca"); }
 ```
 
 A program built on heca says who it is, adds what it wants through heca's **existing doors**, and
-calls the same `heca::run()`. Nothing here is a second mechanism: each door fills the one heca's own
+calls the same `heca::run(..)` with its own fixed name — `heca::run("Heca Pro")` — which titles its
+windows (`Heca Pro - ~/projects/x`). Nothing here is a second mechanism: each door fills the one heca's own
 parts use, so what is added is reachable from a key, a menu, the palette and RPC with nothing written
 for any of them. A worked, runnable example: `heca/examples/extend_heca.rs`
 (`cargo run -p heca --example extend_heca`).
@@ -37,12 +38,12 @@ for any of them. A worked, runnable example: `heca/examples/extend_heca.rs`
 fn main() {
     let demo = heca::extension("demo");
     // Add actions, layers and pane decorations through `demo`.
-    heca::run();
+    heca::run("heca");
 }
 ```
 
 **Docks are contributed through Providers.** The canonical
-[Provider and startup region reference](widgets.md#providers-and-startup-regions) documents adding,
+[Provider and startup region reference](widgets.md#providers-and-regions) documents adding,
 removing and ordering them from native Heca/library code, plus the sandbox-plugin startup parity
 requirement and current availability.
 
@@ -96,7 +97,7 @@ described/sandbox path and its current availability.
 
 ## Providers and docks at startup
 
-The canonical [Provider and region API reference](widgets.md#providers-and-startup-regions) explains
+The canonical [Provider and region API reference](widgets.md#providers-and-regions) explains
 how to add, remove and order docks, the required `Provider` methods, placement identity, startup
 cutoff and native/plugin availability. Use that reference for the operation contract.
 
@@ -141,18 +142,18 @@ Dock and layer factories return ordinary components. For a dock, implement
 for a named layer use `demo.layer("details").view(|cx| widget)`. Neither needs author-side boxing,
 casts or storage conversions. The complete compiling program is
 [`extend_heca.rs`](../heca/examples/extend_heca.rs); the shared reference is
-[Providers and startup regions](widgets.md#providers-and-startup-regions).
+[Providers and regions](widgets.md#providers-and-regions).
 
 ## Terminal agent drivers
 
 Implement `heca::agent::AgentDriver`: declare executable names, prepare a temporary reporting
 connection, and decode explicit `AgentInput` reports. Register it
-before `heca::run()`:
+before `heca::run(..)`:
 
 ```rust,ignore
 let demo = heca::extension("demo");
 demo.agent_driver(MyDriver::new());
-heca::run();
+heca::run("heca");
 ```
 
 **An agent's icon, by its driver id** — to draw the same harness icon heca draws, in your own dock:
@@ -345,7 +346,7 @@ let choice = Sound::asset("demo.review-ready").volume(0.4).enabled(true);
 // Configure a custom status with sound = { source = "asset:demo.review-ready" }.
 ```
 
-Register before `heca::run()`. `heca::audio::library().names()` provides the available choices,
+Register before `heca::run(..)`. `heca::audio::library().names()` provides the available choices,
 including added assets. A caller building an independent catalog can use
 `SoundLibrary::new().sound("name", Audio::load(path))`. No harness or status name is built into
 the loader. This is native extension registration; it does not add a dynamic plugin loader.
@@ -579,7 +580,7 @@ fn request_done(&mut self, cx: &mut ServiceCx<'_, Msg>, request: &RequestRef, ou
 | `stop_timeout_ms` | `3000` | the longest the server waits for services to stop at shutdown |
 | `request_queue_capacity` | `64` | requests one service may have open at once, waiting to run or waiting on a deferred answer |
 
-Declare services and their actions before `heca::run()`; later ones are reported and dropped. Code: `heca/src/entry/service/` (what you write), `heca/src/server/services/` (the host).
+Declare services and their actions before `heca::run(..)`; later ones are reported and dropped. Code: `heca/src/entry/service/` (what you write), `heca/src/server/services/` (the host).
 
 ## Sessions and their projects
 

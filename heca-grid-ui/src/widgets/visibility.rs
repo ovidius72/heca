@@ -2,7 +2,7 @@
 //! without rebuilding the tree.
 
 use crate::component::{Base, Component, PaintCx};
-use crate::reactive::{Signal, SignalGet, signal};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 
 /// A wrapper that toggles one child's layout and paint presence from a boolean signal.
 ///
@@ -26,24 +26,43 @@ pub struct Visibility {
     seen: bool,
 }
 
+impl Default for Visibility {
+    fn default() -> Self { Self::new() }
+}
+
 impl Visibility {
-    /// Wrap `child` and show it initially when `visible` is `true`.
-    pub fn new(child: impl crate::builders::IntoComponent, visible: bool) -> Self {
+    /// An empty wrapper, shown. Give it its child with [`child`](Self::child) and say whether it
+    /// shows with [`visible`](Self::visible):
+    ///
+    /// ```ignore
+    /// Visibility::new().visible(cwd.is_some()).child(folder_line)
+    /// ```
+    pub fn new() -> Self {
         let mut base = Base::container();
+        base.transparent = true;
+        let visible = signal(true);
+        Self { base, visible, seen: true }
+    }
+
+    /// **Whether the child shows** (default `true`). Hidden means gone from the layout, not only
+    /// unpainted. Change it later through [`visible_signal`](Self::visible_signal).
+    pub fn visible(mut self, visible: bool) -> Self {
+        self.visible.set(visible);
+        self.seen = visible;
+        self.apply(visible);
+        self
+    }
+
+    /// **The one widget it shows and hides.** A second call replaces the first: a `Visibility`
+    /// wraps one thing — wrap a `Flex` to hide several together.
+    pub fn child(mut self, child: impl crate::builders::IntoComponent) -> Self {
         let child: crate::WidgetModel = child.into_component();
         // Transparent to layout as well as to paint: see `component::wrap_transparently`.
-        crate::component::wrap_transparently(&mut base, child.as_ref());
-        base.children.push(child);
-        let visible = signal(visible);
-        let mut this = Self {
-            base,
-            visible,
-            seen: visible.get_untracked(),
-        };
-        if let Some(child) = this.base.children.first_mut() {
-            child.base_mut().set_hidden(!this.seen);
-        }
-        this
+        crate::component::wrap_transparently(&mut self.base, child.as_ref());
+        self.base.children = vec![child];
+        let seen = self.seen;
+        self.apply(seen);
+        self
     }
 
     /// Return the visibility signal so hosts can toggle the wrapped child live.
@@ -61,7 +80,7 @@ impl Visibility {
     /// mechanism producing the right picture.
     fn apply(&mut self, visible: bool) {
         self.base.set_hidden(!visible);
-        if let Some(child) = self.base.children.first_mut() {
+        for child in &mut self.base.children {
             child.base_mut().set_hidden(!visible);
         }
     }
@@ -86,9 +105,7 @@ impl Component for Visibility {
         if !self.base.visible.get_untracked() {
             return;
         }
-        if let Some(child) = self.base.children.first()
-            && !child.base().style.layout.hidden
-        {
+        for child in self.base.children.iter().filter(|child| !child.base().style.layout.hidden) {
             crate::component::paint_child(child.as_ref(), cx);
         }
     }

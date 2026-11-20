@@ -192,7 +192,7 @@ mod tests {
                 .status(StatusDot::online())
                 .suffix(Label::new("(nvim)"))
                 .line(Label::new("~/projects"))
-                .line(Visibility::new(Label::new("main"), false)),
+                .line(Visibility::new().visible(false).child(Label::new("main"))),
         );
         LayoutEngine::new().compute(&mut root, Size::new(300.0, 400.0));
         let tile = &root.base().children[0];

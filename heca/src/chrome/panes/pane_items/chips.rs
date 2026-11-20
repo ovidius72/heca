@@ -152,7 +152,7 @@ pub(crate) fn add_extension_chip(
     if let Err((name, _)) = QUEUE.with(|q| q.add((name, Rc::new(produce)))) {
         warn_author(format!(
             "[heca] pane chip '{name}' was added after the app started, so it does nothing — add it \
-             before `heca::run()`"
+             before `heca::run(..)`"
         ));
     }
 }

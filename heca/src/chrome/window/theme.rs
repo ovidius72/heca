@@ -9,12 +9,6 @@
 
 use crate::chrome::*;
 
-/// Convert a `0.0..=1.0` theme alpha token into an 8-bit channel value for
-/// [`Color::with_alpha`]. Clamped so out-of-range config values can't wrap.
-pub(crate) fn alpha_u8(a: f32) -> u8 {
-    (a.clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
 /// Projects the loaded app theme into the grid-ui widget theme contract.
 ///
 /// With the compose model, `heca_grid_ui::Theme` embeds `heca_theme::Theme`
@@ -53,21 +47,21 @@ pub(crate) fn chrome_bar_color_for(
     theme: &heca_config::theme::Theme,
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
-    top_bottom_pane_background_color(theme).with_alpha(alpha_u8(appearance.chrome_opacity()))
+    top_bottom_pane_background_color(theme).with_alpha_f32(appearance.chrome_opacity())
 }
 
 pub(crate) fn sidebar_shell_background_color_for(
     sidebar_bg: Color,
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
-    sidebar_bg.with_alpha(alpha_u8(appearance.opacity()))
+    sidebar_bg.with_alpha_f32(appearance.opacity())
 }
 
 pub(crate) fn chrome_shell_surface_color_for(
     theme: &heca_config::theme::Theme,
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
-    chrome_surface_color(theme).with_alpha(alpha_u8(appearance.opacity()))
+    chrome_surface_color(theme).with_alpha_f32(appearance.opacity())
 }
 
 pub(crate) fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {

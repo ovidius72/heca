@@ -30,7 +30,7 @@ impl Flex {
 
     /// A zero-size placeholder — an empty slot that takes no layout space. Used
     /// to fill an optional slot (e.g. an [`Item`](super::Item) leading/trailing
-    /// slot, or a [`DockFrame`](super::DockFrame) header-controls slot) until a
+    /// slot, or a [`DockFrame`](super::DockFrame) header-actions slot) until a
     /// real component replaces it.
     pub fn empty() -> Self {
         Self::row().width(0.0).height(0.0)
@@ -272,7 +272,7 @@ mod tests {
         let row = laid_out(
             Flex::row()
                 .child(Label::new("fafdsa").bold(true))
-                .child(Visibility::new(Label::new("(zsh)").font_scale(0.8), true)),
+                .child(Visibility::new().visible(true).child(Label::new("(zsh)").font_scale(0.8))),
         );
         let name = baseline(row.base().children[0].as_ref()).expect("the name is text");
         let wrapped = baseline(row.base().children[1].as_ref()).expect("the wrapper holds text");

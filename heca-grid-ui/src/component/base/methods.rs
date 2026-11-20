@@ -175,7 +175,9 @@ impl Base {
 
     /// Whether this widget needs repainting.
     pub fn needs_paint(&self) -> bool {
-        self.needs_paint.get()
+        // A tooltip's bubble appearing, moving or going is a repaint nobody marked: it happens on a
+        // timed wake (`widgets::tooltip::bubble_changed`).
+        self.needs_paint.get() || crate::widgets::tooltip::bubble_changed(self)
     }
 
     /// Clear the repaint flag — the renderer calls this once the widget is painted.

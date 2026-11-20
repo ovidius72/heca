@@ -120,7 +120,7 @@ fn an_incoming_flood_waits_for_room_and_every_message_arrives_in_order() {
         match server.poll().unwrap() {
             Some(ClientMsg::Terminal { input: ProcessInput::Bytes(bytes), .. }) => received.extend(bytes),
             Some(other) => panic!("unexpected {other:?}"),
-            None => thread::sleep(Duration::from_millis(1)),
+            None => thread::yield_now(),
         }
     }
     assert_eq!(received, typed);
@@ -192,4 +192,19 @@ fn the_notification_history_crosses_a_real_socket_as_typed_values() {
         ServerMsg::NotificationHistory(received) => assert_eq!(received, records),
         other => panic!("unexpected reply: {other:?}"),
     }
+}
+
+/// **Closing a connection whose reader is waiting for room returns** — the reader is not reading
+/// the socket, so shutting the socket alone would leave it, and the close, waiting for ever.
+#[test]
+fn dropping_a_peer_whose_reader_waits_for_room_returns() {
+    let (a, mut b) = UnixStream::pair().unwrap();
+    let limits = TransportLimits { queue_capacity: NonZeroUsize::new(1).unwrap(), ..limits() };
+    let server = SocketServer::new(a, limits, wake()).unwrap();
+    for _ in 0..3 { frame::write(&mut b, &ClientMsg::Attach, limits.max_frame_bytes).unwrap(); }
+    // Nobody polls: the reader fills the queue and waits for room.
+    thread::sleep(Duration::from_millis(50));
+    let (done, finished) = mpsc::channel();
+    thread::spawn(move || { drop(server); let _ = done.send(()); });
+    assert!(finished.recv_timeout(Duration::from_secs(5)).is_ok(), "the close waited for room nobody makes");
 }

@@ -112,7 +112,7 @@ pub(crate) fn add_extension_line(
     if let Err((name, _)) = QUEUE.with(|q| q.add((name, Rc::new(produce)))) {
         warn_author(format!(
             "[heca] pane line '{name}' was added after the app started, so it does nothing — add it \
-             before `heca::run()`"
+             before `heca::run(..)`"
         ));
     }
 }

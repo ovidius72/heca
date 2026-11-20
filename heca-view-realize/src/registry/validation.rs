@@ -58,8 +58,11 @@ impl WidgetRegistry {
             // registration or compatibility error is hidden by the parent's child contract.
             self.prepare_node(&mut child, theme, path, diagnostics)?;
             path.pop();
-            if metadata.accepts_children
-                && (metadata.child_types.is_empty() || metadata.child_types.contains(&child.kind))
+            // A child in the `tooltip` slot is what the node shows on hover, not one of its
+            // children: every kind takes one, whatever children it accepts.
+            if crate::intents::slot_of(&child) == Some(crate::intents::TOOLTIP_SLOT)
+                || metadata.accepts_children
+                    && (metadata.child_types.is_empty() || metadata.child_types.contains(&child.kind))
             {
                 node.children.push(child);
             } else {

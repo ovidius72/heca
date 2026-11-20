@@ -17,7 +17,7 @@ thread_local! {
 impl crate::Extension {
     /// Add a terminal agent implementation. Its identity is scoped to this extension.
     ///
-    /// A program built on Heca calls this before `heca::run()`. Recognition, setup and reports
+    /// A program built on Heca calls this before `heca::run(..)`. Recognition, setup and reports
     /// use the same contract as the built-in programs; no private registry is needed.
     pub fn agent_driver(&self, driver: impl AgentDriver + 'static) {
         let Some(id) = self.full("agent driver", driver.id()) else { return };

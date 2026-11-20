@@ -36,6 +36,10 @@ pub(crate) fn change_intent(node: &ViewNode) -> Option<Intent> {
 /// `ViewNode`'s shape: `children` remains one flat `Vec`, and the *child* says where it goes. No
 /// `slots: Map<..>` on the node, no second child vector, and the JSON stays flat. It generalizes to
 /// every future slotted widget for free.
+/// The slot every kind has: a child in it is what the node shows on hover — natively
+/// `.tooltip(widget)` — rather than one of its children.
+pub(crate) const TOOLTIP_SLOT: &str = "tooltip";
+
 pub(crate) fn slot_of(node: &ViewNode) -> Option<&str> {
     node.props.get("slot").and_then(PropValue::as_text)
 }

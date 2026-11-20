@@ -267,10 +267,11 @@ per-window view and every request brings its own `Asker`.
   (`ServerMsg::Windows`) to every window of that session after each join, leave and title change.
 - **Titles.** Each window formats its own title and reports it (`ClientMsg::ReportWindowTitle`). The
   first window on a session has no number; each later one is numbered. Both formats are in
-  `[settings.session_text]` (`window_title = "{folder}"`,
-  `window_title_numbered = "{folder} #{number}"`), so two windows read `~/projects/heca` and
-  `~/projects/heca #2`. `{folder}` is the session folder shown from home, or the session name when it
-  has none.
+  `[settings.session_text]` (`window_title = "{app} - {folder}"`,
+  `window_title_numbered = "{app} - {folder} - #{number}"`), so two windows read
+  `heca - ~/projects/heca` and `heca - ~/projects/heca - #2`. `{app}` is the program's fixed name,
+  given to `heca::run(..)`; `{folder}` is the session folder shown from home, or the session name when
+  it has none.
 - **`follow`.** The `follow` action (a picker of the other windows) makes a window **mirror** another
   one: it shows the same workspace and scroll position, but keeps its own size and scale. It sends
   `ClientMsg::Follow { target }`; `None` stops. The server tells the followed window

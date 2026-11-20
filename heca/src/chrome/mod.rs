@@ -86,7 +86,7 @@ pub(crate) use window::scene::{
 };
 pub(crate) use window::signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) use window::theme::{
-    SidebarLook, alpha_u8, chrome_colors, chrome_gui_theme, chrome_status,
+    SidebarLook, chrome_colors, chrome_gui_theme, chrome_status,
 };
 pub(crate) use window::window_root::{
     CHROME_KEY, new_window_root, place_surface, remove_surface, seat_chrome, surface_node,

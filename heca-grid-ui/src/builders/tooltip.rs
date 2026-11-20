@@ -20,18 +20,26 @@ pub trait TooltipExt: Component + Sized {
     /// a widget held by a typed container, because wrapping it changes what it is. The wrapper
     /// survives only for a region that is not a widget you can put a builder on, exactly as
     /// [`KeyHint`](crate::widgets::KeyHint) did when the pick declaration moved onto every widget.
+    ///
+    /// **What it takes** ([`IntoTip`](crate::widgets::tooltip::IntoTip)): words, which wrap and
+    /// keep their line breaks (`"zsh\npane-1"` is two lines); a `Signal<String>`, which the bubble
+    /// follows live without the widget being rebuilt; or a whole widget — a segmented
+    /// [`Tag`](crate::widgets::Tag), a row of parts — laid out inside the bubble like anything else.
+    ///
+    /// ```ignore
+    /// row.tooltip(Tag::new().segment(program).segment(model).segment(folder))
+    /// ```
     #[heca_grid_ui_macros::prop]
-    fn tooltip(mut self, text: impl Into<String>) -> Self {
-        self.base_mut().tooltip = Some(crate::widgets::tooltip::Tip::new(text));
+    fn tooltip(mut self, tip: impl crate::widgets::tooltip::IntoTip) -> Self {
+        self.base_mut().tooltip = Some(tip.into_tip());
         self
     }
 
 
-    /// **A tooltip whose words are live** — an action's current keybinding, a changing status — so
-    /// the bubble follows the signal without the widget being rebuilt.
-    fn tooltip_signal(mut self, text: crate::reactive::Signal<String>) -> Self {
-        self.base_mut().tooltip = Some(crate::widgets::tooltip::Tip::from_signal(text));
-        self
+    /// **A tooltip whose words are live** — the same as [`tooltip`](Self::tooltip) given a signal,
+    /// which is the form to write; kept so code written against it keeps working.
+    fn tooltip_signal(self, text: crate::reactive::Signal<String>) -> Self {
+        self.tooltip(text)
     }
 
 

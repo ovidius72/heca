@@ -71,8 +71,8 @@ impl WorkspacesContainerProvider {
     /// nothing you write can reach.
     ///
     /// ```ignore
-    /// regions("sidebar.left").append(Workspaces::new("workspaces"));
-    /// regions("sidebar.right").append(Workspaces::new("workspaces.right"));
+    /// regions("sidebar.left").append(|| Workspaces::new("workspaces"));
+    /// regions("sidebar.right").append(|| Workspaces::new("workspaces.right"));
     /// ```
     pub fn new(name: impl Into<String>) -> Self {
         Self {
@@ -99,6 +99,11 @@ impl Provider for WorkspacesContainerProvider {
     /// declared actions, while their cursor, scroll offset and focus stay their own.
     fn kind(&self) -> &str {
         "workspaces"
+    }
+
+    /// The user may add as many workspaces docks as they like from `[[docks]]`.
+    fn spawn(&self, id: &str) -> Option<Box<dyn Provider>> {
+        Some(Box::new(Self::new(id)))
     }
 
     fn supported_regions(&self) -> RegionSet {

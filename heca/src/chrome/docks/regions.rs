@@ -1,9 +1,9 @@
 //! **`regions("sidebar.left")` — a region is a place, reached by name, that holds a list.**
 //!
 //! ```ignore
-//! regions("sidebar.left").append(FileTree::new("files"));
-//! regions("sidebar.left").prepend(Outline::new("outline"));
-//! regions("sidebar.right").remove("workspaces");
+//! regions("sidebar.left").append(|| FileTree::new("files"));
+//! regions("sidebar.left").prepend(|| Outline::new("outline"));
+//! regions("sidebar.right").remove("workspaces");     // by id, wherever it is
 //! regions("sidebar.left").retain(|id| id != "docker");
 //! regions("sidebar.left").gap("md");
 //! ```
@@ -32,10 +32,20 @@
 //! nobody knows is **said out loud** and the call does nothing: a plugin's typo must not take the
 //! app down, and must not vanish either.
 //!
-//! **Startup only.** Calls are queued and the host takes them once, as it starts
-//! ([`ChromeHost::mount_pending`](crate::chrome::ChromeHost::mount_pending)). A call after that is
-//! **said out loud** and dropped — it used to be dropped silently, which is worse than either
-//! answer. Regions that change while the app runs are not built yet.
+//! **Any time.** Calls are queued and the host applies them — as it starts
+//! ([`ChromeHost::mount_pending`](crate::chrome::ChromeHost::mount_pending)) and then on every
+//! frame ([`ChromeHost::apply_pending`](crate::chrome::ChromeHost::apply_pending)), so a plugin may
+//! add or take out a dock while the app runs.
+//!
+//! **Where a dock goes and in what order is the user's word first.** The config's `[[docks]]`
+//! entries (by kind or by id) give a `location` (a region, or `"none"`) and an `order`; the region a
+//! call names, and the dock's own `.order(..)`, count only where the user said nothing.
+//!
+//! **A dock or the recipe for one.** `.append(Rooms::new("rooms"))` hands over a dock;
+//! `.append(|| Rooms::new("rooms"))` hands over how to make it, so the host can make it again when
+//! the user's `[[docks]]` brings it back after a reload (`"none"` → a region). A dock given as itself
+//! can still be moved by a reload, but once taken out it returns only with a restart. A dock's
+//! cursor, scroll and folded state are kept by its id, so one made again finds them.
 
 // `prepend`, `remove`, `retain` and `gap` are for plugins; the app itself only appends today, so in
 // the binary they read as unused. They are exercised by `host::region_list_tests`.
@@ -64,7 +74,8 @@ pub struct RegionHandle {
 impl RegionHandle {
     /// **Add at the end** — one container or several, in the order given. Say how big it is or
     /// where it sits on the dock itself: `.append(Docker::new("docker").flex(2.0).order(-1))`.
-    pub fn append(self, containers: impl IntoDocks) -> Self {
+    /// A recipe — `.append(|| Docker::new("docker"))` — lets the host make it again on a reload.
+    pub fn append<M>(self, containers: impl IntoDocks<M>) -> Self {
         let ops = containers
             .into_docks()
             .into_iter()
@@ -75,7 +86,7 @@ impl RegionHandle {
 
     /// **Add at the start** — one container or several; several keep the order given, all of them
     /// ahead of what was there.
-    pub fn prepend(self, containers: impl IntoDocks) -> Self {
+    pub fn prepend<M>(self, containers: impl IntoDocks<M>) -> Self {
         // Prepending each in reverse puts the group at the front in the order the caller wrote.
         let ops = containers
             .into_docks()
@@ -86,10 +97,11 @@ impl RegionHandle {
         self.queue(ops)
     }
 
-    /// **Take out the container named `id`.** A name that is not in this region is said out loud.
+    /// **Take out the dock whose id is `id`**, wherever it is — the user may have placed it in
+    /// another region through `[[docks]]` or by hand. An id no dock has is said out loud.
     ///
     /// Removing a built-in is allowed — that is the point — so nothing in the app may assume a
-    /// particular container is there.
+    /// particular container is there. A dock taken out this way is not made again by a reload.
     pub fn remove(self, id: &str) -> Self {
         self.queue(vec![RegionOp::Remove(id.to_string())])
     }
@@ -123,18 +135,7 @@ impl RegionHandle {
             ));
             return self;
         };
-        let refused = QUEUE.with(|q| {
-            ops.into_iter()
-                .map(|op| q.add((region, op)))
-                .any(|added| added.is_err())
-        });
-        if refused {
-            crate::chrome::input::identity::warn_author(format!(
-                "[heca] region '{}' was changed after startup — regions are set up once, as the app \
-                 starts, so this change was dropped. Make it where the app or your plugin loads.",
-                self.name,
-            ));
-        }
+        QUEUE.with(|q| q.borrow_mut().extend(ops.into_iter().map(|op| (region, op))));
         self
     }
 }
@@ -157,20 +158,18 @@ pub struct RegionLayout {
 }
 
 thread_local! {
-    /// Changes made before the host took them.
-    static QUEUE: crate::chrome::StartupQueue<(RegionId, RegionOp)> =
-        const { crate::chrome::StartupQueue::new() };
+    /// Changes made and not yet applied by the host.
+    static QUEUE: std::cell::RefCell<Vec<(RegionId, RegionOp)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// A new host is starting: changes are accepted again until it takes them.
-pub(crate) fn open_for_startup() {
-    QUEUE.with(crate::chrome::StartupQueue::reopen);
+/// Take every queued change, in the order made. The host calls this; nothing else should.
+pub(crate) fn take_pending() -> Vec<(RegionId, RegionOp)> {
+    QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut()))
 }
 
-/// Take every queued change and close the queue. The host calls this; nothing else should.
-pub(crate) fn take_for_startup() -> Vec<(RegionId, RegionOp)> {
-    QUEUE.with(crate::chrome::StartupQueue::take)
-}
+/// **How to make a dock again** — what `.append(|| Dock::new(..))` hands over.
+pub(crate) type Recipe = std::rc::Rc<dyn Fn() -> Box<dyn Provider>>;
 
 /// **One value per region**, reached by the region's own name — `shown[RegionId::TopBar]`.
 ///
@@ -248,6 +247,8 @@ pub struct DockPlacement {
 pub struct Placed {
     pub(crate) provider: Box<dyn Provider>,
     pub(crate) placement: DockPlacement,
+    /// How to make the dock again, when it was handed over as a recipe.
+    pub(crate) recipe: Option<Recipe>,
 }
 
 impl Placed {
@@ -269,6 +270,7 @@ impl From<Box<dyn Provider>> for Placed {
         Placed {
             provider,
             placement: DockPlacement::default(),
+            recipe: None,
         }
     }
 }
@@ -307,38 +309,72 @@ impl PlaceDock for Box<dyn Provider> {
 }
 
 /// **One dock or several** — what [`RegionHandle::append`] and [`prepend`](RegionHandle::prepend)
-/// take: a dock, a dock with `.flex` / `.order` said about it, or a list of either, so a caller
-/// hands over whichever shape they hold and never goes looking for a plural spelling.
-pub trait IntoDocks {
+/// take: a dock, a dock with `.flex` / `.order` said about it, a recipe that makes a dock
+/// (`|| Rooms::new("rooms")`), or a list of any of them, so a caller hands over whichever shape
+/// they hold and never goes looking for another spelling.
+///
+/// `M` only tells a dock from a recipe ([`AsDock`] / [`AsRecipe`]); nobody writes it.
+pub trait IntoDocks<M> {
     /// The docks, each with what its placer said.
     fn into_docks(self) -> Vec<Placed>;
 }
 
-impl<P: Provider + 'static> IntoDocks for P {
+/// [`IntoDocks`]'s mark for a dock handed over as itself.
+pub struct AsDock;
+/// [`IntoDocks`]'s mark for a dock handed over as the recipe that makes it.
+pub struct AsRecipe;
+/// [`IntoDocks`]'s mark for a recipe that also says the dock's `.flex` / `.order`.
+pub struct AsPlacedRecipe;
+
+impl<F> IntoDocks<AsPlacedRecipe> for F
+where
+    F: Fn() -> Placed + 'static,
+{
+    fn into_docks(self) -> Vec<Placed> {
+        let first = self();
+        let recipe: Recipe = std::rc::Rc::new(move || self().provider);
+        vec![Placed { recipe: Some(recipe), ..first }]
+    }
+}
+
+impl<F, P> IntoDocks<AsRecipe> for F
+where
+    F: Fn() -> P + 'static,
+    P: Provider + 'static,
+{
+    fn into_docks(self) -> Vec<Placed> {
+        let recipe: Recipe = std::rc::Rc::new(move || Box::new(self()) as Box<dyn Provider>);
+        let mut placed = Placed::from(recipe());
+        placed.recipe = Some(recipe);
+        vec![placed]
+    }
+}
+
+impl<P: Provider + 'static> IntoDocks<AsDock> for P {
     fn into_docks(self) -> Vec<Placed> {
         vec![self.into_placed()]
     }
 }
 
-impl IntoDocks for Box<dyn Provider> {
+impl IntoDocks<AsDock> for Box<dyn Provider> {
     fn into_docks(self) -> Vec<Placed> {
         vec![self.into_placed()]
     }
 }
 
-impl IntoDocks for Placed {
+impl IntoDocks<AsDock> for Placed {
     fn into_docks(self) -> Vec<Placed> {
         vec![self]
     }
 }
 
-impl<D: IntoDocks> IntoDocks for Vec<D> {
+impl<M, D: IntoDocks<M>> IntoDocks<M> for Vec<D> {
     fn into_docks(self) -> Vec<Placed> {
         self.into_iter().flat_map(IntoDocks::into_docks).collect()
     }
 }
 
-impl<D: IntoDocks, const N: usize> IntoDocks for [D; N] {
+impl<M, D: IntoDocks<M>, const N: usize> IntoDocks<M> for [D; N] {
     fn into_docks(self) -> Vec<Placed> {
         self.into_iter().flat_map(IntoDocks::into_docks).collect()
     }

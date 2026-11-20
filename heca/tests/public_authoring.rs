@@ -83,7 +83,7 @@ fn every_exported_component_has_a_plain_external_construction_and_composition_ex
         .child(widget!(Toggle, Toggle::new()))
         .child(widget!(Tooltip, Tooltip::new(Button::new("Hover"), "Help")))
         .child(widget!(TreeLayout, TreeLayout::new(Label::new("Parent")).branch(Label::new("Child"))))
-        .child(widget!(Visibility, Visibility::new(Label::new("Visible"), true)))
+        .child(widget!(Visibility, Visibility::new().visible(true).child(Label::new("Visible"))))
         .child(heca::Terminal::new("authoring-inventory").command("pwd").cwd("/tmp").title("Scratch"));
     assert_eq!(root.base().children.len(), covered.len() + 1);
 
