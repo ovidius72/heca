@@ -37,13 +37,13 @@
 //! frame ([`ChromeHost::apply_pending`](crate::chrome::ChromeHost::apply_pending)), so a plugin may
 //! add or take out a dock while the app runs.
 //!
-//! **Where a dock starts is the user's word first.** The `[docks]` table of the config names a
-//! region (or `"none"`) for a dock by its id; the region a call names is only where the dock goes
-//! when the user said nothing.
+//! **Where a dock goes and in what order is the user's word first.** The config's `[[docks]]`
+//! entries (by kind or by id) give a `location` (a region, or `"none"`) and an `order`; the region a
+//! call names, and the dock's own `.order(..)`, count only where the user said nothing.
 //!
 //! **A dock or the recipe for one.** `.append(Rooms::new("rooms"))` hands over a dock;
 //! `.append(|| Rooms::new("rooms"))` hands over how to make it, so the host can make it again when
-//! the user's `[docks]` brings it back after a reload (`"none"` → a region). A dock given as itself
+//! the user's `[[docks]]` brings it back after a reload (`"none"` → a region). A dock given as itself
 //! can still be moved by a reload, but once taken out it returns only with a restart. A dock's
 //! cursor, scroll and folded state are kept by its id, so one made again finds them.
 
@@ -98,7 +98,7 @@ impl RegionHandle {
     }
 
     /// **Take out the dock whose id is `id`**, wherever it is — the user may have placed it in
-    /// another region through `[docks]` or by hand. An id no dock has is said out loud.
+    /// another region through `[[docks]]` or by hand. An id no dock has is said out loud.
     ///
     /// Removing a built-in is allowed — that is the point — so nothing in the app may assume a
     /// particular container is there. A dock taken out this way is not made again by a reload.

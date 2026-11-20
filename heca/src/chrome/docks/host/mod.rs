@@ -72,11 +72,11 @@ impl std::error::Error for MoveError {}
 pub struct ChromeHost {
     /// One list of containers per region.
     regions: super::regions::RegionMap<RegionHost>,
-    /// Every dock `regions(..)` declared, with how to make it again — what a reload of `[docks]`
+    /// Every dock `regions(..)` declared, with how to make it again — what a reload of `[[docks]]`
     /// works from ([`placing`]).
     declared: Vec<placing::Declared>,
-    /// The user's `[docks]` table as last applied: a dock's id → a region or `"none"`.
-    docks: std::collections::BTreeMap<String, String>,
+    /// The user's `[[docks]]` as last applied ([`heca_config::docks`]).
+    docks: Vec<heca_config::docks::DockEntry>,
     /// Reverse index: which region each container currently lives in.
     placement: HashMap<ContainerId, RegionId>,
     /// What each region was told about arranging its own contents, by [`RegionId::index`].
@@ -91,7 +91,7 @@ impl ChromeHost {
         Self {
             regions: super::regions::RegionMap::from_fn(|_| RegionHost::new()),
             declared: Vec::new(),
-            docks: std::collections::BTreeMap::new(),
+            docks: Vec::new(),
             placement: HashMap::new(),
             layouts: Default::default(),
             events,

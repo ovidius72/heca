@@ -7079,7 +7079,7 @@ label and a Terminal, then adds that dock to `sidebar.right`.
 | What you want | Public API | Meaning |
 |---|---|---|
 | Add at the end | `regions(name).append(provider)` | One provider or an array/`Vec` with a common element type. Chain calls for different types. |
-| Add a dock heca can make again | `regions(name).append(\|\| Provider::new(..))` | A recipe instead of the dock: when the user's `[docks]` brings it back after a reload (`"none"` → a region), heca makes it again. |
+| Add a dock heca can make again | `regions(name).append(\|\| Provider::new(..))` | A recipe instead of the dock: when the user's `[[docks]]` brings it back after a reload (`"none"` → a region), heca makes it again. |
 | Add at the start | `regions(name).prepend(provider)` | A collection keeps its own order. |
 | Remove a dock | `regions(name).remove(id)` | Remove the dock with that id, **whichever region holds it** (the user may have moved it). Not made again by a reload. |
 | Keep selected docks | `regions(name).retain(predicate)` | Filter the region's current list by placement id. |
@@ -7091,12 +7091,13 @@ Region names are `sidebar.left`, `sidebar.right`, `bar.top` and `bar.bottom`. An
 reported and changes nothing. Calls are queued and applied as the window starts, then at every frame,
 so a dock can be added or removed while the app runs.
 
-**Where a dock starts is the user's word first.** The config's `[docks]` table names a region, or
-`"none"`, by dock id ([configuration](configuration.md#where-docks-start)); the region in
-`regions(..)` is used only when the user said nothing. On a reload (`prefix+Shift+r`) each dock
-whose `[docks]` entry changed is moved, taken out, or — if it was added as a recipe — made again; a
-dock added as itself comes back only with a restart. Docks whose entry did not change stay where
-they are. A dock's cursor, scroll and folded state are kept by its id, so one made again finds them.
+**Where a dock goes and in what order is the user's word first.** The config's `[[docks]]` entries
+(by kind, `name`, or by dock, `name` + `id`) give a `location` — a region or `"none"` — and an
+`order` ([configuration](configuration.md#where-docks-start)); what an entry does not say, the
+`regions(..)` call and the dock's `.order(..)` say. On a reload (`prefix+Shift+r`) each dock whose
+entry changed is moved, reordered, taken out, or — if it was added as a recipe — made again; a dock
+added as itself comes back only with a restart. Docks whose entry did not change stay where they are.
+A dock's cursor, scroll and folded state are kept by its id, so one made again finds them.
 
 The older `left-sidebar` / `left` spellings are also read by the shared region-name parser.
 `retain` changes the existing list; Rust's `filter` would instead build another collection. Regions

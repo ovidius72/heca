@@ -320,14 +320,14 @@ pub(crate) async fn init_state(
     // container to the right region and its UI goes with it.
     use crate::chrome::regions;
     use crate::providers::WorkspacesContainerProvider as Workspaces;
-    // `sidebar.left` is only where it goes when the user's `[docks]` says nothing; the shipped
-    // default (`workspaces = "sidebar.left"`) is in config.default.toml, the one place for defaults.
+    // `sidebar.left` is only where it goes when the user's `[[docks]]` says nothing; the shipped
+    // default entry is in config.default.toml, the one place for defaults.
     // A recipe, so a reload that brings the dock back from `"none"` can make it again.
     regions("sidebar.left").append(|| Workspaces::new("workspaces"));
 
     // Everything named above is queued — which is the point: a plugin adding a container at load
     // time writes the same call and does not have to find the host. This applies it, once, with the
-    // user's `[docks]` table deciding where each dock starts; a `regions(..)` call after this is
+    // user's `[[docks]]` deciding where each dock starts; a `regions(..)` call after this is
     // refused out loud.
     chrome_host.mount_pending(&crate::providers::ChromeCtx::new(&chrome_state), &app_config.config.docks);
 

@@ -292,8 +292,8 @@ impl HecaApp {
             let sidebar_width = self.app_config.config.appearance.effective_sidebar_width();
             state.chrome_state.set_left_size(sidebar_width);
             state.chrome_state.set_right_size(sidebar_width);
-            // Where docks go follows `[docks]` like everything else: a dock whose entry changed is
-            // moved, taken out or made again.
+            // Where docks go follows `[[docks]]` like everything else: a dock whose entry changed
+            // is moved, reordered, taken out or made again.
             state.chrome_host.reload_docks(
                 &crate::providers::ChromeCtx::new(&state.chrome_state),
                 &self.app_config.config.docks,

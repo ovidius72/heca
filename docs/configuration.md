@@ -334,24 +334,40 @@ apply on `prefix+Shift+r`.
 ## Where docks start
 
 A dock is a panel in a sidebar or a bar — heca's workspaces, and any dock a program built on heca
-adds. The `[docks]` table says where each one starts, by the name it is added under:
+adds. `[[docks]]` says where each one goes and in what order. One entry per **kind** of dock
+(`name`), or per **dock** (`name` + `id`); the entry naming a dock's id wins over the one for its
+kind:
 
 ```toml
-[docks]
-workspaces = "sidebar.right"     # heca's workspaces dock on the right
-rooms = "sidebar.left"           # a dock another program adds
-"notes.team" = "none"            # a name with a dot is quoted; "none" leaves the dock out
+[[docks]]
+name = "workspaces"          # every workspaces dock…
+location = "sidebar.left"
+order = 1
+
+[[docks]]
+name = "workspaces"
+id = "aaa"                   # …except this one
+location = "sidebar.right"
+
+[[docks]]
+name = "docker"
+location = "sidebar.left"
+order = -1                   # before the workspaces dock
 ```
 
-| Value | Meaning |
+| Key | Meaning |
 |---|---|
-| `"sidebar.left"`, `"sidebar.right"`, `"bar.top"`, `"bar.bottom"` | the region it starts in |
-| `"none"` | not shown at all; its keyboard actions still work |
+| `name` | the kind of dock (required) |
+| `id` | one dock of that kind; unset = every dock of the kind |
+| `location` | `"sidebar.left"`, `"sidebar.right"`, `"bar.top"`, `"bar.bottom"`, or `"none"` (not shown; its keyboard actions still work) |
+| `order` | where it sits among the region's docks: lower first, ties keep the order the docks were added in (CSS `order`) |
 
-A dock not listed starts where the program that adds it says. A region name heca does not know is
-reported and the dock goes where its program says. A reload (`prefix+Shift+r`) applies changes:
-each dock whose entry changed is moved, taken out, or brought back; a dock whose entry did not
-change stays where it is, even if you moved it by hand. Default: `workspaces = "sidebar.left"`.
+What an entry does not say is what the program that adds the dock says. An entry for an id no dock
+has does nothing; a `location` heca does not know is reported and the dock goes where its program
+says. A reload (`prefix+Shift+r`) applies the entries that changed: a dock is moved, reordered, taken
+out or brought back; a dock whose entry did not change stays where it is, even if you moved it by
+hand. Writing your own `[[docks]]` replaces the default list, which is one entry:
+`name = "workspaces"`, `location = "sidebar.left"`.
 
 ## Notifications
 
