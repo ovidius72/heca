@@ -548,13 +548,22 @@ handler (`open` / `xdg-open` / `start`):
   all on-screen panes with a letter; press the letter to open it, or `Esc` to cancel.
 - **Selection mode** — `Shift+o` opens the link under the caret (`o` stays the
   flip-endpoint binding).
+- **Dropped files** — drop files on a terminal and their full paths are pasted into it, each
+  quoted for the shell when it needs it and followed by a space. (macOS, Windows and X11; on
+  Wayland the window system delivers no drop to heca yet.)
 - **Context menu** — right-click a terminal pane for a menu with **Open link**
-  (shown only when the click cell is a link) plus pane actions (split, zoom,
-  float, close), each with its icon and keybinding hint. Click an entry or use the arrow
+  (shown only when the click cell is a link), **Paste** (the clipboard, into that pane), then
+  pane actions (split, zoom, float, close), each with its icon and keybinding hint. Click an entry or use the arrow
   keys + Enter; `Esc` or an outside-click dismisses. (Right-clicking right on a
   resize seam still starts a right-drag resize.)
 
-When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
+When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from heca's runtime folder (`~/Library/Application Support/heca/runtime/shell-integration/` on macOS, `~/.config/heca/runtime/shell-integration/` on Linux).
+
+**zsh reads your own files, as in any other terminal.** heca starts zsh with `ZDOTDIR` pointing at its
+folder only so zsh reads heca's `.zshenv`, which points `ZDOTDIR` straight back at yours (or unsets
+it, when you had none) and loads heca's hooks; they attach at the first prompt, after your
+`.zshrc`. So your history file, your completion cache and your plugins are the ones every other
+terminal uses — the same approach Ghostty and kitty take.
 
 ### Terminal bell
 

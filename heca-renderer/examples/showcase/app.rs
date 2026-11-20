@@ -116,34 +116,33 @@ impl ApplicationHandler for App {
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                // Device delta → lines (positive = down / right).
-                let (dx_raw, dy_raw) = match delta {
-                    MouseScrollDelta::LineDelta(x, y) => (-x, -y),
-                    MouseScrollDelta::PixelDelta(p) => (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0),
+                // Device delta → the library's one wheel conversion (positive = down / right):
+                // a trackpad's pixels made logical, a line being one line of the UI text.
+                let scale = state.effective_scale() as f32;
+                let turn = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => heca_grid_ui::WheelTurn::Lines(-x, -y),
+                    MouseScrollDelta::PixelDelta(p) => {
+                        heca_grid_ui::WheelTurn::Pixels(-(p.x as f32) / scale, -(p.y as f32) / scale)
+                    }
                 };
+                let line = state.theme.font_size * heca_grid_ui::font::MONO_LINE_RATIO;
+                let raw = state
+                    .raw(RawPointerKind::Wheel, PointerButton::Left)
+                    .with_wheel(turn, line, state.shift);
+                let dy_raw = raw.delta_y;
                 if state.zoom_mode || state.accel() {
                     // Wheel zooms the whole UI while in zoom mode, or with the
                     // accelerator held (scroll up = zoom in); vertical component only.
                     state.nudge_zoom(-dy_raw * ZOOM_STEP);
                 } else {
-                    // Shift+wheel scrolls horizontally: a plain mouse wheel only
-                    // reports the vertical axis, so remap it to X while Shift is held
-                    // (host owns the modifier→axis mapping; `Event::Scroll` carries
-                    // both axes). A trackpad's native horizontal delta already fills X.
-                    let (dx, dy) = if state.shift && dx_raw == 0.0 {
-                        (dy_raw, 0.0)
-                    } else {
-                        (dx_raw, dy_raw)
-                    };
+                    // Shift+wheel scrolls horizontally (`with_wheel` remaps a plain wheel to X
+                    // while Shift is held; a trackpad's own horizontal movement already fills X).
                     // Route scroll through grid-ui: the overlay layer first (an open
                     // Dialog/palette may scroll its own body), then the page tree — an
                     // open Select dropdown takes it via the page's overlay scan, an
                     // embedded ScrollRegion under the cursor consumes it, and otherwise
                     // the ROOT ScrollRegion scrolls the whole page (a real scroll
                     // viewport).
-                    let mut raw = state.raw(RawPointerKind::Wheel, PointerButton::Left);
-                    raw.delta_x = dx;
-                    raw.delta_y = dy;
                     let ev = Event::Raw(raw);
                     if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
                         state.focus.dispatch(&mut state.ui, &ev);

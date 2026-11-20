@@ -172,6 +172,11 @@ focus.dispatch(&mut ui, &Event::pointer_moved(pos));
 focus.dispatch(&mut ui, &Event::pointer_pressed(pos, PointerButton::Left));
 focus.dispatch(&mut ui, &Event::pointer_released(pos, PointerButton::Left));
 focus.dispatch(&mut ui, &Event::wheel(pos, delta_x, delta_y));
+// A real device: say what it reported and let the library fill in lines and pixels alike — a
+// trackpad's logical pixels counted in `line` (one line of your UI text), Shift turning a plain
+// wheel sideways. Every host converts the same way.
+let raw = RawPointer::new(RawPointerKind::Wheel, pos).with_wheel(WheelTurn::Pixels(0.0, 24.0), line, shift);
+focus.dispatch(&mut ui, &Event::Raw(raw));
 
 // The pointer left the window: hover, capture and any drag end with it.
 heca_grid_ui::dispatch(&mut ui, &Event::pointer_cancelled());
@@ -184,6 +189,8 @@ heca_grid_ui::dispatch(&mut ui, &Event::ModifiersChanged(mods));
 if let Some(text) = committed_text {
     heca_grid_ui::dispatch(&mut ui, &Event::TextInput(text));
 }
+// Files dropped on the window, and where: delivered like a click, to the widget under `pos`.
+heca_grid_ui::dispatch(&mut ui, &Event::FilesDropped { paths: vec![dropped_path], pos });
 match key {
     GridKey::Tab    => focus.advance(&mut ui, !mods.shift),  // Shift+Tab = backward
     GridKey::Escape => focus.clear(&mut ui),
@@ -323,6 +330,7 @@ chain fell silent the day one row forgot to declare its key. N copies of a rule 
 | `DragInFlight` / `DragSettled` | a drag **this drop target accepts** (its `accepts` takes what is carried) began / ended — told to the target wherever it is, shown or not, and to nothing that bubbles. A target that exists only for a drag appears on the first and goes on the second. |
 | `Key { key, pressed }` | a key, delivered to the **focus owner** and then up its ancestors (see [the keyboard](#the-keyboard--delivery-follows-focus)). |
 | `TextInput(String)` | text the user **committed** — typed, pasted, or composed by an IME. Distinct from `Key`: `Shift+2` is `Char('2')` there and `"@"` here. A field types from this and from nothing else. |
+| `FilesDropped { paths, pos }` | files dropped on the window and where, in logical pixels — delivered like a click, to the widget under `pos`, then up its ancestors. Listen with `.on(EventKind::FilesDropped, \|cx\| …)`; a terminal pastes the paths, quoted for the shell. (heca asks the system where the pointer is at the drop: winit 0.30 does not say.) |
 | `ModifiersChanged` | broadcast; observers return `Handled::No`. |
 | `Widget(WidgetIntent)` | a semantic, configurable intent resolved from `[keys.widgets]`. |
 | `Hint(HintEvent)` | a picker's letter resolved to a widget. The picked widget's own `on_hint` runs in the **target phase only**; what bubbles is this event, so a container can watch — and take — picks from its children. Carries the picked widget's `key` and `bounds`. |
@@ -2641,13 +2649,15 @@ content shifted past the edge with no scrollbar to bring it back.
 - **Ctrl/Cmd + wheel is a zoom, not a scroll.** The region declines it and it carries on outward,
   so the gesture means the same over a list as over a terminal (the browser's rule).
 - **A wheel carries its device's unit.** `PointerEvent::delta_pixels` is `Some` when the device
-  counts pixels (a trackpad) and `None` for a notched wheel — the DOM's `deltaMode`. The line deltas
-  are always filled in; read the pixels only if you scroll by a unit of your own (a terminal, by its
-  cell height).
+  counts pixels (a trackpad), in logical pixels, and `None` for a notched wheel — the DOM's
+  `deltaMode`. The line deltas are always filled in (the host counts a trackpad's pixels in lines of
+  its UI text, through `RawPointer::with_wheel`); read the pixels if you scroll by a unit of your own
+  (a terminal, by its cell height).
 - **Wheel** (built-in): plain wheel scrolls **vertically**, **`Shift`+wheel
   horizontally**, and a trackpad's 2-D delta drives both — the host maps
   modifiers→axis (`Event::Scroll` carries `delta_x`/`delta_y`). ~10% of the
-  viewport per notch (viewport-proportional). **The wheel carries its position**,
+  viewport per notch of a wheel (viewport-proportional); a trackpad moves the content by its own
+  pixels, so the content follows the fingers. **The wheel carries its position**,
   so the router delivers it to the region under the cursor and this widget has no
   hover gate of its own to keep in step; it simply declines an axis it cannot
   scroll, and the event carries on outward. **Nested regions compose**: the

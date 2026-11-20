@@ -1339,6 +1339,7 @@ dependencies = [
  "window-vibrancy",
  "windows-sys 0.61.2",
  "winit",
+ "x11-dl",
 ]
 
 [[package]]

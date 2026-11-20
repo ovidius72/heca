@@ -179,18 +179,26 @@ impl Component for ScrollRegion {
                 //
                 // The host already mapped modifiers to axes (plain wheel → `delta_y`,
                 // `Shift`+wheel → `delta_x`), so each axis is simply consumed if it can move.
+                //
+                // **A trackpad moves the content by its own pixels**, so the content follows the
+                // fingers; a wheel's notch is a share of the viewport.
+                let (step_x, step_y) = match p.delta_pixels {
+                    Some((x, y)) => (f64::from(x), f64::from(y)),
+                    None => (
+                        f64::from(p.delta_x) * WHEEL_STEP_FRAC * vp.size.w,
+                        f64::from(p.delta_y) * WHEEL_STEP_FRAC * vp.size.h,
+                    ),
+                };
                 let mut handled = false;
                 let (min_y, max_y) = self.offset_bounds_y();
                 let (min_x, max_x) = self.offset_bounds_x();
-                if p.delta_y != 0.0 && max_y > min_y {
-                    let next = self.scroll_offset.get_untracked() as f64
-                        + (p.delta_y as f64) * WHEEL_STEP_FRAC * vp.size.h;
+                if step_y != 0.0 && max_y > min_y {
+                    let next = self.scroll_offset.get_untracked() as f64 + step_y;
                     self.set_offset_y(next as f32, Some(ev));
                     handled = true;
                 }
-                if p.delta_x != 0.0 && max_x > min_x {
-                    let next = self.scroll_offset_x.get_untracked() as f64
-                        + (p.delta_x as f64) * WHEEL_STEP_FRAC * vp.size.w;
+                if step_x != 0.0 && max_x > min_x {
+                    let next = self.scroll_offset_x.get_untracked() as f64 + step_x;
                     self.set_offset_x(next as f32, Some(ev));
                     handled = true;
                 }

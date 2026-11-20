@@ -68,10 +68,11 @@ pub struct PointerEvent {
     /// convention as [`delta_x`](Self::delta_x)/[`delta_y`](Self::delta_y); `None` means it counts
     /// notches (a wheel) and the line deltas are the whole story.
     ///
-    /// The line deltas are always filled in, from pixels by a fixed ratio when need be, so a
-    /// widget that only wants "how much" never reads this. One that scrolls by its own unit — a
-    /// terminal, by its cell height — reads it, because dividing a ratio back out of the lines
-    /// would mean knowing the host's constant.
+    /// Logical pixels, like every other measure a widget gets. The line deltas are always filled
+    /// in too — the host counts the pixels in lines of its UI text — so a widget that only wants
+    /// "how much" never reads this. One that scrolls by its own unit reads it: a terminal by its
+    /// cell height, a [`ScrollRegion`](crate::widgets::ScrollRegion) by the pixels themselves, so
+    /// the content follows the fingers.
     pub delta_pixels: Option<(f32, f32)>,
     /// **The laid-out bounds of the widget this event is being delivered to**, stamped by the
     /// router at delivery.
@@ -196,7 +197,40 @@ pub enum RawPointerKind {
     Cancelled,
 }
 
+/// **What a wheel device reported**, in the direction the content moves (positive = down / right)
+/// — the host only flips the device's sign and converts its pixels to logical ones.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WheelTurn {
+    /// A wheel's notches (lines).
+    Lines(f32, f32),
+    /// A trackpad's movement, in logical pixels.
+    Pixels(f32, f32),
+}
+
 impl RawPointer {
+    /// **A wheel turn, in the one convention every widget reads** — the conversion every host
+    /// would otherwise write for itself (and did: the app and the showcase each divided a
+    /// trackpad's pixels by a number of their own).
+    ///
+    /// - The lines are always filled in: a wheel's notches as they are, a trackpad's pixels counted
+    ///   in `line` — the height of one line of the host's UI text, in logical pixels.
+    /// - A trackpad keeps its pixels too ([`PointerEvent::delta_pixels`]), for a widget that
+    ///   scrolls by its own unit.
+    /// - `shift_to_x`: Shift is held, so a plain wheel's vertical turn scrolls sideways (a
+    ///   trackpad that already moves sideways is left alone).
+    pub fn with_wheel(mut self, turn: WheelTurn, line: f32, shift_to_x: bool) -> Self {
+        let (lines, pixels) = match turn {
+            WheelTurn::Lines(x, y) => ((x, y), None),
+            WheelTurn::Pixels(x, y) if line > 0.0 => ((x / line, y / line), Some((x, y))),
+            WheelTurn::Pixels(x, y) => ((0.0, 0.0), Some((x, y))),
+        };
+        let on_x = shift_to_x && lines.0 == 0.0;
+        let remap = |(x, y): (f32, f32)| if on_x { (y, 0.0) } else { (x, y) };
+        (self.delta_x, self.delta_y) = remap(lines);
+        self.delta_pixels = pixels.map(remap);
+        self
+    }
+
     /// A raw event of `kind` at `pos`, left button, no modifiers, no wheel delta.
     pub fn new(kind: RawPointerKind, pos: Point) -> Self {
         Self {

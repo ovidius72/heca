@@ -260,6 +260,7 @@ pub(crate) fn on_terminal_input(
         } => super::wheel::on_wheel(state, registry, terminal, ((x, y), pixels), cell, modifiers),
         // What was typed into it while it held the keyboard.
         TerminalInput::Text(text) => super::typing::on_text(state, terminal, &text),
+        TerminalInput::Paste(text) => super::typing::on_paste(state, terminal, &text),
         TerminalInput::Key { key, modifiers } => {
             super::typing::on_key(state, terminal, key, modifiers);
         }

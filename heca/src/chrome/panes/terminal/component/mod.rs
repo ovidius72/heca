@@ -295,6 +295,9 @@ impl Component for Terminal {
                 }
             }
             Event::TextInput(text) => self.shared.emit(TerminalInput::Text(text.clone())),
+            // **Dropped files paste their paths**, each quoted for the shell and followed by a
+            // space, as other terminals do.
+            Event::FilesDropped { paths, .. } => self.shared.emit(TerminalInput::Paste(super::input::dropped_paths(paths))),
             Event::Key { key, pressed: true } => self.shared.emit(TerminalInput::Key {
                 key: *key,
                 modifiers: heca_grid_ui::event::modifiers(),

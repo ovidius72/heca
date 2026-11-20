@@ -19,7 +19,8 @@ pub struct ShellIntegrationAssets {
     pub bash_init: PathBuf,
     /// Fish init snippet sourced via `fish -C`.
     pub fish_init: PathBuf,
-    /// Zsh `ZDOTDIR` containing the injected `.zshrc`.
+    /// The folder zsh is started with as its `ZDOTDIR`: heca's `.zshenv`, which restores the
+    /// user's `ZDOTDIR` and loads heca's hooks.
     pub zsh_zdotdir: PathBuf,
 }
 
@@ -27,14 +28,14 @@ pub struct ShellIntegrationAssets {
 /// both write it through [`ShellIntegrationAssets::write_to`].
 const BASH_INIT: (&str, &str) = ("bash_init.sh", include_str!("../../../../heca/assets/shell-integration/bash_init.sh"));
 const FISH_INIT: (&str, &str) = ("fish_init.fish", include_str!("../../../../heca/assets/shell-integration/fish_init.fish"));
-/// zsh reads every startup file from `ZDOTDIR`, which heca points at this folder, and each of
-/// heca's reads the user's own file of the same name first.
+/// heca points zsh's `ZDOTDIR` at this folder only for zsh to read heca's `.zshenv`, which points it
+/// straight back at the user's folder — so every other startup file, the system's included, reads
+/// the user's (their history, their completion cache) — and loads heca's hooks for an interactive
+/// shell. The way Ghostty and kitty do it.
 const ZSH_DIR: &str = "zsh";
-const ZSH_FILES: [(&str, &str); 4] = [
+const ZSH_FILES: [(&str, &str); 2] = [
     (".zshenv", include_str!("../../../../heca/assets/shell-integration/zsh/.zshenv")),
-    (".zprofile", include_str!("../../../../heca/assets/shell-integration/zsh/.zprofile")),
-    (".zshrc", include_str!("../../../../heca/assets/shell-integration/zsh/.zshrc")),
-    (".zlogin", include_str!("../../../../heca/assets/shell-integration/zsh/.zlogin")),
+    ("heca-integration.zsh", include_str!("../../../../heca/assets/shell-integration/zsh/heca-integration.zsh")),
 ];
 
 /// How heca's `.zshenv` begins, in every heca version: what tells a heca zsh folder from the user's.

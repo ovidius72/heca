@@ -97,6 +97,19 @@ pub(crate) fn handle_window_event(
             let passes = state.grid_renderer.passes() + state.text_renderer.passes();
             state.frame_times.finish(passes);
         }
+        // **A file dropped on the window goes to what it was dropped on** — a terminal pastes its
+        // path. winit says which file (one event per file) but not where, so the system is asked
+        // where the pointer is (`drop_point`); the library then delivers it like a click.
+        WindowEvent::DroppedFile(path) => {
+            match crate::app::drop_point::pointer_in_window(&state.window, state.scale_factor) {
+                Some((x, y)) => {
+                    let pos = Point::new(f64::from(x), f64::from(y));
+                    crate::chrome::deliver(state, &heca_grid_ui::Event::FilesDropped { paths: vec![path], pos });
+                    state.mark_full_redraw();
+                }
+                None => eprintln!("[heca] a file was dropped, but the system did not say where: {}", path.display()),
+            }
+        }
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             state.scale_factor = scale_factor;
             state.text_renderer.set_scale_factor(scale_factor);
@@ -385,36 +398,30 @@ fn layer_holds_keyboard(state: &AppState) -> bool {
     )
 }
 
-/// A winit wheel delta as grid-ui's [`Event::Scroll`], in **lines** (positive = down / right).
+/// A winit wheel delta as grid-ui's [`Event::Scroll`] — through the library's one conversion
+/// ([`RawPointer::with_wheel`](heca_grid_ui::RawPointer::with_wheel)).
 ///
-/// The host owns the modifier→axis mapping, because `Event::Scroll` carries both axes and a plain
-/// mouse wheel only reports the vertical one: `Shift`+wheel is remapped to X. A trackpad already
-/// fills X itself, so it is left alone. Same convention as the showcase, deliberately — a region
-/// must scroll identically wherever it is mounted.
+/// The host only flips the device's sign (positive = content down / right), turns a trackpad's
+/// physical pixels into logical ones, and says what a line is: one line of the UI text (the UI font
+/// size × the library's line height). `Shift`+wheel scrolls sideways.
+///
+/// No modifiers attached: the framework fills in what is held down, from the `ModifiersChanged`
+/// this same loop broadcasts. Attaching them here is the second source of truth that let a drop
+/// disagree with its own outline.
 fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
-    let (dx_raw, dy_raw) = match delta {
-        MouseScrollDelta::LineDelta(x, y) => (-x, -y),
-        MouseScrollDelta::PixelDelta(p) => (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0),
+    let scale = if state.scale_factor > 0.0 { state.scale_factor as f32 } else { 1.0 };
+    let turn = match delta {
+        MouseScrollDelta::LineDelta(x, y) => heca_grid_ui::WheelTurn::Lines(-x, -y),
+        MouseScrollDelta::PixelDelta(p) => {
+            heca_grid_ui::WheelTurn::Pixels(-(p.x as f32) / scale, -(p.y as f32) / scale)
+        }
     };
-    // Shift+wheel is the horizontal axis.
-    let on_x = state.modifiers.shift_key() && dx_raw == 0.0;
-    let remap = |x: f32, y: f32| if on_x { (y, 0.0) } else { (x, y) };
-    let (delta_x, delta_y) = remap(dx_raw, dy_raw);
-    // A device that counts pixels says so, in the same convention as the lines.
-    let delta_pixels = match delta {
-        MouseScrollDelta::PixelDelta(p) => Some(remap(-(p.x as f32), -(p.y as f32))),
-        MouseScrollDelta::LineDelta(..) => None,
-    };
-    // No modifiers attached: the framework fills in what is held down, from the
-    // `ModifiersChanged` this same loop broadcasts. Attaching them here is the second source of
-    // truth that let a drop disagree with its own outline.
-    let mut raw = RawPointer::new(
+    let line = state.font_config.size.ui * heca_grid_ui::font::MONO_LINE_RATIO;
+    let raw = RawPointer::new(
         RawPointerKind::Wheel,
         Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64),
-    );
-    raw.delta_x = delta_x;
-    raw.delta_y = delta_y;
-    raw.delta_pixels = delta_pixels;
+    )
+    .with_wheel(turn, line, state.modifiers.shift_key());
     Event::Raw(raw)
 }
 
