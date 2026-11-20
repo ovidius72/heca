@@ -197,7 +197,7 @@ impl super::Extension {
         if let Err(late) = SERVICES.with(|q| q.add(declared.clone())) {
             warn_author(format!(
                 "[heca] service '{}' was added after the app started, so it does nothing — add it \
-                 before `heca::run()`",
+                 before `heca::run(..)`",
                 late.name()
             ));
             return ServiceRegistration { declared: None };
@@ -228,7 +228,7 @@ impl<S: Service> ServiceRegistration<S> {
         if SERVICES.with(StartupQueue::is_closed) {
             warn_author(format!(
                 "[heca] action '{}' was added after the app started, so it does nothing — add it \
-                 before `heca::run()`",
+                 before `heca::run(..)`",
                 meta.name
             ));
             return;
@@ -266,7 +266,7 @@ impl<S: Service> ServiceRegistration<S> {
         if SERVICES.with(StartupQueue::is_closed) {
             warn_author(format!(
                 "[heca] an action policy of service '{}' was added after the app started, so it does nothing — add it \
-                 before `heca::run()`",
+                 before `heca::run(..)`",
                 declared.name
             ));
             return;
@@ -309,7 +309,7 @@ impl<S: Service> ServiceRegistration<S> {
         if SERVICES.with(StartupQueue::is_closed) {
             warn_author(format!(
                 "[heca] a listener of service '{}' was added after the app started, so it does nothing — add it \
-                 before `heca::run()`",
+                 before `heca::run(..)`",
                 declared.name
             ));
             return;

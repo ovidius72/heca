@@ -549,7 +549,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 ///
 /// The whole of the `heca` program, and the last line of any program built on it — whatever a
 /// crate adds first is picked up here.
-pub fn run() {
+///
+/// `app_name` is the program's own fixed name — `heca::run("heca")`, `heca::run("Heca Pro")`: the
+/// window's title before it attaches to a session, and the `{app}` of the title formats.
+pub fn run(app_name: impl Into<String>) {
+    crate::entry::app_name::set(app_name.into());
     if let Some(result) = heca_core::agent::launcher::run_if_requested() {
         let code = result.unwrap_or_else(|error| { eprintln!("[heca] agent launch: {error}"); 1 });
         std::process::exit(code);

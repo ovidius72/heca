@@ -208,7 +208,7 @@ pub(crate) fn add_extension_button(name: String) {
     if let Err(name) = QUEUE.with(|q| q.add(name)) {
         warn_author(format!(
             "[heca] pane button '{name}' was added after the app started, so it does nothing — add \
-             it before `heca::run()`"
+             it before `heca::run(..)`"
         ));
     }
 }

@@ -209,7 +209,7 @@ pub(crate) async fn init_state(
 
     let appearance = app_config.config.appearance.clone();
     let window_attrs = Window::default_attributes()
-        .with_title("heca")
+        .with_title(crate::entry::app_name::get())
         .with_inner_size(winit::dpi::LogicalSize::new(
             app_config.config.settings.window_width as f64,
             app_config.config.settings.window_height as f64,
@@ -447,6 +447,7 @@ pub(crate) async fn init_state(
         pending_reload: Some(crate::app_state::ReloadReason::Session),
         window_focused,
         window_occluded: false,
+        system_title: crate::entry::app_name::get().to_owned(),
         current_cursor: winit::window::CursorIcon::Default,
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),

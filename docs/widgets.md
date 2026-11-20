@@ -6999,7 +6999,7 @@ A **widget** builds a piece of UI. A **`Provider`** contributes a dock to the wi
 host builds and mounts its content. You do not construct or access the workspace's internal
 `DockView` to add your own dock. Compose its content from the public widgets instead.
 
-Write a provider, then place it **before `heca::run()`**:
+Write a provider, then place it **before `heca::run(..)`**:
 
 ```rust,ignore
 use heca::{PlaceDock, regions};
@@ -7010,7 +7010,7 @@ regions("sidebar.right").append(MyDock::new("logs").flex(2.0).order(-1));
 regions("sidebar.left").remove("workspaces");
 regions("sidebar.right").retain(|id| id != "notes");
 
-heca::run();
+heca::run("heca");
 ```
 
 `MyDock` and `MyOtherDock` stand for your types implementing `heca::Provider`; they are not built-in

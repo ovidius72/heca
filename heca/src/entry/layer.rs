@@ -100,7 +100,7 @@ impl LayerBuilder {
         if let Err((name, _)) = QUEUE.with(|q| q.add((name, build))) {
             crate::chrome::warn_author(format!(
                 "[heca] layer '{name}' was added after the app started, so it does nothing — add \
-                 it before `heca::run()`"
+                 it before `heca::run(..)`"
             ));
         }
     }

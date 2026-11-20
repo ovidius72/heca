@@ -330,6 +330,9 @@ pub struct AppState {
     /// system then hands out no surface to draw on, and asking for one waits a whole second each
     /// time, the keyboard included; so nothing is drawn until it shows again.
     pub(crate) window_occluded: bool,
+    /// The title last given to the system's window, so it is set again only when the window's
+    /// title ([`ClientState::title`](crate::client::ClientState)) changes.
+    pub(crate) system_title: String,
     /// The OS cursor currently set on the window. Tracked so the cursor policy only
     /// calls `Window::set_cursor` when the icon actually changes (cursor-moved fires
     /// very often). See `mouse::update_cursor`.
