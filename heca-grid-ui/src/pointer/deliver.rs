@@ -133,6 +133,22 @@ pub(super) fn delivering<T>(f: impl FnOnce() -> T) -> (T, bool) {
 impl Base {
     /// Run this widget's registered handlers for `ev`, if it has any.
     pub(crate) fn run_handlers(&mut self, ev: &Event) -> crate::event::HandlerOutcome {
+        // **A disabled control answers no click** — as a disabled `<button>` fires none. Its click
+        // handlers used to be private to the control, which checked for itself; now they are
+        // ordinary handlers, so the rule is made here, once, for every control. Only controls: a
+        // container that is dimmed with `disabled` keeps listening for what it listens for.
+        let inert = self.click_role != crate::component::ClickRole::Passive
+            && self.disabled.get_untracked()
+            && matches!(
+                ev,
+                Event::Click(_) | Event::DoubleClick(_) | Event::TripleClick(_)
+            );
+        if inert {
+            return crate::event::HandlerOutcome {
+                handled: Handled::No,
+                default_prevented: false,
+            };
+        }
         match self.handlers.as_mut() {
             Some(h) => {
                 let out = h.run(ev);

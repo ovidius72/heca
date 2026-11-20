@@ -90,19 +90,11 @@ fn focus_and_pick(
     //
     // No guard: `FocusDock` only focuses, and focusing the dock that already has the keyboard is a
     // no-op. `ToggleDock` carries the toggle.
-    let focus_scope = match ctx.emit_intent() {
-        Some(emit) => {
-            let emit = emit.clone();
-            let id = container.to_string();
-            FocusScope::new(picked).on_click(move |_| {
-                emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
-                    crate::input::WmAction::FocusDock {
-                        dock: Some(id.clone()),
-                    },
-                ));
-            })
-        }
-        None => FocusScope::new(picked),
+    let focus_scope = {
+        let id = container.to_string();
+        FocusScope::new(picked).on_click(move |ev| {
+            ev.dispatch(Intent::new("focus_dock").arg("dock", PropValue::Text(id.clone())));
+        })
     };
     heca_grid_ui::WidgetModel::new(
         focus_scope
@@ -295,30 +287,19 @@ pub(super) struct ChromeFrame<'a> {
 }
 
 /// A sidebar collapse toggle for the **top bar** (sidebar-fu-14): a small arrow
-/// `IconButton` that emits `ActivateAction(action)` (show↔hide for its region),
+/// `IconButton` that runs the action `action_name` (show↔hide for its region),
 /// carrying a tooltip with its keybind (resolved centrally by `action_name` — like every other
 /// chrome button; the tip is a property of the widget, so this still returns the widget). Lives in the always-visible top bar so it
 /// works in both expanded and collapsed states.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn sidebar_toggle_button(
     glyph: Glyph,
-    action: crate::input::WmAction,
     action_name: &str,
     shortcuts: &ActionShortcuts,
     catalog: &crate::actions::ActionCatalog,
-    emit: ChromeIntentEmitter,
     color: Color,
 ) -> IconButton {
-    use crate::app::interaction::InteractionIntent;
     // Label from the action descriptor (catalog-owned), never re-spelled here.
     let label = catalog.label(action_name).unwrap_or(action_name);
-    // One gesture: a click and a `prefix+/` pick both fire the button's action.
-    let fire = {
-        let emit = emit.clone();
-        let action = action.clone();
-        move || emit.fire(InteractionIntent::ActivateAction(action.clone()))
-    };
-    let hint = fire.clone();
     // Just pick the size variant — the widget derives icon px + padding from the
     // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
     // `IconButton` scales its padding). No caller-side size math.
@@ -332,11 +313,9 @@ pub(super) fn sidebar_toggle_button(
     let button = IconButton::new(Icon::new(glyph).color(color))
         .key(action_name)
         .size(WidgetSize::Small)
-        .on_click(fire)
-        // Declares its own pick — `on_hint` is on `HintExt`, so every widget has it. A
-        // `KeyHint` wrapper here used to be a second pick target on top of the button's own
-        // actionability (AGENTS § 5a).
-        .on_hint(hint);
+        // **One line says what the button does**: a click runs the action, and a `prefix+/` pick of
+        // it carries the same intent, so the picker can ask the policy about it.
+        .on_press(Intent::new(action_name));
     action_tooltip(button, action_name, label, shortcuts)
 }
 
@@ -620,11 +599,9 @@ pub(crate) fn build_chrome_root(
         };
         sidebar_toggle_button(
             glyph,
-            crate::input::WmAction::SidebarLeft,
             "sidebar_left",
             &state.action_shortcuts,
             &state.action_catalog,
-            emit_intent.clone(),
             theme.colors.muted,
         )
     });
@@ -636,11 +613,9 @@ pub(crate) fn build_chrome_root(
         };
         sidebar_toggle_button(
             glyph,
-            crate::input::WmAction::SidebarRight,
             "sidebar_right",
             &state.action_shortcuts,
             &state.action_catalog,
-            emit_intent.clone(),
             theme.colors.muted,
         )
     });

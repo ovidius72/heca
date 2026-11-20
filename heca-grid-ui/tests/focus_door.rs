@@ -47,8 +47,8 @@ fn two_buttons() -> (Flex, Rc<Cell<u32>>, Rc<Cell<u32>>) {
     let (a, b) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
     let (sa, sb) = (a.clone(), b.clone());
     let mut ui = Flex::row()
-        .child(Button::primary("A").on_click(move || sa.set(sa.get() + 1)))
-        .child(Button::secondary("B").on_click(move || sb.set(sb.get() + 1)));
+        .child(Button::primary("A").on_click(move |_| sa.set(sa.get() + 1)))
+        .child(Button::secondary("B").on_click(move |_| sb.set(sb.get() + 1)));
     LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
     (ui, a, b)
 }
@@ -83,8 +83,8 @@ fn a_press_elsewhere_takes_the_keyboard_from_a_followed_surface() {
     let count = Rc::new(Cell::new(0));
     let sink = count.clone();
     let mut ui = Flex::row()
-        .child(Item::new("surface").on_activate(|| {}))
-        .child(Button::primary("B").on_click(move || sink.set(sink.get() + 1)));
+        .child(Item::new("surface").on_click(|_| {}))
+        .child(Button::primary("B").on_click(move |_| sink.set(sink.get() + 1)));
     ui.base_mut().children[0].base_mut().follow_focus(open);
     LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
     assert!(holds_keyboard(&ui), "open, so it holds the keyboard");
@@ -113,8 +113,8 @@ fn a_modal_returns_the_keyboard_to_the_widget_that_held_it_when_it_opened() {
     let (b, layer) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
     let (sb, sl) = (b.clone(), layer.clone());
     let mut ui = Flex::row()
-        .child(Button::primary("B").on_click(move || sb.set(sb.get() + 1)))
-        .child(Item::new("layer").on_activate(move || sl.set(sl.get() + 1)));
+        .child(Button::primary("B").on_click(move |_| sb.set(sb.get() + 1)))
+        .child(Item::new("layer").on_click(move |_| sl.set(sl.get() + 1)));
     ui.base_mut().children[1]
         .base_mut()
         .follow_focus_modal(open);
@@ -158,7 +158,7 @@ fn confirming_a_modal_returns_focus_before_the_host_can_unmount_it() {
     let palette = CommandPalette::new().command(Command::new("Select", || {}));
     let open = palette.open_signal();
     let mut ui = Flex::column()
-        .child(Button::primary("Opener").on_click(move || count.set(count.get() + 1)))
+        .child(Button::primary("Opener").on_click(move |_| count.set(count.get() + 1)))
         .child(palette);
     LayoutEngine::new().compute(&mut ui, Size::new(900.0, 600.0));
     ui.base().children[0].base().focus(false);
@@ -184,9 +184,9 @@ fn a_modal_that_lost_the_keyboard_does_not_take_it_back_on_close() {
     let (a, b) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
     let (sa, sb) = (a.clone(), b.clone());
     let mut ui = Flex::row()
-        .child(Button::primary("A").on_click(move || sa.set(sa.get() + 1)))
-        .child(Button::primary("B").on_click(move || sb.set(sb.get() + 1)))
-        .child(Item::new("layer").on_activate(|| {}));
+        .child(Button::primary("A").on_click(move |_| sa.set(sa.get() + 1)))
+        .child(Button::primary("B").on_click(move |_| sb.set(sb.get() + 1)))
+        .child(Item::new("layer").on_click(|_| {}));
     ui.base_mut().children[2]
         .base_mut()
         .follow_focus_modal(open);
@@ -212,8 +212,8 @@ fn a_modal_that_no_longer_holds_the_keyboard_does_not_hand_it_to_the_opener() {
     let a = Rc::new(Cell::new(0));
     let sa = a.clone();
     let mut ui = Flex::row()
-        .child(Button::primary("A").on_click(move || sa.set(sa.get() + 1)))
-        .child(Item::new("layer").on_activate(|| {}));
+        .child(Button::primary("A").on_click(move |_| sa.set(sa.get() + 1)))
+        .child(Item::new("layer").on_click(|_| {}));
     ui.base_mut().children[1]
         .base_mut()
         .follow_focus_modal(open);
@@ -243,7 +243,7 @@ fn a_region_that_is_told_it_holds_the_keyboard_leaves_it_with_the_control_inside
     let count = Rc::new(Cell::new(0));
     let sink = count.clone();
     let mut ui = Flex::column().child(
-        Flex::row().child(Button::primary("inside").on_click(move || sink.set(sink.get() + 1))),
+        Flex::row().child(Button::primary("inside").on_click(move |_| sink.set(sink.get() + 1))),
     );
     ui.base_mut().children[0].base_mut().follow_focus(dock);
     LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
@@ -268,7 +268,7 @@ fn a_region_returns_the_keyboard_to_the_control_it_held_when_it_last_let_go() {
     let count = Rc::new(Cell::new(0));
     let sink = count.clone();
     let mut ui = Flex::column().child(
-        Flex::row().child(Button::primary("inside").on_click(move || sink.set(sink.get() + 1))),
+        Flex::row().child(Button::primary("inside").on_click(move |_| sink.set(sink.get() + 1))),
     );
     ui.base_mut().children[0].base_mut().follow_focus(dock);
     LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
@@ -296,7 +296,7 @@ fn a_press_inside_a_focused_container_focuses_the_control_inside() {
     let count = Rc::new(Cell::new(0));
     let sink = count.clone();
     let mut ui = Flex::column().child(
-        Flex::row().child(Button::primary("inside").on_click(move || sink.set(sink.get() + 1))),
+        Flex::row().child(Button::primary("inside").on_click(move |_| sink.set(sink.get() + 1))),
     );
     // A container that can hold the keyboard itself: focusable, and not a single click target, so a
     // press inside it lands on what is inside.
@@ -356,7 +356,7 @@ fn tab_continues_from_the_widget_that_was_clicked() {
 /// to reach the keyboard.
 #[test]
 fn a_clicked_row_with_no_wiring_holds_the_keyboard() {
-    let mut ui = Flex::column().child(Row::new().child(Label::new("row")).on_activate(|| {}));
+    let mut ui = Flex::column().child(Row::new().child(Label::new("row")).on_click(|_| {}));
     LayoutEngine::new().compute(&mut ui, Size::new(200.0, 80.0));
     assert!(!holds_keyboard(&ui));
     let at = centre(&ui, 0);

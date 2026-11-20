@@ -11,7 +11,7 @@
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet};
 use crate::scene::{Border, Glow};
@@ -41,7 +41,6 @@ pub struct IconButton {
     /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
     progress: f32,
     flash: Flash,
-    on_click: Option<Box<dyn Fn()>>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -73,6 +72,7 @@ impl IconButton {
         // them genuinely will not fit is a [`ButtonGroup`](super::ButtonGroup)'s job, not a silent
         // squashing.
         base.style.layout.flex_shrink = Some(0.0);
+        base.click_role = crate::component::ClickRole::Control;
         base.children.push(crate::WidgetModel::new(icon));
         Self {
             base,
@@ -82,7 +82,6 @@ impl IconButton {
             show_glow: true,
             progress: 0.0,
             flash: Flash::new(),
-            on_click: None,
         }
     }
 
@@ -122,26 +121,9 @@ impl IconButton {
         self
     }
 
-    /// Set the click callback (also makes it focusable).
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_click = Some(Box::new(f));
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
-        self.base.focusable = true; // clickable icon buttons are focusable (Component::focusable)
-        self.base.one_click_target = true; // and one click target (Base::one_click_target)
-        self
-    }
-
     /// The hover-state signal.
     pub fn hovered(&self) -> Signal<bool> {
         self.base.pointer.hovered
-    }
-
-    fn activate(&mut self) {
-        self.flash.trigger();
-        if let Some(f) = &self.on_click {
-            f();
-        }
     }
 }
 
@@ -247,40 +229,21 @@ impl Component for IconButton {
         }
     }
 
-    /// Capture, not bubble: this control is **one click target and one Tab stop**
-    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
-    /// never see the press first. Handling it before the children is what keeps that true.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if self.on_click.is_none() || self.base.disabled.get_untracked() {
-            return Handled::No;
-        }
-        match ev {
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
-                self.activate();
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
-    }
-
     /// **The click, after its children have declined it.**
     ///
-    /// The press is taken in capture (so composed content can never take it first) and the click
-    /// it turns into is delivered to whoever took that press — this control — which is what makes
-    /// "one control, one click target" a framework rule rather than something each control
-    /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
-    /// refusal and can take the click with `stop_propagation`.
+    /// The press is taken in capture by the framework (`Base::one_click_target`) and the click it
+    /// turns into is delivered here — Enter and Space on the focused button arrive as the same
+    /// click. What was wired with [`on_click`](crate::builders::EventExt::on_click) has already
+    /// run as a handler, with first refusal; this is the button's own part, the press flash.
+    /// A button nothing is wired to is inert: it passes the click on.
     fn on_event(&mut self, ev: &Event) -> Handled {
-        if self.on_click.is_none() || self.base.disabled.get_untracked() {
+        if !self.base.listens(crate::event::EventKind::Click) || self.base.disabled.get_untracked()
+        {
             return Handled::No;
         }
         match ev {
             Event::Click(_) => {
-                self.activate();
+                self.flash.trigger();
                 Handled::Yes
             }
             _ => Handled::No,

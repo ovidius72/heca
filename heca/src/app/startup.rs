@@ -188,13 +188,18 @@ pub(crate) async fn init_state(
     // it through the one dispatch door — the same permission rules and the same confirmation on
     // anything destructive that a keypress gets. A plugin's widget names an action the same way and
     // is judged identically.
+    //
+    // **It is stamped with where it came from.** The host records which surface an event was
+    // delivered to (`chrome::input::origin`), and this reads it back — a dialog's button is the
+    // dialog acting on itself, the sidebar is the sidebar, and only a gesture with no recorded
+    // origin is `MouseContent`, which is all this used to say about everything.
     let intent_proxy = event_proxy.clone();
-    heca_grid_ui::intent::install_intent_sink(move |intent| {
-        let _ = intent_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-            source: crate::app::interaction::InteractionSource::MouseContent,
-            intent: crate::app::interaction::InteractionIntent::View(intent),
-        });
-    });
+    heca_grid_ui::intent::install_intent_sink(crate::chrome::input::origin::sink(
+        move |source, intent| {
+            let _ = intent_proxy
+                .send_event(crate::app::events::AppEvent::ChromeIntent { source, intent });
+        },
+    ));
 
     // **A drop nobody took**, queued the same way and for the same reason: the row owns the
     // gesture, but moving a pane between workspaces needs `&mut AppState`, which a sink has not.

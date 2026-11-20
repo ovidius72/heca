@@ -16,9 +16,10 @@
 //! readable, with nothing required of the author and no runtime check to forget. It is the same
 //! reason [`Select`](super::Select) types its options to [`Choice`](super::Choice).
 //!
-//! **A collapsed row runs the button's own click**, through [`Component::activate`] — the one entry
-//! every way of pressing a button already goes through. Not a copy of the handler, and not a second
-//! handler on the group: the same one, so the visible button and the menu row cannot drift.
+//! **A collapsed row clicks the button.** It runs the button's own click handlers
+//! ([`Handlers::runner`](crate::event::Handlers::runner)) on a real [`Event::Click`] aimed at the
+//! button — the event the pointer would have delivered to it. Not a copy of the handler, and not a
+//! second handler on the group: the same ones, so the visible button and the menu row cannot drift.
 
 use crate::builders::{EventExt, LayoutExt, StyleExt, TooltipExt};
 use crate::component::{Base, Component, PaintCx, paint_child};
@@ -112,9 +113,9 @@ pub struct ButtonGroup {
 struct Entry {
     label: String,
     glyph: Option<Glyph>,
-    /// **The button's own click.** Held here so a menu row runs the same closure the button does,
-    /// with nothing queued and nothing to drain.
-    click: Option<Rc<dyn Fn()>>,
+    /// **The button's own click handlers.** Held here so a menu row runs the same handlers the
+    /// button does, with nothing queued and nothing to drain.
+    click: Option<Rc<dyn Fn(&crate::event::Event) -> crate::event::HandlerOutcome>>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -184,7 +185,11 @@ impl ButtonGroup {
         self.entries.push(Entry {
             label: button.label(),
             glyph: button.glyph(),
-            click: button.click_handler(),
+            click: button
+                .base()
+                .handlers
+                .as_ref()
+                .and_then(|h| h.runner(crate::event::EventKind::Click)),
         });
         // Its words are what it says on hover once it is showing only its icon, so the author
         // writes them once. An author who wants different words has already set a tooltip, and
@@ -564,17 +569,19 @@ impl ButtonGroup {
     fn overflow_menu(&self) -> ContextMenu {
         let shown = self.shown.get().min(self.entries.len());
         let mut menu = Menu::new(OVERFLOW_LABEL, "Actions that did not fit here");
-        for entry in self.entries.iter().skip(shown) {
+        for (i, entry) in self.entries.iter().enumerate().skip(shown) {
             let run = entry.click.clone();
+            // The click the pointer would have delivered to that button, at where it last was.
+            let click = crate::click_event(self.base.children[i].base().bounds);
             let mut item = MenuItem::new()
                 .label(entry.label.clone())
                 .on_click(move || {
-                    // **The button's own closure, run here.** It used to write down which button was
-                    // chosen and wait for the group to drain it on its next event — but the menu is in a
-                    // layer, so no event reaches the group when a row is clicked, and the action sat
-                    // there for seconds until something unrelated wandered past.
+                    // **The button's own handlers, run here.** It used to write down which button
+                    // was chosen and wait for the group to drain it on its next event — but the
+                    // menu is in a layer, so no event reaches the group when a row is clicked, and
+                    // the action sat there for seconds until something unrelated wandered past.
                     if let Some(run) = run.as_ref() {
-                        run();
+                        run(&click);
                     }
                 });
             if let Some(g) = entry.glyph {

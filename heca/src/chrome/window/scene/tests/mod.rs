@@ -22,10 +22,6 @@ fn the_sidebar_toggles_keep_their_identity_when_a_sidebar_is_toggled() {
 
     let shortcuts = ActionShortcuts::default();
     let catalog = crate::actions::ActionCatalog::with_builtins();
-    let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
-        crate::app::interaction::InteractionSource::Keyboard,
-        |_, _| {},
-    );
 
     // The bar as it is built: the two toggles side by side, in document order.
     let bar = |left_open: bool, right_open: bool| {
@@ -42,20 +38,16 @@ fn the_sidebar_toggles_keep_their_identity_when_a_sidebar_is_toggled() {
         Flex::row()
             .child(sidebar_toggle_button(
                 left_glyph,
-                crate::input::WmAction::SidebarLeft,
                 "sidebar_left",
                 &shortcuts,
                 &catalog,
-                emit.clone(),
                 Color::rgb(255, 255, 255),
             ))
             .child(sidebar_toggle_button(
                 right_glyph,
-                crate::input::WmAction::SidebarRight,
                 "sidebar_right",
                 &shortcuts,
                 &catalog,
-                emit.clone(),
                 Color::rgb(255, 255, 255),
             ))
     };

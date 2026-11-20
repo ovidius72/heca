@@ -13,7 +13,7 @@ pub(super) fn build(theme: &Theme) -> Grid {
             if let SignalData::String(text) = action.data { feed.message(text); }
         }});
     let text = editor.text();
-    let send = Button::new("Append entry").on_click(move || {
+    let send = Button::new("Append entry").on_click(move |_| {
         let message = text.get_untracked();
         if !message.is_empty() { feed.message(message); text.set(String::new()); }
     });

@@ -20,7 +20,6 @@ pub(crate) struct HeaderEnv {
     pub(super) programs: std::rc::Rc<ProgramsConfig>,
     pub(super) shortcuts: ActionShortcuts,
     pub(super) catalog: crate::actions::ActionCatalog,
-    pub(super) event_proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
 }
 
 /// The terminal content's pane-info header. Its retained node is independent of the terminal body.
@@ -117,7 +116,6 @@ fn show_pane_header(
             pane_id: input.pane_id,
             ws_idx: input.ws_idx,
             col_idx: input.col_idx,
-            event_proxy: env.event_proxy.clone(),
         };
         let root = build_pane_header(&content, env.band, ctx)?;
         // The identity rule's warning half: each control carries a key naming which pane's

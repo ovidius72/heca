@@ -246,7 +246,7 @@ fn governs_foreign_identity(node: &dyn Component, owner: Option<&str>) -> bool {
 /// declaration. One pass could not express it — the first target found won, whatever it was.
 ///
 /// The case that forced it: heca's sidebar pane row carries the identity and is *actionable*
-/// (`on_activate`), while the `KeyHint` around it carries the *declaration* and the placement that
+/// (`on_click`), while the `KeyHint` around it carries the *declaration* and the placement that
 /// goes with it (`CenterRight`, so the letter clears the row's label). A single inner-first pass
 /// labelled the row, so the same pane wore a right-aligned keycap under one picker and a
 /// top-centred one under the other — same letter, two widgets, two looks.

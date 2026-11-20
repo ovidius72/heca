@@ -17,25 +17,37 @@ use crate::keymap::ActionRef;
 /// Handler-to-handler calls should use `registry.execute()` directly —
 /// they bypass the router because they're inside an already-allowed
 /// interaction.
-/// The overlay an overlay-control action acts on: the one it names, or — bare, as from a bound key
-/// or an RPC line, which cannot name a runtime id — the front-most visible modal layer. `None` when
-/// nothing is open.
+/// The overlay an overlay-control action acts on, in this order:
+///
+/// 1. the one it **names**;
+/// 2. the one it **came from** — a dialog's button is the dialog acting on itself, and its
+///    [`source`](InteractionSource::Surface) says which one. This is what lets a button submit its
+///    own overlay without carrying a runtime id the wire cannot hold (`overlay` is `#[serde(skip)]`),
+///    and it is right where "the front-most" is not: a dialog's button pressed while another modal
+///    is in front of it;
+/// 3. bare, as from a bound key or an RPC line, which cannot name a runtime id — the front-most
+///    visible modal layer.
+///
+/// `None` when nothing is open.
 pub(super) fn target_overlay(
-    state: &AppState,
+    layers: &crate::chrome::LayerRegistry,
+    window: &heca_grid_ui::widgets::Flex,
+    source: InteractionSource,
     named: Option<crate::chrome::OverlayId>,
 ) -> Option<crate::chrome::OverlayId> {
-    named.or_else(|| {
-        state
-            .layers
-            .top_modal_id(&state.window_root)
-            .map(crate::chrome::OverlayId)
-    })
+    named
+        .or_else(|| match source {
+            InteractionSource::Surface(key) => layers.id_of_surface(key).map(crate::chrome::OverlayId),
+            _ => None,
+        })
+        .or_else(|| layers.top_modal_id(window).map(crate::chrome::OverlayId))
 }
 
 /// Resolve an overlay-control action ([`WmAction::is_overlay_control`]) — the only place they run.
 pub(super) fn resolve_overlay_control(
     state: &mut AppState,
     registry: &ActionRegistry,
+    source: InteractionSource,
     action: &WmAction,
 ) {
     let (named, result) = match action {
@@ -43,7 +55,7 @@ pub(super) fn resolve_overlay_control(
         WmAction::CloseOverlay { overlay } => (*overlay, None),
         _ => return,
     };
-    let Some(overlay) = target_overlay(state, named) else {
+    let Some(overlay) = target_overlay(&state.layers, &state.window_root, source, named) else {
         return;
     };
     let result = match result {
@@ -74,7 +86,7 @@ pub(crate) fn dispatch_intent(
     if let InteractionIntent::ActivateAction(action) = &intent
         && action.is_overlay_control()
     {
-        resolve_overlay_control(state, registry, action);
+        resolve_overlay_control(state, registry, source, action);
         return;
     }
 
@@ -229,5 +241,57 @@ pub(crate) fn dispatch_action_ref(
             source,
             InteractionIntent::View(intent.clone()),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::interaction::SurfaceKey;
+    use crate::chrome::{LayerKind, LayerRegistry, OverlayId, new_window_root};
+    use heca_grid_ui::WidgetModel;
+    use heca_grid_ui::widgets::Flex;
+
+    fn dialog() -> WidgetModel {
+        WidgetModel::new(Flex::column())
+    }
+
+    /// **A dialog's button submits its own overlay.** The id is a runtime counter the wire cannot
+    /// carry, so the act arrives stamped with the surface it came from and resolves it from that —
+    /// even when another surface was opened after it and would be "the front-most".
+    #[test]
+    fn a_submit_from_a_surface_resolves_that_surface_and_a_bare_one_the_front_most() {
+        let mut layers = LayerRegistry::default();
+        let mut window = new_window_root();
+        let (first, second) = (layers.reserve_id(), layers.reserve_id());
+        layers.insert(first, None, LayerKind::OnDemand, dialog(), &mut window);
+        layers.insert(second, None, LayerKind::OnDemand, dialog(), &mut window);
+
+        let from_first = InteractionSource::Surface(layers.surface_key(first));
+        assert_eq!(
+            target_overlay(&layers, &window, from_first, None),
+            Some(OverlayId(first)),
+            "its own overlay, not the one opened after it"
+        );
+        let from_second = InteractionSource::Surface(layers.surface_key(second));
+        assert_eq!(
+            target_overlay(&layers, &window, from_second, None),
+            Some(OverlayId(second))
+        );
+        assert_eq!(
+            target_overlay(&layers, &window, from_first, Some(OverlayId(second))),
+            Some(OverlayId(second)),
+            "one that names an overlay still wins"
+        );
+        assert_eq!(
+            target_overlay(&layers, &window, InteractionSource::Surface(SurfaceKey::of("gone")), None),
+            layers.top_modal_id(&window).map(OverlayId),
+            "a surface that is no longer a layer falls back to the front-most"
+        );
+        assert_eq!(
+            target_overlay(&layers, &window, InteractionSource::Keyboard, None),
+            layers.top_modal_id(&window).map(OverlayId),
+            "a bound key or an RPC line has no surface and acts on the front-most"
+        );
     }
 }

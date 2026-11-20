@@ -6,7 +6,7 @@
 //! pane. `RailCell` is that per-item cell: a themed square holding one
 //! [`Icon`], with the same interactive chrome as [`Row`](super::Row)
 //! (hover tint, active selection + same-hue border/glow, press flash, focus ring,
-//! `on_activate` on click / Enter / Space).
+//! `on_click` on click / Enter / Space).
 //!
 //! Items are **icons by default**. The move/swap/focus-select **pick letters**
 //! that appear over a cell are not built in here — wrap the cell in the generic
@@ -14,7 +14,7 @@
 //! across the rail, content-area panes, and command palettes.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -40,19 +40,19 @@ pub struct RailCell {
     /// Active (current / selected) state — accent tint + border + glow.
     active: Signal<bool>,
     flash: Flash,
-    on_activate: Option<Box<dyn Fn()>>,
 }
 
 #[heca_grid_ui_macros::props]
 impl RailCell {
     /// A new cell wrapping `icon`, centered in a square. Make it
-    /// clickable/keyboard-activatable with [`on_activate`](RailCell::on_activate).
+    /// clickable/keyboard-activatable with [`on_click`](crate::builders::EventExt::on_click).
     pub fn new(icon: Icon) -> Self {
         // Its name, taken while the icon is still typed — a rail cell IS its glyph. Same reason as
         // `IconButton::new`: without it the cell has no identity at all, and `Icon` must stay silent
         // so it does not shadow a `Label` beside it elsewhere.
         let name = icon.glyph_signal().get_untracked().name();
         let mut base = Base::new();
+        base.click_role = crate::component::ClickRole::Control;
         // Center the single icon child both ways within the square cell.
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Center;
@@ -64,7 +64,6 @@ impl RailCell {
             cell: DEFAULT_CELL,
             active: signal(false),
             flash: Flash::new(),
-            on_activate: None,
         };
         cell.remeasure();
         cell
@@ -90,26 +89,9 @@ impl RailCell {
         self.active
     }
 
-    /// Make the cell clickable/keyboard-activatable (also makes it focusable). The
-    /// host maps activation to its intent (focus the pane, pick the swap target…).
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_activate = Some(Box::new(f));
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
-        self.base.focusable = true; // interactive cells are focusable (Component::focusable)
-        self.base.one_click_target = true; // and one click target (Base::one_click_target)
-        self
-    }
 
     fn interactive(&self) -> bool {
-        self.on_activate.is_some()
-    }
-
-    fn activate(&mut self) {
-        self.flash.trigger();
-        if let Some(f) = &self.on_activate {
-            f();
-        }
+        self.base.listens(crate::event::EventKind::Click)
     }
 }
 
@@ -213,40 +195,20 @@ impl Component for RailCell {
         }
     }
 
-    /// Capture, not bubble: this control is **one click target and one Tab stop**
-    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
-    /// never see the press first. Handling it before the children is what keeps that true.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if !self.interactive() || self.base.disabled.get_untracked() {
-            return Handled::No;
-        }
-        match ev {
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
-                self.activate();
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
-    }
-
     /// **The click, after its children have declined it.**
     ///
-    /// The press is taken in capture (so composed content can never take it first) and the click
-    /// it turns into is delivered to whoever took that press — this control — which is what makes
-    /// "one control, one click target" a framework rule rather than something each control
-    /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
-    /// refusal and can take the click with `stop_propagation`.
+    /// The press is taken in capture by the framework (`Base::one_click_target`) and the click it
+    /// turns into is delivered here — Enter and Space on the focused control arrive as the same
+    /// click. What was wired with [`on_click`](crate::builders::EventExt::on_click) has already
+    /// run as a handler, with first refusal; this is the control's own part, the press flash. One
+    /// nothing is wired to is inert: it passes the click on.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }
         match ev {
             Event::Click(_) => {
-                self.activate();
+                self.flash.trigger();
                 Handled::Yes
             }
             _ => Handled::No,

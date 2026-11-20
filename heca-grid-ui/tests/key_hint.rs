@@ -106,7 +106,7 @@ fn key_hint_is_transparent_to_focus_and_activation() {
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
     let mut wrapped =
-        KeyHint::new(Item::new("file.rs").on_activate(move || sink.set(sink.get() + 1)));
+        KeyHint::new(Item::new("file.rs").on_click(move |_| sink.set(sink.get() + 1)));
     LayoutEngine::new().compute(&mut wrapped, Size::new(200.0, 60.0));
 
     // Focus traversal recurses through the transparent wrapper to the child.
@@ -147,7 +147,7 @@ fn row_attention_request_pulses_then_settles() {
     // Host-owned attention request: setting it true fires one pulse sequence and
     // is consumed back to false (so each request = one sequence).
     let req = signal(false);
-    let mut row = Row::new().attention(req).on_activate(|| {});
+    let mut row = Row::new().attention(req).on_click(|_| {});
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
 
     req.set(true);

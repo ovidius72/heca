@@ -3,7 +3,7 @@
 //! [`Item`](super::Item) is the fixed leading/label/trailing row; `Row` is its
 //! open cousin: it provides the same interactive chrome — hover tint, active
 //! (selected) state with an [`ActiveMarker`], press flash, focus ring, and
-//! `on_activate` (mouse + Enter/Space) — but holds **any** children (a
+//! `on_click` (mouse + Enter/Space) — but holds **any** children (a
 //! [`Grid`](super::Grid) of [`Label`](super::Label)/[`Icon`](super::Icon)/
 //! [`Badge`](super::Badge), a multi-line card, …). Use it for rich Dock rows
 //! that need to be clicked and selected, where `Item`'s slots aren't enough.
@@ -14,7 +14,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::effects::{Attention, Flash};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -56,7 +56,6 @@ pub struct Row {
     reveal: Option<Signal<bool>>,
     marker: ActiveMarker,
     flash: Flash,
-    on_activate: Option<Box<dyn Fn()>>,
     /// Override for the hover/active highlight color. Otherwise selection follows the theme's
     /// selected background and accent border; hover follows the row's background.
     highlight: Option<Color>,
@@ -72,9 +71,10 @@ pub struct Row {
 #[heca_grid_ui_macros::props]
 impl Row {
     /// A new (horizontal) row. Add content with `.child(...)`; make it
-    /// clickable/selectable with [`on_activate`](Row::on_activate).
+    /// clickable/selectable with [`on_click`](crate::builders::EventExt::on_click).
     pub fn new() -> Self {
         let mut base = Base::new();
+        base.click_role = crate::component::ClickRole::Control;
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Center;
         Self {
@@ -89,7 +89,6 @@ impl Row {
             // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
             flash: Flash::new(),
-            on_activate: None,
             highlight: None,
             previous_tint: None,
             attention: Attention::new(),
@@ -120,15 +119,6 @@ impl Row {
         self
     }
 
-    /// Make the row clickable/keyboard-activatable (also makes it focusable).
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_activate = Some(Box::new(f));
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
-        self.base.focusable = true; // interactive rows are focusable (Component::focusable)
-        self.base.one_click_target = true; // and one click target (Base::one_click_target)
-        self
-    }
 
     /// Bind a **host-owned** "needs attention" request signal. When the host sets
     /// it `true`, the row flashes `ATTENTION_PULSES` times (and the signal is
@@ -227,14 +217,7 @@ impl Row {
     }
 
     fn interactive(&self) -> bool {
-        self.on_activate.is_some()
-    }
-
-    fn activate(&mut self) {
-        self.flash.trigger();
-        if let Some(f) = &self.on_activate {
-            f();
-        }
+        self.base.listens(crate::event::EventKind::Click)
     }
 }
 
@@ -451,43 +434,20 @@ impl Component for Row {
         }
     }
 
-    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
-    /// children, and they must never take the press first — the control is one click target.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if !self.interactive() || self.base.disabled.get_untracked() {
-            return Handled::No;
-        }
-        match ev {
-            // No focus check here, and none in any of the other six widgets that were doing this by
-            // hand: `dispatch` only offers a raw key to the widget that owns the keyboard. The rule
-            // is the framework's, made once, so a widget cannot take a key meant for something else
-            // — which is what made a row eat the Enter that belonged to the list it sits in.
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
-                self.activate();
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
-    }
-
     /// **The click, after its children have declined it.**
     ///
-    /// The press is taken in capture (so composed content can never take it first) and the click
-    /// it turns into is delivered to whoever took that press — this control — which is what makes
-    /// "one control, one click target" a framework rule rather than something each control
-    /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
-    /// refusal and can take the click with `stop_propagation`.
+    /// The press is taken in capture by the framework (`Base::one_click_target`) and the click it
+    /// turns into is delivered here — Enter and Space on the focused control arrive as the same
+    /// click. What was wired with [`on_click`](crate::builders::EventExt::on_click) has already
+    /// run as a handler, with first refusal; this is the control's own part, the press flash. One
+    /// nothing is wired to is inert: it passes the click on.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }
         match ev {
             Event::Click(_) => {
-                self.activate();
+                self.flash.trigger();
                 Handled::Yes
             }
             _ => Handled::No,

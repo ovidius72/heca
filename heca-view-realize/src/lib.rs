@@ -36,7 +36,7 @@ use std::rc::Rc;
 use heca_grid_ui::reactive::Signal;
 use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
 use heca_grid_ui::{Component, Glyph, Theme};
-use heca_view::{Intent, PropMap, PropValue, ViewNode};
+use heca_view::{Intent, PropMap, PropValue, ViewEvent, ViewNode};
 
 use crate::intents::hint_intent;
 use crate::style::{merge_style_half, resolve_color};
@@ -222,6 +222,23 @@ pub(crate) fn apply_common_props(
         realized.base_mut().hint = Some(heca_grid_ui::hint::Hint::of(carrier, move || {
             emit(run.clone())
         }));
+    }
+    // **Every other native event, by name** — `click`, `double_click`, `right_click`,
+    // `pointer_enter`, `focus_gained`, `key_down`, `drag_start`, `drop`, … — read once here for
+    // every kind, like the hint above.
+    //
+    // A plugin binds an `Intent` to any event the native API has, under the native builders'
+    // own names, through one table (`heca_grid_ui::EVENT_NAMES`) that both authoring paths read.
+    // A name that is not in it (`press`, `change`, … — events a widget raises) is the kind's own
+    // to read and is skipped here; so is `hint`, which is what a pick does and was read above.
+    for (name, intent) in &node.events {
+        if name == ViewEvent::Hint.name() {
+            continue;
+        }
+        let (emit, intent) = (emit.clone(), intent.clone());
+        realized
+            .base_mut()
+            .listen_named(name, move |_| emit(intent.clone()));
     }
     // **Who this node is**, read once here for every kind, exactly like style and the hint above.
     //

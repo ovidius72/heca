@@ -1,4 +1,5 @@
 use super::*;
+use crate::builders::EventExt;
 use crate::event::PointerButton;
 use crate::widgets::{Button, Label};
 use std::cell::Cell;
@@ -200,7 +201,7 @@ fn text_input_body_types_and_submit_nav_fires_primary() {
     // A form dialog: an Input body + OK (primary) / Cancel. `open` focuses the Input first.
     let mut d = Dialog::new("Rename pane")
         .body(Input::new().value("term"))
-        .action(Button::new("OK").on_click(move || f.set(true)))
+        .action(Button::new("OK").on_click(move |_| f.set(true)))
         .action(Button::new("Cancel"))
         .default_open(true);
     // Typed text is delivered field-first to (and consumed by) the focused input. Text, not a
@@ -340,10 +341,10 @@ fn interleaved_body_and_actions_keep_field_focus_and_primary_activation() {
     let submit = primary.clone();
     let cancel = canceled.clone();
     let mut dialog = Dialog::new("Rename")
-        .action(Button::new("Save").on_click(move || submit.set(true)))
+        .action(Button::new("Save").on_click(move |_| submit.set(true)))
         .child(Input::new().value("name"))
         .child(Label::new("A second body component"))
-        .action(Button::new("Cancel").on_click(move || cancel.set(true)))
+        .action(Button::new("Cancel").on_click(move |_| cancel.set(true)))
         .default_open(true);
 
     assert_eq!(

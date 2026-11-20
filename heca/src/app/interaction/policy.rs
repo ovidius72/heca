@@ -112,6 +112,9 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed
+        // One named workspace's row: the same act, aimed. Judged exactly as the click that used to
+        // ask for it by its own intent was — refused while a pane floats or something covers the panes.
+        | WmAction::ToggleWorkspaceCollapsed { .. }
         | WmAction::CollapseCurrentColumn
         | WmAction::ExpandCurrentColumn
         | WmAction::ToggleCurrentColumnCollapsed
@@ -162,6 +165,8 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ScrollToTop
         | WmAction::ScrollToBottom
         | WmAction::ScrollToOffset { .. }
+        // …and one named terminal's, the same act aimed (a pane's own scrollback controls).
+        | WmAction::TerminalScroll { .. }
         // Selection acts on the focused pane and is allowed in both
         // tiled and floating domains.
         | WmAction::EnterSelectionMode
@@ -269,6 +274,11 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // `Global`, not `AlwaysAllowed`: a floating pane is no reason to refuse moving a dock's
         // cursor, and `AlwaysAllowed` is refused while something covers the content.
         WmAction::CursorTo { .. } => ActionPolicy::Global,
+        // **Moving the exposé's highlight is looking, not acting** — it records a pane id and touches
+        // no session state — so it is `Global`, as its own `ExposeCursor` intent always was: the only
+        // time it fires is while the map covers the panes, so any narrower policy would refuse it
+        // every time.
+        WmAction::ExposeCursor { .. } => ActionPolicy::Global,
         WmAction::UnfocusDock => ActionPolicy::Global,
         // Horizontal scroll reaches a chrome container's scroll area only — chrome state, no pane
         // layout impact — so it stays reachable while a floating pane is active, unlike the vertical

@@ -155,10 +155,11 @@ fn candidate_allowed(
 /// the chrome tree dispatches as `MouseLeftSidebar` is exactly how the picker came to offer letters
 /// that execution then refused.
 ///
-/// Each surface answers from the emitter that built it, so there is nothing to keep in step:
-/// the chrome tree carries its emitter's source, a layer's is its own id, and a pane's pick is the
-/// keyboard gesture `chrome/pane/mod.rs` posts.
-fn pick_source(
+/// **The window tree answers through [`source_at`](crate::chrome::input::origin::source_at)** — the
+/// same function that stamps a widget's click with where it came from, so a letter is shown for
+/// the source its act will be executed with, by one rule. A pane's pick is the keyboard gesture
+/// `chrome/pane/mod.rs` posts, and a surface outside the window tree is the keyboard's too.
+pub(super) fn pick_source(
     state: &crate::app_state::AppState,
     target: &HintTarget,
 ) -> crate::app::interaction::InteractionSource {
@@ -166,47 +167,12 @@ fn pick_source(
     let HintSurface::Window = target.surface else {
         return S::Keyboard;
     };
-    // **Which surface a target sits in is the first step of its path.** The window root's children
-    // are the chrome and the surfaces seated beside it, so `path[0]` names one of them and the
-    // node's own declared key says which. Nothing is parsed out of that key: the registry is asked
-    // by it, because the registry is what holds the name.
-    let Some(slot) = window_slot_of(state, target) else {
-        return S::Keyboard;
-    };
-    if slot == crate::chrome::CHROME_KEY {
-        return state
-            .chrome_tree
-            .as_ref()
-            .map(|t| t.intent_source)
-            .unwrap_or(S::Keyboard);
-    }
-    // A registered surface answers by its addressable **name** (`heca.expose`), not by the slot it
-    // is seated in; one that registered nothing already *is* named by the key it declared on
-    // itself (the toast stack's `heca.notifications`). Both spellings arrive here as the same
-    // `SurfaceKey`, which is what stops a surface having two identities.
-    S::Surface(
-        state
-            .layers
-            .declaration_at(&slot)
-            .map(|l| state.layers.surface_key(l.id))
-            .unwrap_or_else(|| crate::app::interaction::SurfaceKey::of(&slot)),
+    crate::chrome::input::origin::source_at(
+        &state.window_root,
+        &crate::chrome::input::origin::Seats::new(&state.layers, state.chrome_tree.as_ref()),
+        &target.path,
     )
-}
-
-/// **The window-root child a target fell under**, by its own declared key.
-///
-/// `None` when the target names the root itself (an empty path) or the child has gone — both of
-/// which mean "no surface to ask about", never "the chrome".
-fn window_slot_of(state: &crate::app_state::AppState, target: &HintTarget) -> Option<String> {
-    let first = *target.path.first()?;
-    state
-        .window_root
-        .base()
-        .children
-        .get(first)?
-        .base()
-        .key
-        .clone()
+    .unwrap_or(S::Keyboard)
 }
 
 /// **What a layer hides from the letters beneath it.**

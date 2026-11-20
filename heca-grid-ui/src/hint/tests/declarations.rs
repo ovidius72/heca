@@ -1,4 +1,4 @@
-use crate::builders::HintExt as _;
+use crate::builders::{EventExt as _, HintExt as _};
 use crate::component::Component;
 use crate::hint::*;
 use crate::reactive::SignalUpdate;
@@ -28,7 +28,7 @@ fn hint_at(
 /// in two different places: a declaration carries its own placement, so labelling a different
 /// node silently moves the keycap.
 ///
-/// heca's case: a sidebar pane row carries the identity and is actionable (`on_activate`),
+/// heca's case: a sidebar pane row carries the identity and is actionable (`on_click`),
 /// wrapped in a `KeyHint` that carries the declaration and `CenterRight`. Labelling by key used
 /// to take the row — so the same pane showed a right-aligned cap under `prefix+/` and a
 /// top-centred one under `prefix+q`.
@@ -322,7 +322,7 @@ fn a_button_inside_a_declaring_container_still_gets_its_own_letter() {
     // …and it holds two things of its own, one of which is an ordinary button.
     let mut label = Surface::new();
     label.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 40.0));
-    let mut button = Button::new("Close").on_click(|| {});
+    let mut button = Button::new("Close").on_click(|_| {});
     button.base_mut().bounds = Rectangle::new(Point::new(0.0, 50.0), Size::new(40.0, 40.0));
     region.base_mut().children.push(crate::WidgetModel::new(label));
     region.base_mut().children.push(crate::WidgetModel::new(button));
@@ -350,7 +350,7 @@ fn a_wrapper_and_the_one_thing_it_holds_share_a_letter() {
 
     let log = Rc::new(RefCell::new(Vec::new()));
     let seen = log.clone();
-    let mut card = Button::new("Card").on_click(|| {});
+    let mut card = Button::new("Card").on_click(|_| {});
     card.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(80.0, 40.0));
     let mut wrapper = KeyHint::new(card).on_hint(move || seen.borrow_mut().push("wrapper"));
     wrapper.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(80.0, 40.0));

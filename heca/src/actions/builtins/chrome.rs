@@ -240,6 +240,30 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[],
     },
     ActionDescriptor {
+        name: "toggle_workspace_collapsed",
+        side: Side::Client,
+        label: "Toggle a Workspace Row",
+        description: "Fold or unfold one workspace's row in the sidebar tree, by index — what clicking its header does.",
+        icon: None,
+        args: &[ArgDescriptor::required(
+            "ws_idx",
+            ArgKind::Int,
+            "Index of the workspace whose row to fold or unfold.",
+        )],
+    },
+    ActionDescriptor {
+        name: "expose_cursor",
+        side: Side::Client,
+        label: "Move Expose Cursor",
+        description: "Put the exposé's highlight on a pane, so the map reopens there. Moves the highlight and nothing else — no focus changes.",
+        icon: None,
+        args: &[ArgDescriptor::required(
+            "pane_id",
+            ArgKind::Int,
+            "The pane the highlight moves to.",
+        )],
+    },
+    ActionDescriptor {
         name: "collapse_current_column",
         side: Side::Client,
         label: "Collapse Column Row",

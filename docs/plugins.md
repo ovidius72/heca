@@ -166,13 +166,20 @@ A screen is described as a tree of nodes:
 ViewNode {
   kind: which widget           // Column, Row, Button, Input, Scroll, …
   props: name → value           // padding, placeholder, variant, colour, …
-  events: name → Intent          // "press" → an action id + arguments
+  events: name → Intent          // "press", "click", "double_click", "focus_gained", … → an action id + arguments
   children: [ ViewNode, … ]        // any depth
 }
 ```
 
 The same tree works for the app's own screens, for anything sent in over RPC, and for a plugin.
 It is plain data, so it survives being turned into bytes.
+
+**Any node can be bound to any event the native API has**, by the native name: `click`,
+`double_click`, `right_click`, `middle_click`, `pointer_enter`, `pointer_leave`, `focus_gained`,
+`focus_lost`, `key_down`, `key_up`, `text_input`, `scroll`, `drag_start`, `drop`, … (the full list is
+in [`widgets.md`](widgets.md#what-every-widget-gets)), plus the ones a widget raises (`press`,
+`change`, `toggle`, `dismiss`, …). `.on("double_click", Intent::new("open"))` is the same act as the
+native `.on_double_click`; `press` is the native `.on_press` — a click, Enter or Space, and a pick.
 
 `realize` turns a tree into real widgets. It is the only path from a description to a widget.
 
@@ -192,7 +199,7 @@ Two ways exist to build a screen and they produce the same widgets:
 
 ```rust
 // The app's own code — it can hold functions and live values.
-Button::destructive("Restart").on_click(move || restart(id))
+Button::destructive("Restart").on_click(move |_| restart(id))
 
 // A description — plain data, so it can be sent anywhere.
 ViewNode::new(WidgetId::Button)

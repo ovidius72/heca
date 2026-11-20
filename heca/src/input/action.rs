@@ -332,6 +332,14 @@ pub enum WmAction {
     CollapseCurrentWorkspace,
     ExpandCurrentWorkspace,
     ToggleCurrentWorkspaceCollapsed,
+    /// **Fold or unfold one workspace's row** in the sidebar tree, by index — what clicking its
+    /// header does. [`ToggleCurrentWorkspaceCollapsed`](Self::ToggleCurrentWorkspaceCollapsed) is
+    /// the active workspace's.
+    ToggleWorkspaceCollapsed { ws_idx: usize },
+    /// **Put the exposé's highlight on a pane**, so the map can reopen there and return to it
+    /// after a trip through another workspace. Not a focus change: moving a highlight around a map
+    /// is looking, and it touches no session state.
+    ExposeCursor { pane_id: PaneId },
     CollapseCurrentColumn,
     ExpandCurrentColumn,
     ToggleCurrentColumnCollapsed,
@@ -429,6 +437,17 @@ pub enum WmAction {
     /// Used by the GUI scrollbar / RPC; no default keybinding.
     ScrollToOffset {
         rows: usize,
+    },
+    /// **Scroll one terminal's viewport** — the terminal a pane's scrollback controls belong to,
+    /// not whichever the keyboard is on. The target is a `terminal` (the id the store issued), a
+    /// `pane_id`, or — with neither — the terminal the keyboard is on, like
+    /// [`PaneTerminalFontZoom`](Self::PaneTerminalFontZoom). `rows` is how far above the live
+    /// bottom to go (never past the top of its history); with none, all the way down to the live
+    /// bottom, animated — what the "N lines above" badge does.
+    TerminalScroll {
+        pane_id: Option<PaneId>,
+        terminal: Option<u64>,
+        rows: Option<usize>,
     },
 
     // ── Selection (host capability, reusable across pane types) ──

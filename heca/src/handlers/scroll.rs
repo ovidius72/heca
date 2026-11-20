@@ -234,6 +234,38 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
     }
 }
 
+/// **Scroll one terminal** — the one named by `terminal` or `pane_id`, else the one the keyboard
+/// acts on. With `rows`, to that offset above the live bottom (the scrollbar's gesture); without,
+/// animated to the live bottom (the badge's). Both are the moves a click on that terminal's own
+/// scrollback controls always made, now reachable by name.
+pub fn handle_terminal_scroll(state: &mut AppState, action: &WmAction) {
+    let WmAction::TerminalScroll {
+        pane_id,
+        terminal,
+        rows,
+    } = action
+    else {
+        return;
+    };
+    let id = match pane_id.is_some() || terminal.is_some() {
+        true => {
+            let backends = &state.client.backends;
+            backends
+                .target(*pane_id, *terminal, None)
+                .and_then(|t| backends.terminal_of(t))
+        }
+        false => state.keyboard_terminal(),
+    };
+    let Some(backend) = id.and_then(|id| state.client.backends.get_mut_by_id(id)) else {
+        return;
+    };
+    match rows {
+        Some(rows) => scroll_backend_to_offset(backend, *rows),
+        None => backend.scroll_to_bottom_animated(),
+    }
+    state.needs_redraw = true;
+}
+
 /// **Scroll a terminal to `rows` above its live bottom**, never past the top of its history. The one
 /// place that does it: the action for the focused pane and a click on any terminal's scrollbar
 /// both come here.

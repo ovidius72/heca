@@ -176,10 +176,10 @@ impl PaneCard<'_> {
             ))
             // Click to go there. `Row` already provides the hover tint and the press handling, so
             // the mouse costs one line rather than a second input path.
-            .on_activate({
+            .on_click({
                 let choose = self.cb.choose.clone();
                 let id = self.pane_id;
-                move || choose(id)
+                move |_| choose(id)
             })
             .child({
                 // The name, and under it where the pane is — one column so a card with no folder

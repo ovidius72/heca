@@ -7,7 +7,7 @@
 //! state. Lifecycle (when a toast appears, how long it lives, auto-dismiss policy,
 //! deduplication, sound) is the **host application's** job; the widget merely
 //! *renders* one notification and *reports interactions* back via callbacks
-//! ([`on_click`](Toast::on_click), [`action`](Toast::action),
+//! ([`on_click`](crate::builders::EventExt::on_click), [`action`](Toast::action),
 //! [`on_dismiss`](Toast::on_dismiss)). The host removes it from its own store.
 //!
 //! Because it is an ordinary in-tree component (not overlay-drawn), it is equally
@@ -36,8 +36,8 @@ pub use spec::{ToastAction, ToastSpec};
 pub use stack::ToastStack;
 
 use crate::animation::Animation;
-use crate::builders::{LayoutExt, Parent};
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::builders::{EventExt, LayoutExt, Parent};
+use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
@@ -96,7 +96,6 @@ pub struct Toast {
     has_actions: bool,
     /// Whether the × dismiss affordance is shown (default `true`).
     dismissible: bool,
-    on_click: Option<Box<dyn Fn()>>,
     on_dismiss: Option<Rc<dyn Fn()>>,
     /// The whole-card press flash. The actions and the × are real controls that flash themselves,
     /// so this is only ever the card's own press.
@@ -127,6 +126,7 @@ impl Toast {
     /// constructors, and wire dismissal with [`on_dismiss`](Toast::on_dismiss).
     pub fn new(title: impl Into<String>) -> Self {
         let mut base = Base::new();
+        base.click_role = crate::component::ClickRole::Card;
         base.style.layout.width = Length::Px(DEFAULT_WIDTH);
         base.style.layout.direction = Direction::Row;
         // Centre the row's items vertically: the leading icon, the text column and the × line up on
@@ -171,7 +171,6 @@ impl Toast {
             has_body: false,
             has_actions: false,
             dismissible: true,
-            on_click: None,
             on_dismiss: None,
             flash: Flash::new(),
             progress: false,
@@ -372,16 +371,6 @@ impl Toast {
             .unwrap_or(false)
     }
 
-    /// Make the whole card clickable. It fires for a press the action button and the × did not
-    /// take — they are children, and a child takes its own press.
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_click = Some(Box::new(f));
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
-        self.base.focusable = true; // a clickable toast is focusable (Component::focusable)
-        self
-    }
-
     /// Set the callback fired when the × is clicked. The host removes the toast.
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
@@ -518,7 +507,7 @@ impl Toast {
     fn sync_dismiss(&mut self) {
         self.base.children[DISMISS] = if self.dismissible {
             let dismiss = self.on_dismiss.clone();
-            crate::WidgetModel::new(IconButton::new(Icon::new(Glyph::Close)).on_click(move || {
+            crate::WidgetModel::new(IconButton::new(Icon::new(Glyph::Close)).on_click(move |_| {
                 if let Some(f) = &dismiss {
                     f();
                 }
@@ -526,13 +515,6 @@ impl Toast {
         } else {
             empty_slot()
         };
-    }
-
-    fn activate_body(&mut self) {
-        self.flash.trigger();
-        if let Some(f) = &self.on_click {
-            f();
-        }
     }
 }
 
@@ -658,22 +640,23 @@ impl Component for Toast {
 
     /// **The card takes what its children declined.** The action button and the × are children and
     /// take their own press, so a press that reaches here landed on the card itself — which is
-    /// exactly what `on_click` means. Bubble, not capture: capturing would take the press before
-    /// the two controls the card is built from ever saw it.
+    /// exactly what a click handler on the card means. Bubble, not capture: capturing would take
+    /// the press before the two controls the card is built from ever saw it.
+    ///
+    /// A card with a click handler **owns the press that reaches it**, so it is not also a press on
+    /// whatever sits behind the stack; the click that press becomes is the card's own, and
+    /// whatever was wired with [`on_click`](crate::builders::EventExt::on_click) has already run
+    /// as a handler by the time it gets here. Enter and Space on the focused card arrive as that
+    /// same click.
     fn on_event(&mut self, ev: &Event) -> Handled {
-        if self.base.disabled.get_untracked() {
+        if !self.base.listens(crate::event::EventKind::Click) || self.base.disabled.get_untracked()
+        {
             return Handled::No;
         }
         match ev {
-            Event::PointerDown(_) if self.on_click.is_some() => {
-                self.activate_body();
-                Handled::Yes
-            }
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } if self.focusable() => {
-                self.activate_body();
+            Event::PointerDown(_) => Handled::Yes,
+            Event::Click(_) => {
+                self.flash.trigger();
                 Handled::Yes
             }
             _ => Handled::No,

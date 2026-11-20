@@ -108,6 +108,11 @@ pub fn build_registry() -> ActionRegistry {
         handle_toggle_current_workspace_collapsed,
     );
     registry.register(
+        WmActionKind::ToggleWorkspaceCollapsed,
+        handle_toggle_workspace_collapsed,
+    );
+    registry.register(WmActionKind::ExposeCursor, handle_expose_cursor);
+    registry.register(
         WmActionKind::CollapseCurrentColumn,
         handle_collapse_current_column,
     );
@@ -202,6 +207,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::ScrollToLeftEdge, handle_scroll_to_left_edge);
     registry.register(WmActionKind::ScrollToRightEdge, handle_scroll_to_right_edge);
     registry.register(WmActionKind::ScrollToOffset, handle_scroll_to_offset);
+    registry.register(WmActionKind::TerminalScroll, handle_terminal_scroll);
 
     // ── Selection (host capability) ──
     registry.register(

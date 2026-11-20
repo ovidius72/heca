@@ -3,6 +3,8 @@
 
 use super::{DragEvent, Event, EventKind, Handled, Modifiers, PointerEvent};
 use heca_core::layout::Point;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// **What a widget's handlers said about an event**: whether one of them took it, and whether one
 /// of them asked the framework not to do its own thing afterwards.
@@ -131,7 +133,11 @@ impl<'a> EventCx<'a> {
 }
 
 /// One registered handler: a callback that may take the event.
-type Handler = Box<dyn FnMut(&mut EventCx<'_>)>;
+///
+/// Shared (`Rc`) so a container that has to present a widget as something else — a
+/// [`ButtonGroup`](crate::widgets::ButtonGroup) turning a button into a menu row — can run **the
+/// widget's own handlers** through [`Handlers::runner`], never a copy of them.
+type Handler = Rc<RefCell<dyn FnMut(&mut EventCx<'_>)>>;
 
 /// A widget's registered event handlers, keyed by [`EventKind`].
 ///
@@ -147,7 +153,33 @@ pub struct Handlers {
 impl Handlers {
     /// Register `f` for `kind`.
     pub fn add(&mut self, kind: EventKind, f: impl FnMut(&mut EventCx<'_>) + 'static) {
-        self.entries.push((kind, Box::new(f)));
+        self.entries.push((kind, Rc::new(RefCell::new(f))));
+    }
+
+    /// **Every handler registered for `kind`, as one shareable call** — `None` when there is none.
+    ///
+    /// For a container that has to act *as* a child it is not routing an event to: the child's own
+    /// handlers run, in registration order, on an event the caller builds. The same handlers the
+    /// widget runs for the real event, not a second set that could drift from them. A handler is
+    /// `FnMut`, so a runner that is re-entered from inside one of its own handlers is a no-op
+    /// rather than a panic.
+    pub fn runner(&self, kind: EventKind) -> Option<Rc<dyn Fn(&Event) -> HandlerOutcome>> {
+        let own: Vec<Handler> = self
+            .entries
+            .iter()
+            .filter(|(k, _)| *k == kind)
+            .map(|(_, f)| f.clone())
+            .collect();
+        if own.is_empty() {
+            return None;
+        }
+        Some(Rc::new(move |ev: &Event| {
+            let mut cx = EventCx::new(ev);
+            for f in &own {
+                call(f, &mut cx);
+            }
+            outcome(&cx)
+        }))
     }
 
     /// Whether anything is registered for `kind` — the cheap check the router makes before
@@ -161,19 +193,46 @@ impl Handlers {
     pub fn run(&mut self, ev: &Event) -> HandlerOutcome {
         let kind = ev.kind();
         let mut cx = EventCx::new(ev);
-        for (k, f) in self.entries.iter_mut() {
+        for (k, f) in &self.entries {
             if *k == kind {
-                f(&mut cx);
+                call(f, &mut cx);
             }
         }
-        HandlerOutcome {
-            handled: if cx.stopped() {
-                Handled::Yes
-            } else {
-                Handled::No
-            },
-            default_prevented: cx.default_prevented(),
+        outcome(&cx)
+    }
+}
+
+/// `f`, run only for the half of a key it asked for — one registration on [`EventKind::Key`] that
+/// ignores the other half. The one place that gate is written, for the named builders and for a
+/// description's `key_down` / `key_up` alike.
+pub(crate) fn key_half(
+    want_pressed: bool,
+    mut f: impl FnMut(&mut EventCx<'_>) + 'static,
+) -> impl FnMut(&mut EventCx<'_>) + 'static {
+    move |cx| {
+        if matches!(cx.event(), Event::Key { pressed, .. } if *pressed == want_pressed) {
+            f(cx);
         }
+    }
+}
+
+/// Call one handler. One already running (a handler that re-enters its own widget) is skipped
+/// rather than panicking.
+fn call(handler: &Handler, cx: &mut EventCx<'_>) {
+    if let Ok(mut f) = handler.try_borrow_mut() {
+        f(cx);
+    }
+}
+
+/// What the handlers that ran said — the one place it is read off the [`EventCx`].
+fn outcome(cx: &EventCx<'_>) -> HandlerOutcome {
+    HandlerOutcome {
+        handled: if cx.stopped() {
+            Handled::Yes
+        } else {
+            Handled::No
+        },
+        default_prevented: cx.default_prevented(),
     }
 }
 

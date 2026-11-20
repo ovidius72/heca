@@ -25,7 +25,7 @@ mod common;
 use common::click_at;
 use heca_core::layout::Point;
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::widgets::{Flex, FocusScope, Item};
+use heca_grid_ui::widgets::{Flex, FocusScope};
 use heca_grid_ui::{Event, LayoutEngine, PointerButton, Size};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -42,7 +42,10 @@ fn dock(log: &Log) -> heca_grid_ui::WidgetModel {
         .padding(40.0)
         .child({
             let log = log.clone();
-            Item::new("zsh")
+            // A plain row: a container that only listens. An `Item` is a **control** — with a click
+            // handler it is one click target and takes the click, as a `Button` does — so it would
+            // answer alone.
+            Flex::row()
                 .key("pane:7")
                 .height(Length::Px(30.0))
                 .on_click(move |_| log.borrow_mut().push("row"))

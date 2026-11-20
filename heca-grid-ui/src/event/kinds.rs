@@ -378,3 +378,121 @@ pub enum EventKind {
     Mount,
     Unmount,
 }
+
+/// **One event, under the name a description calls it by.**
+///
+/// A name is not always a whole kind: a key going down and a key coming up are one
+/// [`EventKind::Key`] told apart by `pressed`, and both are events a widget can be asked about by
+/// name. [`key_pressed`](Self::key_pressed) carries that half.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventName {
+    /// What it is called — in a description (`.on("double_click", …)`) and in the docs.
+    pub name: &'static str,
+    /// The kind a handler for it is registered under.
+    pub kind: EventKind,
+    /// For [`EventKind::Key`] only: `Some(true)` is the key going down, `Some(false)` coming up.
+    /// `None` for every other kind, which has no halves.
+    pub key_pressed: Option<bool>,
+}
+
+const fn named(name: &'static str, kind: EventKind) -> EventName {
+    EventName {
+        name,
+        kind,
+        key_pressed: None,
+    }
+}
+
+/// **The one table from an event's name to its kind** — read by a description (`.on("click", …)`
+/// in `heca-view-realize`) and by the native [`Base::listen_named`](crate::component::Base::listen_named),
+/// so a name means the same thing from either authoring path.
+///
+/// **Every [`EventKind`] is here**, which a test holds: a new kind that is not named fails it, so a
+/// widget can never have an event a plugin cannot bind. The spellings are the native builders'
+/// (`on_focus_gained` → `focus_gained`), so a plugin author reads the same word in both.
+pub const EVENT_NAMES: &[EventName] = &[
+    EventName {
+        name: "key_down",
+        kind: EventKind::Key,
+        key_pressed: Some(true),
+    },
+    EventName {
+        name: "key_up",
+        kind: EventKind::Key,
+        key_pressed: Some(false),
+    },
+    named("text_input", EventKind::TextInput),
+    named("modifiers_changed", EventKind::ModifiersChanged),
+    named("widget", EventKind::Widget),
+    named("hint", EventKind::Hint),
+    named("pointer_down", EventKind::PointerDown),
+    named("pointer_up", EventKind::PointerUp),
+    named("pointer_move", EventKind::PointerMove),
+    named("pointer_recheck", EventKind::PointerRecheck),
+    named("pointer_enter", EventKind::PointerEnter),
+    named("pointer_leave", EventKind::PointerLeave),
+    named("click", EventKind::Click),
+    named("double_click", EventKind::DoubleClick),
+    named("triple_click", EventKind::TripleClick),
+    named("right_click", EventKind::RightClick),
+    named("middle_click", EventKind::MiddleClick),
+    named("pointer_down_outside", EventKind::PointerDownOutside),
+    named("scroll", EventKind::Scroll),
+    named("drag_start", EventKind::DragStart),
+    named("drag", EventKind::Drag),
+    named("drag_end", EventKind::DragEnd),
+    named("drag_enter", EventKind::DragEnter),
+    named("drag_over", EventKind::DragOver),
+    named("drag_leave", EventKind::DragLeave),
+    named("drop", EventKind::Drop),
+    named("drag_in_flight", EventKind::DragInFlight),
+    named("drag_settled", EventKind::DragSettled),
+    named("focus_gained", EventKind::Focus),
+    named("focus_lost", EventKind::Blur),
+    named("mount", EventKind::Mount),
+    named("unmount", EventKind::Unmount),
+];
+
+impl EventName {
+    /// The entry called `name`, if there is one.
+    pub fn of(name: &str) -> Option<&'static EventName> {
+        EVENT_NAMES.iter().find(|e| e.name == name)
+    }
+}
+
+impl EventKind {
+    /// Every kind — the list the names table is held against.
+    pub const ALL: &'static [EventKind] = &[
+        EventKind::Key,
+        EventKind::TextInput,
+        EventKind::ModifiersChanged,
+        EventKind::Widget,
+        EventKind::Hint,
+        EventKind::PointerDown,
+        EventKind::PointerUp,
+        EventKind::PointerMove,
+        EventKind::PointerRecheck,
+        EventKind::PointerEnter,
+        EventKind::PointerLeave,
+        EventKind::Click,
+        EventKind::DoubleClick,
+        EventKind::TripleClick,
+        EventKind::RightClick,
+        EventKind::MiddleClick,
+        EventKind::PointerDownOutside,
+        EventKind::Scroll,
+        EventKind::DragStart,
+        EventKind::Drag,
+        EventKind::DragEnd,
+        EventKind::DragEnter,
+        EventKind::DragOver,
+        EventKind::DragLeave,
+        EventKind::Drop,
+        EventKind::DragInFlight,
+        EventKind::DragSettled,
+        EventKind::Focus,
+        EventKind::Blur,
+        EventKind::Mount,
+        EventKind::Unmount,
+    ];
+}

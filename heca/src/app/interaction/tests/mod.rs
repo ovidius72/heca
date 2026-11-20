@@ -25,6 +25,7 @@ pub(super) fn surface(name: &str) -> SurfaceKey {
 
 mod floating;
 mod focus;
+mod named_counterparts;
 mod policy;
 mod route;
 mod view_intent;

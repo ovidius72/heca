@@ -16,7 +16,7 @@
 //! selected pill, the cursor outline, the attention flash and the click:
 //!
 //! ```ignore
-//! Row::new().on_activate(open).child(
+//! Row::new().on_click(move |_| open()).child(
 //!     Tile::new()
 //!         .status(StatusDot::online())
 //!         .icon(Icon::new(Glyph::FileCode))

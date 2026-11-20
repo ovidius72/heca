@@ -33,22 +33,29 @@ fn a_handler_on_any_widget_hears_its_own_clicks() {
 }
 
 /// `stop_propagation` is the named opt-out: the handler takes the event, and the widget's own
-/// behaviour does not run.
+/// behaviour does not run. A probe is the widget here — its own behaviour is what it records.
 #[test]
 fn stop_propagation_takes_the_event_from_the_widget_itself() {
-    let fired = Rc::new(std::cell::Cell::new(false));
-    let f = fired.clone();
-    let mut button = Button::primary("DEREZ")
-        .on_click(move || f.set(true))
-        .on(EventKind::Click, |cx| cx.stop_propagation());
-    LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
-    let b = button.base().bounds;
-    click_at(
-        &mut button,
-        Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
-        PointerButton::Left,
+    let click = |stop: bool| {
+        let (probe, seen) = Probe::new(100.0, 50.0);
+        let probe = if stop {
+            probe.on(EventKind::Click, |cx| cx.stop_propagation())
+        } else {
+            probe.on(EventKind::Click, |_| {})
+        };
+        let mut root = Flex::row().child(probe);
+        LayoutEngine::new().compute(&mut root, Size::new(100.0, 50.0));
+        click_at(&mut root, LEFT, PointerButton::Left);
+        meaningful(&seen)
+    };
+    assert!(
+        click(false).contains(&"Click".to_string()),
+        "without it the widget's own behaviour runs"
     );
-    assert!(!fired.get(), "the handler owned the click");
+    assert!(
+        !click(true).contains(&"Click".to_string()),
+        "the handler owned the click"
+    );
 }
 
 /// Mount fires once, on the first layout pass that sees the widget — the first moment it is both

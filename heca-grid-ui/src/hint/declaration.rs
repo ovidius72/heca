@@ -51,6 +51,17 @@ impl Hint {
         }
     }
 
+    /// **A pick that says what it is and does exactly that**: dispatches `intent` to the host's
+    /// sink — the one the widget's [`EventCx::dispatch`](crate::event::EventCx::dispatch) posts to.
+    ///
+    /// For a widget whose pick is *not* its click (a column picked to go to its first pane, which
+    /// clicking the column does not do): [`on_press`](crate::builders::EventExt::on_press) covers
+    /// the case where they are the same act.
+    pub fn dispatching(intent: heca_view::Intent) -> Self {
+        let run = intent.clone();
+        Self::of(intent, move || crate::intent::dispatch(run.clone()))
+    }
+
     /// Run it. The only thing the library ever does with a declaration.
     pub fn run(&self) {
         (self.run)()

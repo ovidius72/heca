@@ -256,3 +256,39 @@ fn test_spawn_command_takes_a_folder() {
     };
     assert_eq!(cwd.as_deref(), Some("/tmp/work"));
 }
+
+/// **The three actions that name what they act on** build from the arguments their descriptors
+/// declare, and a missing required one is a failure rather than a default.
+#[test]
+fn test_build_the_named_actions() {
+    let args = |pairs: &[(&str, &str)]| {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect::<std::collections::HashMap<_, _>>()
+    };
+    assert_eq!(
+        build_action("terminal_scroll", &args(&[("pane_id", "7"), ("rows", "20")])),
+        Some(WmAction::TerminalScroll { pane_id: Some(PaneId(7)), terminal: None, rows: Some(20) })
+    );
+    assert_eq!(
+        build_action("terminal_scroll", &args(&[("terminal", "4")])),
+        Some(WmAction::TerminalScroll { pane_id: None, terminal: Some(4), rows: None }),
+        "no rows is the live bottom"
+    );
+    assert_eq!(
+        build_action("terminal_scroll", &args(&[])),
+        Some(WmAction::TerminalScroll { pane_id: None, terminal: None, rows: None }),
+        "naming nothing is the keyboard's terminal"
+    );
+    assert_eq!(
+        build_action("toggle_workspace_collapsed", &args(&[("ws_idx", "2")])),
+        Some(WmAction::ToggleWorkspaceCollapsed { ws_idx: 2 })
+    );
+    assert_eq!(build_action("toggle_workspace_collapsed", &args(&[])), None);
+    assert_eq!(
+        build_action("expose_cursor", &args(&[("pane_id", "9")])),
+        Some(WmAction::ExposeCursor { pane_id: PaneId(9) })
+    );
+    assert_eq!(build_action("expose_cursor", &args(&[])), None);
+}

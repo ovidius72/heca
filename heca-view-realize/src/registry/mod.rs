@@ -46,6 +46,19 @@ pub struct WidgetDefinition {
     updates: Vec<Rc<Update>>,
 }
 
+/// **The events every widget takes** — each native one, by name (`click`, `double_click`,
+/// `focus_gained`, …), and the pick (`hint`). What a widget raises on top of those is declared per
+/// kind with [`WidgetDefinition::events`].
+fn native_events() -> Vec<String> {
+    let mut names: Vec<String> = ViewEvent::ALL
+        .iter()
+        .filter(|event| !ViewEvent::WIDGET.contains(event))
+        .map(|event| event.name().to_string())
+        .collect();
+    names.sort();
+    names
+}
+
 impl WidgetDefinition {
     /// Registerable construction; callers return a concrete widget without boxing it.
     pub fn new<C: IntoComponent + 'static>(
@@ -53,7 +66,7 @@ impl WidgetDefinition {
         factory: impl Fn(&ViewNode, &mut RealizeCx<'_>) -> Result<C, RealizeError> + 'static,
     ) -> Self {
         Self {
-            metadata: WidgetMetadata { id: id.into(), sdk_name: "", native_name: "", properties: Vec::new(), native_bindings: &[], minimum_version: 1, maximum_version: 1, accepts_children: false, child_types: Vec::new(), events: vec![ViewEvent::Hint.name().into()], declaration: false },
+            metadata: WidgetMetadata { id: id.into(), sdk_name: "", native_name: "", properties: Vec::new(), native_bindings: &[], minimum_version: 1, maximum_version: 1, accepts_children: false, child_types: Vec::new(), events: native_events(), declaration: false },
             factory: Rc::new(move |node, cx| factory(node, cx).map(IntoComponent::into_component)),
             validators: Vec::new(),
             state_updates: Vec::new(),

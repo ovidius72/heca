@@ -1,6 +1,6 @@
 //! Actions on what is drawn around the panes: containers, docks, layers, the palette, search history, overlays, regions, notifications.
 
-use super::{get_enum, get_enum_or_default, get_string, get_u64};
+use super::{get_enum, get_enum_or_default, get_string, get_u64, get_usize};
 use crate::input::WmAction;
 
 pub(super) fn build_chrome(
@@ -8,6 +8,12 @@ pub(super) fn build_chrome(
     args: &std::collections::HashMap<String, String>,
 ) -> Option<WmAction> {
     match name {
+        "toggle_workspace_collapsed" => Some(WmAction::ToggleWorkspaceCollapsed {
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
+        "expose_cursor" => Some(WmAction::ExposeCursor {
+            pane_id: heca_core::layout::PaneId(get_u64(args, "pane_id")?),
+        }),
         "cursor_to" => Some(WmAction::CursorTo {
             mount: args.get("mount")?.clone(),
             key: args.get("key")?.clone(),

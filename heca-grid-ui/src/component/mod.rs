@@ -16,7 +16,7 @@ mod paint_walk;
 mod tests;
 mod tree;
 
-pub use base::Base;
+pub use base::{Base, ClickRole};
 pub use behavior::Component;
 pub use model::WidgetModel;
 pub use dispatch::*;

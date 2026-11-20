@@ -122,13 +122,18 @@ not work** — two red tests said so before anything was built on it:
 - **Eight widgets keep their action in a private field of their own** — `Button`, `IconButton`,
   `BadgeButton`, `Toast`, `Choice`, `RailCell`, `Item`, `Row`. `Handlers::has(Click)` is `false` for a
   `Button`, the case that matters most.
-- **`on_click` and `on_activate` are two spellings of one thing**, so no set of `EventKind`s names it
+- **`on_click` and `on_activate` were two spellings of one thing**, so no set of `EventKind`s named it
   either.
 
 So it is a field after all: **`Base::activatable`**, set wherever the action is wired — once in
-`EventExt::on` for the generic listeners (`Click`, `DoubleClick`, `Key`, which covers `on_click`,
-`on_double_click`, `on_key_down` and `on_key_up`), and one line in each of the eight. That line sits
-beside their existing `base.focusable` and `base.one_click_target`, which are the same pattern.
+`Base::listen` (what `EventExt::on` calls) for the generic listeners (`Click`, `DoubleClick`, `Key`,
+which covers `on_click`, `on_press`, `on_double_click`, `on_key_down` and `on_key_up`).
+
+> **Update (P087/T565):** the eight private actions are gone — `Button`, `IconButton`,
+> `BadgeButton`, `Toast`, `Choice`, `RailCell`, `Item` and `Row` take the generic `.on_click` like
+> every widget, so `Handlers::has(Click)` is now true for all of them and `on_activate` no longer
+> exists on them. The field stays: it still answers the question without walking the handler list
+> for every candidate, and it is one assignment in one place.
 
 ```
 gets a letter = activatable && !hintable(false)

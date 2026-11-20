@@ -40,21 +40,7 @@ pub trait EventExt: Component + Sized {
         kind: crate::event::EventKind,
         f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
     ) -> Self {
-        // **Wiring an action is what makes a widget pickable**. Set here, in the one
-        // place every generic listener goes through, rather than repeated in `on_click`,
-        // `on_double_click`, `on_key_down` and `on_key_up` — a rule in four call sites is a rule in
-        // the wrong place.
-        //
-        // Right-click and middle-click are deliberately absent: a right-click opens a context menu
-        // rather than doing the thing, so it should not spend one of the 52 letters.
-        use crate::event::EventKind as K;
-        if matches!(kind, K::Click | K::DoubleClick | K::Key) {
-            self.base_mut().activatable = true;
-        }
-        self.base_mut()
-            .handlers
-            .get_or_insert_with(Default::default)
-            .add(kind, f);
+        self.base_mut().listen(kind, f);
         self
     }
 
@@ -64,6 +50,44 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::Click, f)
     }
 
+
+    /// **A click that says what it does** — the intent it dispatches, as data.
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_view::Intent;
+    ///
+    /// let close = IconButton::new(Icon::new(Glyph::Close))
+    ///     .on_press(Intent::new("close_pane_by_id").arg("pane_id", 7_i64.into()));
+    /// ```
+    ///
+    /// One line, and both ways of pressing it are the **same act**: a click dispatches the intent
+    /// ([`EventCx::dispatch`](crate::event::EventCx::dispatch), so the host's gate, permissions
+    /// and confirmations apply), and a `prefix+/` pick of the widget carries the *same* intent
+    /// ([`Hint::of`](crate::hint::Hint::of)) so a host can ask its policy before spending a letter
+    /// on an act that would be refused. The declarative twin is
+    /// [`ViewNode::on_press`](heca_view::ViewNode::on_press).
+    ///
+    /// A later [`on_hint`](crate::builders::HintExt::on_hint) overrides what a pick does and leaves
+    /// the click alone — for a widget whose click and pick are two acts.
+    fn on_press(self, intent: heca_view::Intent) -> Self {
+        self.on_press_to(intent, crate::intent::dispatch)
+    }
+
+    /// [`on_press`](EventExt::on_press) to a sender of your own rather than the host's intent sink
+    /// — what a described tree uses, whose host hands `realize` an emitter. The click and the pick
+    /// still carry the one intent.
+    fn on_press_to(self, intent: heca_view::Intent, send: impl Fn(heca_view::Intent) + 'static) -> Self {
+        let send = std::rc::Rc::new(send);
+        let on_click = {
+            let (intent, send) = (intent.clone(), send.clone());
+            move |_: &mut crate::event::EventCx<'_>| send(intent.clone())
+        };
+        let mut this = self.on_click(on_click);
+        let pick = intent.clone();
+        this.base_mut().hint = Some(crate::hint::Hint::of(intent, move || send(pick.clone())));
+        this
+    }
 
     /// A second click in the same run. The first still arrived as a
     /// [`click`](EventExt::on_click).
@@ -179,14 +203,12 @@ pub trait EventExt: Component + Sized {
     fn on_key_when(
         self,
         want_pressed: bool,
-        mut f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
+        f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
     ) -> Self {
-        self.on(crate::event::EventKind::Key, move |cx| {
-            if matches!(cx.event(), crate::event::Event::Key { pressed, .. } if *pressed == want_pressed)
-            {
-                f(cx);
-            }
-        })
+        self.on(
+            crate::event::EventKind::Key,
+            crate::event::key_half(want_pressed, f),
+        )
     }
 
 

@@ -27,7 +27,7 @@ mod lines;
 mod listing;
 
 pub use buttons::PANE_ARG;
-pub(crate) use buttons::{ButtonEmit, PaneButtonDef, PaneButtons, PaneIds, add_extension_button};
+pub(crate) use buttons::{PaneButtonDef, PaneButtons, PaneIds, add_extension_button, stays_when_floating};
 pub(crate) use chips::{Fit, PaneChipDef, PaneChips, add_extension_chip};
 pub use chips::{PaneChip, PaneFacts};
 pub(crate) use lines::{

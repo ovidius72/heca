@@ -36,7 +36,7 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{HintExt, LayoutExt, Parent, PlaceExt, StyleExt};
+use crate::builders::{EventExt, HintExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -152,7 +152,7 @@ impl DockFrame {
         // library deciding app styling. A caller says it with `fold_hint_tone`.
         let toggle = Item::new(title)
             .leading(leading)
-            .on_activate(move || expanded.set(!expanded.get_untracked()))
+            .on_click(move |_| expanded.set(!expanded.get_untracked()))
             .hint_placement(crate::widgets::HintPlacement::TopLeft);
         // The toggle takes remaining width; controls keep their natural width and own input.
         let header = Grid::new()

@@ -31,19 +31,19 @@ impl Dialog {
         self.base.children[0].advance_focus(false);
     }
 
-    /// Fire the **primary** (first) action button — used when Enter is pressed from a field
+    /// Press the **primary** (first) action button — used when Enter is pressed from a field
     /// that didn't consume it (e.g. a focused text input), so Enter submits like clicking OK.
-    /// When a button itself is focused, Enter is delivered straight to it (it consumes it), so
-    /// this only runs for the non-button-focused case.
+    /// When a button itself is focused, Enter is a click on that button, so this only runs for
+    /// the non-button-focused case.
     fn activate_primary(&mut self) {
         // The first declared action is primary; body-builder order cannot change its row.
         if let Some(row) = self.part_mut(ACTIONS_AREA)
             && let Some(primary) = row.base_mut().children.first_mut()
         {
-            // **Ask it to act; do not pretend to be a keyboard.** This used to dispatch a
-            // synthetic `Event::Key { Enter }` and relied on the button claiming raw keys whether
-            // or not it was focused.
-            primary.activate();
+            // **Click it; do not pretend to be a keyboard.** A real click, through the one way
+            // anything presses a widget it holds — the handlers wired with `on_click`, then the
+            // widget's own.
+            crate::click(primary.as_mut());
         }
     }
 

@@ -64,9 +64,17 @@ pub(crate) fn deliver_press_to_tree(
     if the_app_answers_first(state.window_keyboard_terminal().is_some(), app_keys, combo) {
         return Some(Handled::No);
     }
+    // Where the keys go is read before they move, so what a widget dispatches in answer is stamped
+    // with the surface that holds the keyboard.
+    let origin = crate::chrome::input::origin::keyboard_origin(
+        &state.window_root,
+        &crate::chrome::input::origin::Seats::new(&state.layers, state.chrome_tree.as_ref()),
+    );
     // The keymap and the tree are different fields, so both are borrowed as they are: no copy.
     Some(state.widget_keymap.deliver_press(&press, |ev| {
-        heca_grid_ui::dispatch(&mut state.window_root, ev)
+        crate::chrome::input::origin::within(origin, || {
+            heca_grid_ui::dispatch(&mut state.window_root, ev)
+        })
     }))
 }
 

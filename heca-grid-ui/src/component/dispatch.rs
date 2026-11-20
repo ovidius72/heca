@@ -125,6 +125,7 @@ pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
 /// both handled one intent was not an error, and reading the tree could not tell you where a key
 /// landed.
 pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
+    let is_target = path.is_empty();
     if node.on_event_capture(ev) == Handled::Yes {
         return Handled::Yes;
     }
@@ -170,7 +171,32 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
     if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
+    // **Enter and Space on a control are a click** — the browser's `<button>`, done once here.
+    // After the widget's own key handlers (they may refuse it, as `preventDefault` would), and only
+    // at the target: a key bubbling up through a control's ancestors is not a press on them.
+    if is_target && is_activation(ev) && presses_on_activation(node) && click(node) == Handled::Yes {
+        return Handled::Yes;
+    }
     node.on_event(ev)
+}
+
+/// Enter or Space going down, or the configurable intent they resolve to — what a control answers
+/// as a click.
+fn is_activation(ev: &Event) -> bool {
+    matches!(
+        ev,
+        Event::Key {
+            key: GridKey::Enter | GridKey::Space,
+            pressed: true,
+        } | Event::Widget(WidgetIntent::Activate)
+    )
+}
+
+/// Whether a key at this target means a click: it declared a [`ClickRole`] (it is a control, or a
+/// card with something wired to it), and it is enabled.
+fn presses_on_activation(node: &dyn Component) -> bool {
+    let base = node.base();
+    base.click_role != ClickRole::Passive && !base.disabled.get_untracked()
 }
 
 /// **Do to `node` what picking it means**, in two cases and in this order:
@@ -190,12 +216,41 @@ pub(crate) fn run_pick(node: &mut dyn Component) {
     if !crate::hint::is_target(node) {
         return;
     }
-    // The centre, so a handler reading the position lands inside the widget it was aimed at.
-    let b = node.base().bounds;
-    let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    let click = Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b));
-    node.base_mut().run_handlers(&click);
-    node.on_event(&click);
+    click(node);
+}
+
+/// **Click this widget** — the DOM's `el.click()`.
+///
+/// Delivers a real [`Event::Click`] to `node`: its [`on_click`](crate::builders::EventExt::on_click)
+/// handlers first, then the widget's own [`on_event`](Component::on_event), exactly the two steps
+/// the pointer's click takes at its target. It is the one way anything presses a widget it holds
+/// without a pointer — a letter pick, Enter or Space on a focused control, a dialog pressing its
+/// primary button, a plugin — so none of them is a second path that could drift from what the mouse
+/// does.
+///
+/// A disabled widget does not answer, as a disabled `<button>` does not. Returns whether the click
+/// was taken.
+pub fn click(node: &mut dyn Component) -> Handled {
+    if node.base().disabled.get_untracked() {
+        return Handled::No;
+    }
+    let ev = click_event(node.base().bounds);
+    if node.base_mut().run_handlers(&ev).handled == Handled::Yes {
+        return Handled::Yes;
+    }
+    node.on_event(&ev)
+}
+
+/// The [`Event::Click`] a synthetic press delivers to a widget at `bounds`: left button, a run of
+/// one, at the centre — so a handler reading the position lands inside the widget it was aimed at.
+pub fn click_event(bounds: Rectangle) -> Event {
+    let at = heca_core::layout::Point::new(
+        bounds.loc.x + bounds.size.w / 2.0,
+        bounds.loc.y + bounds.size.h / 2.0,
+    );
+    let mut p = crate::event::PointerEvent::at(at).with_target_bounds(bounds);
+    p.click_count = 1;
+    Event::Click(p)
 }
 
 /// Capture down, children last-first, bubble up — for the events that are addressed to everything

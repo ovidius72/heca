@@ -27,7 +27,7 @@
 //! `Badge::danger`) keeps it.
 
 use crate::builders::{LayoutExt, Parent};
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Align, Direction, Justify, Length};
@@ -73,7 +73,6 @@ pub struct Choice {
     /// Selected (chosen) — a tinted pill + accent content.
     selected: Signal<bool>,
     flash: Flash,
-    on_activate: Option<Box<dyn Fn()>>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -82,6 +81,7 @@ impl Choice {
     /// [`child`](Parent::child).
     pub fn new(value: impl Into<String>) -> Self {
         let mut base = Base::new();
+        base.click_role = crate::component::ClickRole::Control;
         // Content is laid out as a centered row; padding/gap derive from the size variant in
         // `remeasure`, and the variant itself cascades to the content during layout.
         base.style.layout.direction = Direction::Row;
@@ -94,7 +94,6 @@ impl Choice {
             value: value.into(),
             selected: signal(false),
             flash: Flash::new(),
-            on_activate: None,
         };
         choice.remeasure();
         choice
@@ -131,28 +130,9 @@ impl Choice {
         self.base.pointer.hovered
     }
 
-    /// Make the option activatable (click / `Enter` / `Space`), which also makes it focusable.
-    ///
-    /// A container (`Select`, `Tabs`) wires this to record the pick; a standalone `Choice` can use
-    /// it directly.
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_activate = Some(Box::new(f));
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
-        self.base.focusable = true; // interactive options are focusable (Component::focusable)
-        self.base.one_click_target = true; // and one click target (Base::one_click_target)
-        self
-    }
 
     fn interactive(&self) -> bool {
-        self.on_activate.is_some()
-    }
-
-    fn activate(&mut self) {
-        self.flash.trigger();
-        if let Some(f) = &self.on_activate {
-            f();
-        }
+        self.base.listens(crate::event::EventKind::Click)
     }
 }
 
@@ -232,39 +212,20 @@ impl Component for Choice {
         }
     }
 
-    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
-    /// children, and they must never take the press first — the control is one click target.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if !self.interactive() || self.base.disabled.get_untracked() {
-            return Handled::No;
-        }
-        match ev {
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
-                self.activate();
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
-    }
-
     /// **The click, after its children have declined it.**
     ///
-    /// The press is taken in capture (so composed content can never take it first) and the click
-    /// it turns into is delivered to whoever took that press — this control — which is what makes
-    /// "one control, one click target" a framework rule rather than something each control
-    /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
-    /// refusal and can take the click with `stop_propagation`.
+    /// The press is taken in capture by the framework (`Base::one_click_target`) and the click it
+    /// turns into is delivered here — Enter and Space on the focused control arrive as the same
+    /// click. What was wired with [`on_click`](crate::builders::EventExt::on_click) has already
+    /// run as a handler, with first refusal; this is the control's own part, the press flash. One
+    /// nothing is wired to is inert: it passes the click on.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }
         match ev {
             Event::Click(_) => {
-                self.activate();
+                self.flash.trigger();
                 Handled::Yes
             }
             _ => Handled::No,

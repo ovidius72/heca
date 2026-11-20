@@ -3,8 +3,7 @@
 
 use super::*;
 use crate::color::Color;
-use crate::component::{Component, Event, GridKey, Handled, PaintCx};
-use crate::event::WidgetIntent;
+use crate::component::{Component, Event, Handled, PaintCx};
 use crate::font::MONO_ADVANCE_RATIO;
 use crate::reactive::SignalGet;
 use crate::scene::{Border, Glow};
@@ -94,23 +93,9 @@ impl Button {
             None,
         );
     }
-
-    /// The button's one action: flash, then run `on_click`. Every way of pressing it — pointer,
-    /// keyboard, or a caller invoking [`Component::activate`] — goes through here, so they cannot
-    /// drift apart and none of them has to know how the others work.
-    fn fire(&mut self) {
-        self.flash.trigger();
-        if let Some(f) = &self.on_click {
-            f();
-        }
-    }
 }
 
 impl Component for Button {
-    /// A caller with only a `dyn Component` can press this button — no synthetic keypress, no
-    /// focus required, because an addressed call is not an event competing for a target.
-    /// Its own [`icon_only`](Self::icon_only), reachable through `dyn Component` so a container
-    /// short of room can ask without knowing what its children are.
     /// A container styling a row as one group hands its variant down; a button that was given its
     /// own keeps it, which is what lets a quiet toolbar still have a destructive button in it.
     fn set_variant(&mut self, variant: ButtonVariant) {
@@ -145,11 +130,6 @@ impl Component for Button {
                 .push(crate::WidgetModel::new(Label::new(self.label.clone()).bold(true)));
         }
         self.remeasure();
-    }
-
-    fn activate(&mut self) -> bool {
-        self.fire();
-        true
     }
 
     fn base(&self) -> &Base {
@@ -446,68 +426,22 @@ impl Component for Button {
         }
     }
 
-    /// Capture, not bubble: this control is **one click target and one Tab stop**
-    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
-    /// never see the press first. Handling it before the children is what keeps that true.
-    ///
-    /// It takes the press and **fires on the click**: the press captures the pointer (so the
-    /// release comes here wherever the cursor went) and the click is what a press and a release on
-    /// this button *mean*. Dragging off the button before letting go therefore cancels it, which
-    /// is what every other control on the machine does — and it costs nothing here, because the
-    /// pairing is the framework's.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if self.base.disabled.get_untracked() {
-            return Handled::No;
-        }
-        match ev {
-            // Keyboard activation: Space/Enter on the focused button == a click. `dispatch` only
-            // offers a raw key to the widget that owns the keyboard, so there is no focus check
-            // here to forget — and no way for this button to take a key meant for something else.
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
-                self.fire();
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
-    }
-
     /// **The click, after its children have declined it.**
     ///
-    /// The press is taken in capture (so composed content can never take it first) and the click
-    /// it turns into is delivered to whoever took that press — this control — which is what makes
-    /// "one control, one click target" a framework rule rather than something each control
-    /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
-    /// refusal and can take the click with `stop_propagation`.
+    /// The press is taken in capture by the framework (`Base::one_click_target`, so composed
+    /// content can never take it first) and the click it turns into is delivered to this control —
+    /// which is what makes "one control, one click target" a framework rule rather than something
+    /// each control arranges by swallowing events. Enter and Space on a focused button arrive here
+    /// as the same click (`dispatch::click`), so this is the button's one action: it flashes, and
+    /// whatever was wired with [`on_click`](crate::builders::EventExt::on_click) has already run
+    /// as a handler, before this, with first refusal to take the click.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }
         match ev {
             Event::Click(_) => {
-                self.fire();
-                Handled::Yes
-            }
-            // **A focused button answers the activate key**.
-            //
-            // Keys reach the focus owner, so this only ever runs for the button the keyboard is
-            // actually on — which is why it needs no focus test of its own.
-            //
-            // `Dialog` already documented this as the way it works ("when a button itself is
-            // focused, Enter is delivered straight to it (it consumes it)") and fell back to
-            // firing its *primary* action for the case where it was not consumed. The button never
-            // consumed it, so every Enter went to the primary action instead of the focused
-            // button: Tab to Cancel, press Enter, and you got OK.
-            //
-            // Found by building an overlay the way a plugin has to — `Overlay` + `Surface` +
-            // `Button`s, with no `Dialog` to translate anything — where nothing answered Enter at
-            // all. That surface has no primary action to fall back to, so the gap that was hidden
-            // natively was total there.
-            Event::Widget(WidgetIntent::Activate) => {
-                self.fire();
+                self.flash.trigger();
                 Handled::Yes
             }
             _ => Handled::No,

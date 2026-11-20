@@ -196,8 +196,14 @@ pub(crate) fn fire_hint(state: &mut crate::app_state::AppState, target: &HintTar
     let Some(path) = paths.into_iter().next() else {
         return false;
     };
-    hint_surface_root_mut(state, &target.surface)
-        .is_some_and(|root| heca_grid_ui::fire_hint(root, &path))
+    // **A pick is executed as the source it was judged as** — the same `pick_source` the picker
+    // asked, recorded around the delivery so an intent the pick dispatches through the sink carries
+    // it. One rule for showing a letter and for running it.
+    let origin = Some(super::targets::pick_source(state, target));
+    crate::chrome::input::origin::within(origin, || {
+        hint_surface_root_mut(state, &target.surface)
+            .is_some_and(|root| heca_grid_ui::fire_hint(root, &path))
+    })
 }
 
 /// **Run an action a widget on screen declares**, if any does.

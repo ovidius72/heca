@@ -11,7 +11,7 @@ fn button_click_fires_within_bounds() {
 
     let clicked = Rc::new(Cell::new(false));
     let flag = clicked.clone();
-    let mut button = Button::new("DEREZ").on_click(move || flag.set(true));
+    let mut button = Button::new("DEREZ").on_click(move |_| flag.set(true));
     LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
 
     let b = button.base().bounds;
@@ -75,7 +75,7 @@ fn disabled_button_ignores_clicks_and_focus() {
     let flag = clicked.clone();
     let mut button = Button::new("X")
         .disabled(true)
-        .on_click(move || flag.set(true));
+        .on_click(move |_| flag.set(true));
     LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
 
     let b = button.base().bounds;
@@ -168,7 +168,7 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
     let mut btn = IconButton::new(Icon::new(Glyph::Search).size(18.0))
-        .on_click(move || sink.set(sink.get() + 1));
+        .on_click(move |_| sink.set(sink.get() + 1));
     LayoutEngine::new().compute(&mut btn, Size::new(100.0, 100.0));
     assert!(btn.focusable(), "wired icon button is focusable");
 

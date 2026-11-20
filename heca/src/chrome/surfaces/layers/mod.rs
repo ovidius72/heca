@@ -441,6 +441,16 @@ impl LayerRegistry {
             .find(|l| crate::chrome::surface_slot(l.id) == slot)
     }
 
+    /// **The layer a [`SurfaceKey`](crate::app::interaction::SurfaceKey) names** — the reverse of
+    /// [`surface_key`](Self::surface_key), for an act that arrives stamped with the surface it came
+    /// from and has to be applied to that surface.
+    pub(crate) fn id_of_surface(&self, key: crate::app::interaction::SurfaceKey) -> Option<LayerId> {
+        self.layers
+            .iter()
+            .map(|l| l.id)
+            .find(|id| self.surface_key(*id) == key)
+    }
+
     /// The same, **but only while that surface is still in charge**.
     ///
     /// ⚠️ **Presence in the tree is not liveness, and this is the whole of the difference.** Hiding

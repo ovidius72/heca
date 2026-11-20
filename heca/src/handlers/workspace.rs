@@ -57,6 +57,22 @@ pub fn handle_toggle_current_workspace_collapsed(state: &mut AppState, _action: 
     apply_ws_collapse(state, ws_idx, None);
 }
 
+/// Fold or unfold one workspace's row, by index.
+pub fn handle_toggle_workspace_collapsed(state: &mut AppState, action: &WmAction) {
+    let WmAction::ToggleWorkspaceCollapsed { ws_idx } = action else {
+        return;
+    };
+    apply_ws_collapse(state, *ws_idx, None);
+}
+
+/// Put the exposé's highlight on a pane.
+pub fn handle_expose_cursor(state: &mut AppState, action: &WmAction) {
+    let WmAction::ExposeCursor { pane_id } = action else {
+        return;
+    };
+    crate::chrome::record_expose_cursor(state, *pane_id);
+}
+
 pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;

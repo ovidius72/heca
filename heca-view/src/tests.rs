@@ -376,9 +376,13 @@ fn an_event_is_bound_and_read_by_the_one_vocabulary() {
         node.events.contains_key(ViewEvent::Press.name()),
         "the wire key is the event's name",
     );
+    // The nine events a widget raises, the pick, and the native names (`click`, `drag_start`, …) —
+    // `heca-view-realize` holds the native ones equal to the library's own table.
     assert_eq!(
-        ViewEvent::ALL.len(),
-        10,
-        "press, hint, change, submit, toggle, dismiss, action, activate, move, resize"
+        ViewEvent::WIDGET.len(),
+        9,
+        "press, change, submit, toggle, dismiss, action, activate, move, resize"
     );
+    assert_eq!(ViewEvent::ALL.len(), ViewEvent::WIDGET.len() + 1 + 31);
+    assert!(ViewEvent::ALL.contains(&ViewEvent::Hint));
 }

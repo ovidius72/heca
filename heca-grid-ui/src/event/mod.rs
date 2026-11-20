@@ -59,10 +59,11 @@ mod pointer;
 
 pub use handled::Handled;
 pub use handlers::{EventCx, HandlerOutcome, Handlers};
+pub(crate) use handlers::key_half;
 pub use intent::WidgetIntent;
 pub(crate) use keys::remember_modifiers;
 pub use keys::{GridKey, Modifiers, modifiers, typed_text};
-pub use kinds::{Event, EventKind};
+pub use kinds::{EVENT_NAMES, Event, EventKind, EventName};
 pub use pointer::{DragEvent, HintEvent, PointerButton, PointerEvent, RawPointer, RawPointerKind};
 
 #[cfg(test)]

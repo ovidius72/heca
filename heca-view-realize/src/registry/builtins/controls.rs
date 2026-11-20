@@ -113,7 +113,7 @@ pub(super) fn badge_button(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<he
             let mut b = with_props(BadgeButton::new(text_of(node)), node, cx.theme());
             if let Some(carrier) = press_intent(node) {
                 let emit = emit.clone();
-                b = b.on_click(move || emit(carrier.clone()));
+                b = b.on_press_to(carrier, move |intent| emit(intent));
             }
             heca_grid_ui::WidgetModel::new(b)
         })
@@ -126,7 +126,7 @@ pub(super) fn icon_button(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<hec
             let mut b = with_props(IconButton::new(icon), node, cx.theme());
             if let Some(carrier) = press_intent(node) {
                 let emit = emit.clone();
-                b = b.on_click(move || emit(carrier.clone()));
+                b = b.on_press_to(carrier, move |intent| emit(intent));
             }
             heca_grid_ui::WidgetModel::new(b)
         })
@@ -138,7 +138,7 @@ pub(super) fn item(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_
             let mut it = Item::new(text_of(node));
             if let Some(carrier) = press_intent(node) {
                 let emit = emit.clone();
-                it = it.on_activate(move || emit(carrier.clone()));
+                it = it.on_press_to(carrier, move |intent| emit(intent));
             }
             // Slots: the row's leading / trailing affordances. It has **no default slot** — its
             // middle is the label, which comes from `text` — so a child with neither slot name is
@@ -162,7 +162,7 @@ pub(super) fn rail_cell(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_
             let mut cell = with_props(RailCell::new(icon), node, cx.theme());
             if let Some(carrier) = press_intent(node) {
                 let emit = emit.clone();
-                cell = cell.on_activate(move || emit(carrier.clone()));
+                cell = cell.on_press_to(carrier, move |intent| emit(intent));
             }
             heca_grid_ui::WidgetModel::new(cell)
         })
@@ -176,7 +176,7 @@ pub(super) fn choice(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_gri
             // container the container owns the click, so a `press` there is ignored, not half-wired.
             if let Some(carrier) = press_intent(node) {
                 let emit = emit.clone();
-                choice = choice.on_activate(move || emit(carrier.clone()));
+                choice = choice.on_press_to(carrier, move |intent| emit(intent));
             }
             heca_grid_ui::WidgetModel::new(choice)
         })

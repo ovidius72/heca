@@ -131,7 +131,7 @@ fn dock_frame_header_control_receives_events_before_toggle() {
     // A search-like interactive control living in the header-controls slot.
     let control_clicks = Rc::new(Cell::new(0u32));
     let sink = control_clicks.clone();
-    let control = Item::new("search").on_activate(move || sink.set(sink.get() + 1));
+    let control = Item::new("search").on_click(move |_| sink.set(sink.get() + 1));
     let mut dock = DockFrame::new("FILES").header(control);
     LayoutEngine::new().compute(&mut dock, Size::new(260.0, 400.0));
 
@@ -155,7 +155,7 @@ fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
     use heca_grid_ui::{DockFrame, FocusManager};
 
     // Header toggle + one interactive body row are both focusable when expanded.
-    let mut dock = DockFrame::new("FILES").child(Item::new("file.rs").on_activate(|| {}));
+    let mut dock = DockFrame::new("FILES").child(Item::new("file.rs").on_click(|_| {}));
     LayoutEngine::new().compute(&mut dock, Size::new(220.0, 400.0));
 
     let mut focus = FocusManager::new();

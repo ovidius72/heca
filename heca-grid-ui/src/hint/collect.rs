@@ -92,13 +92,10 @@ pub(crate) fn unseen(node: &dyn Component, clip: Option<Rectangle>) -> bool {
 /// **Can the user act on this widget?** A click, a double click, or a key — the three ways a widget
 /// says "do something to me".
 ///
-/// **It reads one flag and not the handler list**, because the answer is not in the handler list:
-/// eight widgets — `Button`, `IconButton`, `BadgeButton`, `Toast`, `Choice`, `RailCell`, `Item`,
-/// `Row` — keep their action in a private field of their own, so `Handlers::has(Click)` is `false`
-/// for a `Button`. Two red tests said so before this was written. And the two spellings
-/// (`on_click`, `on_activate`) mean the same thing, so no set of `EventKind`s names it either.
-/// [`Base::activatable`](crate::component::Base::activatable) is set wherever the action is wired,
-/// which is the only place that knows.
+/// **It reads one flag, [`Base::activatable`](crate::component::Base::activatable)**, which
+/// [`Base::listen`](crate::component::Base::listen) sets wherever a click, double click or key
+/// handler is wired — one assignment in one place, so a walk over the whole tree does not ask each
+/// candidate's handler list.
 ///
 /// **Or it holds the keyboard, with nothing lettered inside it.** A text field, a checkbox, a
 /// dropdown: picking one is pressing on it, which gives it the keyboard

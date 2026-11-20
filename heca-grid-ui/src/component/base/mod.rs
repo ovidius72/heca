@@ -4,6 +4,30 @@ use super::*;
 
 mod methods;
 
+/// **What a widget becomes when something is wired to its click.**
+///
+/// A widget says it once, in its constructor; [`EventExt::on`](crate::builders::EventExt::on) does
+/// the rest when a click handler arrives. The alternative — every control's own builder setting
+/// `focusable` and `one_click_target` — is the same two lines in eight places, and a ninth control
+/// forgets one.
+///
+/// It is **not** "has a handler". A pane shell or a dock listens for clicks on its own area and
+/// must keep passing the press to the children inside it; those stay [`Passive`](Self::Passive).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ClickRole {
+    /// A click handler is only a listener: nothing about focus or the press changes. The default,
+    /// and every container.
+    #[default]
+    Passive,
+    /// A control — one thing to click and one thing to Tab to. Wiring a click makes it focusable
+    /// and **one click target** (the press lands on it, not on what it composes). Enter and Space
+    /// on it deliver a click, like a browser's `<button>`.
+    Control,
+    /// A card holding controls of its own (a toast with an action and a ×). Wiring a click makes it
+    /// focusable and lets Enter and Space click it, but its children keep their own presses.
+    Card,
+}
+
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
     /// Layout + visual style.
@@ -429,20 +453,16 @@ pub struct Base {
     pub hintable: bool,
     /// **Can the user act on this widget — click it, or activate it from the keyboard?**
     ///
-    /// Set by whichever builder wires the action up, whatever it is called: the generic
-    /// [`on_click`](crate::builders::EventExt::on_click) /
-    /// [`on_double_click`](crate::builders::EventExt::on_double_click) /
-    /// [`on_key_down`](crate::builders::EventExt::on_key_down) /
-    /// [`on_key_up`](crate::builders::EventExt::on_key_up), and the widgets that keep their own
-    /// callback instead — `Button::on_click`, `Row::on_activate`, and the six like them.
-    ///
-    /// **It is a field and not a question asked of the handler list**, because the answer is not in
-    /// the handler list. Eight widgets store their action in a private field of their own, so
-    /// `Handlers::has(Click)` is `false` for a `Button` — the single case that matters most. And
-    /// the two spellings (`on_click`, `on_activate`) mean the same thing, so no set of `EventKind`s
-    /// names it either. One flag, set where the action is wired, is the only thing a walk over the
-    /// tree can read.
+    /// Set by [`EventExt::on`](crate::builders::EventExt::on) when a click, double click or key
+    /// handler is registered — whatever spelling wired it (`on_click`, `on_press`,
+    /// `on_double_click`, `on_key_down`, …). There is one place an action is wired, so there is
+    /// one place this is set, and a walk over the tree can read it without asking each widget.
     pub activatable: bool,
+    /// **What wiring a click to this widget makes it.** Declared once by the widget's constructor
+    /// and applied by [`EventExt::on`](crate::builders::EventExt::on) — so no widget's builder sets
+    /// `focusable` or `one_click_target` by hand, and a plain container that merely listens for a
+    /// click (a pane shell, a dock) stays what it was. See [`ClickRole`].
+    pub click_role: ClickRole,
     /// **This widget exists only to carry the one inside it** — a wrapper, not a thing of its own.
     ///
     /// Set by [`wrap_transparently`], which every such wrapper already calls, so no widget opts in

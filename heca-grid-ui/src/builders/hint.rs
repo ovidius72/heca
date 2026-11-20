@@ -69,7 +69,7 @@ pub trait HintExt: Component + Sized {
     /// use heca_grid_ui::widgets::Row;
     ///
     /// // A click activates the pane and leaves the sidebar; a pick looks at it and stays.
-    /// let row = Row::new().on_activate(|| { /* focus_pane */ }).on_hint(|| { /* peek_selected */ });
+    /// let row = Row::new().on_click(|_| { /* focus_pane */ }).on_hint(|| { /* peek_selected */ });
     /// ```
     ///
     /// **It fires in the target phase only** — when *this* widget is the one picked, never when a

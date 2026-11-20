@@ -81,7 +81,7 @@ const SCRIM_REACH: f64 = 1.0e9;
 ///
 /// ```ignore
 /// let confirm = Dialog::new("Close pane?").body(..).action(..);
-/// Button::new("Delete").on_click(move || confirm.show())
+/// Button::new("Delete").on_click(move |_| confirm.show())
 /// ```
 ///
 /// `show`/`hide` on the widget itself take `&mut self`, so a closure living inside a button can

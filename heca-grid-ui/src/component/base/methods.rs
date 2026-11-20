@@ -28,6 +28,54 @@ impl Base {
             || v.glow.is_some()
     }
 
+    /// **Register a handler** — the one door every listener goes through, `EventExt::on` included.
+    ///
+    /// Wiring an action is what makes a widget pickable, and a click on a control is what makes it
+    /// a control. Both are decided here, **once**, rather than repeated in each builder:
+    ///
+    /// - a click, double click or key handler sets [`activatable`](Self::activatable), so the
+    ///   picker letters it. Right-click and middle-click are deliberately absent: they open a
+    ///   context menu rather than doing the thing, and should not spend one of the 52 letters.
+    /// - a click handler applies the widget's [`ClickRole`] — a control becomes focusable and one
+    ///   click target. A widget with no role (every container) is untouched, so a pane shell that
+    ///   listens for clicks still passes the press to the children inside it.
+    pub fn listen(&mut self, kind: EventKind, f: impl FnMut(&mut EventCx<'_>) + 'static) {
+        if matches!(kind, EventKind::Click | EventKind::DoubleClick | EventKind::Key) {
+            self.activatable = true;
+        }
+        if kind == EventKind::Click {
+            match self.click_role {
+                ClickRole::Passive => {}
+                ClickRole::Control => {
+                    self.focusable = true;
+                    self.one_click_target = true;
+                }
+                ClickRole::Card => self.focusable = true,
+            }
+        }
+        self.handlers.get_or_insert_with(Default::default).add(kind, f);
+    }
+
+    /// **Register a handler by the name a description uses** — `"click"`, `"key_down"`,
+    /// `"focus_gained"`, … from the one table, [`EVENT_NAMES`](crate::event::EVENT_NAMES).
+    /// `false` when the name is not an event (the handler is dropped).
+    pub fn listen_named(&mut self, name: &str, f: impl FnMut(&mut EventCx<'_>) + 'static) -> bool {
+        let Some(entry) = crate::event::EventName::of(name) else {
+            return false;
+        };
+        match entry.key_pressed {
+            Some(want) => self.listen(entry.kind, crate::event::key_half(want, f)),
+            None => self.listen(entry.kind, f),
+        }
+        true
+    }
+
+    /// Whether a handler is registered for `kind` on this widget — what a control asks to know if
+    /// it has anything to do for the event it was just given.
+    pub fn listens(&self, kind: EventKind) -> bool {
+        self.handlers.as_ref().is_some_and(|h| h.has(kind))
+    }
+
     /// **The name this widget declares itself by** — its [`key`](Self::key), or its
     /// [`scope_key`](Self::scope_key) when it names a region rather than a row.
     ///
@@ -138,6 +186,7 @@ impl Base {
             content_tone: None,
             hintable: true,
             activatable: false,
+            click_role: ClickRole::Passive,
             transparent: false,
             hint_label: crate::reactive::signal(None),
             hint_style: crate::widgets::HintStyle::default(),

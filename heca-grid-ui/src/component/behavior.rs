@@ -296,34 +296,13 @@ pub trait Component {
         let _ = (ev, handled);
     }
 
-    /// `true` when this widget wants an enclosing scroll region to **keep it in view**.
-    ///
-    /// The default is keyboard focus, which is what browsers do: focus something off-screen and the
-    /// view comes to it. A widget that is "current" by some other measure — a list's navigation
-    /// cursor, a search hit — overrides this to say so, and then every
-    /// [`ScrollRegion`](crate::widgets::ScrollRegion) it is ever placed inside follows it, with
-    /// nothing wired at the call site.
-    /// **Run this widget's primary action** — what a click or Enter on it would do — and report
-    /// whether it had one. `false` by default: most widgets do nothing on their own.
-    ///
-    /// The equivalent of `button.click()` in the DOM, and it exists because there was no way to say
-    /// "activate this child" through `dyn Component`. Without it a caller has only one lever: build
-    /// a fake `Event::Key { Enter }` and dispatch it, hoping the target claims raw keys — which is
-    /// what [`Dialog::submit`](crate::widgets::Dialog) did to fire its primary button. That worked
-    /// only because seven widgets claimed `Enter` without checking whether they owned the keyboard,
-    /// and it broke the moment they stopped. Synthesising input to reach behaviour is a symptom of
-    /// a missing call, not a technique.
-    fn activate(&mut self) -> bool {
-        false
-    }
-
     /// **Show only your icon, keeping your words** — or go back to showing both.
     ///
     /// A question a container asks a child it is short of room for, answered by whatever the child
     /// happens to be. `false` by default: a widget with nothing to shorten simply ignores it, and a
     /// widget with no icon must ignore it, since hiding its words would leave an empty box.
     ///
-    /// It is a trait method for the same reason [`activate`](Self::activate) is: a container holds
+    /// It is a trait method because a container holds
     /// `dyn Component`, so without one the only way to ask would be to know the child's concrete
     /// type — which is exactly the coupling a container must not have. The container decides *what*
     /// is shown; the widget owns *how it looks* when it is, including that a button with no words
@@ -366,6 +345,13 @@ pub trait Component {
         false
     }
 
+    /// `true` when this widget wants an enclosing scroll region to **keep it in view**.
+    ///
+    /// The default is keyboard focus, which is what browsers do: focus something off-screen and the
+    /// view comes to it. A widget that is "current" by some other measure — a list's navigation
+    /// cursor, a search hit — overrides this to say so, and then every
+    /// [`ScrollRegion`](crate::widgets::ScrollRegion) it is ever placed inside follows it, with
+    /// nothing wired at the call site.
     fn wants_visible(&self) -> bool {
         self.base().focused_by_keyboard()
     }

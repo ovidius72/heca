@@ -5,6 +5,7 @@
 //!
 //! Split out of `chrome/mod.rs`. Nothing here is new; the passes are unchanged.
 
+use crate::chrome::input::origin::{Seats, deliver_window, origin_of, within};
 use crate::chrome::*;
 
 /// Offer a pointer event to the **surfaces above the page** — the whole set, in one place.
@@ -42,7 +43,9 @@ pub(crate) fn dispatch_surface_pointer(state: &mut crate::app_state::AppState, e
         matches!(ev, Event::Raw(_)),
         "dispatch_surface_pointer is the pointer path; keys go through the keymap",
     );
-    if !surface_owns_pointer(&mut state.window_root, ev) {
+    // The origin is where the event is going, which is read before it moves.
+    let origin = origin_of(&state.window_root, &Seats::new(&state.layers, state.chrome_tree.as_ref()), ev);
+    if !surface_owns_pointer(&mut state.window_root, origin, ev) {
         return false;
     }
     state.mark_full_redraw();
@@ -55,14 +58,18 @@ pub(crate) fn dispatch_surface_pointer(state: &mut crate::app_state::AppState, e
 /// Hover is worked out by the walk that routes a move. The window root's walk reaches every
 /// surface, the chrome and the panes (they are all nodes in it), so a covered dock row or a header
 /// button under a blocking overlay loses its hover, and its tooltip, by itself.
-pub(crate) fn surface_owns_pointer(window: &mut dyn Component, ev: &Event) -> bool {
+pub(crate) fn surface_owns_pointer(
+    window: &mut dyn Component,
+    origin: Option<crate::app::interaction::InteractionSource>,
+    ev: &Event,
+) -> bool {
     let Some(pos) = ev.position() else {
         return false;
     };
     if !heca_grid_ui::overlay_occluded_at(window, pos) {
         return false;
     }
-    let _ = heca_grid_ui::dispatch(window, ev);
+    let _ = within(origin, || heca_grid_ui::dispatch(window, ev));
     true
 }
 
@@ -87,7 +94,10 @@ pub(crate) fn surface_owns_pointer(window: &mut dyn Component, ev: &Event) -> bo
 /// scrolling. The drift is handled properly twice over: the tree rebuilds when `chrome_signature`
 /// changes, and `sync_chrome_signals` pushes value-state into its bound signals every frame.
 pub(crate) fn deliver(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
-    let handled = heca_grid_ui::dispatch(&mut state.window_root, ev) == heca_grid_ui::Handled::Yes;
+    // **Record which surface this is going to**, so an intent a widget dispatches from inside it
+    // is stamped with that surface and not with a source the sink had to guess.
+    let seats = Seats::new(&state.layers, state.chrome_tree.as_ref());
+    let handled = deliver_window(&mut state.window_root, &seats, ev) == heca_grid_ui::Handled::Yes;
     // A press may have moved the keyboard: settle it and announce it now, so what the key rules read
     // off the tree is current before the next key.
     if matches!(ev, Event::Raw(raw) if raw.kind == heca_grid_ui::RawPointerKind::Pressed) {
@@ -309,7 +319,7 @@ mod surface_pointer_tests {
         LayoutEngine::new().compute(&mut window, Size::new(400.0, 300.0));
 
         // The pointer has not moved: the host re-routes a move at the same place.
-        let owned = surface_owns_pointer(&mut window, &moved(10.0, 10.0));
+        let owned = surface_owns_pointer(&mut window, None, &moved(10.0, 10.0));
 
         assert!(owned, "a blocking surface owns the point");
         assert!(
@@ -326,7 +336,7 @@ mod surface_pointer_tests {
         LayoutEngine::new().compute(&mut window, Size::new(400.0, 300.0));
         let _ = heca_grid_ui::dispatch(&mut window, &moved(10.0, 10.0));
 
-        let owned = surface_owns_pointer(&mut window, &moved(10.0, 10.0));
+        let owned = surface_owns_pointer(&mut window, None, &moved(10.0, 10.0));
 
         assert!(!owned);
         assert!(hovered(window.base().children[0].as_ref()));

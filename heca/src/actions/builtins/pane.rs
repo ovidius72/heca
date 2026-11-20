@@ -256,6 +256,30 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             "Rows above the live bottom to jump to.",
         )],
     },
+    ActionDescriptor {
+        name: "terminal_scroll",
+        side: Side::Client,
+        label: "Scroll Terminal",
+        description: "Scroll one terminal's viewport — to `rows` above the live bottom, or with no `rows` all the way down to the live bottom. Name the terminal by `terminal` (its id), or a `pane_id`; with neither, the terminal the keyboard is on.",
+        icon: None,
+        args: &[
+            ArgDescriptor::optional(
+                "terminal",
+                ArgKind::Int,
+                "The terminal's id, as the store issued it. Wins over pane_id.",
+            ),
+            ArgDescriptor::optional(
+                "pane_id",
+                ArgKind::Int,
+                "The pane whose terminal to scroll; omit for the terminal the keyboard is on.",
+            ),
+            ArgDescriptor::optional(
+                "rows",
+                ArgKind::Int,
+                "Rows above the live bottom to jump to; omit to go to the live bottom.",
+            ),
+        ],
+    },
     // ── Selection (host capability) ──
     ActionDescriptor {
         name: "enter_selection_mode",

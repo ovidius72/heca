@@ -128,8 +128,17 @@ pub(crate) fn handle_window_event(
                         state.modifiers,
                     );
                     if let Some((key, _)) = crate::app::registry::combo_to_grid(&combo) {
+                        let origin = crate::chrome::input::origin::keyboard_origin(
+                            &state.window_root,
+                            &crate::chrome::input::origin::Seats::new(
+                                &state.layers,
+                                state.chrome_tree.as_ref(),
+                            ),
+                        );
                         let handled = state.widget_keymap.deliver_release(key, |ev| {
-                            heca_grid_ui::dispatch(&mut state.window_root, ev)
+                            crate::chrome::input::origin::within(origin, || {
+                                heca_grid_ui::dispatch(&mut state.window_root, ev)
+                            })
                         });
                         if matches!(handled, Handled::Yes) {
                             state.mark_full_redraw();

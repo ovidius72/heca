@@ -284,7 +284,8 @@ fn a_surface_places_the_keyboard_once_and_then_leaves_it_alone() {
 /// window and hid every other letter behind it.
 #[test]
 fn a_closed_overlay_is_not_lettered_or_hit() {
-    let panel = || Flex::column().child(crate::widgets::Button::new("go").on_click(|| {}));
+    use crate::builders::EventExt as _;
+    let panel = || Flex::column().child(crate::widgets::Button::new("go").on_click(|_| {}));
     let at = Point::new(400.0, 300.0);
     let laid_out = |mut o: Overlay| {
         crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
