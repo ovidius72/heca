@@ -265,11 +265,20 @@
       "priority": 4,
       "shortName": "the-pane-card-look-as-a-row-va",
       "title": "The pane card look as a Row variant; no hand-written styling left in the app",
-      "status": "planned",
+      "status": "canceled",
       "description": "Antonio approved 2026-11-19 (heca-pro's first request + the cleanup he asked for after I failed to flag it). Rule (AGENTS § 0 / the six component steps): components are built with Grid (several parts) or Flex (like things) from small widgets; nothing written by hand at a call site — no background, alpha, radius, padding, colour or pixel number; a look two places need is a variant/builder in heca-grid-ui.\n\n## 1. The card look as a Row variant (heca-pro needs it for its member card)\nheca/src/providers/workspaces/pane_row.rs:178-185 writes the card by hand: `Row::new().background(theme.colors.foreground.with_alpha(alpha_u8(theme.colors.card_background_alpha))).radius(theme.colors.control_radius()).padding(Spacing::Sm)`. The exposé card (heca/src/chrome/surfaces/expose/pane_card.rs:116-118) writes its own: `.background(theme.colors.surface).radius(theme.colors.control_radius()).padding(Spacing::Xs)` (its comment explains why the map card is a surface, not a wash — two looks, both named, both in the library). One variant/builder on Row that owns each look from the theme (name agreed with Antonio before code); pane row, exposé card and heca-pro use it; public, documented in docs/widgets.md with the showcase.\n\n## 2. pane_row.rs, everything that breaks the rules (found 2026-11-19)\n- the hand-written card look (above);\n- hand-picked colours: `Icon::new(info.icon).color(theme.colors.foreground)` (:93), the `(program)` suffix `.color(theme.colors.foreground)` (:131) — colour from the theme through the widget/variant, not at the call site;\n- hand-sent events on click: two `emit.fire(..)` (FocusDock + CursorTo, ~:205-220) — one of the 13 sites owned by P087(F011)/T565; coordinate, do not duplicate;\n- constructors not in THE SYNTAX: `PaneRow { pane, column_of_pane }.build(seams, reg)`, `PaneName { .. }.build()` → constructor + builders;\n- states handed to the host by hand: `reg.signals.pane_active.push(..)` / `pane_previous` / `row_nav` (~:236-243) — check against Rule Zero and say what the library should own.\n## 3. The other files with hand-written styling (grep 2026-11-19, app side)\n- heca/src/providers/workspaces/row_lines.rs:54, :92 (`.color(theme.colors.foreground|warning)`)\n- heca/src/chrome/window/scene/mod.rs:75, :245-250, :272-273, :430, :481 (radius, padding, background, accent alpha)\n- heca/src/chrome/panes/pane/shell/mod.rs:77-79, :92 (padding, radius, float background)\n- heca/src/chrome/panes/pane_header/build.rs:333 (`.background(band)`)\n- heca/src/chrome/panes/terminal/search/mod.rs:165 (`cx.rect(.., accent.with_alpha(alpha), ..)` — hand painting)\n- heca/src/chrome/surfaces/expose/mod.rs:166-172 (scrim background, padding)\n- heca/src/chrome/surfaces/expose/pane_card.rs:116-118 (above)\nNOT a defect: heca/src/chrome/window/theme.rs:56-70 is where the theme and appearance are turned into colours — that is its job.\nFor each: the variant/builder it should use (existing in docs/widgets.md, or a proposal), layout as Grid/Flex per the six steps. Eye-check every surface (sidebar, exposé, pane header, terminal search, scene) — rendering changes are not verified by tests alone.",
       "descriptionUpdatedAt": "2026-11-19T15:05:05.123Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2d8f506d-2992-41fb-8b93-97b42f31304c-check-001-planned-canceled",
+          "date": "2026-11-20T12:54:22.046Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Merged into P110(F010)/T567 on Antonio's word (2026-11-20: \"possiamo unire le task pending in una?\" … \"ok\"), to have one working task. The Row variant (C1-C2) is built in T567's branch (feat/t567-findings, 23fedd2d) and is T567 checklist C35; the remaining cleanup (C3 pane_row.rs, C4 the other six hand-styled files, C5 tell heca-pro) is T567 checklist C36-C38. Nothing of this task's description is lost: T567's items point back here by name.",
+          "description": "Merged into P110(F010)/T567 on Antonio's word (2026-11-20: \"possiamo unire le task pending in una?\" … \"ok\"), to have one working task. The Row variant (C1-C2) is built in T567's branch (feat/t567-findings, 23fedd2d) and is T567 checklist C35; the remaining cleanup (C3 pane_row.rs, C4 the other six hand-styled files, C5 tell heca-pro) is T567 checklist C36-C38. Nothing of this task's description is lost: T567's items point back here by name."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -311,13 +320,13 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-11-19T15:05:05.057Z",
-      "updatedAt": "2026-11-19T15:05:05.057Z",
+      "updatedAt": "2026-11-20T12:54:22.046Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-19T11:15:37.223Z",
-  "updatedAt": "2026-11-19T16:14:59.127Z",
+  "updatedAt": "2026-11-20T12:54:22.046Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -330,6 +339,14 @@
       "fromStatus": "draft",
       "toStatus": "in-progress",
       "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "e3a4a53f-fe4d-4dbc-8c2b-a883334ebbaf",
+      "date": "2026-11-20T12:54:22.084Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],

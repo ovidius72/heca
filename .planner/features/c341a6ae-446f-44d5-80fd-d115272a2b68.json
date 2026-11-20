@@ -53,12 +53,60 @@
       "rationale": "Keeps one owner per capability: F013 owns native bindable properties and the bound form; T360 owns the described/plugin side and the value store.",
       "implementationNotes": "",
       "acceptedAt": "2026-11-19T21:23:48.019Z"
+    },
+    {
+      "id": "566014bb-6859-4469-9e08-eb5dea618b8d",
+      "title": "Floating panels are moved by hand after layout — the layout must place them (found on the tooltip, T567 point 23/23b)",
+      "decision": "Found 2026-11-19 while making the tooltip bubble a composed tree (P110(F010)/T567 points 23/23b): every floating panel is laid out somewhere, then moved to its place by hand, piece by piece — `shift_subtree` (heca-grid-ui/src/component/tree.rs) used by the tooltip, Select, ContextMenu, Overlay, ToastStack, CommandPalette, Flex, ScrollRegion. The positions the layout wrote and the final ones differ, so anything that remembers a position can be wrong; the same family of bug cut the tooltip's Tag in half during the eye-check. Decided with Antonio: fix it in F013, for every floating panel at once, not only the tooltip. The shape discussed: the panel declares where it wants to be — beside an anchor rect, on a preferred side, flipping when there is no room and kept inside the window (the rule that today lives in `place_beside`, heca-grid-ui/src/widgets/overlay/place.rs) — and the LAYOUT ENGINE measures it and writes the final positions once; nothing moves it afterwards, so drawing, clicking and repaint regions read true positions. This is CSS anchor positioning. NAME NOT DECIDED: I proposed `.beside(anchor, side)`; Antonio has never heard that word and prefers the CSS vocabulary — \"position\", \"anchor\" (e.g. a `position`/`anchor` builder). Agree the name with him before code.",
+      "rationale": "A panel's place depends on its own size (to centre it on the anchor, to flip it), so it cannot be decided by the caller before layout nor fixed up after without the two positions disagreeing; only the engine has both answers at the same moment.",
+      "implementationNotes": "Related existing builder: `LayoutExt::at_rect(..)` (heca-grid-ui/src/builders/layout.rs:108, CSS `position: absolute` + insets, the `Placement` type in style/length.rs:210). Antonio hoped it is internal: it is NOT — it is a public LayoutExt builder, and heca's app code uses it to place things by hand (heca/src/chrome/panes/terminal/viewport.rs, terminal/search/mod.rs, panes/column/shell.rs, surfaces/expose/workspace_row.rs, plus tests) — review those under F013 too. The anchored placement would be built on the same engine support (absolute position) plus the side choice. Tooltip bubble today: heca-grid-ui/src/widgets/tooltip.rs `place_bubble` (lay out, place_beside, shift_subtree).",
+      "acceptedAt": "2026-11-19T23:25:35.279Z"
+    },
+    {
+      "id": "51eeb6fc-4ac3-44ad-8e31-73ea48ee60cf",
+      "title": "Widget glows written as numbers — derive them from the theme's glow, keeping each widget's own multiplier",
+      "decision": "Found 2026-11-19 (T567 points 23/23b): many widgets write their halo's radius and intensity as numbers in code (`radius: 10.0`, `GLOW_RADIUS`, `GLOW_REST_INTENSITY`…). Grep count of such lines in heca-grid-ui/src/widgets: button/component.rs 11, row.rs 8, badge_button.rs 8, toggle.rs 7, scroll_bar.rs 5, checkbox.rs 5, badge.rs 5, tabs.rs 4, status_dot.rs 4, rail_cell.rs 4, progress.rs 4, marker_group.rs 4, icon_button.rs 4, dock_frame.rs 4, select 5, button/mod.rs 3, toast 2, tag 2, spinner 2, scroll_region 4, pane 2, item 2, gauge 2 (indicative). The fix, as for the tooltip: the halo comes from the theme's glow (active_glow_radius / active_glow_strength, the user's `glow_size` GlowLevel on top via PaintCx::scaled_glow) — NOT one same halo for every widget: Antonio, 2026-11-19: \"lo stesso alone non va bene per tutti, molti usano un moltiplicatore da applicare a quel valore e questo va tenuto\". Each widget keeps its own relative strength, expressed as a multiplier on the theme value (or a named GlowLevel like the tooltip's Thin), never an absolute number.",
+      "rationale": "An absolute radius/intensity in a widget ignores the theme and drifts from the other widgets; but flattening every halo to one token would erase deliberate differences (a resting control is faint, an active one strong). A multiplier on the theme value keeps both.",
+      "implementationNotes": "Verify widget by widget before changing: which numbers are already multipliers on a theme value (keep them as they are), which are absolute (turn into a multiplier on the theme glow so the look stays the same at the default theme), and that the default look does not change (compare with the showcase). Done for the tooltip in T567: heca-grid-ui/src/widgets/tooltip.rs uses `active_glow_radius * GlowLevel::Thin.radius_scale()` and `active_glow_strength * GlowLevel::Thin.strength_scale()`.",
+      "acceptedAt": "2026-11-19T23:27:35.067Z"
+    },
+    {
+      "id": "f72a9911-4b2f-4a66-ae63-1d8c2679769b",
+      "title": "Wrappers take their child in the constructor — bring them to `Wrapper::new().prop(..).child(..)` (Visibility done in T567)",
+      "decision": "Raised by heca-pro (2026-11-20) and agreed by Antonio: a wrapper whose constructor takes the child (and sometimes an unnamed positional value) does not follow THE SYNTAX. Visibility was changed in P110(F010)/T567 (2026-11-20) to `Visibility::new().visible(bool).child(c)` — `new(child, bool)` removed, every heca call site moved, heca-pro adapts its own. TO DO, same shape: KeyHint::new(child) (heca-grid-ui/src/widgets/key_hint/mod.rs:59), KeyHintGroup::new(child) (key_hint_group.rs:103), FocusScope::new(child) (focus_scope/mod.rs:53), Tooltip::new(child, text) / Tooltip::new_signal(child, text) (tooltip.rs:318, :323) → `X::new().<props>.child(c)`. Antonio's word for these: change the constructor directly (as Visibility), heca-pro adapts its code; tell heca-pro when each lands.",
+      "rationale": "Every container takes children with `.child(..)`; a wrapper that takes its child as a constructor argument is a second shape, and a positional bool (`Visibility::new(x, true)`) says nothing at the call site. Rust cannot keep two `new` with different arguments, so the old form cannot stay beside the new one under the same name; Antonio chose the direct change because heca-pro asked for it.",
+      "implementationNotes": "Pattern to copy: heca-grid-ui/src/widgets/visibility.rs (new() empty, property builders, `child` replaces the one child and calls component::wrap_transparently; apply/paint walk the children instead of reading the first by position). The layout side of transparent wrappers (a wrapper lays its child out as the child's real parent would) was fixed centrally in T567 in heca-grid-ui/src/layout/build.rs, test heca-grid-ui/tests/transparent_wrapper.rs.",
+      "acceptedAt": "2026-11-20T12:17:49.141Z"
+    },
+    {
+      "id": "49db4eb3-9196-4fca-a4bd-b1c3bdefb5fb",
+      "title": "Icon and Image are sized only in pixels — they need a theme-relative size",
+      "decision": "Found 2026-11-20 (T567, review of the DockFrame/Row work): `Icon::size(px: f32)` (heca-grid-ui/src/widgets/icon.rs:371) is the only way to size an icon, and it shadows LayoutExt's theme-relative `.size(WidgetSize)`; so DockFrame's rail icon is a pixel constant (dock_frame.rs RAIL_ICON_SIZE = 22.0) and showcase/app code writes icon sizes as numbers. `Image` has no theme-relative size either: the agent line sizes its logo by hand with `.width(cx.theme.font_size).height(cx.theme.font_size)` (heca/src/providers/workspaces/agent_line/mod.rs). Wanted: both take a size from the theme (a step relative to the font, like WidgetSize / Spacing), and the pixel form is no longer the way to write it. Not fixed in T567 because it is a public API change whose name and shape must be agreed with Antonio (and heca-pro, decision 15ec67fc).",
+      "rationale": "A size written at the call site (a number, or a theme value read where it is consumed) is the 'nothing written by hand' rule broken; the library is missing the builder (RULE ZERO).",
+      "implementationNotes": "Check every `Icon::new(..).size(` and Image `.width/.height` with a theme value in heca, heca-renderer showcase and heca-pro when doing it.",
+      "acceptedAt": "2026-11-20T12:25:28.242Z"
+    },
+    {
+      "id": "44776376-762d-482b-b7c0-ab061d91d458",
+      "title": "Every widget is customizable like an HTML element — a widget whose look cannot be overridden is a defect",
+      "decision": "Antonio, 2026-11-20: every widget — composed ones included (Item, ItemGroup, Tag, Card, Select…) — must be customizable the way an HTML element is: its padding, margins, colours, borders, radius, alignment overridable by its builders/style (a hand style wins over the variant's look, as Row's RowVariant does). A widget that \"brings its own look\" which cannot be changed is not a reason to avoid it; it is a defect to fix under F013. Part of F013 step 1's review: for each widget, list what of its look cannot be overridden today.",
+      "rationale": "Raised while discussing AGENTS.md's step 3 (\"never use a ready-made composite as the layout … they have their own look\"), added by me on 2026-11-19 in be00a420 (PR #329, T570) copying heca-pro's steps without pointing it out to Antonio. Antonio: \"devono essere customizzabili tutti come un elemento html. se non lo sono vanno fixati in F013.\"",
+      "implementationNotes": "The AGENTS.md step 3 wording (\"Never use a ready-made composite as the layout\") reads as a ban and is to be reworded only as Antonio decides (he edits AGENTS.md policy; I do not change it unasked).",
+      "acceptedAt": "2026-11-20T14:34:05.856Z"
+    },
+    {
+      "id": "bf271be6-baa9-4a1e-b92f-ddad49fe75f4",
+      "title": "The active-marker bar and pip are pixel sizes in three widgets — the theme needs one token for them",
+      "decision": "Found 2026-11-20 while bringing Item's spaces to theme steps (T567): the width of the vivid left bar that marks the active row is a pixel constant written separately in Item (ACTIVE_BAR_W = 3.0, heca-grid-ui/src/widgets/item.rs), Row (its own bar width, row.rs) and MarkerGroup (BAR_W / BAR_W_HOVER, marker_group.rs:210); Item's selected-option pip is CHECK_SIZE = 10.0. Three copies of one look means the theme is missing a token (marker bar width, and pip size relative to the font); add it once and read it in all three. Not done in T567: a theme field is an API change to agree with Antonio.",
+      "rationale": "Spaces in Item now come from theme steps (Spacing); these two shapes have no theme value to come from, and inventing a Spacing step for a line width would be the wrong unit.",
+      "implementationNotes": "",
+      "acceptedAt": "2026-11-20T16:04:25.721Z"
     }
   ],
   "phaseIds": [],
   "dependsOn": [],
   "statusLog": [],
   "createdAt": "2026-11-18T18:34:46.404Z",
-  "updatedAt": "2026-11-19T21:30:08.158Z",
+  "updatedAt": "2026-11-20T16:04:25.721Z",
   "sessionInfo": []
 }

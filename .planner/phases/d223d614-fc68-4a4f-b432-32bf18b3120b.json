@@ -113,6 +113,22 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress (resume checkpoint)",
           "description": "Resumed from T567 point 24 (paste into the first terminal instead of the focused one), heca/src/app_state/keyboard_terminal.rs:22-47.. After T572 is merged, instrument the paste path for point 24 before changing code, then the other open points one at a time with Antonio."
+        },
+        {
+          "id": "c44b8007-6e2b-46f7-ad7a-3ecbdd41dfc2",
+          "date": "2026-11-20T12:38:28.196Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio (2026-11-20): close the resume-required T572 — its PR is merged and its last fix now rides in T567's branch.\nWhat was being done: T567 work committed on feat/t567-findings (23fedd2d Row/DockFrame variants, transparent wrappers, Visibility syntax; 9bbe6950 the T572 close-wakes-reader fix). Pending: Antonio's eye check of the showcase (Development section, PINNED, DockFrame inset), then the remaining T567 points.\nResume location: /Users/antonio/projects/heca-feat-567, branch feat/t567-findings, head 9bbe6950\nHow to resume: Return to T567 after completing T572; then check worktrees heca-feat-469 and heca-feat-565 (T469/T565 checkpoints) as Antonio asked; then continue T567 open points (18 version check first, T528 p5 for heca-pro)."
+        },
+        {
+          "id": "8c9c01e1-52d9-47aa-abf8-5c133462b558",
+          "date": "2026-11-20T12:39:04.381Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from /Users/antonio/projects/heca-feat-567, branch feat/t567-findings, head 9bbe6950. Return to T567 after completing T572; then check worktrees heca-feat-469 and heca-feat-565 (T469/T565 checkpoints) as Antonio asked; then continue T567 open points (18 version check first, T528 p5 for heca-pro)."
         }
       ],
       "decisions": [],
@@ -122,19 +138,19 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-001-23-multi-line-tooltip-draws-outside-its-bubble-do-heca-pro-via-antonio-2026-11-19-tooltip-zsh-npane-1-shows-a-one-line-bubble-with-the-text-sticking-out-heca-grid-ui-src-widgets-tooltip-rs-108-113-bubble-size-measures-by-hand-chars-mono-advance-ratio-wide-one-mono-line-ratio-line-tall-pad-x-pad-y-constants-a-newline-is-never-measured-and-the-bubble-is-hand-painted-fix-the-class-not-the-count-the-bubble-is-composed-a-surface-holding-a-label-sized-by-the-layout-engine-wrapping-like-a-label-padding-from-a-theme-step-so-any-text-fits-no-measure-or-pixel-constant-left-in-tooltip-rs-eye-check-a-1-line-and-a-2-line-tip",
           "number": 1,
           "title": "23. MULTI-LINE TOOLTIP DRAWS OUTSIDE ITS BUBBLE — DO (heca-pro via Antonio, 2026-11-19). `.tooltip(\"zsh\\npane-1\")` shows a one-line bubble with the text sticking out. heca-grid-ui/src/widgets/tooltip.rs:108-113 `bubble_size` measures by hand: chars × MONO_ADVANCE_RATIO wide, one MONO_LINE_RATIO line tall, PAD_X/PAD_Y constants — a newline is never measured and the bubble is hand-painted. Fix the class, not the count: the bubble is composed (a Surface holding a Label, sized by the layout engine, wrapping like a Label, padding from a theme step), so any text fits; no measure or pixel constant left in tooltip.rs. Eye-check a 1-line and a 2-line tip.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-002-23b-the-tooltip-takes-a-widget-too-do-with-23-heca-pro-via-antonio-2026-11-19-the-same-tooltip-door-tooltipext-tooltip-heca-grid-ui-src-widgets-tooltip-rs-today-tip-text-is-a-signal-string-also-takes-a-widget-tree-as-the-bubble-s-content-heca-pro-wants-a-segmented-tag-program-model-folder-text-stays-the-simple-case-it-becomes-the-default-content-a-label-once-23-makes-the-bubble-a-composed-surface-one-door-through-an-impl-into-style-argument-like-child-s-intochildren-never-a-second-builder-the-live-text-form-tooltip-signal-keeps-working-shape-agreed-with-antonio-before-code",
           "number": 2,
           "title": "23b. THE TOOLTIP TAKES A WIDGET TOO — DO with 23 (heca-pro via Antonio, 2026-11-19). The same `.tooltip(..)` door (TooltipExt::tooltip, heca-grid-ui/src/widgets/tooltip.rs; today Tip.text is a Signal<String>) also takes a widget/tree as the bubble's content — heca-pro wants a segmented Tag (program │ model │ folder). Text stays the simple case: it becomes the default content, a Label, once 23 makes the bubble a composed Surface. One door through an `impl Into<..>`-style argument like `.child(..)`'s IntoChildren, never a second builder; the live text form (tooltip_signal) keeps working. Shape agreed with Antonio before code.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-003-18b-the-lag-has-two-shapes-antonio-2026-11-19-always-some-delay-and-at-times-very-strong-spikes-measure-both-over-time-not-one-keystroke-a-per-frame-timing-log-start-from-heca-frame-times-docs-development-md-plus-what-ran-in-a-slow-frame-turn-candidates-for-spikes-session-save-session-save-delay-ms-1000-after-every-change-json-of-every-pane-git-process-sampling-per-pane-a-full-sidebar-chrome-rebuild-chrome-signature-change-agent-reports-find-what-coincides-with-the-spikes-then-fix-centrally-antonio-may-report-when-spikes-happen-agent-working-finishing-cd-workspace-switch-random",
           "number": 3,
           "title": "18b. THE LAG HAS TWO SHAPES (Antonio, 2026-11-19): always some delay, and at times VERY strong spikes. Measure both over time, not one keystroke: a per-frame timing log (start from HECA_FRAME_TIMES, docs/development.md) plus what ran in a slow frame/turn — candidates for spikes: session save (session_save_delay_ms=1000 after every change, JSON of every pane), git/process sampling per pane, a full sidebar/chrome rebuild (chrome_signature change), agent reports. Find what coincides with the spikes, then fix centrally. Antonio may report when spikes happen (agent working/finishing, cd, workspace switch, random).",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-004-8b-reproduced-antonio-2026-11-19-type-fs-tab-tab-zsh-offers-fsh-list-deleting-leaves-the-suggestion-printed-it-stays-after-a-window-resize-it-is-in-the-terminal-s-own-state-not-a-drawing-damage-problem-lead-to-verify-not-proven-heca-never-overrides-wezterm-term-s-terminalconfiguration-unicode-version-whose-default-is-unicode-9-ambiguous-narrow-wezterm-term-src-config-rs-190-rev-891bed3-heca-core-src-backend-terminal-engine-mod-rs-has-no-override-while-macos-zsh-wcwidth-and-ghostty-use-newer-width-tables-a-prompt-glyph-starship-nerd-font-icons-counted-1-cell-by-one-side-and-2-by-the-other-puts-zsh-s-idea-of-the-cursor-one-cell-off-so-its-relative-erase-leaves-residue-matches-the-cursor-one-cell-past-c-bug-verify-by-replaying-the-shell-s-exact-output-into-the-engine-in-a-test-then-set-the-width-table-centrally-and-from-config-if-needed",
@@ -164,7 +180,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-008-18c-root-cause-found-moved-to-p110-f010-t572-2026-11-19-terminal-updates-travel-as-whole-screens-in-json-server-and-window-saturate-cpu-with-many-agent-panes-and-a-full-connection-queue-tears-the-connection-down-losing-typed-letters-t572-owns-the-lag-fix-point-18-here-closes-when-t572-does",
           "number": 8,
           "title": "18c. ROOT CAUSE FOUND → moved to P110(F010)/T572 (2026-11-19): terminal updates travel as whole screens in JSON (server and window saturate CPU with many agent panes), and a full connection queue tears the connection down, losing typed letters. T572 owns the lag fix; point 18 here closes when T572 does.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-009-point-25-antonio-2026-11-19-resizing-with-shift-held-behaves-wrongly-reproduce-with-him-first-which-resize-pane-column-drag-keyboard-resize-mode-then-fix",
@@ -176,7 +192,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-010-point-26-antonio-2026-11-19-the-window-prints-audio-stream-error-a-buffer-underrun-or-overrun-occurred-repeatedly-to-its-terminal-under-load-agent-sounds-playback-find-where-it-is-printed-stop-the-noise-check-whether-sounds-are-lost",
           "number": 10,
           "title": "Point 26 (Antonio, 2026-11-19): the window prints \"audio stream error: A buffer underrun or overrun occurred.\" repeatedly to its terminal under load (agent sounds playback) — find where it is printed, stop the noise, check whether sounds are lost.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-011-point-27-antonio-2026-11-19-a-mouse-selection-in-a-terminal-does-not-scroll-the-history-when-the-pointer-reaches-the-top-of-the-terminal-dragging-past-the-top-edge-must-scroll-back-and-extend-the-selection-and-past-the-bottom-edge-forward",
@@ -201,6 +217,162 @@
           "number": 14,
           "title": "Point 28 note (2026-11-19): not reproduced with a focus trace (prefix+Ctrl+p/n, tiled panes only, no floats — every switch left a focused pane); skipped for now on Antonio's word. If it comes back, trace sync_focus (heca/src/app/focus.rs) again: ws, focused pane, focus domain, active column, keyboard holder.",
           "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-015-20-shape-agreed-with-antonio-2026-11-19-the-app-name-is-fixed-not-configurable-heca-ed-heca-pro-sono-fissi-given-once-by-the-program-heca-run-app-name-replaces-heca-run-heca-s-binary-heca-run-heca-heca-pro-heca-run-heca-pro-proposed-to-heca-pro-dev-waiting-for-its-answer-before-code-compatibility-15ec67fc-title-app-name-session-folder-from-the-second-window-of-a-session-app-name-session-folder-n-extends-t522-t545-s-folder-k-follow-stays-by-window-id-before-attach-the-app-name-alone-no-literal-heca-left-in-startup-rs",
+          "number": 15,
+          "title": "20 — shape agreed with Antonio 2026-11-19: the app name is FIXED, not configurable (\"heca ed heca pro sono fissi\"), given once by the program: `heca::run(app_name)` replaces `heca::run()` (heca's binary: `heca::run(\"heca\")`; heca-pro: `heca::run(\"Heca Pro\")` — proposed to heca-pro-dev, waiting for its answer before code, compatibility 15ec67fc). Title: `<app name> - <session folder>`, from the second window of a session `<app name> - <session folder> - #<n>` (extends T522/T545's folder + ` #k`; follow stays by window id); before attach: the app name alone. No literal \"heca\" left in startup.rs.",
+          "checked": true
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-016-point-29-antonio-2026-11-20-opening-heca-on-a-folder-from-the-installed-app-a-an-action-install-the-heca-command-in-path-like-vs-code-s-install-code-command-links-heca-the-binary-inside-applications-heca-app-contents-macos-into-a-path-folder-so-heca-new-heca-attach-work-from-a-terminal-reachable-from-palette-key-and-rpc-per-os-macos-link-windows-path-linux-already-in-path-via-package-b-drop-a-folder-on-the-dock-finder-icon-or-open-with-heca-the-bundle-declares-it-opens-folders-heca-receives-the-open-event-and-creates-attaches-a-session-in-that-folder-winit-does-not-expose-macos-open-events-directly-verify-how-first-today-a-user-can-already-do-it-from-inside-the-app-with-the-session-palette-mode-folder-picker-t522-shape-agreed-with-antonio-before-code",
+          "number": 16,
+          "title": "Point 29 (Antonio, 2026-11-20): opening heca on a folder from the installed app — (a) an action \"Install the heca command in PATH\" (like VS Code's \"Install 'code' command\"): links `heca` (the binary inside /Applications/heca.app/Contents/MacOS/) into a PATH folder so `heca --new` / `heca --attach` work from a terminal; reachable from palette, key and RPC; per-OS (macOS link, Windows PATH, Linux already in PATH via package). (b) Drop a folder on the Dock/Finder icon or \"Open With heca\": the bundle declares it opens folders, heca receives the open event and creates/attaches a session in that folder — winit does not expose macOS open events directly, verify how first. Today a user can already do it from inside the app with the session palette (`#` mode, folder picker, T522). Shape agreed with Antonio before code.",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-017-18-window-server-version-check-do-antonio-2026-11-20-a-window-and-a-server-of-different-builds-speak-different-wire-formats-t572-changed-it-and-nothing-checks-a-new-window-attaching-to-an-old-server-e-g-applications-heca-server-started-before-an-upgrade-holding-long-running-work-cannot-read-it-with-unknown-effects-wanted-the-first-message-of-a-connection-carries-a-protocol-version-on-mismatch-the-window-says-plainly-that-the-server-is-another-version-and-must-be-restarted-and-how-sessions-come-back-layout-restored-programs-per-resume-programs-and-touches-nothing-one-place-for-the-version-constant-bumped-by-any-wire-change-heca-src-server-wire-heca-pro-uses-this-wire-agree-the-shape-with-it-decision-15ec67fc-later-separate-decision-upgrading-the-server-while-keeping-terminals-alive-hand-the-open-ptys-to-the-new-server",
+          "number": 17,
+          "title": "18. WINDOW/SERVER VERSION CHECK — DO (Antonio, 2026-11-20). A window and a server of different builds speak different wire formats (T572 changed it) and nothing checks: a new window attaching to an old server (e.g. /Applications heca server started before an upgrade, holding long-running work) cannot read it, with unknown effects. Wanted: the first message of a connection carries a protocol version; on mismatch the window says plainly that the server is another version and must be restarted (and how sessions come back: layout restored, programs per resume_programs), and touches nothing. One place for the version constant, bumped by any wire change (heca/src/server/wire/). heca-pro uses this wire: agree the shape with it (decision 15ec67fc). Later, separate decision: upgrading the server while keeping terminals alive (hand the open PTYs to the new server).",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-018-1-delete-the-current-workspace-delete-workspace-ws-idx-optional-default-current-key-palette-details-description-point-1",
+          "number": 18,
+          "title": "1. Delete the current workspace: delete_workspace ws_idx optional (default current), key + palette (details: description point 1)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-019-2-terminal-round-glyphs-drawn-as-squares-investigate-description-point-2",
+          "number": 19,
+          "title": "2. Terminal round glyphs (⏺/●) drawn as squares — investigate (description point 2)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-020-3-paste-in-the-terminal-s-right-click-menu-description-point-3",
+          "number": 20,
+          "title": "3. Paste in the terminal's right-click menu (description point 3)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-021-4-macos-heca-was-prevented-from-modifying-apps-no-code-note-it-in-docs-release-notes-description-point-4",
+          "number": 21,
+          "title": "4. macOS \"heca was prevented from modifying apps\" — no code; note it in docs/release notes (description point 4)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-022-5-zoom-a-pane-in-a-split-column-bring-design-options-to-antonio-description-point-5",
+          "number": 22,
+          "title": "5. Zoom a pane in a split column — bring design options to Antonio (description point 5)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-023-6-default-session-folder-when-launched-from-the-icon-home-not-verify-and-fix-description-point-6",
+          "number": 23,
+          "title": "6. Default session folder when launched from the icon: home, not \"/\" — verify and fix (description point 6)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-024-7-fit-the-visible-columns-into-the-viewport-study-relation-to-zoom-description-point-7",
+          "number": 24,
+          "title": "7. Fit the visible columns into the viewport — study, relation to zoom (description point 7)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-025-8-zsh-suggestions-highlighting-and-tab-cursor-off-by-one-verify-after-the-locale-fix-8d-description-point-8",
+          "number": 25,
+          "title": "8. zsh suggestions/highlighting and Tab cursor off by one — verify after the locale fix 8d (description point 8)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-026-9-agent-finished-in-an-unfocused-pane-on-another-workspace-no-sound-flash-investigate-description-point-9",
+          "number": 26,
+          "title": "9. Agent finished in an unfocused pane on another workspace: no sound/flash — investigate (description point 9)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-027-10-transparent-logo-done-in-pr-325",
+          "number": 27,
+          "title": "10. Transparent logo (done in PR #325)",
+          "checked": true
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-028-11-drop-a-file-on-the-terminal-pastes-its-quoted-path-a-drop-target-capability-on-the-widget-description-point-11",
+          "number": 28,
+          "title": "11. Drop a file on the terminal pastes its quoted path; a drop-target capability on the widget (description point 11)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-029-12-wheel-scroll-slow-one-notch-calculation-for-host-scrollback-and-forwarded-wheel-speed-from-config-description-point-12",
+          "number": 29,
+          "title": "12. Wheel scroll slow: one notch calculation for host scrollback and forwarded wheel, speed from config (description point 12)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-030-13-report-unknown-retired-config-keys-at-load-then-remove-old-spellings-description-point-13",
+          "number": 30,
+          "title": "13. Report unknown/retired config keys at load, then remove old spellings (description point 13)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-031-14-workspace-numbers-in-the-sidebar-hideable-from-config-description-point-14",
+          "number": 31,
+          "title": "14. Workspace numbers in the sidebar, hideable from config (description point 14)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-032-15-t528-point-5-heca-pro-waits-a-dock-s-first-region-from-config-docks-mount-id-region-decision-943527d4-on-t528-one-workspaces-dock-remove-workspaces-right-workspaces-left2-from-startup-keep-multi-dock-tests-in-fixtures-none-not-mounted",
+          "number": 32,
+          "title": "15 + T528 point 5 (heca-pro waits): a dock's first region from config `[docks] <mount id> = \"<region>\"` (decision 943527d4 on T528); one workspaces dock — remove workspaces.right / workspaces.left2 from startup, keep multi-dock tests in fixtures; `none` = not mounted",
+          "checked": true
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-033-16-attention-on-a-pane-row-scrolled-out-of-sight-form-with-antonio-scroll-into-view-in-scrollregion-description-point-16",
+          "number": 33,
+          "title": "16. Attention on a pane row scrolled out of sight — form with Antonio; scroll-into-view in ScrollRegion (description point 16)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-034-17-a-new-pane-starts-in-the-asker-s-folder-with-shell-takes-the-asker-s-cwd-description-point-17",
+          "number": 34,
+          "title": "17. A new pane starts in the asker's folder (with_shell takes the asker's cwd) (description point 17)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-035-t571-merged-in-row-card-look-as-rowvariant-plain-tinted-filled-pane-row-expos-card-use-it-docs-showcase-built-23fedd2d",
+          "number": 35,
+          "title": "T571 (merged in): Row card look as RowVariant Plain/Tinted/Filled, pane row + exposé card use it, docs + showcase (built, 23fedd2d)",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-036-t571-merged-in-clean-pane-row-rs-hand-colours-93-131-constructors-in-the-syntax-panerow-panename-host-signal-hand-off-chromesignals-the-click-coordinated-with-t565",
+          "number": 36,
+          "title": "T571 (merged in): clean pane_row.rs — hand colours (:93, :131), constructors in THE SYNTAX (PaneRow/PaneName), host signal hand-off (ChromeSignals); the click coordinated with T565",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-037-t571-merged-in-clean-the-other-hand-styled-files-row-lines-rs-chrome-window-scene-pane-shell-pane-header-build-rs-terminal-search-expose-mod-rs-one-surface-at-a-time-with-antonio-s-eye-check",
+          "number": 37,
+          "title": "T571 (merged in): clean the other hand-styled files — row_lines.rs, chrome/window/scene, pane/shell, pane_header/build.rs, terminal/search, expose/mod.rs — one surface at a time with Antonio's eye-check",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-038-heca-pro-asks-2026-11-20-dockframe-section-header-of-its-own-header-actions-collapsible-grip-transparent-wrappers-lay-out-like-the-child-s-parent-visibility-in-the-syntax-built-23fedd2d-antonio-s-eye-check-pending",
+          "number": 38,
+          "title": "heca-pro asks (2026-11-20): DockFrame Section + header of its own + header_actions/collapsible/grip; transparent wrappers lay out like the child's parent; Visibility in THE SYNTAX (built, 23fedd2d) — Antonio's eye-check pending",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-039-30-typed-keys-reach-the-shell-out-of-order-under-load-do-whole-fix-antonio-2026-11-20-ciao-typed-while-rendering-lags-arrives-as-cia-o-cause-found-on-the-server-two-writers-feed-one-shell-a-key-that-maps-to-a-backendkeyevent-letters-heca-src-app-keyboard-rs-328-key-character-backendkeycode-char-goes-processinput-key-engine-process-key-event-wezterm-key-down-which-writes-through-wezterm-s-own-bufwriter-threadedwriter-on-its-own-thread-wezterm-term-src-terminalstate-mod-rs-507-anything-sent-as-bytes-space-namedkey-space-is-missing-from-that-table-so-keyboard-rs-321-makes-it-b-plus-pastes-ime-textinput-text-terminalrun-goes-processinput-bytes-pty-write-input-sharedwriter-directly-on-the-server-thread-heca-core-src-backend-terminal-pane-rs-42-pty-rs-305-under-load-wezterm-s-thread-lags-and-the-direct-write-overtakes-it-fix-the-class-not-the-space-every-byte-bound-for-one-terminal-s-shell-travels-one-ordered-path-in-heca-core-study-how-since-wezterm-always-inserts-its-thread-and-exposes-no-raw-write-test-interleaved-key-events-and-raw-bytes-reach-the-pty-in-the-order-sent-with-the-writer-thread-artificially-slowed",
+          "number": 39,
+          "title": "30. TYPED KEYS REACH THE SHELL OUT OF ORDER under load — DO, whole fix (Antonio, 2026-11-20: \"ciao \" typed while rendering lags arrives as \"cia o\"). Cause found: on the server two writers feed one shell. A key that maps to a BackendKeyEvent (letters: heca/src/app/keyboard.rs:328 Key::Character → BackendKeyCode::Char) goes ProcessInput::Key → engine.process_key_event → wezterm key_down, which writes through wezterm's own BufWriter<ThreadedWriter> on its own thread (wezterm term/src/terminalstate/mod.rs:507). Anything sent as bytes (Space — NamedKey::Space is missing from that table, so keyboard.rs:321 makes it b\" \" — plus pastes, IME/TextInput text, TerminalRun) goes ProcessInput::Bytes → pty.write_input → SharedWriter directly on the server thread (heca-core/src/backend/terminal/pane.rs:42, pty.rs:305). Under load wezterm's thread lags and the direct write overtakes it. Fix the class, not the space: every byte bound for one terminal's shell travels one ordered path in heca-core (study how, since wezterm always inserts its thread and exposes no raw write). Test: interleaved key events and raw bytes reach the pty in the order sent, with the writer thread artificially slowed.",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-040-31-the-focused-terminal-makes-feedback-sounds-do-antonio-2026-11-20-standalone-while-typing-in-the-pane-rule-only-an-unfocused-terminal-sounds-heca-src-client-feedback-rs-70-plays-a-sound-when-the-pane-is-not-input-focused-pane-heca-src-app-state-keyboard-terminal-rs-8-which-is-none-when-heca-s-window-is-not-frontmost-a-palette-dialog-is-open-or-hypothesis-to-test-first-when-the-focused-pane-s-process-has-exited-identity-of-focused-pane-finds-no-backend-as-after-the-ctrl-c-that-produced-pane-14-process-exited-code-130-write-the-failing-test-first-focused-pane-whose-process-exits-does-not-sound-then-fix-in-one-place",
+          "number": 40,
+          "title": "31. THE FOCUSED TERMINAL MAKES FEEDBACK SOUNDS — DO (Antonio, 2026-11-20, standalone, while typing in the pane). Rule: only an unfocused terminal sounds. heca/src/client/feedback.rs:70 plays a sound when the pane is not `input_focused_pane()` (heca/src/app_state/keyboard_terminal.rs:8), which is None when heca's window is not frontmost, a palette/dialog is open, or — hypothesis to test first — when the focused pane's process has exited (identity_of(focused_pane) finds no backend), as after the Ctrl-C that produced \"Pane 14 process exited, code 130\". Write the failing test first (focused pane whose process exits does not sound), then fix in one place.",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -216,16 +388,26 @@
           "relatedTaskId": "02d73556-acee-4f84-ad6f-06ce6ac571e1",
           "pausedAt": "2026-11-19T18:36:50.911Z",
           "pausedBy": ""
+        },
+        {
+          "id": "775befa3-0a38-48e9-90c6-e12bfc2d3da0",
+          "reason": "Antonio (2026-11-20): close the resume-required T572 — its PR is merged and its last fix now rides in T567's branch.",
+          "whatWasBeingDone": "T567 work committed on feat/t567-findings (23fedd2d Row/DockFrame variants, transparent wrappers, Visibility syntax; 9bbe6950 the T572 close-wakes-reader fix). Pending: Antonio's eye check of the showcase (Development section, PINNED, DockFrame inset), then the remaining T567 points.",
+          "resumeLocation": "/Users/antonio/projects/heca-feat-567, branch feat/t567-findings, head 9bbe6950",
+          "howToResume": "Return to T567 after completing T572; then check worktrees heca-feat-469 and heca-feat-565 (T469/T565 checkpoints) as Antonio asked; then continue T567 open points (18 version check first, T528 p5 for heca-pro).",
+          "relatedTaskId": "02d73556-acee-4f84-ad6f-06ce6ac571e1",
+          "pausedAt": "2026-11-20T12:38:28.196Z",
+          "pausedBy": ""
         }
       ],
       "startedAt": "2026-11-19T17:36:39.451Z",
       "completedAt": "",
       "createdAt": "2026-11-19T10:17:09.901Z",
-      "updatedAt": "2026-11-19T21:35:59.598Z",
+      "updatedAt": "2026-11-20T17:37:12.481Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
-          "createdAt": "2026-11-19T21:35:59.344Z"
+          "createdAt": "2026-11-20T12:39:04.084Z"
         }
       ],
       "activeOwnerSession": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2"
@@ -238,9 +420,9 @@
       "priority": 3,
       "shortName": "terminal-updates-travel-as-who",
       "title": "Terminal updates travel as whole screens in JSON — send only changed lines, compactly, and never drop input when a queue is full",
-      "status": "planned",
-      "description": "Root cause, found 2026-11-19, of T567 point 18 (typing lags, spikes, letters skipped) — Antonio: \"si, crea task apposito e metti tutti i dettagli\". Proposal to agree with Antonio BEFORE code (wire protocol change; heca-pro uses it — decision 15ec67fc).\n\n## Evidence (2026-11-19)\n- Antonio's real session (installed v0.1.0-1, ~12 panes, several agent harnesses — Claude Code etc.): typing lags always, spikes at times, inside Claude it is worse, and SOMETIMES TYPED LETTERS ARE SKIPPED. A second window attached to the same session froze (\"non risponde\", 100% CPU) and was killed.\n- Activity Monitor: installed window (pid 68970) ~130-148% CPU, its server (`heca --server`, pid 17228) ~50-70% CPU, the second window 100%.\n- `sample` (macOS) of both: the window's hot frames are serde_json DESERIALIZING terminal cells — `serde_json ... parse_number`, `deserialize_struct ... heca_core::backend::TerminalCell`, `Vec<TerminalLine>::clone`, `from_utf8`, `parse_str`; the server's are serde_json SERIALIZING terminal lines — `serde_json::ser ... collect_seq ... heca_core::backend::TerminalLine`, `format_escaped_str`, `zmij` float formatting, plus `heca_core::backend::terminal::engine::links::detect_plain_links` and `wezterm_cell::Cell::clone`.\n- In `heca --standalone` with 2 terminals and one Claude: no particular lag (little to send).\n- Client-side timing (HECA_SLOW_MS, branch fix/t567-lag): frames mostly vsync-bound (~8-10 ms, frame.open waits for the swapchain); spikes 20-53 ms in frame.paint_window, of which frame.chrome_layout up to 19 ms (the whole window tree is laid out every frame — heca/src/chrome/window/scene/mod.rs:443 `LayoutEngine::new().compute(root, ..)` runs unconditionally); most frames are asked for by terminal output (HECA_FRAME_REASONS: `event BackendWake` 1147, `backend_data` 602, `event TerminalInput` 158 in ~3.7k lines).\n\n## The mechanism\n1. Every terminal update sends the WHOLE visible screen: `TerminalSnapshot::to_wire` (heca-core/src/backend/snapshot.rs:256) copies every line (`lines: self.lines.clone()`), each line every cell. A cell (heca-core/src/backend/mod.rs:154) is `{ text: String, fg: [f32;4], bg: [f32;4], bold, italic, underline, width }` — two colours as eight decimal floats per cell. A 200×50 terminal is 10 000 cells ≈ 80 000 floats per update.\n2. The frame codec is JSON: heca/src/server/wire/frame.rs:13 `serde_json::to_vec(message)`, :45 `serde_json::from_slice`. Floats are printed and parsed as text on every update.\n3. Agent TUIs (Claude Code, Codex…) repaint many times a second, and every keystroke inside them repaints; with several active, server and window spend their CPU encoding/decoding JSON screens. A second window doubles the server's work.\n4. Queues are bounded at `[settings.connection] queue_capacity = 64` (config.default.toml:267). The server's per-connection reader (heca/src/server/wire/socket.rs:58-66) does `inbound.send(message)?` — when the inbound queue is full, `queue::Sender::send` returns `WouldBlock` \"connection queue full\" (heca/src/server/wire/queue.rs:21-37), the `?` ends the reader thread with an error and THE CONNECTION IS TORN DOWN — every message in flight, keystrokes included, is lost. That contradicts the queue's own rule (queue.rs:1 \"Replace pending state, never discard ordered input or effects\"). Likely the \"letters skipped\". The window's own outbox (heca/src/client/outbox.rs:34-39) also `try_send`s into a bounded channel and records a failure when full (then `check()` reports the connection broken). ServerMsg::Terminal replaces a queued older one for the same terminal (queue.rs:87) — fine for snapshots, but it means each surviving update still carries a whole screen.\n\n## Proposal (to agree)\nA. **Send what changed, not the screen.** The engine already tracks damage (TerminalDamage, heca-core/src/backend/snapshot.rs; heca/src/client/terminal.rs keeps a per-terminal view). A terminal update carries only the rows that changed since what this window has (with the cursor/viewport fields), plus a full screen only on attach, resize, a missed revision or a scroll that moves everything. The client applies rows onto the view it keeps. Revision numbers so a lost/replaced update triggers a full resend, like services do (ServiceUpdate revisions).\nB. **A compact encoding for cells.** Colours as packed u32 RGBA (or palette indices with a per-update palette), style flags in one byte, runs of identical style grouped, text as one string per run; and a binary codec for the frame (e.g. bincode/postcard, or MessagePack) instead of JSON — at least for the terminal payload. Keep the codec choice in ONE place (frame.rs) so every message benefits; measure size and CPU before/after.\nC. **Input is never dropped.** A full inbound queue must not end the connection: keystrokes, pastes and actions wait (bounded backpressure on the socket — stop reading until there is room) instead of erroring; only replaceable state (screens, projections) may be coalesced. Same for the window's outbox: input must not be lost when it is full. Test: flood the server while it is slow; every typed byte arrives, in order, and the connection stays up.\nD. (Related, separate measurement) the whole-window layout every frame (scene/mod.rs:443) — lay out only when something asked for layout (`heca_grid_ui::needs_layout`), measured with HECA_SLOW_MS.\nE. Also check `detect_plain_links` per update (server hot spot) runs only on changed rows.\n\n## Compatibility\nheca-pro builds on the server/client protocol (decision 15ec67fc: add beside, deprecate, agree removal). The protocol changes shape here: agree with Antonio and heca-pro how (a protocol version bump negotiated at attach; old and new server/client refuse each other with a clear message rather than misread).\n\n## Verification\n- HECA_SLOW_MS + Activity Monitor + `sample` before/after on Antonio's real kind of load (many agent panes): window and server CPU, frame times, no frozen second window.\n- A load test in `heca --standalone`: ~10 panes printing continuously (`while true; do ls -la /usr/bin | head -40; sleep 0.1; done`) + typing into Claude: no skipped letters.\n- Unit tests: row diff round-trip (apply diffs = full snapshot), revision gap → full resend, queue full → no input lost.\n\n## Tooling already built (branch fix/t567-lag, worktree /Users/antonio/projects/heca-feat-567, uncommitted)\nheca/src/slow_steps.rs (`HECA_SLOW_MS=<ms>` prints every timed step over the threshold, with a timestamp), steps in render_frame, paint_window (chrome rebuild/layout/paint split), client receive/about_to_wait/window_event/poll_backends/sync_chrome_state, server pump/pump_sessions/pump_services/publish_directory/autosave and session pump sub-steps. Also on that branch: the locale fix (T567 8d, verified) and a release-only unused-variable warning fix (heca/src/providers/actions.rs).",
-      "descriptionUpdatedAt": "2026-11-19T18:20:03.549Z",
+      "status": "done",
+      "description": "Root cause, found 2026-11-19, of T567 point 18 (typing lags, spikes, letters skipped) — Antonio: \"si, crea task apposito e metti tutti i dettagli\". Proposal to agree with Antonio BEFORE code (wire protocol change; heca-pro uses it — decision 15ec67fc).\n\n## Evidence (2026-11-19)\n- Antonio's real session (installed v0.1.0-1, ~12 panes, several agent harnesses — Claude Code etc.): typing lags always, spikes at times, inside Claude it is worse, and SOMETIMES TYPED LETTERS ARE SKIPPED. A second window attached to the same session froze (\"non risponde\", 100% CPU) and was killed.\n- Activity Monitor: installed window (pid 68970) ~130-148% CPU, its server (`heca --server`, pid 17228) ~50-70% CPU, the second window 100%.\n- `sample` (macOS) of both: the window's hot frames are serde_json DESERIALIZING terminal cells — `serde_json ... parse_number`, `deserialize_struct ... heca_core::backend::TerminalCell`, `Vec<TerminalLine>::clone`, `from_utf8`, `parse_str`; the server's are serde_json SERIALIZING terminal lines — `serde_json::ser ... collect_seq ... heca_core::backend::TerminalLine`, `format_escaped_str`, `zmij` float formatting, plus `heca_core::backend::terminal::engine::links::detect_plain_links` and `wezterm_cell::Cell::clone`.\n- In `heca --standalone` with 2 terminals and one Claude: no particular lag (little to send).\n- Client-side timing (HECA_SLOW_MS, branch fix/t567-lag): frames mostly vsync-bound (~8-10 ms, frame.open waits for the swapchain); spikes 20-53 ms in frame.paint_window, of which frame.chrome_layout up to 19 ms (the whole window tree is laid out every frame — heca/src/chrome/window/scene/mod.rs:443 `LayoutEngine::new().compute(root, ..)` runs unconditionally); most frames are asked for by terminal output (HECA_FRAME_REASONS: `event BackendWake` 1147, `backend_data` 602, `event TerminalInput` 158 in ~3.7k lines).\n\n## The mechanism\n1. Every terminal update sends the WHOLE visible screen: `TerminalSnapshot::to_wire` (heca-core/src/backend/snapshot.rs:256) copies every line (`lines: self.lines.clone()`), each line every cell. A cell (heca-core/src/backend/mod.rs:154) is `{ text: String, fg: [f32;4], bg: [f32;4], bold, italic, underline, width }` — two colours as eight decimal floats per cell. A 200×50 terminal is 10 000 cells ≈ 80 000 floats per update.\n2. The frame codec is JSON: heca/src/server/wire/frame.rs:13 `serde_json::to_vec(message)`, :45 `serde_json::from_slice`. Floats are printed and parsed as text on every update.\n3. Agent TUIs (Claude Code, Codex…) repaint many times a second, and every keystroke inside them repaints; with several active, server and window spend their CPU encoding/decoding JSON screens. A second window doubles the server's work.\n4. Queues are bounded at `[settings.connection] queue_capacity = 64` (config.default.toml:267). The server's per-connection reader (heca/src/server/wire/socket.rs:58-66) does `inbound.send(message)?` — when the inbound queue is full, `queue::Sender::send` returns `WouldBlock` \"connection queue full\" (heca/src/server/wire/queue.rs:21-37), the `?` ends the reader thread with an error and THE CONNECTION IS TORN DOWN — every message in flight, keystrokes included, is lost. That contradicts the queue's own rule (queue.rs:1 \"Replace pending state, never discard ordered input or effects\"). Likely the \"letters skipped\". The window's own outbox (heca/src/client/outbox.rs:34-39) also `try_send`s into a bounded channel and records a failure when full (then `check()` reports the connection broken). ServerMsg::Terminal replaces a queued older one for the same terminal (queue.rs:87) — fine for snapshots, but it means each surviving update still carries a whole screen.\n\n## Proposal (to agree)\nA. **Send what changed, not the screen.** The engine already tracks damage (TerminalDamage, heca-core/src/backend/snapshot.rs; heca/src/client/terminal.rs keeps a per-terminal view). A terminal update carries only the rows that changed since what this window has (with the cursor/viewport fields), plus a full screen only on attach, resize, a missed revision or a scroll that moves everything. The client applies rows onto the view it keeps. Revision numbers so a lost/replaced update triggers a full resend, like services do (ServiceUpdate revisions).\nB. **A compact encoding for cells.** Colours as packed u32 RGBA (or palette indices with a per-update palette), style flags in one byte, runs of identical style grouped, text as one string per run; and a binary codec for the frame (e.g. bincode/postcard, or MessagePack) instead of JSON — at least for the terminal payload. Keep the codec choice in ONE place (frame.rs) so every message benefits; measure size and CPU before/after.\nC. **Input is never dropped.** A full inbound queue must not end the connection: keystrokes, pastes and actions wait (bounded backpressure on the socket — stop reading until there is room) instead of erroring; only replaceable state (screens, projections) may be coalesced. Same for the window's outbox: input must not be lost when it is full. Test: flood the server while it is slow; every typed byte arrives, in order, and the connection stays up.\nD. (Related, separate measurement) the whole-window layout every frame (scene/mod.rs:443) — lay out only when something asked for layout (`heca_grid_ui::needs_layout`), measured with HECA_SLOW_MS.\nE. Also check `detect_plain_links` per update (server hot spot) runs only on changed rows.\n\n## Compatibility\nheca-pro builds on the server/client protocol (decision 15ec67fc: add beside, deprecate, agree removal). The protocol changes shape here: agree with Antonio and heca-pro how (a protocol version bump negotiated at attach; old and new server/client refuse each other with a clear message rather than misread).\n\n## Verification\n- HECA_SLOW_MS + Activity Monitor + `sample` before/after on Antonio's real kind of load (many agent panes): window and server CPU, frame times, no frozen second window.\n- A load test in `heca --standalone`: ~10 panes printing continuously (`while true; do ls -la /usr/bin | head -40; sleep 0.1; done`) + typing into Claude: no skipped letters.\n- Unit tests: row diff round-trip (apply diffs = full snapshot), revision gap → full resend, queue full → no input lost.\n\n## Tooling already built (branch fix/t567-lag, worktree /Users/antonio/projects/heca-feat-567, uncommitted)\nheca/src/slow_steps.rs (`HECA_SLOW_MS=<ms>` prints every timed step over the threshold, with a timestamp), steps in render_frame, paint_window (chrome rebuild/layout/paint split), client receive/about_to_wait/window_event/poll_backends/sync_chrome_state, server pump/pump_sessions/pump_services/publish_directory/autosave and session pump sub-steps. Also on that branch: the locale fix (T567 8d, verified) and a release-only unused-variable warning fix (heca/src/providers/actions.rs).\n\n---\n**Completion summary:**\nDONE. PR #332 (feat/t572-terminal-wire) merged into main by Antonio on 2026-11-19 (merge aa1b6a01): a terminal travels as the rows that changed, compactly (heca/src/server/wire/rows.rs) [A, B]; a terminal is snapshotted and sent only when its screen changed and frames are shared (3a4f84a8) [E]; redraw only changed rows and one answer to which terminal the keys are for (f79ddd9e); input is not dropped when a queue is full [C]. Verified by sample/HECA_SLOW_MS during the work and by Antonio by eye under his load (\"sembra più fluido\", small degradation with many processes), tests green in the PR. Point D (layout only when asked) dropped with Antonio, project decision 06ac6e43. Follow-up fix found by the macOS CI hang — closing a connection wakes a reader waiting for room (heca/src/server/wire/queue.rs Receiver::close; SocketPeer Drop; test dropping_a_peer_whose_reader_waits_for_room_returns) — was commit 0db15860 on fix/t572-close-wakes-reader; on Antonio's word (2026-11-20) moved into P110(F010)/T567's branch feat/t567-findings (cherry-pick 9bbe6950), ships with T567's PR; worktree heca-feat-572 and both T572 branches removed. NOT DONE here although this task's Compatibility section asked for it: a protocol version negotiated at attach — now T567 point 18 (C17); its absence means a new window cannot safely attach to an old server (seen 2026-11-20 with Antonio's /Applications server).",
+      "descriptionUpdatedAt": "2026-11-20T12:38:49.090Z",
       "notes": "Progress 2026-11-19 (branch feat/t572-terminal-wire, worktree ../heca-feat-572, commits 07b4f5be + f79ddd9e, not pushed):\n- C done: queue.rs Message::WHEN_FULL (ClientMsg Keep, ServerMsg Refuse) + Sender::send_wait used by socket readers; window outbox unbounded; flood test (2000 keys, capacity 1) and queue tests go red on the old code.\n- A done, without revisions: wire/rows.rs — the socket writer remembers the last screen per terminal and sends changed rows; the reader rebuilds whole frames (full screen on first frame, height change, after TerminalClosed). Attach preface now \"@heca-attach 2\" with \"@heca-attach ok\" / \"refused 2\" answer; mismatch tells the user to run `heca --kill-server`.\n- B partly: compact cell encoding (style runs, one string per run of 1-column chars) inside JSON — 1.28 MB → 177 KB for a worst-case full screen. NO binary codec: it would add a dependency (not agreed with Antonio); not needed after A.\n- E done: rows without ':' skip URL detection. D NOT done: whole-window layout every frame is ~6% of the window in `sample`; left until the lag under load warrants it (Antonio: \"sembra più fluido\").\n- Also found by measuring Antonio's load: the window cloned every terminal screen at every wake (fixed: replica frames are Arc); a covered window waited 1 s per frame in nextDrawable (fixed: WindowEvent::Occluded skips drawing); the window redrew whole terminals for one changed row (fixed: TerminalView compares with the last drawn frame and returns Rows damage). Antonio's eye-check: fluid, \"funziona. ottimo\".\n- headless_server.rs speaks the socket protocol by hand (a copy of the format); updated for v2.\nRemaining: PR (on Antonio's word); C4 (binary codec) and D to decide or drop.",
       "statusLog": [
         {
@@ -258,6 +440,22 @@
           "toStatus": "planned",
           "title": "in-progress → planned (checkpoint saved)",
           "description": "Reason: Antonio: \"Riprendiamo t567\". T572 is finished and waits for PR #332's CI and merge.\nWhat was being done: T572 complete on feat/t572-terminal-wire (4 commits, PR #332 open, CI running).\nResume location: PR #332 https://github.com/ovidius72/heca/pull/332\nHow to resume: Read the CI result; on Antonio's merge, complete T572 (evidence in its notes), remove the heca-feat-572 worktree and the merged branch."
+        },
+        {
+          "id": "6b0e1fe2-a178-4a5b-8668-2e9524713114",
+          "date": "2026-11-20T12:38:28.196Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from PR #332 https://github.com/ovidius72/heca/pull/332. Read the CI result; on Antonio's merge, complete T572 (evidence in its notes), remove the heca-feat-572 worktree and the merged branch."
+        },
+        {
+          "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-004-in-progress-done",
+          "date": "2026-11-20T12:38:49.088Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE. PR #332 (feat/t572-terminal-wire) merged into main by Antonio on 2026-11-19 (merge aa1b6a01): a terminal travels as the rows that changed, compactly (heca/src/server/wire/rows.rs) [A, B]; a terminal is snapshotted and sent only when its screen changed and frames are shared (3a4f84a8) [E]; redraw only changed rows and one answer to which terminal the keys are for (f79ddd9e); input is not dropped when a queue is full [C]. Verified by sample/HECA_SLOW_MS during the work and by Antonio by eye under his load (\"sembra più fluido\", small degradation with many processes), tests green in the PR. Point D (layout only when asked) dropped with Antonio, project decision 06ac6e43. Follow-up fix found by the macOS CI hang — closing a connection wakes a reader waiting for room (heca/src/server/wire/queue.rs Receiver::close; SocketPeer Drop; test dropping_a_peer_whose_reader_waits_for_room_returns) — was commit 0db15860 on fix/t572-close-wakes-reader; on Antonio's word (2026-11-20) moved into P110(F010)/T567's branch feat/t567-findings (cherry-pick 9bbe6950), ships with T567's PR; worktree heca-feat-572 and both T572 branches removed. NOT DONE here although this task's Compatibility section asked for it: a protocol version negotiated at attach — now T567 point 18 (C17); its absence means a new window cannot safely attach to an old server (seen 2026-11-20 with Antonio's /Applications server)."
         }
       ],
       "decisions": [],
@@ -291,21 +489,12 @@
           "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-006-verify-on-a-real-like-load-activity-monitor-sample-heca-slow-ms-antonio-s-eye-check-pr",
           "number": 5,
           "title": "Verify on a real-like load (Activity Monitor, sample, HECA_SLOW_MS); Antonio's eye-check; PR",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "pauseSnapshot": {
-        "id": "75dfecb1-ee69-4ac6-a987-ae4401e211df",
-        "reason": "Antonio: \"Riprendiamo t567\". T572 is finished and waits for PR #332's CI and merge.",
-        "whatWasBeingDone": "T572 complete on feat/t572-terminal-wire (4 commits, PR #332 open, CI running).",
-        "resumeLocation": "PR #332 https://github.com/ovidius72/heca/pull/332",
-        "howToResume": "Read the CI result; on Antonio's merge, complete T572 (evidence in its notes), remove the heca-feat-572 worktree and the merged branch.",
-        "relatedTaskId": "25b8c84f-6a93-48ea-9206-ceb249b4c21b",
-        "pausedAt": "2026-11-19T21:35:59.598Z",
-        "pausedBy": ""
-      },
+      "pauseSnapshot": null,
       "pauseHistory": [
         {
           "id": "75dfecb1-ee69-4ac6-a987-ae4401e211df",
@@ -319,20 +508,20 @@
         }
       ],
       "startedAt": "2026-11-19T18:36:50.911Z",
-      "completedAt": "",
+      "completedAt": "2026-11-20T12:38:49.088Z",
       "createdAt": "2026-11-19T18:20:03.419Z",
-      "updatedAt": "2026-11-19T21:35:59.598Z",
+      "updatedAt": "2026-11-20T12:38:49.088Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
-          "createdAt": "2026-11-19T18:36:50.835Z"
+          "createdAt": "2026-11-20T12:38:27.879Z"
         }
       ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-18T18:40:53.598Z",
-  "updatedAt": "2026-11-19T20:51:22.293Z",
+  "updatedAt": "2026-11-20T17:37:12.481Z",
   "handoff": "# T572 finished on its branch (PR on Antonio's word); heca-pro is waiting on T528 p5, T567 p20/23/23b, T571\n\nCreated at: 2026-11-19T18:32:59.781Z\nUpdated at: 2026-11-19T20:51:22.293Z\nReason: Antonio asked to write down, before the context is lost, what heca-pro is waiting for — it was in the planner only as ordinary open work and had been forgotten — and the state of T572 after a long session.\n\n## Current focus\n- Feature: F010. Phase: P110(F010).\n- P110(F010)/T572 (in-progress) — all checklist items done or dropped except the last: push + PR, **only on Antonio's word** (asked 2026-11-19, no answer yet). Worktree `/Users/antonio/projects/heca-feat-572`, branch `feat/t572-terminal-wire`, 3 commits: 07b4f5be, f79ddd9e, 3a4f84a8. Working tree clean.\n- After T572: **heca-pro is WAITING on these — they come first** (Antonio, 2026-11-19; heca-pro is on a heca version with T568+T569, not T570):\n  1. dock's first position from config — P045(F006)/T528 point 5 (also needed by T567 point 15);\n  2. window title \"Heca Pro\" — P110(F010)/T567 point 20;\n  3. Row \"card\" variant — P110(F010)/T571;\n  4. multi-line tooltip + tooltip taking a widget — T567 points 23 and 23b (checklist C1/C2).\n  T570 (real icons, no Flex::row() around FolderLine) needs nothing from heca: heca-pro must update its heca version.\n  Ask Antonio which of the four first.\n\n## Current and partial state\n- T572 done on the branch: input never dropped (queue.rs WHEN_FULL + send_wait; outbox unbounded; flood test); terminals cross the socket as changed rows (wire/rows.rs, Carried in wire/frame.rs), attach preface v2 with ok/refused answer; window shares frames (Arc), redraws only changed rows (client/terminal.rs changed_rows), skips drawing while occluded; server snapshots/sends a terminal only when its screen_version moved (PaneBackend::screen_version, session `published` cache; a window waiting for its first picture gets all); one answer to \"which terminal gets the keys\" (keyboard_terminal: focused pane while keyboard is on the panes) — fixes T567 point 24; single waiting-for-keyboard slot; zsh `.zshenv` recursion when heca runs inside heca fixed (T567 point 22). Antonio's eye-check: fluid, paste correct. C4 (binary codec) removed; D (layout only when needed) dropped — project Accepted Decision 06ac6e43 has the numbers.\n- T567 open: 1-7, 9, 11-17, 19-21, 23/23b, 25 (prefix+r then Shift+j/k resizes the wrong pane), 26 (audio \"buffer underrun\" messages), 27 (mouse selection does not scroll at the top edge), 28 (not reproduced, skipped). 22 and 24 done on T572's branch.\n- Antonio, 2026-11-19: \"from today widgets and components must be built with layout-dirty in mind; what was done is a mess\". Proposed (not yet agreed): a task to make Base's style.layout and children private behind methods that mark needs_layout (~300 sites), which makes D safe later. Do not create it without his yes.\n\n## Preservation constraints\n- Read AGENTS.md in full first. Chat in Italian; the last line is \"Per te: …\" / \"Niente per te.\" in Italian. Answer questions before writing; wait for \"vai\". Never invent APIs. Never edit Antonio's files. Commit only on his word; **PR only at the end of a task** (never offer one with checklist items open). Antonio commits .planner on main.\n- Test builds for Antonio: `HECA_SLOW_MS=20 TMPDIR=$(mktemp -d) <worktree>/target/release/heca` — a separate server; his real server must never be stopped (long jobs running). Load script: the session scratchpad bench/load.sh (repaints a full coloured screen 20×/s).\n\n## Supporting documents\n- None needed: T572 notes and the project decision 06ac6e43 hold the details.\n\n## Blockers and risks\n- None blocking. Open worktrees not to touch: heca-feat-469 (T469), heca-feat-565 (T565 paused).\n- heca/tests/headless_server.rs speaks the socket protocol by hand (a copy of the format) — update it with any wire change.\n\n## How to resume\n1. Ask Antonio for the T572 push + PR (lint audit + xwin clippy + `gh run watch` after push).\n2. Then ask which heca-pro item first (list above) and start that task with its own worktree heca-feat-<num>.\n3. Raise again the Base-privacy task proposal for layout-dirty.",
   "handoffUpdatedAt": "2026-11-19T20:51:22.293Z",
   "handoffAudit": {
@@ -591,7 +780,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
-      "createdAt": "2026-11-19T21:35:59.344Z"
+      "createdAt": "2026-11-20T12:39:04.084Z"
     },
     {
       "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",

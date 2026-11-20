@@ -312,7 +312,16 @@
       "notes": "",
       "statusLog": [],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "943527d4-b8f9-45ab-80a5-71765c7b1037",
+          "title": "A dock's first region comes from config: `[docks] <mount id> = \"<region>\"`",
+          "decision": "Approved by Antonio 2026-11-20. The user's config says where a dock starts, keyed by its mount id: `[docks]` table, `<mount id> = \"<region>\"` (e.g. `workspaces = \"sidebar.left\"`, `rooms = \"sidebar.right\"`, `notes = \"none\"`; `none` = not mounted, its keyboard actions still work). Precedence: saved placement (point 2) → this config → the code's `regions(..).append/prepend` fallback (kept, heca-pro compatibility 15ec67fc). One key for every dock — heca's workspaces dock (T567 point 15) and extension docks (heca-pro's rooms) alike; no per-dock setting. Documented in config.default.toml and docs/configuration.md.",
+          "rationale": "heca-pro (T015) needs its rooms dock placed by the user, not by its code; T567 point 15 needs the same for the workspaces dock. One table keyed by mount id serves both.",
+          "implementationNotes": "",
+          "acceptedAt": "2026-11-20T12:47:33.395Z"
+        }
+      ],
       "checklist": [
         {
           "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-001-drag-a-dock-s-title-row-to-the-other-sidebar-a-position-dispatches-the-existing-move-action-works-for-a-dock-another-crate-added",
@@ -349,6 +358,12 @@
           "number": 6,
           "title": "Drive it in the GPU app and confirm with Antonio",
           "checked": false
+        },
+        {
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-007-point-5-first-region-from-config-docks-mount-id-region-decision-943527d4-is-built-under-p110-f010-t567-checklist-c32-for-heca-pro-tick-here-when-it-lands",
+          "number": 7,
+          "title": "Point 5 (first region from config `[docks] <mount id> = \"<region>\"`, decision 943527d4) is built under P110(F010)/T567 checklist C32 for heca-pro; tick here when it lands",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -358,7 +373,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-09-30T09:14:17.217Z",
-      "updatedAt": "2026-11-19T11:16:11.546Z",
+      "updatedAt": "2026-11-20T12:54:23.043Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -656,7 +671,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-19T11:16:11.546Z",
+  "updatedAt": "2026-11-20T12:54:23.043Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,

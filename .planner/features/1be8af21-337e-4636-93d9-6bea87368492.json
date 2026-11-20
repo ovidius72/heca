@@ -236,6 +236,14 @@
       "toStatus": "in-progress",
       "title": "done → in-progress",
       "description": ""
+    },
+    {
+      "id": "823f85dc-dd0e-432a-b644-1f42607f220a",
+      "date": "2026-11-20T12:54:22.170Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:05.026Z",
