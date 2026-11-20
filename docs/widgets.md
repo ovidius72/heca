@@ -4027,9 +4027,18 @@ half-wired. See [Options are children](#options-are-children-select--tabs--choic
 
 Generic list/menu/sidebar **row**: an optional leading slot, a label, and an optional trailing
 slot, with hover, active (selected), and click-to-activate states. Slots accept any component
-(a `StatusDot`, a kbd-hint `Label`, a `>` chevron, …). Row height tracks the font; the
-active/hover highlight is an inset pill (rounds with the theme radius, so it tucks inside a
-rounded `Pane`). Becomes focusable/clickable once `.on_activate(...)` is set.
+(a `StatusDot`, a kbd-hint `Label`, a `>` chevron, …). The active/hover highlight is an inset pill
+(rounds with the theme radius, so it tucks inside a rounded `Pane`). Becomes focusable/clickable
+once `.on_activate(...)` is set.
+
+**Its size comes from the theme, like a CSS box.** The air at the sides is the `Md` spacing step,
+above and below the `Sm` step, between a slot and the label the `Sm` step — all relative to the font,
+so a font or size change moves them together. There is **no fixed height**: a row is its content plus
+that air, so a taller slot makes a taller row. **An empty slot takes no room** — a row without a
+leading part starts its label exactly where another row's leading part starts, so the content of
+every row in a list lines up. Parts placed beside rows by the library (a
+[`DockFrame`](#dockframe)'s title row, its leading part, its header actions) start and end at the
+same air, from the same source, so they line up with the rows without a spacer.
 
 **Content is composed** (like [`Button`](#button)): the label is a real `Label` child that grows to
 fill the middle, so the row draws only its chrome. Its **state color** (active → accent, muted →
@@ -4987,9 +4996,18 @@ A signal-driven wrapper that hides or shows exactly one child without rebuilding
 Use it for optional metadata rows and exceptional-state indicators that should collapse
 cleanly when absent.
 
-- **Construct**: `Visibility::new().visible(visible).child(child)`.
+- **Construct**: `Visibility::new()` — empty and shown — then `.visible(bool)` (default `true`) and
+  `.child(widget)`: the one widget it shows and hides (a second `.child` replaces the first; wrap a
+  `Flex` to hide several together). The order of the two builders does not matter.
 - **Live update**: `.visible_signal() -> Signal<bool>`.
-- **Existing signal**: `.with_visible_signal(signal)` binds presence without an extra event handler.
+- **Hidden means gone from the layout**, the wrapper's box as well as the child's: its parent spends
+  no gap on it.
+- **Transparent to layout**: the child is laid out exactly as it would be without the wrapper. A
+  child of automatic width stretches wherever its parent stretches the wrapper (a list item in a
+  column fills the column), keeps its natural size where it would, and a child that grows still
+  grows. No caller writes `.width(Length::FULL)` under it. The same holds for every transparent
+  wrapper: [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope),
+  [`Tooltip`](#tooltip) and heca's `FolderLine` — the layout engine does it once for all of them.
 
 ```rust
 let error = Visibility::new().visible(false).child(StatusDot::error());
@@ -5131,7 +5149,7 @@ marker bar is an indicator; the rows inside carry their own intents.
 ### DockFrame
 
 For adding, removing or ordering a dock in the application, use the
-[Provider and startup region API](#providers-and-regions). `DockFrame` supplies the UI frame;
+[Provider and region API](#providers-and-regions). `DockFrame` supplies the UI frame;
 the host mounts the provider.
 
 A titled, collapsible, bracket-framed shell for a Dock: a title bar (drag-handle grip + chevron
@@ -5141,18 +5159,27 @@ away to a single centered `Icon` while the region is collapsed to a rail.
 
 - **Construct**: `DockFrame::new(title)`. Add body with `.child(...)`: one component or an
   array/`Vec` of a common type; chain `.child(a).child(b)` for different types. Every child stays in
-  the body. The frame's named Grid areas identify its own title, controls and body. Nested
+  the body. The frame's named Grid areas identify its own title, header actions and body. Nested
   components may use the same area names: their content, fold state and rail remain independent.
 - **Variants** (`.variant(DockFrameVariant)`) — how the title row is laid out:
 
   | Variant | Title row | Use |
   |---|---|---|
-  | `Dock` (default) | grip, chevron, title, controls | a dock in a chrome region |
-  | `Section` | the `leading` part right before the title, the chevron at the end, no grip | a group in a list (a team with its members) |
+  | `Dock` (default) | grip, **chevron on the left**, leading part, title · header actions | a dock in a chrome region |
+  | `Section` | the `leading` part right before the title, **chevron at the right end**, no grip · header actions | a group in a list (a team with its members) |
+  | a title row of your own (`.header`) | your content, **chevron at the right end** · header actions | anything else |
 
-  Only the title row differs; the body is laid out the same in both. **Whether the body's rows are
-  indented is the caller's decision**, written in the content it gives (e.g.
+  Only the title row differs; the body is laid out the same in every case. **Whether the body's rows
+  are indented is the caller's decision**, written in the content it gives (e.g.
   `.child(Flex::column().padding_left(Spacing::Lg).child(rows))`) — the frame never indents it.
+
+- **Everything lines up with the rows, with nothing written by the caller.** The first part of the
+  title row (a `Dock`'s grip, a `Section`'s leading part, the first thing in your own `.header`)
+  starts where an [`Item`](#item) row's content starts; the header actions end where a row's trailing
+  part ends, so a count in the title row sits in the same column as the badges under it; your own
+  title row is given a row's air above and below, so it is as tall as a `Dock`'s. The parts of the
+  title row are centred on it. Every inset is a theme step taken from `Item`, never a number, so a
+  spacer beside a badge is never needed — and would now double the air.
 
 - **Builders**: `.variant(DockFrameVariant)`,
   `.leading(impl Component)` (the part before the title — avatar, icon, image — inside the title
@@ -7091,15 +7118,41 @@ Region names are `sidebar.left`, `sidebar.right`, `bar.top` and `bar.bottom`. An
 reported and changes nothing. Calls are queued and applied as the window starts, then at every frame,
 so a dock can be added or removed while the app runs.
 
-**Where a dock goes and in what order is the user's word first.** The config's `[[docks]]` entries
-(by kind, `name`, or by dock, `name` + `id`) give a `location` — a region or `"none"` — and an
-`order` and a `flex` ([configuration](configuration.md#where-docks-start)); what an entry does not
-say, the `regions(..)` call and the dock's `.order(..)` / `.flex(..)` say. An entry with an id no
-code added makes another dock of that kind when the provider allows it — implement
-`Provider::another(&self, id) -> Option<Box<dyn Provider>>` (default `None`: placed by code only). On a reload (`prefix+Shift+r`) each dock whose
-entry changed is moved, reordered, taken out, or — if it was added as a recipe — made again; a dock
-added as itself comes back only with a restart. Docks whose entry did not change stay where they are.
-A dock's cursor, scroll and folded state are kept by its id, so one made again finds them.
+**Where a dock goes, in what order and how big is the user's word first.** The config's `[[docks]]`
+entries — by kind (`name`) or by dock (`name` + `id`; that one wins) — give a `location` (a region or
+`"none"`), an `order` and a `flex` ([configuration](configuration.md#where-docks-start)):
+
+```toml
+[[docks]]
+name = "tools"               # every dock of the kind `tools`
+location = "sidebar.left"
+order = -1
+
+[[docks]]
+name = "workspaces"
+id = "workspaces.2"          # an id no code added: a second workspaces dock, made by `spawn`
+location = "sidebar.left"
+flex = 2
+```
+
+What an entry does not say, the `regions(..)` call and the dock's `.order(..)` / `.flex(..)` say.
+
+**More docks from the config — `Provider::spawn`.** An entry with an id no code added asks a dock of
+that kind for another one under that id. Implement
+`fn spawn(&self, id: &str) -> Option<Box<dyn Provider>>` to allow it
+(`Some(Box::new(MyDock::new(id)))`); the default `None` means the kind is placed by code only, and
+such an entry does nothing. heca's workspaces dock allows it. A dock made this way lives as long as
+its entry: removing the entry and reloading removes it.
+
+**Reload.** On `prefix+Shift+r` each dock whose entry changed is moved, reordered, resized, taken out,
+made again (a recipe, or a dock spawned from the config) or added; a dock added as itself comes back
+from `"none"` only with a restart, and heca says so. Docks whose entry did not change stay where
+they are, even if the user moved them by hand. A dock's cursor, scroll and folded state are kept by
+its id, so one made again finds them.
+
+**How `append` takes both a dock and a recipe.** Rust cannot have two `append`s, so the
+`IntoDocks<M>` trait carries a hidden mark (`AsDock`, `AsRecipe`, `AsPlacedRecipe`) that tells a dock,
+a recipe and a recipe that also says `.flex` / `.order` apart. Nobody writes it.
 
 The older `left-sidebar` / `left` spellings are also read by the shared region-name parser.
 `retain` changes the existing list; Rust's `filter` would instead build another collection. Regions
@@ -7109,9 +7162,11 @@ own body; ties keep insertion order, and spacing belongs to the region.
 
 `Provider::id()` identifies a **placement**. `Provider::kind()` identifies the component type and
 its action/config namespace; it defaults to `id()` for the single-placement case. Two placements of
-one component have different ids, so their focus, cursor and scroll state remain separate. Implement
-`supported_regions`, `default_region`, `title` and `build_contribution` to describe the dock. The optional
-`on_activate` hook returns `ProviderHandles`; dropping those handles releases the subscriptions. The host owns its
+one component have different ids, so their focus, cursor and scroll state remain separate (a
+`[[docks]]` entry's `name` is the kind, its `id` the placement). Implement `supported_regions`,
+`default_region`, `title` and `build_contribution` to describe the dock. The optional `on_activate`
+hook returns `ProviderHandles`; dropping those handles releases the subscriptions. The optional
+`spawn(id)` lets the user add more docks of the kind from the config (above). The host owns its
 mounting, frame, layout and event delivery.
 
 Build the contribution with `ContainerContribution::new(self, |ctx, build| widget)` inside the

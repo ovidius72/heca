@@ -102,7 +102,7 @@ impl Provider for WorkspacesContainerProvider {
     }
 
     /// The user may add as many workspaces docks as they like from `[[docks]]`.
-    fn another(&self, id: &str) -> Option<Box<dyn Provider>> {
+    fn spawn(&self, id: &str) -> Option<Box<dyn Provider>> {
         Some(Box::new(Self::new(id)))
     }
 

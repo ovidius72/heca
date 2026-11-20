@@ -63,7 +63,7 @@ pub trait Provider {
     /// ```
     ///
     /// `None` (the default): this kind is placed only by code, and such an entry does nothing.
-    fn another(&self, id: &str) -> Option<Box<dyn Provider>> {
+    fn spawn(&self, id: &str) -> Option<Box<dyn Provider>> {
         let _ = id;
         None
     }

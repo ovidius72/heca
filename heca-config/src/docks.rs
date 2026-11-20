@@ -14,7 +14,7 @@
 //! ```
 //!
 //! An entry for an id no dock has **adds one** of that kind, when the kind can make another
-//! (`Provider::another`); otherwise it does nothing. `location`, `order` and `flex` are each
+//! (`Provider::spawn`); otherwise it does nothing. `location`, `order` and `flex` are each
 //! optional: what is not said is what the code that adds the dock says.
 
 use serde::{Deserialize, Serialize};

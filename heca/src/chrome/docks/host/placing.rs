@@ -6,7 +6,7 @@
 //! id, else the one for its kind ([`entry_for`]) — for its `location` (a region, or `"none"`), its
 //! `order` and its `flex`; what the entry does not say, the code that added the dock says. An entry
 //! for an id nobody added makes a new dock of that kind, if the kind can
-//! ([`Provider::another`]).
+//! ([`Provider::spawn`]).
 
 use heca_config::docks::{DockEntry, entry_for};
 
@@ -174,21 +174,21 @@ impl ChromeHost {
         let declared = &self.declared[i];
         match &declared.recipe {
             Some(recipe) => Some(recipe()),
-            None if declared.from_config => self.another_of(&declared.kind, &declared.id),
+            None if declared.from_config => self.spawn_of(&declared.kind, &declared.id),
             None => None,
         }
     }
 
     /// **A new dock of `kind` under `id`**, made by a dock of that kind the host knows — from its
     /// recipe, or the seated one — if the kind can make another.
-    fn another_of(&self, kind: &str, id: &str) -> Option<Box<dyn Provider>> {
+    fn spawn_of(&self, kind: &str, id: &str) -> Option<Box<dyn Provider>> {
         let from_recipe = self.declared.iter()
             .filter(|d| d.kind == kind)
-            .find_map(|d| d.recipe.as_ref().and_then(|recipe| recipe().another(id)));
+            .find_map(|d| d.recipe.as_ref().and_then(|recipe| recipe().spawn(id)));
         from_recipe.or_else(|| self.regions.iter()
             .flat_map(|r| r.contributions.iter())
             .filter(|m| m.provider.kind() == kind)
-            .find_map(|m| m.provider.another(id)))
+            .find_map(|m| m.provider.spawn(id)))
     }
 
     /// **Add the docks `[[docks]]` names that nobody added** — one entry with a `name` and an `id`
@@ -200,7 +200,7 @@ impl ChromeHost {
             .filter(|(_, id)| !self.placement.contains_key(id) && !self.declared.iter().any(|d| &d.id == id))
             .collect();
         for (kind, id) in wanted {
-            let Some(provider) = self.another_of(&kind, &id) else { continue };
+            let Some(provider) = self.spawn_of(&kind, &id) else { continue };
             let region = self.declared.iter().find(|d| d.kind == kind).map_or(RegionId::LeftSidebar, |d| d.region);
             self.declare(region, Placed::from(provider), false, true);
         }
