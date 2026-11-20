@@ -15,7 +15,7 @@ fn marker_and_tag_properties_reach_the_described_tree() {
 fn a_built_tree_is_an_ordinary_view_node() {
     let built = VStack::new()
         .gap(8.0)
-        .child(Label::new("nginx").bold(true))
+        .child(Label::new("nginx").font_weight(crate::ViewFontWeight::Bold))
         .into_node();
 
     let by_hand = ViewNode::new(WidgetId::VStack)
@@ -23,7 +23,7 @@ fn a_built_tree_is_an_ordinary_view_node() {
         .child(
             ViewNode::new(WidgetId::Label)
                 .text("nginx")
-                .prop("bold", PropValue::Bool(true)),
+                .prop("font_weight", PropValue::Text("bold".into())),
         );
 
     assert_eq!(built, by_hand);

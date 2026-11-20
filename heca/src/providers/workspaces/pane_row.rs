@@ -104,7 +104,7 @@ impl PaneRow<'_> {
         let name = crate::components::PaneName {
             text: &info.title,
             color: None,
-            bold: true,
+            weight: heca_grid_ui::style::FontWeight::Bold,
             font_scale: 1.0,
             theme,
         }

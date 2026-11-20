@@ -244,7 +244,7 @@ mod tests {
     fn text_runs_of_different_sizes_share_a_baseline() {
         let row = laid_out(
             Flex::row()
-                .child(Label::new("NAME").bold(true))
+                .child(Label::new("NAME").font_weight(crate::style::FontWeight::Bold))
                 .child(Label::new("(zsh)").font_scale(0.8))
                 .child(Label::new("tiny").font_scale(0.6)),
         );
@@ -271,7 +271,7 @@ mod tests {
     fn a_wrapped_text_run_shares_the_baseline_too() {
         let row = laid_out(
             Flex::row()
-                .child(Label::new("fafdsa").bold(true))
+                .child(Label::new("fafdsa").font_weight(crate::style::FontWeight::Bold))
                 .child(Visibility::new().visible(true).child(Label::new("(zsh)").font_scale(0.8))),
         );
         let name = baseline(row.base().children[0].as_ref()).expect("the name is text");
@@ -286,14 +286,14 @@ mod tests {
     /// taller sibling already claimed.
     #[test]
     fn sharing_a_baseline_does_not_grow_the_row() {
-        let tall = laid_out(Flex::row().child(Label::new("NAME").bold(true)))
+        let tall = laid_out(Flex::row().child(Label::new("NAME").font_weight(crate::style::FontWeight::Bold)))
             .base()
             .bounds
             .size
             .h;
         let mixed = laid_out(
             Flex::row()
-                .child(Label::new("NAME").bold(true))
+                .child(Label::new("NAME").font_weight(crate::style::FontWeight::Bold))
                 .child(Label::new("(zsh)").font_scale(0.8)),
         )
         .base()

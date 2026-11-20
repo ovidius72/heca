@@ -11,7 +11,10 @@ pub(super) struct LabelKey {
     pub(super) text: String,
     /// Scaled font size in `f32::to_bits()` form (exact, hashable).
     pub(super) size_bits: u32,
-    pub(super) bold: bool,
+    /// CSS weight the layout was shaped at.
+    pub(super) weight: u16,
+    /// Letter spacing in `f32::to_bits()` form — it moves every glyph after the first.
+    pub(super) letter_spacing_bits: u32,
     pub(super) icon: bool,
     pub(super) italic: bool,
     pub(super) font_family: Option<String>,

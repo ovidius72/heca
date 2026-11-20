@@ -1,13 +1,26 @@
 //! [`Label`] — a single run of text bound to a reactive signal.
 //!
-//! # Weight, slant, decorations
-//! The four text attributes split cleanly in two, and the split is the interesting part:
+//! ```ignore
+//! Label::new("Members · 4")
+//!     .font_weight(FontWeight::SemiBold)
+//!     .letter_spacing(LetterSpacing::Wide)
+//!     .transform(TextTransform::Uppercase)
+//!     .muted(true)
+//! ```
 //!
-//! - **`bold` / `italic` are FONT attributes** — the shaper picks the glyphs. Bold selects the
-//!   embedded family's real bold face; italic is a **synthesized oblique** (a glyph shear), because
-//!   the embedded family ships no italic face and asking for a real one would substitute a
-//!   *proportional* fallback and break the monospace metrics the whole grid rests on. See
-//!   [`font`](crate::font).
+//! # How the text is set
+//! The text attributes split in three, and the split is the interesting part:
+//!
+//! - **`font_weight` / `italic` are FONT attributes** — the shaper picks the glyphs. Each
+//!   [`FontWeight`] is a real face of the embedded family (Regular, Medium, SemiBold, Bold); italic
+//!   is a **synthesized oblique** (a glyph shear), because the embedded family ships no italic face
+//!   and asking for a real one would substitute a *proportional* fallback and break the monospace
+//!   metrics the whole grid rests on. See [`font`](crate::font).
+//! - **`letter_spacing` / `line_height` / `transform` change the SHAPE of the text** — how wide a
+//!   character is, how tall a line is, which characters are shown. They feed the one cell, the one
+//!   line and the one shown string this label measures, cuts, wraps and paints with, so the box and
+//!   the glyphs cannot disagree. Spacing and line height are steps of the font size
+//!   ([`LetterSpacing`], [`LineHeight`]), so no caller writes a number.
 //! - **`underline` / `strikethrough` are DECORATIONS** — a line is not a glyph, it is a rect. The
 //!   label draws them itself, in its own resolved color, like any other chrome. Nothing about them
 //!   reaches the shaper, which is why the renderer needed no change to gain them.
@@ -15,10 +28,10 @@
 use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
-use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO, mono_cells, wrap_indexed};
+use crate::font::{MONO_ADVANCE_RATIO, mono_cells, wrap_indexed};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{TextAlign, TextStyle};
-use crate::style::Length;
+use crate::style::{FontWeight, Length, LetterSpacing, LineHeight, TextTransform};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Decoration thickness as a fraction of the resolved font — so a rule under 10px text is hairline
@@ -70,10 +83,21 @@ pub struct Label {
     seen_text: String,
     align: TextAlign,
     color: Option<Color>,
-    /// Bold weight. A [`Signal`] because it can be **state-driven by an enclosing widget** — an
-    /// [`Item`](super::Item) bolds its label while the row is active — and the inherited paint
-    /// context carries only a color, not a weight. The parent flips this in its `tick`.
+    /// How heavy the glyphs are. A [`Signal`] because it can be **state-driven by an enclosing
+    /// widget** — an [`Item`](super::Item) bolds its label while the row is active — and the
+    /// inherited paint context carries only a color, not a weight. The parent sets this in its
+    /// `tick`.
+    weight: Signal<FontWeight>,
+    /// The old on/off weight, kept so code written against [`bold`](Label::bold) still works: while
+    /// it is on, the label draws [`FontWeight::Bold`] whatever [`weight`](Self::weight) says.
     bold: Signal<bool>,
+    /// The air after every letter — widens the cell everything is measured and cut in.
+    letter_spacing: LetterSpacing,
+    /// How tall one line is — a one-line label's height, and a wrapping label's line pitch.
+    line_height: LineHeight,
+    /// The case the text is shown in. The text itself (and [`text_summary`](Component::text_summary))
+    /// stays as written.
+    transform: TextTransform,
     /// Slanted (a synthesized oblique — see the module docs). A [`Signal`] for the same reason as
     /// [`bold`](Self::bold): a parent can drive it from state without rebuilding the tree.
     italic: Signal<bool>,
@@ -131,7 +155,11 @@ impl Label {
             seen_text,
             align: TextAlign::Start,
             color: None,
+            weight: signal(FontWeight::Regular),
             bold: signal(false),
+            letter_spacing: LetterSpacing::Normal,
+            line_height: LineHeight::Normal,
+            transform: TextTransform::None,
             italic: signal(false),
             underline: signal(false),
             strikethrough: signal(false),
@@ -285,14 +313,31 @@ impl Label {
         source.is_some_and(|i| marks.contains(&i))
     }
 
-    /// The width of one monospace cell at the resolved font.
+    /// The width of one character at the resolved font: the monospace advance plus the letter
+    /// spacing. **The one cell** — the measure, the cut, the wrap, the marks and the decorations all
+    /// take it from here, so spacing the letters can never leave the text and its box disagreeing.
     fn cell(&self) -> f64 {
-        (self.base.font * MONO_ADVANCE_RATIO) as f64
+        f64::from(self.base.font * (MONO_ADVANCE_RATIO + self.letter_spacing.em()))
     }
 
-    /// The height of one line at the resolved font.
+    /// The height of one line at the resolved font — the [`LineHeight`] step.
     fn line_h(&self) -> f64 {
-        (self.base.font * MONO_LINE_RATIO) as f64
+        f64::from(self.base.font * self.line_height.ratio())
+    }
+
+    /// **The text as it is shown** — after the [`TextTransform`]. Everything that measures, cuts or
+    /// draws reads this, never the raw signal, so a transformed label is sized for what it shows.
+    fn shown_text(&self) -> String {
+        self.transform.apply(&self.text.get_untracked())
+    }
+
+    /// The weight the label draws with: the old [`bold`](Self::bold) switch, while on, wins.
+    fn drawn_weight(&self) -> FontWeight {
+        if self.bold.get_untracked() {
+            FontWeight::Bold
+        } else {
+            self.weight.get_untracked()
+        }
     }
 
     /// The lines as they will actually be drawn: one for a plain or truncated label, as many as the
@@ -317,7 +362,7 @@ impl Label {
     /// transformation: a cut drops the marks whose characters went and shifts the survivors by
     /// construction, and a reflow carries each to the line its character landed on.
     fn drawn_indexed(&self) -> Vec<Vec<(char, Option<usize>)>> {
-        let text = self.text.get_untracked();
+        let text = self.shown_text();
         let cells = mono_cells(self.base.bounds.size.w, self.cell());
         if self.wrap.get_untracked() {
             return (if self.preserve_whitespace { crate::font::wrap_preserved(&text, cells, self.max_lines.get_untracked()) }
@@ -380,7 +425,7 @@ impl Label {
             return true;
         }
         let last_drawn = lines.iter().flatten().filter_map(|(_, index)| *index).max();
-        let wanted = self.text.get_untracked().trim_end().chars().count();
+        let wanted = self.shown_text().trim_end().chars().count();
         wanted > 0 && last_drawn.is_none_or(|last| last + 1 < wanted)
     }
 
@@ -400,18 +445,69 @@ impl Label {
         self
     }
 
+    /// **How heavy the glyphs are** — CSS `font-weight`: [`Regular`](FontWeight::Regular) (the
+    /// default), [`Medium`](FontWeight::Medium), [`SemiBold`](FontWeight::SemiBold) or
+    /// [`Bold`](FontWeight::Bold). Each is a real face of the embedded family; a font the user
+    /// configures gives its nearest installed weight.
+    #[heca_grid_ui_macros::prop]
+    pub fn font_weight(self, weight: FontWeight) -> Self {
+        self.weight.set(weight);
+        self
+    }
+
+    /// The weight signal — set it to re-weight the label in place, without rebuilding the tree. An
+    /// enclosing widget uses this to drive a state-dependent weight (an [`Item`](super::Item) bolds
+    /// its label while the row is active).
+    pub fn font_weight_signal(&self) -> Signal<FontWeight> {
+        self.weight
+    }
+
     /// Render the label with bold weight.
+    #[deprecated(note = "use `font_weight(FontWeight::Bold)`")]
     #[heca_grid_ui_macros::prop]
     pub fn bold(self, bold: bool) -> Self {
         self.bold.set(bold);
         self
     }
 
-    /// The bold-weight signal — set it to re-weight the label in place, without rebuilding the
-    /// tree. An enclosing widget uses this to drive a state-dependent weight (e.g. an
-    /// [`Item`](super::Item) bolding its label while active).
+    /// The old on/off weight signal. While it is on the label draws bold, whatever
+    /// [`font_weight`](Self::font_weight) says.
+    #[deprecated(note = "use `font_weight_signal()`, which carries every weight")]
     pub fn bold_signal(&self) -> Signal<bool> {
         self.bold
+    }
+
+    /// **The air after every letter** — CSS `letter-spacing`, as a step of the font size:
+    /// [`Tight`](LetterSpacing::Tight), [`Normal`](LetterSpacing::Normal) (the default),
+    /// [`Wide`](LetterSpacing::Wide) or [`Wider`](LetterSpacing::Wider). A small uppercase heading
+    /// reads best `Wide`. The label is measured, cut and wrapped with the spacing included.
+    #[heca_grid_ui_macros::prop]
+    pub fn letter_spacing(mut self, spacing: LetterSpacing) -> Self {
+        self.letter_spacing = spacing;
+        self.remeasure();
+        self
+    }
+
+    /// **How tall one line is** — CSS `line-height`, as a step of the font size:
+    /// [`Tight`](LineHeight::Tight), [`Normal`](LineHeight::Normal) (the default),
+    /// [`Relaxed`](LineHeight::Relaxed) or [`Loose`](LineHeight::Loose). The text sits in the middle
+    /// of its line; a wrapping label stacks its lines this far apart.
+    #[heca_grid_ui_macros::prop]
+    pub fn line_height(mut self, height: LineHeight) -> Self {
+        self.line_height = height;
+        self.remeasure();
+        self
+    }
+
+    /// **The case the text is shown in** — CSS `text-transform`: [`None`](TextTransform::None) (the
+    /// default), [`Uppercase`](TextTransform::Uppercase), [`Lowercase`](TextTransform::Lowercase) or
+    /// [`Capitalize`](TextTransform::Capitalize). Only what is drawn changes: the text, the accessible
+    /// name and the tooltip of a cut label keep the casing it was written in.
+    #[heca_grid_ui_macros::prop]
+    pub fn transform(mut self, transform: TextTransform) -> Self {
+        self.transform = transform;
+        self.remeasure();
+        self
     }
 
     /// Render the label slanted — a **synthesized oblique**, not a separate face (see the module
@@ -458,7 +554,7 @@ impl Label {
     ///
     /// The label's box can be wider than its text (a stretched parent), and `align` decides where
     /// each run sits in it, so a decoration must follow the run rather than span the box. Widths
-    /// come from the same monospace measure the layout uses, which is what keeps rule and glyphs in
+    /// come from the same cell the layout measures with, which is what keeps rule and glyphs in
     /// agreement.
     ///
     /// **One rect per drawn line**, so a wrapped label's underline follows each line instead of one
@@ -466,7 +562,6 @@ impl Label {
     /// height — unchanged from before wrapping existed.
     fn run_rects(&self) -> Vec<Rectangle> {
         let bounds = self.base.bounds;
-        let font = self.base.font as f64;
         // A wrapped label's box is N lines tall, so a run is one line; a plain label's run is its
         // whole box, which is what keeps a stretched single-line label centring as it always did.
         let line_h = if self.wrap.get_untracked() {
@@ -481,7 +576,7 @@ impl Label {
                 // The **drawn** text, not the full string: a rule under a truncated label must span
                 // the glyphs that are actually there, ellipsis included.
                 let chars = line.chars().count() as f64;
-                let width = (chars * font * MONO_ADVANCE_RATIO as f64).min(bounds.size.w);
+                let width = (chars * self.cell()).min(bounds.size.w);
                 let x = match self.align {
                     TextAlign::Start => bounds.loc.x,
                     TextAlign::Center => bounds.loc.x + (bounds.size.w - width) / 2.0,
@@ -555,11 +650,12 @@ impl Component for Label {
         }
     }
 
-    /// Naive monospace measure from the resolved font ([`Base::font`]).
+    /// Monospace measure from the resolved font ([`Base::font`]), the letter spacing, the line
+    /// height and the shown (transformed) text.
     fn remeasure(&mut self) {
-        let text = self.text.get_untracked();
-        self.seen_text = text.clone();
-        let fs = self.base.font;
+        self.seen_text = self.text.get_untracked();
+        let text = self.shown_text();
+        let line = self.line_h() as f32;
         if self.wrap.get_untracked() {
             // **Deliberately no size.** A wrapped label's height is a function of the width it is
             // resolved to, which this method runs too early to know — writing the one-line height
@@ -575,12 +671,12 @@ impl Component for Label {
             // never cut at all. `auto` + the measure path lets the box it is given decide, which is
             // the whole contract of truncation; the height is still exactly one line.
             self.base.style.layout.width = Length::Auto;
-            self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
+            self.base.style.layout.height = Length::Px(line);
             return;
         }
-        let chars = text.chars().count() as f32;
-        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
-        self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
+        let chars = text.chars().count() as f64;
+        self.base.style.layout.width = Length::Px((chars * self.cell()) as f32);
+        self.base.style.layout.height = Length::Px(line);
     }
 
     /// A wrapping label is the one widget measured from its resolved width (see
@@ -588,8 +684,9 @@ impl Component for Label {
     fn measure_text(&self) -> Option<crate::layout::TextMeasure> {
         let wrap = self.wrap.get_untracked();
         (wrap || self.truncate != Ellipsis::None || self.preserve_whitespace).then(|| crate::layout::TextMeasure {
-            text: self.text.get_untracked(),
-            font: self.base.font,
+            text: self.shown_text(),
+            cell: self.cell() as f32,
+            line: self.line_h() as f32,
             wrap,
             preserve_whitespace: self.preserve_whitespace,
             max_lines: self.max_lines.get_untracked(),
@@ -610,8 +707,9 @@ impl Component for Label {
             .or_else(|| cx.content_color())
             .unwrap_or_else(|| cx.theme().colors.foreground);
         let style = TextStyle::REGULAR
-            .bold(self.bold.get_untracked())
-            .italic(self.italic.get_untracked());
+            .weight(self.drawn_weight())
+            .italic(self.italic.get_untracked())
+            .letter_spacing(self.letter_spacing.em());
         let lines = self.drawn_indexed();
         let bounds = self.base.bounds;
         let runs = self.run_rects();
@@ -661,7 +759,7 @@ impl Component for Label {
                     mark_color,
                     self.base.font,
                     TextAlign::Start,
-                    style.bold(true),
+                    style.weight(FontWeight::Bold),
                 );
             }
         }

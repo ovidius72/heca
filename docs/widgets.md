@@ -1506,7 +1506,7 @@ stay DRY):
 | `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Dialog` to lift off the scrim. |
 | `.focus_ring(rect, color, radius)` | **The** keyboard focus outline for every widget — a thin accent-toned ring drawn *just outside* `rect` (CSS-`outline` style, offset gap), corner radius widened to stay concentric. Visible whether or not the widget has its own border (works on borderless Ghost/Link buttons). Width = `focus_border_width`; halo tracks `glow_size`. Pair with the theme's `focus_ring`/`effective_focus_ring()`/`focus_ring_tone()` for the color. |
 | `.bracket_frame(rect)` | Decorative L-shaped corner-bracket reticle (Pane/DockFrame/Dialog chrome) — **decoration, not focus** (focus uses `.focus_ring`). |
-| `.text(rect, &str, color, size, TextAlign, TextStyle)` | Text centered in `rect` (per `align` horizontally, vertically centered). `TextStyle { bold, italic }` is the **font** style — what the shaper does to the glyphs (`TextStyle::REGULAR` / `BOLD` / `ITALIC`, or `TextStyle::REGULAR.bold(is_active)`). Decorations (underline, strikethrough) are **not** here: a line is a rect, and the widget draws it — see [`Label`](#label). Italic is a *synthesized oblique*, since the embedded family has no italic face. |
+| `.text(rect, &str, color, size, TextAlign, TextStyle)` | Text centered in `rect` (per `align` horizontally, vertically centered). `TextStyle { weight, italic, letter_spacing }` is the **font** style — what the shaper does to the glyphs (`TextStyle::REGULAR` / `BOLD` / `ITALIC`, or `TextStyle::REGULAR.weight(row_weight).letter_spacing(em)`). Decorations (underline, strikethrough) are **not** here: a line is a rect, and the widget draws it — see [`Label`](#label). Italic is a *synthesized oblique*, since the embedded family has no italic face. |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
@@ -2531,7 +2531,7 @@ Grid::new()
     // pair; the status dot centres against the title. Without this they all sit at the cell top.
     .align(Align::Center)
     .area(Icon::new(Glyph::Terminal), "icon")
-    .area(Label::new("zsh").bold(true), "title")
+    .area(Label::new("zsh").font_weight(FontWeight::Bold), "title")
     // Horizontal, for this item only: pin the dot to the right edge of its cell instead of
     // stretching it across the column.
     .area(StatusDot::online().justify_self(Align::End), "status")
@@ -2943,9 +2943,21 @@ an input to the caption, including the empty-text case.
 A single text run bound to a `Signal<String>`.
 
 - **Construct**: `Label::new(text)`.
-- **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
-  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy), and the
-  four text attributes: `.bold(bool)`, `.italic(bool)`, `.underline(bool)`, `.strikethrough(bool)`.
+- **Builders**: `.align(TextAlign)`, `.color(Color)`, `.muted(bool)`, `.font_size(f32)` (pin a
+  size), `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy), and
+  how the text is set (CSS's names, each with its default):
+  - `.font_weight(FontWeight)` — `Regular` (default) · `Medium` · `SemiBold` · `Bold` (CSS
+    `font-weight` 400 / 500 / 600 / 700);
+  - `.letter_spacing(LetterSpacing)` — `Tight` · `Normal` (default) · `Wide` · `Wider` (CSS
+    `letter-spacing`, a step of the font size);
+  - `.line_height(LineHeight)` — `Tight` · `Normal` (default) · `Relaxed` · `Loose` (CSS
+    `line-height`, a step of the font size);
+  - `.transform(TextTransform)` — `None` (default) · `Uppercase` · `Lowercase` · `Capitalize` (CSS
+    `text-transform`);
+  - `.italic(bool)`, `.underline(bool)`, `.strikethrough(bool)` (default `false`).
+
+  `.bold(bool)` is **deprecated** — it still draws bold (and wins over `font_weight` while on), so
+  code written against it keeps working; write `.font_weight(FontWeight::Bold)`.
 - **Cut text offers itself on hover**: whenever the label cuts its text (below), hovering it shows
   the whole text — after half of the default tooltip rest — and the tooltip goes when the text fits
   again. Nothing to write; a tooltip written by hand, on the label or on anything holding it, wins.
@@ -2958,23 +2970,37 @@ A single text run bound to a `Signal<String>`.
   (measure and paint share the one wrap function, so the box is exactly the drawn lines tall);
   `.max_lines_signal()` is the live handle and `.with_max_lines_signal(sig)` adopts a caller-owned one
   so several labels share a cap.
-- **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively), plus a signal per
-  attribute — `.bold_signal()`, `.italic_signal()`, `.underline_signal()`, `.strikethrough_signal()`
-  (all `Signal<bool>`). Flip one to restyle the label **in place**, with no rebuild: an enclosing
-  widget drives it for a state-dependent look — this is how [`Item`](#item) bolds its label while
-  active (the inherited paint context carries a color, but not a weight), and how a link underlines
-  on hover.
+- **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively),
+  `.font_weight_signal() -> Signal<FontWeight>`, and `.italic_signal()`, `.underline_signal()`,
+  `.strikethrough_signal()` (`Signal<bool>`). Set one to restyle the label **in place**, with no
+  rebuild: an enclosing widget drives it for a state-dependent look — this is how [`Item`](#item)
+  bolds its label while active (the inherited paint context carries a color, but not a weight), and
+  how a link underlines on hover. (`.bold_signal()` is deprecated with `.bold`.)
 
-#### The four text attributes — two are font, two are not
+#### How the text is set — font, shape, decoration
 
-The split matters, because it is why underline exists at all without touching the renderer:
+The attributes split three ways, and the split is why each one needed only the change it needed:
 
 | | | Who renders it |
 |---|---|---|
-| `bold` | **font attribute** | The shaper picks the glyphs — the embedded family ships a real bold face. |
-| `italic` | **font attribute** | A **synthesized oblique**: the glyphs are *sheared*. The embedded family (Geist Mono) has **no italic face**, and asking the shaper for a real one would substitute a *proportional* fallback — which would break the monospace advances every measure in this library assumes. The shear keeps the same face, same widths, just slanted. |
+| `font_weight` | **font attribute** | The shaper picks the glyphs. The embedded family (Geist Mono) ships a real face for each weight — Regular, Medium, SemiBold, Bold — so none is faked; a font the user configures gives its nearest installed weight. |
+| `italic` | **font attribute** | A **synthesized oblique**: the glyphs are *sheared*. The embedded family has **no italic face**, and asking the shaper for a real one would substitute a *proportional* fallback — which would break the monospace advances every measure in this library assumes. The shear keeps the same face, same widths, just slanted. |
+| `letter_spacing` | **shape** | Widens the label's **cell** — the one width it measures, cuts, wraps, marks and decorates with — and the renderer spaces the glyphs by the same step. A box sized for the text spaced out holds exactly the text spaced out. |
+| `line_height` | **shape** | Sets the **line** — a one-line label's height and a wrapping label's line pitch. The text sits in the middle of its line, so a taller line adds the same air above and below (CSS's half-leading). |
+| `transform` | **shape** | Changes the **shown text** only: the measure and the paint read the transformed string, while `.text_signal()`, the accessible name and a cut label's tooltip keep the casing it was written in — a language file keeps ordinary casing and the label shows it in capitals. A letter whose capital is two (`ß` → `SS`) becomes two characters, as in CSS. |
 | `underline` | **decoration** | The **label** draws it — a line is not a glyph, it is a rect. |
 | `strikethrough` | **decoration** | Likewise. |
+
+**Steps, not numbers.** `LetterSpacing` and `LineHeight` are multiples of the font size, the way a
+[`Spacing`](layout.md#space--gap-padding-margin) step is, so a caller never writes a number and a font-size change carries them
+along:
+
+| `LetterSpacing` | `em` | | `LineHeight` | × font |
+|---|---|---|---|---|
+| `Tight` | −0.025 | | `Tight` | 1.15 |
+| `Normal` | 0 | | `Normal` | 1.4 (every label's height before the step existed) |
+| `Wide` | 0.05 | | `Relaxed` | 1.7 |
+| `Wider` | 0.1 | | `Loose` | 2.0 |
 
 The decorations are painted in the label's **resolved color** (own → inherited content color → theme
 foreground), so an underlined label inside a `Button` tints with the button's hover/disabled state
@@ -3013,12 +3039,28 @@ let status = Label::new("ONLINE").color(theme.foreground).font_size(14.0);
 let sig = status.text_signal();
 // later: sig.set("OFFLINE".into());
 
-// The four text attributes, alone and combined — they compose freely.
-Label::new("BOLD").bold(true);
+// A small section heading: the language file says "Members", the label shows it spaced capitals.
+Flex::row()
+    .gap(Spacing::Xs)
+    .child(
+        Label::new("Members")
+            .font_weight(FontWeight::SemiBold)
+            .letter_spacing(LetterSpacing::Wide)
+            .transform(TextTransform::Uppercase)
+            .muted(true),
+    )
+    .child(Label::new("4").muted(true));
+
+// A paragraph meant to be read: wrapped, with air between its lines.
+Label::new("The workspace keeps every pane you opened, in the order you left them.")
+    .wrap(true)
+    .line_height(LineHeight::Relaxed);
+
+// The attributes compose freely.
 Label::new("ITALIC").italic(true);                      // synthesized oblique (see above)
 Label::new("LINK").underline(true);
 Label::new("DONE").strikethrough(true);
-Label::new("ALL FOUR").bold(true).italic(true).underline(true).strikethrough(true);
+Label::new("ALL").font_weight(FontWeight::Bold).italic(true).underline(true).strikethrough(true);
 
 // State-driven, in place — no rebuild. A link that underlines while hovered:
 let link = Label::new("docs/widgets.md");
@@ -3035,15 +3077,27 @@ let done = row.strikethrough_signal();
 
 ```rust
 ViewNode::new(WidgetId::Label)
-    .text("DONE")
-    .prop("bold", PropValue::Bool(true))
-    .prop("italic", PropValue::Bool(true))
-    .prop("underline", PropValue::Bool(false))
-    .prop("strikethrough", PropValue::Bool(true));
+    .text("Members")
+    .prop("font_weight", PropValue::Text("semi_bold".into()))
+    .prop("letter_spacing", PropValue::Text("wide".into()))
+    .prop("transform", PropValue::Text("uppercase".into()))
+    .prop("italic", PropValue::Bool(false))
+    .prop("strikethrough", PropValue::Bool(false));
+
+// The same, through the description builders:
+Label::new("Members")
+    .font_weight(ViewFontWeight::SemiBold)
+    .letter_spacing(ViewLetterSpacing::Wide)
+    .line_height(ViewLineHeight::Normal)
+    .transform(ViewTextTransform::Uppercase);
 ```
 
-Props `realize` reads: `text`, `bold`, `italic`, `underline`, `strikethrough` (all `Bool`, all
-default `false`). The signals are **not** exposed declaratively — a `ViewNode` is static data and
+Props `realize` reads: `text`; `font_weight` (`regular` · `medium` · `semi_bold` · `bold`),
+`letter_spacing` (`tight` · `normal` · `wide` · `wider`), `line_height` (`tight` · `normal` ·
+`relaxed` · `loose`), `transform` (`none` · `uppercase` · `lowercase` · `capitalize`) — each a
+name, defaulting as above; `italic`, `underline`, `strikethrough` (`Bool`, default `false`). The old
+`bold` (`Bool`) is still read, so a description written before `font_weight` keeps drawing bold.
+The signals are **not** exposed declaratively — a `ViewNode` is static data and
 cannot carry a live signal; a plugin author re-emits the node with the new value instead.
 Stateful adapters, such as [`ScrollBar`](#scrollbar), bind data to native signals inside the host.
 
@@ -4245,7 +4299,7 @@ Row::new().on_activate(open).child(
     Tile::new()
         .status(StatusDot::online())
         .icon(Icon::new(Glyph::FileCode))
-        .title(Label::new("Neovim").bold(true))
+        .title(Label::new("Neovim").font_weight(FontWeight::Bold))
         .suffix(Label::new("(nvim)").size(WidgetSize::Small))
         .line(Visibility::new().visible(cwd.is_some()).child(folder_line))
         .line(Visibility::new().visible(branch.is_some()).child(git_line)),
@@ -4262,7 +4316,7 @@ Row::new().on_press(Intent::new("docker.open")).child(
     Tile::new()
         .child(StatusDot::new().prop("slot", "status"))
         .child(Icon::new().glyph(ViewGlyph::Terminal).prop("slot", "icon"))
-        .child(Label::new("nginx").bold(true).prop("slot", "title"))
+        .child(Label::new("nginx").font_weight(ViewFontWeight::Bold).prop("slot", "title"))
         .child(Label::new("(web)").prop("slot", "suffix"))
         .child(Label::new("up 3 days")),                 // a line
 )
@@ -7994,7 +8048,7 @@ Flex::column()
                     .child(StatusDot::online()),
             )
             .child(Icon::new(Glyph::FileCode).size(14.0))
-            .child(Label::new("Neovim").bold(true)),
+            .child(Label::new("Neovim").font_weight(FontWeight::Bold)),
     )
     .child(
         Visibility::new().visible(true).child(Flex::row()

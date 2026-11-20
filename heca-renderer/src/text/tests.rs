@@ -7,7 +7,8 @@ fn emit_key_distinguishes_color_and_position() {
     let base = EmitKey {
         text: "hi".into(),
         size_bits: 14.0f32.to_bits(),
-        bold: false,
+        weight: 400,
+        letter_spacing_bits: 0,
         icon: false,
         italic: false,
         faux_italic: false,
@@ -137,8 +138,9 @@ fn shaping_says_the_line_and_the_ligatures_once() {
     let glyphs = |fonts: &mut cosmic_text::FontSystem, ligatures| {
         let face = Face {
             family: crate::font::DEFAULT_TERMINAL_FAMILY,
-            bold: false,
+            weight: 400,
             italic: false,
+            letter_spacing: 0.0,
             ligatures,
         };
         shape(fonts, "=>", 24.0, &face)
@@ -147,4 +149,56 @@ fn shaping_says_the_line_and_the_ligatures_once() {
             .collect::<Vec<u16>>()
     };
     assert_ne!(glyphs(&mut fonts, true), glyphs(&mut fonts, false));
+}
+
+/// **Every [`FontWeight`](heca_grid_ui::FontWeight) is a real face of the embedded UI family** — a
+/// weight asks the family for that face, and Medium and SemiBold are not quietly drawn as Regular
+/// or Bold.
+#[test]
+fn each_ui_weight_shapes_with_its_own_face() {
+    use super::shape::{Face, shape};
+    use heca_grid_ui::FontWeight;
+    let mut fonts = crate::font::embedded_font_system();
+    let mut faces = Vec::new();
+    for weight in [FontWeight::Regular, FontWeight::Medium, FontWeight::SemiBold, FontWeight::Bold] {
+        let face = Face {
+            family: heca_grid_ui::font::DEFAULT_MONO_FAMILY,
+            weight: weight.value(),
+            italic: false,
+            letter_spacing: 0.0,
+            ligatures: true,
+        };
+        let buffer = shape(&mut fonts, "M", 24.0, &face);
+        let id = buffer.layout_runs().next().and_then(|run| run.glyphs.first()).map(|g| g.font_id);
+        let id = id.expect("the UI family shapes an M");
+        let found = fonts.db().face(id).expect("a loaded face");
+        assert_eq!(found.weight.0, weight.value(), "{weight:?} shaped with a {}-weight face", found.weight.0);
+        faces.push(id);
+    }
+    faces.dedup();
+    assert_eq!(faces.len(), 4, "four weights, four faces");
+}
+
+/// **Letter spacing moves every glyph after the first** by its share of the font size — the same
+/// `em` the label measured its box with.
+#[test]
+fn letter_spacing_widens_a_shaped_run_by_its_em() {
+    use super::shape::{Face, shape};
+    let mut fonts = crate::font::embedded_font_system();
+    let width = |fonts: &mut cosmic_text::FontSystem, letter_spacing| {
+        let face = Face {
+            family: heca_grid_ui::font::DEFAULT_MONO_FAMILY,
+            weight: 400,
+            italic: false,
+            letter_spacing,
+            ligatures: true,
+        };
+        shape(fonts, "abcd", 20.0, &face).layout_runs().next().map_or(0.0, |run| run.line_w)
+    };
+    let plain = width(&mut fonts, 0.0);
+    let spaced = width(&mut fonts, 0.1);
+    assert!(
+        (spaced - plain - 4.0 * 0.1 * 20.0).abs() < 0.5,
+        "four glyphs, each 0.1 em (2px) wider: {plain} → {spaced}"
+    );
 }

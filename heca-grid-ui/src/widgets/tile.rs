@@ -20,7 +20,7 @@
 //!     Tile::new()
 //!         .status(StatusDot::online())
 //!         .icon(Icon::new(Glyph::FileCode))
-//!         .title(Label::new("Neovim").bold(true))
+//!         .title(Label::new("Neovim").font_weight(FontWeight::Bold))
 //!         .suffix(Label::new("(nvim)").font_scale(0.8))
 //!         .line(folder_line)
 //!         .line(git_line),

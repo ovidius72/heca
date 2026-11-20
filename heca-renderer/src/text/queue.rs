@@ -1,7 +1,9 @@
 //! **Asking for text**: plain, in a box, in a line box, and terminal row-runs — each becomes one
 //! queued command for the next frame.
 
-use heca_grid_ui::scene::TextAlign;
+use heca_grid_ui::scene::{TextAlign, TextStyle as SceneTextStyle};
+
+use super::shape;
 
 use super::{TextBox, TextGlow, TextRenderer, TextStyle};
 
@@ -15,8 +17,12 @@ pub(super) struct TextCommand {
     pub(super) h: f32,
     pub(super) font_size: f32,
     pub(super) color: [f32; 4],
-    pub(super) bold: bool,
+    /// CSS weight the run is shaped at (400 regular … 700 bold).
+    pub(super) weight: u16,
     pub(super) italic: bool,
+    /// The air after every letter, in `em` (UI labels only; terminal runs keep `0.0`, their cells
+    /// are the grid).
+    pub(super) letter_spacing: f32,
     pub(super) faux_italic: bool,
     pub(super) align: TextAlign,
     /// Center within `(w, h)` (grid scene), or place at `(x, y)` (app labels).
@@ -78,8 +84,9 @@ impl TextCommand {
             h: rect.h,
             font_size,
             color,
-            bold: false,
+            weight: shape::REGULAR_WEIGHT,
             italic: false,
+            letter_spacing: 0.0,
             faux_italic: false,
             align: TextAlign::Start,
             centered: false,
@@ -118,8 +125,8 @@ impl TextRenderer {
         h: f32,
         font_size: f32,
         color: [f32; 4],
-        bold: bool,
-        italic: bool,
+        // Weight, slant and letter spacing, as the scene said them.
+        style: SceneTextStyle,
         align: TextAlign,
         icon: bool,
         // Family override for this run — `None` shapes with the theme's text family. The Nerd Font
@@ -129,13 +136,14 @@ impl TextRenderer {
     ) {
         let rect = TextBox { x, y, w, h };
         self.commands.push(TextCommand {
-            bold,
+            weight: style.weight.value(),
+            letter_spacing: style.letter_spacing,
             // Italic is the **synthesized oblique**, not `Style::Italic`. The embedded UI family
             // (Geist Mono) ships no italic face: asking cosmic-text for one would either render
             // upright or substitute a *proportional* fallback, and a proportional fallback breaks
             // the monospace advances every grid-ui measure assumes. The shear keeps the same face —
             // same glyphs, same widths, just slanted.
-            faux_italic: italic,
+            faux_italic: style.italic,
             align,
             centered: true,
             icon,
@@ -155,7 +163,7 @@ impl TextRenderer {
         icon: bool,
     ) {
         self.commands.push(TextCommand {
-            bold: style.bold,
+            weight: shape::weight_of(style.bold),
             italic: style.italic,
             faux_italic: style.faux_italic,
             align,
@@ -189,7 +197,7 @@ impl TextRenderer {
         ligatures: bool,
     ) {
         self.commands.push(TextCommand {
-            bold: style.bold,
+            weight: shape::weight_of(style.bold),
             italic: style.italic,
             faux_italic: style.faux_italic,
             line_box: true,

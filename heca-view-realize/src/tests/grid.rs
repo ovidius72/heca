@@ -193,27 +193,50 @@ fn grid_child_in_an_unknown_area_auto_places() {
     assert_eq!(grid.base().children[0].base().style.layout.grid_cell, None);
 }
 
-/// A `Label`'s text attributes are authorable: weight + slant (font attributes) and underline +
-/// strikethrough (decorations the widget draws). Absent props keep the widget's default.
+/// A `Label`'s text attributes are authorable: weight, slant and letter spacing (what the shaper
+/// gets), the case it is shown in, and underline + strikethrough (decorations the widget draws).
+/// Absent props keep the widget's default.
 #[test]
 fn label_text_attributes_are_authorable() {
+    use heca_grid_ui::{FontWeight, LetterSpacing, TextStyle};
     let node = ViewNode::new(WidgetId::Label)
-        .text("DONE")
-        .prop("bold", PropValue::Bool(true))
+        .text("done")
+        .prop("font_weight", PropValue::Text("semi_bold".into()))
+        .prop("letter_spacing", PropValue::Text("wide".into()))
+        .prop("transform", PropValue::Text("uppercase".into()))
         .prop("italic", PropValue::Bool(true))
         .prop("strikethrough", PropValue::Bool(true));
 
-    let label = realize(
-        &node,
-        &Theme::default(),
-        &noop_emitter(),
-        &mut FormBindings::default(),
-    ).expect("valid described test widget");
-    // Realize hands back a `heca_grid_ui::WidgetModel`, so read the state through the scene: paint it
-    // and check the run carries the font attributes and the strike is drawn as a rect.
+    let (text, style, rules) = painted_label(&node);
+    assert_eq!(text, "DONE", "shown upper-cased, written as it was");
+    assert_eq!(
+        style,
+        TextStyle::REGULAR
+            .weight(FontWeight::SemiBold)
+            .italic(true)
+            .letter_spacing(LetterSpacing::Wide.em())
+    );
+    assert_eq!(rules, 1, "the strikethrough, drawn as a rect (not shaped)");
+}
+
+/// **A description written with the old `bold` still draws bold** — the property is kept for
+/// descriptions that predate `font_weight`.
+#[test]
+fn the_old_bold_property_still_draws_bold() {
+    use heca_grid_ui::{FontWeight, TextStyle};
+    let node = ViewNode::new(WidgetId::Label).text("x").prop("bold", PropValue::Bool(true));
+    let (_, style, _) = painted_label(&node);
+    assert_eq!(style, TextStyle::REGULAR.weight(FontWeight::Bold));
+}
+
+/// Realize a described label, lay it out and paint it: its text run's words and style, and how many
+/// rects (decorations) it drew. `realize` hands back a `WidgetModel`, so the state is read through
+/// the scene.
+fn painted_label(node: &ViewNode) -> (String, heca_grid_ui::TextStyle, usize) {
     use heca_core::layout::Size;
-    use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, TextStyle, Theme};
-    let mut label = label;
+    use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Theme};
+    let mut label = realize(node, &Theme::default(), &noop_emitter(), &mut FormBindings::default())
+        .expect("valid described test widget");
     LayoutEngine::new().compute(label.as_mut(), Size::new(200.0, 40.0));
     let theme = Theme::default();
     let mut scene = Scene::new();
@@ -221,19 +244,15 @@ fn label_text_attributes_are_authorable() {
         let mut cx = PaintCx::new(&mut scene, &theme);
         label.paint(&mut cx);
     }
-    let style = scene
+    let (text, style) = scene
         .iter()
         .find_map(|c| match c {
-            DrawCommand::Text(t) => Some(t.style),
+            DrawCommand::Text(t) => Some((t.text.clone(), t.style)),
             _ => None,
         })
         .expect("the label paints its run");
-    assert_eq!(style, TextStyle::REGULAR.bold(true).italic(true));
-    let rules = scene
-        .iter()
-        .filter(|c| matches!(c, DrawCommand::Rect(_)))
-        .count();
-    assert_eq!(rules, 1, "the strikethrough, drawn as a rect (not shaped)");
+    let rules = scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count();
+    (text, style, rules)
 }
 
 /// **A described child is placed exactly as a native one is** — the same five words

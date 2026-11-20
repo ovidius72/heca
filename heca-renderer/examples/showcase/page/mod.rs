@@ -244,7 +244,7 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         Label::new(name)
             .color(theme.colors.accent)
             .font_scale(0.72)
-            .bold(true)
+            .font_weight(FontWeight::Bold)
     };
 
     // 20-entry list so the dropdown caps its height and shows a scrollbar.

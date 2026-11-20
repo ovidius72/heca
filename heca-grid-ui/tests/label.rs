@@ -476,8 +476,8 @@ fn label_weight_and_slant_are_font_attributes_decorations_are_rects() {
     };
 
     // Weight + slant reach the shaper as font attributes on the run…
-    let (runs, rules, ..) = paint(Label::new("STATUS").bold(true).italic(true));
-    assert_eq!(runs, vec![TextStyle::REGULAR.bold(true).italic(true)]);
+    let (runs, rules, ..) = paint(Label::new("STATUS").font_weight(FontWeight::Bold).italic(true));
+    assert_eq!(runs, vec![TextStyle::REGULAR.weight(FontWeight::Bold).italic(true)]);
     assert!(rules.is_empty(), "no decoration ⇒ no rects");
 
     // …while the decorations never touch it: they are rects the widget draws.

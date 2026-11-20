@@ -108,7 +108,7 @@ builder!(
     ///     Tile::new()
     ///         .child(StatusDot::new().prop("slot", "status"))
     ///         .child(Icon::new().glyph(ViewGlyph::Terminal).prop("slot", "icon"))
-    ///         .child(Label::new("nginx").bold(true).prop("slot", "title"))
+    ///         .child(Label::new("nginx").font_weight(ViewFontWeight::Bold).prop("slot", "title"))
     ///         .child(Label::new("(web)").prop("slot", "suffix"))
     ///         .child(Label::new("up 3 days")),          // no slot: a line under the head
     /// )

@@ -27,7 +27,7 @@ pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
                                 .gap(6.0)
                                 .align("center")
                                 .child(Icon::new(Glyph::Lightning))
-                                .child(Label::new("COMPOSED").bold(true)),
+                                .child(Label::new("COMPOSED").font_weight(FontWeight::Bold)),
                         )
                         // Not styled → inherits the button's state color, like the rest.
                         .child(Label::new("any tree, any depth").font_scale(0.75)),

@@ -28,7 +28,8 @@ impl TextRenderer {
         let key = LabelKey {
             text: cmd.text.clone(),
             size_bits: scaled_size.to_bits(),
-            bold: cmd.bold,
+            weight: cmd.weight,
+            letter_spacing_bits: 0,
             icon: false,
             italic: cmd.italic,
             font_family: cmd.font_family.clone(),
@@ -39,8 +40,9 @@ impl TextRenderer {
             // The run's whole text is shaped at once, so ligatures can form across cells.
             let face = shape::Face {
                 family: cmd.font_family.as_deref().unwrap_or(&self.font_family),
-                bold: cmd.bold,
+                weight: cmd.weight,
                 italic: cmd.italic,
+                letter_spacing: 0.0,
                 ligatures: run.ligatures,
             };
             let buffer = shape::shape(&mut self.font_system, &cmd.text, scaled_size, &face);

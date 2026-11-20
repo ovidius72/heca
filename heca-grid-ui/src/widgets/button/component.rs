@@ -142,7 +142,7 @@ impl Component for Button {
         } else if !self.label.is_empty() {
             self.base
                 .children
-                .push(crate::WidgetModel::new(Label::new(self.label.clone()).bold(true)));
+                .push(crate::WidgetModel::new(Label::new(self.label.clone()).font_weight(crate::style::FontWeight::Bold)));
         }
         // **Its words, on hover, only while they are not on screen** — a button showing its icon
         // alone says what it does when the pointer rests on it; with its words back it has nothing

@@ -197,7 +197,7 @@ impl PaneCard<'_> {
                         crate::components::PaneName {
                             text: self.name,
                             color: Some(theme.colors.foreground),
-                            bold: false,
+                            weight: heca_grid_ui::style::FontWeight::Regular,
                             font_scale: 1.0,
                             theme,
                         }
