@@ -5,6 +5,37 @@
 //! [`ChromeCtx`] selectors, reacts to events, and dispatches actions. It declares placement metadata and builds a
 //! [`Contribution`] model; the
 //! [`ChromeHost`](crate::chrome::ChromeHost) owns mounting, ordering, and moves.
+//!
+//! **A dock's controller, not a component — and why.** A [`Provider`] is what a dock **is and
+//! does**, not what it looks like:
+//! - an identity: [`id`](Provider::id) (this dock, unique) and [`kind`](Provider::kind) (its type —
+//!   the namespace of its config and actions);
+//! - a life: [`on_activate`](Provider::on_activate) runs once when the host starts it and returns
+//!   its event subscriptions and actions, which live exactly as long as the dock stays mounted;
+//! - what the host needs to place it: its title, the regions it accepts, whether it moves or folds,
+//!   and whether the user may add more of its kind from the config ([`spawn`](Provider::spawn));
+//! - and its look — [`build_contribution`](Provider::build_contribution), which returns the widgets
+//!   it shows. **That content is the component**, written in THE SYNTAX like every other widget.
+//!
+//! The dock is the long-lived thing and its UI is built from it again and again — every time the
+//! window rebuilds the region, and again when a reload makes the dock anew — so the two are kept
+//! apart: the provider holds identity and behaviour, the widgets it builds hold the look. Its
+//! cursor, scroll and focus live in the window's shared state by its id, not in the provider, which
+//! is why a dock made again finds them.
+//!
+//! **How it works.**
+//! 1. Write a type and implement [`Provider`] for it; build its content in `build_contribution`.
+//! 2. Add it with [`regions`](crate::chrome::regions)`("sidebar.left").append(|| MyDock::new("id"))`.
+//! 3. The host seats it where the user's `[[docks]]` says (else where the call said) and calls
+//!    `on_activate` once.
+//! 4. Each time the region is drawn anew, the host calls `build_contribution` and wraps the widgets
+//!    it returns with what is the host's: keyboard focus, the `prefix+/` letters, its share and
+//!    place in the region.
+//! 5. Taken out (`remove`, `"none"` on a reload), the dock is dropped and its subscriptions with it.
+//!
+//! Acting on a dock from elsewhere goes through its id — the `chrome.container.*` actions, the
+//! actions it declared, `regions(..).remove(id)` — or through a signal its author kept. A handle to
+//! an added dock is planned (F013).
 
 // The provider trait and facade are the seam first-party providers and the planned plugin bridge
 // implement; parts have no caller in the app yet.
