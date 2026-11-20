@@ -7093,8 +7093,10 @@ so a dock can be added or removed while the app runs.
 
 **Where a dock goes and in what order is the user's word first.** The config's `[[docks]]` entries
 (by kind, `name`, or by dock, `name` + `id`) give a `location` — a region or `"none"` — and an
-`order` ([configuration](configuration.md#where-docks-start)); what an entry does not say, the
-`regions(..)` call and the dock's `.order(..)` say. On a reload (`prefix+Shift+r`) each dock whose
+`order` and a `flex` ([configuration](configuration.md#where-docks-start)); what an entry does not
+say, the `regions(..)` call and the dock's `.order(..)` / `.flex(..)` say. An entry with an id no
+code added makes another dock of that kind when the provider allows it — implement
+`Provider::another(&self, id) -> Option<Box<dyn Provider>>` (default `None`: placed by code only). On a reload (`prefix+Shift+r`) each dock whose
 entry changed is moved, reordered, taken out, or — if it was added as a recipe — made again; a dock
 added as itself comes back only with a restart. Docks whose entry did not change stay where they are.
 A dock's cursor, scroll and folded state are kept by its id, so one made again finds them.

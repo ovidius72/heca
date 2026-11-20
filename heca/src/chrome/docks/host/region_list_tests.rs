@@ -234,6 +234,7 @@ fn entries(docks: &[(&str, &str)]) -> Vec<heca_config::docks::DockEntry> {
         id: Some(id.to_string()),
         location: Some(location.to_string()),
         order: None,
+        flex: None,
     }).collect()
 }
 
@@ -367,7 +368,7 @@ fn the_config_order_puts_a_dock_first() {
     regions("sidebar.left").append([ws("x"), ws("y")]);
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
     let docks = vec![heca_config::docks::DockEntry {
-        name: "workspaces".into(), id: Some("y".into()), location: None, order: Some(-1),
+        name: "workspaces".into(), id: Some("y".into()), location: None, order: Some(-1), flex: None,
     }];
     host.mount_pending(&ChromeCtx::new(&store), &docks);
     assert_eq!(shown_order(&host, RegionId::LeftSidebar), ["y", "x"]);
@@ -384,20 +385,65 @@ fn an_entry_for_the_kind_places_every_dock_of_it_and_an_id_wins() {
     regions("sidebar.left").append([ws("a"), ws("b")]);
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
     let docks = vec![
-        heca_config::docks::DockEntry { name: "workspaces".into(), id: None, location: Some("sidebar.right".into()), order: None },
-        heca_config::docks::DockEntry { name: "workspaces".into(), id: Some("b".into()), location: Some("bar.top".into()), order: None },
+        heca_config::docks::DockEntry { name: "workspaces".into(), id: None, location: Some("sidebar.right".into()), order: None, flex: None },
+        heca_config::docks::DockEntry { name: "workspaces".into(), id: Some("b".into()), location: Some("bar.top".into()), order: None, flex: None },
     ];
     host.mount_pending(&ChromeCtx::new(&store), &docks);
     assert_eq!(ids(&host, RegionId::RightSidebar), ["a"]);
     assert_eq!(ids(&host, RegionId::TopBar), ["b"]);
 }
 
-/// **An entry for an id no dock has does nothing.**
+/// **An entry for a kind no dock has, or that cannot make another, does nothing.**
 #[test]
-fn an_entry_for_an_unknown_id_does_nothing() {
+fn an_entry_for_a_kind_that_cannot_make_another_does_nothing() {
     let mut host = fresh();
     regions("sidebar.left").append(ws("workspaces"));
-    mount_with(&mut host, &[("nobody", "sidebar.right")]);
+    let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
+    let docks = vec![heca_config::docks::DockEntry {
+        name: "notes".into(), id: Some("notes.2".into()), location: Some("sidebar.right".into()), order: None, flex: None,
+    }];
+    host.mount_pending(&ChromeCtx::new(&store), &docks);
     assert_eq!(ids(&host, RegionId::LeftSidebar), ["workspaces"]);
     assert!(ids(&host, RegionId::RightSidebar).is_empty());
+}
+
+fn entry(id: &str, location: &str, order: Option<i64>, flex: Option<f32>) -> heca_config::docks::DockEntry {
+    heca_config::docks::DockEntry {
+        name: "workspaces".into(), id: Some(id.into()), location: Some(location.into()), order, flex,
+    }
+}
+
+/// **`[[docks]]` adds a second workspaces dock to the same sidebar**, under the first, at twice
+/// its height; taking the entry out on a reload takes the dock out, putting it back makes it again.
+#[test]
+fn the_config_adds_a_second_dock_of_a_kind_and_a_reload_takes_it_out_and_back() {
+    let mut host = fresh();
+    regions("sidebar.left").append(|| ws("workspaces"));
+    let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
+    let two = vec![
+        entry("workspaces", "sidebar.left", Some(0), None),
+        entry("workspaces.2", "sidebar.left", Some(1), Some(2.0)),
+    ];
+    host.mount_pending(&ChromeCtx::new(&store), &two);
+    assert_eq!(shown_order(&host, RegionId::LeftSidebar), ["workspaces", "workspaces.2"]);
+    let second = host.contributions(RegionId::LeftSidebar).iter().find(|c| c.id() == "workspaces.2").unwrap();
+    assert_eq!(second.placement().flex, Some(2.0), "flex from the entry");
+
+    host.reload_docks(&ChromeCtx::new(&store), &two[..1]);
+    assert_eq!(ids(&host, RegionId::LeftSidebar), ["workspaces"], "its entry gone, the dock goes");
+
+    host.reload_docks(&ChromeCtx::new(&store), &two);
+    assert_eq!(shown_order(&host, RegionId::LeftSidebar), ["workspaces", "workspaces.2"], "and comes back");
+}
+
+/// **A reload that changes only `flex` resizes the dock** where it is.
+#[test]
+fn a_reload_that_changes_flex_resizes_the_dock() {
+    let mut host = fresh();
+    regions("sidebar.left").append([ws("a"), ws("b")]);
+    let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
+    host.mount_pending(&ChromeCtx::new(&store), &[]);
+    host.reload_docks(&ChromeCtx::new(&store), &[entry("b", "sidebar.left", None, Some(3.0))]);
+    let b = host.contributions(RegionId::LeftSidebar).iter().find(|c| c.id() == "b").unwrap();
+    assert_eq!(b.placement().flex, Some(3.0));
 }

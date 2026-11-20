@@ -101,6 +101,11 @@ impl Provider for WorkspacesContainerProvider {
         "workspaces"
     }
 
+    /// The user may add as many workspaces docks as they like from `[[docks]]`.
+    fn another(&self, id: &str) -> Option<Box<dyn Provider>> {
+        Some(Box::new(Self::new(id)))
+    }
+
     fn supported_regions(&self) -> RegionSet {
         RegionSet::sidebars()
     }

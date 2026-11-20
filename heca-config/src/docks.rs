@@ -5,6 +5,7 @@
 //! name = "workspaces"          # the kind of dock
 //! location = "sidebar.left"    # sidebar.left | sidebar.right | bar.top | bar.bottom | none
 //! order = 1                    # lower first; ties keep the order the docks were added in
+//! flex = 2                     # twice the height (or width) of a dock at 1
 //!
 //! [[docks]]
 //! name = "workspaces"
@@ -12,13 +13,14 @@
 //! location = "sidebar.right"
 //! ```
 //!
-//! An entry for an id no dock has does nothing. `location` and `order` are each optional: what is
-//! not said is what the code that adds the dock says.
+//! An entry for an id no dock has **adds one** of that kind, when the kind can make another
+//! (`Provider::another`); otherwise it does nothing. `location`, `order` and `flex` are each
+//! optional: what is not said is what the code that adds the dock says.
 
 use serde::{Deserialize, Serialize};
 
 /// One `[[docks]]` entry.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct DockEntry {
     /// The kind of dock (`Provider::kind`, e.g. `"workspaces"`).
     pub name: String,
@@ -33,6 +35,10 @@ pub struct DockEntry {
     /// Unset: what the code says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub order: Option<i64>,
+    /// How much of its region it takes, as CSS `flex: <n>`: `2` is twice a dock at `1`. Unset:
+    /// what the code says, else one equal part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flex: Option<f32>,
 }
 
 /// **The entry for one dock**: the one naming its id wins over the one for its kind.
@@ -46,7 +52,7 @@ mod tests {
     use super::*;
 
     fn entry(name: &str, id: Option<&str>, location: &str) -> DockEntry {
-        DockEntry { name: name.into(), id: id.map(Into::into), location: Some(location.into()), order: None }
+        DockEntry { name: name.into(), id: id.map(Into::into), location: Some(location.into()), order: None, flex: None }
     }
 
     #[test]

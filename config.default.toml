@@ -448,16 +448,19 @@ terminate_session = true # stop processes, keep the session for explicit restart
 delete_session = true    # remove the session, never project files
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [[docks]] — where each dock goes and in what order. One entry per kind of dock
-# (name), or per dock (name + id), which wins over the entry for its kind:
+# [[docks]] — where each dock goes, in what order and how big. One entry per kind
+# of dock (name), or per dock (name + id), which wins over the entry for its kind:
 #   name     = the kind of dock, e.g. "workspaces"
 #   id       = one dock of that kind (optional; unset = every dock of the kind)
 #   location = "sidebar.left" | "sidebar.right" | "bar.top" | "bar.bottom" | "none"
 #   order    = lower first; ties keep the order the docks were added in (optional)
+#   flex     = how much of the region it takes: 2 is twice a dock at 1 (optional)
 # "none" leaves the dock out of the window; its keyboard actions still work. An
-# id no dock has does nothing. What an entry does not say is what the program
-# that adds the dock says. A reload (prefix+Shift+r) applies the entries that
-# changed. This list replaces the default one when you write your own.
+# entry with an id no dock has adds one of that kind, if the kind allows it (the
+# workspaces dock does); otherwise it does nothing. What an entry does not say
+# is what the program that adds the dock says. A reload (prefix+Shift+r) applies
+# the entries that changed. This list replaces the default one when you write
+# your own.
 # ─────────────────────────────────────────────────────────────────────────────
 [[docks]]
 name = "workspaces"          # the workspaces and their panes
