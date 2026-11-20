@@ -73,7 +73,14 @@ fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
     // What the widget asks to have drawn over its children (a frame) is landed when its subtree is
     // done, so it covers its own children and not what is painted after it.
     let outline = cx.scene.outline_mark();
+    // A tooltip written by hand on a hovered widget covers the cut-text tooltips of the labels
+    // inside it: they paint (and so decide) before it does.
+    let base = c.base();
+    let hand_tip_here = base.hovered() && base.tooltip.as_ref().is_some_and(|tip| !tip.is_automatic());
+    let above = cx.hand_tip_above;
+    cx.hand_tip_above = above || hand_tip_here;
     paint_holding(c, cx);
+    cx.hand_tip_above = above;
     cx.scene.settle_outline(outline);
     crate::flash::paint(c.base(), cx);
     crate::widgets::key_hint::paint_hint_label(c, cx);

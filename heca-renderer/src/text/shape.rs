@@ -17,11 +17,24 @@ const SHAPING_BOX: f32 = 10_000.0;
 /// half of it and the bottom left by half.
 const FAUX_ITALIC_SLANT: f32 = 0.14;
 
+/// The CSS weight of an ordinary face, and of a bold one — what an on/off `bold` (a terminal cell)
+/// asks for.
+pub(super) const REGULAR_WEIGHT: u16 = 400;
+pub(super) const BOLD_WEIGHT: u16 = 700;
+
+/// The weight an on/off bold flag asks for.
+pub(super) const fn weight_of(bold: bool) -> u16 {
+    if bold { BOLD_WEIGHT } else { REGULAR_WEIGHT }
+}
+
 /// The face a text is shaped in.
 pub(super) struct Face<'a> {
     pub(super) family: &'a str,
-    pub(super) bold: bool,
+    /// CSS weight (400 regular … 700 bold). The family's nearest face to it is used.
+    pub(super) weight: u16,
     pub(super) italic: bool,
+    /// The air after every letter, in `em` of the font size (`0.0` = the font's own spacing).
+    pub(super) letter_spacing: f32,
     /// Whether `calt` / `liga` / `clig` apply. Off shapes every character standalone.
     pub(super) ligatures: bool,
 }
@@ -38,16 +51,15 @@ pub(super) fn shape(fonts: &mut FontSystem, text: &str, size: f32, face: &Face<'
     buffer.set_size(Some(SHAPING_BOX), Some(SHAPING_BOX));
     let mut attrs = Attrs::new()
         .family(Family::Name(face.family))
-        .weight(if face.bold {
-            Weight::BOLD
-        } else {
-            Weight::NORMAL
-        })
+        .weight(Weight(face.weight))
         .style(if face.italic {
             Style::Italic
         } else {
             Style::Normal
         });
+    if face.letter_spacing != 0.0 {
+        attrs = attrs.letter_spacing(face.letter_spacing);
+    }
     // `Shaping::Advanced` runs the full HarfBuzz-style shaper; with the whole text visible,
     // `calt`/`liga`/`clig` (on by default in coding fonts) collapse e.g. `->` into a ligature. When
     // ligatures are off, those features are turned off so each character shapes standalone.

@@ -164,8 +164,8 @@ fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
                 }
                 // An integer delay is the same number of seconds as a float one to whoever
                 // wrote it, and JSON does not keep them apart.
-                if (tip.delay - 2.0).abs() > f32::EPSILON {
-                    missing.push(format!("{kind:?} (declared delay ignored: {})", tip.delay));
+                if (tip.delay() - 2.0).abs() > f32::EPSILON {
+                    missing.push(format!("{kind:?} (declared delay ignored: {})", tip.delay()));
                 }
             }
         }
@@ -224,9 +224,9 @@ fn a_quick_tooltip_declared_on_any_kind_takes_the_librarys_quick_delay() {
         ).expect("valid described test widget");
         match &widget.base().tooltip {
             Some(tip)
-                if (tip.delay - heca_grid_ui::widgets::tooltip::QUICK_DELAY).abs()
+                if (tip.delay() - heca_grid_ui::widgets::tooltip::QUICK_DELAY).abs()
                     < f32::EPSILON => {}
-            Some(tip) => wrong.push(format!("{kind:?} (delay {})", tip.delay)),
+            Some(tip) => wrong.push(format!("{kind:?} (delay {})", tip.delay())),
             None => wrong.push(format!("{kind:?} (no tooltip)")),
         }
     }

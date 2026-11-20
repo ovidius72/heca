@@ -1,6 +1,6 @@
 //! [`FolderLine`] — a working directory, as a line of metadata under a name.
 
-use heca_grid_ui::builders::{LayoutExt, Parent, TooltipExt};
+use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::component::{Base, Component, PaintCx};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
@@ -95,7 +95,6 @@ impl FolderLine {
             // **Cut from the FRONT, so the tail survives**: `…/projects/heca` says more than
             // `~/projects/he…`, and a path's last components are the ones that tell two apart.
             .truncate(Ellipsis::Start);
-        let label = label.tooltip_signal(self.path).tooltip_quick(true);
         Flex::row()
             .align("center")
             .size(self.size)
@@ -201,16 +200,24 @@ mod tests {
         assert_eq!(widget.base().children[0].base().children.len(), 2, "a glyph and a path");
     }
 
+    /// **A cut path offers the whole path on hover, and follows a `cd`**; a path that fits offers
+    /// nothing — the label does both by itself, nothing is written here.
     #[test]
-    fn the_tooltip_keeps_the_full_path_and_follows_directory_changes() {
-        let mut widget = line("~/projects/a/long/folder");
-        let path = widget.path_signal();
-        lay_out(&mut widget);
-        let label = &widget.base().children[0].base().children[1];
-        let tip = label.base().tooltip.as_ref().expect("the path owns its tooltip");
-        assert_eq!(tip.text.get_untracked(), "~/projects/a/long/folder");
+    fn a_cut_path_offers_the_whole_path_and_follows_directory_changes() {
+        let path_tip = |width: f32| {
+            let widget = line("~/projects/a/long/folder");
+            let path = widget.path_signal();
+            let mut root = Flex::column().width(width).child(widget);
+            LayoutEngine::new().base_font(15.0).compute(&mut root, heca_grid_ui::Size::new(f64::from(width), 200.0));
+            let label = &root.base().children[0].base().children[0].base().children[1];
+            (label.base().tooltip.as_ref().map(|tip| tip.text), path)
+        };
+        let (tip, path) = path_tip(80.0);
+        let tip = tip.expect("cut, the path offers itself whole");
+        assert_eq!(tip.get_untracked(), "~/projects/a/long/folder");
         path.set("~/projects/another/folder".into());
-        assert_eq!(tip.text.get_untracked(), "~/projects/another/folder");
+        assert_eq!(tip.get_untracked(), "~/projects/another/folder", "and follows the directory");
+        assert!(path_tip(600.0).0.is_none(), "a path that fits has nothing to add");
     }
 
     /// **Nothing to say, nothing shown, and no gap spent on it** — and a path that arrives later

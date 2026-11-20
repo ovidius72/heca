@@ -48,7 +48,7 @@ impl Button {
     /// [`Label`] child.
     pub fn new(label: impl Into<String>) -> Self {
         let label = label.into();
-        let mut b = Self::empty().child(Label::new(label.clone()).bold(true));
+        let mut b = Self::empty().child(Label::new(label.clone()).font_weight(crate::style::FontWeight::Bold));
         b.label = label;
         b
     }

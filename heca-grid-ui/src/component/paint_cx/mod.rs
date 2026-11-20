@@ -73,6 +73,9 @@ pub struct PaintCx<'a> {
     /// What the widget being painted cuts its children to, in its own layout coordinates — see
     /// [`Component::children_clip`]. Applied by [`paint_child`] to each child it draws.
     pub(super) children_clip: Option<crate::scene::Rounded>,
+    /// A hovered widget around this one carries a tooltip written by hand — so a label's own
+    /// cut-text tooltip stays quiet and the one written by hand is the one shown.
+    pub(crate) hand_tip_above: bool,
 }
 
 impl<'a> PaintCx<'a> {
@@ -96,6 +99,7 @@ impl<'a> PaintCx<'a> {
             clip: None,
             rounded: None,
             children_clip: None,
+            hand_tip_above: false,
         }
     }
 }

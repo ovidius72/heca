@@ -84,7 +84,10 @@ pub(super) struct EmitKey {
     pub(super) text: String,
     /// Scaled font size in `f32::to_bits()` form (exact, hashable).
     pub(super) size_bits: u32,
-    pub(super) bold: bool,
+    /// CSS weight the run is shaped at.
+    pub(super) weight: u16,
+    /// Letter spacing in `f32::to_bits()` form.
+    pub(super) letter_spacing_bits: u32,
     pub(super) icon: bool,
     pub(super) italic: bool,
     pub(super) faux_italic: bool,
@@ -211,7 +214,8 @@ impl TextRenderer {
                     .map_or(0, |_| self.glow_alpha_scale.to_bits()),
                 text: cmd.text.clone(),
                 size_bits: scaled_size.to_bits(),
-                bold: cmd.bold,
+                weight: cmd.weight,
+                letter_spacing_bits: cmd.letter_spacing.to_bits(),
                 icon: cmd.icon,
                 italic: cmd.italic,
                 faux_italic: cmd.faux_italic,

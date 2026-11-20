@@ -14,7 +14,7 @@ pub(super) fn build(theme: &Theme) -> Flex {
     let described = heca_view_realize::realize(&described, theme, &emit, &mut Default::default())
         .expect("the compiled image fixture must match the library registry");
     Flex::column().gap("sm")
-        .child(Label::new("Image — SVG / PNG / JPEG · shared loader and layout").bold(true))
+        .child(Label::new("Image — SVG / PNG / JPEG · shared loader and layout").font_weight(FontWeight::Bold))
         .child(Grid::new().template_column("1fr 1fr 1fr 1fr").gap("md")
             .child(Flex::column().gap("sm").child(Label::new("Inline SVG · contain"))
                 .child(Svg::new(svg).width("100%").aspect_ratio(1.0).fit(ImageFit::Contain).alt("Inline vector")))

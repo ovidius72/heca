@@ -12,6 +12,31 @@
 //! crate-private type, no registry id (Rule Zero). A region is not a widget you build — it is a
 //! list the app and every plugin add to — so it is fetched by name rather than constructed.
 //!
+//! **Not a component — and why.** A component is something you build and place in a tree, in one
+//! expression (THE SYNTAX). A region is the opposite: it **already exists** in the window — the two
+//! sidebars and the two bars — and it is **shared**: heca adds its docks, every extension and plugin
+//! adds its own, each from its own code and at its own time, and the user's config moves them. No
+//! single place writes the sidebar's tree, so there is nothing to build: a region is reached by its
+//! name and changed with operations, the way a page reaches `document.body` and calls
+//! `appendChild` / `remove` on it. The docks put into it are what carries the UI.
+//!
+//! **How it works.**
+//! 1. A call (`append`, `prepend`, `remove`, `retain`, `gap`) is queued — at once, from anywhere on
+//!    the window's thread, before `heca::run` or while the app runs.
+//! 2. The window's host ([`ChromeHost`](crate::chrome::ChromeHost)) applies the queue as the window
+//!    starts and then on every frame, in the order the calls were made.
+//! 3. Where each added dock goes, in what order and how big is the user's `[[docks]]` first; the
+//!    region named in the call, and the dock's `.order(..)` / `.flex(..)`, count where the user said
+//!    nothing.
+//! 4. A dock handed over as a recipe (`|| Dock::new(..)`) can be made again by the host — when a
+//!    reload brings it back from `"none"`; a dock handed over as itself can be moved, but once out
+//!    it returns only with a restart.
+//! 5. The host then starts each new dock (its `on_activate`) and draws it at its next frame.
+//!
+//! Limits today: the queue is per thread (`thread_local!`), so a call from another thread — a
+//! background worker, an extension's server-side service — is never applied; and a dock already
+//! added cannot be fetched to call its methods. Both are planned (F013).
+//!
 //! **What each piece owns:**
 //!
 //! | who | says |

@@ -237,6 +237,17 @@ They are **independent dimensions**: `glow_size` is the sole owner of glow
 opacity only and does **not** affect glow (the older docs that said `intensity`
 drove "glow + scanlines" were wrong). Reload at runtime with `prefix+Shift+r`.
 
+
+### Tooltips
+
+```toml
+[appearance]
+tooltip_delay_ms = 500   # how long the pointer rests before a tooltip appears
+```
+
+One value for every tooltip. A label whose text is cut shows the whole text on hover after half of
+it; a tooltip that sets its own delay in code keeps it. A reload (`prefix+Shift+r`) applies a change.
+
 ## Settings
 
 ```toml

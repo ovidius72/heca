@@ -31,7 +31,7 @@ pub(crate) const DEFAULT_BASE_FONT: f32 = 15.0;
 ///
 /// A widget returns one from [`Component::measure_text`] and the engine attaches it to that node as
 /// taffy's node context, so taffy can ask for the height *after* it has resolved the width. It
-/// carries the text and the font **by value**: the measure runs while taffy owns the tree, so it
+/// carries the text, its cell and its line **by value**: the measure runs while taffy owns the tree, so it
 /// cannot reach back into the component, and a self-contained context is what makes that a
 /// non-issue rather than a lifetime fight.
 ///
@@ -41,8 +41,6 @@ pub(crate) const DEFAULT_BASE_FONT: f32 = 15.0;
 pub struct TextMeasure {
     /// The text to wrap.
     pub text: String,
-    /// The resolved font size, already inherited and size-variant scaled by the layout pass.
-    pub font: f32,
     /// Does the text reflow? A wrapping text answers with as many lines as the width needs; a
     /// cutting one is always **one** line and simply accepts whatever width it is given.
     pub wrap: bool,
@@ -51,6 +49,12 @@ pub struct TextMeasure {
     /// The most lines a wrapping text may take (`None` = as many as it needs). The same cap the
     /// paint applies, so the box is as tall as the lines that are drawn.
     pub max_lines: Option<usize>,
+    /// The width of one character, in px: the font's monospace advance plus its letter spacing.
+    /// The widget computes it once and both the measure and its own paint use it, so the text is
+    /// cut and wrapped against the same cell it is drawn in.
+    pub cell: f32,
+    /// The height of one line, in px (the label's [`LineHeight`](crate::style::LineHeight) step).
+    pub line: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]

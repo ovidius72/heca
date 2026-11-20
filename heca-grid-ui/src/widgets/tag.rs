@@ -9,7 +9,7 @@
 //! border width and colors all from the [`Theme`](crate::theme::Theme) — nothing
 //! hardcoded); the slots draw themselves, so it stays composable and neutral.
 
-use crate::builders::{LayoutExt, Parent, TooltipExt};
+use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet};
@@ -70,7 +70,8 @@ impl Tag {
         base.style.layout.gap = (SEG_GAP).into();
         let label = label.font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
-        base.children.push(crate::WidgetModel::new(segment().tooltip_signal(label_signal).tooltip_quick(true).child(label)));
+        // A segment cut by a narrow chip offers its whole text on hover: its label does that.
+        base.children.push(crate::WidgetModel::new(segment().child(label)));
         Self {
             base,
             color: None,
@@ -171,8 +172,7 @@ impl Tag {
 impl Tag {
     fn label_segment(self, label: Label, leading: Option<crate::WidgetModel>) -> Self {
         let label = label.font_scale(FONT_SCALE);
-        let text = label.text_signal();
-        let mut seg = segment().tooltip_signal(text).tooltip_quick(true).child(label);
+        let mut seg = segment().child(label);
         if let Some(icon) = leading {
             seg.base_mut().children.insert(0, icon);
         }
@@ -200,6 +200,29 @@ impl Component for Tag {
     /// [accessible name](Component::text_summary) itself.
     fn text_summary(&self) -> Option<String> {
         Some(self.label.get_untracked())
+    }
+
+    /// **A segment the chip cuts off offers its whole text on hover.** A segment that shrinks has
+    /// its label cut the text, and the label says so itself; one that does not shrink
+    /// (`segment_shrink(false)`) is cut by the chip's edge instead, which only the tag can see. Same
+    /// rule as a label's: the tooltip is there while the segment does not fit and goes when it
+    /// fits, and a tooltip written by hand wins.
+    fn on_layout(&mut self) {
+        use crate::widgets::tooltip::Tip;
+        let chip = self.base.bounds;
+        for segment in &mut self.base.children {
+            let at = segment.base().bounds;
+            let cut_off = at.loc.x + at.size.w > chip.loc.x + chip.size.w + 0.5 || at.loc.x < chip.loc.x - 0.5;
+            let automatic = segment.base().tooltip.as_ref().map(Tip::is_automatic);
+            match (automatic, cut_off) {
+                (None, true) => {
+                    let text = segment.text_summary().unwrap_or_default();
+                    segment.base_mut().tooltip = Some(Tip::cut_text(crate::reactive::signal(text)));
+                }
+                (Some(true), false) => segment.base_mut().tooltip = None,
+                _ => {}
+            }
+        }
     }
 
     fn paint(&self, cx: &mut PaintCx) {

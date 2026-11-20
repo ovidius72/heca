@@ -30,7 +30,8 @@ impl TextRenderer {
         let key = LabelKey {
             text: cmd.text.clone(),
             size_bits: scaled_size.to_bits(),
-            bold: cmd.bold,
+            weight: cmd.weight,
+            letter_spacing_bits: cmd.letter_spacing.to_bits(),
             icon: cmd.icon,
             italic: cmd.italic,
             font_family: cmd.font_family.clone(),
@@ -47,8 +48,9 @@ impl TextRenderer {
             };
             let face = shape::Face {
                 family,
-                bold: cmd.bold,
+                weight: cmd.weight,
                 italic: cmd.italic,
+                letter_spacing: cmd.letter_spacing,
                 ligatures: true,
             };
             let buffer = shape::shape(&mut self.font_system, &cmd.text, scaled_size, &face);
@@ -260,8 +262,9 @@ mod tests {
                         let text = char::from_u32(cp).unwrap().to_string();
                         let face = shape::Face {
                             family: &renderer.icon_family,
-                            bold: false,
+                            weight: shape::REGULAR_WEIGHT,
                             italic: false,
+                            letter_spacing: 0.0,
                             ligatures: true,
                         };
                         let buffer = shape::shape(&mut renderer.font_system, &text, size * scale, &face);
@@ -274,7 +277,7 @@ mod tests {
                             + (physical.x + image.placement.left) as f32 / scale;
                         renderer.queue_text_in_box(
                             &text, 0.0, 0.0, size, size, size, [1.0; 4],
-                            false, false, TextAlign::Center, true, None, None,
+                            heca_grid_ui::scene::TextStyle::REGULAR, TextAlign::Center, true, None, None,
                         );
                         let cmd = renderer.commands.pop().unwrap();
                         let emitted = renderer.build_emission(&queue, &cmd, size * scale, scale);

@@ -81,15 +81,15 @@ pub enum ActiveMarker {
 /// so the row draws only its own chrome (selection pill, marker, hover/press, focus ring) and lets
 /// the engine lay the content out. The row's **state color** (active → accent, muted → muted) is
 /// published once per paint via [`PaintCx::with_content_color`] and inherited by the label; its
-/// **bold-when-active** weight rides the label's own `bold` signal.
+/// **bold-when-active** weight rides the label's own weight signal.
 pub struct Item {
     base: Base,
     /// The label child's text signal (the child owns the text; this is the handle callers get).
     label: Signal<String>,
-    /// The label child's bold signal — flipped in `tick` when `active` changes, because weight (
-    /// unlike color) is not part of the inherited paint context.
-    label_bold: Signal<bool>,
-    /// Last `active` value seen by `tick`, so the bold signal is written only on a real change.
+    /// The label child's weight signal — set in `tick` when `active` changes, because weight
+    /// (unlike color) is not part of the inherited paint context.
+    label_weight: Signal<crate::style::FontWeight>,
+    /// Last `active` value seen by `tick`, so the weight signal is written only on a real change.
     seen_active: bool,
     /// Active (clicked-and-stays current item): tinted bg + accent label, plus
     /// an optional indicator controlled by [`ActiveMarker`].
@@ -124,7 +124,7 @@ impl Item {
         // text starts hard left after the leading slot and the trailing slot sits at the far edge.
         let label = Label::new(label).align(TextAlign::Start).grow(1.0);
         let text = label.text_signal();
-        let label_bold = label.bold_signal();
+        let label_weight = label.font_weight_signal();
         // An empty slot is out of the layout, as an absent element is: otherwise the row's gap is
         // spent on nothing and the label of a row without a leading part starts one gap further
         // right than every other row's content.
@@ -140,7 +140,7 @@ impl Item {
         Self {
             base,
             label: text,
-            label_bold,
+            label_weight,
             seen_active: false,
             active: signal(false),
             marker: ActiveMarker::None,
@@ -453,12 +453,16 @@ impl Component for Item {
 
     fn tick(&mut self, dt: f32) -> bool {
         // The active row bolds its label. Color is inherited at paint time, but weight is not part
-        // of the paint context, so the row drives the label's own `bold` signal — written only on a
+        // of the paint context, so the row drives the label's own weight signal — written only on a
         // real change, so a stable row never marks itself dirty.
         let active = self.active.get_untracked();
         if active != self.seen_active {
             self.seen_active = active;
-            self.label_bold.set(active);
+            self.label_weight.set(if active {
+                crate::style::FontWeight::Bold
+            } else {
+                crate::style::FontWeight::Regular
+            });
         }
 
         let mut animating = self.flash.tick(dt);

@@ -1,6 +1,7 @@
 use super::Style;
 use crate::{
-    PropValue, ViewEllipsis, ViewGlyph, ViewNode, ViewOrientation, ViewSeverity, ViewTextAlign,
+    PropValue, ViewEllipsis, ViewFontWeight, ViewGlyph, ViewLetterSpacing, ViewLineHeight, ViewNode,
+    ViewOrientation, ViewSeverity, ViewTextAlign, ViewTextTransform,
     WidgetId,
 };
 
@@ -128,7 +129,27 @@ impl Label {
     pub fn mark_color(self, colour: &str) -> Self {
         self.prop("mark_color", PropValue::Color(colour.to_string()))
     }
+    /// How heavy the glyphs are — CSS `font-weight`: regular (the default), medium, semi-bold or
+    /// bold.
+    pub fn font_weight(self, weight: ViewFontWeight) -> Self {
+        self.prop("font_weight", weight)
+    }
+    /// The air after every letter, as a step of the font size — CSS `letter-spacing`. A small
+    /// uppercase heading reads best `Wide`.
+    pub fn letter_spacing(self, spacing: ViewLetterSpacing) -> Self {
+        self.prop("letter_spacing", spacing)
+    }
+    /// How tall one line is, as a step of the font size — CSS `line-height`.
+    pub fn line_height(self, height: ViewLineHeight) -> Self {
+        self.prop("line_height", height)
+    }
+    /// The case the text is shown in — CSS `text-transform`. The text keeps the casing it was
+    /// written in; only what is drawn changes.
+    pub fn transform(self, transform: ViewTextTransform) -> Self {
+        self.prop("transform", transform)
+    }
     /// Heavier weight.
+    #[deprecated(note = "use `font_weight(ViewFontWeight::Bold)`")]
     pub fn bold(self, on: bool) -> Self {
         self.prop("bold", on)
     }

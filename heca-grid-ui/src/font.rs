@@ -8,13 +8,14 @@
 //!
 //! The renderer loads the embedded faces into its `cosmic-text` font system so
 //! `Geist Mono` resolves without a system install. These are *defaults*, not
-//! hardcoded overrides: `Theme.font_family` / `Theme.font_size` (and a future
-//! weight/style token) stay configurable.
+//! hardcoded overrides: `Theme.font_family` / `Theme.font_size` stay configurable.
 //!
 //! ## Weights & italic
-//! Both [`DEFAULT_MONO_BYTES`] (Regular) and [`DEFAULT_MONO_BOLD_BYTES`] (Bold)
-//! register under the same family `"Geist Mono"`; `cosmic-text` selects between
-//! them via `Attrs::weight(...)`. Geist Mono ships **no italic face**, so italic
+//! Four faces — [`DEFAULT_MONO_BYTES`] (Regular), [`DEFAULT_MONO_MEDIUM_BYTES`],
+//! [`DEFAULT_MONO_SEMIBOLD_BYTES`] and [`DEFAULT_MONO_BOLD_BYTES`] — register under
+//! the same family `"Geist Mono"`, one per [`FontWeight`](crate::style::FontWeight);
+//! `cosmic-text` selects between them via `Attrs::weight(...)`. A host loads them
+//! all from [`DEFAULT_MONO_FACES`]. Geist Mono ships **no italic face**, so italic
 //! is rendered as a **synthesized oblique** (skew) — request it with
 //! `Attrs::style(cosmic_text::Style::Italic)` and let the shaper fake-slant the
 //! upright glyphs, or apply [`OBLIQUE_SKEW`] manually.
@@ -23,16 +24,31 @@
 pub const DEFAULT_MONO_FAMILY: &str = "Geist Mono";
 
 /// Embedded bytes of the default monospace font (Geist Mono **Regular**, OFL 1.1).
-/// Load once into the renderer's font database:
-/// ```ignore
-/// font_system.db_mut().load_font_data(DEFAULT_MONO_BYTES.to_vec());
-/// font_system.db_mut().load_font_data(DEFAULT_MONO_BOLD_BYTES.to_vec());
-/// ```
 pub const DEFAULT_MONO_BYTES: &[u8] = include_bytes!("../assets/GeistMono-Regular.ttf");
 
-/// Embedded bytes of the **Bold** weight (Geist Mono Bold, OFL 1.1). Registers
-/// under the same family as [`DEFAULT_MONO_BYTES`]; selected via `Attrs::weight`.
+/// Embedded bytes of the **Medium** weight (Geist Mono Medium, OFL 1.1). Registers under the same
+/// family as [`DEFAULT_MONO_BYTES`] (its typographic family name); selected via `Attrs::weight`.
+pub const DEFAULT_MONO_MEDIUM_BYTES: &[u8] = include_bytes!("../assets/GeistMono-Medium.ttf");
+
+/// Embedded bytes of the **SemiBold** weight (Geist Mono SemiBold, OFL 1.1). Same family.
+pub const DEFAULT_MONO_SEMIBOLD_BYTES: &[u8] = include_bytes!("../assets/GeistMono-SemiBold.ttf");
+
+/// Embedded bytes of the **Bold** weight (Geist Mono Bold, OFL 1.1). Same family.
 pub const DEFAULT_MONO_BOLD_BYTES: &[u8] = include_bytes!("../assets/GeistMono-Bold.ttf");
+
+/// **Every face of the default monospace family**, one per weight. A host loads them all, so
+/// adding a weight is one line here and no loader changes:
+/// ```ignore
+/// for face in DEFAULT_MONO_FACES {
+///     font_system.db_mut().load_font_data(face.to_vec());
+/// }
+/// ```
+pub const DEFAULT_MONO_FACES: &[&[u8]] = &[
+    DEFAULT_MONO_BYTES,
+    DEFAULT_MONO_MEDIUM_BYTES,
+    DEFAULT_MONO_SEMIBOLD_BYTES,
+    DEFAULT_MONO_BOLD_BYTES,
+];
 
 /// Horizontal skew (tangent of the slant angle, ~12°) for synthesizing an
 /// oblique/italic from the upright faces, since Geist Mono has no italic face.

@@ -173,8 +173,9 @@ impl TextRenderer {
         let metrics = shape::metrics(scaled_size);
         let face = shape::Face {
             family: font_family,
-            bold: false,
+            weight: shape::REGULAR_WEIGHT,
             italic: false,
+            letter_spacing: 0.0,
             ligatures: true,
         };
         let buffer = shape::shape(&mut self.font_system, "M", scaled_size, &face);

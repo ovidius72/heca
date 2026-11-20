@@ -128,6 +128,9 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #input
 
+        // A deprecated builder stays a property: a description written against the old name must
+        // keep working, so the generated call to it is not a warning in the widget's crate.
+        #[allow(deprecated)]
         impl ::heca_grid_ui::SetProp for #self_ty {
             const PROP_NAMES: &'static [&'static str] = &[#(#exposed),*];
             const HOST_ONLY_BUILDERS: &'static [&'static str] = &[#(#host_only),*];

@@ -1,7 +1,7 @@
 //! Shared intrinsic-content measurement: text reflow and natural image proportions.
 
 use super::Measure;
-use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO, mono_cells, wrap_lines};
+use crate::font::{mono_cells, wrap_lines};
 use taffy::prelude::*;
 
 /// Measure intrinsic content against the width/height constraints taffy resolved.
@@ -41,8 +41,9 @@ pub(super) fn measure_content(
         }
         Measure::Text(text) => text,
     };
-    let cell = (ctx.font * MONO_ADVANCE_RATIO) as f64;
-    let line = ctx.font * MONO_LINE_RATIO;
+    // The cell and the line come from the widget, which draws with the same two numbers.
+    let cell = f64::from(ctx.cell);
+    let line = ctx.line;
     // One line, uncut — what the label would ask for if nothing constrained it.
     let natural_chars = if ctx.preserve_whitespace {
         ctx.text.split('\n').map(|line| line.chars().count()).max().unwrap_or(0)
