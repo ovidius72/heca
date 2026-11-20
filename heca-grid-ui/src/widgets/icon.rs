@@ -323,6 +323,8 @@ pub struct Icon {
     seen_glyph: Glyph,
     /// Explicit glyph size (px); otherwise the inherited font size.
     size: Option<f32>,
+    /// How many times the inherited font size the glyph is, when no explicit size was given.
+    scale: f32,
     /// Primary-layer color override (default: theme foreground).
     color: Option<Color>,
     /// Secondary-layer color override (default: primary at theme alpha).
@@ -353,6 +355,7 @@ impl Icon {
             glyph: signal(glyph),
             seen_glyph: glyph,
             size: None,
+            scale: 1.0,
             color: None,
             glow: false,
             secondary: None,
@@ -370,6 +373,16 @@ impl Icon {
     #[heca_grid_ui_macros::prop]
     pub fn size(mut self, px: f32) -> Self {
         self.size = Some(px);
+        self.remeasure();
+        self
+    }
+
+    /// **Draw the glyph a multiple of the font it sits in** — `1.3` is a touch larger than the text
+    /// beside it, so the glyph reads as a row's subject. Follows a font or size-variant change like
+    /// the glyph does by default; ignored when an explicit [`size`](Icon::size) was given.
+    #[heca_grid_ui_macros::prop]
+    pub fn scale(mut self, times: f32) -> Self {
+        self.scale = times;
         self.remeasure();
         self
     }
@@ -417,7 +430,7 @@ impl Icon {
             // its font scale — otherwise icon-only buttons wouldn't resize. The
             // font-driven path already includes the variant via `base.font`.
             Some(px) => px * self.base.style.layout.size.font_scale(),
-            None => self.base.font,
+            None => self.base.font * self.scale,
         }
     }
 }

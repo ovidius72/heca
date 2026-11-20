@@ -35,6 +35,11 @@ const REST_GLOW_RADIUS: f32 = 10.0;
 const BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
 const BAR_FRAC: f64 = 0.65;
+/// Width of the accent bar a [panel-selected](Row::panel_selection) row carries on its left edge.
+const PANEL_BAR_W: f64 = 2.5;
+/// How far down the row that bar starts, and (doubled, subtracted) how tall it is — a share of the
+/// row's height, so a two-line row's bar is as tall as its row.
+const PANEL_BAR_INSET: f64 = 0.2;
 /// Size of the [`ActiveMarker::Check`] pip (logical px).
 const CHECK_SIZE: f64 = 10.0;
 /// Left gutter the check pip centers in.
@@ -55,6 +60,8 @@ pub struct Row {
     /// [`reveal_when`](Row::reveal_when).
     reveal: Option<Signal<bool>>,
     marker: ActiveMarker,
+    /// Drawn as the selected row of an overlay panel — see [`panel_selection`](Row::panel_selection).
+    panel_selection: bool,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
     /// Override for the hover/active highlight color. Otherwise selection follows the theme's
@@ -88,6 +95,7 @@ impl Row {
             // sidebar) it came out as two lines side by side. A caller that genuinely wants one
             // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
+            panel_selection: false,
             flash: Flash::new(),
             on_activate: None,
             highlight: None,
@@ -163,6 +171,19 @@ impl Row {
     #[heca_grid_ui_macros::prop]
     pub fn attention_color(mut self, c: Color) -> Self {
         self.attention_color = Some(c);
+        self
+    }
+
+    /// **Draw the active row the way an overlay panel's list does** — the look a
+    /// [`ContextMenu`](crate::widgets::ContextMenu) and a [`CommandPalette`](crate::widgets::CommandPalette)
+    /// give their selected entry: an accent fill and edge at the theme's `panel_row_fill` /
+    /// `panel_row_border` strength and a short accent bar on the left, over the row's whole box.
+    /// No hover tint competes with it, and the active row is the one an enclosing
+    /// [`ScrollRegion`](crate::widgets::ScrollRegion) keeps in view (see
+    /// [`reveal_when`](Row::reveal_when)) — in such a list the cursor *is* the selection.
+    #[heca_grid_ui_macros::prop]
+    pub fn panel_selection(mut self, on: bool) -> Self {
+        self.panel_selection = on;
         self
     }
 
@@ -253,7 +274,8 @@ impl Component for Row {
     ///
     /// **Unless the cursor was put here by the mouse** — see [`reveal_when`](Row::reveal_when).
     fn wants_visible(&self) -> bool {
-        let cursor = self.nav.get_untracked() || self.base.focused_by_keyboard();
+        let selected = self.panel_selection && self.active.get_untracked();
+        let cursor = self.nav.get_untracked() || self.base.focused_by_keyboard() || selected;
         cursor && self.reveal.is_none_or(|r| r.get_untracked())
     }
 
@@ -322,7 +344,27 @@ impl Component for Row {
                 None,
             );
         }
-        if active {
+        if active && self.panel_selection {
+            let radius = ctrl_radius.min((b.size.h / 2.0) as f32);
+            let accent_at = |alpha: u8| accent.with_alpha(alpha);
+            cx.rect(
+                b,
+                accent_at(ia.panel_row_fill),
+                cx.border(accent_at(ia.panel_row_border)),
+                radius,
+                None,
+            );
+            cx.rect(
+                Rectangle::new(
+                    Point::new(b.loc.x, b.loc.y + b.size.h * PANEL_BAR_INSET),
+                    Size::new(PANEL_BAR_W, b.size.h * (1.0 - 2.0 * PANEL_BAR_INSET)),
+                ),
+                accent,
+                None,
+                1.0,
+                None,
+            );
+        } else if active {
             // Selection stays quiet behind content. The stronger glowing navigation ring below
             // still identifies the keyboard cursor when it coincides with the selected row.
             let hue = self.highlight.unwrap_or(selected_bg);

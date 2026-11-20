@@ -122,3 +122,15 @@ fn an_ordinary_dialog_is_unchanged() {
     let runs = text_colours(&mut d);
     assert_ne!(colour_of(&runs, "New name"), theme.colors.danger);
 }
+
+/// **The two list tones are the theme's, resolved when painted** — never a colour a widget wrote.
+#[test]
+fn soft_and_secondary_tones_come_from_theme_tokens() {
+    let mut theme = Theme::default();
+    theme.colors.muted = Color::rgb(10, 20, 30);
+    theme.colors.foreground = Color::rgb(200, 210, 220);
+    assert_eq!(Tone::Secondary.resolve(&theme), theme.colors.foreground.with_alpha(theme.colors.interaction.menu_shortcut));
+    assert_eq!(Tone::Soft.resolve(&theme), theme.colors.muted.lerp(theme.colors.foreground, 0.7));
+    let mut runs = Flex::column().content_tone(Tone::Secondary).child(Label::new("quiet"));
+    assert_eq!(colour_of(&text_colours(&mut runs), "quiet"), Tone::Secondary.resolve(&Theme::default()));
+}

@@ -42,6 +42,31 @@ pub struct PanelChrome {
     pub elevation: PanelElevation,
 }
 
+/// Reach of the accented panel's neon halo (logical px).
+const ACCENT_GLOW_RADIUS: f32 = 12.0;
+/// Strength of the accented panel's neon halo.
+const ACCENT_GLOW_INTENSITY: f32 = 0.3;
+
+impl PanelChrome {
+    /// **The accented panel**: the accent edge (at the theme's `panel_border` strength) and the neon
+    /// halo that mark a surface as an open control — what a [`CommandPalette`](crate::widgets::CommandPalette)
+    /// and a [`ContextMenu`](crate::widgets::ContextMenu) wear. Every value is the theme's, read
+    /// when the panel paints, so it follows a theme or accent change. Pass it to
+    /// [`Overlay::chrome`](super::Overlay::chrome), or to [`paint_panel_chrome`] directly.
+    pub fn accented(cx: &PaintCx) -> Self {
+        let colors = &cx.theme().colors;
+        Self {
+            border: cx.border(cx.accent().with_alpha(colors.interaction.panel_border)),
+            glow: Some(Glow {
+                color: colors.glow,
+                radius: ACCENT_GLOW_RADIUS,
+                intensity: ACCENT_GLOW_INTENSITY,
+            }),
+            elevation: PanelElevation::Panel,
+        }
+    }
+}
+
 /// How high above the page an overlay surface sits, and therefore how much drop
 /// shadow it casts.
 ///

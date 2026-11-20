@@ -27,7 +27,19 @@ pub enum Tone {
     Success,
     /// Something destructive, or its consequence.
     Danger,
+    /// **Primary text a notch below full foreground**: the muted token blended
+    /// `SOFT_MIX` of the way toward the foreground. For the titles of a list whose selected row
+    /// reads in full foreground — the rest are there to be scanned, not read.
+    Soft,
+    /// **Secondary text on a highlighted row**: the foreground at the overlay hint alpha
+    /// (`interaction.menu_shortcut`). `Muted` is nearly the colour of a selection fill, so a
+    /// selected row's second line says "same ink as the title, quieter" instead.
+    Secondary,
 }
+
+/// How far toward the foreground [`Tone::Soft`] sits from the muted token (`0` = muted, `1` =
+/// foreground).
+const SOFT_MIX: f32 = 0.7;
 
 impl Tone {
     /// The colour, from the theme this frame.
@@ -38,6 +50,11 @@ impl Tone {
             Tone::Warning => theme.colors.warning,
             Tone::Success => theme.colors.success,
             Tone::Danger => theme.colors.danger,
+            Tone::Soft => theme.colors.muted.lerp(theme.colors.foreground, SOFT_MIX),
+            Tone::Secondary => theme
+                .colors
+                .foreground
+                .with_alpha(theme.colors.interaction.menu_shortcut),
         }
     }
 }

@@ -174,11 +174,15 @@ impl FocusManager {
     /// Move focus to the next (`forward = true`) or previous focusable component
     /// in Tab order, wrapping at the ends. Updates each component's `focused`
     /// signal.
-    pub fn advance(&mut self, root: &mut dyn Component, forward: bool) {
+    ///
+    /// Returns whether Tab **had somewhere to go** — `false` when there is nothing in Tab order or
+    /// a single stop (which is still given the keyboard, wherever it was), so the caller can let
+    /// the key go on to whatever binds it.
+    pub fn advance(&mut self, root: &mut dyn Component, forward: bool) -> bool {
         let order = Self::tab_order(root);
         let n = order.len();
         if n == 0 {
-            return;
+            return false;
         }
         // Current position within the Tab order (by visit index identity).
         let pos = self
@@ -201,6 +205,7 @@ impl FocusManager {
             }
         };
         self.apply(root, Some(order[next_pos]), true); // keyboard focus → show ring
+        n > 1 && pos != Some(next_pos)
     }
 
     /// Deliver a key press to the focused component. Returns whether it consumed it.

@@ -798,7 +798,7 @@ Not to be confused with `.hint_tone(Tone)`, which declares what a **keycap means
 #### The colour of the text inside — `content_tone`
 
 `.content_tone(Tone)` — on **any** widget, from `ToneExt`. CSS's inherited `color`, named by
-meaning (`Tone::Accent`/`Muted`/`Warning`/`Success`/`Danger`) because a widget has no theme until
+meaning (`Tone::Accent`/`Muted`/`Warning`/`Success`/`Danger`, plus the two list inks `Soft` — muted blended 70% toward the foreground, for the titles of a list whose selected row reads in full foreground — and `Secondary` — the foreground at the overlay hint alpha, `interaction.menu_shortcut`, for a highlighted row's second line) because a widget has no theme until
 paint:
 
 ```rust
@@ -1617,7 +1617,7 @@ reload update an existing request without replaying the event. `clear()` stops e
 target sharing that handle. Another explicit trigger restarts it. For example, a plugin can call `flash.repeat(Tone::Warning)`
 when it needs attention, then `flash.clear()` from its existing focus or action handler.
 
-The theme resolves `Tone::{Accent, Muted, Success, Warning, Danger}` at paint time.
+The theme resolves `Tone::{Accent, Muted, Success, Warning, Danger, Soft, Secondary}` at paint time.
 Each pulse lights the border and adds a subtle glow and tint inside the widget's
 bounds, then fades to a dark pause. Text, content colours and selection remain intact.
 Normal clipping and frame scheduling apply. Each `PaintCx::new` automatically
@@ -4070,7 +4070,10 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
 
 - **Construct**: `Row::new()`. Add content with `.child(...)`.
 - **Builders**: `.on_activate(impl Fn())` (also makes it focusable), `.active(bool)`,
-  `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
+  `.panel_selection(bool)` (draw the active row the way an overlay panel's list does — accent fill and
+  edge at `interaction.panel_row_fill` / `panel_row_border`, a short accent bar on the left, over the
+  row's whole box; the active row is then what an enclosing `ScrollRegion` follows, gated by
+  `.reveal_when`), `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
   more strongly than the quiet `active` outline; a row can show one, the other, or both),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
   `.previous(bool)` (last-focused row, using the theme's `previous_background` at its configured
@@ -6044,6 +6047,22 @@ keyed on it, no declaration outside the tree.
   chose (still clamped into the viewport, never flipped away). Both
   [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#menus--menuitem-menu-contextmenu)
   (point-anchored) delegate their placement here, so the flip/clamp rule exists once.
+- **Hung from the top**: `.top(top, bottom)` (`OverlayPosition::Top`) hangs the panel from the top of
+  the window, centred across: `top` is how far down it starts and `bottom` how much is kept clear
+  beneath it, both **shares of the viewport's height** (`top(0.12, 0.08)` = 12% down, 8% clear), each
+  never less than `VIEWPORT_MARGIN`. The shares become insets in the overlay's own `remeasure`, so
+  the panel's `Percent` caps resolve against what is left. A palette's place: a panel that hugs its
+  rows and stays centred up and down would move its top edge with every keystroke.
+- **Panel chrome**: `.chrome(impl Fn(&PaintCx) -> PanelChrome)` lets the owner of the content choose
+  what the panel looks like. Unset it is `PanelChrome::default()`; `PanelChrome::accented` is the
+  accent edge (at `interaction.panel_border`) and neon halo a `CommandPalette` and a `ContextMenu`
+  wear. It is a function because the accent and the halo are the theme's, and the theme is only
+  there when the panel paints. The painter is still the one `paint_panel_chrome`, and whether an edge
+  is drawn at all is still the user's `overlay_frame`.
+- **Tab**: the overlay holds Tab as the universal focus key, but **only when it moves focus** — a
+  panel with a single control has nowhere to take it, so the key goes on and the host can resolve it
+  to the intent it is bound to (`complete` in a palette). `Component::advance_focus` returns whether
+  the keyboard moved; `FocusManager::advance` likewise.
 - **Sizing**: `.panel_size(width: Length, height: Length)` gives the panel an explicit size instead
   of letting it hug its content. Default = unset (hug). `Length::Auto` on an axis keeps the hug
   behaviour there; a `Length::Percent` resolves against the **viewport**, since the `Overlay` fills it
@@ -6129,11 +6148,12 @@ keyed on it, no declaration outside the tree.
   authority for what an overlay panel *looks like* — drop shadow (lifting it off the page), the theme
   surface fill, the per-widget accents, and the panel's **edge**. The base `Overlay` passes
   `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), and
-  [`CommandPalette`](#commandpalette) call the same painter with their own accent border + glow,
-  because each owns content that cannot be handed to an `Overlay` as a single panel child (`Select`'s
-  option rows are *placed children*; the menu/palette draw their rows from data). Call it inside a
-  `with_overlay` block — it does not open the overlay layer itself, and a blocking layer's **scrim**
-  is separate from the panel chrome (the palette paints its own scrim first).
+  [`CommandPalette`](#commandpalette)'s old hand-painted panel did) call the same painter with their
+  own accent border + glow, because each owns content that cannot be handed to an `Overlay` as a single
+  panel child (`Select`'s option rows are *placed children*; the menu draws its rows from data). Call it
+  inside a `with_overlay` block — it does not open the overlay layer itself, and a blocking layer's
+  **scrim** is separate from the panel chrome. (`CommandPalette` is no longer one of them: it is a layer
+  around an `Overlay` and asks for `PanelChrome::accented` with `.chrome(..)`.)
 - **The panel edge is a user setting, not a widget decision** — `Theme.colors.overlay_frame`
   (`FrameStyle`), driven by the app's `[appearance] overlay_border_style` (`none | bordered |
   bracketed`, live-reloading like the rest). It owns the **whole** edge, so the three styles are
@@ -6157,7 +6177,7 @@ keyed on it, no declaration outside the tree.
 
   | `PanelElevation` | Used by | Shadow |
   |---|---|---|
-  | `Panel` (default) | `Dialog`/`Overlay`, [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), [`CommandPalette`](#commandpalette) | full depth |
+  | `Panel` (default) | `Dialog`/`Overlay` (so [`CommandPalette`](#commandpalette) too), [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu) | full depth |
   | `Hover` | [`Tooltip`](#tooltip) | 25% of it (blur *and* drop scale together) |
 
   Why it exists: the panel shadow is tuned for surfaces hundreds of pixels across. Applied unscaled
@@ -6510,6 +6530,17 @@ keyboard selection. Hover refresh is not movement; actual pointer movement still
 and clicking still activates it. Hosts use the shared raw `Recheck` event after tree changes,
 not a fabricated device move. Widgets need no private first-move flags or distance thresholds.
 
+**It is composed, not drawn.** The palette is a full-window layer holding the keyboard, the open state
+and the cursor, around an [`Overlay`](#overlay) whose panel is a column of the query `Input` and a
+[`ScrollRegion`](#scrollregion) of rows. The overlay places the panel (centred across, hung 12% down the window with 8% kept clear
+under it), caps it at the window and paints the scrim and the accented chrome; the layout engine lays the rows out (each a `Row`
+around a `Grid` of icon · text · chords), so a description that wraps makes its row taller and the rows
+below slide down; the region scrolls and keeps the keyboard's cursor in view (the selected row is a
+`panel_selection` `Row`, which a region follows on its own — pointing never scrolls). The rows' filtering is
+a pure function (`filter::rank`); the keycap chords are drawn by a small leaf through the shared keycap
+primitive. Show and hide are the ordinary `Component::show` / `close` / `toggle` on the layer, or its
+`open_signal`.
+
 #### Palette API
 
 | Builder or method | Behaviour and default |
@@ -6524,7 +6555,7 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.query_in(Some(scope), text)` | Prefix the declared mode's sigil, then use the same query path. `None` or an unknown scope keeps the text unchanged. Sigils already in the text remain unchanged. Works before or after the mode is declared. |
 | `.placeholder(text)` | Empty-query hint. Default `Type a command…`. |
 | `.default_open(bool)` | Initial open state; default `false`. |
-| `.panel_size(WidgetSize)` | `Small`, `Normal` (default), or `Large`: maximum width and row count. `Caption` uses Small and `Header` uses Large. Font size stays unchanged; the viewport caps the panel. |
+| `.panel_size(WidgetSize)` | `Small`, `Normal` (default), or `Large`: the **panel's own size** — its width (560 / 700 / 1000 px) and how many rows the list shows before it scrolls (6 / 8 / 12 rows of a described list, as a height in `em`). `Caption` uses Small and `Header` uses Large. Font size stays unchanged; the panel never takes more than 92% of the width the overlay leaves. |
 | `.search(SearchModel)` | Supply shared search memory and matching options. Each declared mode uses its named scope in that same store. |
 | `.open_signal()` | Read or write the open-state signal. Closing also releases modal focus. |
 | `.label_signals()` | Title text signals in insertion order. Updating one changes both the displayed label and matching without rebuilding the palette. |

@@ -153,6 +153,12 @@ impl Row {
     pub fn marker(self, m: ViewMarker) -> Self {
         self.prop("marker", m)
     }
+    /// Draw the active row the way an overlay panel's list does: accent fill and edge at the panel
+    /// row strengths and a short accent bar on the left; the active row is what an enclosing
+    /// scroll area follows.
+    pub fn panel_selection(self, on: bool) -> Self {
+        self.prop("panel_selection", on)
+    }
     /// Show the navigation cursor on this row.
     pub fn nav_selected(self, on: bool) -> Self {
         self.prop("nav_selected", on)

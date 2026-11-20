@@ -48,7 +48,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, shift_subtree};
 use crate::event::WidgetIntent;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
-use crate::style::{Align, Justify, Length};
+use crate::style::{Align, Justify, Length, Space};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
@@ -63,6 +63,10 @@ use std::cell::Cell;
 pub const VIEWPORT_MARGIN: f32 = 24.0;
 /// How far a blocking scrim reaches before a viewport has been cached (logical px).
 const SCRIM_REACH: f64 = 1.0e9;
+
+/// How an overlay's owner chooses its panel's chrome: a function of the paint context, so the colours
+/// come from the theme in force when the panel paints.
+type ChromeFn = Box<dyn Fn(&PaintCx) -> PanelChrome>;
 
 /// The base overlay surface: a viewport-filling, centering layer that paints a panel (its single
 /// child) with the shared overlay chrome — optional scrim, drop shadow, theme surface fill, and the
@@ -160,8 +164,11 @@ pub struct Overlay {
     /// first field, and a menu wants nothing at all. Unset means nothing is focused, which is what
     /// every surface did before there was a way to say otherwise.
     default_focus: Option<String>,
-    /// How the panel is placed: centered (default) or anchored to a trigger rect.
+    /// How the panel is placed: centered (default), hung from the top, or anchored to a trigger rect.
     position: OverlayPosition,
+    /// What the panel looks like. `None` is [`PanelChrome::default`]; a function, not a value,
+    /// because an accent or a halo is the theme's and the theme is only there when the panel paints.
+    chrome: Option<ChromeFn>,
     /// Explicit panel size, applied to the panel child's style. `None` (default)
     /// leaves the panel to size itself from its content.
     panel_size: Option<(Length, Length)>,
@@ -203,6 +210,7 @@ impl Overlay {
             focus: crate::focus::FocusManager::new(),
             default_focus: None,
             position: OverlayPosition::Center,
+            chrome: None,
             panel_size: None,
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
             // No animation until one is declared: a surface that never asked for one is a cut,
@@ -318,6 +326,34 @@ impl Overlay {
     )]
     pub fn position(mut self, position: OverlayPosition) -> Self {
         self.position = position;
+        self
+    }
+
+    /// Hang the panel from the top of the window, centred across: `top` and `bottom` are shares of
+    /// the viewport's height (`top(0.12, 0.08)` starts the panel 12% down and keeps 8% clear under
+    /// it). See [`OverlayPosition::Top`].
+    #[heca_grid_ui_macros::host_only(
+        "takes more than one value, which a single property cannot carry"
+    )]
+    pub fn top(mut self, top: f32, bottom: f32) -> Self {
+        self.position = OverlayPosition::Top { top, bottom };
+        self
+    }
+
+    /// **What the panel looks like**, chosen by whoever owns the content.
+    ///
+    /// ```ignore
+    /// Overlay::new().panel(body).chrome(PanelChrome::accented)   // the accent edge and neon halo
+    /// ```
+    ///
+    /// Unset, the panel wears [`PanelChrome::default`] — the theme's plain surface and edge. The
+    /// function runs each time the panel paints and is handed the [`PaintCx`], so every colour comes
+    /// from the theme in force; it returns the same [`PanelChrome`] [`paint_panel_chrome`] takes,
+    /// which stays the one painter (the overlay, `Select` and `ContextMenu` all call it). Whether an
+    /// edge is drawn at all is still the user's `overlay_frame` setting, never the owner's.
+    #[heca_grid_ui_macros::host_only("a function of the paint context, not a scalar")]
+    pub fn chrome(mut self, chrome: impl Fn(&PaintCx) -> PanelChrome + 'static) -> Self {
+        self.chrome = Some(Box::new(chrome));
         self
     }
 
@@ -509,7 +545,7 @@ impl Overlay {
     /// only part of it there is.
     fn scale_origin(&self) -> Point {
         let r = match self.position {
-            OverlayPosition::Center => self.base.bounds,
+            OverlayPosition::Center | OverlayPosition::Top { .. } => self.base.bounds,
             OverlayPosition::Anchored { .. } => self.panel_bounds(),
         };
         Point::new(r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0)

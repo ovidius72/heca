@@ -20,6 +20,15 @@ pub enum WidgetIntent {
     MenuUp,
     /// Vertical down — menus, `Select` lists, the command palette. `menu_down`.
     MenuDown,
+    /// One **page** up a vertical list — the selection moves by as many rows as the list shows.
+    /// `menu_page_up`. Vocabulary beside `MenuUp`: any list that answers one answers these.
+    MenuPageUp,
+    /// One **page** down a vertical list. `menu_page_down`.
+    MenuPageDown,
+    /// The **first** row of a vertical list. `menu_first`.
+    MenuFirst,
+    /// The **last** row of a vertical list. `menu_last`.
+    MenuLast,
     /// An **older** past query — a search surface's history, walked backwards. `menu_history_up`.
     ///
     /// Vocabulary, not a palette feature: any surface that searches has a history worth recalling.

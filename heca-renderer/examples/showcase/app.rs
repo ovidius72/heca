@@ -201,7 +201,9 @@ impl ApplicationHandler for App {
                             state.palette_open.set(true);
                         }
                         // Tab / Shift+Tab move keyboard focus across buttons.
-                        GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
+                        GridKey::Tab => {
+                            state.focus.advance(&mut state.ui, !state.shift);
+                        }
                         // Escape clears focus and cancels an open rail pick.
                         GridKey::Escape => {
                             state.set_rail_pick(false);

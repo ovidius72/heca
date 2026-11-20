@@ -34,9 +34,8 @@ impl CommandPalette {
         for command in commands {
             self = self.command(command.mode(scope.clone()));
         }
-        self.sync_marks();
         self.sync_initial_selection();
-        self.sync_wrap();
+        self.sync_rows();
         self
     }
 
@@ -100,7 +99,7 @@ impl CommandPalette {
         if !self.describe_scopes.contains(&scope) {
             self.describe_scopes.push(scope);
         }
-        self.sync_marks();
+        self.sync_rows();
         self
     }
 

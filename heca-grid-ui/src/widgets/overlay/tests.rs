@@ -17,6 +17,7 @@ fn open_overlay() -> Overlay {
     o
 }
 
+mod chrome;
 mod layout;
 mod lifecycle;
 mod input;

@@ -83,3 +83,36 @@ fn command_palette_query_reuses_input_word_delete() {
         "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar"
     );
 }
+
+/// **Tab completes through the path the app uses** — a window tree holding the palette beside the
+/// control that opened it, a typed key press delivered whole (`Keymap::deliver_press`: text, then
+/// the key, then its intents) to the root, the keyboard wherever the framework put it.
+#[test]
+fn tab_completes_a_suggestion_through_the_whole_key_press_path_of_the_app() {
+    use heca_grid_ui::{Command, CommandPalette, KeyPress, Keymap, Modifiers};
+    let mut palette = CommandPalette::new()
+        .source(|_| vec![Command::new("Create folder: project", || {}).completion("project/")])
+        .default_open(true);
+    let query = palette.query_signal();
+    let mut window = Flex::column()
+        .child(Button::primary("Opener"))
+        .child(std::mem::take(&mut palette));
+    LayoutEngine::new().compute(&mut window, Size::new(900.0, 600.0));
+    window.base().children[0].base().focus(false);
+    heca_grid_ui::settle_focus(&mut window);
+    // The palette opens: it takes the keyboard.
+    window.base().children[1].base().open.set(true);
+    heca_grid_ui::settle_focus(&mut window);
+    let keys = Keymap::with_defaults();
+    let press = |text: &str, key, window: &mut Flex| {
+        keys.deliver_press(&KeyPress { key, text: Some(text.into()), mods: Modifiers::default() }, |ev| {
+            heca_grid_ui::dispatch(window, ev)
+        })
+    };
+    for c in "pro".chars() {
+        press(&c.to_string(), heca_grid_ui::GridKey::Char(c), &mut window);
+    }
+    assert_eq!(query.get_untracked(), "pro");
+    assert_eq!(press("\t", heca_grid_ui::GridKey::Tab, &mut window), Handled::Yes);
+    assert_eq!(query.get_untracked(), "project/");
+}

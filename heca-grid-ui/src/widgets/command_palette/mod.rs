@@ -31,38 +31,38 @@
 //! action as an `Intent`; the native host supplies live rows and callbacks. The complete
 //! native and declarative examples and API tables are in `docs/widgets.md`.
 //!
-//! The existing drawing code still positions the panel and forwards input to an off-tree
-//! query field. Those paths live in `geometry`, `paint` and `component`; mode declarations
-//! and named prefill live in `modes`.
+//! **Composed, not drawn.** The palette is a layer that holds the keyboard, the open state and the
+//! selection, around an [`Overlay`](crate::widgets::Overlay) whose panel is a column of the query
+//! `Input` and a `ScrollRegion` of rows (`build`, `row`). The overlay places and caps the panel, the
+//! engine lays the rows out, the region scrolls and keeps the selected row in view. What stays the
+//! palette's own: fuzzy filtering (`filter`, a pure function), the match marks, reflowing the
+//! selected description and moving the cursor (`search`); mode declarations and named prefill live
+//! in `modes`.
 
-use crate::builders::{LayoutExt, Parent, TooltipExt};
-use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
-use crate::font::MONO_LINE_RATIO;
+use crate::builders::LayoutExt;
+use crate::component::{Base, Component, Event, Handled, WidgetIntent};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::Glow;
 use crate::search::{Ranked, SearchAction, SearchModel};
 use crate::style::WidgetSize;
-use crate::style::{Direction, Length};
-use crate::widgets::{
-    Ellipsis, Flex, Glyph, Input, KeyCap, KeycapVariant, Label, PanelChrome, PanelElevation,
-    paint_panel_chrome,
-};
-use heca_core::layout::{Point, Rectangle, Size};
+use crate::widgets::{Glyph, Input, KeyCap};
 use std::cell::Cell;
 
+mod build;
+mod chord;
 mod command;
 mod component;
-mod geometry;
-mod metrics;
+mod extent;
+mod filter;
 mod modes;
-mod paint;
+#[cfg(test)]
+mod pointer_tests;
+mod row;
 mod search;
 mod source;
 #[cfg(test)]
-mod pointer_tests;
+mod tests;
 
 pub use command::Command;
-use metrics::*;
 
 /// A fuzzy command launcher.
 pub struct CommandPalette {
@@ -78,48 +78,34 @@ pub struct CommandPalette {
     /// Builder input kept until a named mode can be resolved. The query field
     /// remains the sole mode selector; editing or replacing it clears this input.
     named_prefill: Option<(String, String)>,
-    /// The value of the query Input, which lives after the result rows in `Base.children`.
+    /// The value of the query Input, which sits above the rows in the panel.
     query: Signal<String>,
     /// A typed edit asks the palette to reset ranking/history before its next read or action.
     query_changed: Signal<bool>,
+    /// The cursor: a position in the ranked results.
     selected: usize,
-    scroll: usize,
+    /// Did the keyboard (or the palette itself) move the cursor, and not the pointer? Only then may
+    /// a row ask its scroll region to bring it into view — pointing at a row is seeing it already,
+    /// and scrolling it from under the pointer would move the row that was pointed at.
+    keyboard_moved: Signal<bool>,
+    /// What the rows' own handlers have noticed the pointer do, read at the next event or tick.
+    pointer: row::PointerInbox,
     placeholder: String,
-    /// How roomy the panel is — width and row count, never font. Set from the app's
+    /// How roomy the panel is — width and how tall it may grow, never font. Set from the app's
     /// `[settings] command_palette_size`.
     panel_size: WidgetSize,
     open: Signal<bool>,
     on_dismiss: Option<Box<dyn Fn()>>,
-    viewport: Cell<Size>,
-    /// Panel rect cached at paint, so the caret blink can damage just the panel
-    /// (the palette paints on the overlay layer, away from its layout `bounds`).
-    panel: Cell<Rectangle>,
-    /// Each row's **measured** height, captured post-layout while the children are still at their
-    /// natural, engine-computed sizes — the same trick [`Select`](super::Select) uses.
-    ///
-    /// This is what makes a wrapping description reflow the list: the palette no longer computes a
-    /// row's height from a line count, it reads what the engine measured, so a description that
-    /// wrapped onto three lines moves the rows below it without a line of arithmetic here.
-    natural_h: Vec<f64>,
     /// Matching, ranking by past use, and the query history — **embedded, not implemented**. Every
     /// call below delegates; this widget owns no matcher and walks no history.
     search: SearchModel,
-    /// The marks signal of each row's title label, so the match highlights can be moved on every
-    /// keystroke without rebuilding a hundred labels.
-    title_marks: Vec<Signal<Vec<usize>>>,
+    /// The live signals of each row, in `commands` order — what moves the marks, the cursor and
+    /// the reflow on every keystroke without rebuilding a hundred rows.
+    rows: Vec<row::RowHandle>,
     /// The text signal of each row's title, in `commands` order — handed to a host that wants a row
     /// to follow something live (a pane's process, a rename). Writing one is a text swap on that
     /// label alone; the palette reads them back when it ranks, so what is matched is what is shown.
     title_text: Vec<Signal<String>>,
-    /// The wrap signal of each row's description, where it has one. **Only the selected row's
-    /// description reflows**; the rest are cut to one line, which is what keeps the list from
-    /// exploding to three lines a row and is why this is per-row state rather than a build-time
-    /// property.
-    desc_wrap: Vec<Option<Signal<bool>>>,
-    /// The marks signal of each row's description label, where it has one — what shows the query's
-    /// match **in the description** for a mode that matches it
-    /// ([`match_description_in`](Self::match_description_in)).
-    desc_marks: Vec<Option<Signal<Vec<usize>>>>,
     /// Scopes whose rows are matched on their description as well as their title.
     describe_scopes: Vec<String>,
     /// What to do when a mode is entered ([`on_mode_enter`](Self::on_mode_enter)), by scope.
@@ -132,18 +118,19 @@ pub struct CommandPalette {
 impl CommandPalette {
     /// A new, empty (closed) palette.
     pub fn new() -> Self {
-        let mut base = Base::new();
-        let open = base.open;
-        // The palette owns modal containment; its child Input owns the keyboard.
-        base.follow_focus_modal(open);
-        // **A palette locks because it is a palette.** It has the keyboard for its query line,
-        // and nothing behind it should be acted on while you are typing into it.
-        base.lock = true;
         let query_changed = signal(false);
         let placeholder = String::from("Type a command…");
+        let panel_size = WidgetSize::Normal;
+        let mut base = Base::viewport_layer();
+        let open = base.open;
+        // Modal containment is the composed overlay's (it follows `open` and gives the keyboard
+        // back to the opener); the query Input inside it owns the keyboard.
+        // **A palette locks because it is a palette.** It has the keyboard for its query line, and
+        // nothing behind it should be acted on while you are typing into it.
+        base.lock = true;
         let query_field = Self::query_field(open, query_changed, String::new(), placeholder.clone());
         let query = query_field.text();
-        base.children.push(crate::WidgetModel::new(query_field));
+        base.children.push(build::overlay(query_field, open, panel_size));
         Self {
             base,
             commands: Vec::new(),
@@ -153,19 +140,15 @@ impl CommandPalette {
             query,
             query_changed,
             selected: 0,
-            scroll: 0,
+            keyboard_moved: signal(true),
+            pointer: row::PointerInbox::new(),
             placeholder,
-            panel_size: WidgetSize::Normal,
+            panel_size,
             open,
             on_dismiss: None,
-            viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
-            panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             search: SearchModel::detached("command"),
-            natural_h: Vec::new(),
-            title_marks: Vec::new(),
+            rows: Vec::new(),
             title_text: Vec::new(),
-            desc_wrap: Vec::new(),
-            desc_marks: Vec::new(),
             describe_scopes: Vec::new(),
             mode_enter: Vec::new(),
             entered: Default::default(),
@@ -175,6 +158,8 @@ impl CommandPalette {
     /// Build the one query control; all editing stays in Input.
     fn query_field(open: Signal<bool>, changed: Signal<bool>, text: String, placeholder: String) -> Input {
         let mut field = Input::new().value(text).placeholder(placeholder).placeholder_on_focus(true)
+            // Home and End are the list's (`menu_first` / `menu_last`), not the caret's.
+            .line_keys(false)
             .on_change(move |_| changed.set(true));
         field.base_mut().follow_focus(open);
         field
@@ -189,11 +174,9 @@ impl CommandPalette {
 
     /// Add a command.
     ///
-    /// Its text becomes **real children** — a title [`Label`] and, when the command has one, a
-    /// description `Label` — so the cut, the reflow and the match marks are the label's properties
-    /// rather than three things painted by hand here. The icon, the keycap chips and the selection
-    /// chrome stay drawn by the palette: the chips already go through the shared keycap primitive,
-    /// and the rest is panel chrome, not text.
+    /// It becomes a **row of the list** — a grid of an icon, the title and description `Label`s and
+    /// the keycap chords — laid out by the engine, so the cut, the reflow, the match marks and the
+    /// shortcut column are properties of widgets rather than things painted here.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn command(mut self, c: Command) -> Self {
         self.push_command(c);
@@ -201,44 +184,27 @@ impl CommandPalette {
     }
 
     fn push_command(&mut self, c: Command) {
-        let title = Label::new(c.label.clone()).truncate(Ellipsis::End);
-        self.title_marks.push(title.marks_signal());
-        // The row's text signal, kept so a host can rename a row **in place**. The label is a
-        // `Signal<String>` already, so writing it re-marks that one label instead of rebuilding the
-        // palette — which is what keeps a live list from flashing.
-        self.title_text.push(title.text_signal());
-        let mut column = Flex::column().child(title);
-        self.desc_wrap.push(None);
-        self.desc_marks.push(None);
-        if let Some(desc) = &c.description {
-            // Cut by default, reflowed while selected — `sync_wrap` flips it. Because the height is
-            // measured, the reflow moves every row below it.
-            let d = Label::new(desc.clone())
-                .truncate(if c.description_path { Ellipsis::Start } else { Ellipsis::End })
-                .wrap(false);
-            if !c.description_path {
-                *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
-            }
-            *self.desc_marks.last_mut().expect("just pushed") = Some(d.marks_signal());
-            let d = if c.description_path { d.tooltip(desc.clone()) } else { d };
-            column = column.child(d);
-        }
-        if let Some(detail) = &c.detail {
-            column = column.child(Label::new(detail.clone()).truncate(Ellipsis::End).wrap(false));
-        }
-        self.base.children.insert(self.commands.len(), crate::WidgetModel::new(column));
+        let (row, handle, title) = row::build(&c, self.commands.len(), self.keyboard_moved, self.pointer);
+        self.list_mut().children.push(crate::WidgetModel::new(row));
+        self.rows.push(handle);
+        // Kept so a host can rename a row **in place**: the label is a `Signal<String>` already, so
+        // writing it re-marks that one label instead of rebuilding the palette — which is what
+        // keeps a live list from flashing.
+        self.title_text.push(title);
         self.commands.push(c);
     }
-    /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
-    /// rows it shows**, and nothing else — the text stays at reading size at every size, which is why
-    /// this is its own property rather than [`LayoutExt::size`],
-    /// whose font scaling would cascade through the whole panel.
+
+    /// How roomy the panel is: `Small` / `Normal` / `Large` decide the panel's **own width and how
+    /// much of the window's height it may take**, and nothing else — the text stays at reading size
+    /// at every size, which is why this is its own property rather than [`LayoutExt::size`], whose
+    /// font scaling would cascade through the whole panel.
     ///
-    /// Whatever the variant, the panel never exceeds `PANEL_VIEWPORT_FRAC` of the window, so a
-    /// small screen is safe by construction.
+    /// Whatever the variant, the panel never exceeds the window: the overlay it sits in caps it, so
+    /// a small screen is safe by construction.
     #[heca_grid_ui_macros::prop]
     pub fn panel_size(mut self, size: WidgetSize) -> Self {
         self.panel_size = size;
+        self.resize_panel(size);
         self
     }
 
@@ -248,7 +214,7 @@ impl CommandPalette {
         self.placeholder = text.into();
         let field = Self::query_field(self.open, self.query_changed, self.query_text(), self.placeholder.clone());
         self.query = field.text();
-        *self.base.children.last_mut().expect("palette owns a query child") = crate::WidgetModel::new(field);
+        self.set_query_field(field);
         self
     }
 
@@ -262,12 +228,11 @@ impl CommandPalette {
         self.named_prefill = None;
         self.query.set(text.into());
         self.refresh_source();
-        // Mark, place the selection and reflow now, so this does not depend on being called before
-        // `open` — properties are order-independent, and a mode set after it would otherwise paint
-        // the wrong list once.
-        self.sync_marks();
+        // Filter, mark, place the selection and reflow now, so this does not depend on being called
+        // before `open` — properties are order-independent, and a mode set after it would otherwise
+        // paint the wrong list once.
         self.sync_initial_selection();
-        self.sync_wrap();
+        self.sync_rows();
         self.announce_mode();
         self
     }
@@ -276,11 +241,10 @@ impl CommandPalette {
     #[heca_grid_ui_macros::prop]
     pub fn default_open(mut self, open: bool) -> Self {
         self.open.set(open);
-        // Mark the matches for the (empty) query now, so the first paint is not a frame behind, and
+        // Filter and mark for the (empty) query now, so the first paint is not a frame behind, and
         // place the selection on whichever row asked to start there.
-        self.sync_marks();
         self.sync_initial_selection();
-        self.sync_wrap();
+        self.sync_rows();
         self.announce_mode();
         self
     }

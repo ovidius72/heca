@@ -75,6 +75,8 @@ pub struct Input {
     /// Shown (muted) when empty and unfocused.
     placeholder: String,
     placeholder_on_focus: bool,
+    /// Whether Home/End move the caret to the line's ends (default). Off, they go on unhandled.
+    line_keys: bool,
     seen_text: String,
     /// Caret position as a char index in `0..=text.chars().count()` (the moving
     /// head of a selection).

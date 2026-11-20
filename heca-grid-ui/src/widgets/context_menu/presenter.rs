@@ -6,10 +6,10 @@ use crate::component::{
     Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent, paint_child, shift_subtree,
 };
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Glow, TextAlign, TextStyle};
+use crate::scene::{TextAlign, TextStyle};
 use crate::style::{Direction, Length};
 use crate::widgets::key_hint::{KeycapVariant, keycap_size, paint_keycap};
-use crate::widgets::{PanelChrome, PanelElevation, paint_panel_chrome, place_at_point};
+use crate::widgets::{PanelChrome, paint_panel_chrome, place_at_point};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -310,6 +310,20 @@ impl ContextMenu {
         }
     }
 
+    /// Select the first enabled entry.
+    pub fn select_first(&mut self) {
+        if let Some(i) = self.enabled_from(0, true) {
+            self.selected = i;
+        }
+    }
+
+    /// Select the last enabled entry.
+    pub fn select_last(&mut self) {
+        if let Some(i) = self.enabled_from(self.menu.items.len().saturating_sub(1), false) {
+            self.selected = i;
+        }
+    }
+
     /// Run the selected entry (if enabled) and close.
     pub fn run_selected(&mut self) {
         if let Some(e) = self.menu.items.get(self.selected)
@@ -434,11 +448,10 @@ impl Component for ContextMenu {
         self.viewport.set(cx.viewport());
         // NB: the panel's own surface fill + corner radius are read by the shared
         // `paint_panel_chrome`, so they are deliberately not pulled out here.
-        let (accent, glow_c, foreground, muted, danger, ctrl_radius) = {
+        let (accent, foreground, muted, danger, ctrl_radius) = {
             let t = cx.theme();
             (
                 cx.accent(),
-                t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,
                 t.colors.danger,
@@ -455,21 +468,7 @@ impl Component for ContextMenu {
             // other overlay panel. On top of it the menu keeps its own identity: an
             // accent edge and the glow it shares with the CommandPalette. No scrim —
             // context menus dismiss on outside-click rather than darkening the view.
-            let panel_border =
-                cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
-            paint_panel_chrome(
-                cx,
-                panel,
-                PanelChrome {
-                    border: panel_border,
-                    glow: Some(Glow {
-                        color: glow_c,
-                        radius: 12.0,
-                        intensity: 0.3,
-                    }),
-                    elevation: PanelElevation::Panel,
-                },
-            );
+            paint_panel_chrome(cx, panel, PanelChrome::accented(cx));
 
             for (i, e) in self.menu.items.iter().enumerate() {
                 let row = self.row_rect(i);
@@ -599,6 +598,15 @@ impl Component for ContextMenu {
                 }
                 WidgetIntent::MenuUp => {
                     self.select_prev();
+                    Handled::Yes
+                }
+                // A menu shows all of its entries at once, so a page is the whole of it.
+                WidgetIntent::MenuFirst | WidgetIntent::MenuPageUp => {
+                    self.select_first();
+                    Handled::Yes
+                }
+                WidgetIntent::MenuLast | WidgetIntent::MenuPageDown => {
+                    self.select_last();
                     Handled::Yes
                 }
                 _ => Handled::No,

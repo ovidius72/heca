@@ -156,6 +156,28 @@ fn select_keyboard_navigates_and_escape_closes() {
     assert_eq!(sel.index(), 2);
 }
 
+/// First, last and page move an open select's highlight like the other vertical lists.
+#[test]
+fn an_open_select_answers_first_last_and_page() {
+    use heca_grid_ui::WidgetIntent;
+    let mut sel = Select::new(["A", "B", "C", "D", "E"]);
+    give_keyboard(&mut sel);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
+    let nav = |s: &mut Select, i: WidgetIntent| heca_grid_ui::dispatch(&mut *s, &Event::Widget(i));
+    heca_grid_ui::dispatch(&mut sel, &Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(nav(&mut sel, WidgetIntent::MenuLast), Handled::Yes);
+    nav(&mut sel, WidgetIntent::Activate);
+    assert_eq!(sel.index(), 4);
+    heca_grid_ui::dispatch(&mut sel, &Event::Key { key: GridKey::Enter, pressed: true });
+    nav(&mut sel, WidgetIntent::MenuFirst);
+    nav(&mut sel, WidgetIntent::Activate);
+    assert_eq!(sel.index(), 0);
+    heca_grid_ui::dispatch(&mut sel, &Event::Key { key: GridKey::Enter, pressed: true });
+    nav(&mut sel, WidgetIntent::MenuPageDown);
+    nav(&mut sel, WidgetIntent::Activate);
+    assert!(sel.index() > 0, "a page down moves the highlight");
+}
+
 /// **A closed select is one hover target, not two.** The chosen option is echoed inside the
 /// trigger, and while it stands there it is decoration: left hittable it hovered on its own, and
 /// its pill stops at the chevron gutter — so the text lit up and the caret beside it did not.

@@ -61,10 +61,30 @@ impl Component for Overlay {
             .assume_open(crate::reactive::SignalGet::get_untracked(&open));
     }
 
-    fn advance_focus(&mut self, forward: bool) {
-        if let Some(panel) = self.base.children.first_mut() {
-            self.focus.advance(panel.as_mut(), forward);
+    fn advance_focus(&mut self, forward: bool) -> bool {
+        match self.base.children.first_mut() {
+            Some(panel) => self.focus.advance(panel.as_mut(), forward),
+            None => false,
         }
+    }
+
+    /// A [`Top`](OverlayPosition::Top) overlay keeps its panel off the edges by shares of the
+    /// viewport, which only a pass that knows the viewport can turn into the insets the engine
+    /// lays the panel out inside — so it is written here, before the panel is measured, and the
+    /// panel's own `Percent` caps then resolve against what is left.
+    fn remeasure(&mut self) {
+        let OverlayPosition::Top { top, bottom } = self.position else {
+            return;
+        };
+        let vh = self.base.viewport.h;
+        if !vh.is_finite() {
+            return;
+        }
+        let inset = |share: f32| Space::Px((share * vh as f32).max(VIEWPORT_MARGIN));
+        let layout = &mut self.base.style.layout;
+        layout.justify = Justify::Start;
+        layout.padding_top = Some(inset(top));
+        layout.padding_bottom = Some(inset(bottom));
     }
 
     fn focus_first_quiet(&mut self) {
@@ -190,7 +210,8 @@ impl Component for Overlay {
                 // Lift the panel, fill it, stamp the shared bracket reticle (same
                 // visual language as Pane / DockFrame) — the base layer takes the
                 // chrome plain; specializations pass their own accents.
-                paint_panel_chrome(cx, panel, PanelChrome::default());
+                let chrome = self.chrome.as_ref().map_or_else(PanelChrome::default, |chrome| chrome(cx));
+                paint_panel_chrome(cx, panel, chrome);
 
                 // The panel's real children on top of the fill. A nested overlay
                 // painted in here records a DEEPER scene segment → composites above
@@ -241,9 +262,15 @@ impl Component for Overlay {
                 key: crate::component::GridKey::Tab,
                 pressed: true,
             } => {
+                // **Only if it moved.** A panel with one control has nowhere to take the keyboard,
+                // and swallowing the key anyway kept a surface whose own control means something
+                // by Tab (a palette's completion) from ever hearing it: the host resolves a Tab
+                // nobody took into the intent it is bound to.
                 let forward = !crate::event::modifiers().shift;
-                Component::advance_focus(self, forward);
-                Handled::Yes
+                match Component::advance_focus(self, forward) {
+                    true => Handled::Yes,
+                    false => Handled::No,
+                }
             }
             Event::Widget(WidgetIntent::Dismiss) => match &self.on_dismiss {
                 Some(f) => {

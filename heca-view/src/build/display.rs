@@ -173,6 +173,10 @@ impl Icon {
     pub fn size_px(self, px: f32) -> Self {
         self.prop("size", px)
     }
+    /// How many times the surrounding font the glyph is drawn (`1.3` = a touch larger than the text).
+    pub fn scale(self, times: f32) -> Self {
+        self.prop("scale", times)
+    }
     /// Primary colour: a theme token name or a literal.
     pub fn color(self, colour: &str) -> Self {
         self.prop("color", PropValue::Color(colour.to_string()))

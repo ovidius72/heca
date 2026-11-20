@@ -22,8 +22,8 @@ impl Input {
             GridKey::Delete => self.delete(self.delete_granularity()),
             GridKey::ArrowLeft => self.move_caret(true, self.granularity()),
             GridKey::ArrowRight => self.move_caret(false, self.granularity()),
-            GridKey::Home => self.move_caret(true, Granularity::Line),
-            GridKey::End => self.move_caret(false, Granularity::Line),
+            GridKey::Home if self.line_keys => self.move_caret(true, Granularity::Line),
+            GridKey::End if self.line_keys => self.move_caret(false, Granularity::Line),
             _ => return Handled::No,
         }
         Handled::Yes

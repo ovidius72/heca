@@ -15,7 +15,7 @@ impl Input {
         view.borrow_mut().offset_x = region.scroll_offset_x();
         view.borrow_mut().offset_y = region.scroll_offset();
         base.children.push(crate::WidgetModel::new(region));
-        Self { base, text, placeholder: String::new(), placeholder_on_focus: false, seen_text: String::new(), cursor: 0, anchor: None,
+        Self { base, text, placeholder: String::new(), placeholder_on_focus: false, line_keys: true, seen_text: String::new(), cursor: 0, anchor: None,
             blink_origin: Instant::now(), last_caret: std::cell::Cell::new(false),
             multiline: false, max_lines: None, view, on_change: None, on_submit: None }
     }
@@ -63,6 +63,12 @@ impl Input {
     /// Keep an empty field's placeholder visible while focused (default false).
     #[heca_grid_ui_macros::prop]
     pub fn placeholder_on_focus(mut self, show: bool) -> Self { self.placeholder_on_focus = show; self }
+
+    /// Whether Home and End jump the caret to the ends of the line (default `true`). A field that sits
+    /// above a list turns them off, so the keys go on to whoever binds them — `menu_first` and
+    /// `menu_last` in a palette.
+    #[heca_grid_ui_macros::prop]
+    pub fn line_keys(mut self, on: bool) -> Self { self.line_keys = on; self }
 
     /// Set the change handler. Receives `Action::value("input-change",
     /// SignalData::String(new_text))` after every edit.

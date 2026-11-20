@@ -419,3 +419,27 @@ fn the_focused_components_actions_come_first_and_the_rest_stay_listed() {
             .collect::<Vec<_>>(),
     );
 }
+
+/// **The palette as the app mounts it**: placed in the window root through `place_surface`, built
+/// like `open_command_palette` builds it (placeholder, modes, size, opened), laid out at a window's
+/// size. The query line fills the panel.
+#[test]
+fn the_query_line_fills_the_panel_the_app_mounts() {
+    use heca_grid_ui::{LayoutEngine, Size, WidgetModel};
+    use heca_grid_ui::widgets::{Command, CommandPalette};
+    let palette = CommandPalette::new()
+        .placeholder("Type a command…")
+        .mode_with_commands(':', "command", [Command::new("Split pane", || {}).description("Split it.")])
+        .panel_size(heca_grid_ui::WidgetSize::Normal)
+        .default_open(true);
+    let mut root = crate::chrome::new_window_root();
+    crate::chrome::place_surface(&mut root, "palette", WidgetModel::new(palette));
+    LayoutEngine::new().compute(&mut root, Size::new(1400.0, 900.0));
+    use heca_grid_ui::Component as _;
+    let overlay = &root.base().children[0].base().children[0];
+    let panel = &overlay.base().children[0];
+    let query = &panel.base().children[0];
+    let list = &panel.base().children[1];
+    eprintln!("overlay {:?}\npanel {:?}\nquery {:?}\nlist {:?}", overlay.base().bounds, panel.base().bounds, query.base().bounds, list.base().bounds);
+    assert!(query.base().bounds.size.w > 0.9 * list.base().bounds.size.w, "query {:?} list {:?}", query.base().bounds, list.base().bounds);
+}

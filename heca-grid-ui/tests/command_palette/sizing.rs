@@ -363,15 +363,31 @@ fn the_palette_never_runs_off_a_short_window() {
             LayoutEngine::new().compute(&mut p, viewport);
             let scene = common::paint_in(&p, &theme, viewport);
             // The panel is the tallest painted rect that is not the full-viewport scrim.
-            let bottoms: Vec<f64> = scene
-                .iter()
-                .filter_map(|c| match c {
-                    DrawCommand::Rect(r) if r.rect.size.w < viewport.w => {
-                        Some(r.rect.loc.y + r.rect.size.h)
+            // What is *seen* of each rect: the list scrolls under a clip, and a selected row taller
+            // than the list is drawn whole and cut by it, so only the clipped part counts.
+            let mut clips: Vec<Option<Rectangle>> = Vec::new();
+            let mut bottoms: Vec<f64> = Vec::new();
+            for c in scene.iter() {
+                match c {
+                    DrawCommand::PushClip(r) => clips.push(match clips.last() {
+                        Some(Some(open)) => open.intersection(*r),
+                        Some(None) => None,
+                        None => Some(*r),
+                    }),
+                    DrawCommand::PopClip => {
+                        clips.pop();
                     }
-                    _ => None,
-                })
-                .collect();
+                    DrawCommand::Rect(r) if r.rect.size.w < viewport.w => {
+                        let seen = match clips.last() {
+                            Some(Some(clip)) => clip.intersection(r.rect),
+                            Some(None) => None,
+                            None => Some(r.rect),
+                        };
+                        bottoms.extend(seen.map(|r| r.loc.y + r.size.h));
+                    }
+                    _ => {}
+                }
+            }
             assert!(
                 !bottoms.is_empty(),
                 "at {}x{} nothing painted a panel rect to measure a bottom from",

@@ -12,6 +12,8 @@ use heca_core::layout::{Point, Rectangle, Size};
 ///
 /// - [`Center`](OverlayPosition::Center) — the default: fill the viewport and
 ///   center the panel with real taffy layout (a modal [`Dialog`](crate::widgets::Dialog)).
+/// - [`Top`](OverlayPosition::Top) — hung from the top at a share of the window's height, centred
+///   across, with a share kept clear beneath (a command palette).
 /// - [`Anchored`](OverlayPosition::Anchored) — dropdown/popover placement: the
 ///   panel is put **below** an anchor rect (a trigger), flipped **above** when
 ///   there is no room below, aligned to the anchor's left edge, and clamped into
@@ -22,6 +24,17 @@ use heca_core::layout::{Point, Rectangle, Size};
 pub enum OverlayPosition {
     /// Fill the viewport and center the panel (modal default).
     Center,
+    /// Hang the panel from the top, centred across — a palette's place. `top` is how far down the
+    /// panel starts and `bottom` how much room is kept clear beneath it, both **shares of the
+    /// viewport's height**; neither is ever less than [`VIEWPORT_MARGIN`](super::VIEWPORT_MARGIN).
+    /// The panel's own height cap shrinks with them, so a tall list keeps the room at the bottom
+    /// instead of running to the window's edge.
+    Top {
+        /// Share of the viewport height above the panel (`0.12` = 12%).
+        top: f32,
+        /// Share of the viewport height kept clear below it.
+        bottom: f32,
+    },
     /// Anchor the panel to a trigger rect (dropdown/popover): below, flipped
     /// above when no room, left-edge aligned, clamped into the viewport.
     Anchored {

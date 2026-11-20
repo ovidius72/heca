@@ -119,7 +119,12 @@ pub trait Component {
     /// from one calls it rather than keeping a focus manager of its own — two managers over one
     /// panel is two positions that drift, so Tab and the arrow keys end up disagreeing about where
     /// the keyboard is.
-    fn advance_focus(&mut self, _forward: bool) {}
+    ///
+    /// Returns whether the keyboard **moved to a different control**: a surface with a single
+    /// control has nowhere to take it, and answers `false` so the key can go on to whoever binds it.
+    fn advance_focus(&mut self, _forward: bool) -> bool {
+        false
+    }
 
     /// **Follow this signal for whether the surface is up.** Default: nothing.
     ///

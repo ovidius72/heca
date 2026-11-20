@@ -483,7 +483,11 @@ item_previous = ["ArrowLeft", "Ctrl+h"]   # vim Ctrl+h
 item_next     = ["ArrowRight", "Ctrl+l"]   # vim Ctrl+l
 # Vertical (up/down) — menus, Select lists, the command palette.
 menu_up       = ["ArrowUp", "Ctrl+k"]      # vim Ctrl+k
-menu_down     = ["ArrowDown", "Ctrl+j"]    # vim Ctrl+j
+menu_down     = ["ArrowDown", "Ctrl+j"]
+menu_page_up   = "PageUp"      # up one visible page of a list (palette, Select; a menu is one page)
+menu_page_down = "PageDown"
+menu_first     = "Home"        # first / last row of a list
+menu_last      = "End"    # vim Ctrl+j
 menu_history_up   = ["Shift+ArrowUp", "Ctrl+p"]     # older query
 menu_history_down = ["Shift+ArrowDown", "Ctrl+n"]   # newer query / back to the draft
 complete = "Tab"                           # complete a selected suggestion; otherwise normal focus traversal

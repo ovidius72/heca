@@ -480,6 +480,7 @@ args   = { name = "heca.expose" }
 # widget/overlay is focused (never hijacks normal-mode input). Split by AXIS:
 #   • item_previous / item_next  — HORIZONTAL (left/right): Tabs, a dialog's button row.
 #   • menu_up / menu_down        — VERTICAL (up/down): menus, Select lists, the palette.
+#   • menu_page_up / _down, menu_first / menu_last — the same lists by a page, and to either end.
 #   • menu_history_up / _down    — a search surface's PAST QUERIES (up = older).
 #   • activate / dismiss         — shared (commit/submit, close/cancel).
 #   • edit_*                     — text-Input shortcuts (plain typing/caret keys are built in).
@@ -493,6 +494,10 @@ item_previous = ["ArrowLeft", "Ctrl+h"]   # Horizontal previous (left) — vim C
 item_next     = ["ArrowRight", "Ctrl+l"]   # Horizontal next (right) — vim Ctrl+l
 menu_up       = ["ArrowUp", "Ctrl+k"]      # Vertical up / previous — vim Ctrl+k
 menu_down     = ["ArrowDown", "Ctrl+j"]    # Vertical down / next — vim Ctrl+j
+menu_page_up   = "PageUp"                  # Up one visible page of a list
+menu_page_down = "PageDown"                # Down one visible page of a list
+menu_first     = "Home"                    # First row of a list
+menu_last      = "End"                     # Last row of a list
 # Past queries of a search surface (the command palette today). Ctrl+p/n and Shift+Arrows because
 # Ctrl+j/k and the plain arrows are already menu_down/menu_up above — every key the shell muscle
 # memory reaches for here was taken. Up is OLDER, down is NEWER, and past the newest the field gets

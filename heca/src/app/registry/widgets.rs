@@ -48,6 +48,10 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
         ("item_next", WidgetIntent::ItemNext),
         ("menu_up", WidgetIntent::MenuUp),
         ("menu_down", WidgetIntent::MenuDown),
+        ("menu_page_up", WidgetIntent::MenuPageUp),
+        ("menu_page_down", WidgetIntent::MenuPageDown),
+        ("menu_first", WidgetIntent::MenuFirst),
+        ("menu_last", WidgetIntent::MenuLast),
         ("menu_history_up", WidgetIntent::MenuHistoryUp),
         ("menu_history_down", WidgetIntent::MenuHistoryDown),
         ("complete", WidgetIntent::Complete),
@@ -78,6 +82,41 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **Tab completes through the keys the app actually builds** — the widget keymap from the
+    /// default `[keys.widgets]`, the whole press (`Keymap::deliver_press`, as
+    /// `app::tree_keys::deliver_press_to_tree` calls it) delivered to a window tree that holds the
+    /// palette beside the control that opened it, with frames ticked between the keys.
+    #[test]
+    fn tab_completes_a_folder_suggestion_through_the_apps_widget_keymap() {
+        use heca_grid_ui::reactive::SignalGet;
+        use heca_grid_ui::widgets::{Button, Command, CommandPalette, Flex};
+        use heca_grid_ui::{Component, GridKey, KeyPress, LayoutEngine, Modifiers, Parent, Size};
+        let keymap = build_widget_keymap(&heca_config::theme::Config::default());
+        let palette = CommandPalette::new()
+            .source(|_| vec![Command::new("Create folder: project", || {}).completion("project/")])
+            .default_open(true);
+        let query = palette.query_signal();
+        let mut window = Flex::column().child(Button::primary("Opener")).child(palette);
+        let frame = |window: &mut Flex| {
+            window.tick(0.016);
+            LayoutEngine::new().compute(window, Size::new(900.0, 600.0));
+            heca_grid_ui::settle_focus(window);
+        };
+        frame(&mut window);
+        let press = |window: &mut Flex, key: GridKey, text: &str| {
+            let press = KeyPress { key, text: Some(text.into()), mods: Modifiers::default() };
+            let handled = keymap.deliver_press(&press, |ev| heca_grid_ui::dispatch(window, ev));
+            frame(window);
+            handled
+        };
+        for c in "pro".chars() {
+            press(&mut window, GridKey::Char(c), &c.to_string());
+        }
+        assert_eq!(query.get_untracked(), "pro");
+        assert_eq!(press(&mut window, GridKey::Tab, "\t"), heca_grid_ui::Handled::Yes);
+        assert_eq!(query.get_untracked(), "project/");
+    }
 
     #[test]
     fn completion_defaults_to_tab_and_can_be_rebound_or_disabled() {
@@ -157,6 +196,24 @@ mod tests {
         );
     }
 
+    /// The list keys are `[keys.widgets]` entries like `menu_up`: bound by default, rebindable.
+    #[test]
+    fn page_first_and_last_are_widget_keys_that_can_be_rebound() {
+        use heca_config::theme::BindingValue;
+        use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
+        let none = Modifiers::default();
+        let mut config = heca_config::theme::Config::default();
+        let km = build_widget_keymap(&config);
+        assert_eq!(km.resolve(GridKey::PageUp, none), &[WidgetIntent::MenuPageUp]);
+        assert_eq!(km.resolve(GridKey::PageDown, none), &[WidgetIntent::MenuPageDown]);
+        assert_eq!(km.resolve(GridKey::Home, none), &[WidgetIntent::MenuFirst]);
+        assert_eq!(km.resolve(GridKey::End, none), &[WidgetIntent::MenuLast]);
+        config.keys.widgets.insert("menu_first".into(), BindingValue::Many(vec!["Ctrl+g".into()]));
+        let km = build_widget_keymap(&config);
+        assert!(km.resolve(GridKey::Home, none).is_empty());
+        assert_eq!(km.resolve(GridKey::Char('g'), Modifiers { ctrl: true, ..none }), &[WidgetIntent::MenuFirst]);
+    }
+
     #[test]
     fn widget_key_names_are_not_wm_actions() {
         // The [keys.widgets] names live only in the widget keymap — NOT WmActions, so
@@ -166,6 +223,10 @@ mod tests {
             "item_next",
             "menu_up",
             "menu_down",
+            "menu_page_up",
+            "menu_page_down",
+            "menu_first",
+            "menu_last",
             "activate",
             "dismiss",
             "edit_delete_back",

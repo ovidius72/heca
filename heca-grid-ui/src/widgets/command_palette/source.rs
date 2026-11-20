@@ -28,17 +28,10 @@ impl CommandPalette {
             return;
         };
         let rows = source(&self.query_text());
-        let input = self.base.children.pop();
-        self.base.children.clear();
+        self.list_mut().children.clear();
         self.commands.clear();
-        self.title_marks.clear();
+        self.rows.clear();
         self.title_text.clear();
-        self.desc_wrap.clear();
-        self.desc_marks.clear();
-        self.natural_h.clear();
-        if let Some(input) = input {
-            self.base.children.push(input);
-        }
         for row in rows {
             self.push_command(row);
         }
@@ -65,8 +58,8 @@ mod tests {
         };
         let marks = |p: &CommandPalette, row: usize| {
             (
-                p.title_marks[row].get_untracked(),
-                p.desc_marks[row].map(|m| m.get_untracked()).unwrap_or_default(),
+                p.rows[row].title_marks.get_untracked(),
+                p.rows[row].desc_marks.map(|m| m.get_untracked()).unwrap_or_default(),
             )
         };
 
@@ -122,6 +115,36 @@ mod tests {
         assert_eq!(palette.results().len(), 1, "the trailing slash must not hide the creation row");
         crate::dispatch(&mut palette, &Event::Widget(WidgetIntent::Activate));
         assert!(*chosen.borrow());
+    }
+
+    /// **Completion belongs to whichever key `complete` is bound to** — the palette hardcodes none.
+    /// With Tab rebound away, Tab no longer completes (the overlay leaves it to focus traversal) and
+    /// the new key does.
+    #[test]
+    fn completion_follows_the_key_complete_is_bound_to() {
+        use crate::{GridKey, Keymap, Modifiers};
+        let build = || {
+            CommandPalette::new()
+                .source(|_| vec![Command::new("Create folder: project", || {}).completion("project/")])
+                .default_open(true)
+        };
+        let mut rebound = Keymap::new();
+        rebound.bind(GridKey::Char(']'), Modifiers::default(), WidgetIntent::Complete);
+
+        let mut palette = build();
+        crate::dispatch(&mut palette, &Event::TextInput("pro".into()));
+        let tab = rebound.dispatch(GridKey::Tab, Modifiers::default(), |event| crate::dispatch(&mut palette, event));
+        assert_eq!(tab, Handled::No, "Tab is no longer bound to complete");
+        assert_eq!(palette.query_text(), "pro");
+        let key = rebound.dispatch(GridKey::Char(']'), Modifiers::default(), |event| crate::dispatch(&mut palette, event));
+        assert_eq!(key, Handled::Yes);
+        assert_eq!(palette.query_text(), "project/");
+
+        // And with the default binding, Tab completes.
+        let mut palette = build();
+        crate::dispatch(&mut palette, &Event::TextInput("pro".into()));
+        Keymap::with_defaults().dispatch(GridKey::Tab, Modifiers::default(), |event| crate::dispatch(&mut palette, event));
+        assert_eq!(palette.query_text(), "project/");
     }
 
     #[test]

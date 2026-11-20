@@ -5,7 +5,13 @@ impl Component for Input {
     fn base_mut(&mut self) -> &mut Base { &mut self.base }
     fn taffy_style(&self) -> taffy::Style {
         let mut layout = self.base.style.layout;
-        if layout.width == Length::Auto { layout.width = Length::Px(self.base.input_style.width); }
+        // **The theme's width is a floor, not a size.** An unset width stretches, as it does for every
+        // widget (docs/layout.md → Sizes), so a field in a column or a grid cell fills what its
+        // parent gives it; the token only says how narrow it may get. Forcing it as the width made
+        // an `Input` the one widget no container could stretch.
+        if layout.width == Length::Auto && layout.min_width.is_none() {
+            layout.min_width = Some(Length::Px(self.base.input_style.width));
+        }
         if layout.padding == crate::style::Space::default() {
             layout.padding = crate::style::Space::Px(self.pad() as f32);
         }

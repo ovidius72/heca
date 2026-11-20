@@ -3,79 +3,120 @@
 use super::*;
 
 impl CommandPalette {
-    /// The current filtered + ranked results — **entirely the model's answer**.
-    ///
-    /// Matching, smart-case and the ranking by past use all live in
-    /// [`search`](crate::search); this reads the order back. The one thing decided here is the
-    /// block ordering, and only while nothing is typed: with an empty query every match scores the
-    /// same and the caller's groups are the only context there is, but a typed query is better
-    /// context than a group and dissolves it.
+    /// The current filtered + ranked results — **entirely the model's answer**, through the pure
+    /// [`filter::rank`]. Only the active mode's commands are candidates, and each comes back under
+    /// its index in the **whole** list: the rows, their signals and the live titles are all keyed by
+    /// position in `commands`, so filtering must not renumber them.
     pub(super) fn results(&self) -> Vec<Ranked> {
         let (_, scope, query) = self.active();
-        // Only the active mode's commands are ranked, and the ids that come back are mapped to
-        // indices into the **whole** list — the children, the marks and the measured heights are all
-        // keyed by position in `commands`, so the filter must not renumber them.
-        let of_mode: Vec<usize> = self
-            .commands
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| self.in_mode(c, &scope))
-            .map(|(i, _)| i)
-            .collect();
         // Read each row's **live** text, not the label it was built with: a host may be following a
         // pane's process or a rename, and a list that shows one name while matching another is
         // worse than a stale one. The labels are short and there are a few hundred at most, so
         // materialising them per keystroke costs nothing measurable.
+        let of_mode: Vec<usize> = (0..self.commands.len())
+            .filter(|&i| self.in_mode(&self.commands[i], &scope))
+            .collect();
+        let titles: Vec<String> = of_mode.iter().map(|&i| self.title_text[i].get_untracked()).collect();
         // The description is matched too, but only in a mode that said so
         // ([`match_description_in`](Self::match_description_in)).
         let describes = self.describe_scopes.contains(&scope);
-        let items: Vec<(Option<&str>, String, Option<&str>)> = of_mode
+        let candidates: Vec<filter::Candidate<'_>> = of_mode
             .iter()
-            .map(|&i| {
-                (
-                    self.commands[i].id.as_deref(),
-                    self.commands[i].completion.clone().unwrap_or_else(|| self.title_text[i].get_untracked()),
-                    self.commands[i].description.as_deref().filter(|_| describes),
-                )
+            .zip(&titles)
+            .map(|(&index, title)| {
+                let command = &self.commands[index];
+                filter::Candidate {
+                    index,
+                    id: command.id.as_deref(),
+                    text: command.completion.as_deref().unwrap_or(title),
+                    secondary: command.description.as_deref().filter(|_| describes),
+                    group: command.group,
+                    fallback: command.fallback,
+                    marks_title: command.completion.as_ref().is_none_or(|text| text == title),
+                }
             })
             .collect();
-        let mut out = self
-            .search
-            .with_scope(scope)
-            .rank_with_secondary(&items, &query, |(id, text, secondary)| (*id, text.as_str(), *secondary));
-        for r in &mut out {
-            r.index = of_mode[r.index];
-            if self.commands[r.index].completion.as_ref()
-                .is_some_and(|text| *text != self.title_text[r.index].get_untracked()) {
-                r.hits.clear();
-            }
-        }
-        if query.is_empty() {
-            // Stable, so the ranking inside each block survives.
-            out.sort_by_key(|r| self.commands[r.index].group);
-        }
-        out.sort_by_key(|r| self.commands[r.index].fallback);
-        out
+        filter::rank(&self.search.with_scope(scope), &candidates, &query)
     }
 
     /// Move the selection down (Ctrl+J / ↓), keeping it on-screen.
     pub fn select_next(&mut self) {
         self.sync_query();
         let n = self.results().len();
-        if n == 0 {
-            return;
+        if n > 0 {
+            self.move_to((self.selected + 1).min(n - 1), true);
         }
-        self.selected = (self.selected + 1).min(n - 1);
-        self.follow_selection();
-        self.sync_wrap();
     }
 
     /// Move the selection up (Ctrl+K / ↑).
     pub fn select_prev(&mut self) {
         self.sync_query();
-        self.selected = self.selected.saturating_sub(1);
-        self.follow_selection();
-        self.sync_wrap();
+        self.move_to(self.selected.saturating_sub(1), true);
+    }
+
+    /// Move the selection by one **page**: as many rows as the list shows whole right now (at least
+    /// one). The count is read from the laid-out rows, so a list of tall rows pages by fewer.
+    pub fn select_page(&mut self, down: bool) {
+        self.sync_query();
+        let n = self.results().len();
+        if n == 0 {
+            return;
+        }
+        let list = self.part_mut(super::build::LIST).base().bounds;
+        let page = self
+            .list_mut()
+            .children
+            .iter()
+            .map(|row| row.base().bounds)
+            .filter(|row| {
+                row.size.h > 0.0 && row.loc.y >= list.loc.y - 0.5 && row.loc.y + row.size.h <= list.loc.y + list.size.h + 0.5
+            })
+            .count()
+            .max(1);
+        let at = if down { (self.selected + page).min(n - 1) } else { self.selected.saturating_sub(page) };
+        self.move_to(at, true);
+    }
+
+    /// Move the selection to the first (`last = false`) or last row.
+    pub fn select_edge(&mut self, last: bool) {
+        self.sync_query();
+        let n = self.results().len();
+        if n > 0 {
+            self.move_to(if last { n - 1 } else { 0 }, true);
+        }
+    }
+
+    /// Put the cursor on result `at`. `by_keyboard` says who moved it, because only the keyboard's
+    /// cursor is scrolled into view — see [`keyboard_moved`](CommandPalette::keyboard_moved).
+    pub(super) fn move_to(&mut self, at: usize, by_keyboard: bool) {
+        self.selected = at;
+        self.keyboard_moved.set(by_keyboard);
+        self.sync_rows();
+        // The selected description reflows, which changes the layout.
+        self.base.mark_needs_layout();
+    }
+
+    /// Act on what the rows' handlers noticed since the last event: a hover selects that row, a
+    /// press chooses it. Run at the start of the next event and every tick.
+    pub(super) fn take_pointer(&mut self) {
+        let position = |palette: &Self, command: usize| {
+            palette.results().iter().position(|ranked| ranked.index == command)
+        };
+        if let Some(command) = self.pointer.hover.get_untracked() {
+            self.pointer.hover.set(None);
+            if let Some(at) = position(self, command)
+                && at != self.selected
+            {
+                self.move_to(at, false);
+            }
+        }
+        if let Some(command) = self.pointer.press.get_untracked() {
+            self.pointer.press.set(None);
+            if let Some(at) = position(self, command) {
+                self.selected = at;
+                self.run_selected();
+            }
+        }
     }
 
     /// Run the selected command (fires its callback) and close.
@@ -98,12 +139,38 @@ impl CommandPalette {
         self.close();
     }
 
-    /// Reflow the selected description and cut every other row's description.
-    pub(super) fn sync_wrap(&mut self) {
-        let selected = self.results().get(self.selected).map(|m| m.index);
-        for (i, wrap) in self.desc_wrap.iter().enumerate() {
-            if let Some(wrap) = wrap {
-                wrap.set(Some(i) == selected);
+    /// Bring every row in line with the query and the cursor: the rows the query left are shown, in
+    /// rank order, and the rest are out of the layout; the matches are marked; the cursor row is lit
+    /// and its description reflows while every other description is cut to one line.
+    ///
+    /// All of it is signals and layout properties on the rows — nothing is measured or placed here.
+    /// Cheap and idempotent, so it runs wherever the answer could have changed.
+    pub(super) fn sync_rows(&mut self) {
+        let results = self.results();
+        let mut place: Vec<Option<usize>> = vec![None; self.commands.len()];
+        for (at, ranked) in results.iter().enumerate() {
+            place[ranked.index] = Some(at);
+        }
+        for (row, at) in self.list_mut().children.iter_mut().zip(&place) {
+            let base = row.base_mut();
+            base.set_hidden(at.is_none());
+            base.style.layout.order = at.map(|at| (at as i64).into());
+        }
+        let cursor = results.get(self.selected).map(|ranked| ranked.index);
+        for (index, row) in self.rows.iter().enumerate() {
+            row.look(Some(index) == cursor);
+            if let Some(wrap) = row.desc_wrap {
+                wrap.set(Some(index) == cursor);
+            }
+            row.title_marks.set(Vec::new());
+            if let Some(marks) = row.desc_marks {
+                marks.set(Vec::new());
+            }
+        }
+        for ranked in &results {
+            self.rows[ranked.index].title_marks.set(ranked.hits.clone());
+            if let Some(marks) = self.rows[ranked.index].desc_marks {
+                marks.set(ranked.secondary_hits.clone());
             }
         }
     }
@@ -129,21 +196,8 @@ impl CommandPalette {
             return;
         };
         self.selected = at;
-        // The preselected row can rank anywhere, so the list may have to open scrolled to reach it.
-        self.follow_selection();
-    }
-
-    /// Move the match marks onto the title labels that matched.
-    pub(super) fn sync_marks(&mut self) {
-        for signal in self.title_marks.iter().chain(self.desc_marks.iter().flatten()) {
-            signal.set(Vec::new());
-        }
-        for m in self.results() {
-            self.title_marks[m.index].set(m.hits.clone());
-            if let Some(signal) = self.desc_marks[m.index] {
-                signal.set(m.secondary_hits.clone());
-            }
-        }
+        // The preselected row can rank anywhere, so the list opens scrolled to reach it.
+        self.keyboard_moved.set(true);
     }
 
     pub(super) fn close(&mut self) {
@@ -153,7 +207,7 @@ impl CommandPalette {
         self.open.set(false);
         self.query.set(String::new());
         self.selected = 0;
-        self.scroll = 0;
+        self.sync_rows();
     }
 
     /// The user typed: reset the filter/selection, move the marks with it, and **leave the history
@@ -177,9 +231,8 @@ impl CommandPalette {
         self.refresh_source();
         self.named_prefill = None;
         self.selected = 0;
-        self.scroll = 0;
-        self.sync_marks();
-        self.sync_wrap();
+        self.keyboard_moved.set(true);
+        self.sync_rows();
         self.announce_mode();
     }
 

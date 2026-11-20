@@ -305,3 +305,35 @@ fn a_closed_overlay_is_not_lettered_or_hit() {
     assert!(crate::hint::collect_hints(&closed).is_empty());
     assert_eq!(crate::pointer::hit_test(&closed, at), None);
 }
+
+/// **Tab moves the keyboard inside a panel that has somewhere to move it, and is left alone by one
+/// that does not** — so a surface whose single control means something by Tab (a palette's
+/// completion) lets the host resolve it to the intent it is bound to.
+#[test]
+fn tab_moves_focus_between_controls_and_passes_when_there_is_nothing_to_move_to() {
+    use crate::widgets::Input;
+    let tab = Event::Key { key: crate::component::GridKey::Tab, pressed: true };
+
+    let mut alone = Overlay::new().panel(Flex::column().child(Input::new())).default_open(true);
+    crate::layout::LayoutEngine::new().compute(&mut alone, Size::new(800.0, 600.0));
+    alone.base.children[0].base().children[0].base().focus(false);
+    crate::focus::settle_focus(&mut alone);
+    assert_eq!(crate::component::dispatch(&mut alone, &tab), Handled::No, "one control: Tab goes on");
+
+    // Even when the keyboard is not yet on that control — the first Tab must not be swallowed
+    // just because it was spent finding the only stop.
+    let mut fresh = Overlay::new().panel(Flex::column().child(Input::new())).default_open(true);
+    crate::layout::LayoutEngine::new().compute(&mut fresh, Size::new(800.0, 600.0));
+    assert_eq!(crate::component::dispatch(&mut fresh, &tab), Handled::No);
+
+    let mut pair = Overlay::new()
+        .panel(Flex::column().child(Input::new()).child(Input::new()))
+        .default_open(true);
+    crate::layout::LayoutEngine::new().compute(&mut pair, Size::new(800.0, 600.0));
+    pair.base.children[0].base().children[0].base().focus(false);
+    crate::focus::settle_focus(&mut pair);
+    let first = crate::focus::keyboard_holder(&pair);
+    assert_eq!(crate::component::dispatch(&mut pair, &tab), Handled::Yes, "two controls: Tab moves");
+    crate::focus::settle_focus(&mut pair);
+    assert_ne!(crate::focus::keyboard_holder(&pair), first, "and the keyboard is on the other one");
+}

@@ -145,6 +145,9 @@ impl BadgeButton {
 }
 
 impl Input {
+    /// Whether Home and End jump the caret to the ends of the line (default true); off, they go on
+    /// to whatever binds them.
+    pub fn line_keys(self, on: bool) -> Self { self.prop("line_keys", on) }
     /// Keep an empty field's placeholder visible while focused (default false).
     pub fn placeholder_on_focus(self, show: bool) -> Self { self.prop("placeholder_on_focus", show) }
 

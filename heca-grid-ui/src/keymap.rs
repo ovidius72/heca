@@ -210,6 +210,10 @@ impl Keymap {
         km.bind(ArrowDown, none, MenuDown);
         km.bind(Tab, none, Complete);
         km.bind(Char('k'), ctrl, MenuUp);
+        km.bind(PageUp, none, MenuPageUp);
+        km.bind(PageDown, none, MenuPageDown);
+        km.bind(Home, none, MenuFirst);
+        km.bind(End, none, MenuLast);
         km.bind(Char('j'), ctrl, MenuDown);
         // Shared.
         km.bind(Enter, none, Activate);

@@ -227,6 +227,11 @@ impl LayoutEngine {
     ) -> Result<(), taffy::TaffyError> {
         self.seen.clear();
         self.updated = 0;
+        // **The size this pass is laid out against is known before anything is measured**, so a
+        // widget's `remeasure` can turn a share of the viewport into the insets its own layout needs
+        // (an overlay hung a fraction down the window) in the pass that uses them, not the next one.
+        // Stamped again after the build, below, for the nodes the build itself created.
+        Self::write_viewport_impl(root, available);
         // The root has no parent to inherit a size variant from — start at the default.
         let node = self.build(root, WidgetSize::default())?;
         // What was in the tree last time and is not now goes: nothing refers to it any more.

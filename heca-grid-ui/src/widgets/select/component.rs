@@ -590,6 +590,25 @@ impl Component for Select {
                     self.place_options();
                     Handled::Yes
                 }
+                WidgetIntent::MenuPageUp | WidgetIntent::MenuPageDown => {
+                    let page = self.vis_rows.max(1);
+                    self.highlight = match intent {
+                        WidgetIntent::MenuPageUp => self.highlight.saturating_sub(page),
+                        _ => (self.highlight + page).min(self.count().saturating_sub(1)),
+                    };
+                    self.scroll_into_view();
+                    self.place_options();
+                    Handled::Yes
+                }
+                WidgetIntent::MenuFirst | WidgetIntent::MenuLast => {
+                    self.highlight = match intent {
+                        WidgetIntent::MenuFirst => 0,
+                        _ => self.count().saturating_sub(1),
+                    };
+                    self.scroll_into_view();
+                    self.place_options();
+                    Handled::Yes
+                }
                 WidgetIntent::Activate => {
                     self.commit(self.highlight);
                     self.close();
