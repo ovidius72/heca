@@ -7,12 +7,22 @@ use crate::input::WmAction;
 use crate::server::{Change, ServerCx};
 
 /// Start the shell of a pane that was made, and say what making it did, then where it is.
+///
+/// **A pane made from a pane starts where that pane is**: the shell opens in the folder the
+/// asker's focused pane is in now, as a split does in other terminals. With no focused pane, or no
+/// folder known for it, the shell starts where a shell starts by default.
 fn with_shell(cx: &mut ServerCx<'_>, added: Option<Added>) -> Vec<Change> {
+    let cwd = cx.asker.focused_pane.and_then(|pane| cx.terminals.cwd_of(pane));
+    start_shell_in(cx, added, cwd)
+}
+
+/// [`with_shell`], in a folder the caller chose (`None` = where a shell starts by default).
+fn start_shell_in(cx: &mut ServerCx<'_>, added: Option<Added>, cwd: Option<std::path::PathBuf>) -> Vec<Change> {
     let Some(a) = added else {
         return Vec::new();
     };
     let (grid, cell) = (cx.asker.grid(), cx.asker.cell);
-    cx.terminals.start_shell(a.pane, grid, cell);
+    cx.terminals.start_shell(a.pane, cwd, grid, cell);
     Change::after_adding(a)
 }
 
@@ -60,13 +70,14 @@ pub(super) fn split_vertical(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<C
     with_shell(cx, added)
 }
 
-/// Make a workspace, after the last, with a pane in it.
+/// Make a workspace, after the last, with a pane in it. Its shell is given no folder — a new
+/// workspace is not made from a pane — so it starts where a shell starts by default.
 pub(super) fn create_workspace(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     cx.layout.add_workspace();
     let index = cx.layout.workspaces.len() - 1;
     let added = cx.layout.add_column(index, 0);
     [Change::WorkspaceAdded { index }]
         .into_iter()
-        .chain(with_shell(cx, added))
+        .chain(start_shell_in(cx, added, None))
         .collect()
 }

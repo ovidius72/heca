@@ -101,3 +101,8 @@ normal shell; a harness is never started as a new conversation, and you are told
 gives a shell in your home folder. See
 [Server and client](server-client-architecture.md#sessions-across-a-restart).
 Session dialog text is configurable under `[settings.session_text]`.
+
+**A new pane starts where you are.** A pane made from a pane — a split (`split_horizontal`,
+`split_vertical`), a pane added to a column, a new column — opens its shell in the folder the
+focused pane is in at that moment (what its shell last reported). With no focused pane, or no folder
+known for it, and for a new workspace, the shell starts in its default folder.

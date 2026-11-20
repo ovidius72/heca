@@ -41,7 +41,7 @@ fn renaming_a_named_terminal_changes_only_metadata_and_clear_restores_its_defaul
 fn renaming_a_panes_terminal_reuses_its_existing_pane_name() {
     let (mut state, mut window) = (server(), two_workspaces_of_two_columns());
     let pane = PaneId(1);
-    state.terminals().start_shell(pane, (80, 24), (10.0, 20.0));
+    state.terminals().start_shell(pane, None, (80, 24), (10.0, 20.0));
     let id = state.backends.identity_of(pane).unwrap();
     assert_eq!(run_on(&mut state, &mut window, Some(pane), WmAction::TerminalRenameTo { terminal: id.0.to_string(), name: "Build".into() }), vec![Change::NamesChanged]);
     assert_eq!(window.session.workspaces[0].find_pane(pane).unwrap().custom_name.as_deref(), Some("Build"));
@@ -203,4 +203,32 @@ fn a_closed_pane_has_its_process_ended() {
         w.session.workspace_holding(second).is_none(),
         "its pane went with it"
     );
+}
+
+/// **A pane made from a pane starts where that pane is**: the new shell opens in the folder the
+/// asker's focused pane reports — for a split, a pane under it, a new column. A new workspace is
+/// not made from a pane, so it is given no folder and starts where a shell starts by default.
+#[test]
+fn a_pane_made_from_a_pane_starts_in_that_panes_folder() {
+    use crate::app::backend_store::{Program, TerminalOwner, TerminalSpec};
+    let folder = std::env::temp_dir();
+    let started_in = |action: WmAction| {
+        let (mut server, mut w) = (server(), two_workspaces_of_two_columns());
+        let mut asker = heca_core::backend::FakeBackend::new(80, 24);
+        asker.set_runtime(heca_core::runtime::PaneRuntime { cwd: Some(folder.clone()), ..Default::default() });
+        let spec = TerminalSpec { program: Program::Shell, cwd: None, grid: (80, 24) };
+        server.backends.ensure(TerminalOwner::Pane(PaneId(1)), spec, move |_| Ok(Box::new(asker))).unwrap();
+        w.ws().scroll_mut().activate_column(0);
+        let pane = made(&run_on(&mut server, &mut w, Some(PaneId(1)), action)).expect("a pane");
+        let id = server.backends.identity_of(pane).expect("its terminal");
+        server.backends.spec_of(id).and_then(|spec| spec.cwd.clone())
+    };
+    assert_eq!(started_in(WmAction::SplitHorizontal), Some(folder.clone()), "a split");
+    assert_eq!(started_in(WmAction::SplitVertical), Some(folder.clone()), "a pane under it");
+    assert_eq!(
+        started_in(WmAction::AddColumnToWorkspace { ws_idx: 0 }),
+        Some(folder.clone()),
+        "a new column"
+    );
+    assert_eq!(started_in(WmAction::CreateWorkspace), None, "a new workspace is given no folder");
 }

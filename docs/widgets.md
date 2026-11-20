@@ -4779,7 +4779,7 @@ ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("git_branch".into())
   > `Pause`, `Stop`, `Warning`, `WarningCircle`, `Info`, `Circle`, `Lightning`, `List`,
   > `Sidebar` (`sidebar-simple`), `DotsThreeVertical`, `ArrowRight`, `ArrowLineLeft`,
   > `ArrowLineRight`, `Plus`, `Minus`, `SquareSplitVertical`, `XSquare`, `FrameCorners`, `Cards`,
-  > `Pencil`, `NotePencil`, `Backspace`, `Trash`, `XCircle`, `PlusCircle`, `FolderSimpleMinus`,
+  > `Pencil`, `NotePencil`, `Backspace`, `Trash`, `ClipboardText`, `XCircle`, `PlusCircle`, `FolderSimpleMinus`,
   > `FolderSimplePlus`, `PlusSquare`, `StackPlus`, `StackMinus`, `ColumnsPlusLeft`,
   > `ColumnsPlusRight`, `SquareHalf`, `SquareSplitHorizontal`, `SquareHalfBottom`
 
