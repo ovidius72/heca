@@ -107,3 +107,29 @@ fn a_terminal_told_to_take_the_keyboard_takes_it_on_screen_or_once_drawn() {
         "once drawn"
     );
 }
+
+/// **A terminal asked for the keyboard while off screen does not take it later** once the keyboard
+/// has been given to another: drawing it again — a window refocused, a pane scrolled back into view
+/// — used to hand the keyboard back to it, so a paste went into the pane before the current one.
+#[test]
+fn an_earlier_request_for_the_keyboard_does_not_win_over_a_later_one() {
+    let earlier = Terminal::unbound();
+    let current = Terminal::unbound();
+    for terminal in [&earlier, &current] {
+        terminal.bind(recording().0);
+        terminal.show(&scrolled(0));
+    }
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(current.clone()), 300.0, 200.0);
+    let _ = painted(root.as_ref());
+    current.place(Some(root.base().bounds));
+
+    earlier.take_keyboard(root.as_mut());
+    current.take_keyboard(root.as_mut());
+    assert_eq!(heca_grid_ui::keyboard_holder(root.as_ref()), current.node());
+
+    let mut elsewhere = laid_out_in(heca_grid_ui::WidgetModel::new(earlier.clone()), 300.0, 200.0);
+    let _ = painted(elsewhere.as_ref());
+    heca_grid_ui::settle_focus(elsewhere.as_mut());
+    assert_eq!(heca_grid_ui::keyboard_holder(elsewhere.as_ref()), None,
+        "drawn again, the terminal asked first does not take the keyboard");
+}

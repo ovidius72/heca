@@ -326,6 +326,10 @@ pub struct AppState {
     pub(crate) pending_reload: Option<ReloadReason>,
     /// Whether the application window is currently focused.
     pub window_focused: bool,
+    /// **Nothing of the window is on screen** — covered, minimized or on another desktop. The
+    /// system then hands out no surface to draw on, and asking for one waits a whole second each
+    /// time, the keyboard included; so nothing is drawn until it shows again.
+    pub(crate) window_occluded: bool,
     /// The OS cursor currently set on the window. Tracked so the cursor policy only
     /// calls `Window::set_cursor` when the icon actually changes (cursor-moved fires
     /// very often). See `mouse::update_cursor`.

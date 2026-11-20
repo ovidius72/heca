@@ -1,17 +1,20 @@
 //! Typed, nonblocking requests from terminal views to their connection owner.
+//!
+//! Unbounded on purpose: what goes in is what a person typed or did, made at human speed, and it is
+//! never dropped. Backpressure belongs to the connection (`server/wire/queue.rs`), not here.
 
-use std::{io, sync::{Arc, Mutex, mpsc::{self, Receiver, SyncSender}}};
+use std::{io, sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}}};
 use crate::server::{ServerWaker, wire::{ClientMsg, terminal::ProcessInput}};
 
 #[derive(Clone)]
 pub(super) struct Outbox {
-    sender: SyncSender<ClientMsg>,
+    sender: Sender<ClientMsg>,
     wake: ServerWaker,
     failure: Arc<Mutex<Option<String>>>,
 }
 
-pub(super) fn channel(capacity: usize, wake: ServerWaker) -> (Outbox, Receiver<ClientMsg>) {
-    let (sender, receiver) = mpsc::sync_channel(capacity);
+pub(super) fn channel(wake: ServerWaker) -> (Outbox, Receiver<ClientMsg>) {
+    let (sender, receiver) = mpsc::channel();
     (Outbox { sender, wake, failure: Arc::default() }, receiver)
 }
 
@@ -32,7 +35,8 @@ pub(super) fn drain(receiver: &Receiver<ClientMsg>) -> impl Iterator<Item = Clie
 
 impl Outbox {
     pub(super) fn send(&self, message: ClientMsg) {
-        if let Err(error) = self.sender.try_send(message) {
+        // Fails only when the window's connection owner is gone.
+        if let Err(error) = self.sender.send(message) {
             let mut failure = self.failure.lock().unwrap_or_else(|error| error.into_inner());
             if failure.is_none() { *failure = Some(error.to_string()); }
         }
@@ -60,7 +64,7 @@ mod tests {
 
     #[test]
     fn resize_batches_never_cross_input_actions_or_another_terminal() {
-        let (outbox, requests) = channel(16, ServerWaker::new(|| {}));
+        let (outbox, requests) = channel(ServerWaker::new(|| {}));
         for message in [resize(1, 80), resize(1, 90), ClientMsg::Terminal {
             owner: TerminalOwner::Pane(PaneId(1)), input: ProcessInput::Bytes(b"x".to_vec()) },
             resize(1, 100), resize(2, 50), resize(1, 110), ClientMsg::Reload, resize(1, 120)] {

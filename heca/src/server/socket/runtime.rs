@@ -6,8 +6,13 @@ use heca_config::settings::ConnectionConfig;
 use crate::server::{runtime::RuntimeHandle, wire::socket::{SocketClient, SocketServer}, ServerWaker};
 use super::{listener::ControlListener, local::UnixStream};
 
-// Protocol identity, not a user preference. It consumes exactly one line before framed messages.
-const ATTACH_PREFACE: &[u8] = b"@heca-attach 1\n";
+// Protocol identity, not a user preference. It consumes exactly one line before framed messages,
+// and the server answers it with one line: accepted, or refused because the versions differ. The
+// number moves whenever what travels changes shape (2: terminals travel as the rows that changed).
+const ATTACH_WORD: &[u8] = b"@heca-attach ";
+const ATTACH_PREFACE: &[u8] = b"@heca-attach 2\n";
+const ATTACH_ACCEPTED: &[u8] = b"@heca-attach ok\n";
+const ATTACH_REFUSED: &[u8] = b"@heca-attach refused 2\n";
 // `heca rpc --events`: the connection then stays open and receives one event line at a time.
 pub(super) const EVENTS_PREFACE: &[u8] = b"@heca-events 1\n";
 
@@ -61,10 +66,16 @@ fn serve(mut stream: UnixStream, handle: RuntimeHandle, config: ConnectionConfig
     stream.set_write_timeout(Some(timeout))?;
     let line = read_line(&mut stream, config.max_frame_bytes.get())?;
     if line == ATTACH_PREFACE {
+        stream.write_all(ATTACH_ACCEPTED)?;
         stream.set_read_timeout(None)?;
         stream.set_write_timeout(None)?;
         let link = SocketServer::new(stream, config, handle.waker())?;
         return handle.connect(link);
+    }
+    if line.starts_with(ATTACH_WORD) {
+        stream.write_all(ATTACH_REFUSED)?;
+        return Err(io::Error::new(io::ErrorKind::Unsupported, format!(
+            "refused a window of another heca version ({})", String::from_utf8_lossy(line.trim_ascii_end()))));
     }
     if line == EVENTS_PREFACE {
         // A read-only stream: the server writes one event line at a time, for as long as the script
@@ -108,9 +119,18 @@ fn read_line(stream: &mut UnixStream, limit: usize) -> io::Result<Vec<u8>> {
 impl SocketClient {
     pub(crate) fn connect(path: &Path, config: ConnectionConfig, wake: ServerWaker) -> io::Result<Self> {
         let mut stream = UnixStream::connect(path)?;
-        stream.set_write_timeout(Some(Duration::from_millis(config.request_timeout_ms.get())))?;
+        let timeout = Some(Duration::from_millis(config.request_timeout_ms.get()));
+        stream.set_write_timeout(timeout)?;
+        stream.set_read_timeout(timeout)?;
         stream.write_all(ATTACH_PREFACE)?;
+        let answer = read_line(&mut stream, config.max_frame_bytes.get())?;
+        if answer != ATTACH_ACCEPTED {
+            return Err(io::Error::new(io::ErrorKind::Unsupported,
+                "the running heca server is another version of heca: stop it with `heca --kill-server` \
+                 and open heca again"));
+        }
         stream.set_write_timeout(None)?;
+        stream.set_read_timeout(None)?;
         Self::new(stream, config, wake)
     }
 }

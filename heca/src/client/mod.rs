@@ -168,7 +168,7 @@ impl ClientState {
         let title = format_window_title(&session, window_ordinal, &title_fmt, &title_fmt_numbered);
         // Report this window's title so the server's session directory has it from the start.
         link.send(ClientMsg::ReportWindowTitle(title.clone()))?;
-        let (outbox, requests) = outbox::channel(config.config.settings.connection.queue_capacity.get(), wake.clone());
+        let (outbox, requests) = outbox::channel(wake.clone());
         Ok((Self { client_id, window_ordinal, title, title_fmt, title_fmt_numbered, followed: false, following: None, feedback: Default::default(), session, sessions: Vec::new(), notification_history: None, backends: BackendStore::new(), programs: Rc::new(config.config.programs.clone()),
             link, local, data: Default::default(), outbox, requests, pending: HashMap::new(), next_request: 1,
             images: Default::default(), image_limit: config.config.settings.connection.max_image_bytes.get(), reads: Default::default(), failed: false,
@@ -361,7 +361,7 @@ impl ClientState {
                     for placement in &frame.screen.graphics { self.images.need(placement.image_id, &self.outbox); }
                     let (owner, spec, cell) = (frame.owner.clone(), frame.spec.clone(), (frame.screen.cell_w, frame.screen.cell_h));
                     let display_title = frame.display_title.clone();
-                    self.data.lock().map_err(|error| io::Error::other(error.to_string()))?.receive(*frame);
+                    self.data.lock().map_err(|error| io::Error::other(error.to_string()))?.receive(frame);
                     self.ensure_view(owner.clone(), spec, cell).map_err(|error| io::Error::other(error.to_string()))?;
                     if let Some(id) = self.backends.find_owner(&owner) { self.backends.set_custom_title(id, display_title); }
                 }

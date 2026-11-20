@@ -140,6 +140,10 @@ impl PaneBackend for TerminalBackend {
         Some(self.engine.snapshot_at(self.cell_size(), offset))
     }
 
+    fn screen_version(&self) -> Option<u64> {
+        Some(self.engine.screen_version(self.cell_size()))
+    }
+
     fn take_terminal_damage(&mut self) -> TerminalDamage {
         let current_seqno = self.engine.current_seqno();
         let viewport_top = self.engine.visible_top_stable_row();

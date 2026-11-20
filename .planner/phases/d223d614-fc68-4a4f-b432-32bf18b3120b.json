@@ -12,7 +12,7 @@
   "summary": "",
   "description": "Approved by Antonio 2026-11-18. heca has CI (P?/T555: build, clippy, tests on macOS, Linux, Windows — .github/workflows/ci.yml) but no release: nothing builds downloadable binaries, and README says \"no prebuilt downloads yet\". This phase adds a release workflow: on every version tag, GitHub builds heca for every system and publishes zip archives and installers in a GitHub Release. Out of scope for now (recorded as an idea): Homebrew, AUR, winget/Chocolatey, code signing and notarization.",
   "descriptionUpdatedAt": "2026-11-18T18:40:53.701Z",
-  "notes": "",
+  "notes": "**Handoff context update:**\nT566 done (release workflow). T567 in progress: locale points 8/8b/8c/8d and 10 fixed via PR #331, plus HECA_SLOW_MS timing log. Point 18 root cause found and moved to T572.\n\n**Remaining work:**\nT572 point C (never drop input), then A/B/D/E after protocol agreement with Antonio and heca-pro; T567 point 24 (paste into wrong terminal) then the other open T567 points.",
   "goals": [],
   "nonGoals": [],
   "dependencies": [],
@@ -97,6 +97,22 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "7769a4ae-e492-4363-af49-405daecd3d9d",
+          "date": "2026-11-19T18:36:50.911Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio said \"vai\" for T572 in full (input never dropped + the terminal lag); T567 point 18 is this task.\nWhat was being done: T567 points 8/8b/8c/8d and 10 fixed and merged (PR #331); remaining points open.\nResume location: T567 point 24 (paste into the first terminal instead of the focused one), heca/src/app_state/keyboard_terminal.rs:22-47.\nHow to resume: After T572 is merged, instrument the paste path for point 24 before changing code, then the other open points one at a time with Antonio."
+        },
+        {
+          "id": "cc099ac5-b444-4406-b7a9-68e955a4b551",
+          "date": "2026-11-19T21:35:59.598Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from T567 point 24 (paste into the first terminal instead of the focused one), heca/src/app_state/keyboard_terminal.rs:22-47.. After T572 is merged, instrument the paste path for point 24 before changing code, then the other open points one at a time with Antonio."
         }
       ],
       "decisions": [],
@@ -142,27 +158,74 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-007-24-paste-goes-to-the-wrong-terminal-do-severe-antonio-2026-11-19-heca-standalone-one-window-with-2-workspaces-and-several-panes-focused-on-the-2nd-terminal-of-the-2nd-workspace-cmd-v-pastes-into-the-first-terminal-path-paste-clipboard-handle-paste-clipboard-heca-src-handlers-selection-rs-191-appstate-keyboard-backend-mut-keyboard-terminal-heca-src-app-state-keyboard-terminal-rs-22-36-the-terminal-widget-that-holds-the-window-s-keyboard-heca-grid-ui-keyboard-holder-window-root-window-keyboard-terminal-41-47-wins-else-the-focused-pane-suspect-a-terminal-widget-still-holding-focused-in-the-window-tree-after-focus-moved-to-another-pane-workspace-keyboard-focus-and-the-focused-pane-disagree-or-the-holder-lookup-finding-the-first-terminal-reproduce-in-a-test-two-workspaces-focus-pane-2-of-ws-2-by-key-and-by-click-paste-assert-the-target-terminal-find-which-record-is-stale-fix-so-there-is-one-answer-to-which-terminal-has-the-keyboard-used-by-typing-paste-scroll-search-and-selection",
           "number": 7,
           "title": "24. PASTE GOES TO THE WRONG TERMINAL — DO, SEVERE (Antonio, 2026-11-19, heca --standalone, one window): with 2 workspaces and several panes, focused on the 2nd terminal of the 2nd workspace, Cmd+V pastes into the FIRST terminal. Path: paste_clipboard → handle_paste_clipboard (heca/src/handlers/selection.rs:191) → AppState::keyboard_backend_mut → keyboard_terminal (heca/src/app_state/keyboard_terminal.rs:22-36): the terminal widget that holds the window's keyboard (`heca_grid_ui::keyboard_holder(&window_root)`, window_keyboard_terminal :41-47) wins, else the focused pane. Suspect: a terminal widget still holding `focused` in the window tree after focus moved to another pane/workspace (keyboard focus and the focused pane disagree), or the holder lookup finding the first terminal. Reproduce in a test (two workspaces, focus pane 2 of ws 2 by key and by click, paste → assert the target terminal), find which record is stale, fix so there is ONE answer to \"which terminal has the keyboard\" used by typing, paste, scroll, search and selection.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-008-18c-root-cause-found-moved-to-p110-f010-t572-2026-11-19-terminal-updates-travel-as-whole-screens-in-json-server-and-window-saturate-cpu-with-many-agent-panes-and-a-full-connection-queue-tears-the-connection-down-losing-typed-letters-t572-owns-the-lag-fix-point-18-here-closes-when-t572-does",
           "number": 8,
           "title": "18c. ROOT CAUSE FOUND → moved to P110(F010)/T572 (2026-11-19): terminal updates travel as whole screens in JSON (server and window saturate CPU with many agent panes), and a full connection queue tears the connection down, losing typed letters. T572 owns the lag fix; point 18 here closes when T572 does.",
           "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-009-point-25-antonio-2026-11-19-resizing-with-shift-held-behaves-wrongly-reproduce-with-him-first-which-resize-pane-column-drag-keyboard-resize-mode-then-fix",
+          "number": 9,
+          "title": "Point 25 (Antonio, 2026-11-19): resizing with Shift held behaves wrongly — reproduce with him first (which resize: pane/column drag, keyboard resize mode?), then fix.",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-010-point-26-antonio-2026-11-19-the-window-prints-audio-stream-error-a-buffer-underrun-or-overrun-occurred-repeatedly-to-its-terminal-under-load-agent-sounds-playback-find-where-it-is-printed-stop-the-noise-check-whether-sounds-are-lost",
+          "number": 10,
+          "title": "Point 26 (Antonio, 2026-11-19): the window prints \"audio stream error: A buffer underrun or overrun occurred.\" repeatedly to its terminal under load (agent sounds playback) — find where it is printed, stop the noise, check whether sounds are lost.",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-011-point-27-antonio-2026-11-19-a-mouse-selection-in-a-terminal-does-not-scroll-the-history-when-the-pointer-reaches-the-top-of-the-terminal-dragging-past-the-top-edge-must-scroll-back-and-extend-the-selection-and-past-the-bottom-edge-forward",
+          "number": 11,
+          "title": "Point 27 (Antonio, 2026-11-19): a mouse selection in a terminal does not scroll the history when the pointer reaches the top of the terminal — dragging past the top edge must scroll back and extend the selection (and past the bottom edge forward).",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-012-22-zsh-tests-and-a-heca-started-inside-a-heca-pane-read-heca-s-own-zshenv-recursively-job-table-full-or-recursion-limit-exceeded-done-on-feat-t572-terminal-wire-07b4f5be-a-heca-zsh-folder-is-recognised-by-its-header-line-and-the-user-s-folder-is-used-instead",
+          "number": 12,
+          "title": "22. zsh tests and a heca started inside a heca pane read heca's own .zshenv recursively (\"job table full or recursion limit exceeded\") — DONE on feat/t572-terminal-wire (07b4f5be): a heca zsh folder is recognised by its header line and the user's folder is used instead.",
+          "checked": true
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-013-point-28-antonio-2026-11-19-switching-workspace-sometimes-leaves-no-pane-focused-the-keyboard-focus-does-not-land-on-the-workspace-s-remembered-or-any-pane-reproduce-which-switch-key-sidebar-click-ws-idx-action-find-which-record-is-not-set-fix-so-a-shown-workspace-always-has-a-focused-pane-when-it-has-panes",
+          "number": 13,
+          "title": "Point 28 (Antonio, 2026-11-19): switching workspace sometimes leaves no pane focused — the keyboard/focus does not land on the workspace's remembered (or any) pane. Reproduce (which switch: key, sidebar click, ws_idx action), find which record is not set, fix so a shown workspace always has a focused pane when it has panes.",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-014-point-28-note-2026-11-19-not-reproduced-with-a-focus-trace-prefix-ctrl-p-n-tiled-panes-only-no-floats-every-switch-left-a-focused-pane-skipped-for-now-on-antonio-s-word-if-it-comes-back-trace-sync-focus-heca-src-app-focus-rs-again-ws-focused-pane-focus-domain-active-column-keyboard-holder",
+          "number": 14,
+          "title": "Point 28 note (2026-11-19): not reproduced with a focus trace (prefix+Ctrl+p/n, tiled panes only, no floats — every switch left a focused pane); skipped for now on Antonio's word. If it comes back, trace sync_focus (heca/src/app/focus.rs) again: ws, focused pane, focus domain, active column, keyboard holder.",
+          "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
+      "pauseHistory": [
+        {
+          "id": "46217776-343e-46d2-955e-080ff9df61eb",
+          "reason": "Antonio said \"vai\" for T572 in full (input never dropped + the terminal lag); T567 point 18 is this task.",
+          "whatWasBeingDone": "T567 points 8/8b/8c/8d and 10 fixed and merged (PR #331); remaining points open.",
+          "resumeLocation": "T567 point 24 (paste into the first terminal instead of the focused one), heca/src/app_state/keyboard_terminal.rs:22-47.",
+          "howToResume": "After T572 is merged, instrument the paste path for point 24 before changing code, then the other open points one at a time with Antonio.",
+          "relatedTaskId": "02d73556-acee-4f84-ad6f-06ce6ac571e1",
+          "pausedAt": "2026-11-19T18:36:50.911Z",
+          "pausedBy": ""
+        }
+      ],
       "startedAt": "2026-11-19T17:36:39.451Z",
       "completedAt": "",
       "createdAt": "2026-11-19T10:17:09.901Z",
-      "updatedAt": "2026-11-19T18:20:10.880Z",
+      "updatedAt": "2026-11-19T21:35:59.598Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
-          "createdAt": "2026-11-19T17:36:39.266Z"
+          "createdAt": "2026-11-19T21:35:59.344Z"
         }
       ],
       "activeOwnerSession": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2"
@@ -178,8 +241,25 @@
       "status": "planned",
       "description": "Root cause, found 2026-11-19, of T567 point 18 (typing lags, spikes, letters skipped) — Antonio: \"si, crea task apposito e metti tutti i dettagli\". Proposal to agree with Antonio BEFORE code (wire protocol change; heca-pro uses it — decision 15ec67fc).\n\n## Evidence (2026-11-19)\n- Antonio's real session (installed v0.1.0-1, ~12 panes, several agent harnesses — Claude Code etc.): typing lags always, spikes at times, inside Claude it is worse, and SOMETIMES TYPED LETTERS ARE SKIPPED. A second window attached to the same session froze (\"non risponde\", 100% CPU) and was killed.\n- Activity Monitor: installed window (pid 68970) ~130-148% CPU, its server (`heca --server`, pid 17228) ~50-70% CPU, the second window 100%.\n- `sample` (macOS) of both: the window's hot frames are serde_json DESERIALIZING terminal cells — `serde_json ... parse_number`, `deserialize_struct ... heca_core::backend::TerminalCell`, `Vec<TerminalLine>::clone`, `from_utf8`, `parse_str`; the server's are serde_json SERIALIZING terminal lines — `serde_json::ser ... collect_seq ... heca_core::backend::TerminalLine`, `format_escaped_str`, `zmij` float formatting, plus `heca_core::backend::terminal::engine::links::detect_plain_links` and `wezterm_cell::Cell::clone`.\n- In `heca --standalone` with 2 terminals and one Claude: no particular lag (little to send).\n- Client-side timing (HECA_SLOW_MS, branch fix/t567-lag): frames mostly vsync-bound (~8-10 ms, frame.open waits for the swapchain); spikes 20-53 ms in frame.paint_window, of which frame.chrome_layout up to 19 ms (the whole window tree is laid out every frame — heca/src/chrome/window/scene/mod.rs:443 `LayoutEngine::new().compute(root, ..)` runs unconditionally); most frames are asked for by terminal output (HECA_FRAME_REASONS: `event BackendWake` 1147, `backend_data` 602, `event TerminalInput` 158 in ~3.7k lines).\n\n## The mechanism\n1. Every terminal update sends the WHOLE visible screen: `TerminalSnapshot::to_wire` (heca-core/src/backend/snapshot.rs:256) copies every line (`lines: self.lines.clone()`), each line every cell. A cell (heca-core/src/backend/mod.rs:154) is `{ text: String, fg: [f32;4], bg: [f32;4], bold, italic, underline, width }` — two colours as eight decimal floats per cell. A 200×50 terminal is 10 000 cells ≈ 80 000 floats per update.\n2. The frame codec is JSON: heca/src/server/wire/frame.rs:13 `serde_json::to_vec(message)`, :45 `serde_json::from_slice`. Floats are printed and parsed as text on every update.\n3. Agent TUIs (Claude Code, Codex…) repaint many times a second, and every keystroke inside them repaints; with several active, server and window spend their CPU encoding/decoding JSON screens. A second window doubles the server's work.\n4. Queues are bounded at `[settings.connection] queue_capacity = 64` (config.default.toml:267). The server's per-connection reader (heca/src/server/wire/socket.rs:58-66) does `inbound.send(message)?` — when the inbound queue is full, `queue::Sender::send` returns `WouldBlock` \"connection queue full\" (heca/src/server/wire/queue.rs:21-37), the `?` ends the reader thread with an error and THE CONNECTION IS TORN DOWN — every message in flight, keystrokes included, is lost. That contradicts the queue's own rule (queue.rs:1 \"Replace pending state, never discard ordered input or effects\"). Likely the \"letters skipped\". The window's own outbox (heca/src/client/outbox.rs:34-39) also `try_send`s into a bounded channel and records a failure when full (then `check()` reports the connection broken). ServerMsg::Terminal replaces a queued older one for the same terminal (queue.rs:87) — fine for snapshots, but it means each surviving update still carries a whole screen.\n\n## Proposal (to agree)\nA. **Send what changed, not the screen.** The engine already tracks damage (TerminalDamage, heca-core/src/backend/snapshot.rs; heca/src/client/terminal.rs keeps a per-terminal view). A terminal update carries only the rows that changed since what this window has (with the cursor/viewport fields), plus a full screen only on attach, resize, a missed revision or a scroll that moves everything. The client applies rows onto the view it keeps. Revision numbers so a lost/replaced update triggers a full resend, like services do (ServiceUpdate revisions).\nB. **A compact encoding for cells.** Colours as packed u32 RGBA (or palette indices with a per-update palette), style flags in one byte, runs of identical style grouped, text as one string per run; and a binary codec for the frame (e.g. bincode/postcard, or MessagePack) instead of JSON — at least for the terminal payload. Keep the codec choice in ONE place (frame.rs) so every message benefits; measure size and CPU before/after.\nC. **Input is never dropped.** A full inbound queue must not end the connection: keystrokes, pastes and actions wait (bounded backpressure on the socket — stop reading until there is room) instead of erroring; only replaceable state (screens, projections) may be coalesced. Same for the window's outbox: input must not be lost when it is full. Test: flood the server while it is slow; every typed byte arrives, in order, and the connection stays up.\nD. (Related, separate measurement) the whole-window layout every frame (scene/mod.rs:443) — lay out only when something asked for layout (`heca_grid_ui::needs_layout`), measured with HECA_SLOW_MS.\nE. Also check `detect_plain_links` per update (server hot spot) runs only on changed rows.\n\n## Compatibility\nheca-pro builds on the server/client protocol (decision 15ec67fc: add beside, deprecate, agree removal). The protocol changes shape here: agree with Antonio and heca-pro how (a protocol version bump negotiated at attach; old and new server/client refuse each other with a clear message rather than misread).\n\n## Verification\n- HECA_SLOW_MS + Activity Monitor + `sample` before/after on Antonio's real kind of load (many agent panes): window and server CPU, frame times, no frozen second window.\n- A load test in `heca --standalone`: ~10 panes printing continuously (`while true; do ls -la /usr/bin | head -40; sleep 0.1; done`) + typing into Claude: no skipped letters.\n- Unit tests: row diff round-trip (apply diffs = full snapshot), revision gap → full resend, queue full → no input lost.\n\n## Tooling already built (branch fix/t567-lag, worktree /Users/antonio/projects/heca-feat-567, uncommitted)\nheca/src/slow_steps.rs (`HECA_SLOW_MS=<ms>` prints every timed step over the threshold, with a timestamp), steps in render_frame, paint_window (chrome rebuild/layout/paint split), client receive/about_to_wait/window_event/poll_backends/sync_chrome_state, server pump/pump_sessions/pump_services/publish_directory/autosave and session pump sub-steps. Also on that branch: the locale fix (T567 8d, verified) and a release-only unused-variable warning fix (heca/src/providers/actions.rs).",
       "descriptionUpdatedAt": "2026-11-19T18:20:03.549Z",
-      "notes": "",
-      "statusLog": [],
+      "notes": "Progress 2026-11-19 (branch feat/t572-terminal-wire, worktree ../heca-feat-572, commits 07b4f5be + f79ddd9e, not pushed):\n- C done: queue.rs Message::WHEN_FULL (ClientMsg Keep, ServerMsg Refuse) + Sender::send_wait used by socket readers; window outbox unbounded; flood test (2000 keys, capacity 1) and queue tests go red on the old code.\n- A done, without revisions: wire/rows.rs — the socket writer remembers the last screen per terminal and sends changed rows; the reader rebuilds whole frames (full screen on first frame, height change, after TerminalClosed). Attach preface now \"@heca-attach 2\" with \"@heca-attach ok\" / \"refused 2\" answer; mismatch tells the user to run `heca --kill-server`.\n- B partly: compact cell encoding (style runs, one string per run of 1-column chars) inside JSON — 1.28 MB → 177 KB for a worst-case full screen. NO binary codec: it would add a dependency (not agreed with Antonio); not needed after A.\n- E done: rows without ':' skip URL detection. D NOT done: whole-window layout every frame is ~6% of the window in `sample`; left until the lag under load warrants it (Antonio: \"sembra più fluido\").\n- Also found by measuring Antonio's load: the window cloned every terminal screen at every wake (fixed: replica frames are Arc); a covered window waited 1 s per frame in nextDrawable (fixed: WindowEvent::Occluded skips drawing); the window redrew whole terminals for one changed row (fixed: TerminalView compares with the last drawn frame and returns Rows damage). Antonio's eye-check: fluid, \"funziona. ottimo\".\n- headless_server.rs speaks the socket protocol by hand (a copy of the format); updated for v2.\nRemaining: PR (on Antonio's word); C4 (binary codec) and D to decide or drop.",
+      "statusLog": [
+        {
+          "id": "9748c2ce-5f90-449b-b8c1-919bfc4f1118",
+          "date": "2026-11-19T18:36:50.911Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "98c9c178-3a8e-4f51-bd46-0ee9e519dd72",
+          "date": "2026-11-19T21:35:59.598Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio: \"Riprendiamo t567\". T572 is finished and waits for PR #332's CI and merge.\nWhat was being done: T572 complete on feat/t572-terminal-wire (4 commits, PR #332 open, CI running).\nResume location: PR #332 https://github.com/ovidius72/heca/pull/332\nHow to resume: Read the CI result; on Antonio's merge, complete T572 (evidence in its notes), remove the heca-feat-572 worktree and the merged branch."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -187,57 +267,308 @@
           "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-001-agree-the-proposal-with-antonio-a-rows-only-updates-b-compact-codec-c-never-drop-input-d-layout-only-when-needed-agree-the-protocol-versioning-with-heca-pro",
           "number": 1,
           "title": "Agree the proposal with Antonio (A rows-only updates, B compact codec, C never drop input, D layout only when needed); agree the protocol versioning with heca-pro",
-          "checked": false
+          "checked": true
         },
         {
           "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-002-c-first-input-never-dropped-on-a-full-queue-socket-reader-backpressure-outbox-with-a-flood-test",
           "number": 2,
           "title": "C first: input never dropped on a full queue (socket reader backpressure, outbox), with a flood test",
-          "checked": false
+          "checked": true
         },
         {
           "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-003-a-row-diffs-with-revisions-client-applies-them-full-resend-on-gap-attach-resize",
           "number": 3,
           "title": "A: row diffs with revisions; client applies them; full resend on gap/attach/resize",
-          "checked": false
-        },
-        {
-          "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-004-b-compact-cell-encoding-binary-frame-codec-in-frame-rs-measure-size-cpu",
-          "number": 4,
-          "title": "B: compact cell encoding + binary frame codec in frame.rs; measure size/CPU",
-          "checked": false
+          "checked": true
         },
         {
           "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-005-d-e-layout-only-when-needed-link-detection-on-changed-rows-measure-with-heca-slow-ms",
-          "number": 5,
+          "number": 4,
           "title": "D/E: layout only when needed; link detection on changed rows; measure with HECA_SLOW_MS",
-          "checked": false
+          "checked": true
         },
         {
           "id": "02d73556-acee-4f84-ad6f-06ce6ac571e1-check-006-verify-on-a-real-like-load-activity-monitor-sample-heca-slow-ms-antonio-s-eye-check-pr",
-          "number": 6,
+          "number": 5,
           "title": "Verify on a real-like load (Activity Monitor, sample, HECA_SLOW_MS); Antonio's eye-check; PR",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
+      "pauseSnapshot": {
+        "id": "75dfecb1-ee69-4ac6-a987-ae4401e211df",
+        "reason": "Antonio: \"Riprendiamo t567\". T572 is finished and waits for PR #332's CI and merge.",
+        "whatWasBeingDone": "T572 complete on feat/t572-terminal-wire (4 commits, PR #332 open, CI running).",
+        "resumeLocation": "PR #332 https://github.com/ovidius72/heca/pull/332",
+        "howToResume": "Read the CI result; on Antonio's merge, complete T572 (evidence in its notes), remove the heca-feat-572 worktree and the merged branch.",
+        "relatedTaskId": "25b8c84f-6a93-48ea-9206-ceb249b4c21b",
+        "pausedAt": "2026-11-19T21:35:59.598Z",
+        "pausedBy": ""
+      },
+      "pauseHistory": [
+        {
+          "id": "75dfecb1-ee69-4ac6-a987-ae4401e211df",
+          "reason": "Antonio: \"Riprendiamo t567\". T572 is finished and waits for PR #332's CI and merge.",
+          "whatWasBeingDone": "T572 complete on feat/t572-terminal-wire (4 commits, PR #332 open, CI running).",
+          "resumeLocation": "PR #332 https://github.com/ovidius72/heca/pull/332",
+          "howToResume": "Read the CI result; on Antonio's merge, complete T572 (evidence in its notes), remove the heca-feat-572 worktree and the merged branch.",
+          "relatedTaskId": "25b8c84f-6a93-48ea-9206-ceb249b4c21b",
+          "pausedAt": "2026-11-19T21:35:59.598Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-11-19T18:36:50.911Z",
       "completedAt": "",
       "createdAt": "2026-11-19T18:20:03.419Z",
-      "updatedAt": "2026-11-19T18:20:03.419Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-19T21:35:59.598Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
+          "createdAt": "2026-11-19T18:36:50.835Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-18T18:40:53.598Z",
-  "updatedAt": "2026-11-19T18:20:10.880Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
-  "handoffAudit": null,
-  "handoffReadAt": "",
+  "updatedAt": "2026-11-19T20:51:22.293Z",
+  "handoff": "# T572 finished on its branch (PR on Antonio's word); heca-pro is waiting on T528 p5, T567 p20/23/23b, T571\n\nCreated at: 2026-11-19T18:32:59.781Z\nUpdated at: 2026-11-19T20:51:22.293Z\nReason: Antonio asked to write down, before the context is lost, what heca-pro is waiting for — it was in the planner only as ordinary open work and had been forgotten — and the state of T572 after a long session.\n\n## Current focus\n- Feature: F010. Phase: P110(F010).\n- P110(F010)/T572 (in-progress) — all checklist items done or dropped except the last: push + PR, **only on Antonio's word** (asked 2026-11-19, no answer yet). Worktree `/Users/antonio/projects/heca-feat-572`, branch `feat/t572-terminal-wire`, 3 commits: 07b4f5be, f79ddd9e, 3a4f84a8. Working tree clean.\n- After T572: **heca-pro is WAITING on these — they come first** (Antonio, 2026-11-19; heca-pro is on a heca version with T568+T569, not T570):\n  1. dock's first position from config — P045(F006)/T528 point 5 (also needed by T567 point 15);\n  2. window title \"Heca Pro\" — P110(F010)/T567 point 20;\n  3. Row \"card\" variant — P110(F010)/T571;\n  4. multi-line tooltip + tooltip taking a widget — T567 points 23 and 23b (checklist C1/C2).\n  T570 (real icons, no Flex::row() around FolderLine) needs nothing from heca: heca-pro must update its heca version.\n  Ask Antonio which of the four first.\n\n## Current and partial state\n- T572 done on the branch: input never dropped (queue.rs WHEN_FULL + send_wait; outbox unbounded; flood test); terminals cross the socket as changed rows (wire/rows.rs, Carried in wire/frame.rs), attach preface v2 with ok/refused answer; window shares frames (Arc), redraws only changed rows (client/terminal.rs changed_rows), skips drawing while occluded; server snapshots/sends a terminal only when its screen_version moved (PaneBackend::screen_version, session `published` cache; a window waiting for its first picture gets all); one answer to \"which terminal gets the keys\" (keyboard_terminal: focused pane while keyboard is on the panes) — fixes T567 point 24; single waiting-for-keyboard slot; zsh `.zshenv` recursion when heca runs inside heca fixed (T567 point 22). Antonio's eye-check: fluid, paste correct. C4 (binary codec) removed; D (layout only when needed) dropped — project Accepted Decision 06ac6e43 has the numbers.\n- T567 open: 1-7, 9, 11-17, 19-21, 23/23b, 25 (prefix+r then Shift+j/k resizes the wrong pane), 26 (audio \"buffer underrun\" messages), 27 (mouse selection does not scroll at the top edge), 28 (not reproduced, skipped). 22 and 24 done on T572's branch.\n- Antonio, 2026-11-19: \"from today widgets and components must be built with layout-dirty in mind; what was done is a mess\". Proposed (not yet agreed): a task to make Base's style.layout and children private behind methods that mark needs_layout (~300 sites), which makes D safe later. Do not create it without his yes.\n\n## Preservation constraints\n- Read AGENTS.md in full first. Chat in Italian; the last line is \"Per te: …\" / \"Niente per te.\" in Italian. Answer questions before writing; wait for \"vai\". Never invent APIs. Never edit Antonio's files. Commit only on his word; **PR only at the end of a task** (never offer one with checklist items open). Antonio commits .planner on main.\n- Test builds for Antonio: `HECA_SLOW_MS=20 TMPDIR=$(mktemp -d) <worktree>/target/release/heca` — a separate server; his real server must never be stopped (long jobs running). Load script: the session scratchpad bench/load.sh (repaints a full coloured screen 20×/s).\n\n## Supporting documents\n- None needed: T572 notes and the project decision 06ac6e43 hold the details.\n\n## Blockers and risks\n- None blocking. Open worktrees not to touch: heca-feat-469 (T469), heca-feat-565 (T565 paused).\n- heca/tests/headless_server.rs speaks the socket protocol by hand (a copy of the format) — update it with any wire change.\n\n## How to resume\n1. Ask Antonio for the T572 push + PR (lint audit + xwin clippy + `gh run watch` after push).\n2. Then ask which heca-pro item first (list above) and start that task with its own worktree heca-feat-<num>.\n3. Raise again the Base-privacy task proposal for layout-dirty.",
+  "handoffUpdatedAt": "2026-11-19T20:51:22.293Z",
+  "handoffAudit": {
+    "version": 1,
+    "entries": [
+      {
+        "category": "exact-focus-resume-point",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "first-resume-action",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "partial-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "remaining-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "decisions-rationale",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "rejected-alternatives",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "files-symbols",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "branch-worktree",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "commands-tools",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "pending-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "runtime-limitations-workarounds",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "blockers-risks",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "user-visible-behavior",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "operator-actions",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "project-operating-notes",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "conversation-only-facts",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      }
+    ],
+    "coldStartInventory": {
+      "version": 1,
+      "sourceReviews": [
+        {
+          "source": "conversation",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "planner-entities",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "working-tree",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "verification-runtime",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "peer-agent-output",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        }
+      ],
+      "entries": [
+        {
+          "category": "files",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "symbols",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "working-tree-ownership",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "negative-state",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "commands-tools",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "runtime-wiring",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "preservation-constraints",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "verification-evidence",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "related-planned-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "user-visible-behavior",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "operator-actions",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "blockers-risks",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "remaining-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "ordered-resume-steps",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        }
+      ]
+    },
+    "supportingDocuments": [],
+    "contentHash": "e59a88bba2b48de14fe398dbd4a765bb66c47586205a85e79ba067b5399e929d",
+    "contentLength": 4154,
+    "verifiedAt": "2026-11-19T20:51:22.293Z",
+    "resumeReadyAt": "2026-11-19T20:51:32.253Z",
+    "readBackSourceReviews": [
+      {
+        "source": "conversation",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "planner-entities",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "working-tree",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "verification-runtime",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "peer-agent-output",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      }
+    ]
+  },
+  "handoffReadAt": "2026-11-19T20:51:32.253Z",
   "handoffHistory": [],
   "statusLog": [
     {
@@ -260,7 +591,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
-      "createdAt": "2026-11-19T17:36:39.266Z"
+      "createdAt": "2026-11-19T21:35:59.344Z"
     },
     {
       "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",

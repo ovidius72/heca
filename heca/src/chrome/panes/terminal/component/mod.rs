@@ -89,7 +89,6 @@ impl Terminal {
             view: Cell::new((0, 0)),
             link_modifier: Cell::new(heca_config::theme::ModifierKey::default()),
             node: Cell::new(0),
-            wants_keyboard: Cell::new(false),
         }))
     }
 
@@ -220,7 +219,7 @@ impl Component for Terminal {
         // own focus is the one record of it.
         self.shared.node.set(self.base.focus_id());
         // Asked for the keyboard before it was on screen: take it now, like an `autofocus`.
-        if self.shared.wants_keyboard.replace(false) {
+        if handle::take_waiting_keyboard(&self.shared) {
             self.base.focus(false);
         }
         if let Some(id) = self.shared.id.get() {
