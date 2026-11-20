@@ -97,15 +97,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // to mark the active workspace. Signal-backed, so a host flips it in
         // place via `.active_state()` without rebuilding.
         .active(true)
-        // Inset the header count badge by the Item rows' horizontal
-        // padding (~14px) so it lines up vertically with the rows'
-        // trailing badges instead of sitting flush at the frame edge.
-        .header_actions(
-            Flex::row()
-                .align("center")
-                .child(Badge::accent("3"))
-                .child(Flex::row().width(14.0)),
-        )
+        .header_actions(Badge::accent("3"))
         .child(
             ItemGroup::new("src")
                 .child(file(
@@ -142,12 +134,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // a hollow accent border, distinct from `.active(true)`'s filled wash
         // (see EXPLORER above).
         .nav_selected(true)
-        .header_actions(
-            Flex::row()
-                .align("center")
-                .child(Badge::warning("3"))
-                .child(Flex::row().width(14.0)),
-        )
+        .header_actions(Badge::warning("3"))
         .child(git_row(
             Icon::new(Glyph::GitBranch).color(theme.colors.warning).size(18.0),
             "chrome_region.rs",
@@ -164,15 +151,15 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
             Badge::danger("D"),
         ));
 
-    // A `Section`: a group in a list — the leading part has its own column, the body starts under
-    // the title, the chevron sits at the end.
+    // A `Section`: a group in a list — the leading part right before the title, the chevron at the
+    // end. The body is laid out as in any frame.
     let team = DockFrame::new("Development")
         .variant(DockFrameVariant::Section)
         .rail(sidebar_mode, Glyph::Folder)
         .leading(Icon::new(Glyph::Folder))
         .header_actions(Badge::accent("2"))
-        .child(Item::new("alice"))
-        .child(Item::new("bob"));
+        // Indenting the members is this caller's decision, written in its own content.
+        .child(Flex::column().padding_left(Spacing::Lg).child([Item::new("alice"), Item::new("bob")]));
     // A title row written by the caller; `.collapsible(false)` keeps it open with no chevron.
     let pinned = DockFrame::new("PINNED")
         .rail(sidebar_mode, Glyph::Lock)

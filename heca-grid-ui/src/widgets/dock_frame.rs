@@ -101,10 +101,10 @@ pub enum DockFrameVariant {
     #[default]
     Dock,
     /// **A section of a list** — a modern sidebar's group: an optional
-    /// [`leading`](DockFrame::leading) part (an avatar, an icon) before the title, the fold chevron
-    /// at the end of the row, no grip, and the body starting **under the title**, not under the
-    /// leading part — the frame is a grid whose body shares the title's column, so nothing is
-    /// measured to line them up.
+    /// [`leading`](DockFrame::leading) part (an avatar, an icon) right before the title, the fold
+    /// chevron at the end of the row, no grip. Only the title row differs: the body is laid out
+    /// as in a `Dock` — whether its rows are indented is the caller's decision, written in the
+    /// content it gives.
     Section,
 }
 /// A titled, collapsible, bracket-framed container for a Dock.
@@ -141,10 +141,9 @@ pub struct DockFrame {
     /// then the body. Held rather than made per call because
     /// [`grid_template`](Component::grid_template) hands out a borrow of it.
     areas: Vec<String>,
-    /// The column tracks — none for a [`Dock`](DockFrameVariant::Dock) (one implicit column that
-    /// fills), `auto 1fr` for a [`Section`](DockFrameVariant::Section) (the leading part, then the
-    /// title and the body under it).
-    columns: Vec<Track>,
+    /// The part before the title ([`leading`](DockFrame::leading)), waiting for the title row to
+    /// be made with it. Once made, it lives in the row and is taken back from there by name.
+    leading: Option<crate::WidgetModel>,
     /// How the title row is laid out.
     variant: DockFrameVariant,
     /// The title the default toggle shows.
@@ -196,7 +195,7 @@ impl DockFrame {
             rail_mode: None,
             frameless: false,
             areas: vec![HEADER_AREA.to_string(), BODY_AREA.to_string()],
-            columns: Vec::new(),
+            leading: None,
             variant: DockFrameVariant::Dock,
             title: title.into(),
             grip: true,
@@ -224,13 +223,17 @@ impl DockFrame {
         };
         let chevron_text = self.chevron;
         let chevron = move || Label::new("").with_text_signal(chevron_text).area(CHEVRON_AREA);
-        let custom = self.part_mut(TOGGLE_AREA)
-            .and_then(|toggle| crate::component::area_slot(toggle.base_mut(), CUSTOM_AREA))
+        let mut take = |name: &str| self.part_mut(TOGGLE_AREA)
+            .and_then(|toggle| crate::component::area_slot(toggle.base_mut(), name))
             .map(|slot| std::mem::replace(slot, crate::WidgetModel::new(Flex::empty())));
+        let custom = take(CUSTOM_AREA);
+        let kept_leading = take(LEADING_AREA);
+        let leading_part = self.leading.take().or(kept_leading);
         let (toggle, corner): (crate::WidgetModel, _) = match (custom, self.variant) {
             (Some(content), _) => (
                 crate::WidgetModel::new(crate::widgets::Row::new().on_activate(fold).gap(LEADING_GAP)
-                    .child(content).child(chevron())),
+                    .padding_y(crate::widgets::item::ROW_PAD_Y)
+                    .child(leading_part).child(content).child(chevron())),
                 crate::widgets::HintPlacement::TopRight,
             ),
             (None, DockFrameVariant::Dock) => {
@@ -238,13 +241,15 @@ impl DockFrame {
                 if self.grip {
                     leading = leading.child(Label::new(GRIP));
                 }
-                (crate::WidgetModel::new(Item::new(self.title.clone()).leading(leading.child(chevron())).on_activate(fold)),
+                (crate::WidgetModel::new(Item::new(self.title.clone())
+                    .leading(leading.child(chevron()).child(leading_part)).on_activate(fold)),
                     crate::widgets::HintPlacement::TopLeft)
             }
-            (None, DockFrameVariant::Section) => (
-                crate::WidgetModel::new(Item::new(self.title.clone()).trailing(chevron()).on_activate(fold)),
-                crate::widgets::HintPlacement::TopRight,
-            ),
+            (None, DockFrameVariant::Section) => {
+                let item = Item::new(self.title.clone()).trailing(chevron()).on_activate(fold);
+                let item = match leading_part { Some(part) => item.leading(part), None => item };
+                (crate::WidgetModel::new(item), crate::widgets::HintPlacement::TopRight)
+            }
         };
         let mut toggle = toggle;
         toggle.base_mut().grid_area = Some(TOGGLE_AREA.to_string());
@@ -257,7 +262,8 @@ impl DockFrame {
     }
 
     /// **How the title row is laid out** ([`DockFrameVariant`]): `Dock` (the default) or `Section`
-    /// for a group in a list — leading part, chevron at the end, body under the title.
+    /// for a group in a list — leading part right before the title, chevron at the end. The body
+    /// is the same in both.
     ///
     /// ```ignore
     /// DockFrame::new("Development")
@@ -268,31 +274,19 @@ impl DockFrame {
     #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: DockFrameVariant) -> Self {
         self.variant = variant;
-        let (columns, areas) = match variant {
-            DockFrameVariant::Dock => (Vec::new(), vec![HEADER_AREA.to_string(), BODY_AREA.to_string()]),
-            DockFrameVariant::Section => (vec![Track::Auto, Track::Fr(1.0)],
-                vec![format!("{LEADING_AREA} {HEADER_AREA}"), format!(". {BODY_AREA}")]),
-        };
-        (self.columns, self.areas) = (columns, areas);
-        if variant == DockFrameVariant::Section && self.base.child_in_area(LEADING_AREA).is_none() {
-            self.base.children.push(crate::WidgetModel::new(Flex::empty().area(LEADING_AREA)));
-        }
         self.build_toggle();
         self
     }
 
-    /// **The part before the title** — an avatar, an icon, an image. In a
-    /// [`Section`](DockFrameVariant::Section) it has its own column and the body starts under the
-    /// title, past it; in a [`Dock`](DockFrameVariant::Dock) it sits before the title, after the
-    /// chevron.
+    /// **The part before the title** — an avatar, an icon, an image — inside the title row,
+    /// centred on it like the row's other parts: right before the title in a
+    /// [`Section`](DockFrameVariant::Section), after the chevron in a
+    /// [`Dock`](DockFrameVariant::Dock), before a [`header`](Self::header) of the caller's own.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading(mut self, c: impl crate::builders::IntoComponent) -> Self {
-        let mut fresh = c.into_component();
-        fresh.base_mut().grid_area = Some(LEADING_AREA.to_string());
-        match self.base.child_in_area(LEADING_AREA) {
-            Some(slot) => *slot = fresh,
-            None => self.base.children.push(fresh),
-        }
+        self.leading = Some(crate::WidgetModel::new(
+            Flex::row().align("center").area(LEADING_AREA).child(c.into_component())));
+        self.build_toggle();
         self
     }
 
@@ -308,7 +302,10 @@ impl DockFrame {
         let content = c.into_component();
         // Hand the content to `build_toggle` through the slot it reads a caller's header from.
         // The holder keeps its area through every rebuild, so the content is wrapped once.
-        let holder = Flex::row().child(Flex::row().grow(1.0).area(CUSTOM_AREA).child(content)).area(TOGGLE_AREA);
+        // It starts where a row's content starts, as a Dock's own title row (an `Item`) does.
+        let holder = Flex::row()
+            .child(Flex::row().grow(1.0).padding_left(crate::widgets::item::ROW_INSET).area(CUSTOM_AREA).child(content))
+            .area(TOGGLE_AREA);
         if let Some(slot) = self.part_mut(TOGGLE_AREA) {
             *slot = crate::WidgetModel::new(holder);
         }
@@ -367,8 +364,12 @@ impl DockFrame {
     /// not toggle the dock.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn header_actions(mut self, c: impl crate::builders::IntoComponent) -> Self {
-        let mut fresh = c.into_component();
-        fresh.base_mut().grid_area = Some(HEADER_ACTIONS_AREA.to_string());
+        // They end where a row's content ends, so a count in the title row lines up with the
+        // badges at the end of the rows under it — whoever gives them adds no spacer.
+        let fresh = crate::WidgetModel::new(Flex::row().align("center").justify("end")
+            .padding_right(crate::widgets::item::ROW_INSET)
+            .area(HEADER_ACTIONS_AREA)
+            .child(c.into_component()));
         if let Some(slot) = self.part_mut(HEADER_ACTIONS_AREA) {
             *slot = fresh;
         }
@@ -510,7 +511,6 @@ impl DockFrame {
             }
         };
         hide(&mut self.base, HEADER_AREA, rail);
-        hide(&mut self.base, LEADING_AREA, rail);
         hide(&mut self.base, BODY_AREA, rail || !open);
         hide(&mut self.base, RAIL_AREA, !rail);
         // Tighten the frame inset in the rail so the icon fits the thin column;
@@ -560,14 +560,14 @@ impl Component for DockFrame {
         self.base
             .style
             .layout
-            .to_taffy_grid(self.base.font, &self.columns, &ROWS)
+            .to_taffy_grid(self.base.font, &[], &ROWS)
     }
 
     /// **The header and the body are placed by NAME, against this.** The column track is left
     /// unsaid on purpose: an implicit track fills, so the frame's parts are as wide as the frame.
     fn grid_template(&self) -> Option<crate::style::GridTemplate<'_>> {
         Some(crate::style::GridTemplate {
-            columns: &self.columns,
+            columns: &[],
             rows: &ROWS,
             areas: &self.areas,
         })

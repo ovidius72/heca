@@ -5148,11 +5148,16 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   | Variant | Title row | Use |
   |---|---|---|
   | `Dock` (default) | grip, chevron, title, controls | a dock in a chrome region |
-  | `Section` | title, controls, chevron at the end; a `leading` column beside the whole frame, the body under the title | a group in a list (a team with its members) |
+  | `Section` | the `leading` part right before the title, the chevron at the end, no grip | a group in a list (a team with its members) |
+
+  Only the title row differs; the body is laid out the same in both. **Whether the body's rows are
+  indented is the caller's decision**, written in the content it gives (e.g.
+  `.child(Flex::column().padding_left(Spacing::Lg).child(rows))`) — the frame never indents it.
 
 - **Builders**: `.variant(DockFrameVariant)`,
-  `.leading(impl Component)` (the part before the title — avatar, icon, image; in a `Section` it has
-  its own column and the body starts past it),
+  `.leading(impl Component)` (the part before the title — avatar, icon, image — inside the title
+  row and centred on it: right before the title in a `Section`, after the chevron in a `Dock`,
+  before a `.header` of your own),
   `.header(impl Component)` (**a title row of your own** — any widget; the frame still folds: a
   click on it folds the body and the chevron stays at its end; controls inside it keep their own
   input),
