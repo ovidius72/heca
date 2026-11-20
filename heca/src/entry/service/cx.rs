@@ -7,7 +7,8 @@ use heca_config::loader::AppConfig;
 use serde::de::DeserializeOwned;
 
 use super::{
-    ExtensionConfigError, ExternalRequest, RequestRef, Sender, ServiceInbox, ServiceTicket, SessionKey, SubmitError, config,
+    ExtensionConfigError, ExternalRequest, RequestRef, Sender, ServiceInbox, ServiceTicket, SessionKey, Sessions, SubmitError,
+    config,
 };
 use crate::server::services::Requests;
 
@@ -87,12 +88,20 @@ pub struct ServiceCx<'a, M> {
     pub(crate) inbox: &'a ServiceInbox<M>,
     pub(crate) effects: &'a mut Effects,
     pub(crate) data_dir: &'a Path,
+    pub(crate) sessions: &'a Sessions,
 }
 
 impl<M> ServiceCx<'_, M> {
     /// This run of the server — see [`StartCx::server_epoch`].
     pub fn server_epoch(&self) -> u64 {
         self.epoch
+    }
+
+    /// **Every session this server holds** — key, name, project folder and state — as they are
+    /// now. To hear when they change, listen for `session.changed` with
+    /// [`ServiceRegistration::on`](super::ServiceRegistration::on).
+    pub fn sessions(&self) -> &Sessions {
+        self.sessions
     }
 
     /// The service's inbox, to hand to a worker started now.
@@ -213,6 +222,7 @@ pub struct ProjectCx<'a> {
     pub(crate) extension: &'a str,
     pub(crate) epoch: u64,
     pub(crate) since: Option<u64>,
+    pub(crate) sessions: &'a Sessions,
 }
 
 impl ProjectCx<'_> {
@@ -245,6 +255,12 @@ impl ProjectCx<'_> {
     /// This run of the server — see [`StartCx::server_epoch`].
     pub fn server_epoch(&self) -> u64 {
         self.epoch
+    }
+
+    /// **Every session this server holds** — see [`ServiceCx::sessions`]. The window's own is
+    /// `cx.sessions().get(cx.session_key())`.
+    pub fn sessions(&self) -> &Sessions {
+        self.sessions
     }
 
     /// The revision this window already has, or `None` when it has nothing and needs a snapshot.

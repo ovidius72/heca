@@ -37,6 +37,28 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 > a space and an alignment, and the traps that cost real defects. Read it before arranging anything
 > with more than one part.
 
+## ⭐ THE SYNTAX — every widget and component is written like this
+
+Declarative and nested, in one expression: the shape of Flutter and SwiftUI, with DOM-shaped events.
+
+```rust
+Component::new()
+    .prop_a(..)                                    // its own typed properties, as builders
+    .prop_b(..)
+    .child(
+        Grid::new()
+            .template_row("auto 1fr")              // the arrangement is a track template
+            .child([header, body]),                // children in order, composed to any depth
+    )
+    .on_click(|ev| ev.dispatch(Intent::new("an_action")))   // behaviour lives on the widget
+```
+
+**Never:** find a child by its position (`children[0]`), write a style, a bound or a position by
+hand, rebuild a widget to change one of its properties, or put a number in the code. If what you
+need cannot be written in this shape, the library is missing a builder — propose it (⭐⭐ RULE
+ZERO); never work around it. Real examples: [`docs/layout.md` § The one rule](layout.md),
+[`docs/widgets.md` → Grid](#grid).
+
 ## Mental model
 
 ```
@@ -420,9 +442,11 @@ by the only other thing that says where input is aimed: **`Base::focused`**.
 
 - **The target is the deepest focused widget.** Capture runs from the root down its ancestor chain,
   then handlers and `on_event` run back up — the same target-and-bubble walk the pointer uses.
-- **A key or typed text stops at the owner.** It belongs to one widget. This is the rule that stops
-  the first row in a list eating an Enter meant for the row the cursor is on; seven widgets used to
-  patch that by hand, six of them by forgetting to.
+- **A key or typed text bubbles up from the focused widget, and never goes down into its
+  children** — the DOM's rule: the browser does not hand a key to the children of
+  `document.activeElement` either. This is what stops the first row in a list eating an Enter meant
+  for the row the cursor is on; seven widgets used to patch that by hand, six of them by forgetting
+  to.
 - **A `Widget` intent enters the focused region.** An intent is not a key — it is what a key
   *resolved to*, a capability named out loud (`ScrollPageDown`, `Dismiss`). It is addressed to the
   focused region, so that subtree is walked and whichever widget owns the capability answers, and a
@@ -5766,6 +5790,35 @@ header.texts(vec![("hdr.seg:location".into(), facts.cwd())]);
   holds and the one its owner keeps agree. A node placed anew holds nothing, so the next `show`
   builds for it — a rebuilt parent gets its child back.
 - Host-only: it holds the caller's closures and state, so it is not described declaratively.
+
+### Children that follow a value
+
+`.child(..)` is the one door for children, and it also takes a **list mapped to widgets**: the
+container makes a child per item and keeps them in step with the value. A tree is built once and
+kept, so children made from data otherwise go stale when the data changes — nothing builds them
+again.
+
+```rust
+let rooms = signal(vec![Room::new("lobby")]);
+Flex::column().gap(Spacing::Sm).child(rooms.map(RoomRow::new))
+
+// a list inside a service's window-side value: say where it is
+Flex::column().child(shown.map(|view| &view.rooms, RoomRow::new))
+```
+
+- `signal.map(make)` on a `Signal<Vec<T>>`, `shown.map(pick, make)` on a `ServiceState` (heca).
+  `T: Clone + PartialEq`. The general form both are built on is `BoundChildren::new(read, make)`,
+  where `read` is any function that reads values that change.
+- **Which child an item keeps**: an item is its own identity. An item equal to one already shown
+  keeps that child wherever it moved — focus, hover, its own scroll and state included; a gone item
+  loses its child; a new one gets one; an item whose data changed is a new item and its child is
+  made again.
+- The children sit **directly in the container**, in the place `.child(..)` was called — between the
+  children written before and after it — so a `Flex` gap, a `Grid` track and a hint letter treat them
+  like any other child.
+- The frame after the value changes shows it: the container asks for its own layout pass.
+- Host-only: it holds closures and reads signals, which a described tree cannot carry. A plugin's
+  counterpart is per-mount values (F003/T360).
 
 ### Props — new facts for a widget that is already there
 

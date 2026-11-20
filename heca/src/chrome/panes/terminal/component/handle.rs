@@ -6,7 +6,7 @@ use heca_core::layout::Rectangle;
 
 use super::super::input::{Cell as GridCell, Seams, TerminalCommand};
 use super::super::model::TerminalId;
-use super::super::shared::Declared;
+use super::super::shared::{Declared, Shared};
 use super::super::viewport::Viewport;
 use super::Terminal;
 use crate::app::backend_store::Program;
@@ -256,7 +256,7 @@ impl Terminal {
         let taken = self
             .node()
             .is_some_and(|node| heca_grid_ui::focus_widget_by_id(root, node));
-        self.shared.wants_keyboard.set(!taken);
+        WAITING_FOR_KEYBOARD.set(if taken { std::rc::Weak::new() } else { std::rc::Rc::downgrade(&self.shared) });
     }
 
     /// **The grid cell under `pos`**, in window coordinates — `None` when the terminal was not drawn
@@ -349,4 +349,23 @@ impl Terminal {
             size,
         ))
     }
+}
+
+thread_local! {
+    /// **The one terminal waiting to take the keyboard** when it is next drawn. One, because the
+    /// keyboard goes to one place: a later request replaces it — taken at once or waiting — so a
+    /// terminal asked earlier, while it was off screen, cannot take the keyboard back when it is
+    /// drawn again after it has gone elsewhere. Held by its shared state, which every node of it
+    /// holds (a terminal not bound to a process yet has no id), and weakly: a terminal that goes
+    /// away stops waiting.
+    static WAITING_FOR_KEYBOARD: std::cell::RefCell<std::rc::Weak<Shared>> = const { std::cell::RefCell::new(std::rc::Weak::new()) };
+}
+
+/// Whether the terminal of `shared` is the one waiting for the keyboard; if it is, it stops waiting.
+pub(super) fn take_waiting_keyboard(shared: &std::rc::Rc<Shared>) -> bool {
+    WAITING_FOR_KEYBOARD.with_borrow_mut(|waiting| {
+        let mine = std::ptr::eq(waiting.as_ptr(), std::rc::Rc::as_ptr(shared));
+        if mine { *waiting = std::rc::Weak::new(); }
+        mine
+    })
 }

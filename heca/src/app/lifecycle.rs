@@ -163,7 +163,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.mark_full_redraw();
     }
 
-    let edge_scrolled = mouse::process_edge_scroll(state);
+    use crate::slow_steps::step;
+    let edge_scrolled = { let _s = step("wait.edge_scroll"); mouse::process_edge_scroll(state) };
     if edge_scrolled {
         after_config_change(state);
     }
@@ -172,23 +173,23 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.mark_full_redraw();
     }
 
-    state.layout_mut().advance_animations();
+    { let _s = step("wait.layout_animations"); state.layout_mut().advance_animations(); }
     let dt = FRAME_INTERVAL.as_secs_f32();
     // **Which surfaces are mid-exit, before anything advances.** The tick below is the one that
     // advances them — they are children of this tree — so the registry has to look either side of
     // it to catch the frame an exit finishes. Reading it afterwards misses that frame entirely.
     let leaving_before = state.layers.leaving_before_tick(&state.window_root);
-    let mut chrome_animating = state.window_root.tick(dt);
+    let mut chrome_animating = { let _s = step("wait.tree_tick"); state.window_root.tick(dt) };
     // The tree is the one truth about where the keyboard is; the store follows it.
-    crate::app::tree_focus::settle_window_focus(state);
+    { let _s = step("wait.settle_focus"); crate::app::tree_focus::settle_window_focus(state); }
     // Every surface — an overlay dialog, a plugin panel, the exposé — advanced in the walk above,
     // because it is a child of that tree. All that is left is to **retire the ones whose exit just
     // finished**, which is the registry's bookkeeping and not an animation pass: a surface that was
     // leaving before the tick and is not leaving now has finished, and its absence needs one more
     // frame to be painted.
-    chrome_animating |= state
+    chrome_animating |= { let _s = step("wait.retire_exits"); state
         .layers
-        .retire_finished_exits(&mut state.window_root, &leaving_before);
+        .retire_finished_exits(&mut state.window_root, &leaving_before) };
     // A surface that opened under a pointer that is not moving covers what the pointer was on:
     // hover is only worked out on a move, so it is prompted here.
     if state.layers.visible_set_changed() {
@@ -214,8 +215,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             .notify(crate::server::NotificationCommand::Hover(hovered));
     }
 
-    let backend_poll = poll_backends(state);
-    let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
+    let backend_poll = { let _s = step("wait.poll_backends"); poll_backends(state) };
+    let chrome_runtime_changed = { let _s = step("wait.sync_chrome_state"); crate::chrome::sync_chrome_state(state) };
     if backend_poll.bell_any {
         apply_bell_policy(state);
     }
@@ -236,7 +237,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // loop would wake and go straight back to sleep, and the bubble would still be waiting for the
     // user to nudge the mouse. The deadline is remembered, and reaching it is itself a reason to
     // draw.
-    let widget_wake = crate::chrome::next_redraw_across_trees(state);
+    let widget_wake = { let _s = step("wait.next_redraw"); crate::chrome::next_redraw_across_trees(state) };
     let widget_due = state
         .widget_frame_due
         .is_some_and(|due| Instant::now() >= due);

@@ -144,8 +144,12 @@ impl Component for ScrollRegion {
         self.sync_shift();
         let vp = self.base.bounds;
 
+        // The keyboard resumes following what moves; a pointer press pauses it — a click that
+        // reshapes content must not drag the view after a target it only pushed (`follow_revealed`).
         if matches!(ev, Event::Key { pressed: true, .. } | Event::TextInput(_) | Event::Widget(_)) {
             self.reveal_paused = false;
+        } else if matches!(ev, Event::PointerDown(_)) {
+            self.reveal_paused = true;
         }
         match ev {
             Event::PointerDown(p) => self.press_capture(p.pos, vp, ev),

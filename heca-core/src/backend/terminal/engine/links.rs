@@ -84,6 +84,11 @@ pub(super) fn scan_url_byte_ranges(text: &str) -> Vec<(usize, usize)> {
 
 /// Detect plain-text URLs in one snapshot line, mapped to cell columns.
 pub(super) fn detect_row_links(line: &TerminalLine, row: usize, out: &mut Vec<HyperlinkSpan>) {
+    // Every scheme has a ':', so a row without one has no link — most rows, on every update, and
+    // the column maps below are then never built.
+    if !line.cells.iter().any(|cell| cell.text.contains(':')) {
+        return;
+    }
     // Row string + per-byte (start col, end col) of the owning cell.
     let mut text = String::new();
     let mut byte_start_col: Vec<usize> = Vec::new();
@@ -125,4 +130,13 @@ pub(super) fn detect_plain_links(lines: &[TerminalLine], hyperlinks: &mut Vec<Hy
             .any(|e| e.row == d.row && d.start_col < e.end_col && e.start_col < d.end_col)
     });
     hyperlinks.extend(detected);
+}
+
+#[cfg(test)]
+mod scheme_tests {
+    /// `detect_row_links` skips a row without a ':' — true only while every scheme has one.
+    #[test]
+    fn every_scheme_has_the_colon_rows_are_screened_by() {
+        assert!(super::LINK_SCHEMES.iter().all(|scheme| scheme.contains(':')));
+    }
 }

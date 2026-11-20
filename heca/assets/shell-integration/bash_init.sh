@@ -1,4 +1,23 @@
-if [ -r "$HOME/.bashrc" ]; then
+# A login bash ignores --init-file, so heca starts an ordinary one and, where the user's shell
+# should be a login shell (HECA_LOGIN_SHELL, macOS), reads the login files here as bash would:
+# /etc/profile, then the first of ~/.bash_profile, ~/.bash_login, ~/.profile — which usually reads
+# ~/.bashrc itself (and ~/.bashrc when there is no login file).
+if [ -n "${HECA_LOGIN_SHELL:-}" ]; then
+  unset HECA_LOGIN_SHELL
+  if [ -r /etc/profile ]; then
+    . /etc/profile
+  fi
+  if [ -r "$HOME/.bash_profile" ]; then
+    . "$HOME/.bash_profile"
+  elif [ -r "$HOME/.bash_login" ]; then
+    . "$HOME/.bash_login"
+  elif [ -r "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+  elif [ -r "$HOME/.bashrc" ]; then
+    # No login file at all: the user's only configuration is .bashrc, so it is not skipped.
+    . "$HOME/.bashrc"
+  fi
+elif [ -r "$HOME/.bashrc" ]; then
   . "$HOME/.bashrc"
 fi
 

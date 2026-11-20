@@ -170,6 +170,10 @@ pub(super) struct TerminalEngine {
     /// Detect plain-text URLs in the visible grid and emit them as hyperlink
     /// spans (in addition to explicit OSC 8 links). Default `true`.
     link_detection: bool,
+    /// Moves whenever heca changes how the screen is drawn without the program printing anything —
+    /// colours, link detection, image capture, cell size — so [`screen_version`](Self::screen_version)
+    /// changes with it.
+    settings_generation: u64,
     /// Capture inline-image placements into the snapshot. Default `true`; the app
     /// turns it off via the `terminal.images` config toggle. See `terminal-09`.
     image_capture: bool,
@@ -227,6 +231,7 @@ impl TerminalEngine {
             viewport_anim_config: AnimationConfig::default(),
             viewport_anim_enabled: true,
             link_detection: true,
+            settings_generation: 0,
             image_capture: true,
             decoded_images: RefCell::new(HashMap::new()),
             cell_px,
@@ -237,6 +242,7 @@ impl TerminalEngine {
     /// Enable or disable inline-image capture (the `terminal.images` config toggle).
     pub(super) fn set_image_capture(&mut self, enabled: bool) {
         self.image_capture = enabled;
+        self.settings_generation += 1;
     }
 
     /// Update the physical cell pixel size reported to the emulation layer.
@@ -251,6 +257,7 @@ impl TerminalEngine {
             return;
         }
         self.cell_px = cell_px;
+        self.settings_generation += 1;
         self.terminal
             .resize(terminal_size(self.cols, self.rows, cell_px));
     }
@@ -258,6 +265,7 @@ impl TerminalEngine {
     /// Enable or disable plain-text URL auto-detection (linkify).
     pub(super) fn set_link_detection(&mut self, enabled: bool) {
         self.link_detection = enabled;
+        self.settings_generation += 1;
     }
 
     pub(super) fn title(&self) -> &str {

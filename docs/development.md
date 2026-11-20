@@ -56,7 +56,34 @@ locally, use those same two commands. They build the whole workspace and take a 
 day to day scope cargo to the crates you changed, for example `./scripts/lint-changed.sh` and
 `./scripts/lint-changed.sh test`.
 
-## Frame timing
+## Releasing
+
+A release is made **only** by pushing a version tag: `vX.Y.Z`, equal to the workspace version in
+`Cargo.toml`. A pre-release takes a **number** after the dash — `v0.1.0-1`, not `v0.1.0-rc1` —
+because the Windows installer accepts nothing else; it needs that exact version in `Cargo.toml` too.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) then checks the tag against
+`Cargo.toml` (and stops if they differ), builds heca for macOS (Apple Silicon and Intel), Linux and
+Windows, makes the installers with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager)
+— `.dmg` and `.app`, `.deb` and `.AppImage`, `.msi` — and an archive per system with the program,
+the licences and the README, and publishes them all in a GitHub Release with the notes in
+[`.github/release-notes.md`](../.github/release-notes.md). A tag with a `-` is published as a
+pre-release. The installer settings are in `heca/Cargo.toml` under `[package.metadata.packager]`.
+
+To try the installers locally (macOS shown):
+
+```bash
+cargo install cargo-packager --locked
+cargo build -p heca --release
+cargo packager -p heca --release -f app,dmg -o dist
+```
+
+
 
 For tuning the render path, run heca with `HECA_FRAME_TIMES` set (any value):
 
@@ -73,3 +100,24 @@ CPU and the average number of render passes it began:
 
 It is CPU time only: the GPU runs after the frame is submitted, so work moved from the CPU to the GPU
 looks like a win here. Off unless the variable is set.
+
+To find **which step is slow** — a single long frame, or a server turn that stalls typing — set
+`HECA_SLOW_MS` to a threshold in milliseconds. Every timed step that takes at least that long prints
+one line on stderr, with the seconds since start; inner steps come before the outer ones that contain
+them:
+
+```sh
+HECA_SLOW_MS=8 cargo run --release -p heca -- --standalone 2> slow.log
+```
+
+```text
+[slow]    12.004s    18.8 ms  frame.chrome_layout
+[slow]    12.004s    44.7 ms  frame.paint_window
+```
+
+Steps are named by where they run: `frame.*` (drawing), `client.*` (the window's event loop),
+`wait.*` (the window's turn between events: ticks, focus, polling the terminals),
+`server.*` and `session.*` (the server's turn). Use `--standalone` to see the server's steps: a
+background server writes its output nowhere. Add a step with `let _slow = slow_steps::step("name");`
+(`heca/src/slow_steps.rs`). `HECA_FRAME_REASONS=1` prints why each frame was asked for, on the same
+stream. Off unless the variable is set.

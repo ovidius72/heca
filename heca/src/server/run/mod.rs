@@ -280,6 +280,7 @@ impl ServerLoop {
     }
 
     pub(crate) fn pump(&mut self, now: Instant) {
+        let _slow = crate::slow_steps::step("server.pump");
         let mut received = Vec::new();
         for client in &self.clients {
             loop {
@@ -392,13 +393,13 @@ impl ServerLoop {
                 }
             }
         }
-        self.pump_sessions(now);
-        self.pump_services();
+        { let _s = crate::slow_steps::step("server.pump_sessions"); self.pump_sessions(now) };
+        { let _s = crate::slow_steps::step("server.pump_services"); self.pump_services() };
         for client in &self.clients { client.expire_rpc(now); }
         self.clients.retain(|c| !c.is_closed());
-        self.publish_directory();
+        { let _s = crate::slow_steps::step("server.publish_directory"); self.publish_directory() };
         self.flush_notices();
-        self.autosave(now);
+        { let _s = crate::slow_steps::step("server.autosave"); self.autosave(now) };
     }
 
     fn publish_directory(&mut self) {
@@ -493,10 +494,33 @@ impl ServerLoop {
         host.publish(&audience, limits.max_frame_bytes.get());
     }
 
-    /// Tell the services which sessions exist, after one is made, restored or deleted.
-    pub(super) fn sessions_changed(&self) {
-        let sessions: Vec<_> = self.sessions.iter().map(SessionRuntime::service_ref).collect();
+    /// Tell the services which sessions exist, after one is made, restored or deleted. Nothing is
+    /// announced: [`announce_session`](Self::announce_session) is the door for a change someone
+    /// made.
+    pub(super) fn sessions_changed(&self) -> crate::entry::service::Sessions {
+        let sessions = crate::entry::service::Sessions::new(
+            self.sessions.iter().map(SessionRuntime::service_entry).collect(),
+        );
         self.services.borrow_mut().know_sessions(&sessions);
+        sessions
+    }
+
+    /// **`session.changed` — the one place it is raised.** The services' listeners hear it, then
+    /// the scripts' stream (`heca rpc --events`) gets the same event. `session` is the session it
+    /// happened to; for a deleted one, as it was just before.
+    pub(super) fn announce_session(
+        &self,
+        kind: crate::entry::service::SessionChange,
+        session: crate::entry::service::SessionEntry,
+    ) {
+        let sessions = self.sessions_changed();
+        self.events.emit(&super::StreamEvent::SessionChanged { kind, session: session.clone() });
+        let event = crate::entry::service::ServerEvent::SessionChanged(crate::entry::service::SessionEvent {
+            kind,
+            session,
+            sessions,
+        });
+        self.services.borrow_mut().announce(&event);
     }
 
     fn index_for(&self, id: Option<SessionId>) -> Option<usize> {
@@ -520,6 +544,8 @@ mod catalog_tests;
 mod service_data_tests;
 #[cfg(test)]
 mod service_key_tests;
+#[cfg(test)]
+mod service_session_tests;
 #[cfg(test)]
 mod policy_tests;
 #[cfg(test)]

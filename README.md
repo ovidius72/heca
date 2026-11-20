@@ -35,7 +35,10 @@ terminals (and, later, other tools) inside one native window, laid out the way N
 
 ## Download
 
-There are no prebuilt downloads yet: build heca from source, as below.
+Every release is on the [GitHub Releases page](https://github.com/ovidius72/heca/releases): an
+installer and an archive for each system — `.dmg` on macOS (Apple Silicon and Intel), `.deb` and
+`.AppImage` on Linux, `.msi` on Windows. The builds are not signed yet; the release page says how to
+open them. Or build heca from source, as below.
 
 ## Build from source
 
@@ -51,7 +54,7 @@ or copy it somewhere on your `PATH`.
 On Linux, install the system packages first (Debian/Ubuntu names):
 
 ```bash
-sudo apt-get install pkg-config libasound2-dev libssl-dev
+sudo apt-get install pkg-config libasound2-dev
 ```
 
 ## Start developing

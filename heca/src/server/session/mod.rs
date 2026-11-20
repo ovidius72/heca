@@ -51,6 +51,10 @@ pub(crate) struct SessionRuntime {
     connection: heca_config::settings::ConnectionConfig,
     images: std::collections::HashMap<u64, heca_core::backend::TerminalImage>,
     known_terminals: std::collections::HashSet<crate::app::backend_store::TerminalOwner>,
+    /// The live frame last sent for each terminal and the screen version it was built at: a
+    /// terminal whose screen did not change is not snapshotted again, and is not sent again unless
+    /// its title or state changed. Cleared on a reload (colours may have changed).
+    published: std::collections::HashMap<crate::app::backend_store::TerminalOwner, (u64, std::sync::Arc<super::wire::terminal::TerminalFrame>)>,
     /// `heca rpc --events` subscribers (shared across sessions), fanned to from this session's
     /// broadcast. Empty until the owner loop installs the shared fanout.
     events: super::EventFanout,
@@ -94,6 +98,7 @@ impl SessionRuntime {
             connection: Default::default(),
             images: Default::default(),
             known_terminals: Default::default(),
+            published: Default::default(),
             events: Default::default(),
             services: Default::default(),
             config: None,
@@ -134,6 +139,18 @@ impl SessionRuntime {
         super::services::SessionRef { id: self.session.id, key: self.key }
     }
 
+    /// **This session as a service reads it** — the one place its key, name, folder and state are
+    /// put together for the services and the events.
+    pub(crate) fn service_entry(&self) -> crate::entry::service::SessionEntry {
+        use crate::entry::service::SessionState;
+        let info = self.info();
+        let state = match info.status {
+            super::sessions::SessionStatus::Active => SessionState::Active,
+            super::sessions::SessionStatus::Terminated => SessionState::Terminated,
+        };
+        crate::entry::service::SessionEntry::new(self.key, info.name, info.folder, state)
+    }
+
     /// This session's attached windows, for the services to show.
     pub(super) fn audience(&self) -> super::services::Audience<'_> {
         super::services::Audience {
@@ -160,6 +177,34 @@ impl SessionRuntime {
             .state
             .execute(super::ServerAction::Raise(draft), Instant::now());
         let _ = self.publish_notifications(&changes);
+    }
+
+    /// **The live frame to send for a terminal now**, or `None` when it has nothing new: its screen
+    /// is snapshotted only when its [screen version](ServerState::screen_version) moved, and a frame
+    /// is made only when that or its title or state changed since the one last sent.
+    fn live_frame(&mut self, owner: &crate::app::backend_store::TerminalOwner)
+        -> Option<std::sync::Arc<super::wire::terminal::TerminalFrame>> {
+        let runtime = match owner {
+            crate::app::backend_store::TerminalOwner::Pane(pane) => self.session.workspaces.iter()
+                .find_map(|workspace| workspace.find_pane(*pane)).map(|pane| pane.runtime.clone()),
+            _ => None,
+        };
+        let version = self.state.screen_version(owner);
+        if let (Some(version), Some((sent_at, sent))) = (version, self.published.get(owner))
+            && version == *sent_at && self.state.facts_unchanged(owner, sent, runtime.as_ref()) {
+            return None;
+        }
+        let (mut frame, images) = self.state.viewport(owner, 0)?;
+        if let Some(runtime) = runtime { frame.runtime = runtime; }
+        for image in images {
+            self.images.insert(image.id, image);
+        }
+        let frame = std::sync::Arc::new(frame);
+        match version {
+            Some(version) => { self.published.insert(owner.clone(), (version, frame.clone())); }
+            None => { self.published.remove(owner); }
+        }
+        Some(frame)
     }
 
     /// Re-read the config file and re-apply the server's own terminal and notification settings —
@@ -212,6 +257,7 @@ impl SessionRuntime {
     /// One turn of the loop: drain every client, do what it asked, and send back what changed;
     /// then let time pass (notification deadlines). Detached clients are dropped.
     pub(crate) fn pump(&mut self, now: Instant) {
+        let _slow = crate::slow_steps::step("session.pump");
         // Drain first (borrows the client ends), then act (borrows the state + session), so the two
         // borrows never overlap.
         let mut pending: Vec<(usize, ClientMsg)> = Vec::new();
@@ -386,13 +432,13 @@ impl SessionRuntime {
                     publish_terminals = true;
                 }
                 ClientMsg::Viewport { owner, offset } => {
-                    if let Some((frame, snapshot)) = self.state.viewport(&owner, offset) {
-                        for image in snapshot.images {
+                    if let Some((frame, images)) = self.state.viewport(&owner, offset) {
+                        for image in images {
                             self.images.insert(image.id, image);
                         }
                         if self.clients[i]
                             .link
-                            .send(ServerMsg::Terminal(Box::new(frame)))
+                            .send(ServerMsg::Terminal(std::sync::Arc::new(frame)))
                             .is_err()
                         {
                             detached.push(i);
@@ -429,6 +475,8 @@ impl SessionRuntime {
                 }
                 ClientMsg::Reload => {
                     let changes = self.reload_config(now);
+                    // Colours may have changed without the screens' versions moving.
+                    self.published.clear();
                     detached.extend(self.publish_notifications(&changes));
                     publish_terminals = true;
                 }
@@ -602,18 +650,20 @@ impl SessionRuntime {
             }
         }
 
-        let ticks = self.state.tick(now);
+        let ticks = { let _s = crate::slow_steps::step("session.tick"); self.state.tick(now) };
         detached.extend(self.publish_notifications(&ticks));
-        let poll = self.state.poll_backends();
-        self.state.collect_feedback(&self.session);
+        let poll = { let _s = crate::slow_steps::step("session.poll_backends"); self.state.poll_backends() };
+        { let _s = crate::slow_steps::step("session.collect_feedback"); self.state.collect_feedback(&self.session) };
+        let _reconcile = crate::slow_steps::step("session.reconcile_processes");
         let (process_changes, exits) = self.state.reconcile_processes(
             &mut self.session,
             poll.closing_panes.clone(),
             self.rpc_asker,
         );
+        drop(_reconcile);
         detached.extend(self.broadcast(&process_changes));
         detached.extend(self.publish_feedback());
-        self.state.refresh_git(&mut self.session, now);
+        { let _s = crate::slow_steps::step("session.refresh_git"); self.state.refresh_git(&mut self.session, now) };
         for (pane, code) in exits {
             for (i, client) in self.clients.iter().enumerate() {
                 if matches!(client.attachment.get(), Attachment::Attached)
@@ -640,6 +690,7 @@ impl SessionRuntime {
             }
         }
 
+        let _publish = crate::slow_steps::step("session.publish_terminals");
         if publish_terminals {
             let owners: Vec<_> = self
                 .state
@@ -647,28 +698,20 @@ impl SessionRuntime {
                 .owners()
                 .map(|(owner, _)| owner)
                 .collect();
+            self.published.retain(|owner, _| owners.contains(owner));
             for owner in owners {
-                let Some((mut frame, snapshot)) = self.state.viewport(&owner, 0) else {
-                    continue;
-                };
-                if let crate::app::backend_store::TerminalOwner::Pane(pane) = owner
-                    && let Some(pane) = self
-                        .session
-                        .workspaces
-                        .iter()
-                        .find_map(|workspace| workspace.find_pane(pane))
-                {
-                    frame.runtime = pane.runtime.clone();
-                }
-                for image in snapshot.images {
-                    self.images.insert(image.id, image);
-                }
+                // What changed goes to every window; a window still waiting for its first picture
+                // gets every terminal, changed or not.
+                let fresh = self.live_frame(&owner);
+                let last = fresh.clone().or_else(|| self.published.get(&owner).map(|(_, frame)| frame.clone()));
                 for (i, client) in self.clients.iter().enumerate() {
-                    if !detached.contains(&i)
+                    let frame = if client.projection_pending.get() { last.as_ref() } else { fresh.as_ref() };
+                    if let Some(frame) = frame
+                        && !detached.contains(&i)
                         && matches!(client.attachment.get(), Attachment::Attached)
                         && client
                             .link
-                            .send(ServerMsg::Terminal(Box::new(frame.clone())))
+                            .send(ServerMsg::Terminal(frame.clone()))
                             .is_err()
                     {
                         detached.push(i);

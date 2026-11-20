@@ -19,42 +19,33 @@ use crate::chrome::panes::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLi
 
 /// The built-in lines; configuration chooses their order and visibility.
 pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
-    let own = |name: &str, build: fn(&LineCx<'_>) -> Visibility| PaneLineDef {
+    let own = |name: &str, build: fn(&LineCx<'_>) -> heca_grid_ui::WidgetModel| PaneLineDef {
         name: name.to_string(),
-        build: Rc::new(move |cx| heca_grid_ui::WidgetModel::new(build(cx))),
+        build: Rc::new(build),
         from_extension: false,
     };
-    vec![own("cwd", cwd_line), own("git", git_line), own("agent", super::agent_line::build)]
+    vec![
+        own("cwd", |cx| heca_grid_ui::WidgetModel::new(cwd_line(cx))),
+        own("git", |cx| heca_grid_ui::WidgetModel::new(git_line(cx))),
+        own("agent", |cx| heca_grid_ui::WidgetModel::new(super::agent_line::build(cx))),
+    ]
 }
 
 /// **Where the pane is**: a folder glyph and the home-relative path. The one shape the exposé's card
 /// shares (`components::FolderLine`). Shown while the pane has a directory, read inside this line's own
 /// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
 /// pane_lines`, and nothing else.
-fn cwd_line(cx: &LineCx<'_>) -> Visibility {
-    let line = crate::components::FolderLine {
-        path: None,
-        show: false,
-        size: WidgetSize::Caption,
-        indent: META_INDENT,
-        theme: cx.theme,
-    }
-    .build();
-    let (text, visible) = (line.text, line.visible);
+fn cwd_line(cx: &LineCx<'_>) -> crate::components::FolderLine {
+    let line = crate::components::FolderLine::new(cx.theme).size(WidgetSize::Caption).indent(META_INDENT);
+    let path = line.path_signal();
     let facts = cx.facts.clone();
     create_effect(move |_| {
-        let cwd = facts().cwd;
         // Cut to a home-relative form here, at the binding, so there is one spelling of "where this
-        // pane is".
-        set_if_changed(
-            text,
-            cwd.as_deref()
-                .map(crate::chrome::home_relative_path)
-                .unwrap_or_default(),
-        );
-        set_if_changed(visible, cwd.is_some());
+        // pane is". No directory is an empty path, which hides the line.
+        let cwd = facts().cwd;
+        set_if_changed(path, cwd.as_deref().map(crate::chrome::home_relative_path).unwrap_or_default());
     });
-    line.widget
+    line
 }
 
 /// **The git state**: branch (cut for a narrow sidebar, the full name on hover) and the counts of

@@ -23,6 +23,56 @@ pub struct ShellIntegrationAssets {
     pub zsh_zdotdir: PathBuf,
 }
 
+/// The integration files, by the name they are written under. The one list: the app and the tests
+/// both write it through [`ShellIntegrationAssets::write_to`].
+const BASH_INIT: (&str, &str) = ("bash_init.sh", include_str!("../../../../heca/assets/shell-integration/bash_init.sh"));
+const FISH_INIT: (&str, &str) = ("fish_init.fish", include_str!("../../../../heca/assets/shell-integration/fish_init.fish"));
+/// zsh reads every startup file from `ZDOTDIR`, which heca points at this folder, and each of
+/// heca's reads the user's own file of the same name first.
+const ZSH_DIR: &str = "zsh";
+const ZSH_FILES: [(&str, &str); 4] = [
+    (".zshenv", include_str!("../../../../heca/assets/shell-integration/zsh/.zshenv")),
+    (".zprofile", include_str!("../../../../heca/assets/shell-integration/zsh/.zprofile")),
+    (".zshrc", include_str!("../../../../heca/assets/shell-integration/zsh/.zshrc")),
+    (".zlogin", include_str!("../../../../heca/assets/shell-integration/zsh/.zlogin")),
+];
+
+/// How heca's `.zshenv` begins, in every heca version: what tells a heca zsh folder from the user's.
+const ZSH_HEADER: &str = "# heca shell integration:";
+
+/// **Is this folder a heca zsh folder** — this heca's or that of another heca, of any version? It
+/// is what a shell inside a heca pane has as its `ZDOTDIR`.
+pub(super) fn is_heca_zsh_folder(dir: &std::path::Path) -> bool {
+    use std::io::Read;
+    let mut start = [0; ZSH_HEADER.len()];
+    std::fs::File::open(dir.join(".zshenv")).and_then(|mut file| file.read_exact(&mut start))
+        .is_ok_and(|()| start == ZSH_HEADER.as_bytes())
+}
+
+impl ShellIntegrationAssets {
+    /// Write the integration files under `root` (only those whose content changed) and say where
+    /// they are.
+    pub fn write_to(root: &std::path::Path) -> std::io::Result<Self> {
+        let zsh_dir = root.join(ZSH_DIR);
+        std::fs::create_dir_all(&zsh_dir)?;
+        let bash_init = root.join(BASH_INIT.0);
+        let fish_init = root.join(FISH_INIT.0);
+        write_if_changed(&bash_init, BASH_INIT.1)?;
+        write_if_changed(&fish_init, FISH_INIT.1)?;
+        for (name, content) in ZSH_FILES {
+            write_if_changed(&zsh_dir.join(name), content)?;
+        }
+        Ok(Self { bash_init, fish_init, zsh_zdotdir: zsh_dir })
+    }
+}
+
+fn write_if_changed(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+    if std::fs::read_to_string(path).ok().as_deref() == Some(content) {
+        return Ok(());
+    }
+    std::fs::write(path, content)
+}
+
 /// What a test shell needs beyond the [options](TerminalBackendOptions): which shell, and an
 /// environment of its own. The app always starts the user's shell in the user's environment.
 pub(super) struct ShellLaunch<'a> {

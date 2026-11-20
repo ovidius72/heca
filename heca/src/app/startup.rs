@@ -446,6 +446,7 @@ pub(crate) async fn init_state(
         pending_drops: pending_drops.clone(),
         pending_reload: Some(crate::app_state::ReloadReason::Session),
         window_focused,
+        window_occluded: false,
         current_cursor: winit::window::CursorIcon::Default,
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),

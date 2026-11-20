@@ -18,7 +18,7 @@
 //!
 //! A value with a space, a quote or a Windows path is written in quotes —
 //! `rename_session_to session=demo name="my work"`. How a line is cut into words, and how a
-//! script's arguments are written as a line, is [`line`]'s and nobody else's; its module doc is
+//! script's arguments are written as a line, is [`line`](mod@line)'s and nobody else's; its module doc is
 //! the syntax: quotes, escapes, which `name=` is a name, and what is refused.
 
 pub mod line;
@@ -163,7 +163,7 @@ pub struct RpcCall {
 }
 
 /// Read one RPC line. Knows nothing about any action: which names exist and what they take is the
-/// catalog's, asked by [`RpcCall::into_intent`]. How the line is cut into words is [`line`]'s.
+/// catalog's, asked by [`RpcCall::into_intent`]. How the line is cut into words is [`line`](mod@line)'s.
 pub fn parse_rpc(input: &str) -> Result<RpcCall, RpcError> {
     let mut words = line::tokenize(input)?.into_iter();
     let action = words
