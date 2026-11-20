@@ -9,8 +9,8 @@ programs, each serving a different purpose:
 | **Extension example** | `cargo run -p heca --example extend_heca` | Heca with example contributions: a **Notes** dock with a terminal in the right sidebar, actions and a named layer. These additions belong to the example. |
 | **Widget showcase** | `cargo run -p heca-renderer --example showcase` | An interactive gallery of the UI library's widgets and compositions. |
 
-The base program calls `heca::run()`. The extension example registers its contributions first,
-then calls the same `heca::run()`. Its complete source and usage are in
+The base program calls `heca::run("heca")`. The extension example registers its contributions first,
+then calls the same `heca::run(..)`. Its complete source and usage are in
 [`heca/examples/extend_heca.rs`](../heca/examples/extend_heca.rs) and
 [Building on Heca](extending-heca.md). The showcase source is
 [`heca-renderer/examples/showcase/main.rs`](../heca-renderer/examples/showcase/main.rs), with widget

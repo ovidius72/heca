@@ -253,11 +253,13 @@ confirm_prompt = "Confirm? [y/N]: "
 folder_placeholder = "Project folder (optional)"
 create_folder = "Create folder: {path}"
 counts = "{windows} windows / {agents} agents"
-# Window title. {folder} is the session folder shown home-relative (or the session name when it has
-# no folder). The first window on a session carries no number; each later window on the same session
-# is numbered, so two windows read "~/projects/heca" and "~/projects/heca #2".
-window_title = "{folder}"
-window_title_numbered = "{folder} #{number}"
+# Window title. {app} is the program's fixed name (heca, Heca Pro), {folder} the session folder shown
+# home-relative (or the session name when it has no folder). The first window on a session carries no
+# number; each later window on the same session is numbered, so two windows read
+# "heca - ~/projects/heca" and "heca - ~/projects/heca - #2". Before it attaches to a session a window
+# is titled with the program's name alone.
+window_title = "{app} - {folder}"
+window_title_numbered = "{app} - {folder} - #{number}"
 # The follow picker's row that stops mirroring another window.
 stop_following = "Stop following"
 
@@ -444,6 +446,25 @@ delete_column = true    # deleting a column (and its panes)
 delete_workspace = true # deleting a workspace (and its contents)
 terminate_session = true # stop processes, keep the session for explicit restart
 delete_session = true    # remove the session, never project files
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [[docks]] — where each dock goes, in what order and how big. One entry per kind
+# of dock (name), or per dock (name + id), which wins over the entry for its kind:
+#   name     = the kind of dock, e.g. "workspaces"
+#   id       = one dock of that kind (optional; unset = every dock of the kind)
+#   location = "sidebar.left" | "sidebar.right" | "bar.top" | "bar.bottom" | "none"
+#   order    = lower first; ties keep the order the docks were added in (optional)
+#   flex     = how much of the region it takes: 2 is twice a dock at 1 (optional)
+# "none" leaves the dock out of the window; its keyboard actions still work. An
+# entry with an id no dock has adds one of that kind, if the kind allows it (the
+# workspaces dock does); otherwise it does nothing. What an entry does not say
+# is what the program that adds the dock says. A reload (prefix+Shift+r) applies
+# the entries that changed. This list replaces the default one when you write
+# your own.
+# ─────────────────────────────────────────────────────────────────────────────
+[[docks]]
+name = "workspaces"          # the workspaces and their panes
+location = "sidebar.left"
 
 # ─────────────────────────────────────────────────────────────────────────────
 [font]

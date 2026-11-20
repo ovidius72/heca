@@ -4,7 +4,7 @@ use heca_grid_ui::{Image, Tone, builders::{LayoutExt, Parent, PlaceExt, ToneExt,
 use heca_grid_ui::image::ImageSource;
 use heca_grid_ui::prop::PropName;
 use heca_grid_ui::reactive::{create_effect, signal, SignalGet};
-use heca_grid_ui::style::{Length, Spacing, WidgetSize};
+use heca_grid_ui::style::{Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Flex, Glyph, Grid, Icon, Label, Visibility};
 
 use crate::agent::AgentIcon;
@@ -18,13 +18,13 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let primary_text = primary.text_signal();
     let session = text(cx, false);
     let session_text = session.text_signal();
-    let session = Visibility::new(session, false);
+    let session = Visibility::new().visible(false).child(session);
     let session_visible = session.visible_signal();
     let status = text(cx, false);
     let status_text = status.text_signal();
     let task = text(cx, false).muted(true);
     let task_text = task.text_signal();
-    let task = Visibility::new(task, false);
+    let task = Visibility::new().visible(false).child(task);
     let task_visible = task.visible_signal();
 
     // Image owns decoding, load errors and fitting. The row only supplies driver metadata.
@@ -34,18 +34,17 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
         .width(cx.theme.font_size).height(cx.theme.font_size)
         .fallback(fallback);
     let logo_source = logo.source_signal();
-    let logo = Visibility::new(logo, false);
+    let logo = Visibility::new().visible(false).child(logo);
     let logo_visible = logo.visible_signal();
     let generic = Icon::new(initial.icon);
     let generic_glyph = generic.glyph_signal();
-    let generic = Visibility::new(generic, true);
+    let generic = Visibility::new().visible(true).child(generic);
     let generic_visible = generic.visible_signal();
     let indicator = Icon::new(Glyph::Circle);
     let status_glyph = indicator.glyph_signal();
     let status_tone = signal(None);
     let tooltip = signal(String::new());
-    let row = Visibility::new(
-        Flex::column().gap(Spacing::Xs).padding_x(META_INDENT).width(Length::FULL)
+    let row = Visibility::new().visible(false).child(Flex::column().gap(Spacing::Xs).padding_x(META_INDENT)
             .child(Grid::new()
                 .template_column("auto 1fr auto")
                 .template_area(["logo primary status", ". session session"])
@@ -55,9 +54,7 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
                 .child(session.area("session"))
                 .child(Flex::row().align("center").gap(Spacing::Xs).content_tone_signal(status_tone)
                     .child(indicator).child(status).area("status")))
-            .child(task).tooltip_signal(tooltip),
-        false,
-    );
+            .child(task).tooltip_signal(tooltip));
     let visible = row.visible_signal();
     let facts = cx.facts.clone();
     let statuses = cx.agent_statuses;

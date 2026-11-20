@@ -27,7 +27,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
-- [Providers and startup regions](#providers-and-startup-regions) — add, remove and order docks; placement identity; native/plugin availability
+- [Providers and regions](#providers-and-regions) — add, remove and order docks; placement identity; native/plugin availability
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
 
@@ -2764,7 +2764,7 @@ adds a dock after the app built its own — so a size list written on the region
 one more dock arrives. Each dock carries its own part, and a new one brings its own.
 
 **Where to write it: on the body the container builds** — or, when you are adding a dock someone
-else wrote, on the dock as you add it: `regions("sidebar.left").append(Docker::new("d").flex(3.0).order(-1))`.
+else wrote, on the dock as you add it: `regions("sidebar.left").append(|| Docker::new("d").flex(3.0).order(-1))`.
 `.flex` and `.order` are there on every dock type, built once. What the adder says wins over what
 the dock's body says.
 
@@ -2786,7 +2786,7 @@ regions("sidebar.left").append(git);   // brings its own part; the others keep t
 There is no size method on the provider and no size list on the region — a `fn grow()` on the
 provider and a `template_row` on the region both existed and were removed (P082(F003)/T518). The
 region says only the air between its docks, with `regions(..).gap(..)` (see
-[Providers and startup regions](#providers-and-startup-regions)); unset, the theme's `"sm"`
+[Providers and regions](#providers-and-regions)); unset, the theme's `"sm"`
 step. A rule is drawn between two docks; it asks for no part, so the docks divide what is left
 exactly as asked.
 
@@ -4027,9 +4027,18 @@ half-wired. See [Options are children](#options-are-children-select--tabs--choic
 
 Generic list/menu/sidebar **row**: an optional leading slot, a label, and an optional trailing
 slot, with hover, active (selected), and click-to-activate states. Slots accept any component
-(a `StatusDot`, a kbd-hint `Label`, a `>` chevron, …). Row height tracks the font; the
-active/hover highlight is an inset pill (rounds with the theme radius, so it tucks inside a
-rounded `Pane`). Becomes focusable/clickable once `.on_activate(...)` is set.
+(a `StatusDot`, a kbd-hint `Label`, a `>` chevron, …). The active/hover highlight is an inset pill
+(rounds with the theme radius, so it tucks inside a rounded `Pane`). Becomes focusable/clickable
+once `.on_activate(...)` is set.
+
+**Its size comes from the theme, like a CSS box.** The air at the sides is the `Md` spacing step,
+above and below the `Sm` step, between a slot and the label the `Sm` step — all relative to the font,
+so a font or size change moves them together. There is **no fixed height**: a row is its content plus
+that air, so a taller slot makes a taller row. **An empty slot takes no room** — a row without a
+leading part starts its label exactly where another row's leading part starts, so the content of
+every row in a list lines up. Parts placed beside rows by the library (a
+[`DockFrame`](#dockframe)'s title row, its leading part, its header actions) start and end at the
+same air, from the same source, so they line up with the rows without a spacer.
 
 **Content is composed** (like [`Button`](#button)): the label is a real `Label` child that grows to
 fill the middle, so the row draws only its chrome. Its **state color** (active → accent, muted →
@@ -4102,7 +4111,26 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
   `.attention(Signal<bool>)` + `.attention_color(Color)`,
   `.reveal_when(Signal<bool>)` (gate this row's request to be scrolled into view — see
   [Following the cursor](#following-the-cursor); only needed when the cursor also follows the
-  mouse), plus `StyleExt` for a persistent background under the selection overlay.
+  mouse), `.variant(RowVariant)` (its background at rest, from the theme — below), plus
+  `StyleExt` for a persistent background under the selection overlay.
+- **Variants — a background at rest, by name.** A plain row has none; a list of cards names one
+  instead of writing a background, a radius and a padding at every call site:
+
+  | `RowVariant` | what it paints | used by |
+  | --- | --- | --- |
+  | `Plain` (default) | nothing — only the states show | lists, menus |
+  | `Tinted` | a veil: the theme's text colour at `card_background_alpha`, the controls' corner radius, `Sm` air inside | the workspaces dock's pane rows; a card in any dock |
+  | `Filled` | a solid box: the theme's `surface`, the same corners, `Xs` air inside | the exposé's cards — over something busy |
+
+  ```rust
+  Row::new().variant(RowVariant::Tinted).child(Grid::new() /* icon, name, folder */)
+  Row::new().variant(RowVariant::Tinted).border(accent, 1.0)   // a variant, plus one change
+  Row::new().background(..).radius(..).padding(Spacing::Md)    // all by hand, no variant
+  ```
+
+  **Style set by hand wins**: a background or radius set at any point beats the variant's, and a
+  padding set after it beats its air. A new variant is added only when the same look is wanted in
+  more than one place; anything else is written with the style builders.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
 
@@ -4129,7 +4157,8 @@ ViewNode::new(WidgetId::Row)
     .child(ViewNode::new(WidgetId::Badge).text(status));
 ```
 
-Props `realize` reads: `active`, `nav_selected`, `marker`. Events: `press` — wired to a click, to
+Props `realize` reads: `active`, `nav_selected`, `marker`, `variant` (`"plain"` / `"tinted"` /
+`"filled"`; typed SDK: `Row::new().variant(ViewRowVariant::Tinted)`). Events: `press` — wired to a click, to
 Enter/Space, **and** to a KeyHint target, so `prefix+/` reaches the row like any other actionable
 node. With no `press` intent the row is deliberately inert: not focusable, no hover — a described
 row that nothing can activate should not look like a control.
@@ -4214,8 +4243,8 @@ Row::new().on_activate(open).child(
         .icon(Icon::new(Glyph::FileCode))
         .title(Label::new("Neovim").bold(true))
         .suffix(Label::new("(nvim)").size(WidgetSize::Small))
-        .line(Visibility::new(folder_line, cwd.is_some()))
-        .line(Visibility::new(git_line, branch.is_some())),
+        .line(Visibility::new().visible(cwd.is_some()).child(folder_line))
+        .line(Visibility::new().visible(branch.is_some()).child(git_line)),
 )
 ```
 
@@ -4967,12 +4996,21 @@ A signal-driven wrapper that hides or shows exactly one child without rebuilding
 Use it for optional metadata rows and exceptional-state indicators that should collapse
 cleanly when absent.
 
-- **Construct**: `Visibility::new(child, visible)`.
+- **Construct**: `Visibility::new()` — empty and shown — then `.visible(bool)` (default `true`) and
+  `.child(widget)`: the one widget it shows and hides (a second `.child` replaces the first; wrap a
+  `Flex` to hide several together). The order of the two builders does not matter.
 - **Live update**: `.visible_signal() -> Signal<bool>`.
-- **Existing signal**: `.with_visible_signal(signal)` binds presence without an extra event handler.
+- **Hidden means gone from the layout**, the wrapper's box as well as the child's: its parent spends
+  no gap on it.
+- **Transparent to layout**: the child is laid out exactly as it would be without the wrapper. A
+  child of automatic width stretches wherever its parent stretches the wrapper (a list item in a
+  column fills the column), keeps its natural size where it would, and a child that grows still
+  grows. No caller writes `.width(Length::FULL)` under it. The same holds for every transparent
+  wrapper: [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope),
+  [`Tooltip`](#tooltip) and heca's `FolderLine` — the layout engine does it once for all of them.
 
 ```rust
-let error = Visibility::new(StatusDot::error(), false);
+let error = Visibility::new().visible(false).child(StatusDot::error());
 error.visible_signal().set(true);
 ```
 
@@ -4985,10 +5023,10 @@ error.visible_signal().set(true);
 >
 > ```rust
 > // ✅ the line is there, saying nothing, ready to be revealed
-> column.child(Visibility::new(folder_line, cwd.is_some()))
+> column.child(Visibility::new().visible(cwd.is_some()).child(folder_line))
 >
 > // ❌ if the directory arrives later, nothing can ever show it
-> if cwd.is_some() { column = column.child(Visibility::new(folder_line, true)) }
+> if cwd.is_some() { column = column.child(Visibility::new().visible(true).child(folder_line)) }
 > ```
 >
 > And nothing may go **around** it. An inset, an alignment box or a spacer wrapped around a
@@ -5111,20 +5149,51 @@ marker bar is an indicator; the rows inside carry their own intents.
 ### DockFrame
 
 For adding, removing or ordering a dock in the application, use the
-[Provider and startup region API](#providers-and-startup-regions). `DockFrame` supplies the UI frame;
+[Provider and region API](#providers-and-regions). `DockFrame` supplies the UI frame;
 the host mounts the provider.
 
 A titled, collapsible, bracket-framed shell for a Dock: a title bar (drag-handle grip + chevron
-+ title + a header-controls slot) over a foldable body. Reuses `Pane`'s corner brackets.
++ title + a header-actions slot) over a foldable body. Reuses `Pane`'s corner brackets.
 **Rail-aware**: bound to a region's [`RegionMode`](#chromeregion) signal, it folds header + body
 away to a single centered `Icon` while the region is collapsed to a rail.
 
 - **Construct**: `DockFrame::new(title)`. Add body with `.child(...)`: one component or an
   array/`Vec` of a common type; chain `.child(a).child(b)` for different types. Every child stays in
-  the body. The frame's named Grid areas identify its own title, controls and body. Nested
+  the body. The frame's named Grid areas identify its own title, header actions and body. Nested
   components may use the same area names: their content, fold state and rail remain independent.
-- **Builders**: `.header(impl Component)` (fill the controls slot, e.g. a search field or count
-  `Badge`), `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
+- **Variants** (`.variant(DockFrameVariant)`) — how the title row is laid out:
+
+  | Variant | Title row | Use |
+  |---|---|---|
+  | `Dock` (default) | grip, **chevron on the left**, leading part, title · header actions | a dock in a chrome region |
+  | `Section` | the `leading` part right before the title, **chevron at the right end**, no grip · header actions | a group in a list (a team with its members) |
+  | a title row of your own (`.header`) | your content, **chevron at the right end** · header actions | anything else |
+
+  Only the title row differs; the body is laid out the same in every case. **Whether the body's rows
+  are indented is the caller's decision**, written in the content it gives (e.g.
+  `.child(Flex::column().padding_left(Spacing::Lg).child(rows))`) — the frame never indents it.
+
+- **Everything lines up with the rows, with nothing written by the caller.** The first part of the
+  title row (a `Dock`'s grip, a `Section`'s leading part, the first thing in your own `.header`)
+  starts where an [`Item`](#item) row's content starts; the header actions end where a row's trailing
+  part ends, so a count in the title row sits in the same column as the badges under it; your own
+  title row is given a row's air above and below, so it is as tall as a `Dock`'s. The parts of the
+  title row are centred on it. Every inset is a theme step taken from `Item`, never a number, so a
+  spacer beside a badge is never needed — and would now double the air.
+
+- **Builders**: `.variant(DockFrameVariant)`,
+  `.leading(impl Component)` (the part before the title — avatar, icon, image — inside the title
+  row and centred on it: right before the title in a `Section`, after the chevron in a `Dock`,
+  before a `.header` of your own),
+  `.header(impl Component)` (**a title row of your own** — any widget; the frame still folds: a
+  click on it folds the body and the chevron stays at its end; controls inside it keep their own
+  input),
+  `.header_actions(impl Component)` (the slot at the right of the title row, e.g. a search field or count
+  `Badge`; a click on it never folds. With your own `.header` it is usually not needed — put the
+  actions inside your header — but the two may be used together),
+  `.collapsible(bool)` (default `true`; `false` keeps the body open, hides the chevron and a click
+  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none),
+  `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
   `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace;
@@ -5156,8 +5225,15 @@ let sidebar = ChromeRegion::vertical();
 let mode = sidebar.mode_signal();
 let files = DockFrame::new("EXPLORER")
     .rail(mode, Glyph::FolderOpen)
-    .header(Badge::accent("3"))
+    .header_actions(Badge::accent("3"))
     .child(ItemGroup::new("src").child(Item::new("main.rs")));
+
+// A group in a list, title row written by hand; the frame still folds it.
+let team = DockFrame::new("Development")
+    .variant(DockFrameVariant::Section)
+    .leading(Icon::new(Glyph::Folder))
+    .header(Flex::row().gap(Spacing::Xs).child([Label::new("Development"), Label::new("3")]))
+    .child(members);
 ```
 
 **Declarative** (`WidgetId::DockFrame`):
@@ -5169,17 +5245,23 @@ ViewNode::new(WidgetId::DockFrame)
     .prop("frameless", PropValue::Bool(false))
     .prop("active", PropValue::Bool(false))                    // the accent wash
     .prop("nav_selected", PropValue::Bool(false))              // the nav-cursor outline
+    .prop("variant", PropValue::Text("dock".into()))           // or "section"
+    .prop("collapsible", PropValue::Bool(true))
+    .prop("grip", PropValue::Bool(true))
     .on("toggle", Intent::new("fold_dock"))                    // fires with args {"expanded": …}
     .child(ViewNode::new(WidgetId::Badge)
         .text("3")
-        .prop("slot", PropValue::Text("header".into())))       // ← the controls slot
+        .prop("slot", PropValue::Text("header_actions".into())))     // ← the header-actions slot
     .child(ViewNode::new(WidgetId::Item).text("main.rs"));   // ← no slot ⇒ body (the default)
 ```
 
 - **Props**: `text` (title), `expanded` (Bool, default `true`), `frameless`, `active`,
-  `nav_selected` (Bool).
+  `nav_selected`, `collapsible`, `grip` (Bool), `variant` (`"dock"` | `"section"`). The typed SDK
+  has the same setters (`.variant(ViewDockFrameVariant::Section)`, `.collapsible(false)`, …).
 - **Event**: `toggle` — carries the new state in `args["expanded"]`.
-- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `header` (the controls slot).
+- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `header` (a title row of
+  the plugin's own), `header_actions` (the slot at the right of the title row), `leading` (the part
+  before the title).
   The **body is the default slot**, so an unslotted child is body content; an unknown slot name falls
   back to the body and is debug-logged.
 - **`.rail(..)` is host-only** — it binds a host-owned `Signal<RegionMode>`, and static serializable
@@ -5887,15 +5969,25 @@ has, so **no widget opts in and no host paints on their behalf**.
 
 | builder | what it does |
 | --- | --- |
-| `.tooltip(text)` | what this widget says on hover. Unset = it says nothing, and costs nothing. |
-| `.tooltip_signal(Signal<String>)` | the same, from a live signal — an action's current keybinding, a changing status — so the bubble follows without the widget being rebuilt. |
+| `.tooltip(..)` | what this widget says on hover — **words** (they wrap and keep their line breaks: `"zsh\npane-1"` is two lines), a **`Signal<String>`** the bubble follows live without the widget being rebuilt, or a **whole widget** (a segmented `Tag`, a row of parts). One door: `impl IntoTip`. Unset = it says nothing, and costs nothing. |
+| `.tooltip_signal(Signal<String>)` | the same as `.tooltip(signal)`, which is the form to write; kept so code written against it keeps working. |
 | `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
 | `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
 | `.tooltip_quick(true)` | the library's shorter rest (`QUICK_DELAY`, half the default) — a name instead of a number, for a tip that carries what the widget had to cut short (a branch name in a narrow row). No-op with no tooltip declared. In a described tree: `.prop("tooltip_quick", PropValue::Bool(true))`. |
 
-All four are on `TooltipExt`, so they apply to **every** widget — and the first, third and fourth
-have the described spellings below. `tooltip_signal` is native-only, because a signal is a live host
-value a description cannot name.
+All of them are on `TooltipExt`, so they apply to **every** widget — and `tooltip` (with words),
+`tooltip_side`, `tooltip_delay` and `tooltip_quick` have the described spellings below. A signal or a
+widget as the content is native-only: a description carries words.
+
+```rust
+Button::new("Close").tooltip("Close the pane");                        // words
+PaneName::new(..).tooltip(title);                                      // a Signal<String>, followed live
+row.tooltip(Tag::new(program).segment_text(model).segment_text(folder)); // a widget
+```
+
+**The bubble is widgets, laid out by the engine**: a panel (the overlay family's own surface, see
+below) holding the content, padded with steps of the theme's rhythm. Words are a wrapping `Label`
+that keeps their line breaks. Nothing in it is measured by hand, so whatever it holds fits.
 
 > ⚠️ **The bubble is drawn by `paint_child`, not by the widget's own `paint`.** Anything that paints
 > a tree with a bare `.paint(cx)` shows the widget and none of the three things the framework draws
@@ -5972,9 +6064,25 @@ Button::new("Close").tooltip("Close the pane").tooltip_side(ViewTooltipSide::Bot
 | `tooltip` | text | *(none)* | what the node says on hover. Absent = it says nothing. |
 | `tooltip_side` | `"top"` \| `"bottom"` \| `"left"` \| `"right"` | `"top"` | which side to prefer; flipped when there is no room. Ignored with no `tooltip`. |
 | `tooltip_delay` | number | `0.5` | seconds the pointer must rest. An integer is accepted as well as a fraction. Ignored with no `tooltip`. |
+| child with `slot: "tooltip"` | any node | *(none)* | a widget as the tooltip, instead of words. On every kind. |
+
+**A widget as the tooltip: a child in the `tooltip` slot** — on any kind, a leaf included. It is what
+the node shows on hover (natively `.tooltip(widget)`), not one of its children, and it wins over the
+`tooltip` words. `tooltip_side`, `tooltip_delay` and `tooltip_quick` apply to it the same way:
+
+```rust
+ViewNode::new(WidgetId::Label)
+    .text("claude")
+    .prop("tooltip_side", PropValue::Text("bottom".into()))
+    .child(ViewNode::new(WidgetId::Tag).text("claude")             // shown in the bubble
+        .prop("slot", PropValue::Text("tooltip".into())))
+```
+
+The slot is taken by `realize` before the node's own kind is built, so no kind knows it exists.
 
 There is no declarative `tooltip_signal`: a signal is a live host value, and a description has no way
-to name one. A described tooltip whose words change is a re-described node.
+to name one. A described tooltip whose words change is a re-described node, until a described value
+can be bound (P085(F003)/T360).
 
 In the heca app an action button's tip is derived from its `WmAction` centrally (next section),
 never authored per call site.
@@ -6965,7 +7073,7 @@ toasts.update(|v| v.push(
 
 Dialog panels use the theme’s `[dialog] max_width_em` cap (40 font units) and remain bounded by narrow windows. The common `.max_width(..)` overrides that cap. Legacy `.panel_size(width, height)` and `.panel_max_width(width)` remain compatibility aliases. Width, height and constraints belong to the visible panel; the modal scrim and input coverage still fill the viewport. The composed Overlay preserves explicit panel maximum dimensions.
 
-## Providers and startup regions
+## Providers and regions
 
 This section documents the **Heca host API** (`heca`), separate from the GPU-free widget library.
 
@@ -6973,18 +7081,21 @@ A **widget** builds a piece of UI. A **`Provider`** contributes a dock to the wi
 host builds and mounts its content. You do not construct or access the workspace's internal
 `DockView` to add your own dock. Compose its content from the public widgets instead.
 
-Write a provider, then place it **before `heca::run()`**:
+Write a provider, then place it — usually **before `heca::run(..)`**, but a call made while the app
+runs is applied too, at the next frame:
 
 ```rust,ignore
 use heca::{PlaceDock, regions};
 
-regions("sidebar.right").append(MyDock::new("tools"));
-regions("sidebar.left").prepend(MyOtherDock::new("outline"));
-regions("sidebar.right").append(MyDock::new("logs").flex(2.0).order(-1));
+regions("sidebar.right").append(|| MyDock::new("tools"));    // a recipe: heca can make it again
+regions("sidebar.right").append(MyDock::new("scratch"));     // the dock itself: it works, but once
+                                                              // out it comes back only on restart
+regions("sidebar.left").prepend(|| MyOtherDock::new("outline"));
+regions("sidebar.right").append(|| MyDock::new("logs").flex(2.0).order(-1));
 regions("sidebar.left").remove("workspaces");
 regions("sidebar.right").retain(|id| id != "notes");
 
-heca::run();
+heca::run("heca");
 ```
 
 `MyDock` and `MyOtherDock` stand for your types implementing `heca::Provider`; they are not built-in
@@ -6995,16 +7106,53 @@ label and a Terminal, then adds that dock to `sidebar.right`.
 | What you want | Public API | Meaning |
 |---|---|---|
 | Add at the end | `regions(name).append(provider)` | One provider or an array/`Vec` with a common element type. Chain calls for different types. |
+| Add a dock heca can make again | `regions(name).append(\|\| Provider::new(..))` | A recipe instead of the dock: when the user's `[[docks]]` brings it back after a reload (`"none"` → a region), heca makes it again. |
 | Add at the start | `regions(name).prepend(provider)` | A collection keeps its own order. |
-| Remove a dock | `regions(name).remove(id)` | Remove the placement with that id from this region. |
+| Remove a dock | `regions(name).remove(id)` | Remove the dock with that id, **whichever region holds it** (the user may have moved it). Not made again by a reload. |
 | Keep selected docks | `regions(name).retain(predicate)` | Filter the region's current list by placement id. |
 | Choose visual order | `provider.order(value)` | Lower first; ties keep insertion order. Accepts a number or an order path such as `[0, 5]`. |
 | Choose a share | `provider.flex(parts)` | Overrides the share requested by the provider's body. |
 | Set space between docks | `regions(name).gap("md")` | Uses the shared spacing vocabulary. |
 
 Region names are `sidebar.left`, `sidebar.right`, `bar.top` and `bar.bottom`. An unknown name is
-reported and changes nothing. These calls queue defaults for startup; calls after startup are
-reported and refused. They do not dynamically load or unload providers.
+reported and changes nothing. Calls are queued and applied as the window starts, then at every frame,
+so a dock can be added or removed while the app runs.
+
+**Where a dock goes, in what order and how big is the user's word first.** The config's `[[docks]]`
+entries — by kind (`name`) or by dock (`name` + `id`; that one wins) — give a `location` (a region or
+`"none"`), an `order` and a `flex` ([configuration](configuration.md#where-docks-start)):
+
+```toml
+[[docks]]
+name = "tools"               # every dock of the kind `tools`
+location = "sidebar.left"
+order = -1
+
+[[docks]]
+name = "workspaces"
+id = "workspaces.2"          # an id no code added: a second workspaces dock, made by `spawn`
+location = "sidebar.left"
+flex = 2
+```
+
+What an entry does not say, the `regions(..)` call and the dock's `.order(..)` / `.flex(..)` say.
+
+**More docks from the config — `Provider::spawn`.** An entry with an id no code added asks a dock of
+that kind for another one under that id. Implement
+`fn spawn(&self, id: &str) -> Option<Box<dyn Provider>>` to allow it
+(`Some(Box::new(MyDock::new(id)))`); the default `None` means the kind is placed by code only, and
+such an entry does nothing. heca's workspaces dock allows it. A dock made this way lives as long as
+its entry: removing the entry and reloading removes it.
+
+**Reload.** On `prefix+Shift+r` each dock whose entry changed is moved, reordered, resized, taken out,
+made again (a recipe, or a dock spawned from the config) or added; a dock added as itself comes back
+from `"none"` only with a restart, and heca says so. Docks whose entry did not change stay where
+they are, even if the user moved them by hand. A dock's cursor, scroll and folded state are kept by
+its id, so one made again finds them.
+
+**How `append` takes both a dock and a recipe.** Rust cannot have two `append`s, so the
+`IntoDocks<M>` trait carries a hidden mark (`AsDock`, `AsRecipe`, `AsPlacedRecipe`) that tells a dock,
+a recipe and a recipe that also says `.flex` / `.order` apart. Nobody writes it.
 
 The older `left-sidebar` / `left` spellings are also read by the shared region-name parser.
 `retain` changes the existing list; Rust's `filter` would instead build another collection. Regions
@@ -7014,9 +7162,11 @@ own body; ties keep insertion order, and spacing belongs to the region.
 
 `Provider::id()` identifies a **placement**. `Provider::kind()` identifies the component type and
 its action/config namespace; it defaults to `id()` for the single-placement case. Two placements of
-one component have different ids, so their focus, cursor and scroll state remain separate. Implement
-`supported_regions`, `default_region`, `title` and `build_contribution` to describe the dock. The optional
-`on_activate` hook returns `ProviderHandles`; dropping those handles releases the subscriptions. The host owns its
+one component have different ids, so their focus, cursor and scroll state remain separate (a
+`[[docks]]` entry's `name` is the kind, its `id` the placement). Implement `supported_regions`,
+`default_region`, `title` and `build_contribution` to describe the dock. The optional `on_activate`
+hook returns `ProviderHandles`; dropping those handles releases the subscriptions. The optional
+`spawn(id)` lets the user add more docks of the kind from the config (above). The host owns its
 mounting, frame, layout and event delivery.
 
 Build the contribution with `ContainerContribution::new(self, |ctx, build| widget)` inside the
@@ -7350,7 +7500,7 @@ ViewNode::new(WidgetId::DockFrame)
     .text("EXPLORER")
     .child(ViewNode::new(WidgetId::Badge)
         .text("3")
-        .prop("slot", PropValue::Text("header".into())))   // ← the controls slot
+        .prop("slot", PropValue::Text("header_actions".into())))   // ← the header-actions slot
     .child(ViewNode::new(WidgetId::Item).text("src"))    // ← no slot ⇒ the body (default)
     .child(ViewNode::new(WidgetId::Item).text("tests"));
 ```
@@ -7789,8 +7939,7 @@ Flex::column()
             .child(Label::new("Neovim").bold(true)),
     )
     .child(
-        Visibility::new(
-            Flex::row()
+        Visibility::new().visible(true).child(Flex::row()
                 .align(Align::Center)
                 .gap(6.0)
                 .child(Icon::new(Glyph::GitBranch).size(12.0))
@@ -7808,9 +7957,7 @@ Flex::column()
                         .gap(4.0)
                         .child(Icon::new(Glyph::Warning).size(12.0))
                         .child(Label::new("~3").font_scale(0.8)),
-                ),
-            true,
-        ),
+                )),
     );
 ```
 

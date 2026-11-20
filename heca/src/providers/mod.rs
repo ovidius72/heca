@@ -52,6 +52,22 @@ pub trait Provider {
         self.id()
     }
 
+    /// **Another dock of this kind, under `id`** — what lets the user's `[[docks]]` add one more,
+    /// with an entry naming this kind and an id no code added:
+    ///
+    /// ```toml
+    /// [[docks]]
+    /// name = "workspaces"
+    /// id = "workspaces.2"        # a second workspaces dock, made from this
+    /// location = "sidebar.left"
+    /// ```
+    ///
+    /// `None` (the default): this kind is placed only by code, and such an entry does nothing.
+    fn spawn(&self, id: &str) -> Option<Box<dyn Provider>> {
+        let _ = id;
+        None
+    }
+
     /// Regions this provider's contribution may be placed in.
     fn supported_regions(&self) -> RegionSet;
 

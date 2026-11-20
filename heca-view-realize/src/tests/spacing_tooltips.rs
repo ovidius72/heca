@@ -177,6 +177,33 @@ fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
     );
 }
 
+/// **A widget as the tooltip, in a described tree: a child in the `tooltip` slot** — on ANY kind,
+/// leaves included. It becomes what the node shows on hover (natively `.tooltip(widget)`) and is not
+/// one of the node's children; the tooltip's side and delay apply to it like to words.
+#[test]
+fn a_child_in_the_tooltip_slot_is_what_any_kind_shows_on_hover() {
+    let mut wrong: Vec<String> = Vec::new();
+    for kind in registered_ids() {
+        let (emit, _fired) = recording_emitter();
+        let realized = |node: &ViewNode| realize(node, &Theme::default(), &emit, &mut FormBindings::default())
+            .expect("valid described test widget");
+        let plain = realized(&sample_node(kind.clone()));
+        let node = sample_node(kind.clone())
+            .prop("tooltip_side", PropValue::Text("bottom".into()))
+            .child(ViewNode::new("tag").text("claude").prop("slot", PropValue::Text("tooltip".into())));
+        let widget = realized(&node);
+        match &widget.base().tooltip {
+            None => wrong.push(format!("{kind:?} (no tooltip)")),
+            Some(tip) if tip.side != heca_grid_ui::TooltipSide::Bottom => wrong.push(format!("{kind:?} (side ignored)")),
+            Some(_) => {}
+        }
+        if widget.base().children.len() != plain.base().children.len() {
+            wrong.push(format!("{kind:?} (the tooltip became a child)"));
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
 /// **A quick tooltip is a name, not a number — in a described tree too.** `tooltip_quick` lands
 /// on every kind the way `tooltip_delay` does, so a plugin's row can say it the way heca's own
 /// does; `Label::new("x").tooltip("full text").tooltip_quick(true)` and the described

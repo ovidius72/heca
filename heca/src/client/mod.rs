@@ -49,7 +49,7 @@ fn format_window_title(
         .as_deref()
         .map(crate::chrome::home_relative_path)
         .unwrap_or_else(|| session.name.clone());
-    crate::server::sessions::window_title(&folder, ordinal, base, numbered)
+    crate::server::sessions::window_title(crate::entry::app_name::get(), &folder, ordinal, base, numbered)
 }
 
 #[derive(Default)]

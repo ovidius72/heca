@@ -86,8 +86,13 @@ fn no_kind_paints_outside_the_box_it_is_given() {
             // that, "keep your content inside" is not a defect report, it is the box model:
             // something has to be cut, and which one is a design decision, not this sweep's.
             // The kinds that escape all do so at widths where they *did* have room.
-            // The kind itself, not the wrapper that hands it a definite width.
-            let pad = root.base().children.first().map_or(0.0, |kind| {
+            // The kind itself, not the wrapper that hands it a definite width — and through a
+            // transparent kind (`FocusScope`, `Keyed`…) to the widget it carries, whose box it is.
+            let mut kind_node = root.base().children.first();
+            while let Some(inner) = kind_node.filter(|n| n.base().transparent) {
+                kind_node = inner.base().children.first();
+            }
+            let pad = kind_node.map_or(0.0, |kind| {
                 kind.base().style.layout.padding.resolve(kind.base().font) as f64
             });
             let one_control = (theme.font_size * 2.0) as f64;

@@ -72,12 +72,7 @@ impl WorkspaceFrame<'_> {
                     crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
                 );
             })
-            .header(
-                Flex::row()
-                    .align("center")
-                    .padding_right(Spacing::Sm)
-                    .child(badge),
-            );
+            .header_actions(badge);
         // Keep the active identity live. The theme may enable a workspace-wide wash through
         // `active_wash_alpha` (off by default); the count badge also identifies this workspace.
         dock = dock.active(active_ws);

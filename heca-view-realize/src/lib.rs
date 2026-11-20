@@ -140,6 +140,21 @@ pub fn realize(
     WidgetRegistry::builtins()?.realize(node.as_ref(), theme, emit, forms)
 }
 
+/// The node's `tooltip_side`, `tooltip_delay` and `tooltip_quick`, onto the tip it declared —
+/// words or a widget alike. Nothing to do on a node that declared no tooltip.
+pub(crate) fn apply_tip_options(realized: &mut dyn Component, node: &ViewNode) {
+    let Some(tip) = realized.base_mut().tooltip.as_mut() else { return };
+    if let Some(side) = node.props.get("tooltip_side").and_then(PropValue::as_text).and_then(tooltip_side) {
+        tip.side = side;
+    }
+    if let Some(delay) = node.props.get("tooltip_delay").and_then(PropValue::as_float) {
+        tip.delay = (delay as f32).max(0.0);
+    }
+    if node.props.get("tooltip_quick").and_then(PropValue::as_bool) == Some(true) {
+        tip.delay = heca_grid_ui::widgets::tooltip::QUICK_DELAY;
+    }
+}
+
 pub(crate) fn apply_common_props(
     realized: &mut dyn Component,
     node: &ViewNode,
@@ -256,27 +271,12 @@ pub(crate) fn apply_common_props(
     //
     // Side and delay are part of the tip rather than styles of their own, so a node that declared
     // no tooltip says nothing by setting them — the same no-op the native builders are.
+    //
+    // The words are the `tooltip` prop; a whole widget is a child in the `tooltip` slot, taken by the
+    // registry before the kind is built (`RealizeCx::build`), and it wins over the words.
     if let Some(PropValue::Text(text)) = node.props.get("tooltip") {
         realized.base_mut().tooltip = Some(heca_grid_ui::widgets::tooltip::Tip::new(text.clone()));
-        if let Some(name) = node.props.get("tooltip_side").and_then(PropValue::as_text)
-            && let Some(side) = tooltip_side(name)
-            && let Some(tip) = realized.base_mut().tooltip.as_mut()
-        {
-            tip.side = side;
-        }
-        if let Some(delay) = node
-            .props
-            .get("tooltip_delay")
-            .and_then(PropValue::as_float)
-            && let Some(tip) = realized.base_mut().tooltip.as_mut()
-        {
-            tip.delay = (delay as f32).max(0.0);
-        }
-        if node.props.get("tooltip_quick").and_then(PropValue::as_bool) == Some(true)
-            && let Some(tip) = realized.base_mut().tooltip.as_mut()
-        {
-            tip.delay = heca_grid_ui::widgets::tooltip::QUICK_DELAY;
-        }
+        apply_tip_options(realized, node);
     }
     // **Whether this node's ink is drawn**, read once here for every kind — CSS `visibility`.
     //

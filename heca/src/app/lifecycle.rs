@@ -150,6 +150,11 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // received and a fresh ask is meaningful again. Anything marking itself further down this pass
     // is asking for the *next* frame and must be able to wake us.
     heca_grid_ui::frame_served();
+    // Docks added or taken out with `regions(..)` since the last pass — a plugin may do it while
+    // the app runs.
+    if state.chrome_host.apply_pending(&crate::providers::ChromeCtx::new(&state.chrome_state)) {
+        state.mark_full_redraw();
+    }
     let prefix_timeout = state.prefix.timeout;
     let should_timeout = matches!(
         state.input_mode,
@@ -215,6 +220,12 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             .notify(crate::server::NotificationCommand::Hover(hovered));
     }
 
+    // The system's window carries the same title the window shows in its top bar and reports to
+    // the server — one title, from the session and the window's number.
+    if state.client.title != state.system_title {
+        state.system_title.clone_from(&state.client.title);
+        state.window.set_title(&state.system_title);
+    }
     let backend_poll = { let _s = step("wait.poll_backends"); poll_backends(state) };
     let chrome_runtime_changed = { let _s = step("wait.sync_chrome_state"); crate::chrome::sync_chrome_state(state) };
     if backend_poll.bell_any {

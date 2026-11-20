@@ -86,6 +86,12 @@ impl<T: Message> Sender<T> {
 }
 
 impl<T> Receiver<T> {
+    /// Close the queue from the receiving side: a sender waiting for room
+    /// ([`send_wait`](Sender::send_wait)) stops waiting and is told the connection is closed.
+    pub(super) fn close(&self) {
+        self.0.close();
+    }
+
     pub(super) fn poll(&self) -> io::Result<Option<T>> {
         let mut state = self.0.state.lock().map_err(poisoned)?;
         if let Some(message) = self.take(&mut state) { return Ok(Some(message)); }

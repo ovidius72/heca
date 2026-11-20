@@ -1,7 +1,7 @@
 //! **Things declared before the app starts** — held until the host takes them, refused after.
 //!
 //! A program built on heca declares what it adds — an action, a layer, a pane button, a dock's
-//! placement — in `main`, before `heca::run()`. The host takes each kind once, as it starts. What is
+//! placement — in `main`, before `heca::run(..)`. The host takes each kind once, as it starts. What is
 //! declared after that can no longer reach it, so it is **refused out loud** instead of being
 //! accepted and silently doing nothing.
 //!
@@ -65,6 +65,7 @@ impl<T> StartupQueue<T> {
 
     /// A new host is starting: accept again. What was declared before it started is kept — that is
     /// what the new host is about to take.
+    #[cfg(test)]
     pub(crate) fn reopen(&self) {
         self.taken.set(false);
     }

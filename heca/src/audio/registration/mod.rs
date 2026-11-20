@@ -11,7 +11,7 @@ thread_local! {
 }
 
 impl crate::Extension {
-    /// Register an asset before `heca::run()`. Its configuration name is scoped to this extension.
+    /// Register an asset before `heca::run(..)`. Its configuration name is scoped to this extension.
     /// For example, `extension("demo").sound("ready", Audio::from_bytes(bytes))` supplies
     /// `sound = { source = "asset:demo.ready" }` to ordinary event settings.
     pub fn sound(&self, name: &str, source: Audio) -> &Self {

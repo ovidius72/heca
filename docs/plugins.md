@@ -70,7 +70,7 @@ A plugin never puts a surface in the tree itself. It offers one, exactly as it o
 ### Adding a dock to a region
 
 A **`Provider` contributes a dock**; the host mounts its content in a named region. The canonical
-[Providers and startup regions reference](widgets.md#providers-and-startup-regions) contains the
+[Providers and regions reference](widgets.md#providers-and-regions) contains the
 add/remove/order API, required methods, identities, runnable example and startup cutoff.
 
 Native code can use that API now. Sandbox plugins send typed descriptions through a host adapter;
@@ -119,7 +119,8 @@ many times a second, which stays ours.
   nothing. That is the gap between "a plugin *can* do this" and "anyone can write a plugin".
 - **Widget access.** T398 supplies an open host registry, typed constructors and native state
   adapters, including Dialog, CommandPalette, ToastStack, ScrollBar and Terminal in Heca's host.
-  Menus, hints, visibility and tooltips remain declarations on any node. See the canonical
+  Menus, hints, visibility and tooltips remain declarations on any node; a tooltip is words (the
+  `tooltip` prop) or any widget (a child in the `tooltip` slot). See the canonical
   [widget reference](widgets.md#registry-and-public-authoring-checks) for the executable coverage
   and ownership contract. Native signals, closures and resource stores stay inside the host;
   descriptions carry data and intents. These tests prove the authoring/realization path, while

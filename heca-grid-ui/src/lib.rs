@@ -114,11 +114,11 @@ pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use tone::Tone;
 pub use widgets::{
     ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonVariant,
-    Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame,
+    Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DockFrameVariant,
     DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton,
     Caption, Image, ImageFit, ImageState, Svg, Input, Item, ItemGroup, MessageList, MessageFeed, Line, TreeLayout, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
     LandingSlot, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel,
-    ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo,
+    ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, RowVariant, ScrollAxes, ScrollBar, ScrollInfo,
     ScrollRegion, Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast,
     ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
     Visibility, container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
@@ -155,10 +155,10 @@ pub mod prelude {
     pub use crate::widgets::{
         ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonGroup,
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container,
-        ContextMenu, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid,
+        ContextMenu, Dialog, DockFrame, DockFrameVariant, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid,
         Caption, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, Line, TreeLayout, MessageList, MessageFeed, KeyHint, KeyHintGroup, Label,
         LabelSide, LandingSlot, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation,
-        Pane, ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, ScrollAxes, ScrollBar,
+        Pane, ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, RowVariant, ScrollAxes, ScrollBar,
         ScrollInfo, ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile,
         Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,
         TooltipSide, Visibility, container,

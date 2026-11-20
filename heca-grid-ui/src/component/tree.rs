@@ -218,4 +218,10 @@ pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
     // version — gave way in its place, and the dot was drawn as a 3px sliver inside a box that had
     // shrunk around it. The wrapper has no opinion of its own; it *is* the widget inside it.
     base.style.layout.flex_shrink = base.style.layout.flex_shrink.or(child.flex_shrink);
+    // Nor whether it takes the room left over: a child that grows asked its parent for that room,
+    // and the wrapper is what its parent now holds.
+    if base.style.layout.flex_grow == 0.0 {
+        base.style.layout.flex_grow = child.flex_grow;
+    }
+    base.style.layout.flex = base.style.layout.flex.or(child.flex);
 }

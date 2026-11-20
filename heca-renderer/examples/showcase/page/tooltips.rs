@@ -47,6 +47,10 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .on_click(|| println!("[showcase] header add")),
             "Header size",
         ))
+        // Words with a line break are two lines, inside the bubble.
+        .child(Button::new("Two lines").tooltip("zsh\npane-1"))
+        // The same door takes a widget: a segmented tag inside the bubble.
+        .child(Button::new("A tag").tooltip(Tag::new("claude").segment_text("opus").segment_text("~/projects/heca")))
         .child(
             Tooltip::new(
                 IconButton::new(Icon::new(Glyph::Close).color(theme.colors.danger).size(20.0))

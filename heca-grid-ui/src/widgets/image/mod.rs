@@ -132,7 +132,7 @@ impl LayoutExt for Image {}
 
 // Absolute slots do not change the picture's box; they remain real layout/event children.
 fn slot(view: impl crate::builders::IntoComponent, error: bool, state: Signal<ImageState>) -> crate::WidgetModel {
-    let slot = Visibility::new(Flex::column().at_rect(0, 0, Length::FULL, Length::FULL).child(view.into_component()), !error);
+    let slot = Visibility::new().visible(!error).child(Flex::column().at_rect(0, 0, Length::FULL, Length::FULL).child(view.into_component()));
     let visible = slot.visible_signal();
     create_effect(move |_| {
         let show = matches!((error, state.get()), (false, ImageState::Loading) | (true, ImageState::Failed(_)));

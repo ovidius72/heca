@@ -257,7 +257,7 @@ fn every_layout_container_over_the_panes_leaves_them_their_presses() {
                     .child(inner),
             )
         }),
-        ("Visibility", |inner| heca_grid_ui::WidgetModel::new(Visibility::new(inner, true))),
+        ("Visibility", |inner| heca_grid_ui::WidgetModel::new(Visibility::new().visible(true).child(inner))),
         ("KeyHintGroup", |inner| heca_grid_ui::WidgetModel::new(KeyHintGroup::new(inner))),
     ];
 

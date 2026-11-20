@@ -1287,7 +1287,7 @@ DnD meaning = dispatch(action)     DnD hooks → shipped src/drag/      DragCont
 |------|----------|-----------|
 | **Region** | app (ChromeHost) + grid-ui shell | A chrome area: left/right **sidebar** (vertical), **top/bottom bar** (horizontal). App owns which regions exist + visibility + placement; grid-ui renders the **region shell**. |
 | **Dock** | **app** | The hosted, **movable** unit a region mounts (`WorkspacesDock`, `GitDock`, the docker one, …). Owns its domain logic + internal items. Declares metadata (`id`, `title`, `supported_regions`, `default_region`, `movable`, `collapsible`). The region can host/move/drag a Dock but knows **nothing of its contents**. |
-| **`DockFrame`** | grid-ui (**new**) | Visual wrapper around a mounted Dock: title bar, collapse toggle, drag handle, a header-controls slot (a Dock may put its own search/filter there), body. Reuses `Pane`'s rounded-bracket painting. The chrome plan's `SidebarContainerFrame`. |
+| **`DockFrame`** | grid-ui (**new**) | Visual wrapper around a mounted Dock: title bar, collapse toggle, drag handle, a header-actions slot (a Dock may put its own search/filter there), body. Reuses `Pane`'s rounded-bracket painting. The chrome plan's `SidebarContainerFrame`. |
 | **`ChromeRegion` / `Sidebar`** | grid-ui (**new**) | The **shell**: oriented (vertical/horizontal), toggle/collapsible, mode-aware, stacks `DockFrame`s, scrolls, and is a **drop target** for Dock-level DnD. No tree/workspace/expand/drag *semantics* of its own. |
 | **AppState** | **app** | A **namespaced signal store** (see §4): canonical state + per-namespace derived/UI state. grid-ui widgets **read** signals from it; they never own it. |
 | **Item / ItemGroup** | grid-ui | Reusable row + collapsible group a Dock *may* use internally. Domain-neutral (menus, dropdowns, Docks all reuse them). `Item` already exists = the chrome plan's "SidebarItem". |
@@ -1331,7 +1331,7 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 - **Status:** new. Builds on `Item`.
 
 ### 2.4 `DockFrame` (new; reuses Pane brackets)
-- Titled, **collapsible** frame: title bar (title + collapse toggle + **drag handle** + header-controls slot) over a body that hosts the Dock's content; keeps the rounded corner brackets.
+- Titled, **collapsible** frame: title bar (title + collapse toggle + **drag handle** + header-actions slot) over a body that hosts the Dock's content; keeps the rounded corner brackets.
 - Keep `Pane` as the plain framed container; `DockFrame` is the chrome wrapper.
 - **Status:** new (Pane exists, has no header/collapse/handle).
 

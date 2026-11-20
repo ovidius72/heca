@@ -57,6 +57,20 @@ impl LayoutEngine {
         crate::builders::apply_bound(c.base_mut());
         c.remeasure();
         let mut style = c.taffy_style();
+        // **A wrapper lays its child out as the child's parent would.** A transparent wrapper
+        // (`wrap_transparently`) is a box of its own to taffy, and as a flex row it put its one child
+        // on the row's main axis: a child of automatic width hugged its content where, without the
+        // wrapper, a column parent would have stretched it — a list item under a `Visibility` shrank
+        // to its word. As one grid cell that fills the wrapper both ways (and may shrink to nothing,
+        // like any flex item here), the child stretches on whichever axis its real parent stretches
+        // the wrapper and keeps its natural size on the other. Here, once, so no wrapper and no
+        // caller has to know.
+        if c.base().transparent && style.display == taffy::Display::Flex {
+            use taffy::style_helpers::{fr, length, minmax};
+            style.display = taffy::Display::Grid;
+            style.grid_auto_columns = vec![minmax(length(0.0_f32), fr(1.0_f32))];
+            style.grid_auto_rows = vec![minmax(length(0.0_f32), fr(1.0_f32))];
+        }
         // Replaced content is measured from the final constrained width, so max-width does
         // not leave the height computed from a wider, pre-clamp box in taffy 0.7.
         if c.intrinsic_size().is_some() { style.aspect_ratio = None; }

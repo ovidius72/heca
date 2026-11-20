@@ -1,6 +1,7 @@
 pub mod appearance;
 pub mod color;
 pub mod confirm;
+pub mod docks;
 pub mod font;
 pub mod keys;
 pub mod loader;

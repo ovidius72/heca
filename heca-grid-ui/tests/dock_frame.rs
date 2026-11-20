@@ -128,11 +128,11 @@ fn dock_frame_header_control_receives_events_before_toggle() {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    // A search-like interactive control living in the header-controls slot.
+    // A search-like interactive control living in the header-actions slot.
     let control_clicks = Rc::new(Cell::new(0u32));
     let sink = control_clicks.clone();
     let control = Item::new("search").on_activate(move || sink.set(sink.get() + 1));
-    let mut dock = DockFrame::new("FILES").header(control);
+    let mut dock = DockFrame::new("FILES").header_actions(control);
     LayoutEngine::new().compute(&mut dock, Size::new(260.0, 400.0));
 
     // Click the control (header child 1): it consumes the event; frame must NOT toggle.
@@ -451,7 +451,7 @@ fn nested_header_frames_do_not_claim_the_outer_frames_parts() {
     let mode = signal(RegionMode::Expanded);
     let inner = DockFrame::new("INNER").child(Label::new("inner body"))
         .rail(mode, Glyph::FolderOpen);
-    let mut outer = DockFrame::new("OUTER").header(inner)
+    let mut outer = DockFrame::new("OUTER").header_actions(inner)
         .child([Label::new("outer first"), Label::new("outer second")])
         .rail(mode, Glyph::FolderOpen);
     LayoutEngine::new().compute(&mut outer, Size::new(700.0, 600.0));
@@ -467,9 +467,163 @@ fn nested_header_frames_do_not_claim_the_outer_frames_parts() {
     let outer_body = outer.base().children.iter()
         .find(|c| c.base().grid_area.as_deref() == Some("body")).unwrap();
     assert!(outer_body.base().style.layout.hidden, "folding hides the outer body");
-    let inner = heca_grid_ui::area(&outer, "controls").unwrap();
+    // The header-actions slot holds what it was given — here the nested frame.
+    let slot = heca_grid_ui::area(&outer, "header_actions").unwrap();
+    let inner = slot.base().children.first().expect("the slot holds the nested frame");
     let inner_body = inner.base().children.iter()
         .find(|c| c.base().grid_area.as_deref() == Some("body")).unwrap();
     assert!(!inner_body.base().style.layout.hidden, "the nested header frame keeps its own state");
     assert_eq!(inner_body.base().children.len(), 1, "no outer content leaked into the inner body");
+}
+
+fn texts(dock: &heca_grid_ui::DockFrame) -> Vec<String> {
+    common::paint(dock, &Theme::default()).iter().filter_map(|cmd| match cmd {
+        heca_grid_ui::DrawCommand::Text(text) => Some(text.text.clone()),
+        _ => None,
+    }).collect()
+}
+
+fn centre(rect: heca_grid_ui::Rectangle) -> Point {
+    Point::new(rect.loc.x + rect.size.w / 2.0, rect.loc.y + rect.size.h / 2.0)
+}
+
+/// A `Section` changes only the title row: the leading part sits right before the title, centred
+/// on the row, and the body is laid out exactly as a `Dock`'s — indenting it is the caller's call.
+#[test]
+fn a_section_puts_its_leading_part_before_the_title_and_leaves_the_body_alone() {
+    use heca_grid_ui::{DockFrame, DockFrameVariant, DrawCommand};
+    let texts_at = |dock: DockFrame| {
+        let mut dock = dock;
+        LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+        common::paint(&dock, &Theme::default()).iter().filter_map(|cmd| match cmd {
+            DrawCommand::Text(text) => Some((text.text.clone(), text.rect)),
+            _ => None,
+        }).collect::<Vec<_>>()
+    };
+    let find = |all: &[(String, heca_grid_ui::Rectangle)], what: &str| {
+        all.iter().find(|(text, _)| text == what).map(|(_, rect)| *rect).unwrap_or_else(|| panic!("{what} painted"))
+    };
+    let section = texts_at(DockFrame::new("Development").variant(DockFrameVariant::Section)
+        .leading(Label::new("◆")).child(Item::new("alice")));
+    let dock = texts_at(DockFrame::new("FILES").child(Item::new("alice")));
+    let (icon, title) = (find(&section, "◆"), find(&section, "Development"));
+    let middle = |r: heca_grid_ui::Rectangle| r.loc.y + r.size.h / 2.0;
+    assert!(icon.loc.x + icon.size.w < title.loc.x, "the leading part is before the title");
+    assert!(title.loc.x - (icon.loc.x + icon.size.w) < 12.0,
+        "only a gap between them, no room kept for a chevron: {icon:?} {title:?}");
+    assert!((middle(icon) - middle(title)).abs() < 1.0, "the leading part is centred on the title row");
+    assert_eq!(find(&section, "alice").loc.x, find(&dock, "alice").loc.x,
+        "the body starts where a Dock's does — the frame does not indent it");
+    assert!(!section.iter().any(|(text, _)| text == "⠿"), "a section has no grip");
+}
+
+#[test]
+fn a_header_of_the_callers_own_still_folds_the_frame() {
+    use heca_grid_ui::DockFrame;
+    let mut dock = DockFrame::new("unused")
+        .header(Flex::row().child([Label::new("Team"), Label::new("3")]))
+        .child(fixed_box(100.0, 40.0));
+    LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+    let painted = texts(&dock);
+    assert!(painted.iter().any(|t| t == "Team") && painted.iter().any(|t| t == "3"));
+    assert!(!painted.iter().any(|t| t == "unused"), "the caller's header replaces the title");
+    assert!(painted.iter().any(|t| t == "▾"), "the frame keeps its chevron");
+    let toggle = heca_grid_ui::component::area(&dock, "toggle").unwrap().base().bounds;
+    click_at(&mut dock, centre(toggle), PointerButton::Left);
+    assert!(!dock.state().get_untracked(), "a click on the caller's header folds the body");
+}
+
+#[test]
+fn a_header_survives_a_later_variant_and_is_wrapped_once() {
+    use heca_grid_ui::{DockFrame, DockFrameVariant};
+    let build = |dock: DockFrame| {
+        let mut dock = dock;
+        LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+        let custom = heca_grid_ui::component::area(&dock, "dock.header").unwrap();
+        (texts(&dock).iter().any(|t| t == "Team"), custom.base().children.len())
+    };
+    let once = build(DockFrame::new("x").header(Label::new("Team")));
+    let rebuilt = build(DockFrame::new("x").header(Label::new("Team"))
+        .variant(DockFrameVariant::Section).grip(false));
+    assert_eq!(once, (true, 1));
+    assert_eq!(rebuilt, once, "rebuilding the title row keeps the caller's header as it was");
+}
+
+#[test]
+fn a_frame_that_does_not_collapse_ignores_the_click_and_shows_no_chevron() {
+    use heca_grid_ui::DockFrame;
+    let mut dock = DockFrame::new("FILES").expanded(false).collapsible(false)
+        .child(fixed_box(100.0, 40.0));
+    LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+    assert!(dock.state().get_untracked(), "a frame that cannot fold is open");
+    assert!(!texts(&dock).iter().any(|t| t == "▾" || t == "▸"), "no chevron");
+    let toggle = heca_grid_ui::component::area(&dock, "toggle").unwrap().base().bounds;
+    click_at(&mut dock, centre(toggle), PointerButton::Left);
+    assert!(dock.state().get_untracked(), "the click folds nothing");
+}
+
+#[test]
+fn a_dock_without_grip_paints_none() {
+    use heca_grid_ui::DockFrame;
+    let mut with = DockFrame::new("FILES");
+    let mut without = DockFrame::new("FILES").grip(false);
+    LayoutEngine::new().compute(&mut with, Size::new(300.0, 400.0));
+    LayoutEngine::new().compute(&mut without, Size::new(300.0, 400.0));
+    assert!(texts(&with).iter().any(|t| t == "⠿"));
+    assert!(!texts(&without).iter().any(|t| t == "⠿"));
+}
+
+/// **Every frame's first part starts at one left edge**: a Dock's grip, a Section's leading part
+/// and a title row of the caller's own all begin where a row's content begins.
+#[test]
+fn every_kind_of_title_row_starts_at_the_same_left_edge() {
+    use heca_grid_ui::{DockFrame, DockFrameVariant, DrawCommand};
+    let first_x = |dock: DockFrame, what: &str| {
+        let mut dock = dock;
+        LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+        common::paint(&dock, &Theme::default()).iter().find_map(|cmd| match cmd {
+            DrawCommand::Text(text) if text.text == what => Some(text.rect.loc.x),
+            _ => None,
+        }).unwrap_or_else(|| panic!("{what} painted"))
+    };
+    let grip = first_x(DockFrame::new("FILES"), "⠿");
+    let leading = first_x(DockFrame::new("Team").variant(DockFrameVariant::Section)
+        .leading(Label::new("◆")), "◆");
+    let custom = first_x(DockFrame::new("x").header(Label::new("Team")), "Team");
+    let row = first_x(DockFrame::new("x").header(Label::new("Team")).child(Item::new("row")), "row");
+    assert!((leading - grip).abs() < 1.0, "a Section's leading part starts at the grip: {leading} vs {grip}");
+    assert!((custom - grip).abs() < 1.0, "a caller's title row starts at the grip: {custom} vs {grip}");
+    assert!((row - grip).abs() < 1.0, "a body row's content starts there too: {row} vs {grip}");
+}
+
+/// **A title row of the caller's own sits where a Dock's title row sits**: as tall, so the first
+/// body row starts at the same height in both.
+#[test]
+fn a_callers_title_row_is_as_tall_as_a_docks() {
+    use heca_grid_ui::{DockFrame, DrawCommand};
+    let first_row_y = |dock: DockFrame| {
+        let mut dock = dock;
+        LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+        common::paint(&dock, &Theme::default()).iter().find_map(|cmd| match cmd {
+            DrawCommand::Text(text) if text.text == "row" => Some(text.rect.loc.y),
+            _ => None,
+        }).expect("the row is painted")
+    };
+    let dock = first_row_y(DockFrame::new("FILES").child(Item::new("row")));
+    let custom = first_row_y(DockFrame::new("x").header(Label::new("Team")).child(Item::new("row")));
+    assert!((dock - custom).abs() < 1.0, "the first row starts at the same height: {dock} vs {custom}");
+}
+
+/// **A count in the title row ends where the rows' badges end** — the caller adds no spacer.
+#[test]
+fn header_actions_end_where_a_rows_trailing_part_ends() {
+    use heca_grid_ui::{DockFrame, DrawCommand};
+    let mut dock = DockFrame::new("FILES").header_actions(Label::new("3"))
+        .child(Item::new("row").trailing(Label::new("M")));
+    LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+    let right = |what: &str| common::paint(&dock, &Theme::default()).iter().find_map(|cmd| match cmd {
+        DrawCommand::Text(text) if text.text == what => Some(text.rect.loc.x + text.rect.size.w),
+        _ => None,
+    }).unwrap_or_else(|| panic!("{what} painted"));
+    assert!((right("3") - right("M")).abs() < 1.0, "the title count and the row badge end together: {} vs {}", right("3"), right("M"));
 }

@@ -46,19 +46,15 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // One count on the git line — an icon and a number in one tone — shown only when
         // there is a count to show.
         let count = |glyph: Glyph, tone: Color, text: Option<&str>| {
-            Visibility::new(
-                Flex::row()
+            Visibility::new().visible(text.is_some()).child(Flex::row()
                     .align("center")
                     .gap(Spacing::Xs)
                     .child(Icon::new(glyph).color(tone))
-                    .child(Label::new(text.unwrap_or_default()).color(tone)),
-                text.is_some(),
-            )
+                    .child(Label::new(text.unwrap_or_default()).color(tone)))
         };
         // Attached always and hidden outside a repository, so it could appear later
         // without a rebuild (see `Tile::line`).
-        let git_line = Visibility::new(
-            Flex::row()
+        let git_line = Visibility::new().visible(git_branch.is_some()).child(Flex::row()
                 .align("center")
                 .gap(Spacing::Sm)
                 .size(WidgetSize::Small)
@@ -66,10 +62,9 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .child(Label::new(git_branch.unwrap_or_default()))
                 .child(count(Glyph::Plus, theme.colors.success, git_added))
                 .child(count(Glyph::Warning, theme.colors.warning, git_modified))
-                .child(count(Glyph::Minus, theme.colors.danger, git_deleted)),
-            git_branch.is_some(),
-        );
-        let row = Row::new().padding(Spacing::Sm).child(
+                .child(count(Glyph::Minus, theme.colors.danger, git_deleted)));
+        // The sidebar's pane-card look, by name — a veil from the theme, not a hand-set background.
+        let row = Row::new().variant(RowVariant::Tinted).child(
             Tile::new()
                 .status(StatusDot::new(status))
                 .icon(Icon::new(icon))
@@ -102,15 +97,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // to mark the active workspace. Signal-backed, so a host flips it in
         // place via `.active_state()` without rebuilding.
         .active(true)
-        // Inset the header count badge by the Item rows' horizontal
-        // padding (~14px) so it lines up vertically with the rows'
-        // trailing badges instead of sitting flush at the frame edge.
-        .header(
-            Flex::row()
-                .align("center")
-                .child(Badge::accent("3"))
-                .child(Flex::row().width(14.0)),
-        )
+        .header_actions(Badge::accent("3"))
         .child(
             ItemGroup::new("src")
                 .child(file(
@@ -147,12 +134,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // a hollow accent border, distinct from `.active(true)`'s filled wash
         // (see EXPLORER above).
         .nav_selected(true)
-        .header(
-            Flex::row()
-                .align("center")
-                .child(Badge::warning("3"))
-                .child(Flex::row().width(14.0)),
-        )
+        .header_actions(Badge::warning("3"))
         .child(git_row(
             Icon::new(Glyph::GitBranch).color(theme.colors.warning).size(18.0),
             "chrome_region.rs",
@@ -169,6 +151,24 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
             Badge::danger("D"),
         ));
 
+    // A `Section`: a group in a list — the leading part right before the title, the chevron at the
+    // end. The body is laid out as in any frame.
+    let team = DockFrame::new("Development")
+        .variant(DockFrameVariant::Section)
+        .rail(sidebar_mode, Glyph::Folder)
+        .leading(Icon::new(Glyph::Folder))
+        .header_actions(Badge::accent("2"))
+        // Indenting the members is this caller's decision, written in its own content.
+        .child(Flex::column().padding_left(Spacing::Lg).child([Item::new("alice"), Item::new("bob")]));
+    // A title row written by the caller; `.collapsible(false)` keeps it open with no chevron.
+    let pinned = DockFrame::new("PINNED")
+        .rail(sidebar_mode, Glyph::Lock)
+        .header(Flex::row().align("center").gap(Spacing::Xs)
+            .child(Icon::new(Glyph::Lock))
+            .child(Label::new("PINNED").bold(true)))
+        .collapsible(false)
+        .child(Item::new("README.md"));
+
     // G5 ChromeRegion: a vertical sidebar shell hosting the docks. Bound
     // to the host-owned mode signal so `[` collapses it to the icon rail.
     let sidebar = ChromeRegion::vertical()
@@ -179,7 +179,9 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         .padding(14.0)
         .background(theme.colors.surface)
         .dock(explorer)
-        .dock(source_control);
+        .dock(source_control)
+        .dock(team)
+        .dock(pinned);
 
     // PANES: sidebar-style pane cards. Row 1 is a centered inline
     // `status dot + icon + name`; row 2 is a flat git metadata line that
