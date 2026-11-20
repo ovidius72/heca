@@ -20,10 +20,11 @@
 use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_PANE, PaneEntry, pane_key, pane_row_items, pane_row_press, row_hint};
 use crate::chrome::panes::pane_items::LineCx;
-use crate::chrome::{ChromeDragItem, PaneFacts, alpha_u8, pane_info_view};
+use crate::chrome::{ChromeDragItem, PaneFacts, pane_info_view};
+use heca_grid_ui::RowVariant;
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{
-    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, StyleExt, FlashExt,
+    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, FlashExt,
 };
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::style::Spacing;
@@ -131,7 +132,7 @@ impl PaneRow<'_> {
             .color(theme.colors.foreground)
             .size(heca_grid_ui::style::WidgetSize::Caption);
         let process_hint_signal = process_hint_label.text_signal();
-        let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
+        let process_hint = Visibility::new().visible(info.process_hint.is_some()).child(process_hint_label);
         let process_hint_visible = process_hint.visible_signal();
         // **What is true of this pane, as a function** — read inside each line's own subscription, so
         // reading it is what makes a line follow the pane. The lines under the name (`cwd`, `git`, and
@@ -175,14 +176,7 @@ impl PaneRow<'_> {
         let content = content.grow(1.0);
         let card = Row::new()
             .flash(flash)
-            .background(
-                theme
-                    .colors
-                    .foreground
-                    .with_alpha(alpha_u8(theme.colors.card_background_alpha)),
-            )
-            .radius(theme.colors.control_radius())
-            .padding(Spacing::Sm)
+            .variant(RowVariant::Tinted)
             // The selected panel identifies the current row; an extra marker would repeat it.
             .active(active)
             .nav_selected(false)

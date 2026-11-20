@@ -116,6 +116,25 @@ value_set! {
 }
 
 value_set! {
+    /// A row's background at rest — mirrors grid-ui `RowVariant`: none, a veil, or a solid box.
+    pub enum ViewRowVariant {
+        Plain => "plain",
+        Tinted => "tinted",
+        Filled => "filled",
+    }
+}
+
+value_set! {
+    /// A dock frame's header shape — mirrors grid-ui `DockFrameVariant`: a dock's (grip and fold
+    /// chevron before the title) or a section's (title, then the chevron at the right; an optional
+    /// `leading` column beside the whole frame).
+    pub enum ViewDockFrameVariant {
+        Dock => "dock",
+        Section => "section",
+    }
+}
+
+value_set! {
     /// How a selected row shows it — mirrors grid-ui `ActiveMarker` (`Row`, `Item`).
     pub enum ViewMarker {
         None => "none",

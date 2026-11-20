@@ -125,13 +125,7 @@ pub(crate) fn map(
     // letter — each drawn by the card itself, so it lands wherever the card is, at any nesting
     // depth. Typing one runs that card's own `on_hint`. Nothing host-side is involved: no input
     // mode, no host paint pass, no registry.
-    let grid = KeyHintGroup::new(grid)
-        .opens_on(PICK_ACTION)
-        // The wrapper hugs its child, so the room the panel gives it has to be passed on
-        // deliberately — the grid inside is a share of *this*, and a hugged wrapper would leave it
-        // resolving a percentage of nothing (the same term the cards' `KeyHint` needs).
-        .width(Length::FULL)
-        .height(Length::FULL);
+    let grid = KeyHintGroup::new(grid).opens_on(PICK_ACTION);
 
     heca_grid_ui::WidgetModel::new(
         Overlay::new()

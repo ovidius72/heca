@@ -12,14 +12,14 @@ use super::*;
 ///
 /// `DockFrame` has a **default** slot (the body), so an unslotted child lands there.
 #[test]
-fn dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body() {
+fn dock_frame_routes_its_header_actions_slot_and_defaults_the_rest_to_the_body() {
     let node = ViewNode::new(WidgetId::DockFrame)
         .text("EXPLORER")
         .prop("frameless", PropValue::Bool(true))
         .child(
             ViewNode::new(WidgetId::Badge)
                 .text("3")
-                .prop("slot", PropValue::Text("header".into())),
+                .prop("slot", PropValue::Text("header_actions".into())),
         )
         .child(ViewNode::new(WidgetId::Item).text("src"))
         .child(ViewNode::new(WidgetId::Item).text("tests"));
@@ -31,11 +31,11 @@ fn dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body() {
         &mut FormBindings::default(),
     ).expect("valid described test widget");
     // The widget's own shape: children[0] = header row [toggle, CONTROLS], children[1] = body.
-    let header_controls = &dock.base().children[0].base().children[1];
+    let header_actions = &dock.base().children[0].base().children[1];
     assert_eq!(
-        header_controls.text_summary().as_deref(),
+        header_actions.text_summary().as_deref(),
         Some("3"),
-        "the slot=\"header\" child fills the controls slot",
+        "the slot=\"controls\" child fills the header-actions slot",
     );
     assert_eq!(
         dock.base().children[1].base().children.len(),
@@ -51,18 +51,18 @@ fn legacy_dock_header_slots_match_the_native_named_area_layout() {
     let node = ViewNode::new(WidgetId::DockFrame).text("EXPLORER")
         .prop("frameless", PropValue::Bool(true))
         .child(ViewNode::new(WidgetId::Badge).text("3")
-            .prop("slot", PropValue::Text("header".into())))
+            .prop("slot", PropValue::Text("header_actions".into())))
         .child(ViewNode::new(WidgetId::Item).text("src"))
         .child(ViewNode::new(WidgetId::Item).text("tests"));
     let mut described = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
     let mut native = Parent::child(
-        DockFrame::new("EXPLORER").frameless(true).header(Badge::new("3")),
+        DockFrame::new("EXPLORER").frameless(true).header_actions(Badge::new("3")),
         [Item::new("src"), Item::new("tests")],
     );
     for size in [Size::new(180.0, 220.0), Size::new(700.0, 500.0)] {
         LayoutEngine::new().compute(&mut native, size);
         LayoutEngine::new().compute(described.as_mut(), size);
-        for name in ["header", "controls", "body", "toggle"] {
+        for name in ["header", "header_actions", "body", "toggle"] {
             let a = heca_grid_ui::component::area(&native, name).unwrap().base().bounds;
             let b = heca_grid_ui::component::area(described.as_ref(), name).unwrap().base().bounds;
             assert_eq!(a, b, "wire slot and native composition agree for {name}");

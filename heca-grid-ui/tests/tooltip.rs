@@ -348,3 +348,21 @@ fn a_bubble_appearing_or_going_is_damage_with_its_whole_rect() {
     let gone = heca_grid_ui::collect_damage(&root).expect("the bubble going is damage");
     assert!(covers(gone), "its old place is repainted: {gone:?}");
 }
+
+/// **A bubble near the window's right edge stays inside the window** — shifted left along its side,
+/// as it flips between top and bottom (heca-pro: a tip on a row in the right sidebar).
+#[test]
+fn a_bubble_by_the_right_edge_is_kept_inside_the_window() {
+    let vp = Size::new(400.0, 300.0);
+    let mut root = Flex::row().width("100%").justify("end").child(Button::new("X").tooltip("a long tooltip near the right edge").tooltip_delay(0.0));
+    LayoutEngine::new().compute(&mut root, vp);
+    let b = root.base().children[0].base().bounds;
+    assert!(b.loc.x + b.size.w > vp.w - 1.0, "the button sits at the right edge");
+    heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0)));
+    let theme = Theme::default();
+    let mut scene = Scene::new();
+    { let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp); heca_grid_ui::paint_child(&root, &mut cx); }
+    let texts: Vec<_> = scene.overlay_layer().iter().filter_map(|c| match c { DrawCommand::Text(t) => Some(t.rect), _ => None }).collect();
+    assert!(!texts.is_empty(), "the tip is drawn");
+    for t in texts { assert!(t.loc.x >= 0.0 && t.loc.x + t.size.w <= vp.w + 0.5, "inside the window: {t:?}"); }
+}

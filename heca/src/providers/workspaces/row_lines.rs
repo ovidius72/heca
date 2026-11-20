@@ -66,15 +66,12 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
         // so it keeps its own width and the branch beside it is what gives way.
         let label = Label::new("").color(color).truncate(Ellipsis::None);
         let text = label.text_signal();
-        let segment = Visibility::new(
-            Flex::row()
+        let segment = Visibility::new().visible(false).child(Flex::row()
                 .align("center")
                 .gap(Spacing::Xs)
                 .shrink(0.0)
                 .child(Icon::new(glyph).color(color))
-                .child(label),
-            false,
-        );
+                .child(label));
         let visible = segment.visible_signal();
         (segment, text, visible)
     };
@@ -82,7 +79,7 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
     let (modified, modified_text, modified_visible) = count(Glyph::Warning, theme.colors.warning);
     let (deleted, deleted_text, deleted_visible) = count(Glyph::Minus, theme.colors.danger);
 
-    let row = Visibility::new(
+    let row = Visibility::new().visible(false).child(
         Flex::row()
             .align("center")
             .size(WidgetSize::Caption)
@@ -105,7 +102,6 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
             .child(added)
             .child(modified)
             .child(deleted),
-        false,
     );
     let visible = row.visible_signal();
 
@@ -154,16 +150,13 @@ pub(crate) fn text_line(produce: Rc<ProduceLine>) -> Rc<BuildLine> {
         let text = label.text_signal();
         let icon = Icon::new(Glyph::Circle).color(cx.theme.colors.foreground);
         let glyph = icon.glyph_signal();
-        let row = Visibility::new(
-            Flex::row()
+        let row = Visibility::new().visible(false).child(Flex::row()
                 .align("center")
                 .size(WidgetSize::Caption)
                 .gap(Spacing::Sm)
                 .padding_x(META_INDENT)
                 .child(icon)
-                .child(label),
-            false,
-        );
+                .child(label));
         let visible = row.visible_signal();
         let facts = cx.facts.clone();
         let produce = produce.clone();

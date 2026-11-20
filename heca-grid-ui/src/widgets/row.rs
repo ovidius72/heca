@@ -18,7 +18,7 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::{Attention, Flash};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
-use crate::style::{Align, Direction};
+use crate::style::{Align, Direction, Spacing};
 use crate::widgets::ActiveMarker;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -27,10 +27,10 @@ use heca_core::layout::{Point, Rectangle, Size};
 const SEL_INSET: f64 = 3.0;
 /// Number of flashes a `needs attention` pulse plays.
 const ATTENTION_PULSES: u32 = 4;
-/// Peak glow radius (logical px) of the attention pulse border.
-const ATTENTION_GLOW_RADIUS: f32 = 12.0;
-/// Rest-glow spread radius (px) — a filled row's share of the theme rest halo.
-const REST_GLOW_RADIUS: f32 = 10.0;
+/// Peak halo of the attention pulse border, as a share of the theme's glow radius.
+const ATTENTION_GLOW_SCALE: f32 = 1.2;
+/// A filled row's rest halo, as a share of the theme's glow radius.
+const REST_GLOW_SCALE: f32 = 1.0;
 /// Width of the left accent bar shown when active.
 const BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
@@ -39,6 +39,45 @@ const BAR_FRAC: f64 = 0.65;
 const CHECK_SIZE: f64 = 10.0;
 /// Left gutter the check pip centers in.
 const CHECK_GUTTER: f64 = 14.0;
+
+/// **A row's own background at rest** — a look taken from the theme, so a list of cards is written
+/// as `Row::new().variant(RowVariant::Tinted)` instead of a background, a radius and a padding at
+/// every call site. Anything set by hand (`.background(..)`, `.radius(..)`, `.padding(..)`) wins
+/// over it, so a variant is a starting point, never a cage; a new variant is added only when the
+/// same look is wanted in more than one place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
+pub enum RowVariant {
+    /// No background: only the states (active, cursor, hover) show. The default.
+    #[default]
+    Plain,
+    /// **A veil**: the theme's text colour at `card_background_alpha`, the controls' corner radius
+    /// and `Sm` air inside — a card that lifts just off a dock's background (the workspaces dock's
+    /// pane rows).
+    Tinted,
+    /// **A solid box**: the theme's `surface`, the same corners, `Xs` air inside — a card that has
+    /// to read as an object over something busy (the exposé's map of panes).
+    Filled,
+}
+
+impl RowVariant {
+    /// The background this look paints, from the theme this frame.
+    fn fill(self, theme: &crate::theme::Theme) -> Option<Color> {
+        match self {
+            RowVariant::Plain => None,
+            RowVariant::Tinted => Some(theme.colors.foreground.with_alpha_f32(theme.colors.card_background_alpha)),
+            RowVariant::Filled => Some(theme.colors.surface),
+        }
+    }
+
+    /// The air inside this look.
+    fn padding(self) -> Option<Spacing> {
+        match self {
+            RowVariant::Plain => None,
+            RowVariant::Tinted => Some(Spacing::Sm),
+            RowVariant::Filled => Some(Spacing::Xs),
+        }
+    }
+}
 
 /// A focusable, selectable container holding arbitrary child content.
 pub struct Row {
@@ -67,6 +106,8 @@ pub struct Row {
     attention_req: Option<Signal<bool>>,
     /// Color of the attention pulse (default: theme warning).
     attention_color: Option<Color>,
+    /// Its background at rest — see [`RowVariant`].
+    variant: RowVariant,
 }
 
 #[heca_grid_ui_macros::props]
@@ -95,6 +136,23 @@ impl Row {
             attention: Attention::new(),
             attention_req: None,
             attention_color: None,
+            variant: RowVariant::Plain,
+        }
+    }
+
+    /// **Its background at rest**, from the theme ([`RowVariant`]): `Tinted` for a card that lifts
+    /// just off a dock, `Filled` for a solid box. Sets the look's padding; anything set by hand
+    /// afterwards — or a background or radius set at any point — wins.
+    ///
+    /// ```ignore
+    /// Row::new().variant(RowVariant::Tinted).child(Grid::new() /* icon, name, folder */)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn variant(mut self, variant: RowVariant) -> Self {
+        self.variant = variant;
+        match variant.padding() {
+            Some(air) => self.padding(air),
+            None => self,
         }
     }
 
@@ -290,13 +348,16 @@ impl Component for Row {
         // back to the theme rest glow (`PaintCx::rest_glow`), so cards honor the
         // `glow_size` setting at rest; an unfilled row stays surface-less and flat.
         let s = &self.base.style;
-        if let (Some(fill), None) = (s.visual.fill, s.visual.glow) {
+        // A background or radius set by hand wins over the variant's.
+        let fill = s.visual.fill.or_else(|| self.variant.fill(cx.theme()));
+        let radius = if s.visual.radius > 0.0 || self.variant == RowVariant::Plain { s.visual.radius } else { ctrl_radius };
+        if let (Some(fill), None) = (fill, s.visual.glow) {
             cx.rect(
                 b,
                 fill,
                 s.visual.border,
-                s.visual.radius,
-                cx.rest_glow(REST_GLOW_RADIUS),
+                radius,
+                cx.rest_glow(cx.theme().colors.active_glow_radius * REST_GLOW_SCALE),
             );
         } else {
             cx.paint_base(&self.base);
@@ -310,7 +371,7 @@ impl Component for Row {
         // Without an explicit override, derive the highlight from the row's own fill
         // so state-tinted rows stay in-family. With an explicit `highlight`, use the
         // lighter Item-style accent wash instead of a heavy same-hue tint.
-        let highlight_base = self.highlight.or(self.base.style.visual.fill);
+        let highlight_base = self.highlight.or(fill);
         // The theme owns this history highlight, including its opacity. It is independent of
         // hover, and yields to the active state so the current pane keeps its quiet outline.
         if self.previous.get_untracked() && !active {
@@ -444,7 +505,7 @@ impl Component for Row {
                 radius,
                 Some(Glow {
                     color: c,
-                    radius: ATTENTION_GLOW_RADIUS,
+                    radius: cx.theme().colors.active_glow_radius * ATTENTION_GLOW_SCALE,
                     intensity: attn,
                 }),
             );

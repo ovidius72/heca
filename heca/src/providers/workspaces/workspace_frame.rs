@@ -72,7 +72,7 @@ impl WorkspaceFrame<'_> {
                     crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
                 );
             })
-            .header(
+            .header_actions(
                 Flex::row()
                     .align("center")
                     .padding_right(Spacing::Sm)

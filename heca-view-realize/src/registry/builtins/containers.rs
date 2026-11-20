@@ -126,15 +126,19 @@ pub(super) fn dock_frame(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca
             if let Some(on_toggle) = toggle_change(node, emit) {
                 dock = dock.on_toggle(on_toggle);
             }
-            // Slots: `header` is the controls slot (a search field, a count badge); everything else
-            // is body content — the body is the **default slot**, so an unslotted child lands there.
+            // Slots, named as the native builders: `header` is a title row of the plugin's own
+            // (the frame still folds), `header_actions` the slot at its right (a search field, a count),
+            // `leading` the part before the title; everything else is body content — the body is
+            // the **default slot**, so an unslotted child lands there.
             for (index, child) in node.children.iter().enumerate() {
                 let realized = cx.child(node, index)?;
                 match slot_of(child) {
                     Some("header") => dock = dock.header(realized),
+                    Some("header_actions") => dock = dock.header_actions(realized),
+                    Some("leading") => dock = dock.leading(realized),
                     None => dock = dock.child(realized),
                     other => {
-                        warn_unknown_slot(node, child, other, &["header"]);
+                        warn_unknown_slot(node, child, other, &["header", "header_actions", "leading"]);
                         dock = dock.child(realized);
                     }
                 }

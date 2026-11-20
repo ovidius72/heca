@@ -64,7 +64,7 @@ fn collapsing_a_dock_or_a_group_asks_for_a_layout() {
 fn revealing_a_hidden_child_asks_for_the_layout_that_moves_its_siblings() {
     use heca_grid_ui::{Component, Label, Visibility};
 
-    let row = Visibility::new(Label::new("~/projects/heca"), false);
+    let row = Visibility::new().visible(false).child(Label::new("~/projects/heca"));
     let shown = row.visible_signal();
     let mut page = Flex::column().child(Label::new("zsh")).child(row);
     LayoutEngine::new()

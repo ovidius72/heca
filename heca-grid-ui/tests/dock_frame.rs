@@ -128,11 +128,11 @@ fn dock_frame_header_control_receives_events_before_toggle() {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    // A search-like interactive control living in the header-controls slot.
+    // A search-like interactive control living in the header-actions slot.
     let control_clicks = Rc::new(Cell::new(0u32));
     let sink = control_clicks.clone();
     let control = Item::new("search").on_activate(move || sink.set(sink.get() + 1));
-    let mut dock = DockFrame::new("FILES").header(control);
+    let mut dock = DockFrame::new("FILES").header_actions(control);
     LayoutEngine::new().compute(&mut dock, Size::new(260.0, 400.0));
 
     // Click the control (header child 1): it consumes the event; frame must NOT toggle.
@@ -451,7 +451,7 @@ fn nested_header_frames_do_not_claim_the_outer_frames_parts() {
     let mode = signal(RegionMode::Expanded);
     let inner = DockFrame::new("INNER").child(Label::new("inner body"))
         .rail(mode, Glyph::FolderOpen);
-    let mut outer = DockFrame::new("OUTER").header(inner)
+    let mut outer = DockFrame::new("OUTER").header_actions(inner)
         .child([Label::new("outer first"), Label::new("outer second")])
         .rail(mode, Glyph::FolderOpen);
     LayoutEngine::new().compute(&mut outer, Size::new(700.0, 600.0));
@@ -467,9 +467,92 @@ fn nested_header_frames_do_not_claim_the_outer_frames_parts() {
     let outer_body = outer.base().children.iter()
         .find(|c| c.base().grid_area.as_deref() == Some("body")).unwrap();
     assert!(outer_body.base().style.layout.hidden, "folding hides the outer body");
-    let inner = heca_grid_ui::area(&outer, "controls").unwrap();
+    let inner = heca_grid_ui::area(&outer, "header_actions").unwrap();
     let inner_body = inner.base().children.iter()
         .find(|c| c.base().grid_area.as_deref() == Some("body")).unwrap();
     assert!(!inner_body.base().style.layout.hidden, "the nested header frame keeps its own state");
     assert_eq!(inner_body.base().children.len(), 1, "no outer content leaked into the inner body");
+}
+
+fn texts(dock: &heca_grid_ui::DockFrame) -> Vec<String> {
+    common::paint(dock, &Theme::default()).iter().filter_map(|cmd| match cmd {
+        heca_grid_ui::DrawCommand::Text(text) => Some(text.text.clone()),
+        _ => None,
+    }).collect()
+}
+
+fn centre(rect: heca_grid_ui::Rectangle) -> Point {
+    Point::new(rect.loc.x + rect.size.w / 2.0, rect.loc.y + rect.size.h / 2.0)
+}
+
+#[test]
+fn a_section_puts_its_leading_part_in_a_column_and_the_body_under_the_title() {
+    use heca_grid_ui::{DockFrame, DockFrameVariant};
+    let mut dock = DockFrame::new("Development").variant(DockFrameVariant::Section)
+        .leading(fixed_box(24.0, 24.0)).child(fixed_box(100.0, 40.0));
+    LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+    let area = |name| heca_grid_ui::component::area(&dock, name).unwrap().base().bounds;
+    let (leading, header, body) = (area("leading"), area("header"), area("body"));
+    assert!(leading.loc.x + leading.size.w <= header.loc.x, "the leading part is left of the title");
+    assert_eq!(body.loc.x, header.loc.x, "the body starts under the title, past the leading part");
+    assert!(body.loc.y >= header.loc.y + header.size.h, "the body is under the title");
+    let painted = texts(&dock);
+    assert!(painted.iter().any(|t| t == "Development"));
+    assert!(!painted.iter().any(|t| t == "⠿"), "a section has no grip");
+}
+
+#[test]
+fn a_header_of_the_callers_own_still_folds_the_frame() {
+    use heca_grid_ui::DockFrame;
+    let mut dock = DockFrame::new("unused")
+        .header(Flex::row().child([Label::new("Team"), Label::new("3")]))
+        .child(fixed_box(100.0, 40.0));
+    LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+    let painted = texts(&dock);
+    assert!(painted.iter().any(|t| t == "Team") && painted.iter().any(|t| t == "3"));
+    assert!(!painted.iter().any(|t| t == "unused"), "the caller's header replaces the title");
+    assert!(painted.iter().any(|t| t == "▾"), "the frame keeps its chevron");
+    let toggle = heca_grid_ui::component::area(&dock, "toggle").unwrap().base().bounds;
+    click_at(&mut dock, centre(toggle), PointerButton::Left);
+    assert!(!dock.state().get_untracked(), "a click on the caller's header folds the body");
+}
+
+#[test]
+fn a_header_survives_a_later_variant_and_is_wrapped_once() {
+    use heca_grid_ui::{DockFrame, DockFrameVariant};
+    let build = |dock: DockFrame| {
+        let mut dock = dock;
+        LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+        let custom = heca_grid_ui::component::area(&dock, "dock.header").unwrap();
+        (texts(&dock).iter().any(|t| t == "Team"), custom.base().children.len())
+    };
+    let once = build(DockFrame::new("x").header(Label::new("Team")));
+    let rebuilt = build(DockFrame::new("x").header(Label::new("Team"))
+        .variant(DockFrameVariant::Section).grip(false));
+    assert_eq!(once, (true, 1));
+    assert_eq!(rebuilt, once, "rebuilding the title row keeps the caller's header as it was");
+}
+
+#[test]
+fn a_frame_that_does_not_collapse_ignores_the_click_and_shows_no_chevron() {
+    use heca_grid_ui::DockFrame;
+    let mut dock = DockFrame::new("FILES").expanded(false).collapsible(false)
+        .child(fixed_box(100.0, 40.0));
+    LayoutEngine::new().compute(&mut dock, Size::new(300.0, 400.0));
+    assert!(dock.state().get_untracked(), "a frame that cannot fold is open");
+    assert!(!texts(&dock).iter().any(|t| t == "▾" || t == "▸"), "no chevron");
+    let toggle = heca_grid_ui::component::area(&dock, "toggle").unwrap().base().bounds;
+    click_at(&mut dock, centre(toggle), PointerButton::Left);
+    assert!(dock.state().get_untracked(), "the click folds nothing");
+}
+
+#[test]
+fn a_dock_without_grip_paints_none() {
+    use heca_grid_ui::DockFrame;
+    let mut with = DockFrame::new("FILES");
+    let mut without = DockFrame::new("FILES").grip(false);
+    LayoutEngine::new().compute(&mut with, Size::new(300.0, 400.0));
+    LayoutEngine::new().compute(&mut without, Size::new(300.0, 400.0));
+    assert!(texts(&with).iter().any(|t| t == "⠿"));
+    assert!(!texts(&without).iter().any(|t| t == "⠿"));
 }

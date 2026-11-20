@@ -2,7 +2,7 @@
 //!
 //! It is the bracket-framed shell an app-side Dock (e.g. `WorkspacesDock`) drops
 //! its content into: a **title bar** (drag-handle grip + collapse chevron +
-//! title, plus a header-controls slot the Dock fills with its own affordances,
+//! title, plus a header-actions slot the Dock fills with its own affordances,
 //! e.g. a search field) over a **body** that holds the content. The whole frame
 //! reuses [`Pane`](super::Pane)'s prominent corner brackets via the shared
 //! [`PaintCx::bracket_frame`].
@@ -36,11 +36,11 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{HintExt, LayoutExt, Parent, PlaceExt, StyleExt};
+use crate::builders::{LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
-use crate::style::Track;
+use crate::style::{Spacing, Track};
 use crate::widgets::{Flex, Glyph, Grid, Icon, Item, Label, RegionMode};
 
 /// Chevron glyphs for expanded / collapsed states.
@@ -50,22 +50,22 @@ const CHEVRON_CLOSED: &str = "▸";
 /// which two phases claim it.
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
-const LEADING_GAP: f32 = 8.0;
-/// Rest-glow spread radius (px) — the frame's share of the theme rest halo.
-const GLOW_RADIUS: f32 = 12.0;
+const LEADING_GAP: Spacing = Spacing::Sm;
+/// The frame's rest halo, as a share of the theme's glow radius (`active_glow_radius`).
+const GLOW_SCALE: f32 = 1.2;
 /// Inset of the header + body from the bracket frame, so content (title, the
-/// header-controls slot, body rows) never collides with the corner brackets.
-const CONTENT_PAD: f32 = 10.0;
+/// header-actions slot, body rows) never collides with the corner brackets.
+const CONTENT_PAD: Spacing = Spacing::Sm;
 /// Tighter inset used in [`RegionMode::CollapsedRail`] so the centered icon fits
 /// a thin rail without colliding with the brackets.
-const RAIL_PAD: f32 = 6.0;
+const RAIL_PAD: Spacing = Spacing::Xs;
 /// Inset used when [`frameless`](DockFrame::frameless): no brackets to clear, so the
 /// content can sit tight against the (host-provided) outer frame.
-const FRAMELESS_PAD: f32 = 2.0;
+const FRAMELESS_PAD: Spacing = Spacing::Hairline;
 /// Gap between the title bar and the body.
-const HEADER_BODY_GAP: f32 = 8.0;
+const HEADER_BODY_GAP: Spacing = Spacing::Sm;
 /// Gap between body rows.
-const BODY_GAP: f32 = 4.0;
+const BODY_GAP: Spacing = Spacing::Xs;
 /// Size (logical px) of the centered glyph shown in [`RegionMode::CollapsedRail`].
 const RAIL_ICON_SIZE: f32 = 22.0;
 
@@ -85,7 +85,28 @@ pub const RAIL_AREA: &str = "rail";
 /// The title row's fold toggle.
 pub const TOGGLE_AREA: &str = "toggle";
 /// The title row's slot for a caller's own affordances.
-pub const CONTROLS_AREA: &str = "controls";
+pub const HEADER_ACTIONS_AREA: &str = "header_actions";
+/// The place before the title — an avatar, an icon ([`leading`](DockFrame::leading)).
+pub const LEADING_AREA: &str = "leading";
+/// The fold chevron, wherever the variant puts it.
+const CHEVRON_AREA: &str = "dock.chevron";
+/// A header written by the caller ([`header`](DockFrame::header)), inside the fold toggle.
+const CUSTOM_AREA: &str = "dock.header";
+
+/// **How a [`DockFrame`]'s title row is laid out.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
+pub enum DockFrameVariant {
+    /// The dock's own frame: a grip and the fold chevron before the title, header actions at the right,
+    /// the body under the whole row. The default.
+    #[default]
+    Dock,
+    /// **A section of a list** — a modern sidebar's group: an optional
+    /// [`leading`](DockFrame::leading) part (an avatar, an icon) before the title, the fold chevron
+    /// at the end of the row, no grip, and the body starting **under the title**, not under the
+    /// leading part — the frame is a grid whose body shares the title's column, so nothing is
+    /// measured to line them up.
+    Section,
+}
 /// A titled, collapsible, bracket-framed container for a Dock.
 pub struct DockFrame {
     base: Base,
@@ -120,47 +141,38 @@ pub struct DockFrame {
     /// then the body. Held rather than made per call because
     /// [`grid_template`](Component::grid_template) hands out a borrow of it.
     areas: Vec<String>,
+    /// The column tracks — none for a [`Dock`](DockFrameVariant::Dock) (one implicit column that
+    /// fills), `auto 1fr` for a [`Section`](DockFrameVariant::Section) (the leading part, then the
+    /// title and the body under it).
+    columns: Vec<Track>,
+    /// How the title row is laid out.
+    variant: DockFrameVariant,
+    /// The title the default toggle shows.
+    title: String,
+    /// Whether the grip shows (a [`Dock`](DockFrameVariant::Dock)'s only).
+    grip: bool,
+    /// Whether the header folds the body; `false` hides the chevron and keeps the body open.
+    collapsible: Signal<bool>,
+    /// The fold letter's tone ([`fold_hint_tone`](DockFrame::fold_hint_tone)), kept so a toggle
+    /// made again keeps it.
+    fold_tone: Option<crate::Tone>,
 }
 
 #[heca_grid_ui_macros::props]
 impl DockFrame {
     /// A new expanded frame titled `title`. Add body content with `.child(...)`
-    /// and header controls with `.header(...)`.
+    /// and header controls with `.header_actions(...)`.
     pub fn new(title: impl Into<String>) -> Self {
         let expanded = signal(true);
-        let chevron_label = Label::new(CHEVRON_OPEN);
-        let chevron = chevron_label.text_signal();
-
-        // Leading slot: drag grip + chevron. Body visibility + chevron are synced
-        // in `remeasure`/`event` (which have `&mut self`).
-        let leading = Flex::row()
-            .align("center")
-            .gap(LEADING_GAP)
-            .child(Label::new(GRIP))
-            .child(chevron_label);
-        // The toggle Item carries the title and flips `expanded` on activate; it
-        // grows so the controls slot sits at the right edge.
-        // **Its letter sits on the chevron it folds.**
-        //
-        // Folding a dock is a real act, so it earns one of the 52 — but it was wearing the default
-        // cap in the default place: centred on the title, on top of whatever the dock's own author
-        // declared there. Top-left puts it over the chevron, which is the thing it operates, and
-        // that is geometry only this widget knows.
-        //
-        // **What the letter MEANS is not this widget's to say** — accent, warning, success are a
-        // vocabulary the app assigns, and a domain-neutral widget picking one of them is the
-        // library deciding app styling. A caller says it with `fold_hint_tone`.
-        let toggle = Item::new(title)
-            .leading(leading)
-            .on_activate(move || expanded.set(!expanded.get_untracked()))
-            .hint_placement(crate::widgets::HintPlacement::TopLeft);
-        // The toggle takes remaining width; controls keep their natural width and own input.
+        let chevron = signal(CHEVRON_OPEN.to_string());
+        // The toggle takes remaining width; header actions keep their natural width and own input. The
+        // toggle itself is made by `build_toggle`, from the variant and what the caller gave.
         let header = Grid::new()
             .template_column("1fr auto")
-            .template_area(&format!("{TOGGLE_AREA} {CONTROLS_AREA}"))
+            .template_area(&format!("{TOGGLE_AREA} {HEADER_ACTIONS_AREA}"))
             .align("center")
-            .child(toggle.area(TOGGLE_AREA))
-            .child(Flex::empty().area(CONTROLS_AREA))
+            .child(Flex::empty().area(TOGGLE_AREA))
+            .child(Flex::empty().area(HEADER_ACTIONS_AREA))
             .area(HEADER_AREA);
 
         // Body holds the dock content; folds out of layout when collapsed.
@@ -172,7 +184,7 @@ impl DockFrame {
         base.style.layout.gap = (HEADER_BODY_GAP).into();
         base.children.push(crate::WidgetModel::new(header));
         base.children.push(crate::WidgetModel::new(body));
-        Self {
+        let mut frame = Self {
             base,
             expanded,
             was_expanded: expanded.get_untracked(),
@@ -184,7 +196,145 @@ impl DockFrame {
             rail_mode: None,
             frameless: false,
             areas: vec![HEADER_AREA.to_string(), BODY_AREA.to_string()],
+            columns: Vec::new(),
+            variant: DockFrameVariant::Dock,
+            title: title.into(),
+            grip: true,
+            collapsible: signal(true),
+            fold_tone: None,
+        };
+        frame.build_toggle();
+        frame
+    }
+
+    /// **The fold toggle — the title row's clickable part**, made from the variant and what the
+    /// caller gave: the title, or a header of its own ([`header`](Self::header)). Made again when
+    /// either changes, keeping a caller's header.
+    ///
+    /// **Its letter sits on the chevron it folds.** Folding is a real act, so it earns one of the
+    /// 52 — top-left over a [`Dock`](DockFrameVariant::Dock)'s chevron, top-right over a
+    /// [`Section`](DockFrameVariant::Section)'s; that is geometry only this widget knows. **What
+    /// the letter MEANS is not this widget's to say** — a caller says it with `fold_hint_tone`.
+    fn build_toggle(&mut self) {
+        let (expanded, collapsible) = (self.expanded, self.collapsible);
+        let fold = move || {
+            if collapsible.get_untracked() {
+                expanded.set(!expanded.get_untracked());
+            }
+        };
+        let chevron_text = self.chevron;
+        let chevron = move || Label::new("").with_text_signal(chevron_text).area(CHEVRON_AREA);
+        let custom = self.part_mut(TOGGLE_AREA)
+            .and_then(|toggle| crate::component::area_slot(toggle.base_mut(), CUSTOM_AREA))
+            .map(|slot| std::mem::replace(slot, crate::WidgetModel::new(Flex::empty())));
+        let (toggle, corner): (crate::WidgetModel, _) = match (custom, self.variant) {
+            (Some(content), _) => (
+                crate::WidgetModel::new(crate::widgets::Row::new().on_activate(fold).gap(LEADING_GAP)
+                    .child(content).child(chevron())),
+                crate::widgets::HintPlacement::TopRight,
+            ),
+            (None, DockFrameVariant::Dock) => {
+                let mut leading = Flex::row().align("center").gap(LEADING_GAP);
+                if self.grip {
+                    leading = leading.child(Label::new(GRIP));
+                }
+                (crate::WidgetModel::new(Item::new(self.title.clone()).leading(leading.child(chevron())).on_activate(fold)),
+                    crate::widgets::HintPlacement::TopLeft)
+            }
+            (None, DockFrameVariant::Section) => (
+                crate::WidgetModel::new(Item::new(self.title.clone()).trailing(chevron()).on_activate(fold)),
+                crate::widgets::HintPlacement::TopRight,
+            ),
+        };
+        let mut toggle = toggle;
+        toggle.base_mut().grid_area = Some(TOGGLE_AREA.to_string());
+        toggle.base_mut().hint_style.placement = corner;
+        toggle.base_mut().hint_style.tone = self.fold_tone;
+        if let Some(slot) = self.part_mut(TOGGLE_AREA) {
+            *slot = toggle;
         }
+        self.sync();
+    }
+
+    /// **How the title row is laid out** ([`DockFrameVariant`]): `Dock` (the default) or `Section`
+    /// for a group in a list — leading part, chevron at the end, body under the title.
+    ///
+    /// ```ignore
+    /// DockFrame::new("Development")
+    ///     .variant(DockFrameVariant::Section)
+    ///     .leading(avatar)
+    ///     .child(members)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn variant(mut self, variant: DockFrameVariant) -> Self {
+        self.variant = variant;
+        let (columns, areas) = match variant {
+            DockFrameVariant::Dock => (Vec::new(), vec![HEADER_AREA.to_string(), BODY_AREA.to_string()]),
+            DockFrameVariant::Section => (vec![Track::Auto, Track::Fr(1.0)],
+                vec![format!("{LEADING_AREA} {HEADER_AREA}"), format!(". {BODY_AREA}")]),
+        };
+        (self.columns, self.areas) = (columns, areas);
+        if variant == DockFrameVariant::Section && self.base.child_in_area(LEADING_AREA).is_none() {
+            self.base.children.push(crate::WidgetModel::new(Flex::empty().area(LEADING_AREA)));
+        }
+        self.build_toggle();
+        self
+    }
+
+    /// **The part before the title** — an avatar, an icon, an image. In a
+    /// [`Section`](DockFrameVariant::Section) it has its own column and the body starts under the
+    /// title, past it; in a [`Dock`](DockFrameVariant::Dock) it sits before the title, after the
+    /// chevron.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
+    pub fn leading(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        let mut fresh = c.into_component();
+        fresh.base_mut().grid_area = Some(LEADING_AREA.to_string());
+        match self.base.child_in_area(LEADING_AREA) {
+            Some(slot) => *slot = fresh,
+            None => self.base.children.push(fresh),
+        }
+        self
+    }
+
+    /// **A title row written by the caller** — any widget, composed as it likes. The frame still
+    /// owns folding: a click on the row folds the body, and the frame's chevron stays at its end
+    /// (unless [`collapsible(false)`](Self::collapsible)). Controls inside it keep their own input.
+    ///
+    /// ```ignore
+    /// DockFrame::new("Development").header(Flex::row().gap(Spacing::Xs).child([avatar, title, count]))
+    /// ```
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
+    pub fn header(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        let content = c.into_component();
+        // Hand the content to `build_toggle` through the slot it reads a caller's header from.
+        // The holder keeps its area through every rebuild, so the content is wrapped once.
+        let holder = Flex::row().child(Flex::row().grow(1.0).area(CUSTOM_AREA).child(content)).area(TOGGLE_AREA);
+        if let Some(slot) = self.part_mut(TOGGLE_AREA) {
+            *slot = crate::WidgetModel::new(holder);
+        }
+        self.build_toggle();
+        self
+    }
+
+    /// **Whether the header folds the body** (default `true`). `false`: no chevron, the body stays
+    /// open and a click on the header folds nothing.
+    #[heca_grid_ui_macros::prop]
+    pub fn collapsible(mut self, collapsible: bool) -> Self {
+        self.collapsible.set(collapsible);
+        if !collapsible {
+            self.expanded.set(true);
+        }
+        self.sync();
+        self
+    }
+
+    /// **Whether a [`Dock`](DockFrameVariant::Dock)'s title row shows the grip** (default `true`).
+    /// A [`Section`](DockFrameVariant::Section) has none.
+    #[heca_grid_ui_macros::prop]
+    pub fn grip(mut self, grip: bool) -> Self {
+        self.grip = grip;
+        self.build_toggle();
+        self
     }
 
     /// Drop the corner-bracket frame (and tighten the content inset). Use when the
@@ -212,13 +362,14 @@ impl DockFrame {
         self
     }
 
-    /// Fill the header-controls slot — the Dock's own affordances (e.g. a search
-    /// field). Controls retain their own input and focus; clicking one does not toggle the dock.
+    /// Fill the header-actions slot at the right of the title row — the Dock's own affordances
+    /// (e.g. a search field, a count). Controls retain their own input and focus; clicking one does
+    /// not toggle the dock.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn header(mut self, c: impl crate::builders::IntoComponent) -> Self {
+    pub fn header_actions(mut self, c: impl crate::builders::IntoComponent) -> Self {
         let mut fresh = c.into_component();
-        fresh.base_mut().grid_area = Some(CONTROLS_AREA.to_string());
-        if let Some(slot) = self.part_mut(CONTROLS_AREA) {
+        fresh.base_mut().grid_area = Some(HEADER_ACTIONS_AREA.to_string());
+        if let Some(slot) = self.part_mut(HEADER_ACTIONS_AREA) {
             *slot = fresh;
         }
         self
@@ -249,6 +400,7 @@ impl DockFrame {
     /// ```
     #[heca_grid_ui_macros::prop]
     pub fn fold_hint_tone(mut self, tone: crate::Tone) -> Self {
+        self.fold_tone = Some(tone);
         self.part_mut(TOGGLE_AREA)
             .expect("the title row always holds its toggle")
             .base_mut()
@@ -341,8 +493,14 @@ impl DockFrame {
     /// mode the header + body fold away and only the rail icon shows; otherwise
     /// the body follows `expanded` and the rail icon (if any) stays hidden.
     fn sync(&mut self) {
-        let open = self.expanded.get_untracked();
+        let collapsible = self.collapsible.get_untracked();
+        let open = self.expanded.get_untracked() || !collapsible;
         self.chevron.set(chevron_for(open).to_string());
+        if let Some(header) = self.base.child_in_area(HEADER_AREA)
+            && let Some(chevron) = crate::component::area_slot(header.base_mut(), CHEVRON_AREA)
+        {
+            chevron.base_mut().set_hidden(!collapsible);
+        }
         let rail = self
             .rail_mode
             .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
@@ -352,6 +510,7 @@ impl DockFrame {
             }
         };
         hide(&mut self.base, HEADER_AREA, rail);
+        hide(&mut self.base, LEADING_AREA, rail);
         hide(&mut self.base, BODY_AREA, rail || !open);
         hide(&mut self.base, RAIL_AREA, !rail);
         // Tighten the frame inset in the rail so the icon fits the thin column;
@@ -368,7 +527,7 @@ impl DockFrame {
 
     /// Only this frame's template owns its parts; a component in the header may own the same names.
     fn part_mut(&mut self, name: &str) -> Option<&mut crate::WidgetModel> {
-        if matches!(name, TOGGLE_AREA | CONTROLS_AREA) {
+        if matches!(name, TOGGLE_AREA | HEADER_ACTIONS_AREA) {
             self.base.child_in_area(HEADER_AREA)?.base_mut().child_in_area(name)
         } else {
             self.base.child_in_area(name)
@@ -401,14 +560,14 @@ impl Component for DockFrame {
         self.base
             .style
             .layout
-            .to_taffy_grid(self.base.font, &[], &ROWS)
+            .to_taffy_grid(self.base.font, &self.columns, &ROWS)
     }
 
     /// **The header and the body are placed by NAME, against this.** The column track is left
     /// unsaid on purpose: an implicit track fills, so the frame's parts are as wide as the frame.
     fn grid_template(&self) -> Option<crate::style::GridTemplate<'_>> {
         Some(crate::style::GridTemplate {
-            columns: &[],
+            columns: &self.columns,
             rows: &ROWS,
             areas: &self.areas,
         })
@@ -444,7 +603,7 @@ impl Component for DockFrame {
                 .style
                 .visual
                 .glow
-                .or_else(|| cx.rest_glow(GLOW_RADIUS));
+                .or_else(|| cx.rest_glow(cx.theme().colors.active_glow_radius * GLOW_SCALE));
             cx.rect(b, f, None, radius, glow);
         }
 

@@ -4102,7 +4102,26 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
   `.attention(Signal<bool>)` + `.attention_color(Color)`,
   `.reveal_when(Signal<bool>)` (gate this row's request to be scrolled into view — see
   [Following the cursor](#following-the-cursor); only needed when the cursor also follows the
-  mouse), plus `StyleExt` for a persistent background under the selection overlay.
+  mouse), `.variant(RowVariant)` (its background at rest, from the theme — below), plus
+  `StyleExt` for a persistent background under the selection overlay.
+- **Variants — a background at rest, by name.** A plain row has none; a list of cards names one
+  instead of writing a background, a radius and a padding at every call site:
+
+  | `RowVariant` | what it paints | used by |
+  | --- | --- | --- |
+  | `Plain` (default) | nothing — only the states show | lists, menus |
+  | `Tinted` | a veil: the theme's text colour at `card_background_alpha`, the controls' corner radius, `Sm` air inside | the workspaces dock's pane rows; a card in any dock |
+  | `Filled` | a solid box: the theme's `surface`, the same corners, `Xs` air inside | the exposé's cards — over something busy |
+
+  ```rust
+  Row::new().variant(RowVariant::Tinted).child(Grid::new() /* icon, name, folder */)
+  Row::new().variant(RowVariant::Tinted).border(accent, 1.0)   // a variant, plus one change
+  Row::new().background(..).radius(..).padding(Spacing::Md)    // all by hand, no variant
+  ```
+
+  **Style set by hand wins**: a background or radius set at any point beats the variant's, and a
+  padding set after it beats its air. A new variant is added only when the same look is wanted in
+  more than one place; anything else is written with the style builders.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
 
@@ -4129,7 +4148,8 @@ ViewNode::new(WidgetId::Row)
     .child(ViewNode::new(WidgetId::Badge).text(status));
 ```
 
-Props `realize` reads: `active`, `nav_selected`, `marker`. Events: `press` — wired to a click, to
+Props `realize` reads: `active`, `nav_selected`, `marker`, `variant` (`"plain"` / `"tinted"` /
+`"filled"`; typed SDK: `Row::new().variant(ViewRowVariant::Tinted)`). Events: `press` — wired to a click, to
 Enter/Space, **and** to a KeyHint target, so `prefix+/` reaches the row like any other actionable
 node. With no `press` intent the row is deliberately inert: not focusable, no hover — a described
 row that nothing can activate should not look like a control.
@@ -4214,8 +4234,8 @@ Row::new().on_activate(open).child(
         .icon(Icon::new(Glyph::FileCode))
         .title(Label::new("Neovim").bold(true))
         .suffix(Label::new("(nvim)").size(WidgetSize::Small))
-        .line(Visibility::new(folder_line, cwd.is_some()))
-        .line(Visibility::new(git_line, branch.is_some())),
+        .line(Visibility::new().visible(cwd.is_some()).child(folder_line))
+        .line(Visibility::new().visible(branch.is_some()).child(git_line)),
 )
 ```
 
@@ -4967,12 +4987,12 @@ A signal-driven wrapper that hides or shows exactly one child without rebuilding
 Use it for optional metadata rows and exceptional-state indicators that should collapse
 cleanly when absent.
 
-- **Construct**: `Visibility::new(child, visible)`.
+- **Construct**: `Visibility::new().visible(visible).child(child)`.
 - **Live update**: `.visible_signal() -> Signal<bool>`.
 - **Existing signal**: `.with_visible_signal(signal)` binds presence without an extra event handler.
 
 ```rust
-let error = Visibility::new(StatusDot::error(), false);
+let error = Visibility::new().visible(false).child(StatusDot::error());
 error.visible_signal().set(true);
 ```
 
@@ -4985,10 +5005,10 @@ error.visible_signal().set(true);
 >
 > ```rust
 > // ✅ the line is there, saying nothing, ready to be revealed
-> column.child(Visibility::new(folder_line, cwd.is_some()))
+> column.child(Visibility::new().visible(cwd.is_some()).child(folder_line))
 >
 > // ❌ if the directory arrives later, nothing can ever show it
-> if cwd.is_some() { column = column.child(Visibility::new(folder_line, true)) }
+> if cwd.is_some() { column = column.child(Visibility::new().visible(true).child(folder_line)) }
 > ```
 >
 > And nothing may go **around** it. An inset, an alignment box or a spacer wrapped around a
@@ -5115,7 +5135,7 @@ For adding, removing or ordering a dock in the application, use the
 the host mounts the provider.
 
 A titled, collapsible, bracket-framed shell for a Dock: a title bar (drag-handle grip + chevron
-+ title + a header-controls slot) over a foldable body. Reuses `Pane`'s corner brackets.
++ title + a header-actions slot) over a foldable body. Reuses `Pane`'s corner brackets.
 **Rail-aware**: bound to a region's [`RegionMode`](#chromeregion) signal, it folds header + body
 away to a single centered `Icon` while the region is collapsed to a rail.
 
@@ -5123,8 +5143,25 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   array/`Vec` of a common type; chain `.child(a).child(b)` for different types. Every child stays in
   the body. The frame's named Grid areas identify its own title, controls and body. Nested
   components may use the same area names: their content, fold state and rail remain independent.
-- **Builders**: `.header(impl Component)` (fill the controls slot, e.g. a search field or count
-  `Badge`), `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
+- **Variants** (`.variant(DockFrameVariant)`) — how the title row is laid out:
+
+  | Variant | Title row | Use |
+  |---|---|---|
+  | `Dock` (default) | grip, chevron, title, controls | a dock in a chrome region |
+  | `Section` | title, controls, chevron at the end; a `leading` column beside the whole frame, the body under the title | a group in a list (a team with its members) |
+
+- **Builders**: `.variant(DockFrameVariant)`,
+  `.leading(impl Component)` (the part before the title — avatar, icon, image; in a `Section` it has
+  its own column and the body starts past it),
+  `.header(impl Component)` (**a title row of your own** — any widget; the frame still folds: a
+  click on it folds the body and the chevron stays at its end; controls inside it keep their own
+  input),
+  `.header_actions(impl Component)` (the slot at the right of the title row, e.g. a search field or count
+  `Badge`; a click on it never folds. With your own `.header` it is usually not needed — put the
+  actions inside your header — but the two may be used together),
+  `.collapsible(bool)` (default `true`; `false` keeps the body open, hides the chevron and a click
+  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none),
+  `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
   `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace;
@@ -5156,8 +5193,15 @@ let sidebar = ChromeRegion::vertical();
 let mode = sidebar.mode_signal();
 let files = DockFrame::new("EXPLORER")
     .rail(mode, Glyph::FolderOpen)
-    .header(Badge::accent("3"))
+    .header_actions(Badge::accent("3"))
     .child(ItemGroup::new("src").child(Item::new("main.rs")));
+
+// A group in a list, title row written by hand; the frame still folds it.
+let team = DockFrame::new("Development")
+    .variant(DockFrameVariant::Section)
+    .leading(Icon::new(Glyph::Folder))
+    .header(Flex::row().gap(Spacing::Xs).child([Label::new("Development"), Label::new("3")]))
+    .child(members);
 ```
 
 **Declarative** (`WidgetId::DockFrame`):
@@ -5169,17 +5213,23 @@ ViewNode::new(WidgetId::DockFrame)
     .prop("frameless", PropValue::Bool(false))
     .prop("active", PropValue::Bool(false))                    // the accent wash
     .prop("nav_selected", PropValue::Bool(false))              // the nav-cursor outline
+    .prop("variant", PropValue::Text("dock".into()))           // or "section"
+    .prop("collapsible", PropValue::Bool(true))
+    .prop("grip", PropValue::Bool(true))
     .on("toggle", Intent::new("fold_dock"))                    // fires with args {"expanded": …}
     .child(ViewNode::new(WidgetId::Badge)
         .text("3")
-        .prop("slot", PropValue::Text("header".into())))       // ← the controls slot
+        .prop("slot", PropValue::Text("header_actions".into())))     // ← the header-actions slot
     .child(ViewNode::new(WidgetId::Item).text("main.rs"));   // ← no slot ⇒ body (the default)
 ```
 
 - **Props**: `text` (title), `expanded` (Bool, default `true`), `frameless`, `active`,
-  `nav_selected` (Bool).
+  `nav_selected`, `collapsible`, `grip` (Bool), `variant` (`"dock"` | `"section"`). The typed SDK
+  has the same setters (`.variant(ViewDockFrameVariant::Section)`, `.collapsible(false)`, …).
 - **Event**: `toggle` — carries the new state in `args["expanded"]`.
-- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `header` (the controls slot).
+- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `header` (a title row of
+  the plugin's own), `header_actions` (the slot at the right of the title row), `leading` (the part
+  before the title).
   The **body is the default slot**, so an unslotted child is body content; an unknown slot name falls
   back to the body and is debug-logged.
 - **`.rail(..)` is host-only** — it binds a host-owned `Signal<RegionMode>`, and static serializable
@@ -7376,7 +7426,7 @@ ViewNode::new(WidgetId::DockFrame)
     .text("EXPLORER")
     .child(ViewNode::new(WidgetId::Badge)
         .text("3")
-        .prop("slot", PropValue::Text("header".into())))   // ← the controls slot
+        .prop("slot", PropValue::Text("header_actions".into())))   // ← the header-actions slot
     .child(ViewNode::new(WidgetId::Item).text("src"))    // ← no slot ⇒ the body (default)
     .child(ViewNode::new(WidgetId::Item).text("tests"));
 ```
@@ -7815,8 +7865,7 @@ Flex::column()
             .child(Label::new("Neovim").bold(true)),
     )
     .child(
-        Visibility::new(
-            Flex::row()
+        Visibility::new().visible(true).child(Flex::row()
                 .align(Align::Center)
                 .gap(6.0)
                 .child(Icon::new(Glyph::GitBranch).size(12.0))
@@ -7834,9 +7883,7 @@ Flex::column()
                         .gap(4.0)
                         .child(Icon::new(Glyph::Warning).size(12.0))
                         .child(Label::new("~3").font_scale(0.8)),
-                ),
-            true,
-        ),
+                )),
     );
 ```
 
