@@ -67,10 +67,17 @@ fn header_segments_keep_full_hover_values_and_theme_colours_when_squeezed() {
         assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == facts.app_name)),
             "the short application name should remain readable");
         let tag = &root.base().children[0];
-        let path_tip = tag.base().children[0].base().tooltip.as_ref().unwrap();
-        let branch_tip = tag.base().children[2].base().tooltip.as_ref().unwrap();
-        assert_eq!(path_tip.text.get_untracked(), "/a/very/long/path/to/the/project/directory");
-        assert_eq!(branch_tip.text.get_untracked(), "feature/a-long-branch-name");
+        // A segment the bar had to cut offers its whole value on hover (its label does that); one
+        // that fits offers nothing.
+        for (index, full) in [(0, "/a/very/long/path/to/the/project/directory"), (2, "feature/a-long-branch-name")] {
+            if let Some(tip) = tip_text(tag.base().children[index].as_ref()) {
+                assert_eq!(tip, full, "a cut segment offers its whole value");
+            }
+        }
+        if width == 280.0 {
+            assert_eq!(tip_text(tag.base().children[0].as_ref()).as_deref(),
+                Some("/a/very/long/path/to/the/project/directory"), "squeezed, the path is cut and offers itself");
+        }
         for (index, expected) in [(0, theme.colors.accent), (2, theme.colors.warning)] {
             let segment = tag.base().children[index].base().bounds;
             assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
@@ -82,9 +89,17 @@ fn header_segments_keep_full_hover_values_and_theme_colours_when_squeezed() {
             }
         }
     }
-    heca_grid_ui::set_text_by_key(&root, &segment_text_key("location"), "/another/complete/path");
+    heca_grid_ui::set_text_by_key(&root, &segment_text_key("location"), "/another/complete/path/that/is/also/long");
+    crate::chrome::paint_chrome_root(&mut root, 280.0, 100.0, &theme);
     let tag = &root.base().children[0];
-    assert_eq!(tag.base().children[0].base().tooltip.as_ref().unwrap().text.get_untracked(), "/another/complete/path");
+    assert_eq!(tip_text(tag.base().children[0].as_ref()).as_deref(), Some("/another/complete/path/that/is/also/long"));
+}
+
+/// The tooltip text found on a widget or the first of its descendants that has one.
+fn tip_text(w: &dyn heca_grid_ui::Component) -> Option<String> {
+    use heca_grid_ui::reactive::SignalGet;
+    w.base().tooltip.as_ref().map(|t| t.text.get_untracked())
+        .or_else(|| w.base().children.iter().find_map(|c| tip_text(c.as_ref())))
 }
 
 /// **Which actions are destructive is the action's own declaration, not a surface's.**

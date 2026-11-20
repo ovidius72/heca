@@ -78,30 +78,28 @@ fn segment_paint_is_confined_to_its_box_and_the_chip_without_clipping_tooltips()
             }
         }
         assert!(clips.is_empty());
-        assert_eq!(
-            tag.base().children[1]
-                .base()
-                .tooltip
-                .as_ref()
-                .unwrap()
-                .text
-                .get_untracked(),
-            "a long branch name",
-            "fitting must preserve the full hover value"
-        );
+        // What the branch segment offers on hover: its whole text while the chip cuts it, nothing
+        // once it fits again.
+        let tip = tip_text(tag.base().children[1].as_ref());
+        match width {
+            300.0 => assert_eq!(tip, None, "at full width nothing is cut, so nothing to add"),
+            100.0 => assert_eq!(tip.as_deref(), Some("a long branch name"), "partly shown, it offers its whole text"),
+            _ => {}
+        }
     }
+}
+
+/// The tooltip text found on a widget or the first of its descendants that has one.
+fn tip_text(w: &dyn heca_grid_ui::Component) -> Option<String> {
+    w.base().tooltip.as_ref().map(|t| t.text.get_untracked())
+        .or_else(|| w.base().children.iter().find_map(|c| tip_text(c.as_ref())))
 }
 
 #[test]
 fn a_truncated_segments_tooltip_can_extend_beyond_the_chip() {
     let full = "/projects/a/very/long/path";
+    heca_grid_ui::widgets::tooltip::set_default_delay(0.0);
     let mut tag = Tag::new(full).width(100.0);
-    tag.base_mut().children[0]
-        .base_mut()
-        .tooltip
-        .as_mut()
-        .unwrap()
-        .delay = 0.0;
     LayoutEngine::new().compute(&mut tag, Size::new(500.0, 200.0));
     let bounds = tag.base().children[0].base().bounds;
     heca_grid_ui::dispatch(

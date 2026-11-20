@@ -17,6 +17,13 @@ use crate::chrome::*;
 /// needed — we clone the theme straight into `colors` and layer the
 /// system-local font tokens on top. Font family/size come from `font_config`
 /// (decoupled from the color theme).
+/// **The user's widget settings that are not colours**, handed to the widget library — once at
+/// start and again on every reload, from the one place both call. Today: how long a tooltip waits
+/// (`[appearance] tooltip_delay_ms`), so no widget and no caller passes a delay.
+pub(crate) fn apply_widget_settings(appearance: &heca_config::appearance::AppearanceConfig) {
+    heca_grid_ui::widgets::tooltip::set_default_delay(appearance.tooltip_delay_ms as f32 / 1000.0);
+}
+
 pub(crate) fn app_theme_to_gui_theme(
     theme: &heca_config::theme::Theme,
     font_config: &heca_config::font::FontConfig,

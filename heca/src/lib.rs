@@ -278,6 +278,7 @@ impl HecaApp {
             // so would stack another container/effect view each reload. Changing
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance.clone();
+            crate::chrome::window::theme::apply_widget_settings(&state.appearance);
             state.settings = crate::app_state::WindowSettings::from_config(&self.app_config);
             crate::chrome::panes::pane_items::report_pane_items(state);
             // The layout's own options, by the one mapping startup uses too.

@@ -369,6 +369,21 @@ impl Label {
         vec![cut]
     }
 
+    /// **Whether what is drawn is less than the text** — cut with an ellipsis, or a wrapped label
+    /// that ran out of lines. A label with no room at all yet is not "cut": it is not on screen.
+    fn is_cut(&self) -> bool {
+        if self.base.bounds.size.w <= 0.0 {
+            return false;
+        }
+        let lines = self.drawn_indexed();
+        if lines.iter().flatten().any(|(_, index)| index.is_none()) {
+            return true;
+        }
+        let last_drawn = lines.iter().flatten().filter_map(|(_, index)| *index).max();
+        let wanted = self.text.get_untracked().trim_end().chars().count();
+        wanted > 0 && last_drawn.is_none_or(|last| last + 1 < wanted)
+    }
+
     /// Text horizontal alignment.
     #[heca_grid_ui_macros::prop]
     pub fn align(mut self, align: TextAlign) -> Self {
@@ -525,6 +540,19 @@ impl Component for Label {
     /// does not own (a [`Select`](super::Select) trigger showing the chosen option).
     fn text_summary(&self) -> Option<String> {
         Some(self.text.get_untracked())
+    }
+
+    /// **A label that had to cut its text offers the whole of it on hover** — with nothing written
+    /// by the caller: the tooltip appears while the text does not fit and goes when it fits again.
+    /// A tooltip written by hand on the label is left alone, and one written by hand on a widget
+    /// holding it wins (the paint walk keeps this one quiet under it).
+    fn on_layout(&mut self) {
+        let automatic = self.base.tooltip.as_ref().map(crate::widgets::tooltip::Tip::is_automatic);
+        match (automatic, self.is_cut()) {
+            (None, true) => self.base.tooltip = Some(crate::widgets::tooltip::Tip::cut_text(self.text)),
+            (Some(true), false) => self.base.tooltip = None,
+            _ => {}
+        }
     }
 
     /// Naive monospace measure from the resolved font ([`Base::font`]).

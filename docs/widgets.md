@@ -2946,6 +2946,10 @@ A single text run bound to a `Signal<String>`.
 - **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
   `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy), and the
   four text attributes: `.bold(bool)`, `.italic(bool)`, `.underline(bool)`, `.strikethrough(bool)`.
+- **Cut text offers itself on hover**: whenever the label cuts its text (below), hovering it shows
+  the whole text — after half of the default tooltip rest — and the tooltip goes when the text fits
+  again. Nothing to write; a tooltip written by hand, on the label or on anything holding it, wins.
+  See [Tooltip](#tooltip).
 - **When the text does not fit**: `.truncate(Ellipsis)` cuts it to one line with `…`; `.wrap(true)`
   reflows it onto as many lines as the width needs instead (the two are exclusive, the last one set
   wins). A word longer than the line is broken **after a path separator** (`/` or `\`) when one lies
@@ -5972,12 +5976,27 @@ has, so **no widget opts in and no host paints on their behalf**.
 | `.tooltip(..)` | what this widget says on hover — **words** (they wrap and keep their line breaks: `"zsh\npane-1"` is two lines), a **`Signal<String>`** the bubble follows live without the widget being rebuilt, or a **whole widget** (a segmented `Tag`, a row of parts). One door: `impl IntoTip`. Unset = it says nothing, and costs nothing. |
 | `.tooltip_signal(Signal<String>)` | the same as `.tooltip(signal)`, which is the form to write; kept so code written against it keeps working. |
 | `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
-| `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
-| `.tooltip_quick(true)` | the library's shorter rest (`QUICK_DELAY`, half the default) — a name instead of a number, for a tip that carries what the widget had to cut short (a branch name in a narrow row). No-op with no tooltip declared. In a described tree: `.prop("tooltip_quick", PropValue::Bool(true))`. |
+| `.tooltip_delay(seconds)` | a rest of its own, for a real exception — it no longer follows the default. No-op with no tooltip declared. |
+| `.tooltip_quick(true)` | half of the default rest — a name instead of a number, for a tip the reader goes to the pointer for. No-op with no tooltip declared. In a described tree: `.prop("tooltip_quick", PropValue::Bool(true))`. |
 
 All of them are on `TooltipExt`, so they apply to **every** widget — and `tooltip` (with words),
 `tooltip_side`, `tooltip_delay` and `tooltip_quick` have the described spellings below. A signal or a
 widget as the content is native-only: a description carries words.
+
+**One default rest for the whole app.** How long the pointer must rest is set once by the host —
+`heca_grid_ui::widgets::tooltip::set_default_delay(seconds)` (`0.5` until it is called); heca sets it
+from the user's `[appearance] tooltip_delay_ms`, at start and on reload. Every tooltip that did not ask
+for its own rest reads it when the pointer rests, so a changed setting reaches tooltips already
+built. No caller passes a delay.
+
+**Cut text offers itself — nothing to write.** A [`Label`](#label) that has to cut its text (an
+ellipsis, or a wrapped label that ran out of lines) offers the whole text on hover, after the quick
+rest, and stops as soon as the text fits. A [`Tag`](#tag) segment that the chip's edge cuts off does
+the same, and so does a [`Button`](#button) showing only its icon (`.icon_only(true)`, or a
+[`ButtonGroup`](#buttongroup) out of room): it says its words on hover while they are not on screen,
+and nothing once they are back. So **do not** write `.tooltip(same_text)` on a label "in case it is cut": it would show
+even when nothing is cut. A tooltip written by hand **always wins** — on the label itself, or on any
+widget holding it (a row's details are not covered by the label's own text).
 
 ```rust
 Button::new("Close").tooltip("Close the pane");                        // words
@@ -7080,6 +7099,45 @@ This section documents the **Heca host API** (`heca`), separate from the GPU-fre
 A **widget** builds a piece of UI. A **`Provider`** contributes a dock to the window chrome; the
 host builds and mounts its content. You do not construct or access the workspace's internal
 `DockView` to add your own dock. Compose its content from the public widgets instead.
+
+### Why a region and a provider are not components
+
+Everything else on this page is a component: built in one expression and placed in a tree (THE
+SYNTAX). These two are not, on purpose.
+
+- **A region is a shared place, not something you build.** The two sidebars and the two bars already
+  exist in the window, and many hands fill them — heca adds its docks, every extension and plugin
+  adds its own from its own code at its own time, and the user's config moves them. No single place
+  writes a sidebar's tree, so there is nothing to construct. A region is reached by name and changed
+  with operations, the way a page reaches `document.body` and calls `appendChild` / `remove`:
+  `regions("sidebar.left").append(..)`.
+- **A provider is a dock's controller, not its look.** It is what the dock *is and does*: an id and a
+  kind (the namespace of its config and actions), a life (it is started once, subscribes to events,
+  declares actions, and is dropped with them when taken out), what the host needs to place it (title,
+  accepted regions, whether it moves or folds, whether the user may add more of its kind), and its
+  content. **The content is the component** — `build_contribution` returns ordinary widgets written in
+  THE SYNTAX. The dock lives long and its UI is built from it many times (each time the region is
+  drawn anew, and again when a reload makes the dock anew), so identity and behaviour stay in the
+  provider and the look in the widgets it builds. Its cursor, scroll and focus live in the window's
+  shared state under its id, so a dock made again finds them.
+
+### How it works
+
+1. Write a type implementing `heca::Provider`; build its content in `build_contribution`.
+2. Add it: `regions("sidebar.left").append(|| MyDock::new("id"))` — from anywhere on the window's
+   thread, before `heca::run` or while the app runs. The call is queued.
+3. The window's host applies the queue as the window starts and then on every frame. It seats the
+   dock where the user's `[[docks]]` says (else where the call said), in the order and share the
+   entry or the code gives, and starts it (`on_activate`, once).
+4. Each time the region is drawn anew it calls `build_contribution` and wraps the widgets with what
+   is the host's: keyboard focus, the `prefix+/` letters, the dock's share and place.
+5. Taken out — `regions(..).remove(id)`, or `"none"` on a reload — the dock is dropped with its
+   subscriptions; added as a recipe, a reload can make it again.
+
+Acting on a dock from elsewhere goes through its id (the `chrome.container.*` actions, the actions it
+declared, `remove`) or through a signal its author kept. **Not yet:** a handle to an added dock to call
+its methods, index-based access, and `regions(..)` from any thread (its queue is per thread, so a
+call from a background worker or a server-side service is lost) — all planned in F013.
 
 Write a provider, then place it — usually **before `heca::run(..)`**, but a call made while the app
 runs is applied too, at the next frame:

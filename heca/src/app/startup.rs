@@ -208,6 +208,7 @@ pub(crate) async fn init_state(
     });
 
     let appearance = app_config.config.appearance.clone();
+    crate::chrome::window::theme::apply_widget_settings(&appearance);
     let window_attrs = Window::default_attributes()
         .with_title(crate::entry::app_name::get())
         .with_inner_size(winit::dpi::LogicalSize::new(

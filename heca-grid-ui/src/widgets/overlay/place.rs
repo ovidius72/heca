@@ -313,14 +313,14 @@ pub fn place_beside(
             anchor.loc.y + (anchor.size.h - panel.h) / 2.0,
         ),
     };
-    // Clamp the cross axis only — see "Not clamped on the main axis" above.
+    // Clamp the cross axis only — see "Not clamped on the main axis" above. **Kept the same gap
+    // away from the window's edge as from the anchor**: flush against the edge, the panel's border
+    // and halo are drawn on the window's edge and cut by it, which reads as the panel running off
+    // the screen. A panel too big for the window and both gaps starts at one gap.
+    let inside = |at: f64, size: f64, room: f64| at.clamp(gap, (room - size - gap).max(gap));
     match side {
-        BesideSide::Top | BesideSide::Bottom if viewport.w.is_finite() => {
-            x = x.clamp(0.0, (viewport.w - panel.w).max(0.0));
-        }
-        BesideSide::Left | BesideSide::Right if viewport.h.is_finite() => {
-            y = y.clamp(0.0, (viewport.h - panel.h).max(0.0));
-        }
+        BesideSide::Top | BesideSide::Bottom if viewport.w.is_finite() => x = inside(x, panel.w, viewport.w),
+        BesideSide::Left | BesideSide::Right if viewport.h.is_finite() => y = inside(y, panel.h, viewport.h),
         _ => {}
     }
     Rectangle::new(Point::new(x, y), panel)
@@ -559,12 +559,16 @@ mod tests {
         // Anchor hugging the left edge: centring would put x at 5 - 40 = -35.
         let anchor = Rectangle::new(Point::new(5.0, 300.0), Size::new(40.0, 20.0));
         let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Top);
-        assert_eq!(r.loc.x, 0.0, "cross axis clamped into the viewport");
+        assert_eq!(r.loc.x, 6.0, "cross axis clamped into the viewport, a gap away from its edge");
         assert_eq!(
             r.loc.y,
             300.0 - panel.h - 6.0,
             "main axis untouched by the clamp"
         );
+        // And by the right edge: the same gap from the window's edge.
+        let right = Rectangle::new(Point::new(vp.w - 20.0, 300.0), Size::new(20.0, 20.0));
+        let r = place_beside(right, panel, vp, 6.0, BesideSide::Top);
+        assert_eq!(r.loc.x + panel.w, vp.w - 6.0, "a gap away from the right edge too");
     }
 
     /// **Documents the deliberate rule.** When neither side fits, the preferred side
