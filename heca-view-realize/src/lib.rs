@@ -148,10 +148,10 @@ pub(crate) fn apply_tip_options(realized: &mut dyn Component, node: &ViewNode) {
         tip.side = side;
     }
     if let Some(delay) = node.props.get("tooltip_delay").and_then(PropValue::as_float) {
-        tip.delay = (delay as f32).max(0.0);
+        tip.set_delay(delay as f32);
     }
     if node.props.get("tooltip_quick").and_then(PropValue::as_bool) == Some(true) {
-        tip.delay = heca_grid_ui::widgets::tooltip::QUICK_DELAY;
+        tip.set_quick();
     }
 }
 

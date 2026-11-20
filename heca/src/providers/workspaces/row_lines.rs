@@ -9,10 +9,10 @@
 
 use std::rc::Rc;
 
-use heca_grid_ui::builders::{LayoutExt, Parent, TooltipExt};
-use heca_grid_ui::reactive::{create_effect, signal};
+use heca_grid_ui::builders::{LayoutExt, Parent};
+use heca_grid_ui::reactive::create_effect;
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
-use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, TooltipSide, Visibility};
+use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 
 use super::pane_row::{META_INDENT, set_if_changed};
 use crate::chrome::panes::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLine};
@@ -57,8 +57,8 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
     let branch_label = Label::new("")
         .color(theme.colors.foreground)
         .truncate(Ellipsis::Start);
+    // Cut, it offers the whole name on hover by itself (a label does that for any text it cuts).
     let branch_shown = branch_label.text_signal();
-    let branch_full = signal(String::new());
 
     // One count: a glyph and its words, hidden while there is nothing to say.
     let count = |glyph: Glyph, color| {
@@ -93,12 +93,7 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
                     .color(theme.colors.warning)
                     .shrink(0.0),
             )
-            .child(
-                branch_label
-                    .tooltip_signal(branch_full)
-                    .tooltip_side(TooltipSide::Bottom)
-                    .tooltip_quick(true),
-            )
+            .child(branch_label)
             .child(added)
             .child(modified)
             .child(deleted),
@@ -113,8 +108,7 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
             .as_ref()
             .map(crate::chrome::panes::pane_header::git_branch)
             .unwrap_or_default();
-        set_if_changed(branch_shown, branch.clone());
-        set_if_changed(branch_full, branch);
+        set_if_changed(branch_shown, branch);
         for (visible, text, value) in [
             (
                 added_visible,
@@ -179,7 +173,7 @@ mod tests {
     use crate::chrome::panes::pane_items::{PaneLine, PaneRowLines};
     use heca_config::programs::ProgramsConfig;
     use heca_core::layout::PaneId;
-    use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+    use heca_grid_ui::reactive::{SignalGet, SignalUpdate, signal};
 
     /// **An added line follows its pane and hides itself when it has nothing to say** — with no
     /// rebuild: the line subscribed to the pane's facts when it was built, and rewrites itself.

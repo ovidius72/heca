@@ -62,7 +62,7 @@ pub trait TooltipExt: Component + Sized {
     #[heca_grid_ui_macros::prop]
     fn tooltip_delay(mut self, seconds: f32) -> Self {
         if let Some(tip) = self.base_mut().tooltip.as_mut() {
-            tip.delay = seconds.max(0.0);
+            tip.set_delay(seconds);
         }
         self
     }
@@ -77,7 +77,7 @@ pub trait TooltipExt: Component + Sized {
     #[heca_grid_ui_macros::prop]
     fn tooltip_quick(mut self, quick: bool) -> Self {
         if quick && let Some(tip) = self.base_mut().tooltip.as_mut() {
-            tip.delay = crate::widgets::tooltip::QUICK_DELAY;
+            tip.set_quick();
         }
         self
     }

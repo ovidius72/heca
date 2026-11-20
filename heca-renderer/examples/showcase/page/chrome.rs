@@ -68,7 +68,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
             Tile::new()
                 .status(StatusDot::new(status))
                 .icon(Icon::new(icon))
-                .title(Label::new(title).bold(true))
+                .title(Label::new(title).font_weight(FontWeight::Bold))
                 .line(git_line)
                 .grow(1.0),
         );
@@ -165,7 +165,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         .rail(sidebar_mode, Glyph::Lock)
         .header(Flex::row().align("center").gap(Spacing::Xs)
             .child(Icon::new(Glyph::Lock))
-            .child(Label::new("PINNED").bold(true)))
+            .child(Label::new("PINNED").font_weight(FontWeight::Bold)))
         .collapsible(false)
         .child(Item::new("README.md"));
 

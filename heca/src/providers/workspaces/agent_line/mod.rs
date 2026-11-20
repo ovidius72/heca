@@ -4,7 +4,7 @@ use heca_grid_ui::{Image, Tone, builders::{LayoutExt, Parent, PlaceExt, ToneExt,
 use heca_grid_ui::image::ImageSource;
 use heca_grid_ui::prop::PropName;
 use heca_grid_ui::reactive::{create_effect, signal, SignalGet};
-use heca_grid_ui::style::{Spacing, WidgetSize};
+use heca_grid_ui::style::{FontWeight, Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Flex, Glyph, Grid, Icon, Label, Visibility};
 
 use crate::agent::AgentIcon;
@@ -14,15 +14,15 @@ use super::pane_row::{META_INDENT, set_if_changed};
 
 pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let initial = (cx.facts)();
-    let primary = text(cx, true);
+    let primary = text(cx, FontWeight::Bold);
     let primary_text = primary.text_signal();
-    let session = text(cx, false);
+    let session = text(cx, FontWeight::Regular);
     let session_text = session.text_signal();
     let session = Visibility::new().visible(false).child(session);
     let session_visible = session.visible_signal();
-    let status = text(cx, false);
+    let status = text(cx, FontWeight::Regular);
     let status_text = status.text_signal();
-    let task = text(cx, false).muted(true);
+    let task = text(cx, FontWeight::Regular).muted(true);
     let task_text = task.text_signal();
     let task = Visibility::new().visible(false).child(task);
     let task_visible = task.visible_signal();
@@ -93,8 +93,8 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     row
 }
 
-fn text(cx: &LineCx<'_>, bold: bool) -> Label {
-    PaneName { text: "", color: None, bold, font_scale: WidgetSize::Normal.font_scale(), theme: cx.theme }.build().widget
+fn text(cx: &LineCx<'_>, weight: FontWeight) -> Label {
+    PaneName { text: "", color: None, weight, font_scale: WidgetSize::Normal.font_scale(), theme: cx.theme }.build().widget
 }
 
 #[cfg(test)]

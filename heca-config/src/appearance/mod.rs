@@ -33,6 +33,10 @@ fn default_blur() -> u8 {
     0
 }
 
+fn default_tooltip_delay_ms() -> u32 {
+    500
+}
+
 fn default_hint_font_size() -> f32 {
     12.0
 }
@@ -130,6 +134,12 @@ pub struct AppearanceConfig {
     /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
     pub vibrancy: Vibrancy,
+
+    /// How long the pointer must rest on a widget before its tooltip appears, in milliseconds.
+    /// One value for every tooltip; a "quick" tooltip (a label showing its whole cut text) waits
+    /// half of it, and a tooltip that sets its own delay in code keeps it.
+    #[serde(default = "default_tooltip_delay_ms")]
+    pub tooltip_delay_ms: u32,
 
     /// **The `prefix+/` picker's letter size, in logical px.** One size for every letter in the app.
     ///
@@ -262,6 +272,7 @@ impl Default for AppearanceConfig {
             transparency: default_transparency(),
             blur: default_blur(),
             vibrancy: default_vibrancy(),
+            tooltip_delay_ms: default_tooltip_delay_ms(),
             hint_font_size: default_hint_font_size(),
             background_gradient_top: None,
             background_gradient_bottom: None,

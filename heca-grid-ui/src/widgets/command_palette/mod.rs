@@ -35,7 +35,7 @@
 //! query field. Those paths live in `geometry`, `paint` and `component`; mode declarations
 //! and named prefill live in `modes`.
 
-use crate::builders::{LayoutExt, Parent, TooltipExt};
+use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
@@ -220,7 +220,6 @@ impl CommandPalette {
                 *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
             }
             *self.desc_marks.last_mut().expect("just pushed") = Some(d.marks_signal());
-            let d = if c.description_path { d.tooltip(desc.clone()) } else { d };
             column = column.child(d);
         }
         if let Some(detail) = &c.detail {

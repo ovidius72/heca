@@ -587,6 +587,10 @@ hint_font_size = 12.0
 # top_bar_height    = 32.0   # the tab bar
 # bottom_bar_height = 24.0   # the status bar
 
+# How long the pointer rests on something before its tooltip appears, in
+# milliseconds. A label whose text is cut shows the whole text after half of it.
+tooltip_delay_ms = 500
+
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.terminal]
 # ─────────────────────────────────────────────────────────────────────────────

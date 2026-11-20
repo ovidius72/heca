@@ -13,6 +13,7 @@ mod grid;
 mod layout;
 mod length;
 mod space;
+mod typography;
 mod visual;
 
 pub use flow::*;
@@ -20,6 +21,7 @@ pub use grid::*;
 pub use layout::*;
 pub use length::*;
 pub use space::*;
+pub use typography::*;
 pub use visual::*;
 
 /// **Read a layout keyword the way a stylesheet writes it** — one parser for every unit enum here.

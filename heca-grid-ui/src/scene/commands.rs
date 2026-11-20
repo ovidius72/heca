@@ -2,6 +2,7 @@
 //! each one carries.
 
 use crate::color::Color;
+use crate::style::FontWeight;
 use heca_core::layout::{Point, Rectangle};
 
 /// One drawable element. Adding a new effect is one variant here plus one branch
@@ -232,43 +233,66 @@ pub enum FontRole {
 /// text shaper.
 ///
 /// It is a value rather than a pile of `bool` parameters so that the *next* attribute doesn't break
-/// [`PaintCx::text`](crate::component::PaintCx::text)'s signature a second time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// [`PaintCx::text`](crate::component::PaintCx::text)'s signature a second time — which is how the
+/// weight and the letter spacing joined it without touching a caller.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct TextStyle {
-    /// The bold weight (a real face — the embedded family ships one).
-    pub bold: bool,
+    /// How heavy the glyphs are. Each weight is a real face of the embedded family.
+    pub weight: FontWeight,
     /// Slanted. Rendered as a **synthesized oblique** (a glyph shear), because the embedded family
     /// has no italic face — see the bridge in `heca-renderer`.
     pub italic: bool,
+    /// The air added after every letter, as a fraction of the font size (CSS `em`; `0.0` = the
+    /// font's own spacing). A [`LetterSpacing`](crate::style::LetterSpacing) step says how much; the
+    /// widget that measured the text with it passes the same value here, so glyphs and box agree.
+    pub letter_spacing: f32,
 }
 
 impl TextStyle {
-    /// Upright, regular weight — the default.
+    /// Upright, regular weight, the font's own spacing — the default.
     pub const REGULAR: Self = Self {
-        bold: false,
+        weight: FontWeight::Regular,
         italic: false,
+        letter_spacing: 0.0,
     };
     /// Bold, upright.
     pub const BOLD: Self = Self {
-        bold: true,
-        italic: false,
+        weight: FontWeight::Bold,
+        ..Self::REGULAR
     };
     /// Regular weight, slanted.
     pub const ITALIC: Self = Self {
-        bold: false,
         italic: true,
+        ..Self::REGULAR
     };
 
-    /// Set the weight (chainable, so a state-derived flag reads straight through:
-    /// `TextStyle::REGULAR.bold(is_active)`).
-    pub const fn bold(mut self, bold: bool) -> Self {
-        self.bold = bold;
+    /// Set the weight (chainable, so a state-derived weight reads straight through:
+    /// `TextStyle::REGULAR.weight(row_weight)`).
+    pub const fn weight(mut self, weight: FontWeight) -> Self {
+        self.weight = weight;
         self
+    }
+
+    /// The old on/off weight: `true` is [`FontWeight::Bold`], `false` is
+    /// [`FontWeight::Regular`].
+    #[deprecated(note = "use `weight(FontWeight::Bold)`, which carries every weight")]
+    pub const fn bold(self, bold: bool) -> Self {
+        self.weight(if bold {
+            FontWeight::Bold
+        } else {
+            FontWeight::Regular
+        })
     }
 
     /// Set the slant.
     pub const fn italic(mut self, italic: bool) -> Self {
         self.italic = italic;
+        self
+    }
+
+    /// Set the air after every letter, in `em` of the font size.
+    pub const fn letter_spacing(mut self, em: f32) -> Self {
+        self.letter_spacing = em;
         self
     }
 }

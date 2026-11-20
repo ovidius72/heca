@@ -224,11 +224,11 @@ fn a_quick_tooltip_rests_for_the_librarys_quick_delay() {
         .tooltip("feat/long-branch-name")
         .tooltip_quick(true);
     assert_eq!(
-        plain.base().tooltip.as_ref().map(|t| t.delay),
+        plain.base().tooltip.as_ref().map(|t| t.delay()),
         Some(DEFAULT_DELAY)
     );
     assert_eq!(
-        quick.base().tooltip.as_ref().map(|t| t.delay),
+        quick.base().tooltip.as_ref().map(|t| t.delay()),
         Some(QUICK_DELAY)
     );
     const { assert!(QUICK_DELAY < DEFAULT_DELAY) };

@@ -3,7 +3,7 @@
 use heca_grid_ui::Color;
 use heca_grid_ui::builders::LayoutExt;
 use heca_grid_ui::reactive::Signal;
-use heca_grid_ui::style::Length;
+use heca_grid_ui::style::{FontWeight, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Label};
 
@@ -31,7 +31,7 @@ pub(crate) struct PaneName<'a> {
     /// state. A surface that genuinely owns the colour still passes one.
     pub(crate) color: Option<Color>,
     /// Names are shown bold everywhere they are shown; a caller that wants otherwise says so.
-    pub(crate) bold: bool,
+    pub(crate) weight: FontWeight,
     /// Size relative to the surrounding text. `1.0` is the surface's own size.
     pub(crate) font_scale: f32,
     #[allow(
@@ -53,7 +53,7 @@ impl PaneName<'_> {
         // **Cut at the end**: a name's beginning is what tells two panes apart (`server`/`serverb`),
         // so the tail is the half to lose. A path would want the other end — that is `FolderLine`'s
         // decision to make, not this one's.
-        let mut widget = Label::new(self.text).bold(self.bold);
+        let mut widget = Label::new(self.text).font_weight(self.weight);
         // Unset means inherit the enclosing control's state colour, which is what lets one name
         // follow selection instead of one name existing per state.
         if let Some(c) = self.color {
@@ -86,7 +86,7 @@ mod tests {
         PaneName {
             text,
             color: Some(GuiTheme::default().colors.foreground),
-            bold: true,
+            weight: FontWeight::Bold,
             font_scale: 1.0,
             theme: &GuiTheme::default(),
         }

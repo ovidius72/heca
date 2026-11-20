@@ -142,7 +142,17 @@ impl Component for Button {
         } else if !self.label.is_empty() {
             self.base
                 .children
-                .push(crate::WidgetModel::new(Label::new(self.label.clone()).bold(true)));
+                .push(crate::WidgetModel::new(Label::new(self.label.clone()).font_weight(crate::style::FontWeight::Bold)));
+        }
+        // **Its words, on hover, only while they are not on screen** — a button showing its icon
+        // alone says what it does when the pointer rests on it; with its words back it has nothing
+        // to add. A tooltip written by hand is left alone either way.
+        use crate::widgets::tooltip::Tip;
+        let automatic = self.base.tooltip.as_ref().map(Tip::is_automatic);
+        match (automatic, on) {
+            (None, true) if !self.label.is_empty() => self.base.tooltip = Some(Tip::hidden_words(self.label.clone())),
+            (Some(true), false) => self.base.tooltip = None,
+            _ => {}
         }
         self.remeasure();
     }

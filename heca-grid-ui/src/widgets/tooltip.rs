@@ -55,12 +55,44 @@ fn union(a: Rectangle, b: Rectangle) -> Rectangle {
 /// tooltip and [`place_beside`] can never disagree about what `Top` means.
 pub type TooltipSide = BesideSide;
 
-/// Seconds the pointer must rest before the bubble shows.
+/// Seconds the pointer must rest before the bubble shows, until the host says otherwise with
+/// [`set_default_delay`] — heca does, from the user's `[appearance] tooltip_delay_ms`.
 pub const DEFAULT_DELAY: f32 = 0.5;
-/// The shorter rest for a tip that is the point of the thing it sits on — a value cut short on
-/// purpose (a branch name in a narrow row) that the reader goes to the pointer for.
+/// The shorter rest, as it is at [`DEFAULT_DELAY`]: always half of the current default — see
+/// [`default_delay`]. For a tip that is the point of the thing it sits on (a value cut short on
+/// purpose) that the reader goes to the pointer for.
 /// See [`TooltipExt::tooltip_quick`](crate::builders::TooltipExt::tooltip_quick).
 pub const QUICK_DELAY: f32 = DEFAULT_DELAY / 2.0;
+
+thread_local! {
+    /// The default rest, in seconds — one value for every tooltip that did not ask for its own.
+    static DEFAULT: std::cell::Cell<f32> = const { std::cell::Cell::new(DEFAULT_DELAY) };
+}
+
+/// **How long every tooltip waits by default**, in seconds — set once by the host (heca reads the
+/// user's config, at start and on reload), so no widget and no caller passes a delay. A tooltip
+/// that asked for its own ([`TooltipExt::tooltip_delay`](crate::builders::TooltipExt::tooltip_delay))
+/// keeps it; a quick one ([`tooltip_quick`](crate::builders::TooltipExt::tooltip_quick)) waits half
+/// of this.
+pub fn set_default_delay(seconds: f32) {
+    DEFAULT.with(|d| d.set(seconds.max(0.0)));
+}
+
+/// The current default rest, in seconds ([`set_default_delay`]).
+pub fn default_delay() -> f32 {
+    DEFAULT.with(std::cell::Cell::get)
+}
+
+/// How long a tooltip waits: the default, half of it, or its own.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Delay {
+    /// [`default_delay`], read when the pointer rests — so a changed setting reaches every tip.
+    Default,
+    /// Half of [`default_delay`].
+    Quick,
+    /// Its own, in seconds.
+    Seconds(f32),
+}
 /// The air between the target and the bubble, and inside the bubble around what it holds — steps
 /// of the theme's rhythm, so they follow the font like every other space.
 const GAP: Spacing = Spacing::Sm;
@@ -89,8 +121,11 @@ pub struct Tip {
     pub text: Signal<String>,
     /// Which side of the widget to anchor to. Flipped automatically when there is no room.
     pub side: TooltipSide,
-    /// Seconds the pointer must rest before the bubble appears.
-    pub delay: f32,
+    /// How long the pointer must rest before the bubble appears ([`delay`](Self::delay)).
+    delay: Delay,
+    /// Made by a label for its own cut text ([`Tip::cut_text`]): a tooltip written by hand on the
+    /// label or on anything holding it wins over this one.
+    automatic: bool,
     /// Whether the content is a widget rather than the words.
     widget: bool,
     /// The bubble's tree, kept across reveals: laid out and painted only while it shows.
@@ -126,8 +161,53 @@ impl Tip {
         // use, so the panel is its content's size and not the room's.
         let panel = Flex::column().padding_x(PAD_X).padding_y(PAD_Y).area(BUBBLE).child(content);
         let room = Flex::row().align("start").child(panel);
-        Self { text, side: TooltipSide::default(), delay: DEFAULT_DELAY, widget, bubble: Rc::new(RefCell::new(room)),
-            drawn: Rc::default(), announced: Rc::default() }
+        Self { text, side: TooltipSide::default(), delay: Delay::Default, automatic: false, widget,
+            bubble: Rc::new(RefCell::new(room)), drawn: Rc::default(), announced: Rc::default() }
+    }
+
+    /// **The whole text of a label that had to cut it** — what a [`Label`] declares on itself while
+    /// its text does not fit, and drops when it fits again. Shown after the quick rest: the reader
+    /// came to the pointer for it. Any tooltip written by hand — on the label, or on a widget
+    /// holding it — wins over this one.
+    pub(crate) fn cut_text(text: Signal<String>) -> Self {
+        let mut tip = Self::from_signal(text);
+        tip.delay = Delay::Quick;
+        tip.automatic = true;
+        tip
+    }
+
+    /// **The words of a button showing only its icon** — offered on hover while the words are not
+    /// on screen, dropped when they are back. Like [`cut_text`](Self::cut_text), a tooltip written
+    /// by hand wins over it.
+    pub(crate) fn hidden_words(text: impl Into<String>) -> Self {
+        let mut tip = Self::new(text);
+        tip.automatic = true;
+        tip
+    }
+
+    /// Whether a label made this tip for its own cut text ([`cut_text`](Self::cut_text)).
+    pub(crate) fn is_automatic(&self) -> bool {
+        self.automatic
+    }
+
+    /// **Seconds the pointer must rest before the bubble appears** — its own delay, or the current
+    /// default ([`default_delay`]), or half of it for a quick tip.
+    pub fn delay(&self) -> f32 {
+        match self.delay {
+            Delay::Default => default_delay(),
+            Delay::Quick => default_delay() / 2.0,
+            Delay::Seconds(seconds) => seconds,
+        }
+    }
+
+    /// Wait `seconds` before showing, whatever the default is.
+    pub fn set_delay(&mut self, seconds: f32) {
+        self.delay = Delay::Seconds(seconds.max(0.0));
+    }
+
+    /// Wait half of the default before showing ([`QUICK_DELAY`] at the shipped default).
+    pub fn set_quick(&mut self) {
+        self.delay = Delay::Quick;
     }
 
     /// Whether there is anything to show: a widget, or words that are not empty.
@@ -183,7 +263,7 @@ fn surface_font(base: &Base) -> f32 {
 fn shown(base: &Base) -> Option<&Tip> {
     let tip = base.tooltip.as_ref()?;
     let rested = base.pointer.hovered_for()?;
-    (rested >= tip.delay && tip.says_something()).then_some(tip)
+    (rested >= tip.delay() && tip.says_something()).then_some(tip)
 }
 
 /// Lay the bubble out for `base` and place it beside the widget, inside `viewport`. The panel ends
@@ -207,7 +287,9 @@ fn place_bubble(base: &Base, tip: &Tip, viewport: Size) -> Option<Rectangle> {
 pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
     let base = c.base();
     let Some(declared) = base.tooltip.as_ref() else { return };
+    let quiet = declared.is_automatic() && cx.hand_tip_above;
     let tip = (base.visible.get_untracked()
+        && !quiet
         && !base.children.iter().any(|child| owns_hover_tip(child.as_ref())))
         .then(|| shown(base)).flatten();
     let rect = tip.and_then(|tip| place_bubble(base, tip, cx.viewport()));
@@ -248,10 +330,11 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
 
 /// A descendant's specific explanation takes priority over its ancestor's general help,
 /// including while its reveal delay is pending. Pointer routing already owns the hover path.
+/// A label's own cut-text tooltip does not: a tooltip written by hand around it wins.
 fn owns_hover_tip(c: &dyn Component) -> bool {
     let base = c.base();
     base.visible.get_untracked() && base.hovered()
-        && (base.tooltip.as_ref().is_some_and(Tip::says_something)
+        && (base.tooltip.as_ref().is_some_and(|tip| tip.says_something() && !tip.is_automatic())
             || base.children.iter().any(|child| owns_hover_tip(child.as_ref())))
 }
 
@@ -263,9 +346,9 @@ fn owns_hover_tip(c: &dyn Component) -> bool {
 pub(crate) fn wake(base: &Base) -> Option<f32> {
     let tip = base.tooltip.as_ref()?;
     if let Some(rested) = base.pointer.hovered_for()
-        && rested < tip.delay
+        && rested < tip.delay()
     {
-        return Some(tip.delay - rested);
+        return Some(tip.delay() - rested);
     }
     // Due, but not painted where it should be yet — it came due after this frame was painted: one
     // more frame, now.
@@ -350,7 +433,7 @@ impl Tooltip {
     #[heca_grid_ui_macros::prop]
     pub fn delay(mut self, seconds: f32) -> Self {
         if let Some(tip) = self.base.tooltip.as_mut() {
-            tip.delay = seconds.max(0.0);
+            tip.set_delay(seconds);
         }
         self
     }

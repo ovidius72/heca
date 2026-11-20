@@ -186,15 +186,8 @@ impl ButtonGroup {
             glyph: button.glyph(),
             click: button.click_handler(),
         });
-        // Its words are what it says on hover once it is showing only its icon, so the author
-        // writes them once. An author who wants different words has already set a tooltip, and
-        // that one stands.
-        let button = if button.base().tooltip.is_none() {
-            let label = button.label();
-            button.tooltip(label)
-        } else {
-            button
-        };
+        // Its words are what it says on hover once it is showing only its icon — the button does
+        // that itself (`set_icon_only`), and stops when the words are back on screen.
         // **The group's variant, through the one rule.** The widget decides what to keep and what
         // to take (`Component::set_variant`), so the group asks the same question of a child as it
         // does of its own ⋮ rather than testing a variant here: a button left at the default takes
