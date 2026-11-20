@@ -101,12 +101,28 @@
       "rationale": "Spaces in Item now come from theme steps (Spacing); these two shapes have no theme value to come from, and inventing a Spacing step for a line width would be the wrong unit.",
       "implementationNotes": "",
       "acceptedAt": "2026-11-20T16:04:25.721Z"
+    },
+    {
+      "id": "a7f74a7c-7b54-4cca-bb64-ba512081b515",
+      "title": "A dock is a trait (Provider), not a component in THE SYNTAX — bring it to `Dock::new(id).title(..).child(..)`",
+      "decision": "Found 2026-11-20 (T567 C32, dock config): a dock is written by implementing the `Provider` trait (heca/src/providers/mod.rs) — its properties are trait METHODS (`id`, `kind`, `title`, `supported_regions`, `default_region`, `movable`, `collapsible`, and `spawn`, which I added on 2026-11-20 copying that shape instead of flagging it), and its content is built in a closure (`build_contribution` → `ContainerContribution::new(self, |ctx, build| widget)`). THE SYNTAX wants a component with builders: `Dock::new(\"rooms\").title(\"Rooms\").regions(RegionSet::SIDEBARS).spawnable(..).child(content)`, added with `regions(\"sidebar.right\").append(|| Dock::new(..)…)`. `regions(name).append/remove/retain` itself stays a function on purpose (a region is a list every plugin appends to, fetched by name — chrome/docks/regions.rs module docs) — that part is not a defect. The change touches every dock, heca-pro's included (decision 15ec67fc: new form beside the old, removal agreed).",
+      "rationale": "Antonio, 2026-11-20: \"ma perché non me lo segnali??? devo dirtelo io??????\" — the non-conformance was known to me while I extended the trait and I did not say it.",
+      "implementationNotes": "Step already taken in T567: `default_region()` gets a trait default and is deprecated (nothing in the app reads it; only tests and a copy in ContainerContribution nobody reads). Also from today's work, still imperative inside the library: DockFrame::build_toggle rebuilds the title row by swapping children found by area name (part_mut / area_slot / mem::replace) instead of binding a declarative row to state; Item paints its active bar (3px) and pip (10px) by hand (F013 decision bf271be6).",
+      "acceptedAt": "2026-11-20T19:25:51.522Z"
+    },
+    {
+      "id": "aa804eea-0c5f-4377-89fe-e40171f45ae4",
+      "title": "Docks and regions reachable from anywhere at runtime — a handle by id, index reads, any thread",
+      "decision": "Antonio, 2026-11-20: from any part of the code — heca, an extension, a plugin — one imports `heca::regions(..)` (like a singleton) and operates on regions AND on docks at any time. State on 2026-11-20 (main after PR #333): `regions(name).append / prepend / remove(id, any region) / retain / gap` work at runtime, applied each frame. MISSING, to build here: (1) a handle to an existing dock by id, reachable from anywhere — e.g. `regions(..).get(\"rooms\")` / returned by `append` — whose methods act through the host (move, remove, change properties such as the title), valid across a remake of the dock because it holds the id, not the object; (2) index-based access (Antonio's example `at_index(n)`): decide reading the dock at position n (safe) vs inserting at n (fragile: a plugin inserting shifts every later index, which is why regions.rs avoids indexes and offers `.order(..)`); (3) `regions(..)` from any thread: today its queue is `thread_local!` (heca/src/chrome/docks/regions.rs), so a call from a background thread or from an extension's server-side service lands in a queue nobody reads and is lost silently — make one queue the window reads, and calls from the server reach the windows. Names (`get`, `at_index`, handle methods) to be agreed with Antonio before code; heca-pro is told (decision 15ec67fc).",
+      "rationale": "Antonio asked for regions usable at runtime (\"region('name').append().remove().get().at_index() etc.. da potere richiamare in ogni momento anche dai plugins\") and for the same on providers (\"deve essere possibile avere un riferimento e chiamare i suoi metodi\"). The append/remove half landed in PR #333; nothing in the planner covered handles, index access or the thread limit (searched 2026-11-20).",
+      "implementationNotes": "Goes with decision a7f74a7c (the dock as a `Dock::new(..)` component): the handle's methods are that component's properties, applied through the host. Host side today: ChromeHost::apply_pending (heca/src/chrome/docks/host/placing.rs) applies the queue every frame from handle_about_to_wait; ChromeHost::provider(id) is the internal lookup. WASM plugins need the adapter of P022(F003)/T075 for any of this.",
+      "acceptedAt": "2026-11-20T19:34:56.336Z"
     }
   ],
   "phaseIds": [],
   "dependsOn": [],
   "statusLog": [],
   "createdAt": "2026-11-18T18:34:46.404Z",
-  "updatedAt": "2026-11-20T16:04:25.721Z",
+  "updatedAt": "2026-11-20T19:34:56.336Z",
   "sessionInfo": []
 }

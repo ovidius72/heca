@@ -363,7 +363,7 @@
           "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-007-point-5-first-region-from-config-docks-mount-id-region-decision-943527d4-is-built-under-p110-f010-t567-checklist-c32-for-heca-pro-tick-here-when-it-lands",
           "number": 7,
           "title": "Point 5 (first region from config `[docks] <mount id> = \"<region>\"`, decision 943527d4) is built under P110(F010)/T567 checklist C32 for heca-pro; tick here when it lands",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -373,7 +373,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-09-30T09:14:17.217Z",
-      "updatedAt": "2026-11-20T12:54:23.043Z",
+      "updatedAt": "2026-11-20T19:21:25.783Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -671,7 +671,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-20T12:54:23.043Z",
+  "updatedAt": "2026-11-20T19:21:25.783Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,

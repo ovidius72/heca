@@ -207,172 +207,178 @@
           "checked": true
         },
         {
-          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-013-point-28-antonio-2026-11-19-switching-workspace-sometimes-leaves-no-pane-focused-the-keyboard-focus-does-not-land-on-the-workspace-s-remembered-or-any-pane-reproduce-which-switch-key-sidebar-click-ws-idx-action-find-which-record-is-not-set-fix-so-a-shown-workspace-always-has-a-focused-pane-when-it-has-panes",
-          "number": 13,
-          "title": "Point 28 (Antonio, 2026-11-19): switching workspace sometimes leaves no pane focused — the keyboard/focus does not land on the workspace's remembered (or any) pane. Reproduce (which switch: key, sidebar click, ws_idx action), find which record is not set, fix so a shown workspace always has a focused pane when it has panes.",
-          "checked": false
-        },
-        {
-          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-014-point-28-note-2026-11-19-not-reproduced-with-a-focus-trace-prefix-ctrl-p-n-tiled-panes-only-no-floats-every-switch-left-a-focused-pane-skipped-for-now-on-antonio-s-word-if-it-comes-back-trace-sync-focus-heca-src-app-focus-rs-again-ws-focused-pane-focus-domain-active-column-keyboard-holder",
-          "number": 14,
-          "title": "Point 28 note (2026-11-19): not reproduced with a focus trace (prefix+Ctrl+p/n, tiled panes only, no floats — every switch left a focused pane); skipped for now on Antonio's word. If it comes back, trace sync_focus (heca/src/app/focus.rs) again: ws, focused pane, focus domain, active column, keyboard holder.",
-          "checked": false
-        },
-        {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-015-20-shape-agreed-with-antonio-2026-11-19-the-app-name-is-fixed-not-configurable-heca-ed-heca-pro-sono-fissi-given-once-by-the-program-heca-run-app-name-replaces-heca-run-heca-s-binary-heca-run-heca-heca-pro-heca-run-heca-pro-proposed-to-heca-pro-dev-waiting-for-its-answer-before-code-compatibility-15ec67fc-title-app-name-session-folder-from-the-second-window-of-a-session-app-name-session-folder-n-extends-t522-t545-s-folder-k-follow-stays-by-window-id-before-attach-the-app-name-alone-no-literal-heca-left-in-startup-rs",
-          "number": 15,
+          "number": 13,
           "title": "20 — shape agreed with Antonio 2026-11-19: the app name is FIXED, not configurable (\"heca ed heca pro sono fissi\"), given once by the program: `heca::run(app_name)` replaces `heca::run()` (heca's binary: `heca::run(\"heca\")`; heca-pro: `heca::run(\"Heca Pro\")` — proposed to heca-pro-dev, waiting for its answer before code, compatibility 15ec67fc). Title: `<app name> - <session folder>`, from the second window of a session `<app name> - <session folder> - #<n>` (extends T522/T545's folder + ` #k`; follow stays by window id); before attach: the app name alone. No literal \"heca\" left in startup.rs.",
           "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-016-point-29-antonio-2026-11-20-opening-heca-on-a-folder-from-the-installed-app-a-an-action-install-the-heca-command-in-path-like-vs-code-s-install-code-command-links-heca-the-binary-inside-applications-heca-app-contents-macos-into-a-path-folder-so-heca-new-heca-attach-work-from-a-terminal-reachable-from-palette-key-and-rpc-per-os-macos-link-windows-path-linux-already-in-path-via-package-b-drop-a-folder-on-the-dock-finder-icon-or-open-with-heca-the-bundle-declares-it-opens-folders-heca-receives-the-open-event-and-creates-attaches-a-session-in-that-folder-winit-does-not-expose-macos-open-events-directly-verify-how-first-today-a-user-can-already-do-it-from-inside-the-app-with-the-session-palette-mode-folder-picker-t522-shape-agreed-with-antonio-before-code",
-          "number": 16,
+          "number": 14,
           "title": "Point 29 (Antonio, 2026-11-20): opening heca on a folder from the installed app — (a) an action \"Install the heca command in PATH\" (like VS Code's \"Install 'code' command\"): links `heca` (the binary inside /Applications/heca.app/Contents/MacOS/) into a PATH folder so `heca --new` / `heca --attach` work from a terminal; reachable from palette, key and RPC; per-OS (macOS link, Windows PATH, Linux already in PATH via package). (b) Drop a folder on the Dock/Finder icon or \"Open With heca\": the bundle declares it opens folders, heca receives the open event and creates/attaches a session in that folder — winit does not expose macOS open events directly, verify how first. Today a user can already do it from inside the app with the session palette (`#` mode, folder picker, T522). Shape agreed with Antonio before code.",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-017-18-window-server-version-check-do-antonio-2026-11-20-a-window-and-a-server-of-different-builds-speak-different-wire-formats-t572-changed-it-and-nothing-checks-a-new-window-attaching-to-an-old-server-e-g-applications-heca-server-started-before-an-upgrade-holding-long-running-work-cannot-read-it-with-unknown-effects-wanted-the-first-message-of-a-connection-carries-a-protocol-version-on-mismatch-the-window-says-plainly-that-the-server-is-another-version-and-must-be-restarted-and-how-sessions-come-back-layout-restored-programs-per-resume-programs-and-touches-nothing-one-place-for-the-version-constant-bumped-by-any-wire-change-heca-src-server-wire-heca-pro-uses-this-wire-agree-the-shape-with-it-decision-15ec67fc-later-separate-decision-upgrading-the-server-while-keeping-terminals-alive-hand-the-open-ptys-to-the-new-server",
-          "number": 17,
+          "number": 15,
           "title": "18. WINDOW/SERVER VERSION CHECK — DO (Antonio, 2026-11-20). A window and a server of different builds speak different wire formats (T572 changed it) and nothing checks: a new window attaching to an old server (e.g. /Applications heca server started before an upgrade, holding long-running work) cannot read it, with unknown effects. Wanted: the first message of a connection carries a protocol version; on mismatch the window says plainly that the server is another version and must be restarted (and how sessions come back: layout restored, programs per resume_programs), and touches nothing. One place for the version constant, bumped by any wire change (heca/src/server/wire/). heca-pro uses this wire: agree the shape with it (decision 15ec67fc). Later, separate decision: upgrading the server while keeping terminals alive (hand the open PTYs to the new server).",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-018-1-delete-the-current-workspace-delete-workspace-ws-idx-optional-default-current-key-palette-details-description-point-1",
-          "number": 18,
+          "number": 16,
           "title": "1. Delete the current workspace: delete_workspace ws_idx optional (default current), key + palette (details: description point 1)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-019-2-terminal-round-glyphs-drawn-as-squares-investigate-description-point-2",
-          "number": 19,
+          "number": 17,
           "title": "2. Terminal round glyphs (⏺/●) drawn as squares — investigate (description point 2)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-020-3-paste-in-the-terminal-s-right-click-menu-description-point-3",
-          "number": 20,
+          "number": 18,
           "title": "3. Paste in the terminal's right-click menu (description point 3)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-021-4-macos-heca-was-prevented-from-modifying-apps-no-code-note-it-in-docs-release-notes-description-point-4",
-          "number": 21,
+          "number": 19,
           "title": "4. macOS \"heca was prevented from modifying apps\" — no code; note it in docs/release notes (description point 4)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-022-5-zoom-a-pane-in-a-split-column-bring-design-options-to-antonio-description-point-5",
-          "number": 22,
+          "number": 20,
           "title": "5. Zoom a pane in a split column — bring design options to Antonio (description point 5)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-023-6-default-session-folder-when-launched-from-the-icon-home-not-verify-and-fix-description-point-6",
-          "number": 23,
+          "number": 21,
           "title": "6. Default session folder when launched from the icon: home, not \"/\" — verify and fix (description point 6)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-024-7-fit-the-visible-columns-into-the-viewport-study-relation-to-zoom-description-point-7",
-          "number": 24,
+          "number": 22,
           "title": "7. Fit the visible columns into the viewport — study, relation to zoom (description point 7)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-025-8-zsh-suggestions-highlighting-and-tab-cursor-off-by-one-verify-after-the-locale-fix-8d-description-point-8",
-          "number": 25,
+          "number": 23,
           "title": "8. zsh suggestions/highlighting and Tab cursor off by one — verify after the locale fix 8d (description point 8)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-026-9-agent-finished-in-an-unfocused-pane-on-another-workspace-no-sound-flash-investigate-description-point-9",
-          "number": 26,
+          "number": 24,
           "title": "9. Agent finished in an unfocused pane on another workspace: no sound/flash — investigate (description point 9)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-027-10-transparent-logo-done-in-pr-325",
-          "number": 27,
+          "number": 25,
           "title": "10. Transparent logo (done in PR #325)",
           "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-028-11-drop-a-file-on-the-terminal-pastes-its-quoted-path-a-drop-target-capability-on-the-widget-description-point-11",
-          "number": 28,
+          "number": 26,
           "title": "11. Drop a file on the terminal pastes its quoted path; a drop-target capability on the widget (description point 11)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-029-12-wheel-scroll-slow-one-notch-calculation-for-host-scrollback-and-forwarded-wheel-speed-from-config-description-point-12",
-          "number": 29,
+          "number": 27,
           "title": "12. Wheel scroll slow: one notch calculation for host scrollback and forwarded wheel, speed from config (description point 12)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-030-13-report-unknown-retired-config-keys-at-load-then-remove-old-spellings-description-point-13",
-          "number": 30,
+          "number": 28,
           "title": "13. Report unknown/retired config keys at load, then remove old spellings (description point 13)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-031-14-workspace-numbers-in-the-sidebar-hideable-from-config-description-point-14",
-          "number": 31,
+          "number": 29,
           "title": "14. Workspace numbers in the sidebar, hideable from config (description point 14)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-032-15-t528-point-5-heca-pro-waits-a-dock-s-first-region-from-config-docks-mount-id-region-decision-943527d4-on-t528-one-workspaces-dock-remove-workspaces-right-workspaces-left2-from-startup-keep-multi-dock-tests-in-fixtures-none-not-mounted",
-          "number": 32,
+          "number": 30,
           "title": "15 + T528 point 5 (heca-pro waits): a dock's first region from config `[docks] <mount id> = \"<region>\"` (decision 943527d4 on T528); one workspaces dock — remove workspaces.right / workspaces.left2 from startup, keep multi-dock tests in fixtures; `none` = not mounted",
           "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-033-16-attention-on-a-pane-row-scrolled-out-of-sight-form-with-antonio-scroll-into-view-in-scrollregion-description-point-16",
-          "number": 33,
+          "number": 31,
           "title": "16. Attention on a pane row scrolled out of sight — form with Antonio; scroll-into-view in ScrollRegion (description point 16)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-034-17-a-new-pane-starts-in-the-asker-s-folder-with-shell-takes-the-asker-s-cwd-description-point-17",
-          "number": 34,
+          "number": 32,
           "title": "17. A new pane starts in the asker's folder (with_shell takes the asker's cwd) (description point 17)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-035-t571-merged-in-row-card-look-as-rowvariant-plain-tinted-filled-pane-row-expos-card-use-it-docs-showcase-built-23fedd2d",
-          "number": 35,
+          "number": 33,
           "title": "T571 (merged in): Row card look as RowVariant Plain/Tinted/Filled, pane row + exposé card use it, docs + showcase (built, 23fedd2d)",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-036-t571-merged-in-clean-pane-row-rs-hand-colours-93-131-constructors-in-the-syntax-panerow-panename-host-signal-hand-off-chromesignals-the-click-coordinated-with-t565",
-          "number": 36,
+          "number": 34,
           "title": "T571 (merged in): clean pane_row.rs — hand colours (:93, :131), constructors in THE SYNTAX (PaneRow/PaneName), host signal hand-off (ChromeSignals); the click coordinated with T565",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-037-t571-merged-in-clean-the-other-hand-styled-files-row-lines-rs-chrome-window-scene-pane-shell-pane-header-build-rs-terminal-search-expose-mod-rs-one-surface-at-a-time-with-antonio-s-eye-check",
-          "number": 37,
+          "number": 35,
           "title": "T571 (merged in): clean the other hand-styled files — row_lines.rs, chrome/window/scene, pane/shell, pane_header/build.rs, terminal/search, expose/mod.rs — one surface at a time with Antonio's eye-check",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-038-heca-pro-asks-2026-11-20-dockframe-section-header-of-its-own-header-actions-collapsible-grip-transparent-wrappers-lay-out-like-the-child-s-parent-visibility-in-the-syntax-built-23fedd2d-antonio-s-eye-check-pending",
-          "number": 38,
+          "number": 36,
           "title": "heca-pro asks (2026-11-20): DockFrame Section + header of its own + header_actions/collapsible/grip; transparent wrappers lay out like the child's parent; Visibility in THE SYNTAX (built, 23fedd2d) — Antonio's eye-check pending",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-039-30-typed-keys-reach-the-shell-out-of-order-under-load-do-whole-fix-antonio-2026-11-20-ciao-typed-while-rendering-lags-arrives-as-cia-o-cause-found-on-the-server-two-writers-feed-one-shell-a-key-that-maps-to-a-backendkeyevent-letters-heca-src-app-keyboard-rs-328-key-character-backendkeycode-char-goes-processinput-key-engine-process-key-event-wezterm-key-down-which-writes-through-wezterm-s-own-bufwriter-threadedwriter-on-its-own-thread-wezterm-term-src-terminalstate-mod-rs-507-anything-sent-as-bytes-space-namedkey-space-is-missing-from-that-table-so-keyboard-rs-321-makes-it-b-plus-pastes-ime-textinput-text-terminalrun-goes-processinput-bytes-pty-write-input-sharedwriter-directly-on-the-server-thread-heca-core-src-backend-terminal-pane-rs-42-pty-rs-305-under-load-wezterm-s-thread-lags-and-the-direct-write-overtakes-it-fix-the-class-not-the-space-every-byte-bound-for-one-terminal-s-shell-travels-one-ordered-path-in-heca-core-study-how-since-wezterm-always-inserts-its-thread-and-exposes-no-raw-write-test-interleaved-key-events-and-raw-bytes-reach-the-pty-in-the-order-sent-with-the-writer-thread-artificially-slowed",
-          "number": 39,
+          "number": 37,
           "title": "30. TYPED KEYS REACH THE SHELL OUT OF ORDER under load — DO, whole fix (Antonio, 2026-11-20: \"ciao \" typed while rendering lags arrives as \"cia o\"). Cause found: on the server two writers feed one shell. A key that maps to a BackendKeyEvent (letters: heca/src/app/keyboard.rs:328 Key::Character → BackendKeyCode::Char) goes ProcessInput::Key → engine.process_key_event → wezterm key_down, which writes through wezterm's own BufWriter<ThreadedWriter> on its own thread (wezterm term/src/terminalstate/mod.rs:507). Anything sent as bytes (Space — NamedKey::Space is missing from that table, so keyboard.rs:321 makes it b\" \" — plus pastes, IME/TextInput text, TerminalRun) goes ProcessInput::Bytes → pty.write_input → SharedWriter directly on the server thread (heca-core/src/backend/terminal/pane.rs:42, pty.rs:305). Under load wezterm's thread lags and the direct write overtakes it. Fix the class, not the space: every byte bound for one terminal's shell travels one ordered path in heca-core (study how, since wezterm always inserts its thread and exposes no raw write). Test: interleaved key events and raw bytes reach the pty in the order sent, with the writer thread artificially slowed.",
           "checked": false
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-040-31-the-focused-terminal-makes-feedback-sounds-do-antonio-2026-11-20-standalone-while-typing-in-the-pane-rule-only-an-unfocused-terminal-sounds-heca-src-client-feedback-rs-70-plays-a-sound-when-the-pane-is-not-input-focused-pane-heca-src-app-state-keyboard-terminal-rs-8-which-is-none-when-heca-s-window-is-not-frontmost-a-palette-dialog-is-open-or-hypothesis-to-test-first-when-the-focused-pane-s-process-has-exited-identity-of-focused-pane-finds-no-backend-as-after-the-ctrl-c-that-produced-pane-14-process-exited-code-130-write-the-failing-test-first-focused-pane-whose-process-exits-does-not-sound-then-fix-in-one-place",
-          "number": 40,
+          "number": 38,
           "title": "31. THE FOCUSED TERMINAL MAKES FEEDBACK SOUNDS — DO (Antonio, 2026-11-20, standalone, while typing in the pane). Rule: only an unfocused terminal sounds. heca/src/client/feedback.rs:70 plays a sound when the pane is not `input_focused_pane()` (heca/src/app_state/keyboard_terminal.rs:8), which is None when heca's window is not frontmost, a palette/dialog is open, or — hypothesis to test first — when the focused pane's process has exited (identity_of(focused_pane) finds no backend), as after the Ctrl-C that produced \"Pane 14 process exited, code 130\". Write the failing test first (focused pane whose process exits does not sound), then fix in one place.",
           "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-041-32-tooltips-antonio-heca-pro-2026-11-20-one-default-delay-from-config-appearance-tooltip-delay-ms-heca-sets-heca-grid-ui-widgets-tooltip-set-default-delay-at-start-and-reload-quick-half-an-own-delay-stays-a-label-that-cuts-its-text-and-a-tag-segment-the-chip-cuts-off-offers-the-whole-text-on-hover-by-itself-gone-when-it-fits-a-hand-written-tooltip-on-it-or-on-any-ancestor-wins-hand-tooltips-repeating-a-label-s-text-removed-sidebar-git-branch-folderline-tag-segments-palette-path-built-on-feat-t567-findings-2-antonio-s-eye-check-pending",
+          "number": 39,
+          "title": "32. TOOLTIPS (Antonio + heca-pro, 2026-11-20): one default delay from config `[appearance] tooltip_delay_ms` (heca sets heca_grid_ui::widgets::tooltip::set_default_delay at start and reload; quick = half; an own delay stays); a Label that cuts its text — and a Tag segment the chip cuts off — offers the whole text on hover by itself, gone when it fits; a hand-written tooltip on it or on any ancestor wins; hand tooltips repeating a label's text removed (sidebar git branch, FolderLine, Tag segments, palette path). Built on feat/t567-findings-2; Antonio's eye check pending.",
+          "checked": true
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-042-heca-pro-via-antonio-2026-11-20-label-lacks-four-text-properties-today-it-has-font-size-font-scale-size-variant-color-tone-bold-italic-underline-strikethrough-align-truncate-wrap-max-lines-heca-grid-ui-src-widgets-label-rs-missing-1-letter-spacing-css-letter-spacing-e-g-a-small-uppercase-section-label-members-4-2-font-weights-between-normal-and-bold-medium-semibold-css-font-weight-3-line-height-css-line-height-4-text-transform-uppercase-lowercase-capitalize-css-text-transform-so-the-language-file-keeps-normal-casing-and-the-label-shows-it-transformed-the-font-family-stays-the-user-s-configured-ui-font-no-per-label-family-values-come-from-the-theme-or-are-label-props-like-the-existing-ones-reachable-from-viewnode-realize-too-only-earlier-trace-p076-notes-letter-spacing-case-transforms-offered-user-deferred-design-to-agree-with-antonio-before-code",
+          "number": 40,
+          "title": "heca-pro (via Antonio, 2026-11-20): Label lacks four text properties. Today it has font_size/font_scale/size variant, color/tone, bold, italic, underline, strikethrough, align, truncate, wrap, max_lines (heca-grid-ui/src/widgets/label.rs). Missing: (1) letter spacing, CSS letter-spacing (e.g. a small uppercase section label \"MEMBERS · 4\"); (2) font weights between normal and bold: medium, semibold (CSS font-weight); (3) line height (CSS line-height); (4) text transform uppercase/lowercase/capitalize (CSS text-transform), so the language file keeps normal casing and the label shows it transformed. The font family stays the user's configured UI font (no per-label family). Values come from the theme or are Label props, like the existing ones; reachable from ViewNode/realize too. Only earlier trace: P076 notes 'letter-spacing, case transforms: offered, user deferred'. Design to agree with Antonio before code.",
+          "checked": false
+        },
+        {
+          "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-041-33-feedback-flash-seemed-to-last-1-2-s-antonio-2026-11-20-checked-works-a-pane-s-sidebar-flash-lasts-settings-notification-flash-ms-default-8000-0-until-the-pane-is-seen-it-reads-shorter-because-the-last-pulse-fades-out-checked-with-the-new-heca-feedback-trace-switch-heca-src-feedback-trace-rs-docs-development-md-no-early-stop-focused-pane-acknowledged-silently-unfocused-panes-flash-and-sound-once-focus-acknowledges-test-a-visible-rows-flash-pulses-for-its-whole-time-on-an-idle-window-heca-src-providers-workspaces-tests-idle-rs-t562-s-wake-lapse-ruled-out-antonio-verified-with-0-the-flash-persists-uncommitted-on-feat-t567-findings-2",
+          "number": 41,
+          "title": "33. FEEDBACK FLASH SEEMED TO LAST 1-2 s (Antonio, 2026-11-20) — CHECKED, works: a pane's sidebar flash lasts `[settings] notification_flash` ms (default 8000; 0 = until the pane is seen); it reads shorter because the last pulse fades out. Checked with the new HECA_FEEDBACK_TRACE switch (heca/src/feedback_trace.rs, docs/development.md): no early stop, focused pane acknowledged silently, unfocused panes flash and sound once, focus acknowledges. Test a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window (heca/src/providers/workspaces/tests/idle.rs). T562's wake lapse ruled out. Antonio verified with 0: the flash persists. Uncommitted on feat/t567-findings-2.",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -403,7 +409,7 @@
       "startedAt": "2026-11-19T17:36:39.451Z",
       "completedAt": "",
       "createdAt": "2026-11-19T10:17:09.901Z",
-      "updatedAt": "2026-11-20T17:37:12.481Z",
+      "updatedAt": "2026-11-20T22:19:11.500Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
@@ -521,9 +527,9 @@
     }
   ],
   "createdAt": "2026-11-18T18:40:53.598Z",
-  "updatedAt": "2026-11-20T17:37:12.481Z",
-  "handoff": "# T572 finished on its branch (PR on Antonio's word); heca-pro is waiting on T528 p5, T567 p20/23/23b, T571\n\nCreated at: 2026-11-19T18:32:59.781Z\nUpdated at: 2026-11-19T20:51:22.293Z\nReason: Antonio asked to write down, before the context is lost, what heca-pro is waiting for — it was in the planner only as ordinary open work and had been forgotten — and the state of T572 after a long session.\n\n## Current focus\n- Feature: F010. Phase: P110(F010).\n- P110(F010)/T572 (in-progress) — all checklist items done or dropped except the last: push + PR, **only on Antonio's word** (asked 2026-11-19, no answer yet). Worktree `/Users/antonio/projects/heca-feat-572`, branch `feat/t572-terminal-wire`, 3 commits: 07b4f5be, f79ddd9e, 3a4f84a8. Working tree clean.\n- After T572: **heca-pro is WAITING on these — they come first** (Antonio, 2026-11-19; heca-pro is on a heca version with T568+T569, not T570):\n  1. dock's first position from config — P045(F006)/T528 point 5 (also needed by T567 point 15);\n  2. window title \"Heca Pro\" — P110(F010)/T567 point 20;\n  3. Row \"card\" variant — P110(F010)/T571;\n  4. multi-line tooltip + tooltip taking a widget — T567 points 23 and 23b (checklist C1/C2).\n  T570 (real icons, no Flex::row() around FolderLine) needs nothing from heca: heca-pro must update its heca version.\n  Ask Antonio which of the four first.\n\n## Current and partial state\n- T572 done on the branch: input never dropped (queue.rs WHEN_FULL + send_wait; outbox unbounded; flood test); terminals cross the socket as changed rows (wire/rows.rs, Carried in wire/frame.rs), attach preface v2 with ok/refused answer; window shares frames (Arc), redraws only changed rows (client/terminal.rs changed_rows), skips drawing while occluded; server snapshots/sends a terminal only when its screen_version moved (PaneBackend::screen_version, session `published` cache; a window waiting for its first picture gets all); one answer to \"which terminal gets the keys\" (keyboard_terminal: focused pane while keyboard is on the panes) — fixes T567 point 24; single waiting-for-keyboard slot; zsh `.zshenv` recursion when heca runs inside heca fixed (T567 point 22). Antonio's eye-check: fluid, paste correct. C4 (binary codec) removed; D (layout only when needed) dropped — project Accepted Decision 06ac6e43 has the numbers.\n- T567 open: 1-7, 9, 11-17, 19-21, 23/23b, 25 (prefix+r then Shift+j/k resizes the wrong pane), 26 (audio \"buffer underrun\" messages), 27 (mouse selection does not scroll at the top edge), 28 (not reproduced, skipped). 22 and 24 done on T572's branch.\n- Antonio, 2026-11-19: \"from today widgets and components must be built with layout-dirty in mind; what was done is a mess\". Proposed (not yet agreed): a task to make Base's style.layout and children private behind methods that mark needs_layout (~300 sites), which makes D safe later. Do not create it without his yes.\n\n## Preservation constraints\n- Read AGENTS.md in full first. Chat in Italian; the last line is \"Per te: …\" / \"Niente per te.\" in Italian. Answer questions before writing; wait for \"vai\". Never invent APIs. Never edit Antonio's files. Commit only on his word; **PR only at the end of a task** (never offer one with checklist items open). Antonio commits .planner on main.\n- Test builds for Antonio: `HECA_SLOW_MS=20 TMPDIR=$(mktemp -d) <worktree>/target/release/heca` — a separate server; his real server must never be stopped (long jobs running). Load script: the session scratchpad bench/load.sh (repaints a full coloured screen 20×/s).\n\n## Supporting documents\n- None needed: T572 notes and the project decision 06ac6e43 hold the details.\n\n## Blockers and risks\n- None blocking. Open worktrees not to touch: heca-feat-469 (T469), heca-feat-565 (T565 paused).\n- heca/tests/headless_server.rs speaks the socket protocol by hand (a copy of the format) — update it with any wire change.\n\n## How to resume\n1. Ask Antonio for the T572 push + PR (lint audit + xwin clippy + `gh run watch` after push).\n2. Then ask which heca-pro item first (list above) and start that task with its own worktree heca-feat-<num>.\n3. Raise again the Base-privacy task proposal for layout-dirty.",
-  "handoffUpdatedAt": "2026-11-19T20:51:22.293Z",
+  "updatedAt": "2026-11-20T22:19:11.500Z",
+  "handoff": "# heca-pro unblocked (PR #333 merged); T567 continues on feat/t567-findings-2 — tooltips done, next point to choose\n\nCreated at: 2026-11-19T18:32:59.781Z\nUpdated at: 2026-11-20T20:16:01.350Z\nReason: heca-pro is unblocked (PR #333 merged) and the tooltip work is committed and pushed on feat/t567-findings-2; Antonio asked for a phase handoff so a cold session can pick T567 up from the next open point.\n- Feature: F010 — Improvements. Phase: P110(F010) — Build and release.\n- Task: P110(F010)/T567 — Findings from using the installed app (in-progress). Checklist 14/41 done; the 17 description points are now checklist items C18-C34 (work goes in the checklist, not the description).\n- Exact resume point: worktree `/Users/antonio/projects/heca-feat-567`, branch `feat/t567-findings-2` (from main after PR #333), head `c520174f`, pushed, working tree clean. Next point NOT chosen: ask Antonio.\n\n## Current and partial state\n- PR #333 merged into main 2026-11-20 (an exception to \"PR only at end of task\", approved to unblock heca-pro). It delivered: `[[docks]]` entries (name = kind, id, location, order, flex); `regions(..)` applied at any time (startup + every frame), recipes `append(|| Dock::new(..))`, `remove(id)` in any region; reload applies changed entries; `Provider::spawn(id)` lets an entry with an unknown id add a dock of that kind (workspaces does); RowVariant Plain/Tinted/Filled; DockFrame Section/.leading/.header/.header_actions/.collapsible/.grip, parts aligned to Item's inset; Item spaces from theme steps, height = content + padding, empty slot takes no gap; transparent wrappers lay their child out like its parent; Visibility::new().visible(b).child(c) (breaking, agreed); tooltip words/signal/widget; heca::run(\"Heca Pro\") title; one workspaces dock at startup. T572 done (closing a connection wakes a waiting reader, cherry-picked). heca-pro told everything; T528 C7 ticked.\n- On feat/t567-findings-2 (committed, not in main): 9723f583 docs — why regions/providers are not components and how they work (regions.rs, providers/mod.rs, widgets.md); c520174f tooltips — `[appearance] tooltip_delay_ms` (default 500) via `tooltip::set_default_delay` at start and reload, quick = half, own delay stays; a Label that cuts its text, a Tag segment the chip cuts off, and a Button showing only its icon offer their text on hover only while hidden/cut; a hand tooltip on the widget or any ancestor wins (PaintCx.hand_tip_above); duplicate hand tooltips removed (sidebar branch, FolderLine, Tag segments, palette path, ButtonGroup); floating panels keep a gap from the window edge (place_beside). Antonio eye-checked tooltips and the edge gap: OK. C41 ticked.\n- T567 open with known cause: C39 \"cia o\" (typed keys out of order: letters go wezterm key_down on its own writer thread, Space/bytes go pty.write_input directly — fix the class: one ordered path to the shell in heca-core); C40 focused terminal makes feedback sounds (hypothesis to test first: a focused pane whose process exited no longer counts as focused, input_focused_pane → None); C17 window/server version check. Others open: C9, C11, C13/C14 (not seen again), C16, C18-C26, C28-C31, C33-C38.\n- heca-pro still waiting on one decision: make `Provider::default_region()` optional (trait default) + deprecated, since nothing in the app reads it (only tests and an unread copy in ContainerContribution). Antonio said yes, then asked about the syntax; not built. heca-pro was also told to build its room title row with DockFrame (Section/.leading or .header) instead of by hand.\n- F013 decisions added today: f72a9911 wrappers' constructors (KeyHint, KeyHintGroup, FocusScope, Tooltip to `X::new().child(..)`, direct change); 49db4eb3 Icon/Image theme-relative size; 44776376 every widget customizable like an HTML element; bf271be6 marker bar/pip theme token; aa804eea docks reachable from anywhere (handle by id, index read vs insert, regions from any thread — its queue is thread_local and calls from other threads are lost). a7f74a7c (\"Provider becomes Dock::new component\") was written without being asked and is probably wrong (Antonio: region and provider need not be components) — ask whether to delete it.\n\n## Preservation constraints\n- Read AGENTS.md in full. Chat in Italian; last line \"Per te: …\" / \"Niente per te.\" in Italian.\n- A message that contains a question gets an answer in the final message and NO work in that turn, even if it also says \"do it\". Wait for Antonio's word before acting; never decide API names, behaviour or design alone — propose. Never write to the planner or memory unless asked.\n- Report any non-conformance (THE SYNTAX, hand-written numbers, call-site fixes) the moment it is seen, in the reply.\n- No hand-written pixels: spaces are theme steps; numbers that remain go to F013. Fixes centralized in the library.\n- Commit only on his word; push the branch as a backup after a commit; no PR before the task ends unless he says. Never put a Claude-Session line or session link in commits/PRs. Antonio commits .planner on main.\n- Never stop Antonio's server (17228) or window (68970). Test with `cargo run -p heca -- --standalone` in the worktree or `TMPDIR=$(mktemp -d) <worktree>/target/release/heca`. Close test servers you start.\n\n## Supporting documents\n- None needed: the commits, T567's checklist (C39-C41 carry causes and files) and the F013 decisions hold the detail.\n\n## Blockers and risks\n- No blocker. Worktrees heca-feat-469 (T469, WIP commit, to rewrite in THE SYNTAX from that worktree) and heca-feat-565 (T565, WIP commit; its planner checkpoint wrongly says \"clean\") are aligned to main and pushed; do not touch without Antonio.\n- heca/tests/headless_server.rs speaks the socket protocol by hand — update it with any wire change (C17).\n\n## How to resume\n1. Ask Antonio which T567 point next; suggested C40 (write the failing test: focused pane whose process exits must not sound) then C39 (one ordered path to the shell).\n2. Ask about default_region (build the deprecation if confirmed) and whether to delete F013 decision a7f74a7c.\n3. Work on feat/t567-findings-2; per change: tests, sabotage check, `scripts/lint-changed.sh clippy origin/main`, xwin clippy, docs; commit on his word and push.",
+  "handoffUpdatedAt": "2026-11-20T20:16:01.350Z",
   "handoffAudit": {
     "version": 1,
     "entries": [
@@ -730,10 +736,10 @@
       ]
     },
     "supportingDocuments": [],
-    "contentHash": "e59a88bba2b48de14fe398dbd4a765bb66c47586205a85e79ba067b5399e929d",
-    "contentLength": 4154,
-    "verifiedAt": "2026-11-19T20:51:22.293Z",
-    "resumeReadyAt": "2026-11-19T20:51:32.253Z",
+    "contentHash": "34a2ca8a0396b38501c88d972fcc441e18bf03cdacd78834b837949ba48b7733",
+    "contentLength": 6226,
+    "verifiedAt": "2026-11-20T20:16:01.350Z",
+    "resumeReadyAt": "2026-11-20T20:16:08.607Z",
     "readBackSourceReviews": [
       {
         "source": "conversation",
@@ -757,7 +763,7 @@
       }
     ]
   },
-  "handoffReadAt": "2026-11-19T20:51:32.253Z",
+  "handoffReadAt": "2026-11-20T20:16:08.607Z",
   "handoffHistory": [],
   "statusLog": [
     {
