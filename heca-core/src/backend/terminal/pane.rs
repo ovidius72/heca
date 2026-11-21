@@ -40,7 +40,8 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn process_input(&mut self, data: &[u8]) {
-        let _ = self.pty.write_input(data);
+        // Through the emulator's own path, the one keys take, so they cannot overtake each other.
+        let _ = self.engine.type_text(&String::from_utf8_lossy(data));
     }
 
     fn process_key_event(&mut self, event: &BackendKeyEvent) -> bool {
@@ -66,18 +67,9 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn paste(&mut self, text: &str) {
-        // Wrap in bracketed-paste markers when the program enabled DECSET 2004, so
-        // editors/shells treat the whole blob as literal pasted text (no auto-indent,
-        // no executing newlines). Otherwise forward verbatim.
-        if self.engine.bracketed_paste_enabled() {
-            let mut framed = Vec::with_capacity(text.len() + 12);
-            framed.extend_from_slice(b"\x1b[200~");
-            framed.extend_from_slice(text.as_bytes());
-            framed.extend_from_slice(b"\x1b[201~");
-            self.process_input(&framed);
-        } else {
-            self.process_input(text.as_bytes());
-        }
+        // Bracketed when the program enabled DECSET 2004, so editors and shells take the whole of
+        // it as pasted text (no auto-indent, no running newlines) — through the keys' own path.
+        let _ = self.engine.paste(text);
     }
 
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {

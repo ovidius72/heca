@@ -317,10 +317,6 @@ impl PtyHandle {
             .map_err(|err| PtyError::new(PtyOperation::Resize, err))
     }
 
-    pub(super) fn write_input(&self, data: &[u8]) -> std::io::Result<()> {
-        self.writer.write_bytes(data)
-    }
-
     pub(super) fn try_read(&self) -> PtyRead {
         match self.rx.try_recv() {
             Ok(bytes) => PtyRead::Data(bytes),
