@@ -8,7 +8,11 @@
 //! session up and reports to the same pane. A pane that is gone has no file to write to, and its
 //! entry is dropped on the next look-up.
 
-use std::{collections::BTreeMap, fs, io, path::{Path, PathBuf}};
+use std::{
+    collections::BTreeMap,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -29,14 +33,26 @@ pub(super) fn folder() -> PathBuf {
 /// The entry for `driver`'s session `id`, or `None` when the id is not a plain identifier — it is a
 /// file name, so nothing in it may reach outside the folder.
 fn entry(folder: &Path, driver: &str, id: &str) -> Option<PathBuf> {
-    let plain = |text: &str| !text.is_empty() && text.len() <= 128
-        && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    let plain = |text: &str| {
+        !text.is_empty()
+            && text.len() <= 128
+            && text
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    };
     (plain(driver) && plain(id)).then(|| folder.join(format!("{driver}.{id}.json")))
 }
 
 /// Remember that `driver`'s session `id` reports through `connection`.
-pub(super) fn remember(folder: &Path, driver: &str, id: &str, connection: &Connection) -> io::Result<()> {
-    let Some(path) = entry(folder, driver, id) else { return Ok(()) };
+pub(super) fn remember(
+    folder: &Path,
+    driver: &str,
+    id: &str,
+    connection: &Connection,
+) -> io::Result<()> {
+    let Some(path) = entry(folder, driver, id) else {
+        return Ok(());
+    };
     fs::create_dir_all(folder)?;
     #[cfg(unix)]
     {
@@ -51,6 +67,16 @@ pub(super) fn remember(folder: &Path, driver: &str, id: &str, connection: &Conne
     io::Write::write_all(&mut file, &text)?;
     file.persist(path).map_err(|error| error.error)?;
     Ok(())
+}
+
+/// Whether any session of `driver` was seen in a pane — a hook outside heca reads nothing otherwise.
+pub(super) fn any_for(folder: &Path, driver: &str) -> bool {
+    let prefix = format!("{driver}.");
+    fs::read_dir(folder).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+    })
 }
 
 /// The connection `driver`'s session `id` reports through — `None` when no hook with heca's
