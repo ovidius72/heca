@@ -63,6 +63,8 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     // **A pane's runtime is not in here.** Every metadata line on a sidebar card is attached
     // always and shows or hides itself, so a runtime change needs no rebuild.
     state.layout().active_workspace_idx().hash(&mut hsh);
+    // Which docks each region holds, in what order and how big: a move from any path rebuilds.
+    state.chrome_host.arrangement(&mut hsh);
     for ws in &state.chrome_state.workspaces.tree().workspaces {
         ws.ws_idx.hash(&mut hsh);
         ws.name.hash(&mut hsh);
