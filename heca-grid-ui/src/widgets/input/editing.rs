@@ -43,7 +43,7 @@ impl Input {
         self.seen_text.clone_from(&text);
         self.text.set(text.clone());
         self.base.mark_needs_layout();
-        self.blink_origin = Instant::now();
+        self.blink_origin = crate::clock::now();
         if let Some(f) = &self.on_change {
             f(Action::value("input-change", SignalData::String(text)));
         }

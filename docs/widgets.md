@@ -1625,6 +1625,26 @@ nothing else.
 > so the cards below kept their old positions — and the gap where the card had been simply sat
 > there until an unrelated click happened to trigger a layout.
 
+### `clock` — what time it is, for every widget that moves with time
+
+A flash pulsing, a caret blinking and a double click told from two clicks all ask
+`heca_grid_ui::clock::now()`, never the system's clock directly. In the app it *is* the system's
+clock. A test **holds** it and moves it by hand, so it says "100 ms later" instead of sleeping —
+it sees exactly the frames it asked for on any machine, however slow or busy:
+
+```rust
+heca_grid_ui::clock::hold();                                   // time stops for this thread
+flash.repeat_for(Tone::Warning, Duration::from_secs(1));
+while let Some(delay) = root.next_redraw() {
+    heca_grid_ui::clock::advance(Duration::from_secs_f32(delay)); // the frame the widget asked for
+    // … tick, lay out, paint, look at the scene
+}
+heca_grid_ui::clock::release();                                // the system's clock again
+```
+
+The held time is per thread. **A widget that keeps time reads `clock::now()`** — reading the system
+clock directly makes it untestable without sleeping, and a test that sleeps fails on a slow machine.
+
 ### `Flash`
 
 A reusable press effect: `Flash::new()` / `Flash::with_duration(s)`; `.trigger()` on press,

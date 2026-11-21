@@ -34,7 +34,7 @@ impl Input {
         let n = self.char_count();
         self.anchor = (n > 0).then_some(0);
         self.cursor = n;
-        self.blink_origin = Instant::now();
+        self.blink_origin = crate::clock::now();
     }
 
     /// Movement granularity from the current modifiers: Ctrl/Cmd → to start/end,
@@ -53,7 +53,7 @@ impl Input {
     /// **extends/shrinks** the selection (anchoring at the start position);
     /// without Shift it collapses any selection and moves the caret.
     pub(super) fn move_caret(&mut self, left: bool, gran: Granularity) {
-        self.blink_origin = Instant::now();
+        self.blink_origin = crate::clock::now();
 
         if crate::event::modifiers().shift {
             // Begin anchoring at the caret if no selection is active yet.
@@ -102,7 +102,7 @@ impl Input {
         if crate::event::modifiers().shift { self.anchor.get_or_insert(self.cursor); }
         else { self.anchor = None; }
         self.cursor = next;
-        self.blink_origin = Instant::now();
+        self.blink_origin = crate::clock::now();
     }
 
 }

@@ -16,7 +16,7 @@ impl Input {
         view.borrow_mut().offset_y = region.scroll_offset();
         base.children.push(crate::WidgetModel::new(region));
         Self { base, text, placeholder: String::new(), placeholder_on_focus: false, seen_text: String::new(), cursor: 0, anchor: None,
-            blink_origin: Instant::now(), last_caret: std::cell::Cell::new(false),
+            blink_origin: crate::clock::now(), last_caret: std::cell::Cell::new(false),
             multiline: false, max_lines: None, view, on_change: None, on_submit: None }
     }
 

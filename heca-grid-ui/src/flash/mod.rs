@@ -86,7 +86,7 @@ impl FlashHandle {
         // widget that is on screen books the next one. Booking "now" from here as well left a wake
         // that only a paint could ever clear, so a flash on a widget nothing paints kept the host
         // awake for ever.
-        self.request.set(Some(Request { started: Instant::now(), tone, playback }));
+        self.request.set(Some(Request { started: crate::clock::now(), tone, playback }));
         crate::request_frame();
     }
 
@@ -102,7 +102,7 @@ impl FlashHandle {
 pub(crate) fn wake(base: &Base) -> Option<f32> {
     if base.style.layout.hidden || !base.visible.get_untracked() { return None }
     let booked = base.flash?.next_frame.get_untracked()?;
-    let now = Instant::now();
+    let now = crate::clock::now();
     // Overdue is still a wake — the host draws at once — but only for one cycle: past that, no paint
     // has reached this widget since it asked, so it is not on screen and has nothing to draw.
     (now <= booked.until).then(|| booked.at.saturating_duration_since(now).as_secs_f32())
@@ -145,7 +145,7 @@ fn lifetime(request: Request, style: heca_theme::FlashStyle) -> f64 {
 pub(crate) fn paint(base: &Base, cx: &mut PaintCx) {
     let Some(request) = base.flash.and_then(|handle| handle.request.get()) else { return };
     let style = cx.theme().colors.flash;
-    let now = Instant::now();
+    let now = crate::clock::now();
     let Some(strength) = amount(request, style, now) else {
         if let Some(handle) = base.flash { handle.next_frame.set(None); }
         return
