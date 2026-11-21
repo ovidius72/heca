@@ -23,6 +23,7 @@ pub(crate) use handed::handed_to;
 pub use identity::{focus_widget_by_id, keyboard_holder};
 pub use scope::{
     KeyboardArea, contains_keyboard, focus_scope, keyboard_area, page_scope, release_scope,
+    replace_child,
 };
 pub(crate) use settle::{focus_on_press, holder_path, settle};
 

@@ -11,11 +11,12 @@ use crate::input::WmAction;
 /// The container's own `workspaces.delete_selected_column` handles the cursor's column;
 /// this is the plain global binding, and it no longer branches on a mode that
 /// does not exist.
-pub fn handle_delete_current_column(state: &mut AppState, _action: &WmAction) {
+pub fn handle_delete_current_column(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
-        return;
+        return Ok(());
     };
     request_destructive(state, WmAction::DeleteColumn { ws_idx, col_idx });
+    Ok(())
 }
 
 /// Apply a workspace collapse change: write the canonical `chrome_state.collapsed_ws`,
@@ -36,58 +37,64 @@ pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: O
         .apply_ws_collapsed(&set, Some(ws_idx));
 }
 
-pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) {
+pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some(ws_idx) = current_active_workspace_idx(state) else {
-        return;
+        return Ok(());
     };
     apply_ws_collapse(state, ws_idx, Some(true));
+    Ok(())
 }
 
-pub fn handle_expand_current_workspace(state: &mut AppState, _action: &WmAction) {
+pub fn handle_expand_current_workspace(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some(ws_idx) = current_active_workspace_idx(state) else {
-        return;
+        return Ok(());
     };
     apply_ws_collapse(state, ws_idx, Some(false));
+    Ok(())
 }
 
-pub fn handle_toggle_current_workspace_collapsed(state: &mut AppState, _action: &WmAction) {
+pub fn handle_toggle_current_workspace_collapsed(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some(ws_idx) = current_active_workspace_idx(state) else {
-        return;
+        return Ok(());
     };
     apply_ws_collapse(state, ws_idx, None);
+    Ok(())
 }
 
-pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) {
+pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
-        return;
+        return Ok(());
     };
     state
         .chrome_state
         .workspaces
         .tree_mut()
         .collapse_column(ws_idx, col_idx);
+    Ok(())
 }
 
-pub fn handle_expand_current_column(state: &mut AppState, _action: &WmAction) {
+pub fn handle_expand_current_column(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
-        return;
+        return Ok(());
     };
     state
         .chrome_state
         .workspaces
         .tree_mut()
         .expand_column(ws_idx, col_idx);
+    Ok(())
 }
 
-pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &WmAction) {
+pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
-        return;
+        return Ok(());
     };
     state
         .chrome_state
         .workspaces
         .tree_mut()
         .toggle_column_collapsed(ws_idx, col_idx);
+    Ok(())
 }
 
 fn current_active_workspace_idx(state: &AppState) -> Option<usize> {

@@ -61,6 +61,14 @@ fn request_to(path: &std::path::Path, line: &str) -> std::io::Result<String> {
     Ok(out)
 }
 
+/// **The `rpc` command lines, as `--help` lists them** — written here, beside the code that answers
+/// them, because `rpc` is read before the command table (its arguments are a whole action line,
+/// not a fixed list).
+pub(crate) const RPC_COMMANDS: &[(&str, &str)] = &[
+    ("rpc <action> [name=value …]", "Run an action on the running server — any action `--list-actions` prints."),
+    ("rpc --events", "Print the server's events, one per line, until it stops."),
+];
+
 /// **`heca rpc <line>`** — the script door. `Some(output)` when `args` is an `rpc` invocation (the
 /// caller prints it and does **not** open a window); `None` otherwise, so the normal CLI runs.
 ///
@@ -132,8 +140,7 @@ fn run_rpc_cli_with(args: &[String], request: impl FnOnce(&str) -> std::io::Resu
     };
     if line.trim().is_empty() {
         return Some(
-            "usage: heca rpc <action> [args…]\nRun `heca --list-actions` to see every action.\n"
-                .to_string(),
+            format!("usage: heca {}\nRun `heca --list-actions` to see every action.\n", RPC_COMMANDS[0].0),
         );
     }
     Some(match request(&line) {

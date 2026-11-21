@@ -90,7 +90,7 @@ pub(crate) fn handle_keyboard_input(
             // consulted after the tree, so a program in a docked terminal gets its PageUp.
             let surface = focused_surface(state);
             if let Some(act) = way_out_action(&surface, mode_keymaps, ctx.event_combo) {
-                dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
+                let _ = dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
                 return;
             }
             // What the surface holds goes to the tree. (A layer was offered the key before the key
@@ -119,7 +119,7 @@ pub(crate) fn handle_keyboard_input(
                     }
                     _ => InteractionSource::Keyboard,
                 };
-                dispatch_action_ref(state, registry, source, &act);
+                let _ = dispatch_action_ref(state, registry, source, &act);
                 return;
             }
 
@@ -127,7 +127,7 @@ pub(crate) fn handle_keyboard_input(
                 .resolve(crate::keymap::DIRECT_LAYER, ctx.event_combo)
                 .cloned();
             if let Some(act) = global_action {
-                dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
+                let _ = dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
                 return;
             }
 

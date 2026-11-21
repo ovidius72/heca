@@ -235,7 +235,7 @@ pub struct GlobalFocus {
     target: String,
     /// The combo as written, `prefix+` and all.
     key: String,
-    /// The entry it came from, for the conflict report and `--keys-show`.
+    /// The entry it came from, for the conflict report and `--show-keys`.
     source: String,
 }
 

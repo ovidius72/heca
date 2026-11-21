@@ -6,41 +6,45 @@ use crate::{
     input::WmAction,
 };
 
-pub(crate) fn handle_detach_session(state: &mut AppState, _: &WmAction) {
+pub(crate) fn handle_detach_session(state: &mut AppState, _: &WmAction) -> crate::actions::ActionResult {
     if state.client.detached {
         session_choice(state, SessionChoice::Detached);
     } else if let Err(error) = state.client.detach_session() {
         state.status_note = Some(error.to_string());
         session_unavailable(state, true);
     }
+    Ok(())
 }
 
-pub(crate) fn handle_switch_session(state: &mut AppState, action: &WmAction) {
+pub(crate) fn handle_switch_session(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
     let WmAction::SwitchSession { name } = action else {
-        return;
+        return Ok(());
     };
     if let Err(error) = state.client.switch_session(name.clone()) {
         state.status_note = Some(error.to_string());
     }
+    Ok(())
 }
 
-pub(crate) fn handle_follow(state: &mut AppState, action: &WmAction) {
+pub(crate) fn handle_follow(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
     let WmAction::Follow { target } = action else {
-        return;
+        return Ok(());
     };
     // Window-local: mirror the target (or stop). The server relays the leader's view; the follow
     // breaks on this window's own input.
     state.client.follow(*target);
+    Ok(())
 }
 
-pub(crate) fn handle_reconnect_session(state: &mut AppState, _: &WmAction) {
+pub(crate) fn handle_reconnect_session(state: &mut AppState, _: &WmAction) -> crate::actions::ActionResult {
     if let Err(error) = state.client.reconnect_session() {
         state.status_note = Some(error.to_string());
         session_unavailable(state, true);
     }
+    Ok(())
 }
 
-pub(crate) fn handle_rename_session(state: &mut AppState, _: &WmAction) {
+pub(crate) fn handle_rename_session(state: &mut AppState, _: &WmAction) -> crate::actions::ActionResult {
     let words = &state.settings.session_text;
     let spec = ModalSpec {
         title: state
@@ -64,7 +68,7 @@ pub(crate) fn handle_rename_session(state: &mut AppState, _: &WmAction) {
             && id == "ok"
             && let Some(name) = data.get("name").and_then(PropValue::as_text)
         {
-            registry.execute(
+            let _ = registry.execute(
                 &WmAction::RenameSessionTo {
                     session: None,
                     name: name.trim().into(),
@@ -73,10 +77,12 @@ pub(crate) fn handle_rename_session(state: &mut AppState, _: &WmAction) {
             );
         }
     });
+    Ok(())
 }
 
-pub(crate) fn handle_new_session(state: &mut AppState, _: &WmAction) {
+pub(crate) fn handle_new_session(state: &mut AppState, _: &WmAction) -> crate::actions::ActionResult {
     crate::chrome::open_session_folder(state);
+    Ok(())
 }
 
 pub(crate) fn session_unavailable(state: &mut AppState, server_lost: bool) {
@@ -111,7 +117,7 @@ pub(crate) fn session_choice(state: &mut AppState, reason: SessionChoice) {
         if matches!(id.as_str(), "select" | "new") {
             session_choice(state, reason);
         }
-        registry.execute(&action, state);
+        let _ = registry.execute(&action, state);
     });
     state.session_dialog = id.ok();
 }

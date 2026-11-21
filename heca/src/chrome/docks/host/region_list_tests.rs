@@ -444,3 +444,25 @@ fn a_reload_that_changes_flex_resizes_the_dock() {
     let b = host.contributions(RegionId::LeftSidebar).iter().find(|c| c.id() == "b").unwrap();
     assert_eq!(b.placement().flex, Some(3.0));
 }
+
+/// **A move from any path changes what the window rebuilds on** — the bug was a dock moved by an
+/// action (RPC said "ok") that stayed on screen where it was until something else rebuilt.
+#[test]
+fn a_moved_dock_changes_the_arrangement_the_window_rebuilds_on() {
+    use std::hash::Hasher;
+    let arrangement = |host: &ChromeHost| {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        host.arrangement(&mut hasher);
+        hasher.finish()
+    };
+    let mut host = fresh();
+    regions("sidebar.left").append(ws("rooms"));
+    regions("sidebar.left").append(ws("notes"));
+    mount(&mut host);
+    let before = arrangement(&host);
+    host.move_container("rooms", RegionId::RightSidebar).unwrap();
+    let moved = arrangement(&host);
+    assert_ne!(before, moved, "a move is a different arrangement");
+    host.reorder("notes", None).unwrap();
+    assert_eq!(arrangement(&host), moved, "putting a lone dock at its own end changes nothing");
+}

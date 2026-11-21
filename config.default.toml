@@ -29,6 +29,12 @@ notification_flash = 8000
 # Applies to shell/editor completions as well as enabled integration events.
 # Per-status mute/source/volume and audio-device availability still apply.
 notification_sound = true
+# Pane-feedback exceptions: exit codes that end a command quietly — no flash and
+# no sound, whichever window is in front. A list of TOML integers, without quotes.
+# Default [130] = a command you interrupted with Ctrl+C, which is not a failure.
+# Add 143 for a command stopped with `kill`; write [] to flash for every ending.
+# Every other code flashes as usual: 0 as success, anything else as error.
+notification_quiet_exit_codes = [130]
 
 # Command palette size: "small" (560px, 6 rows), "normal" (700px, 8 rows) or
 # "large" (1000px, 12 rows). Width and row count only — the text is the same size at

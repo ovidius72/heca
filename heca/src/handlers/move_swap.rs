@@ -6,10 +6,10 @@ use super::pick::{begin_pick, pane_candidates_with_stable_letters};
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 
-pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
+pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
-        return;
+        return Ok(());
     }
     let candidates = pane_candidates_with_stable_letters(state);
     begin_pick(
@@ -19,12 +19,13 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
             focus_after: false,
         },
     );
+    Ok(())
 }
 
-pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
+pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
-        return;
+        return Ok(());
     }
     let candidates = pane_candidates_with_stable_letters(state);
     begin_pick(
@@ -34,4 +35,5 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
             focus_after: true,
         },
     );
+    Ok(())
 }

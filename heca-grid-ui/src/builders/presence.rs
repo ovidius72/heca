@@ -130,9 +130,31 @@ pub trait PresenceExt: Component + Sized {
     /// carried by the generic style merge all along, which left the two authoring paths unequal.
     ///
     /// **Its twin is [`visible`](PresenceExt::visible)** — that one keeps the box.
+    ///
+    /// **The value may change**: besides a `bool` it takes a `Signal<bool>`, a `Memo<bool>` or a
+    /// function reading signals (a value derived from others), and the widget follows it — in or
+    /// out of the layout from the next frame, nothing rebuilt, no wrapper:
+    ///
+    /// ```ignore
+    /// Label::new("No rooms yet").hidden(move || !rooms.with(Vec::is_empty))
+    /// ```
     #[heca_grid_ui_macros::prop]
-    fn hidden(mut self, hidden: bool) -> Self {
-        self.base_mut().set_hidden(hidden);
+    fn hidden(mut self, hidden: impl IntoBoolValue) -> Self {
+        let hidden = hidden.into_bool_value();
+        let base = self.base_mut();
+        base.set_hidden(hidden.now());
+        if hidden.changes() {
+            // A layout property: the layout pass applies it (`Base::apply_hidden_value`); the
+            // value only asks for the frame that will.
+            let watched = hidden.clone();
+            crate::reactive::create_effect(move |_| {
+                watched.now();
+                crate::component::request_frame();
+            });
+            base.hidden_value = Some(hidden);
+        } else {
+            base.hidden_value = None;
+        }
         self
     }
 
@@ -152,11 +174,89 @@ pub trait PresenceExt: Component + Sized {
     /// setting it meant wrapping in a [`Visibility`](crate::widgets::Visibility) — which cannot be
     /// done to a widget a typed container holds, and which a description cannot express at all.
     /// The wrapper stays for a region that is not a widget you can put a builder on.
+    ///
+    /// **The value may change**, as for [`hidden`](Self::hidden): a `Signal<bool>`, a `Memo<bool>`
+    /// or a function reading signals is followed, and the widget's ink comes and goes with it.
     #[heca_grid_ui_macros::prop]
-    fn visible(self, visible: bool) -> Self {
-        crate::reactive::SignalUpdate::set(&self.base().visible, visible);
+    fn visible(self, visible: impl IntoBoolValue) -> Self {
+        let visible = visible.into_bool_value();
+        let target = self.base().visible;
+        if visible.changes() {
+            // A paint property and already a signal: the value writes it directly.
+            crate::reactive::create_effect(move |_| {
+                let now = visible.now();
+                if crate::reactive::SignalGet::get_untracked(&target) != now {
+                    crate::reactive::SignalUpdate::set(&target, now);
+                    crate::component::request_frame();
+                }
+            });
+        } else {
+            crate::reactive::SignalUpdate::set(&target, visible.now());
+        }
         self
     }
 }
 
 impl<T: Component + Sized> PresenceExt for T {}
+
+/// **A `bool` that may change** — what [`hidden`](PresenceExt::hidden) and
+/// [`visible`](PresenceExt::visible) take: a fixed `bool`, or a value read again whenever a signal
+/// it read changes.
+#[derive(Clone)]
+pub struct BoolValue(BoolSource);
+
+#[derive(Clone)]
+enum BoolSource {
+    Fixed(bool),
+    Live(std::rc::Rc<dyn Fn() -> bool>),
+}
+
+impl BoolValue {
+    /// The value now — tracked, when read inside an effect.
+    pub(crate) fn now(&self) -> bool {
+        match &self.0 {
+            BoolSource::Fixed(value) => *value,
+            BoolSource::Live(read) => read(),
+        }
+    }
+
+    /// Whether it can change, so there is something to follow.
+    fn changes(&self) -> bool {
+        matches!(self.0, BoolSource::Live(_))
+    }
+
+    fn live(read: impl Fn() -> bool + 'static) -> Self {
+        Self(BoolSource::Live(std::rc::Rc::new(read)))
+    }
+}
+
+/// **What `.hidden(..)` and `.visible(..)` take**: a `bool`, a `Signal<bool>`, a `Memo<bool>` or a
+/// function returning one.
+pub trait IntoBoolValue {
+    /// The value to apply, and follow when it can change.
+    fn into_bool_value(self) -> BoolValue;
+}
+
+impl IntoBoolValue for bool {
+    fn into_bool_value(self) -> BoolValue {
+        BoolValue(BoolSource::Fixed(self))
+    }
+}
+
+impl<F: Fn() -> bool + 'static> IntoBoolValue for F {
+    fn into_bool_value(self) -> BoolValue {
+        BoolValue::live(self)
+    }
+}
+
+impl IntoBoolValue for crate::reactive::Signal<bool> {
+    fn into_bool_value(self) -> BoolValue {
+        BoolValue::live(move || crate::reactive::SignalGet::get(&self))
+    }
+}
+
+impl IntoBoolValue for crate::reactive::Memo<bool> {
+    fn into_bool_value(self) -> BoolValue {
+        BoolValue::live(move || crate::reactive::SignalGet::get(&self))
+    }
+}

@@ -339,6 +339,27 @@ pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
     })
 }
 
+/// **Light the row under a region's cursor, and darken every other row in it** — by key.
+///
+/// The region is found by its [`scope_key`](crate::builders::IdentityExt::scope_key) (a dock's
+/// mount id); inside it, the node whose `key` is `lit` is selected and every other keyed node is
+/// cleared, so exactly one row shows the cursor. A row only has to declare its `.key(..)`: the host
+/// calls this with the cursor it keeps for that region, and nothing is pushed or registered by the
+/// row. `None` darkens every row. Rows inside a hidden subtree are skipped and lit once shown.
+///
+/// Returns whether any node took the write.
+pub fn select_key_in_scope(root: &dyn Component, scope: &str, lit: Option<&str>) -> bool {
+    walk(root, false, &mut |node, inside| {
+        let base = node.base();
+        let inside = *inside || base.scope_key.as_deref() == Some(scope);
+        let hit = match base.key.as_deref() {
+            Some(key) if inside => node.set_selected(Some(key) == lit),
+            _ => false,
+        };
+        Step::Into { ctx: inside, hit }
+    })
+}
+
 /// **Light the named node, and darken every other one it knows about**.
 ///
 /// A container that moves a cursor over its children says which one it is on by that child's own

@@ -206,7 +206,7 @@ pub(crate) fn on_left_release(state: &mut AppState, registry: &ActionRegistry) {
         && state.selection.source() == Some(SelectionSource::MouseDrag)
     {
         state.selection.end();
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::MouseContent,
@@ -274,7 +274,7 @@ pub(crate) fn on_terminal_input(
                 state.needs_redraw = true;
             }
         }
-        TerminalInput::FontZoom(step) => dispatch_action(
+        TerminalInput::FontZoom(step) => { let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,
@@ -283,7 +283,7 @@ pub(crate) fn on_terminal_input(
                 terminal: Some(terminal.0),
                 step,
             },
-        ),
+        ); }
         // The pointer's buttons and moves.
         TerminalInput::Press {
             button,

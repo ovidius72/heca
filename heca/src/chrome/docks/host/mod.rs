@@ -186,6 +186,25 @@ impl ChromeHost {
         &self.layouts[region]
     }
 
+    /// **Where every dock sits, as one value** — each region's docks, in order, with their share and
+    /// place. The window rebuilds its chrome when this changes, so a dock moved, reordered, resized,
+    /// added or taken out by any path (an action, RPC, a reload, `regions(..)`) is on screen at the
+    /// next frame, and no path has to ask for it.
+    pub fn arrangement(&self, into: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        for region in RegionId::ALL {
+            region.hash(into);
+            for mounted in self.contributions(region) {
+                mounted.id().hash(into);
+                let placement = mounted.placement();
+                placement.flex.map(f32::to_bits).hash(into);
+                placement.order.hash(into);
+            }
+        }
+        // `Space` holds a float, so it is not `Hash`: its spelled form stands in.
+        self.layouts.iter().for_each(|layout| format!("{:?}", layout.gap).hash(into));
+    }
+
     /// The ordered containers currently mounted in `region`.
     pub fn contributions(&self, region: RegionId) -> &[MountedContribution] {
         &self.regions[region].contributions

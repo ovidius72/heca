@@ -170,15 +170,34 @@ fn shell_editor_and_other_program_completions_use_the_same_feedback_store() {
 fn one_client_can_claim_a_pending_revisions_sound_but_never_replay_seen_or_old_feedback() {
     let mut feedback = Feedback::default();
     let pane = PaneId(7);
-    feedback.completed(pane, 1);
+    feedback.completed(pane, 1, &[]);
     assert!(!feedback.claim_sound(pane, 2));
     assert!(!feedback.claim_sound(PaneId(99), 1));
     assert!(feedback.claim_sound(pane, 1));
     assert!(!feedback.claim_sound(pane, 1));
-    feedback.completed(pane, 0);
+    feedback.completed(pane, 0, &[]);
     assert!(!feedback.claim_sound(pane, 1));
     feedback.acknowledge(pane, 2);
     assert!(!feedback.claim_sound(pane, 2));
-    feedback.completed(pane, 0);
+    feedback.completed(pane, 0, &[]);
     assert!(feedback.claim_sound(pane, 3));
+}
+
+/// A command interrupted with Ctrl+C is not a failure: the shipped settings leave its 130 out, and
+/// every other ending still flashes.
+#[test]
+fn an_ending_listed_as_quiet_asks_for_no_attention() {
+    let quiet = heca_config::loader::config_from_layers("").unwrap().settings.notification_quiet_exit_codes;
+    assert_eq!(quiet, vec![130], "the shipped default");
+    let mut feedback = Feedback::default();
+    let pane = PaneId(7);
+    feedback.completed(pane, 130, &quiet);
+    assert!(feedback.snapshot().is_empty(), "no flash and no sound for an interrupted command");
+    feedback.completed(pane, 1, &quiet);
+    assert_eq!(feedback.snapshot()[0].status, "error", "a real failure still flashes");
+
+    let user = heca_config::loader::config_from_layers("[settings]\nnotification_quiet_exit_codes = []\n").unwrap();
+    let mut feedback = Feedback::default();
+    feedback.completed(pane, 130, &user.settings.notification_quiet_exit_codes);
+    assert!(feedback.snapshot()[0].pending(), "an empty list flashes for every ending");
 }

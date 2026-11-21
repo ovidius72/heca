@@ -147,6 +147,7 @@ impl Base {
             // A fresh widget is laid out by the pass that mounts it; it has nothing to re-request.
             needs_layout: Cell::new(false),
             bound: Vec::new(),
+            hidden_value: None,
         }
     }
 
@@ -197,6 +198,15 @@ impl Base {
     /// **It only asks when the value actually changes.** That is what makes it safe to call from
     /// `remeasure`, which runs *inside* the layout pass: re-applying the same state there marks
     /// nothing, so a widget that syncs itself every pass cannot request one every pass.
+    /// **Bring `hidden` in line with the value it follows**, if it was given a changing one
+    /// ([`hidden`](crate::builders::PresenceExt::hidden)). Run by the layout pass on every node, so
+    /// the frame in which the value changed also lays the widget in or out.
+    pub(crate) fn apply_hidden_value(&mut self) {
+        if let Some(hidden) = self.hidden_value.clone() {
+            self.set_hidden(hidden.now());
+        }
+    }
+
     pub fn set_hidden(&mut self, hidden: bool) {
         if self.style.layout.hidden != hidden {
             self.style.layout.hidden = hidden;

@@ -148,8 +148,10 @@ fn check_server_intent(
     let name = &intent.action;
     let meta = catalog.find(name).ok_or_else(|| RpcError::UnknownCommand(name.clone()))?;
     let args = intent_args_as_strings(intent);
-    if !crate::args::check_args(&meta.args, &args).is_empty() {
-        return Err(RpcError::MissingArgs(name.clone()));
+    let problems = crate::args::check_args(&meta.args, &args);
+    if !problems.is_empty() {
+        let problems = problems.iter().map(ToString::to_string).collect();
+        return Err(RpcError::WrongArgs { name: name.clone(), problems });
     }
     let action = crate::input::resolve_action(name, &args);
     if catalog.is_builtin(name) && action.is_none() {

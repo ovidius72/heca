@@ -469,7 +469,7 @@ A surface that wants keys must **hold focus**, which it already had to do to dra
 | `Overlay`, `ContextMenu`, `CommandPalette` | **follow** their open signal into `Base::focused` (`Base::follow_focus_modal`): open *is* focused, and closing gives the keyboard back to whoever held it |
 | `Select` | opening the list focuses it |
 | `Dialog` | its own `FocusManager` focuses a field or button, so text reaches the field and the dialog hears what the field declined on the way back up |
-| `FocusScope` | holds nothing itself; draws its ring while the keyboard is **anywhere inside it** (`contains_keyboard`, CSS `:focus-within`). A host moves the keyboard into a named region with `focus_scope` (and out with `release_scope`) — host-only, because they take a name |
+| `FocusScope` | holds nothing itself; draws its ring while the keyboard is **anywhere inside it** (`contains_keyboard`, CSS `:focus-within`). A host moves the keyboard into a named region with `focus_scope` (and out with `release_scope`), and `replace_child` rebuilds a subtree without moving it — host-only, because they take a name or a place |
 | `CardGrid` | focusable in its constructor — it moves a cursor with the keyboard |
 
 **`focused` means one thing: the widget the keyboard is aimed at** — `document.activeElement`, **one
@@ -587,6 +587,18 @@ card's own state signal (`GridCell::new(key, card.nav_state())`), which a descri
 — it has no way to name another node's signal. The realizer builds **both** the card and the cell,
 so it makes that connection itself. That is why a `CardGrid` can be described while a `ScrollBar`
 cannot: there, the signal genuinely comes from outside, and a described one would be a dead control.
+
+**A dock's cursor is lit the same way, by key.** `select_key_in_scope(root, scope, key)` finds the
+region named `scope` and, inside it only, selects the node whose `key` is `key` and clears every
+other keyed node (`None` clears them all) — a `Row`, a `MarkerGroup` or a `DockFrame` answers;
+anything else ignores it. heca calls it every frame for each dock that moves a cursor, with the
+cursor it keeps for that dock, so a row in a dock — heca's or an extension's — declares only its
+`.key(..)`:
+
+```rust
+// An extension's dock row: the cursor outline needs nothing more than the key.
+Row::new().key(room.id.clone()).child(Label::new(&room.title))
+```
 
 A list whose cursor only the keyboard moves needs nothing. One whose cursor **also follows the
 mouse** gates the request on a signal: [`CardGrid`](#cardgrid) publishes `reveal_state()` — true
@@ -894,7 +906,7 @@ let row = Row::new()
 | `.on_pointer_enter(f)` / `.on_pointer_leave(f)` | Hover transitions. Several widgets on one path enter together, so claiming one is almost always wrong. |
 | `.on_scroll(f)` | The wheel over this widget. Stop propagation to keep it from also scrolling whatever contains this widget. |
 | `.on_pointer_down_outside(f)` | A press landed somewhere else — how a popup closes itself. |
-| `.on_hint(f)` | **What a pick does to this widget, when that differs from acting on it** — the override, on every widget. Fires in the **target phase only**; listen with `.on(EventKind::Hint, …)` to watch picks from your children instead. |
+| `.on_hint(f)` | **What a pick does to this widget, when that differs from acting on it** — the override, on every widget. Fires in the **target phase only**; listen with `.on(EventKind::Hint, …)` to watch picks from your children instead. Takes an `Option` too: `None` declares nothing, so `.on_hint(pick)` needs no branch when a row only sometimes has a pick. |
 | `.on_key(f)` / `.on_text_input(f)` | A key, or committed text, that reached this widget — it holds the keyboard, or contains what does. Intercepting a shortcut or a quick-pick letter is the same one line as intercepting a click. |
 | `.on_focus_gained(f)` / `.on_focus_lost(f)` | Keyboard focus arrived or left. (Named this way because `Component::on_focus` is the widget's own hook for the same moment.) |
 | `.on_mount(f)` / `.on_unmount(f)` | Entered a live tree (first layout pass) / is being dropped. `on_unmount` is where a widget releases what it registered with the host, at the moment the tree that registered it goes away. |
@@ -1012,7 +1024,7 @@ in some context — a ⊠ under a "close" verb, a column under "move a pane here
 
 | Method | Effect |
 |--------|--------|
-| `.key(impl Into<String>)` | The identity of **this item**, when it is one of a collection you are iterating. |
+| `.key(impl IntoKey)` | The identity of **this item**, when it is one of a collection you are iterating. A name (`&str`, `String`, `Cow<str>`, `Box<str>`, `char`) or an `Option` of one — `None` leaves the widget unnamed, with no branch at the call site. |
 
 > **`key` replaced `nav_key`** — do not reintroduce the old name. `scope_key` is **still here**:
 > folding it into `key` turned out to change behaviour — see the note at the end of
@@ -4200,7 +4212,9 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
   padding set after it beats its air. A new variant is added only when the same look is wanted in
   more than one place; anything else is written with the style builders.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
-  cursor) — bind either so the host flips it in place without a rebuild.
+  cursor) — bind either so the host flips it in place without a rebuild. **In a dock you write nothing for the cursor:** for every dock that moves a cursor
+  (`keyboard_navigable`), heca lights the one whose `.key(..)` the cursor is on and darkens the
+  rest (`heca_grid_ui::select_key_in_scope`, by key, inside that dock only).
 
 > **`active` and `nav_selected` are two different questions, and only one of them follows focus.**
 > `active` is "this row *is* the focused thing"; `nav_selected` is "this is where the container's
@@ -5067,7 +5081,9 @@ cleanly when absent.
 - **Construct**: `Visibility::new()` — empty and shown — then `.visible(bool)` (default `true`) and
   `.child(widget)`: the one widget it shows and hides (a second `.child` replaces the first; wrap a
   `Flex` to hide several together). The order of the two builders does not matter.
-- **Live update**: `.visible_signal() -> Signal<bool>`.
+- **Live update**: `.visible_signal() -> Signal<bool>`. To follow a value you already have, use
+  `.hidden(value)` on the child itself instead — no wrapper (see "The two ways of not showing
+  something" below).
 - **Hidden means gone from the layout**, the wrapper's box as well as the child's: its parent spends
   no gap on it.
 - **Transparent to layout**: the child is laid out exactly as it would be without the wrapper. A
@@ -5133,6 +5149,16 @@ StatusDot::new().visible(false)
 Row::new().hidden(true)
 ```
 
+**Both take a value that changes**: a `bool`, a `Signal<bool>`, a `Memo<bool>` or a function
+reading signals (a value derived from others). The widget follows it from the next frame, with
+nothing rebuilt and no wrapper — still the same CSS property, now bound to a value. A described
+tree sets them as plain booleans; a changing value is native, because a signal cannot be described.
+
+```rust
+Label::new("No rooms yet").hidden(move || !rooms.with(Vec::is_empty))   // display, derived
+StatusDot::error().visible(failed)                                      // visibility, failed: Signal<bool>
+```
+
 Between them there is nothing left for a `Visibility` **kind** to do, which is why there is none.
 Note the asymmetry that used to exist and no longer does: `hidden` is a layout property and was
 always describable, while `visible` is a signal on the base and was reachable from **neither**
@@ -5190,7 +5216,9 @@ draggable; the bar stays a pure indicator). All bar styling is read from the `Th
   bar **without** the active glow, so it reads distinctly from the active column).
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either; the host writes it when the group's selection changes and the bar
-  repaints without a rebuild.
+  repaints without a rebuild. **In a dock you write nothing for the cursor:** for every dock that moves a cursor
+  (`keyboard_navigable`), heca lights the one whose `.key(..)` the cursor is on and darkens the
+  rest (`heca_grid_ui::select_key_in_scope`, by key, inside that dock only).
 
 **Native:**
 
@@ -5270,7 +5298,9 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `.nav_selected(bool)` (a hollow accent **border** marking the sidebar-nav cursor on a
   workspace frame — distinct from the filled active wash).
 - **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
-  the look in place without rebuilding the tree.
+  the look in place without rebuilding the tree. **In a dock you write nothing for the cursor:** for every dock that moves a cursor
+  (`keyboard_navigable`), heca lights the one whose `.key(..)` the cursor is on and darkens the
+  rest (`heca_grid_ui::select_key_in_scope`, by key, inside that dock only).
 
 > **The drag-handle grip is drawn but wired to nothing.** If you see it on a workspace header in
 > heca and nothing drags, that is why. **Two different features claim it, and they are not the same
@@ -5884,6 +5914,12 @@ set, focused and unfocused.)
   slot, or a region by its name — which is who answers a key, a menu or an action; it never looks
   through a surface) and `page_scope(root)` (the named region the keyboard is in on the page,
   looking through a dialog above it to where it returns).
+- **Rebuilding a part of the tree (host)**: `replace_child(parent, index, new)` puts a freshly
+  built subtree in place of a child and **keeps the keyboard in the same region**: when it was
+  inside a named region of the old subtree, the region of that name in the new one takes it back
+  (through `focus_scope`, so a region that keeps the keyboard holds it itself). A host that rebuilds
+  its docks — heca's chrome on a resize or a workspace switch — calls this, and no dock has to put
+  the keyboard back after it. When the keyboard was anywhere else, only the replacement happens.
 - **One widget, by identity (host)**: `keyboard_holder(root)` — the focus identity
   (`Base::focus_id`) of the widget holding the keyboard, the browser's `document.activeElement` —
   and `focus_widget_by_id(root, id)`, its `element.focus()`. For a host that remembers a widget by
@@ -5899,6 +5935,8 @@ set, focused and unfocused.)
 let framed = FocusScope::new(my_container).scope_key("my-dock");
 // The host, from an action:
 heca_grid_ui::focus_scope(&mut window_root, "my-dock");
+// The host, rebuilding the part that holds the dock: the keyboard stays in "my-dock".
+heca_grid_ui::replace_child(&mut window_root, at, rebuilt.into());
 ```
 
 The typed described counterpart builds the same native wrapper. Its ring reads the realized
@@ -6037,7 +6075,7 @@ has, so **no widget opts in and no host paints on their behalf**.
 
 | builder | what it does |
 | --- | --- |
-| `.tooltip(..)` | what this widget says on hover — **words** (they wrap and keep their line breaks: `"zsh\npane-1"` is two lines), a **`Signal<String>`** the bubble follows live without the widget being rebuilt, or a **whole widget** (a segmented `Tag`, a row of parts). One door: `impl IntoTip`. Unset = it says nothing, and costs nothing. |
+| `.tooltip(..)` | what this widget says on hover — **words** (they wrap and keep their line breaks: `"zsh\npane-1"` is two lines), a **`Signal<String>`** the bubble follows live without the widget being rebuilt, or a **whole widget** (a segmented `Tag`, a row of parts). One door: `impl IntoTip`, which takes an `Option` of any of these too (`None` = no tooltip, the widget left as it was). Unset = it says nothing, and costs nothing. |
 | `.tooltip_signal(Signal<String>)` | the same as `.tooltip(signal)`, which is the form to write; kept so code written against it keeps working. |
 | `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
 | `.tooltip_delay(seconds)` | a rest of its own, for a real exception — it no longer follows the default. No-op with no tooltip declared. |

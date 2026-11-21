@@ -36,7 +36,7 @@ impl ServerState {
         }
         for (id, exit_code) in completions {
             if let Some(pane) = self.backends.pane_of(id) {
-                self.feedback.completed(pane, exit_code);
+                self.feedback.completed(pane, exit_code, &self.terminal_settings.quiet_exit_codes);
             }
         }
         result.closing_panes = self.backends.pane_ids_to_close();

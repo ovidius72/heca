@@ -31,7 +31,9 @@ pub trait TooltipExt: Component + Sized {
     /// ```
     #[heca_grid_ui_macros::prop]
     fn tooltip(mut self, tip: impl crate::widgets::tooltip::IntoTip) -> Self {
-        self.base_mut().tooltip = Some(tip.into_tip());
+        if let Some(tip) = tip.into_tip_if_any() {
+            self.base_mut().tooltip = Some(tip);
+        }
         self
     }
 

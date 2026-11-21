@@ -244,9 +244,6 @@ impl PaneRow<'_> {
         reg.signals
             .pane_previous
             .push((pane_id, card.previous_state()));
-        reg.signals
-            .row_nav
-            .push((seams.mount.to_string(), pane_key(pane_id), card.nav_state()));
         // A move/swap/take pick stamps this pane's letter over the card. **The letter is offered
         // by key** (`chrome::hint`) and drawn by `paint_child` on the card itself — which is why
         // there is no wrapper: the card is a widget, so it can simply say so.
@@ -371,14 +368,14 @@ mod tests {
     fn a_pane_row_publishes_every_state_that_moves_with_focus() {
         let mut fx = Fixture::default();
         let pane = testing::pane(PaneId(7), "seven");
-        {
+        let row = {
             let (seams, mut reg) = fx.split("left");
-            let _ = PaneRow {
+            PaneRow {
                 pane: &pane,
                 column_of_pane: Some((0, 0)),
             }
-            .build(&seams, &mut reg);
-        }
+            .build(&seams, &mut reg)
+        };
 
         assert!(
             fx.signals.pane_active.iter().any(|(p, _)| *p == PaneId(7)),
@@ -391,16 +388,12 @@ mod tests {
                 .any(|(p, _)| *p == PaneId(7)),
             "last-visited is a signal too — this is the one that was read at build time and froze",
         );
-        assert!(
-            fx.signals
-                .row_nav
-                .iter()
-                .any(|(m, k, _)| m == "left" && k == &pane_key(PaneId(7))),
-            "the cursor outline is per placement, so it is keyed by mount",
+        assert_eq!(
+            heca_grid_ui::Component::base(&row).key.as_deref(),
+            Some(pane_key(PaneId(7)).as_str()),
+            "the cursor outline and the pick letter both reach the row by its key, so the key is \
+             all it owes — the dock's cursor lights it (`select_key_in_scope`)",
         );
-        // The pick letter is **not** a signal this component registers any more: it is offered by
-        // the row's own `key` (`chrome::hint`) and drawn by the widget, so what this component
-        // owes is the identity — asserted above through `row_nav` — and nothing else.
     }
 
     /// **A metadata line that had nothing to say when the row was built must still be able to
