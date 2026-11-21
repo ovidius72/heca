@@ -15,6 +15,7 @@ pub(crate) mod frame_reasons;
 pub(crate) mod frame_times;
 pub mod git_monitor;
 pub mod input;
+pub(crate) mod install_command;
 pub mod interaction;
 pub mod keyboard;
 pub(crate) mod keys_show;

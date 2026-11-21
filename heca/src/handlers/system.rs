@@ -61,6 +61,28 @@ pub fn handle_open_context_menu(
     Ok(())
 }
 
+/// **`install_command`** — put `heca` on the command line, and say where (and, when its folder is not
+/// on the `PATH`, the line to add).
+pub fn handle_install_command(
+    _state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
+    let installed = crate::app::install_command::install()?;
+    let mut body = format!(
+        "Run `heca` in a terminal to open it in that folder ({}).",
+        installed.at.display()
+    );
+    if let Some(hint) = &installed.path_hint {
+        body.push_str(&format!(
+            " If `heca` is not found, add this line to your shell's startup file: {hint}"
+        ));
+    }
+    crate::notification::Notification::success("The heca command is installed")
+        .body(body)
+        .send();
+    Ok(())
+}
+
 pub fn handle_reload_config(
     state: &mut AppState,
     _action: &WmAction,

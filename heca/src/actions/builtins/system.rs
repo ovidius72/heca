@@ -64,6 +64,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         ],
     },
     ActionDescriptor {
+        name: "install_command",
+        side: Side::Client,
+        label: "Install the heca Command",
+        description: "Put `heca` on the command line, so it opens in the folder it is typed in.",
+        icon: Some(Glyph::Terminal),
+        args: &[],
+    },
+    ActionDescriptor {
         name: "reload_config",
         side: Side::Client,
         label: "Reload Config",

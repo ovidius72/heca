@@ -131,6 +131,10 @@ pub fn build_registry() -> ActionRegistry {
     }
     registry.register(WmActionKind::ReloadConfig, handle_reload_config);
     registry.register(
+        WmActionKind::InstallCommand,
+        crate::handlers::handle_install_command,
+    );
+    registry.register(
         WmActionKind::NotificationDismissOne,
         handle_notification_dismiss_one,
     );

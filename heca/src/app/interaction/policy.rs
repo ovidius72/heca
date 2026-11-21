@@ -201,6 +201,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
         WmAction::ReloadConfig
+        | WmAction::InstallCommand
         | WmAction::ListSessions | WmAction::KillServer
         | WmAction::CreateSession { .. } | WmAction::RenameSessionTo { .. }
         | WmAction::TerminateSession { .. } | WmAction::RestartSession { .. }

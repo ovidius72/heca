@@ -131,6 +131,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
             dock: None,
         }),
         "reload_config" => Some(WmAction::ReloadConfig),
+        "install_command" => Some(WmAction::InstallCommand),
         "notification_dismiss_all" => Some(WmAction::NotificationDismissAll),
         "notification_dismiss_last" => Some(WmAction::NotificationDismissLast),
         "notification_pick" => Some(WmAction::NotificationPick),

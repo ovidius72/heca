@@ -651,6 +651,9 @@ pub enum WmAction {
 
     // ── Config ──
     ReloadConfig,
+    /// **Put `heca` on the command line** — link the app's executable into `~/.local/bin`
+    /// (macOS, Linux) or add its folder to the user's `PATH` (Windows).
+    InstallCommand,
 
     // ── Notifications ──
     /// Dismiss one visible notification by id. Mouse (the toast's own × — a
