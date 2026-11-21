@@ -81,6 +81,8 @@ impl ServerLoop {
                     }
                 }
                 self.sessions[i].shutdown();
+                // Its saved entries go with it.
+                self.services.borrow().forget_saved_entries(self.sessions[i].service_ref().key);
                 self.sessions.remove(i);
                 self.announce_session(SessionChange::Deleted, gone);
                 if self.last_session == Some(id) {

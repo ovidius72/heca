@@ -631,8 +631,43 @@ fn request_done(&mut self, cx: &mut ServiceCx<'_, Msg>, request: &RequestRef, ou
 | `inbox_capacity` | `256` | messages one service's inbox holds before senders are told it is full |
 | `stop_timeout_ms` | `3000` | the longest the server waits for services to stop at shutdown |
 | `request_queue_capacity` | `64` | requests one service may have open at once, waiting to run or waiting on a deferred answer |
+| `saved_entry_max_bytes` | `65536` | the largest value one saved-state entry may hold, in bytes of JSON |
 
 Declare services and their actions before `heca::run(..)`; later ones are reported and dropped. Code: `heca/src/entry/service/` (what you write), `heca/src/server/services/` (the host).
+
+### State an extension saves
+
+What an extension wants back after a restart — the order of its rooms, a choice the user made — is
+**saved state**, kept by heca and written by the server only (the user's TOML stays theirs, read
+only). An entry is found by a key and an id (`""` for a single value); heca puts the extension's
+name in front of the key, so no extension can read or overwrite another's. The value is your own
+type, stored as JSON:
+
+```rust
+// In an action: this session's room order.
+let order: Vec<RoomId> = cx.saved(Scope::Session, "room-order", "").unwrap_or_default();
+cx.save(Scope::Session, "room-order", "", &order)?;           // Result<(), SavedError>
+cx.forget(Scope::Session, "room-color", &room_id)?;           // one entry per room
+```
+
+- **Scopes.** `Scope::Global` — one value for the whole server, in a file in the server's own folder
+  (`heca.saved-state.json`), written at once and atomically. `Scope::Session` — the session the call
+  is in (an action's, a projection's): saved with the session, restored with it after a restart,
+  deleted with it. A message handler is in no session: it names one, `Scope::SessionOf(key)`.
+- **`save_sessions = false`:** the sessions are not kept across a restart, and neither are their
+  entries. Global entries are kept either way.
+- **Reading.** `cx.saved::<T>(scope, key, id)` is `None` when the entry is not there **or no longer
+  fits `T`** (you changed the type): start from your default. A missing, corrupt or older global file
+  is a first run, never a failed start.
+- **Limits.** A value larger than `[settings.services] saved_entry_max_bytes` is refused with
+  `SavedError::TooLarge`, never cut short.
+- **Who has it.** `ActionCx` (read and write), `ServiceCx` (read and write; message handlers),
+  `ProjectCx` (read only: a projection shows state, it does not change it). A dock reads and writes
+  the same entries from the window side as well — coming next.
+- **Listening (THE EVENTS).** Every save and every real forget raises **`state.changed`**, with the
+  session (`None` for global), the full key (`heca-pro.room-order`) and the id —
+  `rooms.on("state.changed", |rooms, cx, ev| { let change = ev.as_state(); … })`. The scripts'
+  stream (`heca rpc --events`) carries the same event.
 
 ### Notifications with a button of their own
 

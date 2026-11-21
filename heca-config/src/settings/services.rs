@@ -16,6 +16,8 @@ declare_settings! {
         pub stop_timeout_ms: NonZeroU64,
         /// Requests one service may have open at once: waiting to run, or waiting on a deferred answer.
         pub request_queue_capacity: NonZeroUsize,
+        /// The largest value one saved-state entry may hold, in bytes of JSON.
+        pub saved_entry_max_bytes: NonZeroUsize,
     }
 }
 
@@ -34,7 +36,7 @@ mod tests {
 
     #[test]
     fn limits_must_be_positive() {
-        for field in ["inbox_capacity", "stop_timeout_ms", "request_queue_capacity"] {
+        for field in ["inbox_capacity", "stop_timeout_ms", "request_queue_capacity", "saved_entry_max_bytes"] {
             let input = format!("[settings.services]\n{field} = 0");
             assert!(config_from_layers(&input).is_err(), "{input}");
         }

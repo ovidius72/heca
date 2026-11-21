@@ -86,6 +86,8 @@ pub(crate) trait Hosted {
     fn effects(&mut self) -> &mut Effects;
     /// The sessions as they are now, for every context it is handed from here on.
     fn know_sessions(&mut self, sessions: &Sessions);
+    /// The store every service's saved entries live in — handed once, after the services start.
+    fn know_saved(&mut self, store: &Rc<std::cell::RefCell<super::saved::SavedStore>>);
     /// An event on the server: run every listener for its name, and every `"*"` one.
     fn listen(&mut self, epoch: u64, event: &ServerEvent);
 }
@@ -101,6 +103,8 @@ pub(crate) struct Running<S: Service> {
     effects: Effects,
     capacity: usize,
     sessions: Sessions,
+    /// Every extension's saved entries, shared with the host (`ServiceHost::saved`).
+    saved: Rc<std::cell::RefCell<super::saved::SavedStore>>,
 }
 
 /// What a declared service brings to the host besides the service itself.
@@ -122,7 +126,8 @@ impl<S: Service> Running<S> {
         declared: Brought<S>,
     ) -> Self {
         let Brought { actions, policies, listeners, effects, capacity } = declared;
-        Self { home, service, inbox, messages, actions, policies, listeners, effects, capacity, sessions: Sessions::default() }
+        Self { home, service, inbox, messages, actions, policies, listeners, effects, capacity, sessions: Sessions::default(),
+            saved: Rc::default() }
     }
 
     /// The service, what it is handed at each call, and who it is: borrowed apart so a call can
@@ -134,6 +139,8 @@ impl<S: Service> Running<S> {
             effects: &mut self.effects,
             data_dir: &self.home.data_dir,
             sessions: &self.sessions,
+            saved: &self.saved,
+            extension: &self.home.extension,
         };
         (&mut self.service, cx, &self.home)
     }
@@ -240,6 +247,10 @@ impl<S: Service> Hosted for Running<S> {
 
     fn know_sessions(&mut self, sessions: &Sessions) {
         self.sessions = sessions.clone();
+    }
+
+    fn know_saved(&mut self, store: &Rc<std::cell::RefCell<super::saved::SavedStore>>) {
+        self.saved = store.clone();
     }
 
     fn listen(&mut self, epoch: u64, event: &ServerEvent) {

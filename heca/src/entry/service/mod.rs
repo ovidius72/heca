@@ -63,6 +63,7 @@ mod cx;
 mod declared;
 mod inbox;
 mod request;
+pub mod saved;
 mod session_key;
 mod workspace_key;
 mod sessions;
@@ -78,6 +79,7 @@ pub use inbox::{ServiceInbox, ServiceSendError};
 pub use request::{
     ActionRequest, ExternalRequest, Permit, RequestOutcome, RequestRef, Requester, Sender, SubmitError,
 };
+pub use saved::{SavedError, Scope, StateEvent};
 pub use session_key::SessionKey;
 pub use workspace_key::WorkspaceKey;
 pub use sessions::{ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions};

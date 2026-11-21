@@ -46,8 +46,8 @@ use crate::widgets::{Flex, Glyph, Grid, Icon, Item, Label, RegionMode};
 /// Chevron glyphs for expanded / collapsed states.
 const CHEVRON_OPEN: &str = "▾";
 const CHEVRON_CLOSED: &str = "▸";
-/// Drag-handle grip glyph shown at the start of the title bar. Unwired — see the module docs for
-/// which two phases claim it.
+/// The grip glyph a [`Dock`](DockFrameVariant::Dock)'s title row shows by default — the dock-move
+/// handle. Another one is set with [`DockFrame::grip_glyph`].
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
 const LEADING_GAP: Spacing = Spacing::Sm;
@@ -150,6 +150,8 @@ pub struct DockFrame {
     title: String,
     /// Whether the grip shows (a [`Dock`](DockFrameVariant::Dock)'s only).
     grip: bool,
+    /// The glyph the grip shows ([`grip_glyph`](Self::grip_glyph)); [`GRIP`] unless set.
+    grip_glyph: String,
     /// Whether the header folds the body; `false` hides the chevron and keeps the body open.
     collapsible: Signal<bool>,
     /// The fold letter's tone ([`fold_hint_tone`](DockFrame::fold_hint_tone)), kept so a toggle
@@ -199,6 +201,7 @@ impl DockFrame {
             variant: DockFrameVariant::Dock,
             title: title.into(),
             grip: true,
+            grip_glyph: GRIP.to_owned(),
             collapsible: signal(true),
             fold_tone: None,
         };
@@ -239,7 +242,7 @@ impl DockFrame {
             (None, DockFrameVariant::Dock) => {
                 let mut leading = Flex::row().align("center").gap(LEADING_GAP);
                 if self.grip {
-                    leading = leading.child(Label::new(GRIP));
+                    leading = leading.child(Label::new(self.grip_glyph.clone()));
                 }
                 (crate::WidgetModel::new(Item::new(self.title.clone())
                     .leading(leading.child(chevron()).child(leading_part)).on_activate(fold)),
@@ -330,6 +333,19 @@ impl DockFrame {
     #[heca_grid_ui_macros::prop]
     pub fn grip(mut self, grip: bool) -> Self {
         self.grip = grip;
+        self.build_toggle();
+        self
+    }
+
+    /// **The glyph the grip shows** (default `⠿`, the dock-move handle). A frame that is a row of a
+    /// reorderable list sets its own — a reorder handle that does not read as "move this dock":
+    ///
+    /// ```ignore
+    /// DockFrame::new("Lobby").grip_glyph("≡")
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn grip_glyph(mut self, glyph: impl Into<String>) -> Self {
+        self.grip_glyph = glyph.into();
         self.build_toggle();
         self
     }

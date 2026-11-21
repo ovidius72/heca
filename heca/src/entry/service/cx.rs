@@ -89,9 +89,31 @@ pub struct ServiceCx<'a, M> {
     pub(crate) effects: &'a mut Effects,
     pub(crate) data_dir: &'a Path,
     pub(crate) sessions: &'a Sessions,
+    pub(crate) saved: &'a std::cell::RefCell<crate::server::services::saved::SavedStore>,
+    pub(crate) extension: &'a str,
 }
 
 impl<M> ServiceCx<'_, M> {
+    fn saved_access(&self, session: Option<SessionKey>) -> crate::server::services::saved::Access<'_> {
+        crate::server::services::saved::Access { store: self.saved, extension: self.extension, session }
+    }
+
+    /// **A saved entry** of this extension, as `T` — `None` when it is not there or no longer fits
+    /// `T`. A message handler is in no session: use [`Scope::Global`](crate::Scope::Global) or
+    /// [`Scope::SessionOf`](crate::Scope::SessionOf). See [`crate::Scope`].
+    pub fn saved<T: serde::de::DeserializeOwned>(&self, scope: super::Scope, key: &str, id: &str) -> Option<T> {
+        self.saved_access(None).get(scope, key, id)
+    }
+
+    /// **Save an entry** of this extension (`id` is `""` for a single value). Raises `state.changed`.
+    pub fn save<T: serde::Serialize>(&mut self, scope: super::Scope, key: &str, id: &str, value: &T) -> Result<(), super::SavedError> {
+        self.saved_access(None).set(scope, key, id, value)
+    }
+
+    /// **Forget an entry** of this extension. Raises `state.changed` when there was one.
+    pub fn forget(&mut self, scope: super::Scope, key: &str, id: &str) -> Result<(), super::SavedError> {
+        self.saved_access(None).remove(scope, key, id)
+    }
     /// This run of the server — see [`StartCx::server_epoch`].
     pub fn server_epoch(&self) -> u64 {
         self.epoch
@@ -157,6 +179,27 @@ pub struct ActionCx<'a, M> {
 }
 
 impl<M> ActionCx<'_, M> {
+    fn saved_access(&self) -> crate::server::services::saved::Access<'_> {
+        crate::server::services::saved::Access { store: self.service.saved, extension: self.extension, session: Some(self.session_key) }
+    }
+
+    /// **A saved entry** of this extension, as `T` — [`Scope::Session`](crate::Scope::Session) is
+    /// the session the action ran in. `None` when it is not there or no longer fits `T`. See
+    /// [`crate::Scope`].
+    pub fn saved<T: serde::de::DeserializeOwned>(&self, scope: super::Scope, key: &str, id: &str) -> Option<T> {
+        self.saved_access().get(scope, key, id)
+    }
+
+    /// **Save an entry** of this extension (`id` is `""` for a single value). Raises `state.changed`.
+    pub fn save<T: serde::Serialize>(&mut self, scope: super::Scope, key: &str, id: &str, value: &T) -> Result<(), super::SavedError> {
+        self.saved_access().set(scope, key, id, value)
+    }
+
+    /// **Forget an entry** of this extension. Raises `state.changed` when there was one.
+    pub fn forget(&mut self, scope: super::Scope, key: &str, id: &str) -> Result<(), super::SavedError> {
+        self.saved_access().remove(scope, key, id)
+    }
+
     /// The session the action ran in, as a number for this run of the server only. To store
     /// something against the session, use [`session_key`](Self::session_key).
     pub fn session(&self) -> u64 {
@@ -236,9 +279,17 @@ pub struct ProjectCx<'a> {
     pub(crate) epoch: u64,
     pub(crate) since: Option<u64>,
     pub(crate) sessions: &'a Sessions,
+    pub(crate) saved: &'a std::cell::RefCell<crate::server::services::saved::SavedStore>,
 }
 
 impl ProjectCx<'_> {
+    /// **A saved entry** of this extension, as `T` — [`Scope::Session`](crate::Scope::Session) is the
+    /// window's session. Read-only: a projection shows state, it does not change it.
+    pub fn saved<T: serde::de::DeserializeOwned>(&self, scope: super::Scope, key: &str, id: &str) -> Option<T> {
+        crate::server::services::saved::Access { store: self.saved, extension: self.extension, session: Some(self.session_key) }
+            .get(scope, key, id)
+    }
+
     /// The session the window is attached to, as a number for this run of the server only.
     pub fn session(&self) -> u64 {
         self.session

@@ -627,3 +627,19 @@ fn header_actions_end_where_a_rows_trailing_part_ends() {
     }).unwrap_or_else(|| panic!("{what} painted"));
     assert!((right("3") - right("M")).abs() < 1.0, "the title count and the row badge end together: {} vs {}", right("3"), right("M"));
 }
+
+/// A dock frame that is a row of a reorderable list shows its own reorder handle, not the
+/// dock-move grip.
+#[test]
+fn the_grip_shows_the_glyph_it_is_given() {
+    use heca_grid_ui::prelude::*;
+    fn labels(node: &dyn heca_grid_ui::Component, out: &mut Vec<String>) {
+        if let Some(text) = node.text_summary() { out.push(text); }
+        for child in &node.base().children { labels(child.as_ref(), out); }
+    }
+    let (mut plain, mut handle) = (Vec::new(), Vec::new());
+    labels(&DockFrame::new("Lobby"), &mut plain);
+    labels(&DockFrame::new("Lobby").grip_glyph("≡"), &mut handle);
+    assert!(plain.iter().any(|t| t == "⠿"), "the default grip: {plain:?}");
+    assert!(handle.iter().any(|t| t == "≡") && !handle.iter().any(|t| t == "⠿"), "its own glyph: {handle:?}");
+}
