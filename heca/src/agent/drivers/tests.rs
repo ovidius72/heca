@@ -85,34 +85,40 @@ fn every_builtin_supplies_its_mark_and_accepts_a_configured_asset_override() {
     }
 }
 
+/// **A brand mark carries its own background**, as the brand draws its app icon, so it reads on any
+/// theme — a black mark on a transparent background vanished on a dark one. Its colours are its
+/// own: the text colour around it (red here) never tints it.
 #[test]
-fn the_codex_mark_has_transparent_corners_and_visible_brand_artwork() {
+fn every_brand_mark_carries_its_own_background() {
     use heca_grid_ui::{Color, frame_waker, frame_served, install_frame_request};
     use heca_grid_ui::image::ImageSource;
     use std::{sync::mpsc, time::Duration};
     let (tx, rx) = mpsc::channel();
     install_frame_request(move || { let _ = tx.send(()); });
-    let source = ImageSource::bytes(include_bytes!("assets/icons/codex.svg").as_slice());
-    let handle = source.load(frame_waker());
-    let image = loop {
-        frame_served();
-        if let Some(result) = handle.result() { break result.unwrap() }
-        rx.recv_timeout(Duration::from_secs(5)).expect("decode wakes the UI");
-    };
-    let raster = image.raster(64, 64, Color::rgb(255, 0, 0), frame_waker());
-    let pixels = loop {
-        frame_served();
-        if let Some(result) = raster.result() { break result.unwrap() }
-        rx.recv_timeout(Duration::from_secs(5)).expect("raster wakes the UI");
-    };
-    for (x, y) in [(0, 0), (63, 0), (0, 63), (63, 63)] {
-        assert_eq!(pixels.rgba[(y * 64 + x) * 4 + 3], 0, "the mark must not have a background tile");
+    let marks: [(&str, &[u8], [u8; 3]); 2] = [
+        ("claude", include_bytes!("assets/icons/claude.svg"), [0xD9, 0x77, 0x57]),
+        ("codex", include_bytes!("assets/icons/codex.svg"), [0xFF, 0xFF, 0xFF]),
+    ];
+    for (name, svg, tile) in marks {
+        let handle = ImageSource::bytes(svg).load(frame_waker());
+        let image = loop {
+            frame_served();
+            if let Some(result) = handle.result() { break result.unwrap() }
+            rx.recv_timeout(Duration::from_secs(5)).expect("decode wakes the UI");
+        };
+        let raster = image.raster(64, 64, Color::rgb(255, 0, 0), frame_waker());
+        let pixels = loop {
+            frame_served();
+            if let Some(result) = raster.result() { break result.unwrap() }
+            rx.recv_timeout(Duration::from_secs(5)).expect("raster wakes the UI");
+        };
+        let at = |x: usize, y: usize| &pixels.rgba[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
+        // Just inside the tile's top edge, clear of the mark: the brand's own background.
+        assert_eq!(&at(32, 3)[..3], tile.as_slice(), "{name}: the tile is the brand's colour");
+        assert_eq!(at(32, 3)[3], 255, "{name}: the tile is solid");
+        assert!(pixels.rgba.chunks(4).all(|pixel| pixel[3] == 0 || pixel[..3] != [255, 0, 0]),
+            "{name}: the text colour never tints the mark");
     }
-    assert_eq!(pixels.rgba.len() % 4, 0, "RGBA pixels must be complete");
-    assert!(pixels.rgba.chunks(4).any(|pixel| pixel[3] == 255),
-        "the brand artwork must remain visible");
-    assert!(pixels.rgba.chunks(4).all(|pixel| pixel[3] == 0 || pixel[..3] == [0, 0, 0]),
-        "the requested black mark must not inherit text tint or keep the old gradient");
 }
 
 fn installed(directory: &std::path::Path, config: &AgentsConfig) -> super::super::integration::Integrations {
