@@ -110,6 +110,7 @@ impl TextRenderer {
                         w: ag.width as f32,
                         h: ag.height as f32,
                         uv: ag.uv,
+                        own_colours: ag.own_colours,
                         cache_key,
                     })
                     .collect();
@@ -228,14 +229,14 @@ impl TextRenderer {
                     entry.width as f32,
                     entry.height as f32,
                 );
-                verts.extend(glyph_quad(rect, slant, entry.uv, color, additive));
+                verts.extend(glyph_quad(rect, slant, entry.uv, color, additive, false));
             }
         }
 
         let mut ink = Ink::new();
         for g in &layout.glyphs {
             let rect = on_screen(g.rel_x, g.rel_y, g.w, g.h);
-            verts.extend(glyph_quad(rect, slant, g.uv, cmd.color, 0.0));
+            verts.extend(glyph_quad(rect, slant, g.uv, cmd.color, 0.0, g.own_colours));
             ink.add(rect, slant);
         }
 

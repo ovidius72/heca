@@ -98,6 +98,7 @@ impl TextRenderer {
                         w: ag.width as f32,
                         h: ag.height as f32,
                         uv: ag.uv,
+                        own_colours: ag.own_colours,
                     }
                 })
                 .collect();
@@ -147,7 +148,7 @@ impl TextRenderer {
                 .get(g.col as usize)
                 .copied()
                 .unwrap_or(cmd.color);
-            verts.extend(glyph_quad(rect, slant, g.uv, color, 0.0));
+            verts.extend(glyph_quad(rect, slant, g.uv, color, 0.0, g.own_colours));
             ink.add(rect, slant);
         }
         Emitted {

@@ -106,7 +106,7 @@ fn a_quad_leans_and_its_ink_box_covers_it() {
         w: 4.0,
         h: 8.0,
     };
-    let quad = glyph_quad(rect, 2.0, [0.0, 0.0, 1.0, 1.0], [1.0; 4], 0.0);
+    let quad = glyph_quad(rect, 2.0, [0.0, 0.0, 1.0, 1.0], [1.0; 4], 0.0, false);
     let corners: Vec<[f32; 2]> = quad.iter().map(|v| v.position).collect();
     assert_eq!(
         corners,
@@ -225,5 +225,54 @@ fn letter_spacing_widens_a_shaped_run_by_its_em() {
     assert!(
         (spaced - plain - 4.0 * 0.1 * 20.0).abs() < 0.5,
         "four glyphs, each 0.1 em (2px) wider: {plain} → {spaced}"
+    );
+}
+
+/// **A colour glyph keeps its colours, a plain one is white to be tinted.** ⏺ is not in the
+/// terminal's font, so it falls back to the system's emoji font, which draws it in colour —
+/// read as a mask it used to fill its whole box. Needs a GPU and an emoji font; skipped without.
+#[test]
+fn an_emoji_glyph_enters_the_atlas_with_its_own_colours() {
+    let (device, queue) = crate::gpu::headless_device_or_skip!();
+    let mut fonts = crate::font::embedded_font_system();
+    let mut swash = cosmic_text::SwashCache::new();
+    let mut atlas = crate::atlas::Atlas::new(&device);
+    let face = super::shape::Face {
+        family: crate::font::DEFAULT_TERMINAL_FAMILY,
+        weight: 400,
+        italic: false,
+        letter_spacing: 0.0,
+        ligatures: false,
+    };
+    let glyph_of = |fonts: &mut cosmic_text::FontSystem, text: &str| {
+        let buffer = super::shape::shape(fonts, text, 32.0, &face);
+        let run = buffer.layout_runs().next().expect("a line");
+        run.glyphs[0].physical((0.0, run.line_y), 1.0).cache_key
+    };
+    let letter = glyph_of(&mut fonts, "a");
+    let entry = atlas
+        .glyph(&queue, &mut fonts, &mut swash, letter)
+        .expect("a has a bitmap");
+    assert!(
+        !entry.own_colours,
+        "a letter is tinted by the text's colour"
+    );
+    let emoji = glyph_of(&mut fonts, "\u{23fa}");
+    let Some(entry) = atlas.glyph(&queue, &mut fonts, &mut swash, emoji) else {
+        return; // no fallback font for it on this machine
+    };
+    let colour = matches!(
+        swash
+            .get_image(&mut fonts, emoji)
+            .as_ref()
+            .map(|img| img.content),
+        Some(cosmic_text::SwashContent::Color)
+    );
+    // macOS always has its colour emoji font, so there the case is certain, not skipped.
+    #[cfg(target_os = "macos")]
+    assert!(colour, "on macOS ⏺ falls back to the colour emoji font");
+    assert_eq!(
+        entry.own_colours, colour,
+        "a colour glyph keeps its colours"
     );
 }
