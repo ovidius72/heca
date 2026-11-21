@@ -3,6 +3,7 @@ use super::*;
 impl SessionRuntime {
     pub(crate) fn info(&self) -> SessionInfo {
         let mut info = self.identity.clone();
+        info.key = Some(self.key);
         info.windows = self
             .clients
             .iter()

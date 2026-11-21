@@ -229,6 +229,7 @@ fn two_sessions_come_back_after_a_restart_exactly_as_they_were() {
         (runtime.info(), runtime.service_ref().key, runtime.content(), runtime.saved())
     }).into();
     assert!(before[0].3.content.workspaces.len() > 1, "the test session has several workspaces");
+    let workspace_before = session(&mut server, "Alpha").service_ref().workspace;
     assert_ne!(before[0].1, before[1].1);
 
     forget_started();
@@ -249,6 +250,10 @@ fn two_sessions_come_back_after_a_restart_exactly_as_they_were() {
     let restored = session(&mut server, "Alpha").saved();
     assert_eq!(restored.focus, Some(crate::server::persist::Focus { workspace: 1, pane: panes.last().copied() }));
     assert_eq!(restored.view, Some(view));
+    // The workspace an action is asked from keeps its lasting key across the restart.
+    let workspace_after = session(&mut server, "Alpha").service_ref().workspace;
+    assert!(workspace_before.is_some(), "a window showed a workspace, so an action has one");
+    assert_eq!(workspace_after, workspace_before, "the same workspace key after a restart");
     assert_eq!(started().len(), 5, "each of the five terminals was started again");
     assert_eq!(beta.id, server.sessions[server.named("Beta").unwrap()].info().id);
     // A window with no name opens the session that was used last — Alpha, which the window used after

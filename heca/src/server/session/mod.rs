@@ -136,7 +136,23 @@ impl SessionRuntime {
 
     /// This session as the services are told of it.
     pub(crate) fn service_ref(&self) -> super::services::SessionRef {
-        super::services::SessionRef { id: self.session.id, key: self.key }
+        let workspace = self.last_focus.and_then(|focus| self.workspace_key(focus.workspace));
+        super::services::SessionRef { id: self.session.id, key: self.key, workspace }
+    }
+
+    /// This session as the services are told of it **for a call from window `i`**: the workspace is
+    /// the one that window shows (else the one shown last, as [`service_ref`](Self::service_ref)).
+    pub(crate) fn service_ref_for(&self, i: usize) -> super::services::SessionRef {
+        let shown = self.clients[i].presence.get().and_then(|(workspace, _)| self.workspace_key(workspace));
+        let mut session = self.service_ref();
+        session.workspace = shown.or(session.workspace);
+        session
+    }
+
+    /// The lasting key of the workspace at position `ws_idx`, if there is one there.
+    fn workspace_key(&self, ws_idx: usize) -> Option<crate::entry::service::WorkspaceKey> {
+        let workspace = self.session.workspaces.get(ws_idx)?;
+        Some(crate::entry::service::WorkspaceKey::new(self.key, workspace.id))
     }
 
     /// **This session as a service reads it** — the one place its key, name, folder and state are
@@ -487,7 +503,7 @@ impl SessionRuntime {
                     }
                     if self.services.borrow().owns(&intent.action) {
                         let reply = super::services::Reply::Window { action: intent.action.clone() };
-                        self.services.borrow_mut().invoke(self.service_ref(), &Call::local(Some(self.clients[i].id)),
+                        self.services.borrow_mut().invoke(self.service_ref_for(i), &Call::local(Some(self.clients[i].id)),
                             self.config.as_deref(), &intent, reply);
                         continue;
                     }

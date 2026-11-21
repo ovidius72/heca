@@ -13,6 +13,9 @@ pub(crate) struct ChromeSelection {
     pub(crate) previous_panes: Signal<Vec<Option<PaneId>>>,
     /// The workspace `prefix+Shift+i` would return to.
     pub(crate) previous_ws: Signal<Option<usize>>,
+    /// **The workspace this window shows**, by its lasting key — what a dock binds to
+    /// ([`StateView::active_workspace`](crate::host::StateView::active_workspace)).
+    pub(crate) active_workspace: Signal<Option<crate::entry::service::WorkspaceKey>>,
 }
 
 impl ChromeSelection {
@@ -21,6 +24,7 @@ impl ChromeSelection {
             active_pane: signal(None),
             previous_panes: signal(Vec::new()),
             previous_ws: signal(None),
+            active_workspace: signal(None),
         }
     }
 }
@@ -197,6 +201,20 @@ impl WorkspacesContainerState {
     }
 
     // ── Writes ──
+    /// Mirror the workspace this window shows, raising `workspace.focused` when it changes.
+    pub fn set_active_workspace(&self, workspace: Option<crate::entry::service::WorkspaceKey>) {
+        if self.selection.active_workspace.get_untracked() == workspace {
+            return;
+        }
+        self.selection.active_workspace.set(workspace);
+        self.events.emit(ChromeEvent::WorkspaceFocused { workspace });
+    }
+
+    /// The workspace this window shows, as a value to follow.
+    pub fn active_workspace(&self) -> Signal<Option<crate::entry::service::WorkspaceKey>> {
+        self.selection.active_workspace
+    }
+
     pub fn set_active_pane(&self, pane: Option<PaneId>) {
         if self.selection.active_pane.get_untracked() == pane {
             return;

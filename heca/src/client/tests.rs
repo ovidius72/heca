@@ -21,6 +21,7 @@ impl ClientLink for RecordingLink {
 
 fn info(id: u64, name: &str) -> SessionInfo {
     SessionInfo {
+        key: None,
         id: SessionId(id),
         name: name.into(),
         folder: None,

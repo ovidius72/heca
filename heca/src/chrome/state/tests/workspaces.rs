@@ -41,3 +41,23 @@ fn pane_renamed_add_process_name_defaults_on_then_projects() {
     s.workspaces.set_pane_renamed_add_process_name(false);
     assert!(!s.workspaces.pane_renamed_add_process_name());
 }
+
+/// **The workspace a window shows is a value to follow and an event to hear**: setting it raises
+/// `workspace.focused` once per change, and the signal a dock binds to holds the same key.
+#[test]
+fn the_shown_workspace_is_followed_and_heard_once_per_change() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    let s = state();
+    let heard: Rc<RefCell<Vec<String>>> = Rc::default();
+    let sink = heard.clone();
+    let _sub = s.events().subscribe("workspace.focused", move |event| sink.borrow_mut().push(event.name().to_string()));
+    let key = |n| crate::entry::service::WorkspaceKey::new(crate::entry::service::SessionKey::generate(), heca_core::layout::WorkspaceId(n));
+    let first = key(3);
+    s.workspaces.set_active_workspace(Some(first));
+    s.workspaces.set_active_workspace(Some(first));
+    assert_eq!(heard.borrow().len(), 1, "the same workspace again is no change");
+    assert_eq!(heca_grid_ui::reactive::SignalGet::get_untracked(&s.workspaces.active_workspace()), Some(first));
+    s.workspaces.set_active_workspace(Some(key(4)));
+    assert_eq!(heard.borrow().len(), 2);
+}

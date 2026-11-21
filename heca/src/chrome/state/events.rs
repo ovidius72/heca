@@ -185,6 +185,13 @@ pub enum ChromeEvent {
         ws_idx: usize,
         collapsed: bool,
     },
+    /// **This window now shows another workspace** — `workspace` is its lasting key (`None` before
+    /// the window knows its session). Raised once per change, from the one place the window's
+    /// active workspace is mirrored; [`StateView::active_workspace`](crate::host::StateView::active_workspace)
+    /// is the same value to bind to.
+    WorkspaceFocused {
+        workspace: Option<crate::entry::service::WorkspaceKey>,
+    },
     /// A **container's** nested scroll area moved. Carries which one, because several can be
     /// mounted at once — including two of the same kind in different regions.
     ContainerScrollChanged {
@@ -246,6 +253,7 @@ impl ChromeEvent {
             ChromeEvent::PendingPickChanged { .. } => "pick.pending.changed",
             ChromeEvent::PaneExited { .. } => "pane.exited",
             ChromeEvent::WorkspaceCollapsedChanged { .. } => "workspace.collapsed.changed",
+            ChromeEvent::WorkspaceFocused { .. } => "workspace.focused",
             ChromeEvent::ContainerScrollChanged { .. } => "container.scroll.changed",
             ChromeEvent::RegionVisibilityChanged { .. } => "chrome.region.visibility.changed",
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
