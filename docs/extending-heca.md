@@ -267,6 +267,12 @@ The four built-in marks use this same contract; their sources and licenses are b
 Use explicit SVG fills for brand artwork. `currentColor` deliberately follows the surrounding
 text color; fixed brand fills and gradients keep their own colors, including in selected rows.
 
+**A brand mark carries its own background.** The theme is the user's, so a mark drawn in one colour
+on a transparent background disappears on some theme (a black mark on a dark one). Ship the mark the
+way the brand itself draws its app icon: on its own solid tile, in the brand's colours. heca's Claude
+mark is white on Claude's coral tile, and the Codex mark is OpenAI's black symbol on a white tile.
+Only brand marks keep their own colours this way; everything else heca draws follows the theme.
+
 The report reader attaches the registered mark after decoding a native report. Lifecycle templates
 do not repeat SVG contents in every event or in the launch environment. A user can override a mark
 with `icon = "/path/to/logo.svg"` under that program's configuration; this works for added drivers too.

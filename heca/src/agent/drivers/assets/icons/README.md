@@ -11,7 +11,10 @@ OpenCode: the dark-surface mark from its official
 Pi: [official logo](https://pi.dev/logo-auto.svg), linked by the
 [Pi repository](https://github.com/earendil-works/pi), MIT (PI-LICENSE).
 Pi's viewBox is cropped to the existing paths so its mark fills the same icon box.
-The Codex symbol has a transparent background, without an app tile or gradient.
+**Every brand mark carries its own solid background**, as the brand draws its app icon, so it reads on
+any theme the user picks. Claude: the white mark on Claude's coral tile (#D97757, read from the Claude
+app icon). Codex: OpenAI's black symbol on a white tile (read from the ChatGPT app icon). OpenCode's
+dark-surface mark already fills its box. Pi's coloured squares read on light and dark themes alike.
 
 Brand fills live in the SVG files. The shared Image widget preserves them;
 these marks do not inherit the row's text color. Users may override an integration's
