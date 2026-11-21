@@ -465,6 +465,8 @@ pub(crate) async fn init_state(
     // `notification_pick_open` to already exist) and before providers register their own
     // actions/layers, so a producer that raises a notification on its very first frame has
     // somewhere for it to land.
+    let events = state.event_proxy.clone();
+    state.layers.connect(events);
     crate::chrome::mount_notification_stack(&mut state);
     // Install the raise sink. `Notification::send` posts through this; the app
     // reads it here, posting `AppEvent::RaiseNotification` so the host (not the caller) stamps
