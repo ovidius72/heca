@@ -34,6 +34,13 @@ pub struct SidebarAppearance {
     /// alone. See [`default_sidebar_pane_lines`]. A name nothing provides is reported and skipped.
     #[serde(default = "default_sidebar_pane_lines")]
     pub pane_lines: Vec<String>,
+    /// Show each workspace's number before its name (1–9, then 0 for the tenth). On by default.
+    #[serde(default = "shown")]
+    pub workspace_numbers: bool,
+}
+
+fn shown() -> bool {
+    true
 }
 
 impl Default for SidebarAppearance {
@@ -47,6 +54,7 @@ impl Default for SidebarAppearance {
             gap: None,
             width: None,
             pane_lines: default_sidebar_pane_lines(),
+            workspace_numbers: true,
         }
     }
 }

@@ -71,12 +71,6 @@ fn test_show_chrome_region_toggles_parse() {
     assert!(!s.show_right_sidebar);
     assert!(!s.show_top_bar);
     assert!(!s.show_bottom_bar);
-
-    // Kebab-case aliases parse too.
-    let k: SettingsConfig =
-        toml::from_str("show-top-bar = false\n").expect("kebab alias should parse");
-    assert!(!k.show_top_bar);
-    assert!(k.show_bottom_bar);
 }
 
 #[test]
@@ -96,7 +90,7 @@ fn test_modifier_key_control_alias() {
 
 #[test]
 fn test_terminal_foreground_override_parses() {
-    let s: SettingsConfig = toml::from_str("terminal-foreground = \"#4c4f69\"").unwrap();
+    let s: SettingsConfig = toml::from_str("terminal_foreground = \"#4c4f69\"").unwrap();
     assert!(s.terminal_foreground.is_some());
 }
 

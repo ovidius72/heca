@@ -85,7 +85,7 @@ pub struct ProgramMeta {
     #[serde(default)]
     pub processes: Option<Vec<String>>,
     /// Semantic Phosphor icon id rendered for this program.
-    #[serde(default, alias = "icons")]
+    #[serde(default)]
     pub icon: Option<ProgramIcon>,
     /// Reserved for future menus and richer chrome; not rendered today.
     #[serde(default)]

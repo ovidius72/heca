@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 mod project;
 mod sources;
+pub mod unread;
 
 pub use project::{ProjectFile, project_config_path, read_project, read_project_in, read_project_with};
 pub use sources::{ConfigSource, ConfigSources, config_sources};
@@ -158,7 +159,7 @@ pub struct Config {
     /// color theme. See [`crate::font::FontConfig`].
     #[serde(default)]
     pub font: crate::font::FontConfig,
-    #[serde(default, alias = "program")]
+    #[serde(default, rename = "program", alias = "programs")]
     pub programs: ProgramsConfig,
     #[serde(default)]
     pub keys: KeysConfig,
@@ -262,15 +263,17 @@ impl AppConfig {
         // (keys). Both are deep-merged at the `toml::Value` level so a partial user
         // file overrides only the values it sets and keeps every other default.
         let mut value = embedded_base();
-        let mut found_user = false;
-        if let Some((_, user)) = read_first_toml(&config_file_paths())? {
-            value = deep_merge(value, user);
-            found_user = true;
+        // Each file the user wrote, kept to say afterwards which of its keys heca did not read.
+        let mut files: Vec<(PathBuf, toml::Value)> = Vec::new();
+        if let Some((path, user)) = read_first_toml(&config_file_paths())? {
+            value = deep_merge(value, user.clone());
+            files.push((path, user));
         }
-        if let Some((_, user)) = read_first_toml(&keybindings_file_paths())? {
-            value = deep_merge(value, user);
-            found_user = true;
+        if let Some((path, user)) = read_first_toml(&keybindings_file_paths())? {
+            value = deep_merge(value, user.clone());
+            files.push((path, user));
         }
+        let found_user = !files.is_empty();
         // The project's own file goes on last, so any key it sets wins. A broken one is reported
         // and left out: a project's typo must not take the user's whole configuration with it.
         let project = match folder.map_or_else(read_project, read_project_in) {
@@ -284,7 +287,14 @@ impl AppConfig {
         if !found_user && applied.is_none() && folder.is_none() {
             return Err(ConfigError::NotFound);
         }
-        layered(value, applied)
+        if let Some((path, project)) = &applied {
+            files.push((path.clone(), project.clone()));
+        }
+        let config = layered(value, applied)?;
+        for (path, file) in &files {
+            unread::report(path, file, &config);
+        }
+        Ok(config)
     }
 }
 

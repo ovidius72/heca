@@ -60,13 +60,9 @@ fn json_round_trip_and_validation_keep_the_existing_contract() {
         r#"{"window_width":null}"#,
         r#"{"notification_system":null}"#,
         r#"{"notification_system":{"max_visible":null}}"#,
-        r#"{"terminal_mouse":true,"terminal-mouse":false}"#,
     ] {
         assert!(serde_json::from_str::<SettingsConfig>(input).is_err(), "{input}");
     }
-    assert!(toml::from_str::<SettingsConfig>(
-        "terminal_mouse = true\nterminal-mouse = false",
-    ).is_err());
 }
 
 #[test]

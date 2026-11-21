@@ -233,8 +233,8 @@ fn terminal_color_overrides_apply_via_apply_overrides() {
     let mut theme = theme::load("mocha");
     let settings: SettingsConfig = toml::from_str(
         r##"
-terminal-background = "#112233"
-terminal-foreground = "#ddeeff"
+terminal_background = "#112233"
+terminal_foreground = "#ddeeff"
 "##,
     )
     .expect("settings should parse");

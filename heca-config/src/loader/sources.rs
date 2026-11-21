@@ -28,6 +28,7 @@ pub fn config_sources() -> Result<ConfigSources, ConfigError> {
         .into_iter()
         .map(|(name, value)| (PathBuf::from(format!("(defaults of extension {name})")), value))
         .collect();
+    let extension_layers = layers.len();
     for paths in [config_file_paths(), keybindings_file_paths()] {
         layers.extend(read_first_toml(&paths)?);
     }
@@ -39,9 +40,11 @@ pub fn config_sources() -> Result<ConfigSources, ConfigError> {
             untrusted_project = Some(project.path);
         }
     }
+    let unread = unread_in(&layers[extension_layers..]);
     Ok(ConfigSources {
         sources: sources_of(layers),
         untrusted_project,
+        unread,
     })
 }
 
@@ -51,6 +54,28 @@ pub struct ConfigSources {
     pub sources: Vec<ConfigSource>,
     /// A project file that exists but is not trusted, so it applies to nothing.
     pub untrusted_project: Option<PathBuf>,
+    /// Keys the user's files set that heca does not read, each with its file
+    /// ([`unread`](super::unread)).
+    pub unread: Vec<(PathBuf, super::unread::Unread)>,
+}
+
+/// The keys each of the user's `files` sets that the finished configuration did not read. Nothing
+/// when the files together do not make a valid configuration — that error is reported on its own.
+fn unread_in(files: &[(PathBuf, toml::Value)]) -> Vec<(PathBuf, super::unread::Unread)> {
+    let merged = files
+        .iter()
+        .fold(super::embedded_base(), |base, (_, file)| super::deep_merge(base, file.clone()));
+    let Ok(config) = merged.try_into() else {
+        return Vec::new();
+    };
+    files
+        .iter()
+        .flat_map(|(path, file)| {
+            super::unread::unread_keys(file, &config)
+                .into_iter()
+                .map(move |unread| (path.clone(), unread))
+        })
+        .collect()
 }
 
 /// The sources of `layers` (earliest first): each layer flattened to dotted keys, a later layer's
@@ -116,3 +141,5 @@ mod tests {
         assert_eq!(got.len(), 2, "one line per key");
     }
 }
+
+

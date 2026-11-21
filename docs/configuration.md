@@ -84,6 +84,22 @@ Each command has a one-letter form. One letter, not two: `-la` would read as the
 everywhere else on the machine, and a flag that looks like a convention it does not follow is worse
 than no short form at all.
 
+**A key heca does not read is said, never ignored in silence.** When the configuration loads, each
+key one of your files sets that lands nowhere is reported with its file — a misspelling as unknown,
+and a name heca used to read with the one that replaced it:
+
+```text
+[heca] ~/.config/heca/config.toml: `settings.confirm_close_pane` is no longer read — write `confirm.close` instead
+[heca] ~/.config/heca/config.toml: `settings.notification_flsh` is not a setting heca knows — it is ignored
+```
+
+The window shows them too, as one notification at start-up and after each reload.
+`heca --show-config` lists the same lines at the end, as comments. Keys under `[extensions.<name>]`
+belong to that extension and an action's `args` are checked against the action, so neither is
+reported here. The old kebab-case spellings (`terminal-wheel-scroll-lines`, …), `prefix_key`,
+`command_type`, `icons`, `programs` (the table is `[program]`) and `[confirm] delete_pane` are no longer read:
+each is reported with its current name.
+
 `--describe-action` is the reference for an action's arguments — including which are optional and
 what values an enum accepts — because the declaration lives beside the parser, so the two cannot
 drift. `--help` is rendered from the same table that dispatches, so it cannot list a command that
@@ -269,7 +285,6 @@ shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtim
 new_workspace_cwd = "~"       # Folder a new workspace's shell starts in: a path, "~" or "~/..."; missing → home
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
 pane_name_delay = 1000        # Display-name delay in milliseconds; 0 updates immediately
-# pane_show_cwd is now [appearance.expose] show_cwd (still read; see below)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Lines per wheel notch: history rows, and wheel steps sent to a program (Claude Code, vim)
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
@@ -340,8 +355,8 @@ apply on `prefix+Shift+r`.
 > `confirm_delete_workspace` flags — move any you had set into `[confirm]` as
 > `close` / `delete_column` / `delete_workspace`.
 >
-> The pane toggle was once `delete_pane`; it still works, but `close` is the name
-> now — one word for the action, its key, its label and its dialog. **Close** is
+> The pane toggle was once `delete_pane`; that name is no longer read (heca says so at load) —
+> `close` is the name — one word for the action, its key, its label and its dialog. **Close** is
 > for the pane you work in; **Delete** removes a container or session. Terminating
 > a session stops its processes but retains its definition.
 
@@ -680,6 +695,11 @@ A program built on heca can add its own buttons, named `<extension>.<short>` (fo
 your own list, only the names you list show, and heca tells you once when a button you have not
 listed is available. A name nothing provides is reported and skipped, with the nearest real one.
 
+**Workspace numbers in the sidebar** (`[appearance.sidebar] workspace_numbers`, default `true`):
+each workspace row shows its number before its name — 1 to 9, then `0` for the tenth, as on the
+keyboard. A key bound to `focus_workspace` takes `ws_idx`, which counts from 0: the workspace shown
+as 1 is `ws_idx = "0"`. `false` hides the numbers; a reload shows or hides them at once.
+
 **Lines under a pane's name in the sidebar** (`[appearance.sidebar] pane_lines`, default
 `["cwd", "git", "agent"]`): `cwd` is the working directory and `git` is the branch with change counts, shown
 only inside a repository. **A fresh install shows the folder line under each pane's name in the
@@ -830,8 +850,7 @@ Volume is limited to `0.0`–`1.0`; the sound queue holds at least one entry.
 Supported sound files are WAV, Ogg Vorbis, MP3 and FLAC.
 
 **The exposé's folders** are `[appearance.expose] show_cwd` (on by default; `false` hides them). It replaces
-`[settings] pane_show_cwd`, which is still read while the new key is not written (once it is, it
-decides), with a one-time notice to move it; it no longer affects the sidebar.
+`[settings] pane_show_cwd`, which is no longer read; it does not affect the sidebar.
 
 ## Process Catalog
 

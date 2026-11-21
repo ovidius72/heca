@@ -40,21 +40,16 @@ declare_settings! {
         pub theme: String,
         pub mouse: bool,
         /// How roomy the command palette is (`small` / `normal` / `large`).
-        #[serde(alias = "command-palette-size")]
         pub command_palette_size: PaletteSize,
         /// How a search query's case is treated (`smart` / `sensitive` / `insensitive`).
-        #[serde(alias = "search-case")]
         pub search_case: SearchCase,
         /// Folder pickers' case policy, independent of other search surfaces. Default insensitive.
         pub folder_search_case: SearchCase,
         /// Remember what has been searched for and chosen, across restarts.
-        #[serde(alias = "search-history")]
         pub search_history: bool,
         /// How many past queries each search surface keeps.
-        #[serde(alias = "search-history-size")]
         pub search_history_size: usize,
         /// How many commands' usage counts each search surface keeps for ranking.
-        #[serde(alias = "search-usage-size")]
         pub search_usage_size: usize,
         /// Default display name for unnamed sessions; `{number}` is the server's sequence.
         pub session_name_format: String,
@@ -85,25 +80,18 @@ declare_settings! {
         pub window_width: u32,
         pub window_height: u32,
         /// Optional terminal default foreground override from `config.toml`.
-        #[serde(alias = "terminal-foreground")]
         pub terminal_foreground: Option<Color>,
         /// Optional terminal default background override from `config.toml`.
-        #[serde(alias = "terminal-background")]
         pub terminal_background: Option<Color>,
         /// Optional terminal cursor foreground override from `config.toml`.
-        #[serde(alias = "terminal-cursor-foreground")]
         pub terminal_cursor_foreground: Option<Color>,
         /// Optional terminal cursor background override from `config.toml`.
-        #[serde(alias = "terminal-cursor-background")]
         pub terminal_cursor_background: Option<Color>,
         /// Optional terminal cursor border override from `config.toml`.
-        #[serde(alias = "terminal-cursor-border")]
         pub terminal_cursor_border: Option<Color>,
         /// Optional terminal selection foreground override from `config.toml`.
-        #[serde(alias = "terminal-selection-foreground")]
         pub terminal_selection_foreground: Option<Color>,
         /// Optional terminal selection background override from `config.toml`.
-        #[serde(alias = "terminal-selection-background")]
         pub terminal_selection_background: Option<Color>,
         /// Optional override of the colour of the line a carried pane can be dropped on (default: the
         /// theme's accent).
@@ -114,10 +102,8 @@ declare_settings! {
         /// Optional override of that line's thickness in logical px (default 3, half at rest).
         pub drag_edge_width: Option<f32>,
         /// Optional terminal ANSI `0..7` palette override from `config.toml`.
-        #[serde(alias = "terminal-ansi")]
         pub terminal_ansi: Option<[Color; 8]>,
         /// Optional terminal bright ANSI `8..15` palette override from `config.toml`.
-        #[serde(alias = "terminal-brights")]
         pub terminal_brights: Option<[Color; 8]>,
         /// Automatically scroll the workspace view when the pointer hovers near the left/right edge.
         pub auto_scroll_edge: bool,
@@ -149,7 +135,6 @@ declare_settings! {
         /// so the windows must agree on it: `smallest` (fits every window) | `latest` (the window last
         /// typed in — the default) | `largest`. A pane shown by one window always takes that window's
         /// size. Only rows×cols are shared; each window still draws at its own font/cell size.
-        #[serde(alias = "pane-size")]
         pub pane_size: PaneSize,
         /// Gap between workspace rows in the exposé, as a fraction of a screen height.
         pub overview_gap: f64,
@@ -175,22 +160,15 @@ declare_settings! {
         /// a small dimmed label next to it (e.g. `MyPane (nvim)`). The process label is *not* part of
         /// the name — it is appended for reference only and never edited by rename. Set `false` to
         /// show just the custom name.
-        #[serde(alias = "pane-renamed-add-process-name")]
         pub pane_renamed_add_process_name: bool,
         /// Milliseconds a running program must persist before its name is displayed; 0 is immediate.
         pub pane_name_delay: u64,
-        /// **Deprecated: `[appearance.expose] show_cwd`.** Still read while that key is not written,
-        /// with a one-time notice to move it. It once switched the sidebar's folder line too; that
-        /// line is now decided by `[appearance.sidebar] pane_lines` alone.
-        #[serde(alias = "pane-show-cwd")]
-        pub pane_show_cwd: Option<bool>,
         /// Host terminal scrollback capacity in rows.
         ///
         /// This is the number of history rows the terminal engine retains above the
         /// visible viewport. The host scrollback viewport (see `terminal-01a`) scrolls
         /// within `[0, terminal_scrollback_lines]`. Mirrors wezterm-term's default of
         /// 3500 when unset.
-        #[serde(alias = "terminal-scrollback-lines")]
         pub terminal_scrollback_lines: usize,
 
         /// Enable terminal mouse support for host scrollback: when `true`, wheel events
@@ -200,49 +178,39 @@ declare_settings! {
         ///
         /// This is terminal-ONLY — it does not affect `settings.mouse` (which controls
         /// chrome interaction like click-to-focus and drag-to-move).
-        #[serde(alias = "terminal-mouse")]
         pub terminal_mouse: bool,
 
         /// Lines per wheel notch in a terminal — the rows its history scrolls, and the wheel reports
         /// a program that takes the mouse (Claude Code, vim, less) is sent, one per line. A trackpad
         /// gesture counts one notch per cell height it travels.
-        #[serde(alias = "terminal-wheel-scroll-lines")]
         pub terminal_wheel_scroll_lines: usize,
 
         /// Points added/removed per terminal font-zoom step (keyboard `prefix+Ctrl/Alt`
         /// bindings and `Ctrl`/`Meta`+wheel). Applies to both the app-wide and the
         /// per-pane zoom. Non-positive values fall back to the default step.
-        #[serde(alias = "terminal-font-zoom-step")]
         pub terminal_font_zoom_step: f32,
 
         /// Whether `Ctrl`/`Meta`+mouse-wheel changes the font size (app-wide over
         /// chrome, focused pane over a pane). When false the modified wheel is left
         /// alone (forwarded like a normal wheel), and font zoom stays keyboard-only.
-        #[serde(alias = "mouse-wheel-change-font-size")]
         pub mouse_wheel_change_font_size: bool,
 
         /// Enable smooth animation for backend-side discrete terminal viewport jumps.
         /// When false, animated scroll APIs degrade to immediate scroll.
-        #[serde(alias = "terminal-scroll-animations")]
         pub terminal_scroll_animations: bool,
 
         /// Show the left sidebar region on startup. `false` starts it hidden; the runtime toggle
         /// (`prefix+b`) shows it, and a config reload puts it back to this value.
-        #[serde(alias = "show-left-sidebar")]
         pub show_left_sidebar: bool,
         /// Show the right sidebar region on startup. `false` starts it hidden.
-        #[serde(alias = "show-right-sidebar")]
         pub show_right_sidebar: bool,
         /// Show the top bar (tab bar). `false` fully hides it (zero height) and the
         /// pane area reclaims the space.
-        #[serde(alias = "show-top-bar")]
         pub show_top_bar: bool,
         /// Show the bottom bar (status bar). `false` fully hides it (zero height).
-        #[serde(alias = "show-bottom-bar")]
         pub show_bottom_bar: bool,
 
         /// `[settings.notification_system]` — in-app toast notification behaviour.
-        #[serde(alias = "notification-system")]
         pub notification_system: NotificationSystemConfig,
         /// Status reporting, pane-row presentation and sounds for terminal agents.
         pub agents: AgentsConfig,
