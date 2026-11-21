@@ -158,7 +158,7 @@ pub(super) fn drain(client: &impl ClientLink) -> Vec<ServerMsg> {
 }
 
 /// What the window was sent by services, as (revision, kind).
-fn updates(client: &impl ClientLink) -> Vec<(u64, ServiceUpdateKind)> {
+pub(super) fn updates(client: &impl ClientLink) -> Vec<(u64, ServiceUpdateKind)> {
     drain(client).into_iter().filter_map(|message| match message {
         ServerMsg::Service(update) => Some((update.revision, update.kind)),
         _ => None,

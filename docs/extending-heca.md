@@ -662,8 +662,25 @@ cx.forget(Scope::Session, "room-color", &room_id)?;           // one entry per r
 - **Limits.** A value larger than `[settings.services] saved_entry_max_bytes` is refused with
   `SavedError::TooLarge`, never cut short.
 - **Who has it.** `ActionCx` (read and write), `ServiceCx` (read and write; message handlers),
-  `ProjectCx` (read only: a projection shows state, it does not change it). A dock reads and writes
-  the same entries from the window side as well — coming next.
+  `ProjectCx` (read only: a projection shows state, it does not change it).
+- **A dock shows it and changes it — nothing else to write.** The dock reads what its service shows
+  (`shown`), and the projection reads the saved entry; a drag or a key runs one of the extension's
+  actions, which saves. **After a save, heca shows that extension's services again in every
+  window**, so the new value reaches every dock without the service saying its view changed:
+
+  ```rust
+  DockFrame::new("Rooms")
+      .grip(true)
+      .child(
+          Flex::column()
+              .gap(Spacing::Sm)
+              .child(shown.map(|view| &view.rooms, |room| {         // the order the projection read
+                  RoomRow::new(room)
+                      .draggable()
+                      .on_drop(|ev| ev.dispatch(Intent::new("heca-pro.reorder")))   // the action saves
+              })),
+      )
+  ```
 - **Listening (THE EVENTS).** Every save and every real forget raises **`state.changed`**, with the
   session (`None` for global), the full key (`heca-pro.room-order`) and the id —
   `rooms.on("state.changed", |rooms, cx, ev| { let change = ev.as_state(); … })`. The scripts'

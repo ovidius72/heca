@@ -1,9 +1,11 @@
 //! **An extension's saved state, through a real server**: an action saves an entry of its session,
 //! a listener hears `state.changed`, the entry comes back after the server restarts, and it goes
-//! when the session is deleted.
+//! when the session is deleted — and every window is shown the new value with nothing written by
+//! the extension to say its view changed.
 
 use super::restore_tests::{boot, make, restart, session};
-use super::service_tests::{register_actions, rpc};
+use super::service_tests::{attached, register_actions, rpc, updates};
+use crate::server::wire::service::ServiceUpdateKind;
 use super::*;
 use crate::entry::service::{ActionResult, ProjectCx, Projection, Scope, Service, ServiceCx, ServiceResult};
 use std::cell::Cell;
@@ -12,11 +14,18 @@ struct Rooms;
 
 impl Service for Rooms {
     type Message = ();
-    type Snapshot = ();
+    type Snapshot = Vec<String>;
     type Delta = ();
     const SCHEMA_VERSION: u32 = 1;
     fn receive(&mut self, _: &mut ServiceCx<'_, ()>, _: ()) -> ServiceResult<()> { Ok(()) }
-    fn project(&self, _: &ProjectCx<'_>) -> Option<Projection<(), ()>> { None }
+    /// The window's room order, read from the saved state. Its revision never moves: the service
+    /// never says its view changed, so only heca re-showing it after a save can bring a new order.
+    fn project(&self, cx: &ProjectCx<'_>) -> Option<Projection<Vec<String>, ()>> {
+        Some(match cx.since() {
+            Some(_) => Projection::Unchanged,
+            None => Projection::Snapshot { revision: 1, value: cx.saved(Scope::Session, "room-order", "").unwrap_or_default() },
+        })
+    }
 }
 
 /// The service: `demo.reorder` saves the session's room order, `demo.order` answers it.
@@ -73,4 +82,23 @@ fn a_session_entry_is_heard_kept_across_a_restart_and_gone_with_the_session() {
     let key = session(&mut server, "Work").service_ref().key;
     server.execute_session(SessionCommand::Delete { name: "Work".into() }).unwrap();
     assert!(server.services.borrow().saved_entries(key).is_empty(), "gone with the session");
+}
+
+#[test]
+fn a_save_shows_every_window_the_new_value() {
+    declare();
+    let root = tempfile::tempdir().unwrap();
+    let folders = tempfile::tempdir().unwrap();
+    let mut server = boot(root.path(), "");
+    register_actions(&mut server);
+    make(&mut server, folders.path(), "Work");
+    let window = attached(&mut server);
+    server.pump(Instant::now());
+    let _ = updates(&window);
+
+    ask(&mut server, "demo.reorder");
+    server.pump(Instant::now());
+    let order: serde_json::Value = vec!["lobby", "kitchen"].into();
+    assert!(updates(&window).iter().any(|(_, kind)| *kind == ServiceUpdateKind::Snapshot(order.clone())),
+        "the window is shown the saved order");
 }

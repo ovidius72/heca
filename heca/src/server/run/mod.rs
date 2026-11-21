@@ -527,7 +527,7 @@ impl ServerLoop {
     /// **`state.changed` — the one place it is raised**, once per saved entry that changed since the
     /// last turn: the services' listeners hear it, then the scripts' stream gets the same event.
     pub(super) fn announce_state_changes(&self) {
-        let changes = self.services.borrow().take_state_changes();
+        let changes = self.services.borrow_mut().take_state_changes();
         for change in changes {
             self.events.emit(&super::StreamEvent::StateChanged(change.clone()));
             self.services.borrow_mut().announce(&crate::entry::service::ServerEvent::StateChanged(change));
