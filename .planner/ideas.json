@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 29,
+  "nextIdeaNumber": 30,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -212,14 +212,14 @@
       "updatedAt": "2026-11-21T11:59:55.085Z"
     },
     {
-      "id": "87871499-181b-4bfd-8293-4e1dc52a3a70",
-      "number": 28,
-      "shortId": "X93DS",
-      "title": "Palette asks for an action's arguments (enum list, live docks/workspaces/panes, text)",
-      "description": "Antonio, 2026-11-21 (T567, heca-pro dock placement): an action with required arguments cannot be run from the palette today, because the palette cannot ask for them — e.g. chrome.container.move_to_region / move_left_sidebar need container_id, so a user cannot move a dock from the UI. Decided: actions keep their required arguments; the palette learns to ask.\n\nDesign: every action already declares its arguments (name, kind, required, enum values — what --describe-action prints). Choosing an action with arguments in the palette opens one step per argument: a list for an enum (region: left/right/top/bottom), a list of what exists now for a reference kind (a new arg kind \"dock\" — later \"workspace\", \"pane\" — that the palette can enumerate: the mounted docks), a text field for free text. Once, for every action, built-in and extension (heca-pro) alike; scripts keep passing arguments as today. Today container_id is declared as plain Text.",
+      "id": "95c5f51b-4c15-4cd5-b896-365a3b77ec3a",
+      "number": 29,
+      "shortId": "JR7DM",
+      "title": "Key sequences in every binding (prefix+w 1 1), and the hardcoded w+digit chord removed",
+      "description": "Antonio, 2026-11-21 (T567): with more than 10 workspaces there is no key way to reach workspace 11 by index — his `workspace_chord` mode (prefix+w then 1..0) takes one character per key. Checked: the built-in chord is hand-written in heca/src/app/input/modes.rs (handle_chord_mode: `w` + one digit, focus_workspace digit-1), outside config, actions and the keymap — not extensible by config, plugins or extensions, against AGENTS.md (no hardcoded feature keys in mode handlers).\n\nProposal (agreed as the example, queued): key sequences in the keymap library for every binding — [keys], [[keys.mode]], [[keys.surface]], plugins and extensions — written space-separated, e.g. keys = \"prefix+w 1 1\" with action focus_workspace, args { ws_idx = \"10\" }. heca waits for the next key while the sequence can still continue and shows what was typed in the status bar; when one binding is a prefix of another (prefix+w 1 / prefix+w 1 1) the shorter fires after the prefix timeout, as vim/tmux do. The hand-written chord becomes default sequences, configurable like everything else.",
       "promotion": null,
-      "createdAt": "2026-11-21T12:14:01.435Z",
-      "updatedAt": "2026-11-21T12:14:01.435Z"
+      "createdAt": "2026-11-21T13:45:45.058Z",
+      "updatedAt": "2026-11-21T13:45:45.058Z"
     }
   ]
 }
