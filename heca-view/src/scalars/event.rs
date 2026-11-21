@@ -32,6 +32,42 @@ named_set! {
         /// A `Splitter`'s edge was dragged — the intent carries `delta`: how many px it moved along
         /// its axis since the last report, sent at every pointer move while held.
         Resize => "resize",
+        /// A left click on the node — the bare event, with no pick attached (that is `press`).
+        Click => "click",
+        /// A second click in the same run.
+        DoubleClick => "double_click",
+        /// A third click in the same run.
+        TripleClick => "triple_click",
+        /// A right click.
+        RightClick => "right_click",
+        /// A middle click.
+        MiddleClick => "middle_click",
+        /// The pointer came over the node.
+        PointerEnter => "pointer_enter",
+        /// The pointer left the node.
+        PointerLeave => "pointer_leave",
+        /// The node took keyboard focus.
+        FocusGained => "focus_gained",
+        /// The node lost keyboard focus.
+        FocusLost => "focus_lost",
+        /// A key went down or up while the node held the keyboard.
+        Key => "key",
+        /// The wheel or trackpad scrolled over the node.
+        Scroll => "scroll",
+        /// The node started being dragged.
+        DragStart => "drag_start",
+        /// The node is being dragged — sent at every pointer move.
+        Drag => "drag",
+        /// The node's drag ended, dropped or not.
+        DragEnd => "drag_end",
+        /// Something it takes was dragged over the node.
+        DragEnter => "drag_enter",
+        /// Something it takes moved over the node.
+        DragOver => "drag_over",
+        /// Something it takes was dragged away from the node.
+        DragLeave => "drag_leave",
+        /// Something it takes was dropped on the node.
+        Drop => "drop",
     }
 }
 
