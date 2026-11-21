@@ -241,6 +241,15 @@ impl TerminalBackend {
             && self.reaped
             && let Some(code) = exit_code
         {
+            self.ended_unannounced = Some(code);
+        }
+        // **The end is announced after the last output, never before it.** The child can be reaped
+        // while the reader thread is still handing over what it wrote — then "ended" would reach the
+        // pane with its final lines missing. End of file on the reader means every byte has been
+        // read (`read_output` ran first this wake), so that is when the end is told.
+        if self.reader_disconnected
+            && let Some(code) = self.ended_unannounced.take()
+        {
             if !self.semantic_status_active {
                 self.pending_alerts.push(crate::backend::BackendAlert::ProcessCompleted { exit_code: code });
             }

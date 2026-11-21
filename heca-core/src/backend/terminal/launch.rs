@@ -298,6 +298,7 @@ impl TerminalBackend {
                 ..PaneRuntime::default()
             },
             pending_exit: None,
+            ended_unannounced: None,
             last_fg_check,
             osc,
             semantic_status_active: false,
