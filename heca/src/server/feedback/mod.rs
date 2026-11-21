@@ -85,7 +85,13 @@ impl Feedback {
         self.raise(pane, agent.status.as_str().to_owned());
     }
 
-    pub(crate) fn completed(&mut self, pane: PaneId, exit_code: i32) {
+    /// **A command in `pane` ended with `exit_code`.** It raises feedback — success for `0`, error
+    /// otherwise — unless `quiet` (`[settings] notification_quiet_exit_codes`, Ctrl+C's 130 by
+    /// default) lists the code: such an ending asks for no attention, in any window.
+    pub(crate) fn completed(&mut self, pane: PaneId, exit_code: i32, quiet: &[i32]) {
+        if quiet.contains(&exit_code) {
+            return;
+        }
         self.raise(pane, heca_core::runtime::ProcessStatus::of_exit(exit_code).as_str().to_owned());
     }
 

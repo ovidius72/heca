@@ -7,10 +7,13 @@ use super::Sound;
 pub(super) fn start(capacity: usize, generation: Arc<AtomicU64>) -> io::Result<SyncSender<Sound>> {
     let (sender, receiver) = mpsc::sync_channel::<Sound>(capacity.max(1));
     std::thread::Builder::new().name("heca-agent-sounds".into()).spawn(move || {
-        let device = match rodio::DeviceSinkBuilder::open_default_sink() {
+        let mut device = match rodio::DeviceSinkBuilder::open_default_sink() {
             Ok(device) => device,
             Err(error) => { eprintln!("[heca] sound device unavailable: {error}"); return }
         };
+        // Closing the device as heca quits is expected: rodio would otherwise print a notice
+        // ("Dropping DeviceSink…") on the terminal heca was started from.
+        device.log_on_drop(false);
         for sound in receiver {
             if sound.generation != generation.load(Ordering::Relaxed) { continue }
             if let Err(error) = play(&device, &sound) {
