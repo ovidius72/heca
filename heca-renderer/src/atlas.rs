@@ -117,9 +117,10 @@ impl Atlas {
         key: CacheKey,
     ) -> Option<AtlasGlyph> {
         let img = swash.get_image(font_system, key).as_ref()?.clone();
+        let coverage = coverage_of(&img);
         self.upload(
             queue,
-            &img.data,
+            &coverage,
             img.placement.width,
             img.placement.height,
             img.placement.left,
@@ -172,7 +173,7 @@ impl Atlas {
         if gw == 0 || gh == 0 {
             return None;
         }
-        let (buf, w, h, pad) = blur_mask(&img.data, gw, gh, sigma);
+        let (buf, w, h, pad) = blur_mask(&coverage_of(&img), gw, gh, sigma);
         self.upload(
             queue,
             &buf,
@@ -412,5 +413,48 @@ mod tests {
             wide > narrow,
             "sigma 4 padded {wide}, sigma 1 padded {narrow}"
         );
+    }
+}
+
+/// **A glyph's coverage — one byte per pixel, what this atlas holds.**
+///
+/// Most glyphs already are a coverage mask. A glyph a font draws in colour — an emoji, which a symbol
+/// such as ⏺ falls back to when the terminal's own font lacks it — arrives as four bytes per pixel;
+/// read as a mask it filled its whole box, which is why it showed as a square. Its transparency is
+/// its shape, so that is what is kept: it is drawn in the text's colour, the right shape, until
+/// colour glyphs get an atlas of their own. A subpixel mask keeps its middle channel.
+fn coverage_of(img: &cosmic_text::SwashImage) -> std::borrow::Cow<'_, [u8]> {
+    use cosmic_text::SwashContent;
+    match img.content {
+        SwashContent::Mask => std::borrow::Cow::Borrowed(&img.data),
+        SwashContent::Color => std::borrow::Cow::Owned(img.data.as_chunks::<4>().0.iter().map(|pixel| pixel[3]).collect()),
+        SwashContent::SubpixelMask => std::borrow::Cow::Owned(img.data.as_chunks::<4>().0.iter().map(|pixel| pixel[1]).collect()),
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::coverage_of;
+    use cosmic_text::{SwashContent, SwashImage};
+
+    fn image(content: SwashContent, data: Vec<u8>) -> SwashImage {
+        let mut img = SwashImage::new();
+        img.content = content;
+        img.placement.width = 2;
+        img.placement.height = 1;
+        img.data = data;
+        img
+    }
+
+    /// **A colour glyph keeps its shape, not its box**: one byte per pixel from its transparency, so
+    /// an emoji fallback (⏺) is not drawn as a filled square.
+    #[test]
+    fn every_glyph_becomes_one_byte_of_coverage_per_pixel() {
+        let mask = image(SwashContent::Mask, vec![0, 200]);
+        assert_eq!(&*coverage_of(&mask), &[0, 200]);
+        let colour = image(SwashContent::Color, vec![255, 0, 0, 0, 10, 20, 30, 255]);
+        assert_eq!(&*coverage_of(&colour), &[0, 255], "transparent where the emoji is not");
+        let subpixel = image(SwashContent::SubpixelMask, vec![1, 2, 3, 0, 4, 5, 6, 0]);
+        assert_eq!(&*coverage_of(&subpixel), &[2, 5]);
     }
 }

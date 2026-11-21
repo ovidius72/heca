@@ -47,6 +47,16 @@ fn request(line: &str) -> std::io::Result<String> {
     request_to(&path, line)
 }
 
+/// **Ask the running heca to re-read its configuration** — after something outside it changed the
+/// file (installing an agent integration switches the agent on). It reaches every window and the
+/// server through the same `reload_config` a key runs. `false` when no heca is running, which is
+/// not an error: the next start reads the file anyway. Unix only: a Windows window runs its server
+/// in its own process.
+#[cfg(unix)]
+pub(crate) fn reload_running() -> bool {
+    request("reload_config").is_ok()
+}
+
 fn request_to(path: &std::path::Path, line: &str) -> std::io::Result<String> {
     let mut stream = UnixStream::connect(path)?;
     let limits = heca_config::loader::AppConfig::load().config.settings.connection;

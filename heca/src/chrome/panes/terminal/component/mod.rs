@@ -89,6 +89,7 @@ impl Terminal {
             view: Cell::new((0, 0)),
             link_modifier: Cell::new(heca_config::theme::ModifierKey::default()),
             node: Cell::new(0),
+            edge_rest: Cell::new(0.0),
         }))
     }
 
@@ -143,12 +144,23 @@ impl Terminal {
                 if me.held_for_window(cx) {
                     return;
                 }
+                // **The terminal keeps the pointer until the button is up** — a selection dragged
+                // past its edge still hears every move and scrolls the history — without taking the
+                // press, which a window gesture may still claim.
+                if cx.pointer().is_some_and(|p| p.button == heca_grid_ui::PointerButton::Left) {
+                    cx.capture_pointer();
+                    me.edge_rest.set(0.0);
+                }
                 me.pointer(cx, |p, cell| TerminalInput::Press {
                     button: p.button,
                     cell,
                     modifiers: p.modifiers,
                 })
             }
+        })
+        .on_edge_scroll({
+            let me = me.clone();
+            move |cx| me.edge_scroll(cx)
         })
         .on(EventKind::PointerUp, {
             let me = me.clone();

@@ -88,6 +88,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .workspaces
         .set_pane_lines(state.pane_lines.shown(&state.appearance.sidebar.pane_lines));
     state.chrome_state.workspaces.set_agent_statuses(&state.settings.agents.statuses);
+    state.chrome_state.workspaces.set_agent_session_line(state.appearance.sidebar.agent_session_line);
     state.chrome_state.panes.configure_sounds(&state.settings.agents, state.settings.notification_sound);
     state.chrome_state.panes.set_name_delay(state.settings.pane_name_delay);
     // The program catalog is this component's, not the shared context's. Mirrored

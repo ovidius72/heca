@@ -273,13 +273,23 @@ way the brand itself draws its app icon: on its own solid tile, in the brand's c
 mark is white on Claude's coral tile, and the Codex mark is OpenAI's black symbol on a white tile.
 Only brand marks keep their own colours this way; everything else heca draws follows the theme.
 
+**A session whose work runs outside heca still reports to its pane.** A program can run a session
+in a process heca never started — Claude Code resumes a background session in its own daemon, and
+only the front-end runs in the pane — so that process's hooks have no `HECA_AGENT_*` variables. When a
+hook that has them reports a native `session_id`, heca remembers the pane's reporting connection under
+that id (an owner-only folder in the user's temporary folder); a hook without them looks its session
+up and reports to the same pane. A pane that is gone has no file to write to, and its entry goes.
+
 The report reader attaches the registered mark after decoding a native report. Lifecycle templates
 do not repeat SVG contents in every event or in the launch environment. A user can override a mark
 with `icon = "/path/to/logo.svg"` under that program's configuration; this works for added drivers too.
 
 `AgentState` also accepts optional `model`, `session_id` and `session_title` values supplied by a
-driver. The row shows a reported model or the configured program name, then the reported session
-title or the pane name. It never invents a model or title. Omitted model/title metadata is retained
+driver. The row shows the program's icon and its configured name — never the model, for any agent:
+one shape for all of them, rather than a model that is right for one and stale or missing for the
+others. Under it, the reported session title, as `[appearance.sidebar] agent_session_line` says
+(by default only a title the program reported that is not the pane's name already). It never
+invents a title. Omitted model/title metadata is retained
 only when the driver and an explicit, nonempty session identity match; a different session clears
 it. Missing fields remain compatible with older reports. Native adapters must forward the metadata
 their program actually supplies.

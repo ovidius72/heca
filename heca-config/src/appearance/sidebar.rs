@@ -34,6 +34,24 @@ pub struct SidebarAppearance {
     /// alone. See [`default_sidebar_pane_lines`]. A name nothing provides is reported and skipped.
     #[serde(default = "default_sidebar_pane_lines")]
     pub pane_lines: Vec<String>,
+    /// The line under a pane's agent: the session title the agent reported. See
+    /// [`AgentSessionLine`].
+    #[serde(default)]
+    pub agent_session_line: AgentSessionLine,
+}
+
+/// **When the line under an agent shows its session title** — `[appearance.sidebar]
+/// agent_session_line`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentSessionLine {
+    /// Only a title the agent reported, and only when it is not the pane's name already.
+    #[default]
+    Reported,
+    /// The reported title, or the pane's name when the agent reported none.
+    Always,
+    /// Never.
+    Never,
 }
 
 impl Default for SidebarAppearance {
@@ -47,6 +65,7 @@ impl Default for SidebarAppearance {
             gap: None,
             width: None,
             pane_lines: default_sidebar_pane_lines(),
+            agent_session_line: AgentSessionLine::default(),
         }
     }
 }

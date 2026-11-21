@@ -65,11 +65,10 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         ("Container", "not a widget: a helper for building a `Flex`"),
         ("ScrollRegion", "described as `Scroll`"),
         ("ProgressBar", "described as `Progress`"),
-        // ── Not describable yet: a value a description cannot carry ──
-        (
-            "Elapsed",
-            "its moment is an epoch time, and a description's numbers travel as f32",
-        ),
+        // ── Not describable yet: no kind is declared for it ──
+        // (`at_millis` is already a property — a description's numbers keep full precision — so
+        // declaring the kind is all that is left.)
+        ("Elapsed", "no described kind is declared for it yet"),
         // ── Native code composes these; a description has no use for them ──
         // ── Opened through the host API, not placed in a tree ──
         //

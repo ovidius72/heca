@@ -170,3 +170,41 @@ fn the_terminal_says_which_cell_is_where() {
     assert_eq!(t.cell_at((45.0, 61.0)), None, "not drawn: no cell");
     assert_eq!(t.cell_origin(3, 4), None);
 }
+
+/// **A selection dragged past the terminal scrolls its history, with the mouse still** — the
+/// terminal holds the pointer from the press, so a move above it still reaches it, and each frame
+/// it says how many rows to scroll and the edge cell to stretch the selection to. Whoever places
+/// the terminal wires none of it.
+#[test]
+fn a_drag_past_the_edge_scrolls_and_names_the_edge_cell() {
+    let (seams, said) = recording();
+    let t = Terminal::unbound();
+    t.bind(seams);
+    t.show(&scrolled(0));
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
+    let _ = painted(root.as_ref());
+    let speed = heca_grid_ui::EdgeScroll { distance: 30.0, speed: 60.0 };
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_pressed(Point::new(45.0, 61.0), PointerButton::Left));
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_moved(Point::new(45.0, -30.0)));
+    said.borrow_mut().clear();
+    assert!(heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed), "above the terminal, it scrolls");
+    let emitted = pointer_input(&said);
+    let [TerminalInput::EdgeScroll { lines, cell: Some(cell), .. }] = emitted.as_slice() else {
+        panic!("one edge scroll, got {emitted:?}");
+    };
+    assert!(*lines < 0, "above: back into the history");
+    assert_eq!((cell.row, cell.col), (0, 4), "the top row, under the pointer's column");
+
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_moved(Point::new(45.0, 400.0)));
+    said.borrow_mut().clear();
+    heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed);
+    let emitted = pointer_input(&said);
+    let [TerminalInput::EdgeScroll { lines, cell: Some(cell), .. }] = emitted.as_slice() else {
+        panic!("one edge scroll, got {emitted:?}");
+    };
+    assert!(*lines > 0, "below: towards the live bottom");
+    assert!(cell.row > 0, "the bottom row");
+
+    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_released(Point::new(45.0, 400.0), PointerButton::Left));
+    assert!(!heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed), "the button is up: it stops");
+}

@@ -27,7 +27,12 @@ impl Integrations {
     /// Construction installs nothing. Invalid configuration is returned to the caller rather
     /// than replaced with defaults before an explicit installation change.
     pub fn machine_local() -> io::Result<Self> {
-        let config = heca_config::loader::AppConfig::try_load().map_err(io::Error::other)?;
+        // **No config file yet is the defaults**, not an error: a new user installs an integration
+        // before ever writing one, and the installer then writes the switch into a new file.
+        let config = match heca_config::loader::AppConfig::try_load() {
+            Err(heca_config::loader::ConfigError::NotFound) => heca_config::loader::AppConfig::load(),
+            other => other.map_err(io::Error::other)?,
+        };
         super::integrations(&config.config.settings.agents)
     }
 

@@ -78,6 +78,8 @@ pub struct WorkspacesContainerState {
     pub(crate) pane_lines: Signal<crate::chrome::panes::pane_items::PaneLineSet>,
     /// Open status labels and glyphs, read by each agent line's own subscription.
     pub(crate) agent_statuses: Signal<std::rc::Rc<heca_config::settings::AgentStatuses>>,
+    /// `[appearance.sidebar] agent_session_line`, read by each agent line's own subscription.
+    pub(crate) agent_session_line: Signal<heca_config::appearance::AgentSessionLine>,
 }
 
 impl WorkspacesContainerState {
@@ -87,6 +89,14 @@ impl WorkspacesContainerState {
     ) {
         if self.agent_statuses.with(|current| current.as_ref() != statuses) {
             self.agent_statuses.set(std::rc::Rc::new(statuses.clone()));
+        }
+    }
+
+    /// `[appearance.sidebar] agent_session_line`, set only when it changes.
+    pub(crate) fn set_agent_session_line(&self, line: heca_config::appearance::AgentSessionLine) {
+        use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _};
+        if self.agent_session_line.get_untracked() != line {
+            self.agent_session_line.set(line);
         }
     }
 
@@ -142,6 +152,7 @@ impl WorkspacesContainerState {
             agent_statuses: signal(std::rc::Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,
             )),
+            agent_session_line: signal(Default::default()),
         }
     }
 

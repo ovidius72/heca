@@ -9,6 +9,7 @@ use heca_grid_ui::widgets::{Flex, Glyph, Grid, Icon, Label, Visibility};
 
 use crate::agent::AgentIcon;
 use crate::chrome::panes::pane_items::LineCx;
+use heca_config::appearance::AgentSessionLine;
 use crate::components::PaneName;
 use super::pane_row::{META_INDENT, set_if_changed};
 
@@ -58,6 +59,7 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let visible = row.visible_signal();
     let facts = cx.facts.clone();
     let statuses = cx.agent_statuses;
+    let session_line = cx.agent_session_line;
     create_effect(move |_| {
         let facts = facts();
         set_if_changed(visible, facts.agent.is_some());
@@ -80,8 +82,16 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
             };
             set_if_changed(logo_source, source);
         }
-        let primary = agent.model.filter(|text| !text.is_empty()).unwrap_or(agent.name);
-        let session = agent.session_title.filter(|text| !text.is_empty()).unwrap_or(facts.title);
+        // **The agent's name, never its model**: one shape for every agent — a model is right for one
+        // and stale or missing for the others (decision on T567/C57).
+        let primary = agent.name;
+        let reported = agent.session_title.filter(|text| !text.is_empty());
+        let session = match session_line.get() {
+            AgentSessionLine::Reported => reported.filter(|title| *title != facts.title),
+            AgentSessionLine::Always => Some(reported.unwrap_or(facts.title)),
+            AgentSessionLine::Never => None,
+        }
+        .unwrap_or_default();
         set_if_changed(session_visible, !session.is_empty() && session != primary);
         set_if_changed(primary_text, primary);
         set_if_changed(session_text, session);

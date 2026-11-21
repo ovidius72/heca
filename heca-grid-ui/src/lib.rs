@@ -102,7 +102,7 @@ pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
-pub use pointer::{PointerState, clear_hover, dragged_kind, dragging, hit_test};
+pub use pointer::{EdgeScroll, PointerState, clear_hover, dragged_kind, dragging, edge_scroll, hit_test, pointer_held};
 pub use scene::{
     BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, ImageAt, TextStyle,
 };

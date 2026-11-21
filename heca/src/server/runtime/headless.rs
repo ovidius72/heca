@@ -5,6 +5,11 @@ use heca_config::loader::AppConfig;
 use crate::server::{identity::{ServerIdentity, ServerKind}, run::ServerLoop, socket::RuntimeListener};
 
 pub(crate) fn serve(socket: Option<&Path>) -> io::Result<()> {
+    // **Who this server is, first**, so even what loading the configuration says lands in its log.
+    let identity = ServerIdentity::claim(ServerKind::Background);
+    if let Ok(log) = identity.own_file("log") {
+        super::log::send_output_to(&log);
+    }
     let config = AppConfig::load();
     let settings = &config.config.settings;
     let (handle, inbox) = super::channel(settings.connection);
@@ -17,7 +22,6 @@ pub(crate) fn serve(socket: Option<&Path>) -> io::Result<()> {
             if let Err(error) = handle.raise(draft) { eprintln!("[heca] notification: {error}"); }
         }
     });
-    let identity = ServerIdentity::claim(ServerKind::Background);
     let server = ServerLoop::from_config(&config, identity, handle.waker())?;
     inbox.run(server);
     Ok(())

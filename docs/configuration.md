@@ -686,7 +686,11 @@ only inside a repository. **A fresh install shows the folder line under each pan
 sidebar.** Which lines show is decided by this list alone. A program built
 on heca can add its own, named `<extension>.<short>`; the same rules apply as for buttons and chips.
 
-`agent` shows the reporting program's name, status and optional task. It hides itself in other panes.
+`agent` shows the reporting program's icon, name, status and optional task — the name, never the
+model. It hides itself in other panes. The line under it is the program's session title,
+**`[appearance.sidebar] agent_session_line`**: `"reported"` (default) shows only a title the program
+sent, and only when it is not the pane's name already; `"always"` shows the title, or the pane's name
+when the program sent none; `"never"` hides it.
 Its labels and glyphs come from `[settings.agents.statuses]`; unlisted status ids are shown as reported.
 
 ## Agent status and sounds

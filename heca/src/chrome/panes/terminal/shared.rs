@@ -63,6 +63,9 @@ pub(super) struct Shared {
     /// The window's identity of the node drawn on the last frame (its focus identity), `0` before
     /// one is drawn. Read with `placed`: a terminal not drawn has no node on screen.
     pub(super) node: Cell<u64>,
+    /// The part of a row an edge scroll moved and did not yet make a whole row — kept for the next
+    /// frame, so a slow scroll still advances.
+    pub(super) edge_rest: Cell<f32>,
 }
 
 /// **What an extension declared about a terminal it placed.** The name is the identity and never
@@ -212,7 +215,42 @@ impl Shared {
         if p.target_bounds != Some(self.bounds.get()) {
             return;
         }
-        self.emit(make(p, self.cell_at(p)));
+        self.emit(make(p, self.cell_at(p).or_else(|| self.cell_nearest(p))));
+    }
+
+    /// **The cell nearest the pointer, when it is off the grid** — the edge cell a selection
+    /// stretches to while the pointer is dragged past the terminal. A move or an edge scroll
+    /// reaches the terminal off its grid only while it holds the pointer, so this never names a
+    /// cell for a pointer that is merely passing.
+    pub(super) fn cell_nearest(&self, p: &heca_grid_ui::PointerEvent) -> Option<GridCell> {
+        let content = self.content_bounds();
+        let (cell_w, cell_h) = self.cell.get();
+        let (half_w, half_h) = (f64::from(cell_w) / 2.0, f64::from(cell_h) / 2.0);
+        let clamp = |at: f64, start: f64, size: f64, half: f64| at.clamp(start + half, (start + size - half).max(start + half));
+        GridCell::at(
+            (clamp(p.pos.x, content.loc.x, content.size.w, half_w), clamp(p.pos.y, content.loc.y, content.size.h, half_h)),
+            content,
+            f64::from(cell_w),
+            f64::from(cell_h),
+        )
+    }
+
+    /// **A drag held past the terminal's edge**: the pixels the framework says to scroll this frame
+    /// become whole rows of history (what is left is kept for the next frame), said with the edge
+    /// cell the selection stretches to.
+    pub(super) fn edge_scroll(&self, cx: &mut heca_grid_ui::event::EventCx<'_>) {
+        let Some(p) = cx.pointer().copied() else { return };
+        let Some((_, dy)) = p.delta_pixels else { return };
+        let (_, cell_h) = self.cell.get();
+        if cell_h <= 0.0 {
+            return;
+        }
+        let moved = self.edge_rest.get() + dy / cell_h;
+        let lines = moved.trunc();
+        self.edge_rest.set(moved - lines);
+        if lines != 0.0 {
+            self.emit(TerminalInput::EdgeScroll { lines: lines as i32, cell: self.cell_nearest(&p), modifiers: p.modifiers });
+        }
     }
 
     /// The wheel turned over the terminal.

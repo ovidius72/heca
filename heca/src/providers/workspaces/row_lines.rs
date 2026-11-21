@@ -197,6 +197,7 @@ mod tests {
             theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(heca_config::settings::AgentsConfig::default().statuses)),
+            agent_session_line: signal(Default::default()),
         });
         // Visibility is applied at layout, so each check lays the row out first.
         let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().child(line));
@@ -248,6 +249,7 @@ mod tests {
             theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(heca_config::settings::AgentsConfig::default().statuses)),
+            agent_session_line: signal(Default::default()),
         });
         // A card about as wide as a sidebar row, narrower than the row's natural width.
         let mut root = Flex::column()

@@ -154,7 +154,7 @@ impl PaneRow<'_> {
                 )
             })
         };
-        let line_cx = LineCx { theme, facts, agent_statuses: ws_state.agent_statuses };
+        let line_cx = LineCx { theme, facts, agent_statuses: ws_state.agent_statuses, agent_session_line: ws_state.agent_session_line };
         let runtime_signals = seams.panes.signals(pane_id);
         let flash = runtime_signals.flash;
         // **The card's arrangement is the library's `Tile`** — pip, icon, the name with its dimmed

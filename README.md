@@ -100,6 +100,11 @@ Ctrl+B → f   Toggle floating
 
 Close the window and heca keeps running in the background; run `heca` again to reattach.
 
+**macOS: "heca was prevented from modifying apps".** When a command run inside heca updates an app in
+`/Applications` — `brew upgrade` updating a cask, say — macOS names the terminal it ran in, which is
+heca, under *Privacy & Security → App Management*. heca changes nothing itself. Allow heca there if
+you update apps from its terminals, or run those updates from another terminal.
+
 ## Command line
 
 Every command answers before the window opens, so a script can ask heca without a display.

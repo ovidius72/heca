@@ -250,6 +250,20 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 
 ### The event model — the framework resolves the pointer and walks the tree
 
+**Dragging past the edge.** A widget that keeps the pointer while a button is held hears
+`EdgeScroll` every frame the pointer is outside it — how a selection keeps growing past the edge
+of what holds it, with the mouse still. The terminal does exactly this, inside itself: whoever
+places a `Terminal` writes nothing, and a selection dragged above it scrolls its history.
+
+```rust
+Surface::new()
+    .on(EventKind::PointerDown, |ev| ev.capture_pointer())          // hold the pointer, keep the press free
+    .on_edge_scroll(|ev| scroll_by(ev.pointer().and_then(|p| p.delta_pixels)))
+```
+
+The host runs `heca_grid_ui::edge_scroll(root, dt, EdgeScroll { distance, speed })` once a frame
+with the user's settings; a widget never measures where the pointer is.
+
 **A widget never routes events to its children, and never works out what an event meant.** Both are
 `heca_grid_ui`'s, once, for every widget:
 
@@ -905,6 +919,8 @@ let row = Row::new()
 | `.on_pointer_down(f)` / `.on_pointer_up(f)` / `.on_pointer_move(f)` | The raw halves of a gesture. Stopping propagation on a `pointer_down` **captures the pointer** until the release. |
 | `.on_pointer_enter(f)` / `.on_pointer_leave(f)` | Hover transitions. Several widgets on one path enter together, so claiming one is almost always wrong. |
 | `.on_scroll(f)` | The wheel over this widget. Stop propagation to keep it from also scrolling whatever contains this widget. |
+| `.on_edge_scroll(f)` | **A drag this widget holds is past its edge** — every frame, even with the mouse still. `ev.pointer().delta_pixels` is how far to scroll this frame (negative above/left, positive below/right), faster the further outside, up to `[settings] edge_scroll_speed` at `edge_scroll_distance` away. The widget converts the pixels into its own unit. Needs the widget to hold the pointer: a consumed press, or `ev.capture_pointer()`. |
+| `ev.capture_pointer()` | Called in a `PointerDown` handler: **keep the pointer until the button is up without taking the press** (the browser's `setPointerCapture`). Every move, the release and `EdgeScroll` come to this widget wherever the pointer goes, and the press still reaches the window's own gestures. |
 | `.on_pointer_down_outside(f)` | A press landed somewhere else — how a popup closes itself. |
 | `.on_hint(f)` | **What a pick does to this widget, when that differs from acting on it** — the override, on every widget. Fires in the **target phase only**; listen with `.on(EventKind::Hint, …)` to watch picks from your children instead. Takes an `Option` too: `None` declares nothing, so `.on_hint(pick)` needs no branch when a row only sometimes has a pick. |
 | `.on_key(f)` / `.on_text_input(f)` | A key, or committed text, that reached this widget — it holds the keyboard, or contains what does. Intercepting a shortcut or a quick-pick letter is the same one line as intercepting a click. |
@@ -3004,8 +3020,9 @@ let ago = Elapsed::since(sent_at, Label::new("").size(WidgetSize::Caption));
 The label keeps its own look; `Elapsed` is transparent to layout, so it sits in a row exactly where
 the label would.
 
-A description cannot set the moment yet: its numbers travel as `f32`, which cannot hold an epoch
-time to the second, so `at_millis` and `format` are host-only.
+`at_millis` is a property: a description's numbers keep full precision (an epoch time in
+milliseconds arrives exact), so it is ready for a described kind, which is not declared yet.
+`format` is host-only — a function cannot cross as a static property.
 
 ### Label
 

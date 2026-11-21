@@ -119,6 +119,18 @@ pub enum Event {
     /// A region that cannot scroll the axis asked for declines, and the event bubbles to the next
     /// one out — which is what makes nested scroll areas work with nothing declared.
     Scroll(PointerEvent),
+    /// **A drag is past this widget's edge** — sent while the widget holds the pointer
+    /// ([`EventCx::capture_pointer`](crate::event::EventCx::capture_pointer) or a consumed press)
+    /// and the pointer is outside its bounds, **every frame, even with the mouse still**, the way a
+    /// browser scrolls a selection dragged past the edge of a page.
+    ///
+    /// [`delta_pixels`](PointerEvent::delta_pixels) is how far to scroll this frame, in logical
+    /// pixels: negative `y` when the pointer is above (scroll back), positive below, and the same
+    /// for `x`. It grows with how far outside the pointer is, up to `[settings]
+    /// edge_scroll_speed` per second at `edge_scroll_distance` away. The line deltas are zero: a
+    /// widget converts the pixels into its own unit (a terminal's rows). `pos` is where the pointer
+    /// is, so a selection can be stretched to the edge it is moving towards.
+    EdgeScroll(PointerEvent),
 
     // ───────────────────────────── drag and drop ─────────────────────────────
     /// A drag began on this widget: it declared a
@@ -274,6 +286,7 @@ impl Event {
             Self::MiddleClick(_) => EventKind::MiddleClick,
             Self::PointerDownOutside(_) => EventKind::PointerDownOutside,
             Self::Scroll(_) => EventKind::Scroll,
+            Self::EdgeScroll(_) => EventKind::EdgeScroll,
             Self::DragStart(_) => EventKind::DragStart,
             Self::Drag(_) => EventKind::Drag,
             Self::DragEnd(_) => EventKind::DragEnd,
@@ -309,7 +322,8 @@ impl Event {
             | Self::RightClick(p)
             | Self::MiddleClick(p)
             | Self::PointerDownOutside(p)
-            | Self::Scroll(p) => Some(p),
+            | Self::Scroll(p)
+            | Self::EdgeScroll(p) => Some(p),
             _ => None,
         }
     }
@@ -328,7 +342,8 @@ impl Event {
             | Self::RightClick(p)
             | Self::MiddleClick(p)
             | Self::PointerDownOutside(p)
-            | Self::Scroll(p) => Some(p),
+            | Self::Scroll(p)
+            | Self::EdgeScroll(p) => Some(p),
             _ => None,
         }
     }
@@ -379,6 +394,8 @@ pub enum EventKind {
     MiddleClick,
     PointerDownOutside,
     Scroll,
+    /// A drag past the widget's edge — see [`Event::EdgeScroll`].
+    EdgeScroll,
     DragStart,
     Drag,
     DragEnd,

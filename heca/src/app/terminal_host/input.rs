@@ -189,6 +189,32 @@ fn on_move(
     }
 }
 
+/// **A selection dragged past the terminal's edge**: the history scrolls by `lines` and the
+/// selection stretches to the edge cell — every frame the pointer stays outside, so it keeps
+/// growing with the mouse still. Only a selection drag this terminal owns scrolls; anything else
+/// past the edge (a program's own mouse drag) leaves the history where it is.
+fn on_edge_scroll(
+    state: &mut AppState,
+    terminal: TerminalId,
+    lines: i32,
+    cell: Option<Cell>,
+    modifiers: heca_grid_ui::Modifiers,
+) {
+    let selecting = state.selection.is_selecting()
+        && state.selection.source() == Some(SelectionSource::MouseDrag)
+        && state.selection.owner() == Some(SelectionOwner(terminal));
+    if !selecting {
+        return;
+    }
+    if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
+        // The terminal's lines run down the screen; the history's offset grows going back.
+        backend.scroll_viewport(-lines);
+    }
+    let pane = state.client.backends.pane_of(terminal);
+    on_move(state, terminal, pane, cell, modifiers);
+    state.needs_redraw = true;
+}
+
 /// Has a window gesture taken the pointer — a drag in flight, a menu or dialog
 /// that just opened? Then the program does not hear it.
 fn window_gesture_has_it(state: &AppState) -> bool {
@@ -299,6 +325,7 @@ pub(crate) fn on_terminal_input(
             let pane = state.client.backends.pane_of(terminal);
             on_move(state, terminal, pane, cell, modifiers);
         }
+        TerminalInput::EdgeScroll { lines, cell, modifiers } => on_edge_scroll(state, terminal, lines, cell, modifiers),
     }
 }
 

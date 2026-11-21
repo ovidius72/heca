@@ -117,6 +117,14 @@ pub(crate) enum TerminalInput {
         cell: Option<Cell>,
         modifiers: Modifiers,
     },
+    /// **A drag held past the terminal's edge** — scroll `lines` (negative: back into the history,
+    /// positive: towards the live bottom) and stretch a selection to `cell`, the edge cell nearest
+    /// the pointer. Sent every frame the pointer stays outside, with the mouse still.
+    EdgeScroll {
+        lines: i32,
+        cell: Option<Cell>,
+        modifiers: Modifiers,
+    },
     /// **Scroll back to the live bottom** — the scrollback chip was clicked.
     ScrollToBottom,
     /// **Scroll to `rows` above the live bottom** — the scrollbar thumb moved.

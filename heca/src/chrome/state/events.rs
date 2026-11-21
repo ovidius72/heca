@@ -194,8 +194,7 @@ pub enum ChromeEvent {
     },
     /// **This window now shows another workspace** — `workspace` is its lasting key (`None` before
     /// the window knows its session). Raised once per change, from the one place the window's
-    /// active workspace is mirrored; [`StateView::active_workspace`](crate::host::StateView::active_workspace)
-    /// is the same value to bind to.
+    /// active workspace is mirrored; `cx.state().active_workspace()` is the same value to bind to.
     WorkspaceFocused {
         workspace: Option<crate::entry::service::WorkspaceKey>,
     },

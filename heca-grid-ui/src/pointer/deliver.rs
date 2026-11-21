@@ -139,11 +139,15 @@ impl Base {
                 if out.default_prevented {
                     note_default_prevented();
                 }
+                if out.captures_pointer {
+                    self.pointer.capture.set(true);
+                }
                 out
             }
             None => crate::event::HandlerOutcome {
                 handled: Handled::No,
                 default_prevented: false,
+                captures_pointer: false,
             },
         }
     }

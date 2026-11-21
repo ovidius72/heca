@@ -737,6 +737,10 @@ search_current_match_alpha = 150
 #                   e.g. "demo.status" (shown by default while this list is the default;
 #                   once you write your own list, only what you list shows). [] shows
 #                   the name alone. "agent" shows a reporting program's status and task.
+# agent_session_line: the line under an agent, with its session title.
+#                   "reported" = only a title the agent sent, when it is not the pane's
+#                   name already | "always" = the title, or the pane's name when the agent
+#                   sent none | "never".
 # border_style     = "bracketed"
 # border_width     = 1.0
 # border_color     = "#40e0ff"
@@ -745,6 +749,7 @@ search_current_match_alpha = 150
 # gap              = 12.0
 # width            = 300
 pane_lines = ["cwd", "git", "agent"]
+agent_session_line = "reported"
 
 # Per-project settings: a `.heca/config.toml` in the folder heca was started in (or the nearest
 # parent that has a `.heca/` folder) is merged over this file key by key — any key it sets wins, and

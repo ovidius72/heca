@@ -2,6 +2,7 @@
 
 mod command;
 mod records;
+mod sessions;
 mod server;
 
 use std::{collections::BTreeMap, path::{Path, PathBuf}};

@@ -32,6 +32,17 @@ pub enum PropInput {
     Text(String),
 }
 
+/// The range a whole-number builder argument may take, for [`PropInput::as_whole`].
+pub trait Bounded {
+    const MIN_F64: f64;
+    const MAX_F64: f64;
+}
+
+macro_rules! bounded {
+    ($($t:ty),*) => { $(impl Bounded for $t { const MIN_F64: f64 = <$t>::MIN as f64; const MAX_F64: f64 = <$t>::MAX as f64; })* };
+}
+bounded!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
+
 impl PropInput {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
@@ -40,15 +51,29 @@ impl PropInput {
         }
     }
 
-    /// The number, or a number written as text (`"12"`), so a description that carries everything
-    /// as strings still works.
-    pub fn as_f32(&self) -> Option<f32> {
+    /// **The number at full precision**, or a number written as text (`"12"`), so a description
+    /// that carries everything as strings still works. Every narrower type is read from this one,
+    /// so a large integer — an epoch time in milliseconds — reaches a builder exactly.
+    pub fn as_f64(&self) -> Option<f64> {
         let number = match self {
-            PropInput::Number(n) => Some(*n as f32),
-            PropInput::Text(t) => t.trim().parse::<f32>().ok(),
+            PropInput::Number(n) => Some(*n),
+            PropInput::Text(t) => t.trim().parse::<f64>().ok(),
             PropInput::Bool(_) => None,
         };
         number.filter(|value| value.is_finite())
+    }
+
+    /// The number as an `f32` — a size, a share, a colour channel.
+    pub fn as_f32(&self) -> Option<f32> {
+        self.as_f64().map(|value| value as f32)
+    }
+
+    /// The number as a whole number of the builder's type: rounded, and held inside the type's
+    /// range (a negative count is zero, a too-large one the largest), never wrapped.
+    pub fn as_whole<T: TryFrom<i128> + Bounded>(&self) -> Option<T> {
+        let rounded = self.as_f64()?.round();
+        let clamped = rounded.clamp(T::MIN_F64, T::MAX_F64) as i128;
+        T::try_from(clamped).ok()
     }
 
     pub fn as_text(&self) -> Option<&str> {
@@ -184,5 +209,20 @@ mod tests {
         assert_eq!(PropInput::Text("12.5".into()).as_f32(), Some(12.5));
         assert_eq!(PropInput::Number(3.0).as_f32(), Some(3.0));
         assert_eq!(PropInput::Bool(true).as_f32(), None);
+    }
+
+    /// **A large whole number arrives exact** — an epoch time in milliseconds, which an `f32` would
+    /// round by minutes — and a whole-number builder never wraps: below its range is its least,
+    /// above is its largest.
+    #[test]
+    fn numbers_keep_full_precision_and_narrow_without_wrapping() {
+        let epoch_ms = 1_763_745_123_456.0;
+        assert_eq!(PropInput::Number(epoch_ms).as_f64(), Some(epoch_ms));
+        assert_eq!(PropInput::Number(epoch_ms).as_whole::<u64>(), Some(1_763_745_123_456));
+        assert_eq!(PropInput::Text("1763745123456".into()).as_whole::<i64>(), Some(1_763_745_123_456));
+        assert_eq!(PropInput::Number(-3.0).as_whole::<usize>(), Some(0));
+        assert_eq!(PropInput::Number(70_000.0).as_whole::<u16>(), Some(u16::MAX));
+        assert_eq!(PropInput::Number(2.6).as_whole::<u32>(), Some(3));
+        assert_eq!(PropInput::Number(f64::NAN).as_whole::<u32>(), None);
     }
 }
