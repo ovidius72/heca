@@ -221,6 +221,11 @@ impl DockFrame {
     pub fn grip(self, on: bool) -> Self {
         self.prop("grip", on)
     }
+
+    /// The text a dock-shaped header's grip shows — a list row's own reorder handle.
+    pub fn grip_glyph(self, glyph: impl Into<String>) -> Self {
+        self.prop("grip_glyph", glyph.into())
+    }
     /// Show as the current one.
     pub fn active(self, on: bool) -> Self {
         self.prop("active", on)

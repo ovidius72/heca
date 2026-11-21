@@ -50,6 +50,6 @@ pub use crate::actions::ActionCatalogSnapshot;
 pub use service::{
     ActionCx, ActionRequest, ActionResult, ExtensionConfigError, ExternalRequest, Permit, ProjectCx, Projection,
     RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox, ServiceRegistration,
-    ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, SubmitError, Update, WorkspaceKey,
+    ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, SubmitError, Update, WorkspaceKey, Scope, SavedError, StateEvent,
     ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
 };

@@ -18,6 +18,12 @@ impl SessionRuntime {
             focus: self.last_focus,
             view: self.last_view.clone(),
             terminals: self.recorded_terminals(),
+            // Restored entries waiting for the services, else what the services hold now.
+            saved_state: if self.restored_state.is_empty() {
+                self.services.borrow().saved_entries(self.key)
+            } else {
+                self.restored_state.clone()
+            },
         }
     }
 
@@ -37,6 +43,9 @@ impl SessionRuntime {
             agents: 0,
         };
         self.saved_terminals = saved.terminals;
+        // The services are installed after a session is restored (`install_services`), which hands
+        // these over.
+        self.restored_state = saved.saved_state;
         self.last_focus = saved.focus;
         self.last_view = saved.view;
     }

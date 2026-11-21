@@ -46,6 +46,9 @@ pub(crate) struct SavedSession {
     /// What each terminal was started with, and the harness (driver and native session) in it.
     #[serde(default)]
     pub terminals: Vec<RecordedTerminal>,
+    /// Every extension's saved entries for this session (`Scope::Session`), restored with it.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub saved_state: crate::server::services::saved::Entries,
 }
 
 /// **Every session a server has**, with what the server itself keeps.

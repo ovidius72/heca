@@ -297,6 +297,9 @@ stop_timeout_ms = 3000
 # Requests one service may have open at once, counting those waiting to run and those waiting on a
 # deferred answer. A service that submits a request past this is told the queue is full.
 request_queue_capacity = 64
+# The largest value one saved-state entry may hold, in bytes of JSON (an extension's saved order,
+# choice or list — `cx.save(..)`). A larger one is refused with the reason, never cut short.
+saved_entry_max_bytes = 65536
 
 [settings.notification_system]
 # ─────────────────────────────────────────────────────────────────────────────

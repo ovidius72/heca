@@ -35,6 +35,9 @@ pub(crate) enum StreamEvent {
         kind: crate::entry::service::SessionChange,
         session: crate::entry::service::SessionEntry,
     },
+    /// `state.changed`: an extension's saved entry was saved or forgotten — the same event the
+    /// services hear (THE EVENTS).
+    StateChanged(crate::entry::service::StateEvent),
 }
 
 /// The subscribers' sending ends, shared by the owner loop and its sessions. Cheap to clone (an

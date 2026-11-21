@@ -26,6 +26,7 @@ mod book;
 mod permit;
 mod requests;
 mod running;
+pub(crate) mod saved;
 
 pub(crate) use book::{Handle, Queued, Requests};
 pub(crate) use permit::{Call, gate};
@@ -100,6 +101,8 @@ pub(crate) struct ServiceHost {
     held: Vec<crate::notification::NotificationDraft>,
     /// Every session, as the server last said — what each context hands a service.
     sessions: Sessions,
+    /// Every extension's saved entries, global and per session — the server is the only writer.
+    saved: Rc<std::cell::RefCell<saved::SavedStore>>,
 }
 
 impl ServiceHost {
@@ -132,10 +135,19 @@ impl ServiceHost {
                     .map_err(|error| report(declared.name(), "could not start", &error)).ok())
                 .collect()
         });
+        let saved = Rc::new(std::cell::RefCell::new(saved::SavedStore::open(
+            identity.own_file("saved-state.json").ok(),
+            config.config.settings.services.saved_entry_max_bytes.get(),
+        )));
+        let mut services: Vec<Box<dyn Hosted>> = services;
+        for service in &mut services {
+            service.know_saved(&saved);
+        }
         Self {
             epoch: args.epoch,
             config: Some(Rc::new(config.clone())),
             services,
+            saved,
             nudge: Some(nudge),
             held,
             ..Self::default()
@@ -145,6 +157,26 @@ impl ServiceHost {
     /// The reports held since the server started, for the first session to show.
     pub(crate) fn take_held(&mut self) -> Vec<crate::notification::NotificationDraft> {
         std::mem::take(&mut self.held)
+    }
+
+    /// A session's saved entries, for its save.
+    pub(crate) fn saved_entries(&self, session: crate::entry::service::SessionKey) -> saved::Entries {
+        self.saved.borrow().session_entries(session)
+    }
+
+    /// A restored session's saved entries come back.
+    pub(crate) fn adopt_saved_entries(&self, session: crate::entry::service::SessionKey, entries: saved::Entries) {
+        self.saved.borrow_mut().adopt_session(session, entries);
+    }
+
+    /// A deleted session's saved entries go with it.
+    pub(crate) fn forget_saved_entries(&self, session: crate::entry::service::SessionKey) {
+        self.saved.borrow_mut().forget_session(session);
+    }
+
+    /// The saved-state changes since the last call, to announce as `state.changed`.
+    pub(crate) fn take_state_changes(&self) -> Vec<crate::entry::service::StateEvent> {
+        self.saved.borrow_mut().take_changes()
     }
 
     /// Whether `action` belongs to one of this server's services.
@@ -258,6 +290,7 @@ impl ServiceHost {
                         config: group.config.unwrap_or(&server_config),
                         extension: self.services[index].extension(), epoch: self.epoch, since,
                         sessions: &self.sessions,
+                        saved: &self.saved,
                     };
                     let revision = match self.services[index].project(&cx) {
                         Ok(Projected::Unchanged) => since,
