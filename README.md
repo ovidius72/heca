@@ -100,6 +100,31 @@ Ctrl+B → f   Toggle floating
 
 Close the window and heca keeps running in the background; run `heca` again to reattach.
 
+## Command line
+
+Every command answers before the window opens, so a script can ask heca without a display.
+`heca --help` always prints the complete, current list.
+
+| Command | What it does | Documented in |
+| --- | --- | --- |
+| `heca` | Open a window on the running server (starting it if needed). | [Sessions](docs/sessions.md) |
+| `heca --standalone` | Server and window in one process; the session ends with the window. | [Sessions](docs/sessions.md) |
+| `heca --sessions` | List the server's sessions. | [Sessions](docs/sessions.md) |
+| `heca --attach <name>` | Open a window on a named session. | [Sessions](docs/sessions.md) |
+| `heca --new [path] [--name <name>]` | Create a session in a folder and open its window. | [Sessions](docs/sessions.md) |
+| `heca --kill <name>` | Terminate a session (asks first); it can be restarted later. | [Sessions](docs/sessions.md) |
+| `heca --server [socket]` | Run the session server without a window. | [Server and clients](docs/server-client-architecture.md) |
+| `heca --kill-server` | Stop the server, and every pane with it. | [Sessions](docs/sessions.md) |
+| `heca --show-keys` (`-k`) | Every key binding, the key it resolves to and its layer. | [Keyboard commands](docs/keyboard-commands.md) |
+| `heca --list-actions` (`-a`) | Every action heca knows — what a key, a menu or a script can run. | [Configuration](docs/configuration.md) |
+| `heca --describe-action <name>` (`-d`) | One action in full, with its arguments. | [Configuration](docs/configuration.md) |
+| `heca --show-config` | Every setting your files set, and the file each came from. | [Configuration](docs/configuration.md) |
+| `heca --trust [folder]` / `--untrust [folder]` | Let a project's `.heca/config.toml` apply, or stop it. | [Configuration](docs/configuration.md) |
+| `heca install / update / uninstall / inspect integration <program>`, `heca list integrations` | Manage a program's status-reporting integration (Claude, Codex, …). | [Configuration](docs/configuration.md) |
+| `heca rpc <action> [name=value …]` | Run an action on the running server from a script. | [Server and clients](docs/server-client-architecture.md) |
+
+The commands that print add `--json` (`-j`) for scripts.
+
 ## Documentation
 
 All documentation is in [`docs/`](docs/README.md). Start here:
