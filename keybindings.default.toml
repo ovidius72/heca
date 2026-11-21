@@ -377,8 +377,8 @@ args   = { name = "heca.expose" }
 # them. Writing the id out in full is never wrong either.
 #
 # heca's own components ship their keys in this file, at the bottom, where you can see and change
-# them. A plugin has no file, so it registers its keys at runtime instead — whatever you write here
-# still wins.
+# them. An extension ships its own keybindings.default.toml, layered after this one; whatever you
+# write in your keybindings.toml still wins over both.
 #
 # [[keys.surface]]
 # name = "docker"               # a FIELD, never the table name — so a surface may be called

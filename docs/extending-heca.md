@@ -65,6 +65,7 @@ creation or lifetime behavior:
 | `demo.terminal("shell")` | **get or create** the named terminal declaration; repeated calls return handles sharing that terminal's session |
 | `demo.action("build")…run(handler)` | register a named action and its handler; it does not retrieve an existing widget or execute the action |
 | `demo.layer("console").view(build)` | register a named surface builder; the host calls the builder again when rebuilding that surface, rather than retaining one cached widget tree |
+| `demo.defaults(config, keys)` | ship the extension's own `config.default.toml` and `keybindings.default.toml` — see [An extension's own defaults](#an-extensions-own-defaults) |
 
 For terminals, the first call creates the declaration and the returned component handle; the host
 starts the shell or command from that declaration. The native constructor and extension method
@@ -94,6 +95,31 @@ components asking for `demo.shell` share it. Ordinary widgets still have their o
 state; they do not require an extension handle merely to be constructed or placed in a tree.
 These calls describe the native extension API; see [the plugin guide](plugins.md) for the
 described/sandbox path and its current availability.
+
+### An extension's own defaults
+
+An extension ships its defaults the way heca does — a `config.default.toml` and a
+`keybindings.default.toml` beside its code — and hands them over once, before `heca::run(..)`:
+
+```rust
+let rooms = heca::extension("rooms").defaults(
+    include_str!("../config.default.toml"),       // [extensions.rooms] helper = "auto" …
+    include_str!("../keybindings.default.toml"),  // "rooms.focus" = "prefix+Shift+a", [[keys.surface]] name = "rooms" …
+);
+```
+
+They are layered between heca's defaults and the user's files — **heca's defaults → each
+extension's → `config.toml` / `keybindings.toml` → the project's `.heca/config.toml`** — so they are
+defaults like heca's own: the extension reads its settings with `Config::extension::<T>("rooms")`;
+its keys bind like heca's (plain bindings for any of its actions, not only a dock's, and its
+`[[keys.surface]]` entries beside heca's); `--show-config` lists its settings as coming from
+"(defaults of extension rooms)"; and the user overrides any of it in the same files, the same way.
+
+They speak **only for that extension**: the config file may hold only `[extensions.<name>]`, the
+keys file only bindings of its own actions (`<name>.…`) and its own surfaces (`[[keys.surface]]`
+named `<name>` or `<name>.…`). Anything else — a heca setting, a heca key, another extension's — is
+refused and said, and those defaults are dropped. A WASM plugin will hand over the same two files
+from its package, through the same handle. Code: `heca-config/src/extension_defaults.rs`.
 
 ## Providers and docks at startup
 

@@ -9,7 +9,9 @@ versioned, embedded files (the single source of truth — copy and edit them):
 - `keybindings.default.toml` — default `[keys]` (prefix, bindings, modes)
 
 An extension's own settings go in `[extensions.<name>]`, a table per extension. heca has no keys of
-its own there, so the defaults list none; see [Building on heca](extending-heca.md).
+its own there; an extension may ship its own defaults for them and for its keys, layered between
+heca's defaults and your files, so you change them here the same way (`--show-config` names them
+"(defaults of extension <name>)"). See [An extension's own defaults](extending-heca.md#an-extensions-own-defaults).
 
 ## Per-project settings
 
