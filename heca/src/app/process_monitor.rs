@@ -1,5 +1,6 @@
 //! Per-wake monitor bridging backend-detected runtime → canonical `Pane.runtime`
-//! and emitting `pane.exited{code}`.
+//! and emitting `pane.exited{code}`. Closing the pane and the "program ended" notification are
+//! the server's (`server::process`), not the window's.
 //!
 //! Detection itself lives in `TerminalBackend::update` (event-driven on the
 //! terminal-output / reader-EOF wake, debounced — **no periodic timer**; see the planner decision
@@ -9,14 +10,9 @@
 //! `sync_pane_runtime_state` (in `chrome/mod.rs`) then mirrors `Pane.runtime` →
 //! the chrome store and emits the per-field `pane.*.changed` events.
 
-use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::AppState;
 use crate::chrome::ChromeEvent;
-use crate::server::process::{
-    sync_runtime as sync_pane_runtime_from_backends_impl,
-    exit_should_close as pane_exit_should_close,
-    notify_exited as notify_pane_exited,
-};
+use crate::server::process::sync_runtime as sync_pane_runtime_from_backends_impl;
 
 /// Copy each live pane's backend `runtime()` → its canonical `Pane.runtime`, drain
 /// any one-shot exit codes → emit `pane.exited{code}`, then apply pane-owned
@@ -35,27 +31,19 @@ pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
     }
     let exits =
         sync_pane_runtime_from_backends_impl(&mut state.session, &mut state.client.backends);
-    let mut panes_to_close = Vec::new();
+    // **What happens to a pane whose program ended is the server's to decide** — it owns the
+    // processes: it closes the pane when its close policy says so and otherwise tells the user
+    // (`server::process::reconcile_processes`), once, for every window. The window only says the
+    // event to those who listen here (plugins, docks).
     for (pane, code) in exits {
         bus.emit(ChromeEvent::PaneExited { pane, code });
-        if pane_exit_should_close(&state.session, pane, code) {
-            panes_to_close.push(pane);
-        } else {
-            // The pane stays with a dead process (its close-policy keeps it) — say so, so a
-            // frozen-looking shell is explained rather than mysterious. A pane
-            // that is about to close needs no toast. dedup per pane so a backend that flaps
-            // does not spray.
-            notify_pane_exited(pane, code);
-        }
-    }
-    for pane in panes_to_close {
-        close_pane_by_id_anywhere(state, pane);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{notify_pane_exited, pane_exit_should_close, sync_pane_runtime_from_backends_impl};
+    use super::sync_pane_runtime_from_backends_impl;
+    use crate::server::process::{exit_should_close as pane_exit_should_close, notify_exited as notify_pane_exited};
     use crate::app::backend_store::BackendStore;
     use crate::chrome::{ChromeEvent, ChromeEventBus};
     use heca_core::backend::FakeBackend;
@@ -156,8 +144,8 @@ mod tests {
         let sink = captured.clone();
         install_notification_sink(move |d| sink.borrow_mut().push(d));
 
-        notify_pane_exited(PaneId(7), Some(0));
-        notify_pane_exited(PaneId(9), Some(137));
+        notify_pane_exited(Some("htop"), PaneId(7), Some(0));
+        notify_pane_exited(Some("build"), PaneId(9), Some(137));
 
         let drafts = captured.borrow();
         assert_eq!(drafts.len(), 2);
@@ -169,6 +157,7 @@ mod tests {
             crate::notification::NotificationSeverity::Info
         );
         assert_eq!(clean.dedup_key.as_deref(), Some("pane.exited:7"));
+        assert_eq!(clean.title, "htop ended", "the program's name, not the pane's number");
         assert_eq!(clean.actions.len(), 1, "carries a Focus action");
 
         let crashed = drafts[1]
@@ -179,6 +168,7 @@ mod tests {
             crate::notification::NotificationSeverity::Warning
         );
         assert_eq!(crashed.body.as_deref(), Some("exit code 137"));
+        assert_eq!(crashed.title, "build ended");
         assert_eq!(crashed.dedup_key.as_deref(), Some("pane.exited:9"));
     }
 
