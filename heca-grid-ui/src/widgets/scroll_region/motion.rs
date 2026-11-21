@@ -62,7 +62,8 @@ impl ScrollRegion {
         let dy = self.applied_offset - target_y;
         let dx = self.applied_offset_x - target_x;
         if dx != 0.0 || dy != 0.0 {
-            for child in self.base.children.iter_mut() {
+            let content = self.content_len();
+            for child in self.base.children[..content].iter_mut() {
                 shift_subtree(child.as_mut(), dx, dy);
             }
             self.applied_offset = target_y;

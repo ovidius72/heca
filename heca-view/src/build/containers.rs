@@ -378,6 +378,13 @@ impl MessageList {
 }
 
 impl Scroll {
+    /// **A child that stays put over the content** — not scrolled, out of its flow — such as an
+    /// `EdgeHint`. Written as the child's `slot: "pinned"`.
+    pub fn pinned(self, child: impl Into<ViewNode>) -> Self {
+        let child: ViewNode = child.into();
+        self.child(child.prop("slot", crate::PropValue::Text("pinned".into())))
+    }
+
     /// Follow appended content only while the reader is at the bottom (default false).
     pub fn follow_bottom(self, follow: bool) -> Self {
         self.prop("follow_bottom", follow)

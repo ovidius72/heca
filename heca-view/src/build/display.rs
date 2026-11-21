@@ -34,6 +34,13 @@ builder!(
     /// A small state dot.
     StatusDot => StatusDot
 );
+
+builder!(
+    /// **How many rows wanting attention are out of sight**, on the edges of a `Scroll` it is
+    /// pinned in — `Scroll::new().pinned(EdgeHint::new())`. A click reveals and activates the
+    /// nearest one.
+    EdgeHint => EdgeHint
+);
 impl StatusDot {
     pub fn status(self, status: crate::ViewDotStatus) -> Self {
         self.prop("status", status)

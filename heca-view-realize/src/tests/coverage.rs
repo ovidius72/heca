@@ -60,6 +60,14 @@ fn every_library_widget_is_describable_or_deliberately_not() {
             "not a widget: a CardGrid cell, built by realize",
         ),
         ("Menu", "not a widget: the data a menu declaration carries"),
+        (
+            "ScrollFacts",
+            "not a widget: what a ScrollRegion tells a widget pinned in it",
+        ),
+        (
+            "RevealEdge",
+            "not a widget: which way a pinned widget asks its region to reveal",
+        ),
         ("MenuItem", "not a widget: one entry of the above"),
         ("MenuEntry", "not a widget: one entry of the above"),
         ("MenuAnchor", "not a widget: where a menu opens"),

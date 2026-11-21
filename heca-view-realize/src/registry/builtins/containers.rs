@@ -72,8 +72,21 @@ pub(super) fn scroll(
         // `axes` reaches the widget through its own builder, so a declarative region can be
         // horizontal or two-axis — it was vertical-only for as long as this arm named its
         // properties by hand.
-        let region = with_props(ScrollRegion::new(), node, theme);
-        attach_children(heca_grid_ui::WidgetModel::new(region), node, cx)?
+        use heca_grid_ui::builders::Parent as _;
+        let mut region = with_props(ScrollRegion::new(), node, theme);
+        // A child slotted `pinned` stays over the content (`ScrollRegion::pinned`); the rest scroll.
+        for (index, child) in node.children.iter().enumerate() {
+            let realized = cx.child(node, index)?;
+            region = match slot_of(child) {
+                Some("pinned") => region.pinned(realized),
+                None => region.child(realized),
+                other => {
+                    warn_unknown_slot(node, child, other, &["pinned"]);
+                    region.child(realized)
+                }
+            };
+        }
+        heca_grid_ui::WidgetModel::new(region)
     })
 }
 

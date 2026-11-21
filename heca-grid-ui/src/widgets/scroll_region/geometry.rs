@@ -7,11 +7,21 @@ impl ScrollRegion {
     /// relative to this region's top, never less than the viewport height).
     /// Uses `+ applied_offset` to recover natural positions from the shifted
     /// bounds.
+    /// How many children are content — everything before the [pinned](Self::pinned) ones.
+    pub(super) fn content_len(&self) -> usize {
+        self.base.children.len().saturating_sub(self.pinned)
+    }
+
+    /// The content children — what scrolls.
+    pub(super) fn content(&self) -> &[crate::WidgetModel] {
+        &self.base.children[..self.content_len()]
+    }
+
     pub(super) fn content_extent(&self) -> f64 {
         let vp = self.base.bounds;
         let off = self.applied_offset;
         let mut max_bottom = vp.loc.y + vp.size.h;
-        for c in &self.base.children {
+        for c in self.content() {
             let b = c.base().bounds;
             // natural bottom = shifted bottom + applied shift.
             let bottom = b.loc.y + b.size.h + off;
@@ -28,7 +38,7 @@ impl ScrollRegion {
     pub(super) fn raw_extent(&self) -> (f64, f64) {
         let vp = self.base.bounds;
         let (mut right, mut bottom) = (vp.loc.x, vp.loc.y);
-        for c in &self.base.children {
+        for c in self.content() {
             let b = c.base().bounds;
             right = right.max(b.loc.x + b.size.w + self.applied_offset_x);
             bottom = bottom.max(b.loc.y + b.size.h + self.applied_offset);
@@ -65,7 +75,7 @@ impl ScrollRegion {
         // Natural (pre-shift) rect of whatever asked to be seen — or, while nothing is asking, the
         // last thing that did. See `last_reveal_rect`: a grid stops asking while the pointer drives
         // its cursor, and the pad must hold rather than re-centre on the whole strip.
-        let target = crate::component::reveal_target_in(&self.base.children)
+        let target = crate::component::reveal_target_in(self.content())
             .map(|r| {
                 Rectangle::new(
                     Point::new(
@@ -180,7 +190,7 @@ impl ScrollRegion {
         let vp = self.base.bounds;
         let off = self.applied_offset_x;
         let mut max_right = vp.loc.x + vp.size.w;
-        for c in &self.base.children {
+        for c in self.content() {
             let b = c.base().bounds;
             let right = b.loc.x + b.size.w + off;
             if right > max_right {

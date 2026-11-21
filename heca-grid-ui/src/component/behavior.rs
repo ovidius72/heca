@@ -113,6 +113,16 @@ pub trait Component {
     /// [`show`](Component::show) already is.
     fn set_default_focus(&mut self, _key: &str) {}
 
+    /// **What a [`ScrollRegion`](crate::widgets::ScrollRegion) tells a widget pinned in it**, each
+    /// frame — how many rows wanting attention are out of sight above and below. Default: nothing.
+    /// [`EdgeHint`](crate::widgets::EdgeHint) shows them.
+    fn scroll_facts(&mut self, _facts: crate::widgets::ScrollFacts) {}
+
+    /// **A reveal a widget pinned in a region asks of it**, taken once. Default: none.
+    fn take_reveal(&mut self) -> Option<crate::widgets::RevealEdge> {
+        None
+    }
+
     /// **Move this surface's keyboard to the next or previous control.**
     ///
     /// Default: nothing. [`Overlay`](crate::widgets::Overlay) implements it, and anything composed

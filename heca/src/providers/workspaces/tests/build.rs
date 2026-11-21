@@ -63,8 +63,9 @@ fn build_produces_the_real_workspace_tree_and_registers_host_ids() {
     let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
     let body = (c.build)(&ctx, &mut bx);
 
+    // The last child is the pinned edge hint (`ScrollRegion::pinned`), not content.
     assert_eq!(
-        body.base().children.len(),
+        body.base().children.len() - 1,
         1,
         "one workspace in the tree ⇒ one workspace dock in the body",
     );

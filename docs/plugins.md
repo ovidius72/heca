@@ -133,6 +133,10 @@ P022/T075; these are the shapes it carries.)
       is_mine(session.key()).then(|| build::Badge::new("pro").variant(heca_view::ViewBadgeVariant::Accent).into())
   });
   ```
+- **"More below that wants you."** A plugin's list pins an `edge_hint` in its `scroll`
+  (`slot: "pinned"`): rows with a repeating flash out of sight are counted on the edges, and a click
+  goes to the nearest. Nothing else is written; see
+  [`widgets.md` → EdgeHint](widgets.md#edgehint).
 - **Action arguments.** Declare each argument's kind (`int`, `float`, `bool`, `text`, `enum` with
   its words, `dock`) and the palette asks for them, one step each — the docks mounted now for a
   `dock`. A plugin writes no picker.

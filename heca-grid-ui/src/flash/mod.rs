@@ -123,6 +123,22 @@ impl FlashHandle {
     }
 }
 
+/// **Does this widget want attention** — a repeating flash that has not run out, the pulse a row
+/// keeps until someone looks. What [`ScrollRegion`](crate::widgets::ScrollRegion) counts for the
+/// widgets pinned in it.
+pub(crate) fn wants_attention(base: &Base) -> bool {
+    let Some(request) = base.flash.and_then(|flash| flash.request.get_untracked()) else {
+        return false;
+    };
+    match request.playback {
+        Playback::Repeat { duration: None } => true,
+        Playback::Repeat {
+            duration: Some(limit),
+        } => request.started.elapsed() < limit,
+        _ => false,
+    }
+}
+
 /// Use the existing widget deadline walk, including when a custom widget owns `tick`.
 pub(crate) fn wake(base: &Base) -> Option<f32> {
     if base.style.layout.hidden || !base.visible.get_untracked() {

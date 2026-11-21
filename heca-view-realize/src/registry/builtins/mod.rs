@@ -145,6 +145,7 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
         WidgetDefinition::new(WidgetId::Alert, display::alert)
             .names("Alert", "Alert")
             .properties::<Alert>(),
+        WidgetDefinition::new(WidgetId::EdgeHint, display::edge_hint).names("EdgeHint", "EdgeHint"),
         WidgetDefinition::new(WidgetId::StatusDot, display::status_dot)
             .names("StatusDot", "StatusDot")
             .properties::<StatusDot>()

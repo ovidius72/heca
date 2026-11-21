@@ -239,6 +239,7 @@ impl Component for ScrollRegion {
             animating |= child.tick(dt);
         }
         animating |= self.advance_eased(dt);
+        self.tell_pinned();
         let mut fire: Option<(bool, Point)> = None;
         if let Some(tr) = &mut self.track_repeat {
             tr.next_in -= dt;
@@ -265,5 +266,89 @@ impl Component for ScrollRegion {
             }
         }
         animating
+    }
+}
+
+impl ScrollRegion {
+    /// **Tell the pinned children what is out of sight, and do the reveal one asks for.** Rows that
+    /// want attention (a repeating flash) above the viewport or below it are counted; a reveal
+    /// brings the nearest one on that side into view and clicks it, as the user would.
+    fn tell_pinned(&mut self) {
+        if self.pinned == 0 {
+            return;
+        }
+        let viewport = self.base.bounds;
+        let (top, bottom) = (viewport.loc.y, viewport.loc.y + viewport.size.h);
+        let mut above: Vec<(crate::Rectangle, Vec<usize>)> = Vec::new();
+        let mut below: Vec<(crate::Rectangle, Vec<usize>)> = Vec::new();
+        for (i, child) in self.content().iter().enumerate() {
+            collect_attention(child.as_ref(), &mut vec![i], &mut |rect, path| {
+                if rect.loc.y + rect.size.h <= top {
+                    above.push((rect, path));
+                } else if rect.loc.y >= bottom {
+                    below.push((rect, path));
+                }
+            });
+        }
+        let facts = crate::widgets::ScrollFacts {
+            attention_above: above.len(),
+            attention_below: below.len(),
+        };
+        let content = self.content_len();
+        let mut reveal = None;
+        for child in self.base.children[content..].iter_mut() {
+            child.scroll_facts(facts);
+            reveal = reveal.or(child.take_reveal());
+        }
+        let nearest = match reveal {
+            Some(crate::widgets::RevealEdge::Above) => above
+                .into_iter()
+                .max_by(|a, b| a.0.loc.y.total_cmp(&b.0.loc.y)),
+            Some(crate::widgets::RevealEdge::Below) => below
+                .into_iter()
+                .min_by(|a, b| a.0.loc.y.total_cmp(&b.0.loc.y)),
+            None => None,
+        };
+        if let Some((rect, path)) = nearest {
+            self.ensure_visible(rect);
+            self.click(&path, rect);
+        }
+    }
+
+    /// Click the content widget at `path` — the row a reveal brought into view — as a pointer
+    /// click on it would: the same event, delivered down to it and bubbling back.
+    fn click(&mut self, path: &[usize], rect: crate::Rectangle) {
+        let Some((head, rest)) = path.split_first() else {
+            return;
+        };
+        let centre = crate::Point::new(
+            rect.loc.x + rect.size.w / 2.0,
+            rect.loc.y + rect.size.h / 2.0,
+        );
+        let ev = crate::event::Event::Click(crate::event::PointerEvent::at(centre));
+        if let Some(child) = self.base.children.get_mut(*head) {
+            let _ = crate::pointer::deliver::deliver_path(child.as_mut(), rest, &ev);
+        }
+    }
+}
+
+/// Every descendant of `node` that wants attention, by its on-screen rect and its path from the
+/// region's content.
+fn collect_attention(
+    node: &dyn Component,
+    path: &mut Vec<usize>,
+    found: &mut dyn FnMut(crate::Rectangle, Vec<usize>),
+) {
+    if !node.is_shown() {
+        return;
+    }
+    if crate::flash::wants_attention(node.base()) {
+        found(node.base().bounds, path.clone());
+        return;
+    }
+    for (i, child) in node.base().children.iter().enumerate() {
+        path.push(i);
+        collect_attention(child.as_ref(), path, found);
+        path.pop();
     }
 }

@@ -2668,6 +2668,32 @@ vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
+**Pinned children — what sits on the edges of a list, not in it.** `.pinned(child)` puts a child
+over the content: not scrolled, out of the content's flow, the size of the region (content added
+later with `.child(..)` still goes before it). Each frame the region tells it what is out of sight
+(`Component::scroll_facts`) and does a reveal it asks for (`Component::take_reveal`); a pinned child
+that is a surface passes the pointer through where it draws nothing, so the rows under it stay
+clickable. Described: a child of `scroll` with `slot: "pinned"` — `build::Scroll::new().pinned(..)`.
+
+#### EdgeHint
+
+**How many rows wanting attention are out of sight**, on the region's edges — `↑ 2` at the top,
+`↓ 1` at the bottom, hidden when there are none. A row wants attention while it has a **repeating
+flash** (`.flash(handle)` + `handle.repeat(tone)`, or `repeat_for` until it runs out); a finite
+burst does not count, and nothing else is declared. A click on a pill brings the nearest such row on
+that side into view and clicks it, as the user would; `prefix+/` letters the pills like any button.
+
+```rust
+ScrollRegion::new()
+    .child(rows)                          // each row flashes with `repeat` while it wants you
+    .pinned(EdgeHint::new())
+```
+
+Described (a plugin): `{ "kind": "scroll", "children": [ …rows…, { "kind": "edge_hint", "props": { "slot": "pinned" } } ] }`,
+or `build::Scroll::new().child(rows).pinned(build::EdgeHint::new())`. It takes no properties: what
+it shows is its region's. heca's workspaces dock pins one, so a pane whose agent finished out of
+sight is said on the edge.
+
 **Following appended content.** `.follow_bottom(true)` keeps the new bottom in view only when the
 reader was at the previous bottom. Off by default. Scrolling up pauses it; returning to the bottom
 resumes it. It also handles reflow and viewport resize. The same `follow_bottom` Bool property and

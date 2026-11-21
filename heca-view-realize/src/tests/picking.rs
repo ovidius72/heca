@@ -138,6 +138,11 @@ fn no_kind_with_content_renders_as_nothing() {
             // unless it says `opened`. That is the widget working, not a silent one.
             continue;
         }
+        if kind == WidgetId::EdgeHint {
+            // It shows how many rows wanting attention its region has out of sight; alone, or
+            // with none, there is nothing to say — and saying nothing is the widget working.
+            continue;
+        }
         let node = ViewNode::new(WidgetId::VStack).child(sample_node(kind.clone()));
         let mut root = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default())
             .expect("valid described test widget");
