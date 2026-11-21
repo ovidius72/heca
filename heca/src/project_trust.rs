@@ -30,10 +30,6 @@ const HASH_ARG: &str = "hash";
 
 /// Raise the notification if the project file here is untrusted. Called at startup and on every
 /// reload, so an ignored file is announced every time, not once ever.
-pub(crate) fn notify_if_untrusted() {
-    notify_if_untrusted_in(None);
-}
-
 pub(crate) fn notify_if_untrusted_in(folder: Option<&std::path::Path>) {
     let Ok(Some(project)) = folder.map_or_else(heca_config::loader::read_project, heca_config::loader::read_project_in) else {
         return;
@@ -94,7 +90,7 @@ pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut
             name: FOLDER_ARG.to_string(),
             kind: ArgKind::Text,
             required: false,
-            description: "A folder inside the project; default the one heca was started in."
+            description: "A folder inside the project; default the folder of the session it runs in."
                 .to_string(),
             values: Vec::new(),
         });
@@ -102,7 +98,7 @@ pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut
     // The confirm gate asks first, with a verb of its own, on every surface that dispatches it.
     meta.confirm = Some(trust_confirm());
     let handler = Rc::new(|state: &mut crate::app_state::AppState, intent: &Intent| {
-        let Some(start) = start_folder(intent) else {
+        let Some(start) = start_folder(intent, state.client.session.folder.as_deref()) else {
             return;
         };
         let expected = match intent.args.get(HASH_ARG) {
@@ -116,7 +112,7 @@ pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut
                     project.path.display()
                 );
                 // The new content is a new question: raise a fresh notice for it.
-                notify_if_untrusted();
+                notify_if_untrusted_in(Some(&start));
             }
             Ok(Some(project)) if heca_config::trust::trust(&project.dir, &project.hash) => {
                 crate::providers::emit_queued(state, vec![Intent::new("reload_config")]);
@@ -129,13 +125,20 @@ pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut
     let _ = register_dynamic(registry, catalog, meta, Some(handler));
 }
 
-/// **The folder a `trust_project` call is about**: the one it names, else the one heca was started
-/// in. The one answer, for the handler that trusts and the prompt that asks — two spellings of "the
-/// default folder" could disagree about which file the person was shown.
-fn start_folder(intent: &Intent) -> Option<std::path::PathBuf> {
+/// **The folder a `trust_project` call is about**: the one it names, else the folder of the session
+/// it runs in — never the folder the process happened to start in, which is `/` when heca is opened
+/// from its icon. Only a session with no folder falls back to that.
+fn start_folder(intent: &Intent, session: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    named_folder(intent)
+        .or_else(|| session.map(std::path::Path::to_path_buf))
+        .or_else(|| std::env::current_dir().ok())
+}
+
+/// The folder the call names, if it names one.
+fn named_folder(intent: &Intent) -> Option<std::path::PathBuf> {
     match intent.args.get(FOLDER_ARG) {
         Some(heca_view::PropValue::Text(folder)) => Some(std::path::PathBuf::from(folder)),
-        _ => std::env::current_dir().ok(),
+        _ => None,
     }
 }
 
@@ -145,14 +148,18 @@ fn hash_matches(expected: Option<&str>, current: &str) -> bool {
     expected.is_none_or(|h| h == current)
 }
 
-/// The prompt's body, naming the file and its folder from the call's arguments.
+/// The prompt's body: the file, when the call names its folder (the notice does); otherwise the
+/// session's project, which is what the handler then trusts — the prompt names nothing it would not.
 fn describe_trust(intent: &Intent) -> String {
-    let folder = start_folder(intent)
-        .map(|d| d.display().to_string())
-        .unwrap_or_default();
-    format!(
-        "Trust {folder}/.heca/config.toml? It can bind keys to commands, so only trust a project you know."
-    )
+    match named_folder(intent) {
+        Some(folder) => format!(
+            "Trust {}/.heca/config.toml? It can bind keys to commands, so only trust a project you know.",
+            folder.display()
+        ),
+        None => "Trust this session's project settings (.heca/config.toml)? They can bind keys to \
+                 commands, so only trust a project you know."
+            .to_string(),
+    }
 }
 
 /// The prompt: a forced `[Cancel] [Trust]` choice.
@@ -269,5 +276,18 @@ mod tests {
             "changed since the notice"
         );
         assert!(hash_matches(None, "anything"), "no hash: as it is now");
+    }
+
+    /// **Without a folder, the session's folder** — not the one the process started in, which is
+    /// `/` when heca is opened from its icon. The prompt then names no file it would not trust.
+    #[test]
+    fn a_call_without_a_folder_is_about_the_sessions_project() {
+        let session = std::path::Path::new("/work/project");
+        let bare = Intent::new(TRUST_PROJECT);
+        assert_eq!(start_folder(&bare, Some(session)), Some(session.to_path_buf()));
+        let named = Intent::new(TRUST_PROJECT).arg(FOLDER_ARG, heca_view::PropValue::Text("/elsewhere".into()));
+        assert_eq!(start_folder(&named, Some(session)), Some(std::path::PathBuf::from("/elsewhere")), "a named folder wins");
+        assert!(describe_trust(&bare).contains("this session's project"));
+        assert!(describe_trust(&named).contains("/elsewhere/.heca/config.toml"));
     }
 }
