@@ -283,29 +283,29 @@ impl LayerRegistry {
             l.name = Some(name);
         }
         self.seat(window, id, root);
-        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
-            if let Some((visible, doomed, presence)) = carried {
-                l.visible = visible;
-                l.doomed = doomed;
-                // **The gesture carries on across a rebuild.** The replacement is a fresh tree,
-                // which starts closed and at rest — so without this a rebuild looked like a first
-                // appearance and played the arrival again: `prefix+j` behind the exposé changed
-                // the focus, the map rebuilt, and it zoomed open on every keystroke. Handing over
-                // the whole `Presence` carries the animation *in flight* as well as the fact that
-                // it is open, so a rebuild mid-arrival continues rather than restarting or
-                // snapping.
-                if let (Some(carried), Some(fresh)) = (
-                    presence,
-                    crate::chrome::surface_node_mut(window, id).and_then(|n| n.presence_mut()),
-                ) {
-                    *fresh = carried;
-                }
-                if visible {
-                    // The same call the stack makes to raise it, and it replays nothing: the
-                    // carried presence already says the surface is up, or that it is leaving.
-                    if let Some(node) = crate::chrome::surface_node_mut(window, id) {
-                        node.show();
-                    }
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id)
+            && let Some((visible, doomed, presence)) = carried
+        {
+            l.visible = visible;
+            l.doomed = doomed;
+            // **The gesture carries on across a rebuild.** The replacement is a fresh tree,
+            // which starts closed and at rest — so without this a rebuild looked like a first
+            // appearance and played the arrival again: `prefix+j` behind the exposé changed
+            // the focus, the map rebuilt, and it zoomed open on every keystroke. Handing over
+            // the whole `Presence` carries the animation *in flight* as well as the fact that
+            // it is open, so a rebuild mid-arrival continues rather than restarting or
+            // snapping.
+            if let (Some(carried), Some(fresh)) = (
+                presence,
+                crate::chrome::surface_node_mut(window, id).and_then(|n| n.presence_mut()),
+            ) {
+                *fresh = carried;
+            }
+            if visible {
+                // The same call the stack makes to raise it, and it replays nothing: the
+                // carried presence already says the surface is up, or that it is leaving.
+                if let Some(node) = crate::chrome::surface_node_mut(window, id) {
+                    node.show();
                 }
             }
         }
