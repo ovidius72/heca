@@ -39,6 +39,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config libasound2-dev
 
+      # The style is rustfmt.toml, for the toolchain rust-toolchain.toml pins: a file formatted any
+      # other way fails here, so no session's own habits reach main.
+      - name: Format
+        run: cargo fmt --all -- --check
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
