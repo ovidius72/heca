@@ -35,7 +35,7 @@ use crate::actions::{ActionCategory, ActionMeta};
 use crate::app::interaction::ActionPolicy;
 use crate::args::{ArgKind, ArgSpec};
 use crate::chrome::{
-    ChromeDragItem, ContainerContribution, Contribution, RegionId, RegionSet,
+    ChromeDragItem, ContainerContribution, Contribution, RegionSet,
 };
 use crate::chrome::{Intent, PropMap, PropValue};
 // The menu-entry vocabulary, shared with the host's own pane menu.
@@ -56,8 +56,6 @@ use heca_grid_ui::widgets::Glyph;
 pub struct WorkspacesContainerProvider {
     /// This placement's **mount id** — what distinguishes one placement from another.
     id: String,
-    /// Where this placement is seated on first run.
-    region: RegionId,
 }
 
 impl WorkspacesContainerProvider {
@@ -77,7 +75,6 @@ impl WorkspacesContainerProvider {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             id: name.into(),
-            region: RegionId::LeftSidebar,
         }
     }
 }
@@ -110,9 +107,6 @@ impl Provider for WorkspacesContainerProvider {
         RegionSet::sidebars()
     }
 
-    fn default_region(&self) -> RegionId {
-        self.region
-    }
 
     fn title(&self) -> &str {
         "Workspaces"

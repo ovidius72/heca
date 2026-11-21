@@ -163,6 +163,10 @@ declare_settings! {
         pub drop_edge_reach: f64,
         /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
         pub shell_integration: bool,
+        /// **The folder a new workspace's shell starts in**: a path, `~` or `~/…` for the home
+        /// folder. A folder that does not exist starts the shell in the home folder, with a notice.
+        /// A pane made from a pane (a split, a new column) starts in that pane's folder instead.
+        pub new_workspace_cwd: String,
         /// When a pane has a **custom name** (set via rename), also show its process/program name as
         /// a small dimmed label next to it (e.g. `MyPane (nvim)`). The process label is *not* part of
         /// the name — it is appended for reference only and never edited by rename. Set `false` to
@@ -195,8 +199,9 @@ declare_settings! {
         #[serde(alias = "terminal-mouse")]
         pub terminal_mouse: bool,
 
-        /// Number of scrollback rows per wheel notch when the host scrollback viewport
-        /// is active (i.e. the wheel scrolls the host viewport, not the terminal).
+        /// Lines per wheel notch in a terminal — the rows its history scrolls, and the wheel reports
+        /// a program that takes the mouse (Claude Code, vim, less) is sent, one per line. A trackpad
+        /// gesture counts one notch per cell height it travels.
         #[serde(alias = "terminal-wheel-scroll-lines")]
         pub terminal_wheel_scroll_lines: usize,
 

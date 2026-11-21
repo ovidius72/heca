@@ -175,6 +175,8 @@ pub struct AppState {
     /// The buttons whose press a terminal's program has heard and whose release it has not — so a
     /// release is passed on only where its press was.
     pub(crate) terminal_presses: crate::app::terminal_host::HeardPresses,
+    /// The part of a wheel turn over each terminal not yet worth a whole notch.
+    pub(crate) terminal_wheel: crate::app::terminal_host::WheelRemainders,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See

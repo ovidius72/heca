@@ -84,7 +84,7 @@ pub use effects::{Attention, Eased, Flash};
 pub use event::typed_text;
 pub use event::{
     DragEvent, EventCx, EventKind, Handlers, PointerButton, PointerEvent, RawPointer,
-    RawPointerKind,
+    RawPointerKind, WheelTurn,
 };
 pub use focus::{
     FocusManager, KeyboardArea, KeyboardOwner, contains_keyboard, focus_scope, focus_widget_by_id,

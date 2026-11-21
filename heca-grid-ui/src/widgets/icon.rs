@@ -86,6 +86,8 @@ pub enum Glyph {
     NotePencil,
     Backspace,
     Trash,
+    /// A clipboard with lines of text — "paste".
+    ClipboardText,
     XCircle,
     PlusCircle,
     FolderSimpleMinus,
@@ -161,6 +163,7 @@ impl Glyph {
             Glyph::NotePencil => "note_pencil",
             Glyph::Backspace => "backspace",
             Glyph::Trash => "trash",
+            Glyph::ClipboardText => "clipboard_text",
             Glyph::XCircle => "x_circle",
             Glyph::PlusCircle => "plus_circle",
             Glyph::FolderSimpleMinus => "folder_simple_minus",
@@ -225,6 +228,7 @@ impl Glyph {
         Glyph::NotePencil,
         Glyph::Backspace,
         Glyph::Trash,
+        Glyph::ClipboardText,
         Glyph::XCircle,
         Glyph::PlusCircle,
         Glyph::FolderSimpleMinus,
@@ -289,6 +293,7 @@ impl Glyph {
             Glyph::NotePencil => 0xe34c,            // note-pencil (the "edit" icon)
             Glyph::Backspace => 0xe0ae,             // backspace
             Glyph::Trash => 0xe4a6,                 // trash
+            Glyph::ClipboardText => 0xe198,         // clipboard-text
             Glyph::XCircle => 0xe4f8,               // x-circle
             Glyph::PlusCircle => 0xe3d6,            // plus-circle
             Glyph::FolderSimpleMinus => 0xe25c,     // folder-simple-minus

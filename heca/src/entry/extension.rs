@@ -6,6 +6,7 @@
 //! demo.layer("planner").view(|cx| planner_overlay(cx));           // the layer  `demo.planner`
 //! demo.pane_button("start_worker");                               // a button in every pane header
 //! demo.pane_chip("status", |facts| Some(PaneChip::new(icon, text))); // a chip in every pane header
+//! let demo = demo.defaults(include_str!("config.default.toml"), include_str!("keybindings.default.toml"));
 //! ```
 //!
 //! **Why a handle and not a name on every item.** A name is `<owner>.<short>`, and the owner half
@@ -73,6 +74,34 @@ impl Extension {
     /// The name every item of this extension carries, unless it was refused.
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
+    }
+
+    /// **This extension's shipped defaults** — the text of its own `config.default.toml` and
+    /// `keybindings.default.toml`, usually `include_str!`'d beside its code:
+    ///
+    /// ```ignore
+    /// let rooms = heca::extension("rooms").defaults(
+    ///     include_str!("../config.default.toml"),      // [extensions.rooms] …
+    ///     include_str!("../keybindings.default.toml"), // "rooms.focus" = "prefix+Shift+a", [[keys.surface]] name = "rooms" …
+    /// );
+    /// ```
+    ///
+    /// They are layered between heca's defaults and the user's files — heca's, then each
+    /// extension's, then `config.toml` / `keybindings.toml` — so its settings and keys are defaults
+    /// like heca's own: `--show-config` and `--keys-show` show them, `[[keys.surface]]` and plain
+    /// bindings work for its actions and surfaces, and the user changes them in the same files. A
+    /// default key may be given to any of its actions, not only a dock's.
+    ///
+    /// They speak only for this extension: the config file may hold only `[extensions.<name>]`,
+    /// the keys file only its own actions (`<name>.…`) and surfaces. Anything else is refused and
+    /// said, and these defaults are dropped. Declare them before `heca::run(..)`.
+    pub fn defaults(&self, config: &str, keys: &str) -> Self {
+        if let Some(name) = &self.name
+            && let Err(reason) = heca_config::add_extension_defaults(name, config, keys)
+        {
+            warn_author(format!("[heca] {reason} — these defaults are dropped"));
+        }
+        self.clone()
     }
 
     /// **An action** of this extension — `<extension>.<short>`. Say what it is with

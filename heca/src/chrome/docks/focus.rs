@@ -144,9 +144,6 @@ mod tests {
         fn supported_regions(&self) -> RegionSet {
             RegionSet::sidebars()
         }
-        fn default_region(&self) -> RegionId {
-            self.region
-        }
         fn title(&self) -> &str {
             &self.id
         }
@@ -163,7 +160,7 @@ mod tests {
     fn host(docks: Vec<Dock>) -> ChromeHost {
         let mut host = ChromeHost::new(ChromeEventBus::default());
         for dock in docks {
-            host.register(Box::new(dock));
+            host.register(dock.region, Box::new(dock));
         }
         host
     }

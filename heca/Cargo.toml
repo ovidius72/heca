@@ -54,7 +54,17 @@ windows-sys = { version = "0.61", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
     "Win32_System_Threading",
+    # Where the pointer is when a file is dropped (winit 0.30 does not say): GetCursorPos, ScreenToClient.
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
 ] }
+raw-window-handle = "0.6"
+
+# Where the pointer is when a file is dropped on X11 (winit 0.30 does not say). Already in the build
+# through winit; named here to call XQueryPointer.
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+x11-dl = "2.21"
+raw-window-handle = "0.6"
 
 [lints]
 workspace = true

@@ -37,6 +37,17 @@ pub enum Event {
     /// them is why the host carried a fixup that re-derived the real character from a keyboard
     /// combo before handing it over, and why an IME could commit nothing at all.
     TextInput(String),
+    /// **Files dropped on the window** — their paths, in the order the system gave them, and where
+    /// they were dropped.
+    ///
+    /// Delivered like a click: to the widget under `pos`, then up its ancestors. A widget that takes
+    /// files listens with `.on(EventKind::FilesDropped, …)`; a terminal pastes their paths.
+    FilesDropped {
+        /// The dropped files' paths.
+        paths: Vec<std::path::PathBuf>,
+        /// Where they were dropped, in the window's logical pixels.
+        pos: Point,
+    },
     /// Modifier keys changed — broadcast to the whole tree so widgets can track
     /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
     ModifiersChanged(Modifiers),
@@ -197,6 +208,7 @@ impl Event {
     pub fn position(&self) -> Option<Point> {
         match self {
             Self::Raw(r) => Some(r.pos),
+            Self::FilesDropped { pos, .. } => Some(*pos),
             _ => self
                 .pointer()
                 .map(|p| p.pos)
@@ -246,6 +258,7 @@ impl Event {
             },
             Self::Key { .. } => EventKind::Key,
             Self::TextInput(_) => EventKind::TextInput,
+            Self::FilesDropped { .. } => EventKind::FilesDropped,
             Self::ModifiersChanged(_) => EventKind::ModifiersChanged,
             Self::Widget(_) => EventKind::Widget,
             Self::Hint(_) => EventKind::Hint,
@@ -346,6 +359,8 @@ impl Event {
 pub enum EventKind {
     Key,
     TextInput,
+    /// Files dropped on the window — see [`Event::FilesDropped`].
+    FilesDropped,
     ModifiersChanged,
     Widget,
     /// A picker's letter resolved to a widget — see [`Event::Hint`].

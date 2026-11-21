@@ -11,7 +11,7 @@
 //! - an **overlay**, `demo.detail`, opened with `toggle_layer name=demo.detail` from any of them.
 
 use heca::{
-    ActionCategory, ChromeCtx, ContainerContribution, Contribution, Provider, RegionId, RegionSet,
+    ActionCategory, ChromeCtx, ContainerContribution, Contribution, Provider, RegionSet,
     regions,
 };
 use heca_grid_ui::builders::{LayoutExt, Parent};
@@ -43,9 +43,6 @@ impl Provider for Notes {
         RegionSet::sidebars()
     }
 
-    fn default_region(&self) -> RegionId {
-        RegionId::RightSidebar
-    }
 
     fn title(&self) -> &str {
         "Notes"

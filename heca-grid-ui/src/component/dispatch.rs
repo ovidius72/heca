@@ -39,6 +39,14 @@ pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
     if let Event::Raw(raw) = ev {
         return crate::pointer::route(node, raw);
     }
+    // **Dropped files go to what they were dropped on**, as a click does: the widget under the
+    // point, then up its ancestors. Nothing under it (outside every widget) is nobody's drop.
+    if let Event::FilesDropped { pos, .. } = ev {
+        let Some(path) = crate::pointer::hit_test(node, *pos) else {
+            return Handled::No;
+        };
+        return deliver_to_path(node, &path, ev);
+    }
     deliver(node, ev)
 }
 

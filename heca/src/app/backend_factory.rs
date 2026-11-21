@@ -44,6 +44,8 @@ pub(crate) struct TerminalSettings {
     pub(crate) images: bool,
     /// How a terminal's size is chosen when several windows show it at once.
     pub(crate) pane_size: heca_config::settings::PaneSize,
+    /// The folder a new workspace's shell starts in, as written (`~` allowed).
+    pub(crate) new_workspace_cwd: String,
 }
 
 impl TerminalSettings {
@@ -60,6 +62,7 @@ impl TerminalSettings {
             link_detection: app_config.config.appearance.terminal.link_detection,
             images: app_config.config.appearance.terminal.images,
             pane_size: settings.pane_size,
+            new_workspace_cwd: settings.new_workspace_cwd.clone(),
         }
     }
 }

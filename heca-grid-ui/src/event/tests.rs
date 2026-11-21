@@ -53,3 +53,22 @@ fn every_pointer_event_answers_where_and_on_what_from_its_payload() {
     assert_eq!(Event::Focus.position(), None);
     assert_eq!(Event::Focus.with_target_bounds(bounds).target_bounds(), None);
 }
+
+/// **One wheel conversion for every host**: a wheel's notches are its lines; a trackpad keeps its
+/// pixels and is counted in lines of the host's text; Shift turns a plain wheel sideways but leaves
+/// a trackpad that already moves sideways alone.
+#[test]
+fn a_wheel_turn_fills_lines_and_pixels_in_one_convention() {
+    use super::{RawPointer, RawPointerKind, WheelTurn};
+    let raw = |turn, shift| {
+        RawPointer::new(RawPointerKind::Wheel, heca_core::layout::Point::new(0.0, 0.0)).with_wheel(turn, 20.0, shift)
+    };
+    let wheel = raw(WheelTurn::Lines(0.0, 3.0), false);
+    assert_eq!((wheel.delta_x, wheel.delta_y, wheel.delta_pixels), (0.0, 3.0, None));
+    let pad = raw(WheelTurn::Pixels(0.0, 30.0), false);
+    assert_eq!((pad.delta_x, pad.delta_y, pad.delta_pixels), (0.0, 1.5, Some((0.0, 30.0))), "30 px of 20-px lines");
+    let sideways = raw(WheelTurn::Lines(0.0, 2.0), true);
+    assert_eq!((sideways.delta_x, sideways.delta_y), (2.0, 0.0), "Shift: a plain wheel scrolls sideways");
+    let pad_sideways = raw(WheelTurn::Pixels(10.0, 4.0), true);
+    assert_eq!((pad_sideways.delta_x, pad_sideways.delta_y), (0.5, 0.2), "a trackpad already moving sideways is left alone");
+}

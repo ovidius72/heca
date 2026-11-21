@@ -63,7 +63,7 @@ pub use intent::WidgetIntent;
 pub(crate) use keys::remember_modifiers;
 pub use keys::{GridKey, Modifiers, modifiers, typed_text};
 pub use kinds::{Event, EventKind};
-pub use pointer::{DragEvent, HintEvent, PointerButton, PointerEvent, RawPointer, RawPointerKind};
+pub use pointer::{DragEvent, HintEvent, PointerButton, PointerEvent, RawPointer, RawPointerKind, WheelTurn};
 
 #[cfg(test)]
 mod tests;

@@ -205,3 +205,39 @@ fn terminal_backend_command_spawn_runs_and_stays_open_for_policy() {
         "direct command backends stay open until pane close-policy decides"
     );
 }
+
+/// **A zsh started by heca reads the user's own folder, as in any other terminal.** heca points
+/// `ZDOTDIR` at its folder only for zsh to read heca's `.zshenv`, which points it straight back: so
+/// the user's `.zshrc` is read by zsh itself, a history file chosen from `ZDOTDIR` (macOS's
+/// `/etc/zshrc` does that) is the user's and not one inside heca's folder, and heca's hooks are
+/// still loaded, waiting for the first prompt.
+#[test]
+fn a_heca_zsh_reads_the_users_folder_and_still_loads_heca_hooks() {
+    let zsh = std::path::Path::new("/bin/zsh");
+    if !zsh.exists() {
+        eprintln!("skip: no /bin/zsh");
+        return;
+    }
+    let root = tempfile::tempdir().unwrap();
+    let assets = super::super::launch::ShellIntegrationAssets::write_to(&root.path().join("runtime")).unwrap();
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join(".zshrc"), "USER_RC=read\n").unwrap();
+    let output = std::process::Command::new(zsh)
+        .args(["-i", "-c", r#"print -r -- "zdotdir=${ZDOTDIR-unset} rc=${USER_RC-} hist=${HISTFILE-} hooks=${precmd_functions[(r)heca__attach]-}""#])
+        .env_clear()
+        .env("HOME", &home)
+        .env("PATH", "/usr/bin:/bin")
+        .env("TERM", "xterm-256color")
+        .env("ZDOTDIR", &assets.zsh_zdotdir)
+        .env("OLD_ZDOTDIR", "")
+        .output()
+        .expect("zsh runs");
+    let out = String::from_utf8_lossy(&output.stdout);
+    let line = out.lines().find(|l| l.starts_with("zdotdir=")).unwrap_or_else(|| panic!("no report in {out:?}"));
+    assert!(line.contains("zdotdir=unset"), "ZDOTDIR is the user's again (none): {line}");
+    assert!(line.contains("rc=read"), "zsh read the user's .zshrc itself: {line}");
+    assert!(line.contains("hooks=heca__attach"), "heca's hooks wait for the first prompt: {line}");
+    let heca_folder = assets.zsh_zdotdir.to_string_lossy().into_owned();
+    assert!(!line.contains(&heca_folder), "nothing points into heca's folder any more: {line}");
+}

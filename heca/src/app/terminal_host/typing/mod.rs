@@ -66,6 +66,11 @@ pub(super) fn on_text(state: &mut AppState, terminal: TerminalId, text: &str) {
     });
 }
 
+/// Text to paste reaches the process the way the clipboard does — bracketed when the program asked.
+pub(super) fn on_paste(state: &mut AppState, terminal: TerminalId, text: &str) {
+    type_into(state, terminal, |backend| backend.paste(text));
+}
+
 /// A key that is not text reaches the process. A lone modifier is not typing: it never reaches
 /// here, because the tree only delivers a key.
 pub(super) fn on_key(

@@ -25,25 +25,23 @@ pub(crate) const CONFIG_DEFAULT: &str = include_str!("../../../config.default.to
 /// [`CONFIG_DEFAULT`]; the two cover disjoint TOML sections.
 pub(crate) const KEYS_DEFAULT: &str = include_str!("../../../keybindings.default.toml");
 
-/// Parse the embedded defaults into a single merged `toml::Value` (the base every
-/// user config is layered over). The two files cover disjoint top-level sections
-/// (`config.default.toml` → settings/appearance/font/program; `keybindings.default
-/// .toml` → keys), so the merge is a clean union.
+/// Parse the defaults into a single merged `toml::Value` (the base every user config is layered
+/// over): heca's two embedded files — disjoint top-level sections (`config.default.toml` →
+/// settings/appearance/font/program; `keybindings.default.toml` → keys), so a clean union — and then
+/// every extension's shipped defaults ([`crate::extension_defaults`]), so they are defaults too.
 fn embedded_base() -> toml::Value {
     let config: toml::Value =
         toml::from_str(CONFIG_DEFAULT).expect("embedded config.default.toml must be valid TOML");
     let keys: toml::Value =
         toml::from_str(KEYS_DEFAULT).expect("embedded keybindings.default.toml must be valid TOML");
-    deep_merge(config, keys)
+    crate::extension_defaults::layered_onto(deep_merge(config, keys))
 }
 
-/// Parse the embedded `[keys]` table into a [`KeysConfig`]. Used as the single
-/// source for [`KeysConfig::default`] (no recursion: it deserializes the table
-/// directly, never calling back into the `Default` impl).
+/// Parse the default `[keys]` table — heca's and every extension's — into a [`KeysConfig`]. Used as
+/// the single source for [`KeysConfig::default`] (no recursion: it deserializes the table directly,
+/// never calling back into the `Default` impl).
 pub(crate) fn parse_default_keys() -> KeysConfig {
-    let value: toml::Value =
-        toml::from_str(KEYS_DEFAULT).expect("embedded keybindings.default.toml must be valid TOML");
-    value
+    embedded_base()
         .get("keys")
         .cloned()
         .expect("embedded keybindings.default.toml must contain a [keys] table")

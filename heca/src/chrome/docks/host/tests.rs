@@ -60,15 +60,16 @@ fn seating_one_container_twice_gives_each_placement_its_own_name() {
 struct TestProvider {
     id: String,
     supported: RegionSet,
-    default_region: RegionId,
+    /// Where the test seats it — the dock itself no longer says.
+    region: RegionId,
 }
 
 impl TestProvider {
-    fn new(id: &str, supported: RegionSet, default_region: RegionId) -> Self {
+    fn new(id: &str, supported: RegionSet, region: RegionId) -> Self {
         Self {
             id: id.to_string(),
             supported,
-            default_region,
+            region,
         }
     }
 }
@@ -80,9 +81,6 @@ impl Provider for TestProvider {
     fn supported_regions(&self) -> RegionSet {
         self.supported
     }
-    fn default_region(&self) -> RegionId {
-        self.default_region
-    }
     fn title(&self) -> &str {
         &self.id
     }
@@ -92,6 +90,11 @@ impl Provider for TestProvider {
         // seam is implemented and tested on `WorkspacesContainerProvider`.)
         unimplemented!("TestProvider contributes no body; see WorkspacesContainerProvider")
     }
+}
+
+/// Seat `provider` in the region the test gave it.
+fn seat(host: &mut ChromeHost, provider: TestProvider) {
+    host.register(provider.region, Box::new(provider));
 }
 
 fn host() -> ChromeHost {
@@ -106,19 +109,19 @@ fn ids(host: &ChromeHost, region: RegionId) -> Vec<String> {
 }
 
 #[test]
-fn register_seats_at_default_region_in_the_order_registered() {
+fn register_seats_in_the_order_registered() {
     let mut h = host();
     // The list is the order things were added in; nothing on the provider reorders it.
-    h.register(Box::new(TestProvider::new(
+    seat(&mut h, TestProvider::new(
         "b",
         RegionSet::sidebars(),
         RegionId::LeftSidebar,
-    )));
-    h.register(Box::new(TestProvider::new(
+    ));
+    seat(&mut h, TestProvider::new(
         "a",
         RegionSet::sidebars(),
         RegionId::LeftSidebar,
-    )));
+    ));
     assert_eq!(ids(&h, RegionId::LeftSidebar), ["b", "a"]);
     assert_eq!(h.placement("a"), Some(RegionId::LeftSidebar));
     assert!(h.contributions(RegionId::RightSidebar).is_empty());
@@ -141,11 +144,11 @@ fn move_to_supported_region_succeeds_and_emits() {
             }
         });
 
-    h.register(Box::new(TestProvider::new(
+    seat(&mut h, TestProvider::new(
         "ws",
         RegionSet::sidebars(),
         RegionId::LeftSidebar,
-    )));
+    ));
     h.move_container("ws", RegionId::RightSidebar).unwrap();
 
     assert!(h.contributions(RegionId::LeftSidebar).is_empty());
@@ -160,11 +163,11 @@ fn move_to_supported_region_succeeds_and_emits() {
 #[test]
 fn move_to_unsupported_region_is_rejected() {
     let mut h = host();
-    h.register(Box::new(TestProvider::new(
+    seat(&mut h, TestProvider::new(
         "ws",
         RegionSet::of(&[RegionId::LeftSidebar]), // left only
         RegionId::LeftSidebar,
-    )));
+    ));
     assert_eq!(
         h.move_container("ws", RegionId::BottomBar),
         Err(MoveError::UnsupportedRegion)
@@ -186,11 +189,11 @@ fn move_unknown_container_errors() {
 fn reorder_moves_before_target() {
     let mut h = host();
     for id in ["a", "b", "c"] {
-        h.register(Box::new(TestProvider::new(
+        seat(&mut h, TestProvider::new(
             id,
             RegionSet::sidebars(),
             RegionId::LeftSidebar,
-        )));
+        ));
     }
     assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "b", "c"]);
     // Move "c" before "a".
@@ -210,11 +213,11 @@ fn reorder_moves_before_target() {
 fn reorder_moves_after_target() {
     let mut h = host();
     for id in ["a", "b", "c"] {
-        h.register(Box::new(TestProvider::new(
+        seat(&mut h, TestProvider::new(
             id,
             RegionSet::sidebars(),
             RegionId::LeftSidebar,
-        )));
+        ));
     }
     assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "b", "c"]);
     // Move "a" after "b" → it lands before "c".

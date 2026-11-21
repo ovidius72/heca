@@ -202,8 +202,6 @@ pub struct ContainerContribution {
     pub title: String,
     /// Which regions this container may live in.
     pub supported_regions: RegionSet,
-    /// Region it mounts in on first run.
-    pub default_region: RegionId,
     /// Host-level move/reorder allowed?
     pub movable: bool,
     /// Collapsible within its region shell?
@@ -247,7 +245,6 @@ impl ContainerContribution {
             id: provider.id().to_string(),
             title: provider.title().to_string(),
             supported_regions: provider.supported_regions(),
-            default_region: provider.default_region(),
             movable: provider.movable(),
             collapsible: provider.collapsible(),
             build: Box::new(move |ctx, cx| build(ctx, cx).into_component()),

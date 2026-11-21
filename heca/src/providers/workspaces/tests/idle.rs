@@ -142,3 +142,52 @@ fn a_flash_on_a_row_that_is_not_on_screen_does_not_keep_the_loop_awake() {
         );
     }
 }
+
+/// **A visible row's flash pulses for its whole time** when nothing but the flash asks for frames —
+/// an idle window whose sidebar row asks for attention. Every pulse must be drawn, not only the
+/// first: a wake lost after the first pulse shows a flash that lasts a second or two and stops.
+#[test]
+fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
+    use heca_grid_ui::Tone;
+    use std::time::{Duration, Instant};
+    let tree = two_columns();
+    let mut fx = testing::Fixture::default();
+    let mut root = {
+        let (seams, mut reg) = fx.split("left");
+        DockView {
+            tree: &tree,
+            scroll: heca_grid_ui::reactive::signal(0.0),
+        }
+        .build(&seams, &mut reg)
+    };
+    let mut theme = heca_grid_ui::Theme::default();
+    theme.colors.flash.duration_s = 0.2;
+    theme.colors.flash.pause_s = 0.1;
+    let warning = theme.colors.warning.with_alpha(255);
+    let started = Instant::now();
+    fx.store.panes.signals(PaneId(2)).flash.repeat_for(Tone::Warning, Duration::from_millis(1000));
+    let (mut pulses, mut lit_before, mut last_lit) = (0, false, Duration::ZERO);
+    loop {
+        heca_grid_ui::frame_served();
+        root.tick(0.016);
+        heca_grid_ui::LayoutEngine::new().compute(&mut root, heca_grid_ui::Size::new(300.0, 600.0));
+        let mut scene = heca_grid_ui::Scene::new();
+        heca_grid_ui::paint_child(&root, &mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+        let lit = scene.iter().any(|cmd| matches!(cmd, heca_grid_ui::DrawCommand::Rect(rect)
+            if rect.border.is_some_and(|b| b.color.with_alpha(255) == warning && b.color.a > 0)));
+        if lit && !lit_before {
+            pulses += 1;
+        }
+        if lit {
+            last_lit = started.elapsed();
+        }
+        lit_before = lit;
+        let Some(delay) = root.next_redraw() else { break };
+        std::thread::sleep(Duration::from_secs_f32(delay.max(0.0)));
+        if started.elapsed() > Duration::from_secs(3) {
+            break;
+        }
+    }
+    assert!(pulses >= 3, "a 1 s repeat of 0.3 s cycles pulses at least three times, drew {pulses}");
+    assert!(last_lit >= Duration::from_millis(600), "still lit near the end of its time, last at {last_lit:?}");
+}

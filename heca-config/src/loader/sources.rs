@@ -15,14 +15,19 @@ pub struct ConfigSource {
     pub file: PathBuf,
 }
 
-/// **Which file each setting came from** — every key the user's files or the project's file set, with
-/// the later layer winning, exactly as the merge does. Defaults are not listed: they come from no
-/// file of the user's.
+/// **Which file each setting came from** — every key an extension's shipped defaults, the user's
+/// files or the project's file set, with the later layer winning, exactly as the merge does. heca's
+/// own defaults are not listed: they come from no file of the user's.
 ///
 /// An **untrusted** project file is not listed as applied: it is returned in `untrusted_project`, for
 /// the caller to show as "(not trusted, ignored)".
 pub fn config_sources() -> Result<ConfigSources, ConfigError> {
-    let mut layers = Vec::new();
+    // Each extension's shipped defaults first, named for the extension, so the user's own files are
+    // seen to win over them.
+    let mut layers: Vec<(PathBuf, toml::Value)> = crate::extension_defaults::layers()
+        .into_iter()
+        .map(|(name, value)| (PathBuf::from(format!("(defaults of extension {name})")), value))
+        .collect();
     for paths in [config_file_paths(), keybindings_file_paths()] {
         layers.extend(read_first_toml(&paths)?);
     }
