@@ -116,7 +116,14 @@ pub enum SidebarSelection {
     },
 }
 
+/// **Something that changed in a window**, heard with `cx.on("<name>", |ev| …)`.
+///
+/// A listener outside heca reads what it needs through the accessors below
+/// ([`pane`](Self::pane), [`agent`](Self::agent), [`feedback`](Self::feedback)) — the same shape
+/// as the server's events (`ev.as_session()`, `ev.as_state()`) — rather than matching variants, so
+/// heca can add an event without breaking it.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum ChromeEvent {
     PaneActiveChanged {
         pane: Option<PaneId>,
@@ -239,6 +246,42 @@ pub enum ChromeEvent {
 }
 
 impl ChromeEvent {
+    /// **The pane this event is about**, for every `pane.*` event; `None` for the others, and for
+    /// `pane.active.changed` when no pane is active.
+    pub fn pane(&self) -> Option<PaneId> {
+        match self {
+            ChromeEvent::PaneActiveChanged { pane } => *pane,
+            ChromeEvent::PaneProcessChanged { pane }
+            | ChromeEvent::PaneStatusChanged { pane, .. }
+            | ChromeEvent::PaneAgentChanged { pane, .. }
+            | ChromeEvent::PaneFeedback { pane, .. }
+            | ChromeEvent::PaneCwdChanged { pane }
+            | ChromeEvent::PaneGitChanged { pane, .. }
+            | ChromeEvent::PaneCustomNameChanged { pane, .. }
+            | ChromeEvent::PaneExited { pane, .. }
+            | ChromeEvent::TerminalViewportChanged { pane, .. } => Some(*pane),
+            _ => None,
+        }
+    }
+
+    /// **The agent's report now**, for `pane.agent.changed`; `None` for other events and when the
+    /// agent left the foreground command.
+    pub fn agent(&self) -> Option<&heca_core::agent::AgentState> {
+        match self {
+            ChromeEvent::PaneAgentChanged { agent, .. } => agent.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// **The status a feedback sound was granted for**, for `pane.feedback` — the open status id
+    /// (`waiting`, `done`, …) the agent configuration names.
+    pub fn feedback(&self) -> Option<&str> {
+        match self {
+            ChromeEvent::PaneFeedback { status, .. } => Some(status),
+            _ => None,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             ChromeEvent::PaneActiveChanged { .. } => "pane.active.changed",
@@ -365,5 +408,34 @@ mod tests {
 
         assert_eq!(typed.borrow().as_slice(), ["pane.active.changed"]);
         assert_eq!(all.borrow().as_slice(), ["pane.active.changed"]);
+    }
+
+    /// A listener outside heca reads an event through its accessors, never by matching variants.
+    #[test]
+    fn a_pane_event_says_its_pane_report_and_feedback_through_accessors() {
+        use heca_core::agent::{AgentState, AgentStatus};
+        let report = AgentState::new("pi", "pi", AgentStatus::new("waiting"));
+        let agent = ChromeEvent::PaneAgentChanged {
+            pane: PaneId(3),
+            previous: None,
+            agent: Some(Box::new(report.clone())),
+        };
+        assert_eq!(agent.pane(), Some(PaneId(3)));
+        assert_eq!(agent.agent(), Some(&report));
+        assert_eq!(agent.feedback(), None);
+
+        let feedback = ChromeEvent::PaneFeedback {
+            session: heca_core::layout::SessionId(1),
+            pane: PaneId(4),
+            revision: 1,
+            status: "done".into(),
+        };
+        assert_eq!((feedback.pane(), feedback.feedback()), (Some(PaneId(4)), Some("done")));
+        assert_eq!(feedback.agent(), None);
+
+        let left = ChromeEvent::PaneAgentChanged { pane: PaneId(3), previous: None, agent: None };
+        assert_eq!(left.agent(), None, "the agent left the foreground: no report");
+        let other = ChromeEvent::HintLettersChanged { letters: Vec::new() };
+        assert_eq!((other.pane(), other.agent(), other.feedback()), (None, None, None));
     }
 }
