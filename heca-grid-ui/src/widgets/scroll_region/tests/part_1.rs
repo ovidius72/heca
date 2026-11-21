@@ -31,6 +31,19 @@ use super::*;
             assert_eq!(offset, 0.0, "{held:?}");
         }
     }
+    /// **A trackpad moves the content by its own pixels**, whatever its line count says: the
+    /// content follows the fingers.
+    #[test]
+    fn a_trackpad_scrolls_by_its_own_pixels() {
+        let mut r = region_with_children(&[60.0, 60.0]); // vp 100, max 20
+        let ev = Event::Scroll(crate::event::PointerEvent {
+            delta_y: 9.0,
+            delta_pixels: Some((0.0, 7.0)),
+            ..crate::event::PointerEvent::at(Point::new(10.0, 10.0))
+        });
+        assert_eq!(r.on_event(&ev), Handled::Yes);
+        assert!((r.scroll_offset.get_untracked() - 7.0).abs() < 1e-6, "7 px, not 9 lines");
+    }
     #[test]
     fn wheel_step_is_viewport_fraction_not_fixed_lines() {
         // Regression guard: the step must scale with the viewport, so a small

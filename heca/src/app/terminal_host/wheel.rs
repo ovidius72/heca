@@ -1,5 +1,12 @@
 //! **What the wheel means over a terminal** — font zoom, host scrollback, or the wheel handed to the
 //! program, decided from the mouse-grab, the settings and the device that turned it.
+//!
+//! **One measure of a turn, for both places it goes.** A turn becomes whole *notches* — a wheel's
+//! clicks, or a trackpad's pixels counted in cells, with what is left over kept for the next turn
+//! ([`WheelRemainders`]) — and each notch is `terminal_wheel_scroll_lines` lines, whether the host
+//! scrolls its history by them or the program (Claude Code, vim, less) is told of them, one wheel
+//! report per line. Two calculations of one gesture is how the setting came to change the shell's
+//! history and do nothing inside a program.
 
 use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionSource, dispatch_action};
@@ -8,6 +15,7 @@ use crate::chrome::panes::terminal::Cell;
 use crate::chrome::panes::terminal::TerminalId;
 use crate::input::{FontZoomStep, WmAction};
 use heca_core::backend::{BackendMouseButton, BackendMouseEventKind};
+use std::collections::HashMap;
 use winit::event::MouseScrollDelta;
 
 use super::input::backend_mouse_event;
@@ -149,44 +157,78 @@ pub(super) fn on_wheel(
         return;
     }
 
-    let lines = state.settings.terminal_wheel_scroll_lines;
-    // Determine number of host-scroll notches from the dominant wheel axis.
-    // On many platforms Shift+wheel is remapped to horizontal scroll (`x`) with
-    // `y == 0`; the host scrollback policy still wants that gesture to behave as
-    // a vertical history scroll, so we fall back to `x` when there is no usable
-    // vertical component.
-    let signed_notches = host_scroll_notches(
-        delta,
-        state
-            .client
-            .backends
-            .get_by_id(terminal)
-            .map(|b| b.cell_size().1 as f64)
-            .unwrap_or(state.terminal_cell_size.1 as f64),
-    );
-    let total = (signed_notches.abs().ceil() as usize) * lines;
-    if total == 0 {
+    // Host scrollback is vertical. On many platforms Shift+wheel is remapped to a horizontal turn
+    // (`x`) with `y == 0`; that gesture still means "scroll the history", so a turn with no vertical
+    // part is read from `x`.
+    let (nx, ny) = notches_of(state, terminal, delta);
+    let notches = if ny != 0 { ny } else { nx };
+    let rows = notches * lines_per_notch(state);
+    if rows == 0 {
         return;
     }
-    let delta_i32: i32 = if signed_notches > 0.0 {
-        total as i32
-    } else {
-        -(total as i32)
-    };
-
     if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
-        backend.scroll_viewport(delta_i32);
+        backend.scroll_viewport(rows);
     }
     state.needs_redraw = true;
     // Reset prefix timeout on scroll (like keyboard input).
     state.prefix_entered_at = None;
 }
 
-fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
-    match delta {
-        MouseScrollDelta::LineDelta(x, y) => axis_wheel_buttons(x as f64, y as f64),
-        MouseScrollDelta::PixelDelta(pos) => axis_wheel_buttons(pos.x, pos.y),
+/// **Wheel turns not yet worth a whole notch**, per terminal and axis — what makes a slow trackpad
+/// gesture scroll as far as a fast one of the same length, instead of every tiny movement counting
+/// as a notch (or none of them counting at all).
+#[derive(Default)]
+pub(crate) struct WheelRemainders(HashMap<TerminalId, (f64, f64)>);
+
+impl WheelRemainders {
+    /// **The whole notches `(x, y)` this turn completes**, keeping the rest for the next. A wheel's
+    /// lines are notches already; a trackpad's pixels are counted in cells (`cell` = width, height).
+    fn notches(&mut self, terminal: TerminalId, delta: MouseScrollDelta, cell: (f64, f64)) -> (i32, i32) {
+        let (dx, dy) = match delta {
+            MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
+            MouseScrollDelta::PixelDelta(p) => (per_cell(p.x, cell.0), per_cell(p.y, cell.1)),
+        };
+        let left = self.0.entry(terminal).or_default();
+        let (x, y) = (left.0 + dx, left.1 + dy);
+        let whole = (x.trunc(), y.trunc());
+        *left = (x - whole.0, y - whole.1);
+        (whole.0 as i32, whole.1 as i32)
     }
+}
+
+/// Pixels counted in cells — none when the cell size is not known yet.
+fn per_cell(pixels: f64, cell: f64) -> f64 {
+    if cell > 0.0 { pixels / cell } else { 0.0 }
+}
+
+/// **The whole notches a turn over `terminal` completes**, measured in that terminal's cells.
+fn notches_of(state: &mut AppState, terminal: TerminalId, delta: MouseScrollDelta) -> (i32, i32) {
+    let cell = state
+        .client
+        .backends
+        .get_by_id(terminal)
+        .map(|b| b.cell_size())
+        .unwrap_or(state.terminal_cell_size);
+    state.terminal_wheel.notches(terminal, delta, (f64::from(cell.0), f64::from(cell.1)))
+}
+
+/// Lines per notch — `terminal_wheel_scroll_lines`, for the history and the program alike.
+fn lines_per_notch(state: &AppState) -> i32 {
+    i32::try_from(state.settings.terminal_wheel_scroll_lines).unwrap_or(i32::MAX)
+}
+
+/// **The wheel reports a program is sent for `(x, y)` notches** — one report per line, so a notch is
+/// as many lines inside Claude Code or vim as it is in the shell's history. The program's terminal
+/// writes one report per event whatever count it is given, which is why each line is its own event.
+fn wheel_reports((x, y): (i32, i32), lines: i32) -> Vec<BackendMouseButton> {
+    let mut reports = Vec::new();
+    let mut push = |notches: i32, positive: BackendMouseButton, negative: BackendMouseButton| {
+        let button = if notches > 0 { positive } else { negative };
+        reports.extend(std::iter::repeat_n(button, (notches.unsigned_abs() as usize) * lines.max(0) as usize));
+    };
+    push(y, BackendMouseButton::WheelUp(1), BackendMouseButton::WheelDown(1));
+    push(x, BackendMouseButton::WheelRight(1), BackendMouseButton::WheelLeft(1));
+    reports
 }
 
 /// Forward a wheel scroll to the terminal backend as press events.
@@ -205,62 +247,12 @@ fn forward_wheel_to_terminal(
     let Some(cell) = cell else {
         return;
     };
-    for button in wheel_buttons(delta) {
+    let notches = notches_of(state, terminal, delta);
+    for button in wheel_reports(notches, lines_per_notch(state)) {
         let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
         if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
             let _ = backend.process_mouse_event(&event);
         }
-    }
-}
-
-fn host_scroll_notches(delta: MouseScrollDelta, cell_h: f64) -> f64 {
-    match delta {
-        MouseScrollDelta::LineDelta(x, y) => {
-            if y.abs() > 0.0 {
-                y as f64
-            } else {
-                x as f64
-            }
-        }
-        MouseScrollDelta::PixelDelta(pos) => {
-            let primary = if pos.y.abs() > 0.0 { pos.y } else { pos.x };
-            if primary.abs() > 0.0 && cell_h > 0.0 {
-                primary / cell_h
-            } else {
-                0.0
-            }
-        }
-    }
-}
-
-fn axis_wheel_buttons(x: f64, y: f64) -> Vec<BackendMouseButton> {
-    let mut buttons = Vec::new();
-    push_wheel_buttons(
-        &mut buttons,
-        y,
-        BackendMouseButton::WheelUp,
-        BackendMouseButton::WheelDown,
-    );
-    push_wheel_buttons(
-        &mut buttons,
-        x,
-        BackendMouseButton::WheelRight,
-        BackendMouseButton::WheelLeft,
-    );
-    buttons
-}
-
-fn push_wheel_buttons(
-    buttons: &mut Vec<BackendMouseButton>,
-    delta: f64,
-    positive: impl Fn(usize) -> BackendMouseButton,
-    negative: impl Fn(usize) -> BackendMouseButton,
-) {
-    let steps = delta.abs().round().max(1.0) as usize;
-    if delta > 0.0 {
-        buttons.push(positive(steps));
-    } else if delta < 0.0 {
-        buttons.push(negative(steps));
     }
 }
 
@@ -280,10 +272,36 @@ mod tests {
             MouseScrollDelta::PixelDelta(p) if p.y == -14.0
         ));
         // And the pixels, not the lines, decide the unit: 14 px is one 14-px cell.
-        assert_eq!(
-            host_scroll_notches(device_delta((0.0, 0.7), Some((0.0, 14.0))), 14.0),
-            -1.0
-        );
+        let mut left = WheelRemainders::default();
+        assert_eq!(left.notches(TerminalId(1), device_delta((0.0, 0.7), Some((0.0, 14.0))), (8.0, 14.0)), (0, -1));
+    }
+
+    /// **A slow trackpad gesture adds up**: turns smaller than a cell scroll nothing until they make
+    /// a whole one, and what is left over is kept — per terminal, so two terminals never share it.
+    #[test]
+    fn a_trackpad_turn_smaller_than_a_cell_adds_up_to_a_notch() {
+        let mut left = WheelRemainders::default();
+        let (a, b) = (TerminalId(1), TerminalId(2));
+        let turn = |px: f32| device_delta((0.0, 0.0), Some((0.0, px)));
+        assert_eq!(left.notches(a, turn(5.0), (8.0, 14.0)), (0, 0), "under a cell: nothing yet");
+        assert_eq!(left.notches(b, turn(5.0), (8.0, 14.0)), (0, 0), "another terminal starts from zero");
+        assert_eq!(left.notches(a, turn(5.0), (8.0, 14.0)), (0, 0));
+        assert_eq!(left.notches(a, turn(5.0), (8.0, 14.0)), (0, -1), "15 px make one 14-px cell");
+        assert_eq!(left.notches(a, turn(13.0), (8.0, 14.0)), (0, -1), "the 1 px left over counts");
+        assert_eq!(left.notches(a, device_delta((0.0, 2.0), None), (8.0, 14.0)), (0, -2), "a wheel's notches are whole");
+    }
+
+    /// **A program hears as many lines per notch as the history scrolls**: notches × the setting,
+    /// one report per line, because its terminal writes one report per event whatever count it is
+    /// given.
+    #[test]
+    fn a_program_is_sent_one_report_per_line_of_every_notch() {
+        use BackendMouseButton::{WheelDown, WheelLeft, WheelRight, WheelUp};
+        assert_eq!(wheel_reports((0, 2), 3), vec![WheelUp(1); 6], "two notches of three lines");
+        assert_eq!(wheel_reports((0, -1), 6), vec![WheelDown(1); 6]);
+        assert_eq!(wheel_reports((1, 0), 2), vec![WheelRight(1); 2]);
+        assert_eq!(wheel_reports((-1, 1), 1), vec![WheelUp(1), WheelLeft(1)]);
+        assert!(wheel_reports((0, 0), 3).is_empty(), "no notch, no report");
     }
 
     /// **A modified wheel zooms the terminal it turned over**, whoever owns it — a docked one as

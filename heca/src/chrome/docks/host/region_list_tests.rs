@@ -177,9 +177,6 @@ impl Provider for Listening {
     fn supported_regions(&self) -> crate::chrome::RegionSet {
         crate::chrome::RegionSet::sidebars()
     }
-    fn default_region(&self) -> RegionId {
-        RegionId::LeftSidebar
-    }
     fn title(&self) -> &str {
         self.id
     }

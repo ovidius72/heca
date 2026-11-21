@@ -98,16 +98,15 @@ impl ChromeHost {
         }
     }
 
-    /// Seat a provider at the end of its `default_region` — the tests' short way in; the app seats
-    /// through [`regions`](fn@crate::chrome::regions) and [`mount_pending`](Self::mount_pending).
+    /// Seat a provider at the end of `region` — the tests' short way in; the app seats through
+    /// [`regions`](fn@crate::chrome::regions) and [`mount_pending`](Self::mount_pending).
     #[cfg(test)]
-    pub fn register(&mut self, provider: Box<dyn Provider>) {
-        let region = provider.default_region();
+    pub fn register(&mut self, region: RegionId, provider: Box<dyn Provider>) {
         self.seat(region, provider.into(), false);
     }
 
     /// Seat one container in `region` — the one place a container enters the host, whether it came
-    /// from [`regions`](fn@crate::chrome::regions) or from its own default region. `front` puts it first.
+    /// from [`regions`](fn@crate::chrome::regions) or from the user's `[[docks]]`. `front` puts it first.
     fn seat(&mut self, region: RegionId, placed: super::regions::Placed, front: bool) {
         let super::regions::Placed {
             provider,

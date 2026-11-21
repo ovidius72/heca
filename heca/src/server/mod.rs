@@ -119,6 +119,12 @@ impl ServerState {
                 true
             }
             ServerAction::Hover(hovered) => self.notifications.set_hovered(hovered, now),
+            ServerAction::Run(id, key) => {
+                if !self.notifications.run_action(id, &key) {
+                    eprintln!("[heca] notification button `{key}` has nothing to run here (raised in a window?)");
+                }
+                false
+            }
             ServerAction::Configure(settings) => {
                 self.notifications.set_auto_dismiss(settings.auto_dismiss);
                 self.notifications.set_mode(settings.mode);

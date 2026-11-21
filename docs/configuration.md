@@ -9,7 +9,9 @@ versioned, embedded files (the single source of truth — copy and edit them):
 - `keybindings.default.toml` — default `[keys]` (prefix, bindings, modes)
 
 An extension's own settings go in `[extensions.<name>]`, a table per extension. heca has no keys of
-its own there, so the defaults list none; see [Building on heca](extending-heca.md).
+its own there; an extension may ship its own defaults for them and for its keys, layered between
+heca's defaults and your files, so you change them here the same way (`--show-config` names them
+"(defaults of extension <name>)"). See [An extension's own defaults](extending-heca.md#an-extensions-own-defaults).
 
 ## Per-project settings
 
@@ -264,11 +266,12 @@ interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 float_size = 0.95             # Share of the working area a pane takes when it floats with nowhere given
 move_slide_reach = 0.9        # How far (fraction of the window) a moved or swapped pane animates in from; 0 = jump
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
+new_workspace_cwd = "~"       # Folder a new workspace's shell starts in: a path, "~" or "~/..."; missing → home
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
 pane_name_delay = 1000        # Display-name delay in milliseconds; 0 updates immediately
 # pane_show_cwd is now [appearance.expose] show_cwd (still read; see below)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
-terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
+terminal_wheel_scroll_lines = 3  # Lines per wheel notch: history rows, and wheel steps sent to a program (Claude Code, vim)
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
 pane_size = "latest"          # When several windows show the SAME pane at once, the one running
                               # terminal still has a single size, so the windows must agree on it:
@@ -547,13 +550,22 @@ handler (`open` / `xdg-open` / `start`):
   all on-screen panes with a letter; press the letter to open it, or `Esc` to cancel.
 - **Selection mode** — `Shift+o` opens the link under the caret (`o` stays the
   flip-endpoint binding).
+- **Dropped files** — drop files on a terminal and their full paths are pasted into it, each
+  quoted for the shell when it needs it and followed by a space. (macOS, Windows and X11; on
+  Wayland the window system delivers no drop to heca yet.)
 - **Context menu** — right-click a terminal pane for a menu with **Open link**
-  (shown only when the click cell is a link) plus pane actions (split, zoom,
-  float, close), each with its icon and keybinding hint. Click an entry or use the arrow
+  (shown only when the click cell is a link), **Paste** (the clipboard, into that pane), then
+  pane actions (split, zoom, float, close), each with its icon and keybinding hint. Click an entry or use the arrow
   keys + Enter; `Esc` or an outside-click dismisses. (Right-clicking right on a
   resize seam still starts a right-drag resize.)
 
-When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
+When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from heca's runtime folder (`~/Library/Application Support/heca/runtime/shell-integration/` on macOS, `~/.config/heca/runtime/shell-integration/` on Linux).
+
+**zsh reads your own files, as in any other terminal.** heca starts zsh with `ZDOTDIR` pointing at its
+folder only so zsh reads heca's `.zshenv`, which points `ZDOTDIR` straight back at yours (or unsets
+it, when you had none) and loads heca's hooks; they attach at the first prompt, after your
+`.zshrc`. So your history file, your completion cache and your plugins are the ones every other
+terminal uses — the same approach Ghostty and kitty take.
 
 ### Terminal bell
 

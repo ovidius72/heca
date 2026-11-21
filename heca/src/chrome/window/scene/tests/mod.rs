@@ -157,9 +157,10 @@ pub(super) fn region_body(
     drag: &mut super::DragItemRegistry,
 ) -> Option<super::WidgetModel> {
     let mut host = super::ChromeHost::new(chrome.events());
-    host.register(Box::new(
-        crate::providers::WorkspacesContainerProvider::new("workspaces"),
-    ));
+    host.register(
+        super::RegionId::LeftSidebar,
+        Box::new(crate::providers::WorkspacesContainerProvider::new("workspaces")),
+    );
     let emit: super::ChromeIntentEmitter = ChromeIntentEmitter::of(
         crate::app::interaction::InteractionSource::Keyboard,
         |_, _| {},

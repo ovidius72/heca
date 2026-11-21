@@ -50,7 +50,7 @@ pub(crate) use actions::{
 
 use crate::chrome::{
     ChromeEvent, ChromeIntentEmitter, ChromeSubscription, ContextMenuContribution, Contribution,
-    RegionId, RegionSet, SharedChromeState,
+    RegionSet, SharedChromeState,
 };
 use crate::host::{App, StateView};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -99,11 +99,9 @@ pub trait Provider {
         None
     }
 
-    /// Regions this provider's contribution may be placed in.
+    /// Regions this provider's contribution may be placed in. Where it starts is not the dock's to
+    /// say: `[[docks]]` in the user's config and `regions(..)` in code place it.
     fn supported_regions(&self) -> RegionSet;
-
-    /// Region it mounts in on first run.
-    fn default_region(&self) -> RegionId;
 
     /// Human title (rail/tab label, move menu).
     fn title(&self) -> &str;
@@ -501,9 +499,6 @@ mod tests {
         fn supported_regions(&self) -> RegionSet {
             RegionSet::sidebars()
         }
-        fn default_region(&self) -> RegionId {
-            RegionId::LeftSidebar
-        }
         fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
             unimplemented!("these tests read the action contract, not the render seam")
         }
@@ -553,9 +548,6 @@ mod tests {
         }
         fn supported_regions(&self) -> RegionSet {
             RegionSet::sidebars()
-        }
-        fn default_region(&self) -> RegionId {
-            RegionId::RightSidebar
         }
         /// A body built from **nothing but the shared context** — one label, no model, no catalog.
         fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {

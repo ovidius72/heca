@@ -1,17 +1,23 @@
-# heca shell integration: zsh reads every startup file from ZDOTDIR, which heca points here, so
-# each file of heca's reads the user's own file of the same name first.
+# heca shell integration: zsh read this file because heca pointed ZDOTDIR at this folder.
+#
+# Point ZDOTDIR back at the user's own folder at once, before anything else reads it. Every later
+# startup file then behaves exactly as in any other terminal: macOS's /etc/zshrc picks the history
+# file (HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history), compinit its completion cache, plugin managers their
+# folders — all from the user's folder, not heca's — and zsh reads the user's own .zprofile, .zshrc
+# and .zlogin itself. heca's hooks are loaded from here and attach at the first prompt
+# (heca-integration.zsh), after the user's configuration, so it cannot reset them.
 _heca_dir="$ZDOTDIR"
-_heca_user="${OLD_ZDOTDIR:-$HOME}"
-# Never this folder itself — reading it would start over from here, for this file and the later ones.
-if [[ "$_heca_user" == "$_heca_dir" ]]; then
-  _heca_user="$HOME"
-  unset OLD_ZDOTDIR
+# OLD_ZDOTDIR is the user's ZDOTDIR as heca found it (empty when there was none, which is $HOME).
+if [[ -n "${OLD_ZDOTDIR-}" && "$OLD_ZDOTDIR" != "$_heca_dir" ]]; then
+  export ZDOTDIR="$OLD_ZDOTDIR"
+else
+  unset ZDOTDIR
 fi
-if [[ -r "$_heca_user/.zshenv" ]]; then
-  ZDOTDIR="$_heca_user"
-  source "$_heca_user/.zshenv"
-  # The user's .zshenv may move its own config folder; the later files are read from there.
-  OLD_ZDOTDIR="$ZDOTDIR"
+unset OLD_ZDOTDIR
+if [[ -r "${ZDOTDIR:-$HOME}/.zshenv" ]]; then
+  source "${ZDOTDIR:-$HOME}/.zshenv"
 fi
-ZDOTDIR="$_heca_dir"
-unset _heca_dir _heca_user
+if [[ -o interactive && -r "$_heca_dir/heca-integration.zsh" ]]; then
+  source "$_heca_dir/heca-integration.zsh"
+fi
+unset _heca_dir

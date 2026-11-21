@@ -133,7 +133,13 @@ impl NotificationStore {
 
     /// Retain an archived entry, evicting the oldest records and their dedup
     /// keys once the configured runtime history bound is exceeded.
+    ///
+    /// An archived entry's buttons can no longer be pressed, so their closures
+    /// ([`NotificationAction::run`]) are released here rather than kept alive in the history.
     pub(super) fn retain_history(&mut self, notification_id: NotificationId) {
+        if let Some(notification) = self.notifications.get_mut(&notification_id) {
+            notification.actions.iter_mut().for_each(NotificationAction::release_closure);
+        }
         if self.history_limit == 0 {
             self.remove_canonical(notification_id);
             return;

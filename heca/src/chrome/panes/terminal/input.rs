@@ -124,6 +124,9 @@ pub(crate) enum TerminalInput {
     /// **Text the user typed** — or pasted, or an IME composed — while the terminal held the
     /// keyboard, exactly as the platform produced it (case and shifted symbols intact).
     Text(String),
+    /// **Text to paste** — dropped files' paths, say. Pasted the way the clipboard is (bracketed
+    /// when the program asked for it), so a shell takes it as one piece of text.
+    Paste(String),
     /// **A key that is not text** — Enter, an arrow, Ctrl+C — with what was held when it went
     /// down. Whether the program wants it as an escape sequence is the process's own business.
     Key { key: GridKey, modifiers: Modifiers },
@@ -258,5 +261,37 @@ mod tests {
         assert_eq!(Grid::fit(Size::new(100.0, 50.0), (8.0, f32::NAN)), None);
         let tiny = Grid::fit(Size::new(0.0, -5.0), (8.0, 16.0)).expect("still a grid");
         assert_eq!((tiny.cols, tiny.rows), (1, 1));
+    }
+}
+
+/// **What dropped files paste**: each full path, quoted for a POSIX shell when it needs it, followed
+/// by a space — so `/tmp/a b.txt` and `/tmp/c.txt` become `'/tmp/a b.txt' /tmp/c.txt ` and the
+/// command line reads them as two words, ready for the next one.
+pub(crate) fn dropped_paths(paths: &[std::path::PathBuf]) -> String {
+    paths.iter().map(|path| format!("{} ", shell_quoted(&path.to_string_lossy()))).collect()
+}
+
+/// `text` as one word for a POSIX shell: as it is when every character is safe, otherwise in single
+/// quotes, a single quote inside written `'\''`.
+fn shell_quoted(text: &str) -> String {
+    let safe = |c: char| c.is_ascii_alphanumeric() || "/._-+,:=@%~".contains(c);
+    if !text.is_empty() && text.chars().all(safe) {
+        return text.to_owned();
+    }
+    format!("'{}'", text.replace('\'', r"'\''"))
+}
+
+#[cfg(test)]
+mod dropped_paths_tests {
+    use super::dropped_paths;
+    use std::path::PathBuf;
+
+    #[test]
+    fn dropped_paths_paste_as_shell_words_followed_by_a_space() {
+        let paste = |paths: &[&str]| dropped_paths(&paths.iter().map(PathBuf::from).collect::<Vec<_>>());
+        assert_eq!(paste(&["/tmp/c.txt"]), "/tmp/c.txt ");
+        assert_eq!(paste(&["/tmp/a b.txt", "/tmp/c.txt"]), "'/tmp/a b.txt' /tmp/c.txt ");
+        assert_eq!(paste(&["/tmp/it's"]), r"'/tmp/it'\''s' ", "a quote inside a quoted word");
+        assert_eq!(paste(&["/tmp/$HOME (1)"]), "'/tmp/$HOME (1)' ", "nothing is expanded");
     }
 }

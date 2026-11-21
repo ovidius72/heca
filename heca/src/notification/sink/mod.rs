@@ -98,12 +98,11 @@ pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationD
 /// The duration is optional: omit `auto_dismiss` to use the configured default.
 /// There is no delivery delay or caller timestamp; the host owns acceptance time.
 ///
-/// A closure-based one-off action (`.action(label, variant, || { .. })`, registering an
-/// anonymous name-keyed action behind the scenes) is deliberately **not yet built** — it needs
-/// its own careful design around when the anonymous action registers and unregisters (it must
-/// register only once the draft is actually accepted into the store, so a
-/// deduped or rejected notification never leaks a handler). Only the named `NotificationAction`
-/// form exists today.
+/// A one-off button that runs a closure needs no public action:
+/// `.action(NotificationAction::run("Retry", move || retry()))`. Raised from server code (an
+/// extension service), the closure lives in the notification store for as long as the
+/// notification does — a dropped or duplicate notification drops it — and the button works in
+/// every window of the session.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Notification {
     draft: NotificationDraft,

@@ -2,7 +2,7 @@ use super::*;
 use super::dock_view::DockView;
 use crate::chrome::BuildCx;
 use crate::chrome::{
-    ChromeEventBus, ChromeHost, ChromeIntentEmitter, ChromeSignals, DragItemRegistry,
+    ChromeEventBus, ChromeHost, ChromeIntentEmitter, ChromeSignals, DragItemRegistry, RegionId,
     SharedChromeState,
 };
 use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceTree};
@@ -90,7 +90,6 @@ fn provider_metadata_is_self_consistent() {
     let p = WorkspacesContainerProvider::new("workspaces");
     assert_eq!(p.id(), "workspaces");
     assert_eq!(p.title(), "Workspaces");
-    assert_eq!(p.default_region(), RegionId::LeftSidebar);
     assert!(p.supported_regions().contains(RegionId::LeftSidebar));
     assert!(p.supported_regions().contains(RegionId::RightSidebar));
     assert!(p.movable());
@@ -100,8 +99,8 @@ fn provider_metadata_is_self_consistent() {
 #[test]
 fn register_seats_in_the_left_sidebar() {
     let mut host = ChromeHost::new(ChromeEventBus::default());
-    host.register(Box::new(WorkspacesContainerProvider::new("workspaces")));
-    // Seated in the left sidebar (its default_region), not the right.
+    host.register(RegionId::LeftSidebar, Box::new(WorkspacesContainerProvider::new("workspaces")));
+    // Seated in the left sidebar, where it was put, not the right.
     let left = host.contributions(RegionId::LeftSidebar);
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].id(), "workspaces");
@@ -117,7 +116,6 @@ fn contribution_carries_the_provider_metadata() {
     let c = container(&p, &ctx);
     assert_eq!(c.id, "workspaces");
     assert_eq!(c.title, "Workspaces");
-    assert_eq!(c.default_region, RegionId::LeftSidebar);
     assert!(c.supported_regions.contains(RegionId::LeftSidebar));
     assert!(c.supported_regions.contains(RegionId::RightSidebar));
     assert!(c.movable);

@@ -31,18 +31,40 @@ pub(crate) struct Terminals<'a> {
 }
 
 impl Terminals<'_> {
-    /// **Start the user's shell for `pane`**, `grid` cells big, for a window whose cells are
-    /// `cell` big. A shell always starts (a failed PTY falls back to an inert pane), so there is
-    /// nothing for the caller to handle.
-    pub(crate) fn start_shell(&mut self, pane: PaneId, grid: (usize, usize), cell: (f32, f32)) {
+    /// **Start the user's shell for `pane`** in `cwd`, `grid` cells big, for a window whose cells
+    /// are `cell` big. A shell always starts (a failed PTY falls back to an inert pane), so there
+    /// is nothing for the caller to handle; a folder that is gone, or none, starts it in the home
+    /// folder (see [`start`](Self::start)).
+    pub(crate) fn start_shell(
+        &mut self,
+        pane: PaneId,
+        cwd: Option<std::path::PathBuf>,
+        grid: (usize, usize),
+        cell: (f32, f32),
+    ) {
         let spec = TerminalSpec {
             program: Program::Shell,
-            cwd: None,
+            cwd,
             grid,
         };
         if let Err(err) = self.start(pane, spec, cell) {
             eprintln!("[heca] could not start a shell for pane {}: {err}", pane.0);
         }
+    }
+
+    /// **The folder a new workspace's shell starts in** — `[settings] new_workspace_cwd`, with `~`
+    /// read as the home folder. A folder that is not there is [`start`](Self::start)'s to handle:
+    /// the shell starts in the home folder and the user is told once.
+    pub(crate) fn new_workspace_cwd(&self) -> Option<PathBuf> {
+        let home = dirs::home_dir()?;
+        crate::server::sessions::resolve_folder(Some(&self.settings.new_workspace_cwd), &home).ok()
+    }
+
+    /// **The folder `pane`'s program is in now** — what its shell last reported (OSC 7) or heca
+    /// read from its process. `None` when the pane has no terminal or nothing is known.
+    pub(crate) fn cwd_of(&self, pane: PaneId) -> Option<std::path::PathBuf> {
+        let id = self.backends.identity_of(pane)?;
+        self.backends.get_by_id(id)?.runtime().cwd
     }
 
     /// **Start the terminal for `owner`, or keep the one it has**, for a window whose cells are

@@ -318,7 +318,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         side: Side::Client,
         label: "Paste Clipboard",
         description: "Paste system clipboard content into the focused pane (bracketed-paste aware).",
-        icon: None,
+        icon: Some(Glyph::ClipboardText),
         args: &[],
     },
     ActionDescriptor {

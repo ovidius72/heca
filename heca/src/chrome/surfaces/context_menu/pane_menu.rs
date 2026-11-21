@@ -5,11 +5,14 @@ use super::entries::item_running;
 use crate::chrome::{DropdownItem, PropValue};
 use crate::providers::ChromeCtx;
 
-/// Pane context-menu items. `has_custom_name` gates the "Use process name" reset entry — it only
+/// Pane context-menu items: Paste, then what you can do with the pane. `has_custom_name` gates the "Use process name" reset entry — it only
 /// appears when there is a custom name to clear. This is a **pane** menu, so it carries no
 /// workspace-reset action.
 pub(super) fn pane_action_items(has_custom_name: bool) -> Vec<DropdownItem> {
     let mut items = vec![
+        // **Paste first**, as in every terminal's menu. The right-click has already focused this
+        // pane, and the paste goes to the terminal the keyboard is on — this one.
+        DropdownItem::new("paste_clipboard", "Paste"),
         DropdownItem::new("split_horizontal", "New column"),
         // "Add a pane" reads consistently everywhere: same label + FolderSimplePlus icon (via the
         // `add_pane_to_column` id) as the sidebar "New pane" and the pane-header "+" button. It

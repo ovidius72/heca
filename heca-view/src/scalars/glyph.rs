@@ -57,6 +57,7 @@ named_set! {
         NotePencil => "note_pencil",
         Backspace => "backspace",
         Trash => "trash",
+        ClipboardText => "clipboard_text",
         XCircle => "x_circle",
         PlusCircle => "plus_circle",
         FolderSimpleMinus => "folder_simple_minus",

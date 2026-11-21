@@ -1,10 +1,6 @@
-if [[ -r "${OLD_ZDOTDIR:-$HOME}/.zshrc" ]]; then
-  source "${OLD_ZDOTDIR:-$HOME}/.zshrc"
-fi
-
-if [[ -n "${HECA_AGENT_BIN:-}" ]]; then
-  export PATH="$HECA_AGENT_BIN:$PATH"
-fi
+# heca shell integration: the hooks that tell heca where the shell is (OSC 7), when a command starts
+# and ends with its status (OSC 133), and which program runs. Loaded by heca's .zshenv for an
+# interactive shell; they attach at the first prompt, after the user's own configuration has run.
 
 heca__osc() {
   print -rn -- $'\e]'"$1"$'\a'
@@ -65,7 +61,19 @@ heca_preexec() {
   heca__osc "133;F;$(heca__urlencode "$1")"
 }
 
+# **Attach at the first prompt**, not now: the user's .zshrc runs after this file and may reset the
+# hook arrays (some frameworks do). The first precmd runs after all of it, and removes itself.
+heca__attach() {
+  precmd_functions=(${precmd_functions:#heca__attach})
+  # Programs heca bundles for agents come first on PATH — after the user's own PATH changes.
+  if [[ -n "${HECA_AGENT_BIN:-}" ]]; then
+    export PATH="$HECA_AGENT_BIN:$PATH"
+  fi
+  precmd_functions+=(heca_precmd)
+  preexec_functions+=(heca_preexec)
+  heca_precmd
+}
+
 typeset -ga precmd_functions
 typeset -ga preexec_functions
-precmd_functions+=(heca_precmd)
-preexec_functions+=(heca_preexec)
+precmd_functions+=(heca__attach)

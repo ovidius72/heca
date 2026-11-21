@@ -402,6 +402,7 @@ pub(crate) async fn init_state(
         chrome_tree: None,
         terminals: std::collections::HashMap::new(),
         terminal_presses: Default::default(),
+        terminal_wheel: Default::default(),
         frame_times: crate::app::frame_times::FrameTimes::from_env(),
         layers: crate::chrome::LayerRegistry::default(),
         added_layers: crate::entry::AddedLayers::default(),
