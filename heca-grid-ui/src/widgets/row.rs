@@ -95,7 +95,7 @@ pub struct Row {
     reveal: Option<Signal<bool>>,
     marker: ActiveMarker,
     flash: Flash,
-    on_activate: Option<Box<dyn Fn()>>,
+    on_activate: Option<crate::intent::Act>,
     /// Override for the hover/active highlight color. Otherwise selection follows the theme's
     /// selected background and accent border; hover follows the row's background.
     highlight: Option<Color>,
@@ -180,8 +180,8 @@ impl Row {
 
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_activate = Some(Box::new(f));
+    pub fn on_activate(mut self, act: impl Into<crate::intent::Act>) -> Self {
+        self.on_activate = Some(act.into());
         self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
         self.base.one_click_target = true; // and one click target (Base::one_click_target)
@@ -290,8 +290,8 @@ impl Row {
 
     fn activate(&mut self) {
         self.flash.trigger();
-        if let Some(f) = &self.on_activate {
-            f();
+        if let Some(act) = &self.on_activate {
+            act.run();
         }
     }
 }

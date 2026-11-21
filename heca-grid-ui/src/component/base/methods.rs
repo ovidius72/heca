@@ -132,6 +132,8 @@ impl Base {
             lock: false,
             captures_keyboard: None,
             hint: None,
+            routes_intents: None,
+            intent_route: None,
             hint_scopes: Vec::new(),
             picker_scope: None,
             tooltip: None,

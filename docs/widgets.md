@@ -4086,7 +4086,7 @@ is what lets a declarative author receive `{"value": "high"}` instead of an opaq
 - **Construct**: `Choice::new(value)` (no content — compose it) · `Choice::labeled(value, label)`
   (sugar → one `Label` child, exactly what you'd compose by hand).
 - **Content**: `.child(impl Component)` (`Parent`) — any component, any depth.
-- **Builders**: `.selected(bool)`, `.on_activate(impl Fn())` (click / `Enter` / `Space`; also makes
+- **Builders**: `.selected(bool)`, `.on_activate(..)` (click / `Enter` / `Space`; also makes
   it focusable), plus `LayoutExt` (`.size(WidgetSize)`, `.disabled(bool)`, …).
 - **Accessors**: `.value() -> &str`, `.state() -> Signal<bool>` (selected — flip it in place, no
   rebuild), `.hovered() -> Signal<bool>`.
@@ -4178,7 +4178,7 @@ independent focus targets.
 - **Builders**: `.leading(impl IntoComponent)`, `.trailing(impl IntoComponent)`,
   `.leading_bordered(bool)` / `.trailing_bordered(bool)` (chip frame around a slot),
   `.active(bool)`, `.marker(ActiveMarker)`, `.muted(bool)` (section-header look),
-  `.font_size(f32)`, `.on_activate(impl Fn() + 'static)`.
+  `.font_size(f32)`, `.on_activate(..)`.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.label_signal() -> Signal<String>`.
 - **`ActiveMarker{None, Bar, Check}`** — how the active state reads: `Bar` = vivid left bar
   (sidebar), `Check` = small pip (menu), `None` = tinted bg + accent label only (dropdown).
@@ -4229,7 +4229,7 @@ selected hue as a light wash and an accent outline; text keeps the theme foregro
 readability. The fill and border use `interaction.row_active_fill` and `row_active_border`.
 
 - **Construct**: `Row::new()`. Add content with `.child(...)`.
-- **Builders**: `.on_activate(impl Fn())` (also makes it focusable), `.active(bool)`,
+- **Builders**: `.on_activate(..)` (also makes it focusable), `.active(bool)`,
   `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
   more strongly than the quiet `active` outline; a row can show one, the other, or both),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
@@ -4307,6 +4307,22 @@ row that nothing can activate should not look like a control.
 > node.on_press(intent)                           row.on_activate(fires(intent, emit))
 > node.on_hint(intent)                            row.on_hint(picks(mount, intent, emit))
 > ```
+>
+> **Inside a dock, name the action and nothing else.** `.on_activate(..)` (Row, Item, Choice,
+> RailCell) takes a closure **or an `Intent`**, `.on_hint(..)` takes an `Intent`, and a handler
+> calls `ev.dispatch(..)`. Every one of them goes to the route of the container that holds the
+> widget (`EventExt::route_intents`), and heca seats each dock in a wrapper that declares that
+> route: the intent goes out seated on that dock and judged as a gesture in its region — exactly
+> what `fires` / `picks` send. So a dock, an extension's or a plugin's included, writes
+>
+> ```rust
+> Row::new()
+>     .on_activate(Intent::new("focus_pane").arg("pane_id", id))
+>     .on_hint(Intent::new("show_pane").arg("pane_id", id))
+> ```
+>
+> and never carries the mount or the emitter. `fires` / `picks` stay for widgets that are not
+> inside a seated dock.
 >
 > **The click and the pick are two declarations, not one**. A click on a sidebar
 > row means *go there and leave*; a `prefix+/` pick means *look at that one* and stays in the dock.
@@ -5464,7 +5480,7 @@ ownership of the halo's *reach* — only it knows how big it is.
 > those are additions to make then.
 
 - **Construct**: `RailCell::new(Icon)`.
-- **Builders**: `.cell_size(px)`, `.active(bool)`, `.on_activate(impl Fn())`.
+- **Builders**: `.cell_size(px)`, `.active(bool)`, `.on_activate(..)`.
 - **Accessors**: `.state() -> Signal<bool>` (active/selected).
 
 ```rust

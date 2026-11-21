@@ -59,6 +59,14 @@ pub trait EventExt: Component + Sized {
     }
 
 
+    /// **Send every intent dispatched inside this widget to `route`** — by a handler, a row's
+    /// `on_activate`, or a letter — instead of straight to the host. The nearest container that
+    /// says wins. A host uses it to address what a seated dock asks for; widgets inside never know.
+    fn route_intents(mut self, route: impl Fn(heca_view::Intent) + 'static) -> Self {
+        self.base_mut().routes_intents = Some(std::rc::Rc::new(route));
+        self
+    }
+
     /// A left click landed on this widget (or a descendant that did not take it).
     fn on_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Click, f)

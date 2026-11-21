@@ -40,7 +40,7 @@ pub struct RailCell {
     /// Active (current / selected) state — accent tint + border + glow.
     active: Signal<bool>,
     flash: Flash,
-    on_activate: Option<Box<dyn Fn()>>,
+    on_activate: Option<crate::intent::Act>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -93,8 +93,8 @@ impl RailCell {
     /// Make the cell clickable/keyboard-activatable (also makes it focusable). The
     /// host maps activation to its intent (focus the pane, pick the swap target…).
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_activate = Some(Box::new(f));
+    pub fn on_activate(mut self, act: impl Into<crate::intent::Act>) -> Self {
+        self.on_activate = Some(act.into());
         self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self.base.focusable = true; // interactive cells are focusable (Component::focusable)
         self.base.one_click_target = true; // and one click target (Base::one_click_target)
@@ -107,8 +107,8 @@ impl RailCell {
 
     fn activate(&mut self) {
         self.flash.trigger();
-        if let Some(f) = &self.on_activate {
-            f();
+        if let Some(act) = &self.on_activate {
+            act.run();
         }
     }
 }

@@ -178,7 +178,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
     if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
-    node.on_event(ev)
+    own_event(node, ev)
 }
 
 /// **Do to `node` what picking it means**, in two cases and in this order:
@@ -192,7 +192,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
 ///    does.
 pub(crate) fn run_pick(node: &mut dyn Component) {
     if let Some(hint) = &node.base().hint {
-        hint.run();
+        crate::intent::routed(node.base().intent_route.clone(), || hint.run());
         return;
     }
     if !crate::hint::is_target(node) {
@@ -203,7 +203,15 @@ pub(crate) fn run_pick(node: &mut dyn Component) {
     let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     let click = Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b));
     node.base_mut().run_handlers(&click);
-    node.on_event(&click);
+    own_event(node, &click);
+}
+
+/// **The widget's own event code, as that widget** — a dispatch it makes there takes its route
+/// (`Base::intent_route`). Every walk calls a widget through this, so no widget, and no walk, has
+/// to remember it.
+pub(crate) fn own_event(node: &mut dyn Component, ev: &Event) -> Handled {
+    let route = node.base().intent_route.clone();
+    crate::intent::routed(route, || node.on_event(ev))
 }
 
 /// Capture down, children last-first, bubble up — for the events that are addressed to everything
@@ -226,7 +234,7 @@ fn broadcast(node: &mut dyn Component, ev: &Event) -> Handled {
     if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
-    node.on_event(ev)
+    own_event(node, ev)
 }
 
 /// The bounds of the first descendant (or `node` itself) asking to be kept in view, in tree order.

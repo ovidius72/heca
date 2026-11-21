@@ -17,7 +17,7 @@ pub(super) fn deliver_self(node: &mut dyn Component, ev: &Event) {
     if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return;
     }
-    let _ = node.on_event(ev);
+    let _ = crate::component::own_event(node, ev);
 }
 
 /// Deliver `ev` down `path` and back up: [`on_event_capture`](Component::on_event_capture) on the
@@ -51,7 +51,7 @@ pub fn deliver_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Han
     if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
-    node.on_event(ev)
+    crate::component::own_event(node, ev)
 }
 
 /// Whether this widget takes the press because it is
@@ -133,9 +133,10 @@ pub(super) fn delivering<T>(f: impl FnOnce() -> T) -> (T, bool) {
 impl Base {
     /// Run this widget's registered handlers for `ev`, if it has any.
     pub(crate) fn run_handlers(&mut self, ev: &Event) -> crate::event::HandlerOutcome {
+        let route = self.intent_route.clone();
         match self.handlers.as_mut() {
             Some(h) => {
-                let out = h.run(ev);
+                let out = crate::intent::routed(route, || h.run(ev));
                 if out.default_prevented {
                     note_default_prevented();
                 }

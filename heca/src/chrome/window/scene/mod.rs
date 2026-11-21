@@ -90,17 +90,28 @@ fn focus_and_pick(
     //
     // No guard: `FocusDock` only focuses, and focusing the dock that already has the keyboard is a
     // no-op. `ToggleDock` carries the toggle.
+    //
+    // **Whatever a widget inside names goes out as this dock's own** — seated here and judged as a
+    // gesture in this region, exactly what `fires` / `picks` do. So a row writes
+    // `.on_activate(Intent::new(..))` or `ev.dispatch(..)`, a plugin's included, and never carries
+    // the mount or the emitter to do it.
     let focus_scope = match ctx.emit_intent() {
         Some(emit) => {
-            let emit = emit.clone();
+            let focus = emit.clone();
+            let route = emit.clone();
             let id = container.to_string();
-            FocusScope::new(picked).on_click(move |_| {
-                emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
-                    crate::input::WmAction::FocusDock {
-                        dock: Some(id.clone()),
-                    },
-                ));
-            })
+            let seat = id.clone();
+            FocusScope::new(picked)
+                .on_click(move |_| {
+                    focus.fire(crate::app::interaction::InteractionIntent::ActivateAction(
+                        crate::input::WmAction::FocusDock {
+                            dock: Some(id.clone()),
+                        },
+                    ));
+                })
+                .route_intents(move |intent| {
+                    route.fire_intent(crate::chrome::input::emitter::seated(&seat, intent))
+                })
         }
         None => FocusScope::new(picked),
     };

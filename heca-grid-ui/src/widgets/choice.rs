@@ -73,7 +73,7 @@ pub struct Choice {
     /// Selected (chosen) — a tinted pill + accent content.
     selected: Signal<bool>,
     flash: Flash,
-    on_activate: Option<Box<dyn Fn()>>,
+    on_activate: Option<crate::intent::Act>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -136,8 +136,8 @@ impl Choice {
     /// A container (`Select`, `Tabs`) wires this to record the pick; a standalone `Choice` can use
     /// it directly.
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_activate = Some(Box::new(f));
+    pub fn on_activate(mut self, act: impl Into<crate::intent::Act>) -> Self {
+        self.on_activate = Some(act.into());
         self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self.base.focusable = true; // interactive options are focusable (Component::focusable)
         self.base.one_click_target = true; // and one click target (Base::one_click_target)
@@ -150,8 +150,8 @@ impl Choice {
 
     fn activate(&mut self) {
         self.flash.trigger();
-        if let Some(f) = &self.on_activate {
-            f();
+        if let Some(act) = &self.on_activate {
+            act.run();
         }
     }
 }
