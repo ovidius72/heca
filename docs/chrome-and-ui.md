@@ -615,7 +615,6 @@ To support this cleanly, mounted containers should expose metadata such as:
 - `id`
 - `title`
 - `supported_regions`
-- `default_region`
 - `movable`
 - `collapsible`
 
@@ -891,7 +890,6 @@ pub struct ContainerContribution {
     pub id: ContainerId,              // stable string id (== provider id)
     pub title: String,
     pub supported_regions: RegionSet, // which RegionIds it may live in
-    pub default_region: RegionId,
     pub movable: bool,
     pub collapsible: bool,
     /// Builds the container body as a host-understood grid-ui subtree. Called by
@@ -1107,8 +1105,7 @@ pub trait Provider {
     fn id(&self) -> &str;
     /// Regions this provider's contribution may be placed in.
     fn supported_regions(&self) -> RegionSet;
-    /// Where it mounts by default on first run.
-    fn default_region(&self) -> RegionId;
+    // Where it starts is not the dock's to say: `[[docks]]` and `regions(..)` place it.
     /// Human title (rail/tab label, move menu).
     fn title(&self) -> &str;
     /// Host-level move/reorder allowed?
@@ -1144,7 +1141,7 @@ pub struct ChromeCtx {
 
 1. **seat** — `regions("sidebar.left").append(..)` queues it, and `ChromeHost::mount_pending`
    seats every queued dock as the app starts, reading its placement metadata
-   (`supported_regions` / `default_region`). Where it sits among its region's docks is the
+   (`supported_regions`); the region is the one `regions(..)` or `[[docks]]` named. Where it sits among its region's docks is the
    order it was added (`regions(..).append` / `.prepend`), or `.order(..)` on its body — there is
    no order on the provider.
 2. **on_activate** — run once by `mount_pending`, after every queued dock is seated: the
@@ -1286,7 +1283,7 @@ DnD meaning = dispatch(action)     DnD hooks → shipped src/drag/      DragCont
 | Term | Lives in | What it is |
 |------|----------|-----------|
 | **Region** | app (ChromeHost) + grid-ui shell | A chrome area: left/right **sidebar** (vertical), **top/bottom bar** (horizontal). App owns which regions exist + visibility + placement; grid-ui renders the **region shell**. |
-| **Dock** | **app** | The hosted, **movable** unit a region mounts (`WorkspacesDock`, `GitDock`, the docker one, …). Owns its domain logic + internal items. Declares metadata (`id`, `title`, `supported_regions`, `default_region`, `movable`, `collapsible`). The region can host/move/drag a Dock but knows **nothing of its contents**. |
+| **Dock** | **app** | The hosted, **movable** unit a region mounts (`WorkspacesDock`, `GitDock`, the docker one, …). Owns its domain logic + internal items. Declares metadata (`id`, `title`, `supported_regions`, `movable`, `collapsible`); where it starts comes from `[[docks]]` / `regions(..)`. The region can host/move/drag a Dock but knows **nothing of its contents**. |
 | **`DockFrame`** | grid-ui (**new**) | Visual wrapper around a mounted Dock: title bar, collapse toggle, drag handle, a header-actions slot (a Dock may put its own search/filter there), body. Reuses `Pane`'s rounded-bracket painting. The chrome plan's `SidebarContainerFrame`. |
 | **`ChromeRegion` / `Sidebar`** | grid-ui (**new**) | The **shell**: oriented (vertical/horizontal), toggle/collapsible, mode-aware, stacks `DockFrame`s, scrolls, and is a **drop target** for Dock-level DnD. No tree/workspace/expand/drag *semantics* of its own. |
 | **AppState** | **app** | A **namespaced signal store** (see §4): canonical state + per-namespace derived/UI state. grid-ui widgets **read** signals from it; they never own it. |

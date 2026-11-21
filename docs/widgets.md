@@ -7286,7 +7286,8 @@ own body; ties keep insertion order, and spacing belongs to the region.
 its action/config namespace; it defaults to `id()` for the single-placement case. Two placements of
 one component have different ids, so their focus, cursor and scroll state remain separate (a
 `[[docks]]` entry's `name` is the kind, its `id` the placement). Implement `supported_regions`,
-`default_region`, `title` and `build_contribution` to describe the dock. The optional `on_activate`
+`title` and `build_contribution` to describe the dock. Where it starts is not the dock's to say:
+`[[docks]]` in the user's config and `regions(..)` in code place it. The optional `on_activate`
 hook returns `ProviderHandles`; dropping those handles releases the subscriptions. The optional
 `spawn(id)` lets the user add more docks of the kind from the config (above). The host owns its
 mounting, frame, layout and event delivery.
