@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 27,
+  "nextIdeaNumber": 29,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -200,6 +200,26 @@
       "promotion": null,
       "createdAt": "2026-11-20T23:43:56.661Z",
       "updatedAt": "2026-11-20T23:43:56.661Z"
+    },
+    {
+      "id": "6bfeb77f-e391-4d89-80aa-6159003cdd2c",
+      "number": 27,
+      "shortId": "WL5Y5",
+      "title": "Pick letters beyond 52: two-letter labels (jj, aa…), and which dock a shared letter lands in",
+      "description": "Raised by Antonio on 2026-11-21 while testing two workspaces docks side by side (T567).\n\nState today (heca/src/handlers/pick/mod.rs, assign_letters): every pick is ONE keystroke — a–z then A–Z, 52 targets; past that a target gets no letter and is reachable only from the sidebar. Letters are given per NAME (the row's key), not per place, so the same pane shown in two docks wears the same letter in both. Fine with today's few docks; \"in future we do not know how many docks we will have\".\n\nTwo things to design when it is picked up:\n1. Labels longer than one letter (Vimium / hop style: jj, aa, …) once the targets outgrow 52 — either every label two keys, or only the overflow, in which case a first letter must wait for the second.\n2. A shared letter currently acts on the FIRST copy in tree order, so picking a row shown in two docks always moves the cursor and the keyboard into the top dock. Proposed: act on the dock holding the keyboard, else the one used last, else the first — in the library, so extension docks (heca-pro) get it too. Antonio: leave as is for now.",
+      "promotion": null,
+      "createdAt": "2026-11-21T11:59:55.085Z",
+      "updatedAt": "2026-11-21T11:59:55.085Z"
+    },
+    {
+      "id": "87871499-181b-4bfd-8293-4e1dc52a3a70",
+      "number": 28,
+      "shortId": "X93DS",
+      "title": "Palette asks for an action's arguments (enum list, live docks/workspaces/panes, text)",
+      "description": "Antonio, 2026-11-21 (T567, heca-pro dock placement): an action with required arguments cannot be run from the palette today, because the palette cannot ask for them — e.g. chrome.container.move_to_region / move_left_sidebar need container_id, so a user cannot move a dock from the UI. Decided: actions keep their required arguments; the palette learns to ask.\n\nDesign: every action already declares its arguments (name, kind, required, enum values — what --describe-action prints). Choosing an action with arguments in the palette opens one step per argument: a list for an enum (region: left/right/top/bottom), a list of what exists now for a reference kind (a new arg kind \"dock\" — later \"workspace\", \"pane\" — that the palette can enumerate: the mounted docks), a text field for free text. Once, for every action, built-in and extension (heca-pro) alike; scripts keep passing arguments as today. Today container_id is declared as plain Text.",
+      "promotion": null,
+      "createdAt": "2026-11-21T12:14:01.435Z",
+      "updatedAt": "2026-11-21T12:14:01.435Z"
     }
   ]
 }
