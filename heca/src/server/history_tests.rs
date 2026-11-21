@@ -69,3 +69,44 @@ fn a_reload_changes_the_history_size_and_zero_turns_it_off() {
     raise_and_dismiss(&mut server, &["e"], now + Duration::from_secs(2));
     assert_eq!(titles(&server), ["e"], "and it keeps again once the limit is raised");
 }
+
+/// **A button made with `NotificationAction::run` runs its closure on the server**, whichever
+/// window asked; the closure lives as long as the notification does — a dropped notification never
+/// keeps it, and one that leaves the screen lets it go.
+#[test]
+fn a_run_button_runs_its_closure_and_lives_only_as_long_as_its_notification() {
+    use crate::notification::NotificationAction;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let now = Instant::now();
+    let pressed = Arc::new(AtomicUsize::new(0));
+    let button = || {
+        let pressed = pressed.clone();
+        NotificationAction::run("Retry", move || {
+            pressed.fetch_add(1, Ordering::SeqCst);
+        })
+    };
+    let holders = |pressed: &Arc<AtomicUsize>| Arc::strong_count(pressed) - 1;
+
+    let mut server = ServerState::from_config(&config(""), ServerWaker::new(|| {}));
+    let action = button();
+    let key = action.intent.action.clone();
+    server.execute(ServerAction::Raise(NotificationDraft::new("Agent finished").action(action)), now);
+    let id = server.notifications.visible_views()[0].id;
+    assert!(server.notifications.visible_views()[0].action(&key).is_some_and(|a| a.runs), "every window knows it runs");
+    server.execute(ServerAction::Run(id, key.clone()), now);
+    assert_eq!(pressed.load(Ordering::SeqCst), 1, "pressed once, ran once");
+    assert_eq!(holders(&pressed), 1, "the store holds the closure while the notification is up");
+    server.execute(ServerAction::DismissAll, now);
+    assert_eq!(holders(&pressed), 0, "gone from the screen, the closure is let go (even kept in the history)");
+    server.execute(ServerAction::Run(id, key), now);
+    assert_eq!(pressed.load(Ordering::SeqCst), 1, "an archived button cannot be pressed");
+
+    // A notification the server drops (`mode = "none"`) never keeps its closure.
+    let mut silent = ServerState::from_config(&config("[settings.notification_system]\nmode = \"none\"\n"), ServerWaker::new(|| {}));
+    silent.execute(ServerAction::Raise(NotificationDraft::new("dropped").action(button())), now);
+    assert_eq!(holders(&pressed), 0, "a dropped notification drops its closure");
+
+    // Two buttons on one notification have their own names.
+    assert_ne!(button().intent.action, button().intent.action);
+}

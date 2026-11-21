@@ -7,7 +7,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// The intent stores a name-keyed action id and optional `PropMap` arguments. It
 /// is resolved only when activated through the app's `dispatch_view_intent`
-/// path; this type never stores a closure and is not limited to `WmAction`.
+/// path, and is not limited to `WmAction`.
+///
+/// **Or a closure**, for a one-off button that needs no public action ([`run`](Self::run)). The
+/// closure stays in the process that raised the notification and lives in the notification store
+/// for as long as the notification does: a notification that is dropped (a duplicate, `mode =
+/// "none"`) drops it with it, so nothing is registered and nothing can leak. Pressing the button in
+/// any window asks the server to run it.
 /// `dismiss_after` controls the post-dispatch policy: keep it `false` for
 /// retry-like actions, while dismissive actions close only according to the
 /// dispatch result and never bypass `ActionRegistry`.
@@ -29,6 +35,31 @@ pub struct NotificationAction {
     pub variant: heca_grid_ui::widgets::ButtonVariant,
     /// Whether a successful activation may dismiss the notification.
     pub dismiss_after: bool,
+    /// `true` for a button made with [`run`](Self::run): pressing it runs the closure where the
+    /// notification was raised, instead of dispatching `intent`. Crosses the wire so every window
+    /// knows to ask for that.
+    #[serde(default)]
+    pub runs: bool,
+    /// The closure itself. Never serialized: it stays in the process that raised the notification.
+    #[serde(skip)]
+    run: Option<RunAction>,
+}
+
+/// A button's closure, shared by the copies of its notification. Two are equal only when they are
+/// the same closure.
+#[derive(Clone)]
+struct RunAction(std::sync::Arc<dyn Fn() + Send + Sync>);
+
+impl std::fmt::Debug for RunAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RunAction")
+    }
+}
+
+impl PartialEq for RunAction {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// Serde shim: a [`ButtonVariant`](heca_grid_ui::widgets::ButtonVariant) crosses the wire as its
@@ -69,7 +100,45 @@ impl NotificationAction {
             intent,
             variant: heca_grid_ui::widgets::ButtonVariant::default(),
             dismiss_after: false,
+            runs: false,
+            run: None,
         }
+    }
+
+    /// **A one-off button that runs a closure** — no public action to declare:
+    ///
+    /// ```ignore
+    /// Notification::info("Agent finished")
+    ///     .action(NotificationAction::run("Open pane", move || open(pane)))
+    ///     .send();
+    /// ```
+    ///
+    /// Raise it from server code (an extension service): the closure stays on the server and the
+    /// button works in every window of the session. It lives as long as the notification does — a
+    /// dropped or duplicate notification drops it. Each button gets its own name
+    /// (`notification_run.<n>`), so several on one notification never collide.
+    pub fn run(label: impl Into<String>, closure: impl Fn() + Send + Sync + 'static) -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Self {
+            runs: true,
+            run: Some(RunAction(std::sync::Arc::new(closure))),
+            ..Self::new(label, Intent::new(format!("notification_run.{n}")))
+        }
+    }
+
+    /// Let go of this button's closure — the notification left the screen and its button can no
+    /// longer be pressed.
+    pub(crate) fn release_closure(&mut self) {
+        self.run = None;
+    }
+
+    /// Run this button's closure, if it has one here. `false` when there is none — a button made
+    /// with [`run`](Self::run) in a window, whose closure did not travel to the server.
+    pub(crate) fn run_closure(&self) -> bool {
+        let Some(RunAction(closure)) = &self.run else { return false };
+        closure();
+        true
     }
 
     /// Set how the button reads. Mirrors `ToastAction::variant`.

@@ -7116,6 +7116,10 @@ entirely the engine's; only which corner meets which corner is left.
 - **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(key, label)*.dismissible(bool)`
   — plain data the host owns, with **no closures**: an action is a `key` the host maps back, which
   is the only form that also survives an RPC call or a plugin.
+  heca's own notifications keep it that way: a notification button made with
+  `NotificationAction::run(label, || …)` runs a closure kept in the notification store on the server,
+  and the card still carries only its key (see
+  [Notifications with a button of their own](extending-heca.md#notifications-with-a-button-of-their-own)).
 - **Several actions, each a real control.** `actions: Vec<ToastAction>` where
   `ToastAction { key, label, variant }`. `.action(key, label)` appends one in the default variant;
   `.action_with(ToastAction::new(..).variant(..))` is the full form and the sugar builds it, so

@@ -582,6 +582,24 @@ fn request_done(&mut self, cx: &mut ServiceCx<'_, Msg>, request: &RequestRef, ou
 
 Declare services and their actions before `heca::run(..)`; later ones are reported and dropped. Code: `heca/src/entry/service/` (what you write), `heca/src/server/services/` (the host).
 
+### Notifications with a button of their own
+
+A service raises a notification with `heca::Notification`, and a button on it can run a closure — no
+public action to declare for a one-off "Open pane" or "Retry":
+
+```rust
+heca::Notification::info("Agent finished")
+    .body("room design · bob")
+    .action(NotificationAction::run("Open pane", move || inbox.send(RoomWake::OpenPane(pane))))
+    .send();
+```
+
+The closure stays on the server, so the button works in every window of the session, and it lives as
+long as the notification does: a notification the server drops (a duplicate, `mode = "none"`) drops
+it, and one that leaves the screen lets it go — nothing to register or unregister. A button made in
+window code has no closure on the server; use a named action there
+(`NotificationAction::new(label, Intent)`). Code: `heca/src/notification/model/action.rs`.
+
 ## Sessions and their projects
 
 Every context a service is handed — `ServiceCx` (and so `ActionCx`) and `ProjectCx` — reads

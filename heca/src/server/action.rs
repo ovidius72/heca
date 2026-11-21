@@ -55,6 +55,9 @@ pub(crate) enum ServerAction {
     /// Whether the pointer rests on a notification card. A held stack keeps its deadlines still, and
     /// the time that cost is handed back when the pointer leaves.
     Hover(bool),
+    /// Run the closure behind button `key` of notification `id` — a button made with
+    /// [`NotificationAction::run`](crate::notification::NotificationAction::run).
+    Run(NotificationId, String),
     /// New notification settings (startup, reload).
     Configure(NotificationSettings),
     /// New terminal settings (reload): every running process takes them, and every one started
@@ -80,6 +83,8 @@ pub(crate) enum NotificationCommand {
     DismissAll,
     /// Whether the pointer rests on a notification card.
     Hover(bool),
+    /// Run the closure behind button `key` of notification `id`.
+    Run(NotificationId, String),
 }
 
 impl NotificationCommand {
@@ -96,6 +101,7 @@ impl NotificationCommand {
             Self::DismissLast => ServerAction::DismissLast,
             Self::DismissAll => ServerAction::DismissAll,
             Self::Hover(hovered) => ServerAction::Hover(hovered),
+            Self::Run(id, key) => ServerAction::Run(id, key),
         }
     }
 }

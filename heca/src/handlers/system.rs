@@ -136,15 +136,24 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     // The real `Intent` rides in the projection the server sent (`NotificationView::action`); the
     // `ToastSpec` keeps only the key, so this resolves it from the received views, not a server
     // round-trip.
-    let Some((intent, dismiss_after)) = state
+    let Some((intent, dismiss_after, runs)) = state
         .notifications
         .iter()
         .find(|view| view.id == id)
         .and_then(|view| view.action(key))
-        .map(|action| (action.intent.clone(), action.dismiss_after))
+        .map(|action| (action.intent.clone(), action.dismiss_after, action.runs))
     else {
         return;
     };
+    // **A button made with `NotificationAction::run`** runs its closure where the notification was
+    // raised — the server — whichever window it was pressed in.
+    if runs {
+        state.client.notify(crate::server::NotificationCommand::Run(id, key.clone()));
+        if dismiss_after {
+            state.client.notify(crate::server::NotificationCommand::DismissOne(id));
+        }
+        return;
+    }
     // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
     // it was — the surface's identity comes from its own constant, not from an id someone kept.
     let emit = crate::chrome::layer_emitter(

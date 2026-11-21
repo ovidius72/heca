@@ -152,6 +152,13 @@ impl NotificationRuntime {
         changed
     }
 
+    /// **Run the closure behind button `key`** of visible notification `id`
+    /// ([`NotificationAction::run`](crate::notification::NotificationAction::run)). `false` when
+    /// there is no such button here, or it has no closure in this process.
+    pub(crate) fn run_action(&self, id: NotificationId, key: &str) -> bool {
+        self.store.action_for_visible(id, key).is_some_and(|action| action.run_closure())
+    }
+
     /// Resolve the `Intent` behind `on_action(id, key)` — `key` is the action's own
     /// `intent.action` name (`AppNotification::action_for_visible`).
     pub fn action_intent_for_visible(&self, id: NotificationId, key: &str) -> Option<Intent> {
