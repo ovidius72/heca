@@ -301,8 +301,10 @@ impl Component for Row {
     /// holds is what its look is bound to. A grid moving a cursor over rows lights the one it is on
     /// through this, and the caller connects nothing.
     fn set_selected(&self, on: bool) -> bool {
-        use crate::reactive::SignalUpdate as _;
-        self.nav.set(on);
+        use crate::reactive::{SignalGet as _, SignalUpdate as _};
+        if self.nav.get_untracked() != on {
+            self.nav.set(on);
+        }
         true
     }
 

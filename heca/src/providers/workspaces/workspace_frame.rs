@@ -110,11 +110,6 @@ impl WorkspaceFrame<'_> {
         reg.signals
             .ws_previous
             .push((ws_idx, dock.previous_state()));
-        reg.signals.row_nav.push((
-            seams.mount.to_string(),
-            workspace_key(ws_id),
-            dock.nav_state(),
-        ));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.

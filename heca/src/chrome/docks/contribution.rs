@@ -65,16 +65,16 @@ pub struct BuildCx<'a> {
 // the four are not yet.** Recorded here rather than assumed:
 //
 // - `container_id` is generic. A mount id is a mount id.
-// - **`signals` (`ChromeSignals`) is workspace-shaped.** Every family but `row_nav` is keyed by
+// - **`signals` (`ChromeSignals`) is workspace-shaped.** Every family is keyed by
 //   `PaneId` / `ws_idx` / `col_idx` (`pane_active`, `col_active`, `ws_active`, `pane_hint`,
 //   `ws_hint`, `col_hint`, `pane_info`), so a Docker dock has nowhere to register a value that
-//   updates without a rebuild. `row_nav` shows the shape the rest wants: keyed by
-//   `(mount, key)`, which any component can name.
+//   updates without a rebuild. The cursor shows the shape the rest wants: it reaches a row by
+//   the row's own `key` inside its mount (`select_key_in_scope`), which any component can name.
 // - **`drag` (`DragItemRegistry`) is workspace-shaped** for the same reason: `ChromeDragItem` is a
 //   closed `Pane | Column | Workspace`, which is why the phase lists "a Docker row cannot be
 //   dragged or dropped at all".
 //
-// Both are still open. Whoever takes them should follow `row_nav` — a row already declares one identity
+// Both are still open. Whoever takes them should follow the cursor — a row already declares one identity
 // (`key`), and that is the key both registries want.
 
 impl<'a> BuildCx<'a> {

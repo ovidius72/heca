@@ -26,6 +26,6 @@ pub(crate) use collect::is_target;
 pub use collect::{
     SurfaceHints, collect_hints, collect_hints_by_surface, collect_hints_scoped, hint_targets_of,
 };
-pub use declaration::Hint;
+pub use declaration::{Hint, IntoHint};
 pub use fire::{fire_hint, hint_intent};
-pub use offer::{clear_hints, offer_hint, offer_hint_by_key, set_selected_by_key, set_text_by_key};
+pub use offer::{clear_hints, offer_hint, offer_hint_by_key, select_key_in_scope, set_selected_by_key, set_text_by_key};
