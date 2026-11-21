@@ -404,3 +404,38 @@ fn a_component_moved_under_a_new_parent_can_be_dropped_later() {
         assert_eq!(live(&root), 1, "only the root is left");
     }
 }
+
+/// **A hidden grid leaves the layout like any hidden widget** — CSS `display: none`.
+///
+/// `to_taffy_grid` built on `to_taffy` and then wrote `display: Grid` over the `None` a hidden
+/// widget had just been given, so every grid-based widget (`Grid`, `DockFrame`) stayed in its
+/// parent's flow while hidden: a column of rooms kept a gap — or the frame's own box — where a
+/// hidden one sat, and the rows under it did not close up.
+#[test]
+fn a_hidden_grid_takes_no_room_and_its_neighbours_close_up() {
+    use crate::builders::{IntoComponent, PresenceExt};
+    use crate::widgets::{DockFrame, Grid};
+    let column = |middle: crate::WidgetModel| {
+        let mut root = Flex::column()
+            .width(200.0)
+            .gap(10.0)
+            .child(Flex::row().height(20.0))
+            .child(middle)
+            .child(Flex::row().height(20.0));
+        LayoutEngine::new().compute(&mut root, Size::new(200.0, 400.0));
+        root.base().children[2].base().bounds.loc.y
+    };
+    let without = {
+        let mut root = Flex::column()
+            .width(200.0)
+            .gap(10.0)
+            .child(Flex::row().height(20.0))
+            .child(Flex::row().height(20.0));
+        LayoutEngine::new().compute(&mut root, Size::new(200.0, 400.0));
+        root.base().children[1].base().bounds.loc.y
+    };
+    let grid = Grid::new().height(50.0).hidden(true);
+    let frame = DockFrame::new("room").child(Flex::row().height(50.0)).hidden(true);
+    assert_eq!(column(grid.into_component()), without, "Grid");
+    assert_eq!(column(frame.into_component()), without, "DockFrame");
+}

@@ -479,6 +479,11 @@ impl Layout {
     /// Used by [`Grid`](crate::widgets::Grid) via `Component::taffy_style`.
     pub fn to_taffy_grid(&self, font_px: f32, columns: &[Track], rows: &[Track]) -> taffy::Style {
         let mut s = self.to_taffy(font_px);
+        // **Hidden stays hidden.** `to_taffy` already answered `display: none`; writing `Grid` over
+        // it kept every hidden grid-based widget in its parent's flow, holding a gap where it sat.
+        if self.hidden {
+            return s;
+        }
         s.display = taffy::Display::Grid;
         s.grid_template_columns = columns.iter().map(|t| t.to_taffy()).collect();
         s.grid_template_rows = rows.iter().map(|t| t.to_taffy()).collect();
