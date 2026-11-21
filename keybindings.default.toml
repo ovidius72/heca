@@ -139,6 +139,7 @@ pane_terminal_font_reset      = "prefix+Ctrl+Shift+0"  # The keyboard's terminal
 # ── Pane operations ──
 close = "prefix+x"   # Close active pane
 delete_current_column = "prefix+Shift+x"  # Delete the focused pane's whole column
+delete_current_workspace = "prefix+Ctrl+Shift+x"  # Delete the workspace you are on, after asking
 float = "prefix+f"   # Toggle pane floating
 
 # ── Quick select / swap ──

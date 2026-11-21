@@ -85,6 +85,10 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     state
         .chrome_state
         .workspaces
+        .set_workspace_numbers(state.appearance.sidebar.workspace_numbers);
+    state
+        .chrome_state
+        .workspaces
         .set_agent_statuses(&state.settings.agents.statuses);
     state
         .chrome_state

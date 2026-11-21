@@ -31,6 +31,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[],
     },
     ActionDescriptor {
+        name: "delete_current_workspace",
+        side: Side::Client,
+        label: "Delete Current Workspace",
+        description: "Delete the workspace you are on and all its panes, after asking (not the last workspace).",
+        icon: Some(Glyph::StackMinus),
+        args: &[],
+    },
+    ActionDescriptor {
         name: "delete_workspace",
         side: Side::Server,
         label: "Delete Workspace",
