@@ -304,7 +304,7 @@ fn route_press(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         {
             let node = node_at(root, &path);
             let base = node.base();
-            let now = Instant::now();
+            let now = crate::clock::now();
             let continues =
                 base.pointer.run.get().is_some_and(|(at, _)| {
                     now.duration_since(at).as_secs_f32() <= MULTI_CLICK_SECS

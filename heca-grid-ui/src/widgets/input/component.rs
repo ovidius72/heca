@@ -24,7 +24,7 @@ impl Component for Input {
             self.cursor = text.chars().count();
             self.anchor = None;
             self.seen_text = text;
-            self.blink_origin = Instant::now();
+            self.blink_origin = crate::clock::now();
         }
         self.cursor = self.cursor.min(self.char_count());
         let focused = self.base.focused.get_untracked();
@@ -92,7 +92,7 @@ impl Component for Input {
             // and the selection cycle reads `click_count`: 1 = caret, 2 = word, 3 = all,
             // 4 = deselect and start again.
             Event::PointerDown(p) => {
-                self.blink_origin = Instant::now();
+                self.blink_origin = crate::clock::now();
                 self.anchor = None;
                 self.cursor = self.view.borrow().index_at(p.pos, self.base.children[0].base().bounds.loc, true);
                 Handled::Yes
