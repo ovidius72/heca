@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 26,
+  "nextIdeaNumber": 27,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -190,6 +190,16 @@
       "promotion": null,
       "createdAt": "2026-11-18T18:40:55.649Z",
       "updatedAt": "2026-11-18T18:40:55.649Z"
+    },
+    {
+      "id": "952c36e0-3740-4406-a915-77aaa5f7f059",
+      "number": 26,
+      "shortId": "UVX75",
+      "title": "Upgrade winit to 0.31 once it is stable: drop position and file drop on Wayland",
+      "description": "Recorded 2026-11-21 (Antonio, from T567 C26). heca stays on winit 0.30.13 (latest stable). winit 0.31 exists only as betas (0.31.0-beta.4, 2026-10-24), whose drag events carry a position (DragEntered / DragPosition / DragDropped in beta.4; the shape changed between beta.2 and beta.4, so it is still moving).\n\nWhy it matters:\n- Dropped files: winit 0.30 says which files were dropped but not where. C26 asks the OS where the pointer is at drop time (macOS, Windows, X11) to deliver the drop to the widget under the pointer. With 0.31 the position comes with the event and that OS code can go.\n- Wayland: winit 0.30 delivers no file drop at all on Wayland (checked in winit-0.30.13/src/platform_impl: DroppedFile exists for macos, windows, linux/x11, not linux/wayland). Verify that 0.31 supports Wayland drag-and-drop before upgrading.\n\nCost estimate (2026-11-21): heca uses winit in 36 files / 80 references. 0.31 renames pointer events (CursorMoved -> PointerMoved, MouseInput -> PointerButton), changes the window and event-loop API, needs the wgpu surface hook re-checked, and affects heca-pro (it opens the window through heca::run). About 4-8 agent hours plus Antonio's eye-check of all input (mouse, keyboard, IME, resize, HiDPI) on the three systems.\n\nWhen winit 0.31 is stable: upgrade, move dropped-file delivery to the event's own position (Event::FilesDropped routed by position), remove the per-OS pointer query added for C26, enable Wayland drops.",
+      "promotion": null,
+      "createdAt": "2026-11-20T23:43:56.661Z",
+      "updatedAt": "2026-11-20T23:43:56.661Z"
     }
   ]
 }
