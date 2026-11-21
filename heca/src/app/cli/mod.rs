@@ -247,7 +247,13 @@ fn help() -> String {
             format!("{}{tail}", c.spelling())
         })
         .collect();
-    let width = usages.iter().map(String::len).max().unwrap_or(0);
+    let rpc = crate::server::socket::RPC_COMMANDS;
+    let width = usages
+        .iter()
+        .map(String::len)
+        .chain(rpc.iter().map(|(usage, _)| usage.len() + 4))
+        .max()
+        .unwrap_or(0);
     let mut out = String::from(
         "heca — a GPU-native workspace compositor\n\nUsage: heca [COMMAND]\n\nRun with no command to open the window.\n\nCommands:\n",
     );
@@ -260,6 +266,10 @@ fn help() -> String {
                 "", a.name, a.description
             ));
         }
+    }
+    // `rpc` is answered before the table (its arguments are a whole action line), but listed with it.
+    for (usage, about) in rpc {
+        out.push_str(&format!("  {:<width$}  {about}\n", format!("    {usage}")));
     }
     out.push_str(
         "\nEvery command answers before the window opens, so a script can ask without a display.\n",
