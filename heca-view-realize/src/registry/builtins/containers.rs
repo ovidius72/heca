@@ -17,7 +17,7 @@ pub(super) fn row(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_u
             let mut row = with_props(GridRow::new(), node, theme);
             if let Some(carrier) = press_intent(node) {
                 let emit = emit.clone();
-                row = row.on_activate(move || emit(carrier.clone()));
+                row = row.on_click(move |_| emit(carrier.clone()));
             }
             attach_children(heca_grid_ui::WidgetModel::new(row), node, cx)?
         })

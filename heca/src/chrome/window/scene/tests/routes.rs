@@ -31,7 +31,7 @@ fn a_named_action_inside_a_dock_goes_out_seated_on_that_dock() {
                 self,
                 |_: &ChromeCtx<'_>, _: &mut BuildCx<'_>| {
                     Flex::column()
-                        .child(Row::new().key("activated").on_activate(Intent::new("activated")))
+                        .child(Row::new().key("activated").on_press(Intent::new("activated")))
                         .child(Row::new().key("picked").on_hint(Intent::new("picked")))
                         .child(
                             Row::new()

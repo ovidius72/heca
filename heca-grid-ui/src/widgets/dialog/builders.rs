@@ -298,7 +298,7 @@ impl Dialog {
     ///
     /// ```ignore
     /// let confirm = Dialog::new("Close pane?").body(..).action(..).handle();
-    /// Button::new("Delete").on_click(move || confirm.show())
+    /// Button::new("Delete").on_click(move |_| confirm.show())
     /// ```
     pub fn handle(&self) -> crate::widgets::SurfaceHandle {
         crate::widgets::SurfaceHandle::new(self.base.open)

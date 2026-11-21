@@ -1,3 +1,4 @@
+use crate::builders::EventExt;
 use crate::builders::{HintExt, Parent};
 use crate::hint::*;
 use crate::widgets::{Button, Flex, Label};
@@ -10,8 +11,8 @@ use std::rc::Rc;
 #[test]
 fn anything_actionable_is_lettered_with_nothing_declared() {
     let tree = Flex::column()
-        .child(Button::new("Restart").on_click(|| {}))
-        .child(Button::new("Stop").on_click(|| {}).hintable(false))
+        .child(Button::new("Restart").on_click(|_| {}))
+        .child(Button::new("Stop").on_click(|_| {}).hintable(false))
         .child(Label::new("just text"));
 
     let targets = collect_hints(&tree);
@@ -30,7 +31,7 @@ fn picking_an_ordinary_button_runs_its_click() {
     let ran = Rc::new(RefCell::new(0));
     let seen = ran.clone();
     let mut tree =
-        Flex::column().child(Button::new("Restart").on_click(move || *seen.borrow_mut() += 1));
+        Flex::column().child(Button::new("Restart").on_click(move |_| *seen.borrow_mut() += 1));
 
     let targets = collect_hints(&tree);
     assert_eq!(targets.len(), 1);

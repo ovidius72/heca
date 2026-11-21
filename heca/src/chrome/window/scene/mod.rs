@@ -343,7 +343,7 @@ pub(super) fn sidebar_toggle_button(
     let button = IconButton::new(Icon::new(glyph).color(color))
         .key(action_name)
         .size(WidgetSize::Small)
-        .on_click(fire)
+        .on_click(move |_| fire())
         // Declares its own pick — `on_hint` is on `HintExt`, so every widget has it. A
         // `KeyHint` wrapper here used to be a second pick target on top of the button's own
         // actionability (AGENTS § 5a).

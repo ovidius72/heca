@@ -44,7 +44,7 @@ fn toast_height_grows_with_body_then_action() {
     let with_action = layout_toast(
         &mut Toast::info("Saved")
             .body_text("All files written")
-            .action(heca_grid_ui::Button::outline("Undo").on_click(|| {})),
+            .action(heca_grid_ui::Button::outline("Undo").on_click(|_| {})),
     );
     assert!(with_body > bare, "a body line adds height");
     assert!(with_action > with_body, "an action row adds further height");
@@ -100,7 +100,11 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
 
     let dismissed = Rc::new(Cell::new(0u32));
     let d = dismissed.clone();
-    let mut t = Toast::warning("Disk almost full").on_dismiss(move || d.set(d.get() + 1));
+    let opened = Rc::new(Cell::new(0u32));
+    let o = opened.clone();
+    let mut t = Toast::warning("Disk almost full")
+        .on_dismiss(move || d.set(d.get() + 1))
+        .on_click(move |_| o.set(o.get() + 1));
     layout_toast(&mut t);
 
     // The × is a real `IconButton` now, so it takes a **click** — press and release — like every
@@ -111,12 +115,12 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
         cross.loc.y + cross.size.h / 2.0,
     );
     let _ = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(centre, PointerButton::Left));
-    let hit = heca_grid_ui::dispatch(
+    let _ = heca_grid_ui::dispatch(
         &mut t,
         &Event::pointer_released(centre, PointerButton::Left),
     );
     assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
-    assert!(matches!(hit, Handled::Yes), "the × consumes the click");
+    assert_eq!(opened.get(), 0, "the × uses the click: closing a card does not also open it");
 }
 
 #[test]
@@ -128,7 +132,7 @@ fn toast_action_button_fires_on_action() {
     let acted = Rc::new(Cell::new(0u32));
     let a = acted.clone();
     let mut t = Toast::info("File deleted")
-        .action(heca_grid_ui::Button::outline("Undo").on_click(move || a.set(a.get() + 1)));
+        .action(heca_grid_ui::Button::outline("Undo").on_click(move |_| a.set(a.get() + 1)));
     layout_toast(&mut t);
 
     // Action row sits below the title, left-aligned in the text column.
@@ -144,7 +148,7 @@ fn toast_action_button_hugs_its_label() {
     use heca_grid_ui::{DrawCommand, Toast};
 
     let mut t =
-        Toast::info("File deleted").action(heca_grid_ui::Button::outline("Undo").on_click(|| {}));
+        Toast::info("File deleted").action(heca_grid_ui::Button::outline("Undo").on_click(|_| {}));
     layout_toast(&mut t);
     let theme = Theme::default();
     let scene = common::paint(&t, &theme);
@@ -189,22 +193,19 @@ fn toast_body_click_fires_on_click_only_when_set() {
         "a non-clickable toast doesn't eat body clicks"
     );
 
-    // With on_click, the same click activates + consumes.
+    // With on_click, a click on the body — a press and a release, like every other control — fires
+    // it.
     let clicked = Rc::new(Cell::new(0u32));
     let c = clicked.clone();
     let mut t = Toast::info("Build finished")
         .dismissible(false)
-        .on_click(move || c.set(c.get() + 1));
+        .on_click(move |_| c.set(c.get() + 1));
     layout_toast(&mut t);
-    let hit = heca_grid_ui::dispatch(
-        &mut t,
-        &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left),
-    );
+    let at = Point::new(160.0, 20.0);
+    let _ = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(at, PointerButton::Left));
+    assert_eq!(clicked.get(), 0, "the press alone is not a click");
+    let _ = heca_grid_ui::dispatch(&mut t, &Event::pointer_released(at, PointerButton::Left));
     assert_eq!(clicked.get(), 1, "body click fires on_click");
-    assert!(
-        matches!(hit, Handled::Yes),
-        "a clickable toast consumes the body click"
-    );
 }
 
 /// **The body is whatever you composed** — the card gives it the column and the engine lays it out.
@@ -244,9 +245,9 @@ fn toast_actions_repeat_and_stay_inside_the_card() {
 
     for width in [320.0f64, 120.0] {
         let mut t = Toast::danger("Connection lost")
-            .action(Button::outline("Retry").on_click(|| {}))
-            .action(Button::ghost("Details").on_click(|| {}))
-            .action(Button::ghost("Ignore").on_click(|| {}));
+            .action(Button::outline("Retry").on_click(|_| {}))
+            .action(Button::ghost("Details").on_click(|_| {}))
+            .action(Button::ghost("Ignore").on_click(|_| {}));
         t.base_mut().style.layout.width = heca_grid_ui::Length::Px(width as f32);
         LayoutEngine::new().compute(&mut t, Size::new(width, 300.0));
 
@@ -297,7 +298,7 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
 
     let clicked = Rc::new(Cell::new(0u32));
     let c = clicked.clone();
-    let mut t = Toast::info("Open log?").on_click(move || c.set(c.get() + 1));
+    let mut t = Toast::info("Open log?").on_click(move |_| c.set(c.get() + 1));
     assert!(t.focusable(), "a clickable toast is focusable");
     // A raw key reaches only the widget that owns the keyboard — the assertion below already
     // says "focused", so make it so rather than relying on an unfocused widget taking Enter.
@@ -324,7 +325,7 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
     // Press the Retry action, then paint: the press flash must cover only the
     // action button, not the whole card (no "whole widget clicked" feedback).
     let mut t =
-        Toast::info("File deleted").action(heca_grid_ui::Button::outline("Retry").on_click(|| {}));
+        Toast::info("File deleted").action(heca_grid_ui::Button::outline("Retry").on_click(|_| {}));
     layout_toast(&mut t);
     let card_w = t.base().bounds.size.w;
     click_at(&mut t, Point::new(60.0, 50.0), PointerButton::Left);

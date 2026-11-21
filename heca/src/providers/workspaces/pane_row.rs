@@ -235,7 +235,7 @@ impl PaneRow<'_> {
             .draggable_as("pane")
             .accepts(["pane"])
             // Click / Enter / Space run the row's declared click.
-            .on_activate(press)
+            .on_click(move |_| press())
             .child(content);
         // **Every state that moves with focus, published in the same breath as its initial value.**
         // See this module's note: a bool read at build time freezes, because the tree does not

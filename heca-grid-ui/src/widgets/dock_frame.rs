@@ -36,7 +36,7 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{LayoutExt, Parent, PlaceExt, StyleExt};
+use crate::builders::{EventExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -234,7 +234,7 @@ impl DockFrame {
         let leading_part = self.leading.take().or(kept_leading);
         let (toggle, corner): (crate::WidgetModel, _) = match (custom, self.variant) {
             (Some(content), _) => (
-                crate::WidgetModel::new(crate::widgets::Row::new().on_activate(fold).gap(LEADING_GAP)
+                crate::WidgetModel::new(crate::widgets::Row::new().on_click(move |_| fold()).gap(LEADING_GAP)
                     .padding_y(crate::widgets::item::ROW_PAD_Y)
                     .child(leading_part).child(content).child(chevron())),
                 crate::widgets::HintPlacement::TopRight,
@@ -245,11 +245,11 @@ impl DockFrame {
                     leading = leading.child(Label::new(self.grip_glyph.clone()));
                 }
                 (crate::WidgetModel::new(Item::new(self.title.clone())
-                    .leading(leading.child(chevron()).child(leading_part)).on_activate(fold)),
+                    .leading(leading.child(chevron()).child(leading_part)).on_click(move |_| fold())),
                     crate::widgets::HintPlacement::TopLeft)
             }
             (None, DockFrameVariant::Section) => {
-                let item = Item::new(self.title.clone()).trailing(chevron()).on_activate(fold);
+                let item = Item::new(self.title.clone()).trailing(chevron()).on_click(move |_| fold());
                 let item = match leading_part { Some(part) => item.leading(part), None => item };
                 (crate::WidgetModel::new(item), crate::widgets::HintPlacement::TopRight)
             }

@@ -77,7 +77,7 @@ pub use builders::{
 pub use color::Color;
 pub use component::{
     Base, Component, WidgetModel, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, area, area_slot,
-    collect_damage, deliver, dispatch, frame_served, holds_keyboard, install_frame_request,
+    click, collect_damage, deliver, dispatch, frame_served, holds_keyboard, install_frame_request,
     needs_layout, overlay_occluded_at, paint_child, request_frame, frame_waker, FrameWake, shift_subtree, unmount_child,
 };
 pub use cursor::{Cursor, cursor_at};

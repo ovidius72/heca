@@ -107,14 +107,14 @@ pub struct ButtonGroup {
     /// **The menu of whatever did not fit**, refreshed when the arrangement changes and read by the
     /// ⋮ when it is opened — so the ⋮ itself is built once and never replaced.
     menu: Rc<std::cell::RefCell<ContextMenu>>,
+    /// **The collapsed button a menu row chose**, pressed on the next frame as a real click — the
+    /// menu sits in a layer, so it cannot reach the button itself; it says which and wakes a frame.
+    chosen: Rc<Cell<Option<usize>>>,
 }
 
 struct Entry {
     label: String,
     glyph: Option<Glyph>,
-    /// **The button's own click.** Held here so a menu row runs the same closure the button does,
-    /// with nothing queued and nothing to drain.
-    click: Option<Rc<dyn Fn()>>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -166,6 +166,7 @@ impl ButtonGroup {
             words: Cell::new(true),
             overflow_width: Cell::new(None),
             entries: Vec::new(),
+            chosen: Rc::new(Cell::new(None)),
             menu: Rc::new(std::cell::RefCell::new(
                 ContextMenu::new("button-group-overflow").child(Menu::new(OVERFLOW_LABEL, "")),
             )),
@@ -184,7 +185,6 @@ impl ButtonGroup {
         self.entries.push(Entry {
             label: button.label(),
             glyph: button.glyph(),
-            click: button.click_handler(),
         });
         // Its words are what it says on hover once it is showing only its icon — the button does
         // that itself (`set_icon_only`), and stops when the words are back on screen.
@@ -271,6 +271,19 @@ impl Default for ButtonGroup {
 impl Component for ButtonGroup {
     fn base(&self) -> &Base {
         &self.base
+    }
+
+    /// Press the button a menu row chose, as a click on the button itself — the same click the
+    /// mouse and Enter deliver, so a collapsed button does exactly what it does on screen.
+    fn tick(&mut self, dt: f32) -> bool {
+        if let Some(index) = self.chosen.take() {
+            let _ = crate::component::click(self.strip_mut(), &[index]);
+        }
+        let mut animating = self.base.tick_presence(dt);
+        for child in self.base.children.iter_mut() {
+            animating |= child.tick(dt);
+        }
+        animating
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
@@ -557,18 +570,16 @@ impl ButtonGroup {
     fn overflow_menu(&self) -> ContextMenu {
         let shown = self.shown.get().min(self.entries.len());
         let mut menu = Menu::new(OVERFLOW_LABEL, "Actions that did not fit here");
-        for entry in self.entries.iter().skip(shown) {
-            let run = entry.click.clone();
+        for (index, entry) in self.entries.iter().enumerate().skip(shown) {
+            let chosen = self.chosen.clone();
             let mut item = MenuItem::new()
                 .label(entry.label.clone())
                 .on_click(move || {
-                    // **The button's own closure, run here.** It used to write down which button was
-                    // chosen and wait for the group to drain it on its next event — but the menu is in a
-                    // layer, so no event reaches the group when a row is clicked, and the action sat
-                    // there for seconds until something unrelated wandered past.
-                    if let Some(run) = run.as_ref() {
-                        run();
-                    }
+                    // **Which button, and a frame to press it in.** The group presses it from its
+                    // `tick`, which every frame runs — so nothing waits for an unrelated event, as
+                    // it once did when the group drained the choice from its next event.
+                    chosen.set(Some(index));
+                    crate::component::request_frame();
                 });
             if let Some(g) = entry.glyph {
                 item = item.icon(g);

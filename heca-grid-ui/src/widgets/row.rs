@@ -14,7 +14,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::effects::{Attention, Flash};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -95,7 +95,6 @@ pub struct Row {
     reveal: Option<Signal<bool>>,
     marker: ActiveMarker,
     flash: Flash,
-    on_activate: Option<crate::intent::Act>,
     /// Override for the hover/active highlight color. Otherwise selection follows the theme's
     /// selected background and accent border; hover follows the row's background.
     highlight: Option<Color>,
@@ -130,7 +129,6 @@ impl Row {
             // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
             flash: Flash::new(),
-            on_activate: None,
             highlight: None,
             previous_tint: None,
             attention: Attention::new(),
@@ -178,15 +176,6 @@ impl Row {
         self
     }
 
-    /// Make the row clickable/keyboard-activatable (also makes it focusable).
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_activate(mut self, act: impl Into<crate::intent::Act>) -> Self {
-        self.on_activate = Some(act.into());
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
-        self.base.focusable = true; // interactive rows are focusable (Component::focusable)
-        self.base.one_click_target = true; // and one click target (Base::one_click_target)
-        self
-    }
 
     /// Bind a **host-owned** "needs attention" request signal. When the host sets
     /// it `true`, the row flashes `ATTENTION_PULSES` times (and the signal is
@@ -285,15 +274,9 @@ impl Row {
     }
 
     fn interactive(&self) -> bool {
-        self.on_activate.is_some()
+        self.base.activatable
     }
 
-    fn activate(&mut self) {
-        self.flash.trigger();
-        if let Some(act) = &self.on_activate {
-            act.run();
-        }
-    }
 }
 
 impl Component for Row {
@@ -514,48 +497,18 @@ impl Component for Row {
         }
     }
 
-    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
-    /// children, and they must never take the press first — the control is one click target.
+    /// The press shows on the control itself; what it does belongs to its click handlers.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if !self.interactive() || self.base.disabled.get_untracked() {
-            return Handled::No;
+        if matches!(ev, Event::Click(_)) && self.interactive() && !self.base.disabled.get_untracked() {
+            self.flash.trigger();
         }
-        match ev {
-            // No focus check here, and none in any of the other six widgets that were doing this by
-            // hand: `dispatch` only offers a raw key to the widget that owns the keyboard. The rule
-            // is the framework's, made once, so a widget cannot take a key meant for something else
-            // — which is what made a row eat the Enter that belonged to the list it sits in.
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
-                self.activate();
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
+        Handled::No
     }
 
-    /// **The click, after its children have declined it.**
-    ///
-    /// The press is taken in capture (so composed content can never take it first) and the click
-    /// it turns into is delivered to whoever took that press — this control — which is what makes
-    /// "one control, one click target" a framework rule rather than something each control
-    /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
-    /// refusal and can take the click with `stop_propagation`.
-    fn on_event(&mut self, ev: &Event) -> Handled {
-        if !self.interactive() || self.base.disabled.get_untracked() {
-            return Handled::No;
-        }
-        match ev {
-            Event::Click(_) => {
-                self.activate();
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
+    fn is_control(&self) -> bool {
+        true
     }
+
 
     fn tick(&mut self, dt: f32) -> bool {
         // Consume a host attention request (rising edge): fire the pulse + reset

@@ -33,36 +33,6 @@ thread_local! {
     static ROUTE: RefCell<Option<DispatchHandler>> = const { RefCell::new(None) };
 }
 
-/// **Something a widget does when it is used**: a closure, or an action named as data.
-///
-/// What [`Row::on_activate`](crate::widgets::Row::on_activate) and its siblings take. A named
-/// action is posted through [`dispatch`], so it follows the route of the container it sits in —
-/// the line a plugin writes is the line heca writes:
-///
-/// ```ignore
-/// Row::new().on_activate(Intent::new("focus_pane").arg("pane_id", 7))
-/// ```
-pub struct Act(Box<dyn Fn()>);
-
-impl Act {
-    /// Do it.
-    pub fn run(&self) {
-        (self.0)()
-    }
-}
-
-impl<F: Fn() + 'static> From<F> for Act {
-    fn from(f: F) -> Self {
-        Self(Box::new(f))
-    }
-}
-
-impl From<heca_view::Intent> for Act {
-    fn from(intent: heca_view::Intent) -> Self {
-        Self(Box::new(move || dispatch(intent.clone())))
-    }
-}
-
 /// Run `f` as the widget whose route is `route`: a dispatch made inside goes to that route.
 /// Nested calls restore the outer route, so a widget acting inside another's delivery cannot leak
 /// its route past its own turn.
@@ -125,7 +95,7 @@ mod tests {
         let seen = routed.clone();
         let mut root = Flex::column()
             .on_dispatch(move |intent| seen.borrow_mut().push(intent.action))
-            .child(Row::new().on_activate(Intent::new("activated")))
+            .child(Row::new().on_press(Intent::new("activated")))
             .child(Row::new().on_hint(Intent::new("picked")))
             .child(Row::new().on_click(|ev| ev.dispatch(Intent::new("clicked"))));
         crate::pointer::fire_mounts(&mut root);
@@ -145,7 +115,7 @@ mod tests {
     #[test]
     fn without_a_route_a_named_action_reaches_the_host() {
         let (host, _) = routes();
-        let mut root = Flex::column().child(Row::new().on_activate(Intent::new("activated")));
+        let mut root = Flex::column().child(Row::new().on_press(Intent::new("activated")));
         crate::pointer::fire_mounts(&mut root);
         assert!(crate::hint::fire_hint(&mut root, &[0]));
         assert_eq!(*host.borrow(), ["activated"]);

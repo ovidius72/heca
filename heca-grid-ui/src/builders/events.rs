@@ -51,6 +51,15 @@ pub trait EventExt: Component + Sized {
         if matches!(kind, K::Click | K::DoubleClick | K::Key) {
             self.base_mut().activatable = true;
         }
+        // **A control with a click is one keyboard stop and one click target** — a button, a row.
+        // Asked of the widget's kind, not of every widget with a handler: the dock wrapper and the
+        // pane shell listen to clicks to focus themselves and must not claim the press.
+        if kind == K::Click && self.is_control() {
+            let whole = self.takes_whole_press();
+            let b = self.base_mut();
+            b.focusable = true;
+            b.one_click_target = whole;
+        }
         self.base_mut()
             .handlers
             .get_or_insert_with(Default::default)
@@ -66,6 +75,20 @@ pub trait EventExt: Component + Sized {
     fn on_dispatch(mut self, f: impl Fn(heca_view::Intent) + 'static) -> Self {
         self.base_mut().dispatch_handler = Some(std::rc::Rc::new(f));
         self
+    }
+
+    /// **Pressing this does `intent`** — a click, Enter or Space on it, and its `prefix+/` letter,
+    /// which carries the same intent so a picker can hide a letter whose action would be refused.
+    /// The native twin of a description's `.on_press(Intent)`:
+    ///
+    /// ```ignore
+    /// Row::new().on_press(Intent::new("focus_pane").arg("pane_id", id))
+    /// ```
+    fn on_press(self, intent: heca_view::Intent) -> Self {
+        let run = intent.clone();
+        let mut pressed = self.on_click(move |ev| ev.dispatch(run.clone()));
+        pressed.base_mut().hint = Some(crate::hint::Hint::from(intent));
+        pressed
     }
 
     /// A left click landed on this widget (or a descendant that did not take it).

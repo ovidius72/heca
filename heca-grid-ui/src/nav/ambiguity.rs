@@ -126,13 +126,13 @@ fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{IdentityExt, Parent};
+    use crate::builders::{EventExt, IdentityExt, Parent};
     use crate::reactive::SignalUpdate;
     use crate::widgets::{Flex, Glyph, Icon, KeyHint, Label, Row};
 
     /// A row you can act on — the thing a cursor stops on and a hint letter lands on.
     fn row(name: &str) -> Row {
-        Row::new().on_activate(|| {}).child(Label::new(name))
+        Row::new().on_click(|_| {}).child(Label::new(name))
     }
 
     /// The case the warning exists for: rows built from a collection, none of them keyed.
