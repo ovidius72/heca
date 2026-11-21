@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 30,
+  "nextIdeaNumber": 31,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -220,6 +220,16 @@
       "promotion": null,
       "createdAt": "2026-11-21T13:45:45.058Z",
       "updatedAt": "2026-11-21T13:45:45.058Z"
+    },
+    {
+      "id": "0fb9008e-8816-41a0-a248-f822e4d63bcb",
+      "number": 30,
+      "shortId": "AYJ4S",
+      "title": "aggiunger nome worspace in top bar",
+      "description": "",
+      "promotion": null,
+      "createdAt": "2026-11-21T16:10:05.197Z",
+      "updatedAt": "2026-11-21T16:10:05.197Z"
     }
   ]
 }
