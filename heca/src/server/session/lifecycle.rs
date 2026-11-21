@@ -42,10 +42,14 @@ impl SessionRuntime {
             .filter_map(|(owner, id)| {
                 let backend = self.state.backends.get_by_id(id)?;
                 let runtime = backend.runtime();
-                let agent = runtime.agent.as_ref().map(|agent| crate::server::sessions::RecordedAgent {
-                    driver: agent.driver.clone(),
-                    session_id: agent.session_id.clone(),
-                });
+                let agent =
+                    runtime
+                        .agent
+                        .as_ref()
+                        .map(|agent| crate::server::sessions::RecordedAgent {
+                            driver: agent.driver.clone(),
+                            session_id: agent.session_id.clone(),
+                        });
                 Some(crate::server::sessions::RecordedTerminal {
                     display_title: self.state.backends.custom_title(id).map(str::to_owned),
                     running: runtime.status == heca_core::runtime::ProcessStatus::Running,
@@ -99,10 +103,10 @@ impl SessionRuntime {
             launches.push((recorded.owner.clone(), spec, recorded.display_title.clone()));
         }
         for (owner, spec, title) in launches {
-            if let Err(error) = self
-                .state
-                .terminals()
-                .start(owner.clone(), spec, self.rpc_asker.cell)
+            if let Err(error) =
+                self.state
+                    .terminals()
+                    .start(owner.clone(), spec, self.rpc_asker.cell)
             {
                 self.state.backends.clear();
                 return Err(error.to_string());

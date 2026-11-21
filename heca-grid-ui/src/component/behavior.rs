@@ -466,7 +466,9 @@ pub trait Component {
 
     /// Natural content size, independent of the caller's layout dimensions. The layout engine
     /// resolves proportions against final constraints rather than overwriting the authored style.
-    fn intrinsic_size(&self) -> Option<heca_core::layout::Size> { None }
+    fn intrinsic_size(&self) -> Option<heca_core::layout::Size> {
+        None
+    }
 
     /// Text whose **height depends on the width the engine resolves** — return `Some` and the
     /// layout pass hands this node to taffy's measure path instead of a fixed size.
@@ -517,11 +519,16 @@ pub trait Component {
     /// the soonest such time across the tree instead of redrawing continuously.
     /// `None` = no timed redraw pending. Default: the soonest across children.
     fn next_redraw(&self) -> Option<f32> {
-        let mut soonest = soonest_redraw(crate::widgets::tooltip::wake(self.base()), crate::flash::wake(self.base()));
+        let mut soonest = soonest_redraw(
+            crate::widgets::tooltip::wake(self.base()),
+            crate::flash::wake(self.base()),
+        );
         for child in self.base().children.iter() {
             // Framework feedback also applies to a child that overrides its own deadline hook.
-            soonest = soonest_redraw(soonest,
-                soonest_redraw(child.next_redraw(), crate::flash::wake(child.base())));
+            soonest = soonest_redraw(
+                soonest,
+                soonest_redraw(child.next_redraw(), crate::flash::wake(child.base())),
+            );
         }
         soonest
     }

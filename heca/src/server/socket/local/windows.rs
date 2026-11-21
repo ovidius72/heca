@@ -1,7 +1,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
-use std::net::Shutdown;
 use std::mem::{size_of, zeroed};
+use std::net::Shutdown;
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::{AsRawHandle, AsRawSocket};
 use std::os::windows::process::CommandExt;
@@ -13,9 +13,10 @@ use std::time::Duration;
 
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_FLAG_BACKUP_SEMANTICS,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FileAttributeTagInfo, GetFileInformationByHandle, GetFileInformationByHandleEx,
+    BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FileAttributeTagInfo,
+    GetFileInformationByHandle, GetFileInformationByHandleEx,
 };
 use windows_sys::Win32::System::IO::CancelIoEx;
 use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
@@ -42,7 +43,9 @@ impl UnixStream {
         uds_windows::UnixStream::pair().map(|(a, b)| (Self::from(a), Self::from(b)))
     }
 
-    pub(crate) fn try_clone(&self) -> io::Result<Self> { Ok(Self(Arc::clone(&self.0))) }
+    pub(crate) fn try_clone(&self) -> io::Result<Self> {
+        Ok(Self(Arc::clone(&self.0)))
+    }
 
     pub(crate) fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
         self.0.set_read_timeout(timeout)
@@ -64,16 +67,24 @@ impl UnixStream {
 }
 
 impl From<uds_windows::UnixStream> for UnixStream {
-    fn from(stream: uds_windows::UnixStream) -> Self { Self(Arc::new(stream)) }
+    fn from(stream: uds_windows::UnixStream) -> Self {
+        Self(Arc::new(stream))
+    }
 }
 
 impl Read for UnixStream {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> { (&*self.0).read(buffer) }
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        (&*self.0).read(buffer)
+    }
 }
 
 impl Write for UnixStream {
-    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> { (&*self.0).write(buffer) }
-    fn flush(&mut self) -> io::Result<()> { (&*self.0).flush() }
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        (&*self.0).write(buffer)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        (&*self.0).flush()
+    }
 }
 
 #[derive(Debug)]
@@ -107,11 +118,18 @@ pub(crate) fn is_socket(path: &Path) -> io::Result<bool> {
     let file = entry(path)?;
     let mut info: FILE_ATTRIBUTE_TAG_INFO = unsafe { zeroed() };
     let read = unsafe {
-        GetFileInformationByHandleEx(file.as_raw_handle(), FileAttributeTagInfo,
-            (&raw mut info).cast(), size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32)
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileAttributeTagInfo,
+            (&raw mut info).cast(),
+            size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+        )
     };
-    if read == 0 { return Err(io::Error::last_os_error()); }
-    Ok(info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 && info.ReparseTag == REPARSE_TAG_AF_UNIX)
+    if read == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        && info.ReparseTag == REPARSE_TAG_AF_UNIX)
 }
 
 /// The volume serial number and the file index: the pair Windows gives a file for as long as it
@@ -122,12 +140,17 @@ pub(crate) fn identity(path: &Path) -> io::Result<FileIdentity> {
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok((u64::from(info.dwVolumeSerialNumber), u64::from(info.nFileIndexHigh) << 32 | u64::from(info.nFileIndexLow)))
+    Ok((
+        u64::from(info.dwVolumeSerialNumber),
+        u64::from(info.nFileIndexHigh) << 32 | u64::from(info.nFileIndexLow),
+    ))
 }
 
 /// Nothing to do: Windows has no file mode. The socket sits in the folder `private_folder` made, whose
 /// access list admits the current user alone and which the socket file inherits.
-pub(crate) fn restrict_to_owner(_: &Path) -> io::Result<()> { Ok(()) }
+pub(crate) fn restrict_to_owner(_: &Path) -> io::Result<()> {
+    Ok(())
+}
 
 /// Start `command` with no console and in a process group of its own, so closing the terminal or
 /// pressing Ctrl+C there does not reach it.

@@ -10,11 +10,19 @@ use crate::runtime::PaneRuntime;
 
 impl PaneBackend for TerminalBackend {
     fn process_launch(&self) -> Option<crate::backend::ProcessLaunch> {
-        if let Some(launch) = &self.command_launch { return Some(launch.clone()); }
-        if self.auto_close_on_exit && self.runtime.status == crate::runtime::ProcessStatus::Running { return None; }
+        if let Some(launch) = &self.command_launch {
+            return Some(launch.clone());
+        }
+        if self.auto_close_on_exit && self.runtime.status == crate::runtime::ProcessStatus::Running
+        {
+            return None;
+        }
         Some(self.pty.launch.clone())
     }
-    fn reload_agent_config(&mut self, options: Option<crate::agent::AgentOptions>) -> Result<(), crate::agent::AgentError> {
+    fn reload_agent_config(
+        &mut self,
+        options: Option<crate::agent::AgentOptions>,
+    ) -> Result<(), crate::agent::AgentError> {
         self.configure_agents(options)
     }
 
@@ -119,7 +127,8 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn next_wake(&self) -> Option<std::time::Instant> {
-        self.pending_pty_size.map(|_| self.last_pty_resize + super::size::PTY_RESIZE_MIN_INTERVAL)
+        self.pending_pty_size
+            .map(|_| self.last_pty_resize + super::size::PTY_RESIZE_MIN_INTERVAL)
     }
 
     fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
@@ -194,7 +203,10 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn take_agent_updates(&mut self) -> Vec<Option<crate::agent::AgentState>> {
-        self.agent_session.as_mut().map(|session| session.take_updates()).unwrap_or_default()
+        self.agent_session
+            .as_mut()
+            .map(|session| session.take_updates())
+            .unwrap_or_default()
     }
 
     fn take_exit_code(&mut self) -> Option<i32> {
@@ -265,7 +277,13 @@ impl PaneBackend for TerminalBackend {
         self.engine.search_scrollback(query, cols)
     }
 
-    fn search_stable_range(&self, query: &str, cols: usize, start: isize, end: isize) -> Vec<crate::backend::SearchMatch> {
+    fn search_stable_range(
+        &self,
+        query: &str,
+        cols: usize,
+        start: isize,
+        end: isize,
+    ) -> Vec<crate::backend::SearchMatch> {
         self.engine.search_stable_range(query, cols, start, end)
     }
 }

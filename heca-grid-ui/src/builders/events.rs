@@ -58,12 +58,10 @@ pub trait EventExt: Component + Sized {
         self
     }
 
-
     /// A left click landed on this widget (or a descendant that did not take it).
     fn on_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Click, f)
     }
-
 
     /// A second click in the same run. The first still arrived as a
     /// [`click`](EventExt::on_click).
@@ -71,12 +69,10 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::DoubleClick, f)
     }
 
-
     /// A third click, and any beyond it (`click_count` says which).
     fn on_triple_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::TripleClick, f)
     }
-
 
     /// A right click landed on this widget.
     ///
@@ -87,12 +83,10 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::RightClick, f)
     }
 
-
     /// A middle click landed on this widget.
     fn on_middle_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::MiddleClick, f)
     }
-
 
     /// A button went down on this widget. Stopping propagation here **captures the pointer**: the
     /// moves and the release that end the gesture come here wherever the cursor goes.
@@ -100,18 +94,15 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::PointerDown, f)
     }
 
-
     /// The button came up.
     fn on_pointer_up(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::PointerUp, f)
     }
 
-
     /// The pointer moved over this widget, or anywhere while this widget holds capture.
     fn on_pointer_move(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::PointerMove, f)
     }
-
 
     /// The pointer came over this widget. Several widgets on one path enter together, so stopping
     /// propagation here is almost always wrong.
@@ -119,19 +110,16 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::PointerEnter, f)
     }
 
-
     /// The pointer left this widget.
     fn on_pointer_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::PointerLeave, f)
     }
-
 
     /// The wheel turned over this widget. Stop propagation to keep it from also scrolling whatever
     /// contains this widget.
     fn on_scroll(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Scroll, f)
     }
-
 
     /// A press landed somewhere that is **not** this widget or a descendant — how a popup closes
     /// itself. The press belongs to whatever it landed on, so do not claim it.
@@ -141,7 +129,6 @@ pub trait EventExt: Component + Sized {
     ) -> Self {
         self.on(crate::event::EventKind::PointerDownOutside, f)
     }
-
 
     /// A key went **down** on this widget — it holds the keyboard, or it contains what does.
     ///
@@ -166,12 +153,10 @@ pub trait EventExt: Component + Sized {
         self.on_key_when(true, f)
     }
 
-
     /// A key came **up** on this widget. See [`on_key_down`](EventExt::on_key_down).
     fn on_key_up(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on_key_when(false, f)
     }
-
 
     /// Shared by the two above: one registration on `EventKind::Key`, gated on the half it wants.
     /// Private so there is no third spelling of "a key happened".
@@ -189,12 +174,10 @@ pub trait EventExt: Component + Sized {
         })
     }
 
-
     /// Text the user committed — typed, pasted, or composed by an IME.
     fn on_text_input(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::TextInput, f)
     }
-
 
     /// This widget gained keyboard focus.
     ///
@@ -205,19 +188,16 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::Focus, f)
     }
 
-
     /// This widget lost keyboard focus — the moment to commit an edit or close a popup. Named
     /// `on_focus_lost` for the same reason as [`on_focus_gained`](EventExt::on_focus_gained).
     fn on_focus_lost(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Blur, f)
     }
 
-
     /// This widget entered a live tree (fired on its first layout pass).
     fn on_mount(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Mount, f)
     }
-
 
     /// This widget is being dropped — the tree that held it was rebuilt or thrown away. Use it to
     /// release what the widget registered with the host.
@@ -225,55 +205,46 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::Unmount, f)
     }
 
-
     /// A drag began on this widget (it declared a [`draggable`](super::DragExt::draggable) id and the
     /// pointer travelled past the threshold).
     fn on_drag_start(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragStart, f)
     }
 
-
     /// The drag this widget started moved.
     fn on_drag(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Drag, f)
     }
-
 
     /// The drag this widget started ended, dropped or not.
     fn on_drag_end(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragEnd, f)
     }
 
-
     /// A drag came over this drop target.
     fn on_drag_enter(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragEnter, f)
     }
-
 
     /// A drag moved within this drop target — `side` follows the pointer.
     fn on_drag_over(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragOver, f)
     }
 
-
     /// A drag left this drop target.
     fn on_drag_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragLeave, f)
     }
-
 
     /// A drag this drop target accepts has started, anywhere in the window.
     fn on_drag_in_flight(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragInFlight, f)
     }
 
-
     /// The drag this drop target was told about is over.
     fn on_drag_settled(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragSettled, f)
     }
-
 
     /// **A drag held by this widget is past its edge** — every frame, even with the mouse still.
     /// Scroll by [`delta_pixels`](crate::event::PointerEvent::delta_pixels); see
@@ -286,7 +257,6 @@ pub trait EventExt: Component + Sized {
     fn on_drop(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Drop, f)
     }
-
 
     fn on_action(mut self, name: impl Into<String>, f: impl Fn() + 'static) -> Self {
         self.base_mut().actions.push(crate::hint::DeclaredAction {

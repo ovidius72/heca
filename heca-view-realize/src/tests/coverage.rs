@@ -1,6 +1,5 @@
 //! Vocabulary coverage — the guard that keeps the mapper from rotting.
 
-
 use super::*;
 
 // ── Vocabulary coverage (the guard that keeps this from rotting) ──
@@ -44,9 +43,18 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         // ── Not widgets: parts, values and helpers that happen to be exported ──
         ("ImageFit", "a value set on Image.fit, not a widget"),
         ("ImageState", "observable image load state, not a widget"),
-        ("Svg", "an alias of Image; inline SVG is the Image.svg property"),
-        ("MessageFeed", "a producer handle for MessageList, not a Component"),
-        ("ElapsedFormat", "not a widget: the function type Elapsed.format takes"),
+        (
+            "Svg",
+            "an alias of Image; inline SVG is the Image.svg property",
+        ),
+        (
+            "MessageFeed",
+            "a producer handle for MessageList, not a Component",
+        ),
+        (
+            "ElapsedFormat",
+            "not a widget: the function type Elapsed.format takes",
+        ),
         (
             "GridCell",
             "not a widget: a CardGrid cell, built by realize",
@@ -80,8 +88,7 @@ fn every_library_widget_is_describable_or_deliberately_not() {
     ];
 
     let exports = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../heca-grid-ui/src/widgets/mod.rs"),
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-grid-ui/src/widgets/mod.rs"),
     )
     .expect("the widget exports are where they are expected");
 
@@ -108,9 +115,11 @@ fn every_library_widget_is_describable_or_deliberately_not() {
     // The value types (`ButtonVariant`, `Glyph`, `Display`, …) are vocabularies a widget reads,
     // not widgets. They are told apart by being named in a kind's properties rather than by a
     // list here, which would be one more thing to keep in step.
-    let kinds: std::collections::BTreeSet<String> =
-        WidgetRegistry::builtins().expect("library definitions").definitions()
-            .map(|definition| definition.metadata().native_name.to_string()).collect();
+    let kinds: std::collections::BTreeSet<String> = WidgetRegistry::builtins()
+        .expect("library definitions")
+        .definitions()
+        .map(|definition| definition.metadata().native_name.to_string())
+        .collect();
 
     let unreachable: Vec<&String> = published
         .iter()
@@ -181,7 +190,8 @@ fn every_registered_widget_realizes_to_a_live_widget() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         LayoutEngine::new().compute(widget.as_mut(), Size::new(400.0, 200.0));
         let mut scene = Scene::new();
         {
@@ -190,6 +200,9 @@ fn every_registered_widget_realizes_to_a_live_widget() {
         }
         let alive = !widget.base().children.is_empty() || !scene.is_empty();
 
-        assert!(alive, "{kind:?} realized to nothing: its registered factory must produce a live widget");
+        assert!(
+            alive,
+            "{kind:?} realized to nothing: its registered factory must produce a live widget"
+        );
     }
 }

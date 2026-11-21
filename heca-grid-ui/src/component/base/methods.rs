@@ -5,7 +5,9 @@ use super::*;
 impl Base {
     /// A part owned by this container, without crossing into a nested component's template.
     pub(crate) fn child_in_area(&mut self, name: &str) -> Option<&mut crate::WidgetModel> {
-        self.children.iter_mut().find(|child| child.base().grid_area.as_deref() == Some(name))
+        self.children
+            .iter_mut()
+            .find(|child| child.base().grid_area.as_deref() == Some(name))
     }
 
     /// **Does this widget declare anything the pointer could mean on it?** A handler, a focus
@@ -73,8 +75,10 @@ impl Base {
         base.style.layout.width = crate::Length::Percent(1.0);
         base.style.layout.height = crate::Length::Percent(1.0);
         base.style.layout.placement = Some(crate::style::Placement {
-            left: crate::Length::Px(0.0), top: crate::Length::Px(0.0),
-            width: crate::Length::Auto, height: crate::Length::Auto,
+            left: crate::Length::Px(0.0),
+            top: crate::Length::Px(0.0),
+            width: crate::Length::Auto,
+            height: crate::Length::Auto,
         });
         base
     }
@@ -331,7 +335,9 @@ impl Base {
         self.sync_focus_follow();
         let tone_changed = self.content_tone.is_some_and(|tone| {
             let next = tone.get_untracked();
-            if self.style.visual.content_tone == next { return false; }
+            if self.style.visual.content_tone == next {
+                return false;
+            }
             self.style.visual.content_tone = next;
             self.mark_needs_paint();
             true

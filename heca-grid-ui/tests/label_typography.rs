@@ -60,17 +60,28 @@ fn a_spaced_label_is_cut_on_its_wider_cell() {
         LayoutEngine::new().compute(&mut row, Size::new(600.0, 200.0));
         runs(&row)[0].text.clone()
     };
-    assert_eq!(fits_plain(Label::new(text)), text, "the box is the text's own width");
+    assert_eq!(
+        fits_plain(Label::new(text)),
+        text,
+        "the box is the text's own width"
+    );
     let spaced = fits_plain(Label::new(text).letter_spacing(LetterSpacing::Wider));
-    assert!(spaced.ends_with('…'), "spaced out, the same text no longer fits: {spaced:?}");
+    assert!(
+        spaced.ends_with('…'),
+        "spaced out, the same text no longer fits: {spaced:?}"
+    );
 }
 
 #[test]
 fn line_height_sets_a_one_line_label_and_the_pitch_of_a_wrapped_one() {
     let (normal, font) = laid_out(Label::new("x"));
     let (relaxed, _) = laid_out(Label::new("x").line_height(LineHeight::Relaxed));
-    assert!((normal.base().bounds.size.h - font * f64::from(LineHeight::Normal.ratio())).abs() < 0.5);
-    assert!((relaxed.base().bounds.size.h - font * f64::from(LineHeight::Relaxed.ratio())).abs() < 0.5);
+    assert!(
+        (normal.base().bounds.size.h - font * f64::from(LineHeight::Normal.ratio())).abs() < 0.5
+    );
+    assert!(
+        (relaxed.base().bounds.size.h - font * f64::from(LineHeight::Relaxed.ratio())).abs() < 0.5
+    );
 
     // Wrapped onto several lines: the box is that many lines tall, and each line is drawn one line
     // below the last.
@@ -91,7 +102,10 @@ fn line_height_sets_a_one_line_label_and_the_pitch_of_a_wrapped_one() {
         label.bounds.size.h,
     );
     for pair in drawn.windows(2) {
-        assert!((pair[1].rect.loc.y - pair[0].rect.loc.y - line).abs() < 0.5, "line pitch");
+        assert!(
+            (pair[1].rect.loc.y - pair[0].rect.loc.y - line).abs() < 0.5,
+            "line pitch"
+        );
     }
 }
 
@@ -168,5 +182,10 @@ fn the_steps_follow_the_font_size() {
         label.base().bounds.size.w
     };
     // Whole-pixel boxes: each width is within a pixel of its exact value.
-    assert!((width(30.0) - 2.0 * width(15.0)).abs() < 2.0, "{} vs {}", width(30.0), width(15.0));
+    assert!(
+        (width(30.0) - 2.0 * width(15.0)).abs() < 2.0,
+        "{} vs {}",
+        width(30.0),
+        width(15.0)
+    );
 }

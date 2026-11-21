@@ -26,16 +26,28 @@ pub struct ShellIntegrationAssets {
 
 /// The integration files, by the name they are written under. The one list: the app and the tests
 /// both write it through [`ShellIntegrationAssets::write_to`].
-const BASH_INIT: (&str, &str) = ("bash_init.sh", include_str!("../../../../heca/assets/shell-integration/bash_init.sh"));
-const FISH_INIT: (&str, &str) = ("fish_init.fish", include_str!("../../../../heca/assets/shell-integration/fish_init.fish"));
+const BASH_INIT: (&str, &str) = (
+    "bash_init.sh",
+    include_str!("../../../../heca/assets/shell-integration/bash_init.sh"),
+);
+const FISH_INIT: (&str, &str) = (
+    "fish_init.fish",
+    include_str!("../../../../heca/assets/shell-integration/fish_init.fish"),
+);
 /// heca points zsh's `ZDOTDIR` at this folder only for zsh to read heca's `.zshenv`, which points it
 /// straight back at the user's folder — so every other startup file, the system's included, reads
 /// the user's (their history, their completion cache) — and loads heca's hooks for an interactive
 /// shell. The way Ghostty and kitty do it.
 const ZSH_DIR: &str = "zsh";
 const ZSH_FILES: [(&str, &str); 2] = [
-    (".zshenv", include_str!("../../../../heca/assets/shell-integration/zsh/.zshenv")),
-    ("heca-integration.zsh", include_str!("../../../../heca/assets/shell-integration/zsh/heca-integration.zsh")),
+    (
+        ".zshenv",
+        include_str!("../../../../heca/assets/shell-integration/zsh/.zshenv"),
+    ),
+    (
+        "heca-integration.zsh",
+        include_str!("../../../../heca/assets/shell-integration/zsh/heca-integration.zsh"),
+    ),
 ];
 
 /// How heca's `.zshenv` begins, in every heca version: what tells a heca zsh folder from the user's.
@@ -46,7 +58,8 @@ const ZSH_HEADER: &str = "# heca shell integration:";
 pub(super) fn is_heca_zsh_folder(dir: &std::path::Path) -> bool {
     use std::io::Read;
     let mut start = [0; ZSH_HEADER.len()];
-    std::fs::File::open(dir.join(".zshenv")).and_then(|mut file| file.read_exact(&mut start))
+    std::fs::File::open(dir.join(".zshenv"))
+        .and_then(|mut file| file.read_exact(&mut start))
         .is_ok_and(|()| start == ZSH_HEADER.as_bytes())
 }
 
@@ -63,7 +76,11 @@ impl ShellIntegrationAssets {
         for (name, content) in ZSH_FILES {
             write_if_changed(&zsh_dir.join(name), content)?;
         }
-        Ok(Self { bash_init, fish_init, zsh_zdotdir: zsh_dir })
+        Ok(Self {
+            bash_init,
+            fish_init,
+            zsh_zdotdir: zsh_dir,
+        })
     }
 }
 
@@ -164,9 +181,21 @@ impl Default for TerminalBackendOptions {
 
 impl TerminalBackend {
     /// Start recorded executable/argv data without reconstructing a command line.
-    pub fn with_process(cols: usize, rows: usize, cell_w: f32, cell_h: f32,
-        process: &crate::backend::ProcessLaunch, options: TerminalBackendOptions) -> Result<Self, PtyError> {
-        Self::with_launch_target(cols, rows, (cell_w, cell_h), options, LaunchTarget::Process(process))
+    pub fn with_process(
+        cols: usize,
+        rows: usize,
+        cell_w: f32,
+        cell_h: f32,
+        process: &crate::backend::ProcessLaunch,
+        options: TerminalBackendOptions,
+    ) -> Result<Self, PtyError> {
+        Self::with_launch_target(
+            cols,
+            rows,
+            (cell_w, cell_h),
+            options,
+            LaunchTarget::Process(process),
+        )
     }
     /// **Start a shell**, `cols` × `rows` cells of `cell_w` × `cell_h` logical px, as `options`
     /// say.
@@ -213,14 +242,18 @@ impl TerminalBackend {
             shell_override,
             cwd,
         } = options;
-        let osc = OscSnooper::with_notification_limit(agents.as_ref().map(|agents| agents.max_report_bytes));
-        let agent_session = agents.map(|agents| {
-            crate::agent::AgentSession::prepare(agents, wake_on_output.clone())
-        }).transpose().map_err(PtyError::agent_setup)?;
+        let osc = OscSnooper::with_notification_limit(
+            agents.as_ref().map(|agents| agents.max_report_bytes),
+        );
+        let agent_session = agents
+            .map(|agents| crate::agent::AgentSession::prepare(agents, wake_on_output.clone()))
+            .transpose()
+            .map_err(PtyError::agent_setup)?;
         let agent_wake = wake_on_output.clone();
         let (pty, auto_close_on_exit) = match launch {
             LaunchTarget::Process(process) => (
-                PtyHandle::new_with_process(cols, rows, cell_size, wake_on_output, process)?, false,
+                PtyHandle::new_with_process(cols, rows, cell_size, wake_on_output, process)?,
+                false,
             ),
             LaunchTarget::Shell(shell) => {
                 let pty = PtyHandle::new_with_shell(

@@ -167,10 +167,10 @@ mod tests {
     /// ⚠️ Ran red first: without the wrapper check the second column drops by half a card.
     #[test]
     fn a_row_does_not_baseline_align_children_that_are_layouts() {
+        use crate::LayoutEngine;
         use crate::builders::{LayoutExt, Parent};
         use crate::style::{Justify, Length};
         use crate::widgets::{Flex, Label};
-        use crate::{LayoutEngine};
         use heca_core::layout::Size;
 
         // A card: a share of its column with its label centred inside it.
@@ -272,7 +272,11 @@ mod tests {
         let row = laid_out(
             Flex::row()
                 .child(Label::new("fafdsa").font_weight(crate::style::FontWeight::Bold))
-                .child(Visibility::new().visible(true).child(Label::new("(zsh)").font_scale(0.8))),
+                .child(
+                    Visibility::new()
+                        .visible(true)
+                        .child(Label::new("(zsh)").font_scale(0.8)),
+                ),
         );
         let name = baseline(row.base().children[0].as_ref()).expect("the name is text");
         let wrapped = baseline(row.base().children[1].as_ref()).expect("the wrapper holds text");
@@ -286,11 +290,13 @@ mod tests {
     /// taller sibling already claimed.
     #[test]
     fn sharing_a_baseline_does_not_grow_the_row() {
-        let tall = laid_out(Flex::row().child(Label::new("NAME").font_weight(crate::style::FontWeight::Bold)))
-            .base()
-            .bounds
-            .size
-            .h;
+        let tall = laid_out(
+            Flex::row().child(Label::new("NAME").font_weight(crate::style::FontWeight::Bold)),
+        )
+        .base()
+        .bounds
+        .size
+        .h;
         let mixed = laid_out(
             Flex::row()
                 .child(Label::new("NAME").font_weight(crate::style::FontWeight::Bold))

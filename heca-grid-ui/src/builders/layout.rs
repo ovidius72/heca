@@ -22,7 +22,8 @@ pub trait LayoutExt: Component + Sized {
     /// Preferred width / height. Automatic dimensions follow it; two fixed dimensions win.
     /// Non-finite or non-positive values remove the preference.
     fn aspect_ratio(mut self, ratio: f32) -> Self {
-        self.authored_style_mut().layout.aspect_ratio = (ratio.is_finite() && ratio > 0.0).then_some(ratio);
+        self.authored_style_mut().layout.aspect_ratio =
+            (ratio.is_finite() && ratio > 0.0).then_some(ratio);
         self
     }
     /// Main-axis direction.

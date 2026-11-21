@@ -135,7 +135,11 @@ fn a_wrapped_dot_is_still_round() {
     let mut row = Flex::row()
         .width(Length::Px(120.0))
         .gap(8.0)
-        .child(Visibility::new().visible(true).child(StatusDot::new(DotStatus::Online)))
+        .child(
+            Visibility::new()
+                .visible(true)
+                .child(StatusDot::new(DotStatus::Online)),
+        )
         .child(Label::new("~/projects/hype/HypeSiteNext"))
         .child(Label::new("master"));
     LayoutEngine::new().compute(&mut row, Size::new(120.0, 40.0));
@@ -157,9 +161,21 @@ fn a_hidden_wrapper_leaves_the_slot_to_the_visible_one() {
     let mut slot = Flex::row()
         .align(Align::Center)
         .width(Length::Px(12.0))
-        .child(Visibility::new().visible(false).child(StatusDot::new(DotStatus::Offline)))
-        .child(Visibility::new().visible(true).child(StatusDot::new(DotStatus::Online)))
-        .child(Visibility::new().visible(false).child(StatusDot::new(DotStatus::Error)));
+        .child(
+            Visibility::new()
+                .visible(false)
+                .child(StatusDot::new(DotStatus::Offline)),
+        )
+        .child(
+            Visibility::new()
+                .visible(true)
+                .child(StatusDot::new(DotStatus::Online)),
+        )
+        .child(
+            Visibility::new()
+                .visible(false)
+                .child(StatusDot::new(DotStatus::Error)),
+        );
     LayoutEngine::new().compute(&mut slot, Size::new(200.0, 40.0));
 
     let shown = slot.base().children[1].base().bounds;

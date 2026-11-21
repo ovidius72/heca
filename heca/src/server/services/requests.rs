@@ -15,7 +15,10 @@ impl ServiceHost {
     /// The service that handed `call`'s request in, and the request's number there.
     fn origin_of(&self, call: &Call) -> Option<(usize, u64)> {
         let handle = call.request.as_ref()?;
-        let index = self.services.iter().position(|service| service.name() == handle.reference.service())?;
+        let index = self
+            .services
+            .iter()
+            .position(|service| service.name() == handle.reference.service())?;
         Some((index, handle.serial))
     }
 
@@ -48,7 +51,9 @@ impl ServiceHost {
 
     /// Every request waiting to run, now started. The server runs them, one by one.
     pub(crate) fn take_queued(&mut self) -> Vec<Queued> {
-        (0..self.services.len()).flat_map(|index| self.book(index).start_queued()).collect()
+        (0..self.services.len())
+            .flat_map(|index| self.book(index).start_queued())
+            .collect()
     }
 
     /// Every action of the request has been started: it ends when nothing is owed to it.
@@ -59,12 +64,20 @@ impl ServiceHost {
     /// The request could not go on. Nothing ran before: refused. Something did: failed, and what ran
     /// is not undone.
     pub(crate) fn request_stopped(&mut self, handle: &Handle, anything_ran: bool, reason: String) {
-        let outcome = if anything_ran { RequestOutcome::Failed(reason) } else { RequestOutcome::Refused(reason) };
+        let outcome = if anything_ran {
+            RequestOutcome::Failed(reason)
+        } else {
+            RequestOutcome::Refused(reason)
+        };
         self.request_book(handle, |book| book.end(handle.serial, outcome));
     }
 
     fn request_book(&mut self, handle: &Handle, act: impl FnOnce(&mut Requests)) {
-        if let Some(index) = self.services.iter().position(|service| service.name() == handle.reference.service()) {
+        if let Some(index) = self
+            .services
+            .iter()
+            .position(|service| service.name() == handle.reference.service())
+        {
             act(self.book(index));
         }
     }
@@ -81,7 +94,9 @@ impl ServiceHost {
                     self.settle(index);
                 }
             }
-            if !told { return; }
+            if !told {
+                return;
+            }
         }
     }
 }

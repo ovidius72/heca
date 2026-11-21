@@ -8,19 +8,19 @@
 //!
 //! What travels and how is described in `docs/server-client-architecture.md` → "The wire model".
 
+use std::io;
 #[cfg(test)]
 use std::sync::mpsc::channel;
-use std::io;
 
 mod frame;
 mod queue;
 mod rows;
 mod wait;
 pub(crate) use wait::await_message;
-pub(crate) mod terminal;
 pub(crate) mod image;
 pub(crate) mod service;
 pub(crate) mod socket;
+pub(crate) mod terminal;
 
 use heca_core::layout::SessionContent;
 
@@ -33,16 +33,27 @@ pub(crate) enum ClientMsg {
     /// Attach to the session; the server replies with [`ServerMsg::Attached`].
     Attach,
     /// Select one existing session on a new connection. The ordinary Attach selects the last one.
-    AttachTo { name: String },
+    AttachTo {
+        name: String,
+    },
     /// Leave session membership while keeping this window's physical connection available.
     LeaveSession,
-    Session { request_id: u64, command: super::sessions::SessionCommand },
+    Session {
+        request_id: u64,
+        command: super::sessions::SessionCommand,
+    },
     /// Detach — the window is going away; the session and its programs keep running.
     Detach,
     /// Run a server action, carrying this window's own view facts (the server holds no per-client
     /// view, decision 2c249a29, so each request brings its own [`Asker`]).
-    Act { action: WmAction, asker: Asker, #[serde(default)] request_id: Option<u64>,
-        #[serde(default)] terminal_owner: Option<crate::app::backend_store::TerminalOwner> },
+    Act {
+        action: WmAction,
+        asker: Asker,
+        #[serde(default)]
+        request_id: Option<u64>,
+        #[serde(default)]
+        terminal_owner: Option<crate::app::backend_store::TerminalOwner>,
+    },
     EnsureTerminal {
         owner: crate::app::backend_store::TerminalOwner,
         spec: crate::app::backend_store::TerminalSpec,
@@ -52,43 +63,76 @@ pub(crate) enum ClientMsg {
         owner: crate::app::backend_store::TerminalOwner,
         input: terminal::ProcessInput,
     },
-    Viewport { owner: crate::app::backend_store::TerminalOwner, offset: usize },
-    RpcReply { request_id: u64, answer: String },
+    Viewport {
+        owner: crate::app::backend_store::TerminalOwner,
+        offset: usize,
+    },
+    RpcReply {
+        request_id: u64,
+        answer: String,
+    },
     /// Raise/dismiss/hover a notification — the server owns the queue, timers and dedup and sends
     /// back a [`ServerMsg::Notifications`] projection.
     Notify(crate::server::NotificationCommand),
     /// Ask for the notification history; the server replies with [`ServerMsg::NotificationHistory`].
     /// Only on request: the history is not pushed, so a window that never opens it never receives it.
     NotificationHistory,
-    AcknowledgeFeedback { session_id: heca_core::layout::SessionId,
-        pane_id: heca_core::layout::PaneId, revision: u64 },
-    RequestFeedbackSound { session_id: heca_core::layout::SessionId,
-        pane_id: heca_core::layout::PaneId, revision: u64 },
+    AcknowledgeFeedback {
+        session_id: heca_core::layout::SessionId,
+        pane_id: heca_core::layout::PaneId,
+        revision: u64,
+    },
+    RequestFeedbackSound {
+        session_id: heca_core::layout::SessionId,
+        pane_id: heca_core::layout::PaneId,
+        revision: u64,
+    },
     /// Config changed on disk (`prefix+Shift+r`): the server re-reads it and re-applies its own
     /// terminal and notification settings. The window never hands settings over — it keeps only
     /// its own view-side config.
     Reload,
-    Invoke { intent: crate::chrome::Intent },
-    ImageInfo { id: u64 },
-    ImageChunk { id: u64, frame: usize, offset: usize },
-    Read { request_id: u64, owner: crate::app::backend_store::TerminalOwner,
-        start: isize, end: isize, cols: usize, query: Option<String> },
+    Invoke {
+        intent: crate::chrome::Intent,
+    },
+    ImageInfo {
+        id: u64,
+    },
+    ImageChunk {
+        id: u64,
+        frame: usize,
+        offset: usize,
+    },
+    Read {
+        request_id: u64,
+        owner: crate::app::backend_store::TerminalOwner,
+        start: isize,
+        end: isize,
+        cols: usize,
+        query: Option<String>,
+    },
     /// The title this window formatted for itself (from the session folder and its ordinal). The
     /// server stores it against this connection — the stamped id, never a client-named one — and
     /// republishes the session's window directory ([`ServerMsg::Windows`]).
     ReportWindowTitle(String),
     /// Follow another window (mirror its view), by its id from the directory, or `None` to stop.
     /// The id is resolved from the displayed title by the picker, so a rename never breaks it.
-    Follow { target: Option<u64> },
+    Follow {
+        target: Option<u64>,
+    },
     /// This window's current view, sent only while the server says it is followed
     /// ([`ServerMsg::Followed`]). The server relays it to this window's followers.
     ReportView(heca_core::layout::ViewSnapshot),
     /// Where this window is looking — its shown workspace and focused pane — reported when it
     /// changes. The server turns a change into a `Focus`/`Workspace` event on the `--events` stream.
-    ReportPresence { workspace: usize, pane: Option<heca_core::layout::PaneId> },
+    ReportPresence {
+        workspace: usize,
+        pane: Option<heca_core::layout::PaneId>,
+    },
     /// This window's copy of an extension service's projection is out of step (a missed revision
     /// or another server run): send it a fresh snapshot.
-    ServiceResync { service: String },
+    ServiceResync {
+        service: String,
+    },
 }
 
 /// What the server tells a client.
@@ -96,14 +140,29 @@ pub(crate) enum ClientMsg {
 pub(crate) enum ServerMsg {
     /// The whole shared content, on attach — the client rebuilds a `Session` from it to draw
     /// ([`SessionContent::rebuild`]).
-    Attached { session: super::sessions::SessionInfo, client_id: u64,
-        window_ordinal: u64, content: SessionContent },
+    Attached {
+        session: super::sessions::SessionInfo,
+        client_id: u64,
+        window_ordinal: u64,
+        content: SessionContent,
+    },
     /// The attach's terminal snapshots have all been sent, including an empty/stopped session.
-    ProjectionReady { session_id: heca_core::layout::SessionId },
-    Sessions { request_id: u64, result: Result<super::sessions::SessionReply, String> },
-    SessionTerminated { session: super::sessions::SessionInfo },
-    SessionDeleted { id: heca_core::layout::SessionId },
-    SessionDetached { id: heca_core::layout::SessionId },
+    ProjectionReady {
+        session_id: heca_core::layout::SessionId,
+    },
+    Sessions {
+        request_id: u64,
+        result: Result<super::sessions::SessionReply, String>,
+    },
+    SessionTerminated {
+        session: super::sessions::SessionInfo,
+    },
+    SessionDeleted {
+        id: heca_core::layout::SessionId,
+    },
+    SessionDetached {
+        id: heca_core::layout::SessionId,
+    },
     /// Something changed in the shared content; the client reacts to it for itself.
     Changed(Change),
     /// The server refused an action, and why.
@@ -113,7 +172,9 @@ pub(crate) enum ServerMsg {
     /// A terminal's screen. Shared, so every window it goes to — and the socket writer that keeps
     /// it as the screen to compare the next one with — holds the same one, never a copy.
     Terminal(std::sync::Arc<terminal::TerminalFrame>),
-    Content { content: SessionContent },
+    Content {
+        content: SessionContent,
+    },
     /// The notifications on show, as plain serializable data — the window builds its own toasts
     /// from them. Sent on attach and whenever the visible set changes; a newer one replaces a
     /// still-queued older one (it is a whole snapshot).
@@ -122,26 +183,56 @@ pub(crate) enum ServerMsg {
     /// first: what is still on screen and what was dismissed or expired, as plain data. The same
     /// list for every window, whenever it attached.
     NotificationHistory(Vec<crate::notification::NotificationRecord>),
-    Feedback { session_id: heca_core::layout::SessionId,
-        panes: Vec<super::feedback::PaneFeedback> },
-    FeedbackSound { session_id: heca_core::layout::SessionId,
-        pane_id: heca_core::layout::PaneId, revision: u64 },
-    Reply { request_id: u64, changes: Vec<Change> },
-    Rpc { request_id: u64, line: String },
-    Dispatch { intents: Vec<crate::chrome::Intent> },
+    Feedback {
+        session_id: heca_core::layout::SessionId,
+        panes: Vec<super::feedback::PaneFeedback>,
+    },
+    FeedbackSound {
+        session_id: heca_core::layout::SessionId,
+        pane_id: heca_core::layout::PaneId,
+        revision: u64,
+    },
+    Reply {
+        request_id: u64,
+        changes: Vec<Change>,
+    },
+    Rpc {
+        request_id: u64,
+        line: String,
+    },
+    Dispatch {
+        intents: Vec<crate::chrome::Intent>,
+    },
     ImageInfo(image::ImageInfo),
     ImageChunk(image::ImageChunk),
-    ResourceUnavailable { id: u64, reason: String },
-    ProcessExited { pane: heca_core::layout::PaneId, code: Option<i32> },
-    Read { request_id: u64, start: isize, data: terminal::ReadData },
-    TerminalClosed { owner: crate::app::backend_store::TerminalOwner },
+    ResourceUnavailable {
+        id: u64,
+        reason: String,
+    },
+    ProcessExited {
+        pane: heca_core::layout::PaneId,
+        code: Option<i32>,
+    },
+    Read {
+        request_id: u64,
+        start: isize,
+        data: terminal::ReadData,
+    },
+    TerminalClosed {
+        owner: crate::app::backend_store::TerminalOwner,
+    },
     /// The windows attached to this session and their titles, so each window can list the others —
     /// the follow picker — and show them. Sent after [`Attached`](ServerMsg::Attached) and on every
     /// join, leave and title change.
-    Windows { session_id: heca_core::layout::SessionId, windows: Vec<super::sessions::WindowInfo> },
+    Windows {
+        session_id: heca_core::layout::SessionId,
+        windows: Vec<super::sessions::WindowInfo>,
+    },
     /// Whether any window now follows this one. While `true`, this window reports its view
     /// ([`ClientMsg::ReportView`]) so the server can relay it; while `false` it need not.
-    Followed { active: bool },
+    Followed {
+        active: bool,
+    },
     /// The view of the window this one follows, to mirror. Sent when the leader reports a new view
     /// and once on starting to follow if the leader's view is already known.
     FollowView(heca_core::layout::ViewSnapshot),
@@ -155,7 +246,9 @@ pub(crate) trait ClientLink: Send {
     /// Send a message to the server.
     fn send(&self, msg: ClientMsg) -> io::Result<()>;
     /// Finish queued writes before closing. In-process links deliver synchronously.
-    fn flush(&self) -> io::Result<()> { Ok(()) }
+    fn flush(&self) -> io::Result<()> {
+        Ok(())
+    }
     /// Take the next message from the server, if one is waiting. Never blocks.
     fn poll(&self) -> io::Result<Option<ServerMsg>>;
 }
@@ -246,8 +339,20 @@ pub(crate) fn in_process_with_limits(
     let (to_server, from_client) = queue::channel(limits.queue_capacity);
     let (to_client, from_server) = queue::channel(limits.queue_capacity);
     (
-        InProcessClient { to_server: WakeSender { sender: Some(to_server), wake: server_wake }, from_server },
-        InProcessServer { from_client, to_client: WakeSender { sender: Some(to_client), wake: client_wake } },
+        InProcessClient {
+            to_server: WakeSender {
+                sender: Some(to_server),
+                wake: server_wake,
+            },
+            from_server,
+        },
+        InProcessServer {
+            from_client,
+            to_client: WakeSender {
+                sender: Some(to_client),
+                wake: client_wake,
+            },
+        },
     )
 }
 
@@ -272,18 +377,22 @@ mod tests {
     fn a_message_crosses_each_way() {
         let (client, server) = in_process();
 
-        client.send(ClientMsg::Act {
-            action: WmAction::SplitHorizontal,
-            asker: asker(),
-            request_id: None,
-            terminal_owner: None,
-        }).expect("connected");
+        client
+            .send(ClientMsg::Act {
+                action: WmAction::SplitHorizontal,
+                asker: asker(),
+                request_id: None,
+                terminal_owner: None,
+            })
+            .expect("connected");
         match server.poll().expect("connected") {
             Some(ClientMsg::Act { action, .. }) => assert_eq!(action, WmAction::SplitHorizontal),
             other => panic!("server did not receive the action: {other:?}"),
         }
 
-        server.send(ServerMsg::Changed(Change::LayoutChanged)).expect("connected");
+        server
+            .send(ServerMsg::Changed(Change::LayoutChanged))
+            .expect("connected");
         match client.poll().expect("connected") {
             Some(ServerMsg::Changed(change)) => assert_eq!(change, Change::LayoutChanged),
             other => panic!("client did not receive the change: {other:?}"),
@@ -304,13 +413,19 @@ mod tests {
         let (server_tx, server_rx) = channel();
         let (client_tx, client_rx) = channel();
         let (client, server) = in_process_waking(
-            ServerWaker::new(move || { let _ = server_tx.send(()); }),
-            ServerWaker::new(move || { let _ = client_tx.send(()); }),
+            ServerWaker::new(move || {
+                let _ = server_tx.send(());
+            }),
+            ServerWaker::new(move || {
+                let _ = client_tx.send(());
+            }),
         );
         client.send(ClientMsg::Attach).unwrap();
         server_rx.try_recv().expect("message wakes server");
         assert!(matches!(server.poll().unwrap(), Some(ClientMsg::Attach)));
-        server.send(ServerMsg::Changed(Change::LayoutChanged)).unwrap();
+        server
+            .send(ServerMsg::Changed(Change::LayoutChanged))
+            .unwrap();
         client_rx.try_recv().expect("reply wakes client");
         assert!(client.poll().unwrap().is_some());
         drop(client);

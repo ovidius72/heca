@@ -7,7 +7,11 @@ impl SocketPath {
     fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         loop {
-            let directory = std::env::temp_dir().join(format!("heca-listener-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+            let directory = std::env::temp_dir().join(format!(
+                "heca-listener-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
             match std::fs::create_dir(&directory) {
                 Ok(()) => return Self(directory.join("test.sock")),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -18,7 +22,9 @@ impl SocketPath {
 }
 
 impl Drop for SocketPath {
-    fn drop(&mut self) { std::fs::remove_dir_all(self.0.parent().unwrap()).unwrap(); }
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(self.0.parent().unwrap()).unwrap();
+    }
 }
 
 #[test]
@@ -44,7 +50,11 @@ fn a_stale_socket_is_reclaimed() {
     let listener = ControlListener::bind(&path.0).unwrap();
     assert!(UnixStream::connect(&path.0).is_ok());
     #[cfg(unix)]
-    assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&path.0).unwrap().permissions()) & 0o777, 0o600);
+    assert_eq!(
+        std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&path.0).unwrap().permissions())
+            & 0o777,
+        0o600
+    );
     drop(listener);
     assert!(!path.0.exists());
 }
@@ -72,7 +82,13 @@ fn connecting_to_nobody_is_not_found_or_refused() {
     // The client starts the background server on exactly these two answers (server/socket/connect.rs).
     let path = SocketPath::new();
     let kind = UnixStream::connect(&path.0).unwrap_err().kind();
-    assert!(matches!(kind, io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused), "{kind:?}");
+    assert!(
+        matches!(
+            kind,
+            io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
+        ),
+        "{kind:?}"
+    );
     // The stale-socket half lives in heca/tests/stale_socket.rs, its own process: here another test
     // spawning a child can inherit the listening socket for a moment, and the connect then succeeds.
 }
@@ -110,7 +126,9 @@ fn a_blocked_reader_wakes_when_the_connection_is_shut_down() {
     });
     std::thread::sleep(std::time::Duration::from_millis(100));
     shutter.shutdown(std::net::Shutdown::Both).unwrap();
-    let read = woke.recv_timeout(std::time::Duration::from_secs(5)).expect("the blocked read did not return");
+    let read = woke
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("the blocked read did not return");
     assert!(matches!(read, Ok(0) | Err(_)));
     thread.join().unwrap();
 }
@@ -119,9 +137,14 @@ fn a_blocked_reader_wakes_when_the_connection_is_shut_down() {
 fn a_read_timeout_ends_a_read_that_gets_nothing() {
     use std::io::Read;
     let (mut quiet, _peer) = UnixStream::pair().unwrap();
-    quiet.set_read_timeout(Some(std::time::Duration::from_millis(50))).unwrap();
+    quiet
+        .set_read_timeout(Some(std::time::Duration::from_millis(50)))
+        .unwrap();
     let kind = quiet.read(&mut [0]).unwrap_err().kind();
-    assert!(matches!(kind, io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock), "{kind:?}");
+    assert!(
+        matches!(kind, io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock),
+        "{kind:?}"
+    );
 }
 
 #[test]
@@ -130,7 +153,10 @@ fn a_reader_and_a_writer_on_one_connection_do_not_hold_each_other_up() {
     let (a, mut b) = UnixStream::pair().unwrap();
     let mut writer = a.try_clone().unwrap();
     let mut reader = a;
-    let blocked = std::thread::spawn(move || { let mut byte = [0]; reader.read_exact(&mut byte).map(|()| byte[0]) });
+    let blocked = std::thread::spawn(move || {
+        let mut byte = [0];
+        reader.read_exact(&mut byte).map(|()| byte[0])
+    });
     std::thread::sleep(std::time::Duration::from_millis(100));
     writer.write_all(b"x").unwrap();
     let mut got = [0];

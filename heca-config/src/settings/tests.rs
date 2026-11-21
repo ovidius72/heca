@@ -16,9 +16,15 @@ fn session_confirmation_switches_and_text_follow_config_layers() {
     assert_eq!(user.settings.session_text.confirm_delete, "Remove {name}");
     assert_eq!(user.settings.session_text.delete, "Remove");
     assert_eq!(user.settings.session_text.cancel, "Keep");
-    assert_eq!(user.settings.session_text.confirm_terminate, defaults.settings.session_text.confirm_terminate);
+    assert_eq!(
+        user.settings.session_text.confirm_terminate,
+        defaults.settings.session_text.confirm_terminate
+    );
     for invalid in ["'true'", "1", "0.5"] {
-        assert!(crate::loader::config_from_layers(&format!("[confirm]\ndelete_session={invalid}\n")).is_err());
+        assert!(
+            crate::loader::config_from_layers(&format!("[confirm]\ndelete_session={invalid}\n"))
+                .is_err()
+        );
     }
 }
 
@@ -168,8 +174,7 @@ fn test_notification_system_defaults_and_override() {
     assert_eq!(s.notification_system.auto_dismiss_ms, 8000);
 
     // `system` parses (reserved — the host falls it back to app).
-    let s: SettingsConfig =
-        toml::from_str("[notification_system]\nmode = \"system\"\n").unwrap();
+    let s: SettingsConfig = toml::from_str("[notification_system]\nmode = \"system\"\n").unwrap();
     assert_eq!(s.notification_system.mode, NotificationSystem::System);
 
     // The subtable is optional; unrelated settings still parse without it.
@@ -184,7 +189,10 @@ fn test_notification_system_defaults_and_override() {
 fn column_focus_reads_last_and_row_and_defaults_to_last() {
     let read = |text: &str| toml::from_str::<SettingsConfig>(text).map(|s| s.column_focus);
     assert_eq!(read("").ok(), Some(ColumnFocus::Last));
-    assert_eq!(read("column_focus = \"last\"").ok(), Some(ColumnFocus::Last));
+    assert_eq!(
+        read("column_focus = \"last\"").ok(),
+        Some(ColumnFocus::Last)
+    );
     assert_eq!(read("column_focus = \"row\"").ok(), Some(ColumnFocus::Row));
     assert!(read("column_focus = \"diagonal\"").is_err());
 }

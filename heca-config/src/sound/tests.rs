@@ -1,15 +1,25 @@
 use super::*;
 
 #[derive(Serialize, Deserialize)]
-struct Settings { sound: Sound }
+struct Settings {
+    sound: Sound,
+}
 
 #[test]
 fn filenames_and_properties_round_trip_through_one_sound_type() {
     for (text, expected) in [
-        ("sound = '/my/finished.mp3'", Sound::load("/my/finished.mp3")),
-        ("sound = { source = 'asset:completed', enabled = false, volume = 0.4 }",
-            Sound::asset("completed").enabled(false).volume(0.4)),
-        ("sound = { source = '/my/error.mp3', volume = 0.2 }", Sound::load("/my/error.mp3").volume(0.2)),
+        (
+            "sound = '/my/finished.mp3'",
+            Sound::load("/my/finished.mp3"),
+        ),
+        (
+            "sound = { source = 'asset:completed', enabled = false, volume = 0.4 }",
+            Sound::asset("completed").enabled(false).volume(0.4),
+        ),
+        (
+            "sound = { source = '/my/error.mp3', volume = 0.2 }",
+            Sound::load("/my/error.mp3").volume(0.2),
+        ),
     ] {
         let settings: Settings = toml::from_str(text).unwrap();
         assert_eq!(settings.sound, expected);
@@ -35,6 +45,9 @@ fn invalid_sound_properties_are_reported_as_configuration_errors() {
 #[test]
 fn a_literal_file_with_an_asset_prefix_keeps_its_identity() {
     let expected = Sound::load("asset:my-filename.mp3");
-    let text = toml::to_string(&Settings { sound: expected.clone() }).unwrap();
+    let text = toml::to_string(&Settings {
+        sound: expected.clone(),
+    })
+    .unwrap();
     assert_eq!(toml::from_str::<Settings>(&text).unwrap().sound, expected);
 }

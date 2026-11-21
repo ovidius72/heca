@@ -46,15 +46,18 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // One count on the git line — an icon and a number in one tone — shown only when
         // there is a count to show.
         let count = |glyph: Glyph, tone: Color, text: Option<&str>| {
-            Visibility::new().visible(text.is_some()).child(Flex::row()
+            Visibility::new().visible(text.is_some()).child(
+                Flex::row()
                     .align("center")
                     .gap(Spacing::Xs)
                     .child(Icon::new(glyph).color(tone))
-                    .child(Label::new(text.unwrap_or_default()).color(tone)))
+                    .child(Label::new(text.unwrap_or_default()).color(tone)),
+            )
         };
         // Attached always and hidden outside a repository, so it could appear later
         // without a rebuild (see `Tile::line`).
-        let git_line = Visibility::new().visible(git_branch.is_some()).child(Flex::row()
+        let git_line = Visibility::new().visible(git_branch.is_some()).child(
+            Flex::row()
                 .align("center")
                 .gap(Spacing::Sm)
                 .size(WidgetSize::Small)
@@ -62,7 +65,8 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .child(Label::new(git_branch.unwrap_or_default()))
                 .child(count(Glyph::Plus, theme.colors.success, git_added))
                 .child(count(Glyph::Warning, theme.colors.warning, git_modified))
-                .child(count(Glyph::Minus, theme.colors.danger, git_deleted)));
+                .child(count(Glyph::Minus, theme.colors.danger, git_deleted)),
+        );
         // The sidebar's pane-card look, by name — a veil from the theme, not a hand-set background.
         let row = Row::new().variant(RowVariant::Tinted).child(
             Tile::new()
@@ -79,12 +83,14 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // it drags is the name it declares about itself. The app resolves a drop via
         // `drag::source_at`/`resolve_at` over the laid-out tree and paints
         // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
-        row.key(format!("pane:{i}")).draggable().on_activate(move || {
-            pane_sel.set(i);
-            for (j, s) in pane_states.borrow().iter().enumerate() {
-                s.set(j == i);
-            }
-        })
+        row.key(format!("pane:{i}"))
+            .draggable()
+            .on_activate(move || {
+                pane_sel.set(i);
+                for (j, s) in pane_states.borrow().iter().enumerate() {
+                    s.set(j == i);
+                }
+            })
     };
 
     // G4 DockFrame framing G3 ItemGroups; header slot carries a count
@@ -102,7 +108,9 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
             ItemGroup::new("src")
                 .child(file(
                     "main.rs",
-                    Icon::new(Glyph::FileCode).color(theme.colors.accent).size(18.0),
+                    Icon::new(Glyph::FileCode)
+                        .color(theme.colors.accent)
+                        .size(18.0),
                 ))
                 .child(file(
                     "chrome_region.rs",
@@ -122,12 +130,13 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
             // bleed to the top-left while hidden.
             ItemGroup::new("tests").expanded(false).child(file(
                 "phase_a.rs",
-                Icon::new(Glyph::FileCode).color(theme.colors.muted).size(18.0),
+                Icon::new(Glyph::FileCode)
+                    .color(theme.colors.muted)
+                    .size(18.0),
             )),
         );
     // Git status rows: a state-colored duotone icon + change-kind badge.
-    let git_row =
-        |icon: Icon, name: &str, tag: Badge| Item::new(name).leading(icon).trailing(tag);
+    let git_row = |icon: Icon, name: &str, tag: Badge| Item::new(name).leading(icon).trailing(tag);
     let source_control = DockFrame::new("SOURCE CONTROL")
         .rail(sidebar_mode, Glyph::GitBranch)
         // `.nav_selected(true)`: the sidebar-nav cursor on a workspace frame —
@@ -136,17 +145,23 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         .nav_selected(true)
         .header_actions(Badge::warning("3"))
         .child(git_row(
-            Icon::new(Glyph::GitBranch).color(theme.colors.warning).size(18.0),
+            Icon::new(Glyph::GitBranch)
+                .color(theme.colors.warning)
+                .size(18.0),
             "chrome_region.rs",
             Badge::warning("M"),
         ))
         .child(git_row(
-            Icon::new(Glyph::Plus).color(theme.colors.success).size(18.0),
+            Icon::new(Glyph::Plus)
+                .color(theme.colors.success)
+                .size(18.0),
             "showcase.rs",
             Badge::success("A"),
         ))
         .child(git_row(
-            Icon::new(Glyph::Minus).color(theme.colors.danger).size(18.0),
+            Icon::new(Glyph::Minus)
+                .color(theme.colors.danger)
+                .size(18.0),
             "old_sidebar.rs",
             Badge::danger("D"),
         ));
@@ -159,13 +174,21 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         .leading(Icon::new(Glyph::Folder))
         .header_actions(Badge::accent("2"))
         // Indenting the members is this caller's decision, written in its own content.
-        .child(Flex::column().padding_left(Spacing::Lg).child([Item::new("alice"), Item::new("bob")]));
+        .child(
+            Flex::column()
+                .padding_left(Spacing::Lg)
+                .child([Item::new("alice"), Item::new("bob")]),
+        );
     // A title row written by the caller; `.collapsible(false)` keeps it open with no chevron.
     let pinned = DockFrame::new("PINNED")
         .rail(sidebar_mode, Glyph::Lock)
-        .header(Flex::row().align("center").gap(Spacing::Xs)
-            .child(Icon::new(Glyph::Lock))
-            .child(Label::new("PINNED").font_weight(FontWeight::Bold)))
+        .header(
+            Flex::row()
+                .align("center")
+                .gap(Spacing::Xs)
+                .child(Icon::new(Glyph::Lock))
+                .child(Label::new("PINNED").font_weight(FontWeight::Bold)),
+        )
         .collapsible(false)
         .child(Item::new("README.md"));
 
@@ -260,8 +283,8 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                             .nav_selected(true)
                             .child(Label::new("pane B")),
                     )
-                        .hint(rail_hints[1])
-                        .placement(HintPlacement::CenterRight),
+                    .hint(rail_hints[1])
+                    .placement(HintPlacement::CenterRight),
                 ),
         )
         .child(
@@ -297,21 +320,13 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .child(
                     Flex::column()
                         .gap(4.0)
-                        .child(
-                            IndicatorSwatch::new(false)
-                                .width(120.0)
-                                .height(34.0),
-                        )
+                        .child(IndicatorSwatch::new(false).width(120.0).height(34.0))
                         .child(Label::new("move").color(theme.colors.muted).font_scale(0.8)),
                 )
                 .child(
                     Flex::column()
                         .gap(4.0)
-                        .child(
-                            IndicatorSwatch::new(true)
-                                .width(120.0)
-                                .height(34.0),
-                        )
+                        .child(IndicatorSwatch::new(true).width(120.0).height(34.0))
                         .child(
                             Label::new("swap (Shift)")
                                 .color(theme.colors.muted)
@@ -351,7 +366,11 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     // stays "prefix+…"; only the rendered shortcut uses λ.
     let prefix_demo = Flex::column()
         .gap(8.0)
-        .child(Label::new(format!("PREFIX AS SYMBOL — {PREFIX_SYMBOL}")).color(theme.colors.muted).font_scale(0.82))
+        .child(
+            Label::new(format!("PREFIX AS SYMBOL — {PREFIX_SYMBOL}"))
+                .color(theme.colors.muted)
+                .font_scale(0.82),
+        )
         .child(
             Flex::row()
                 .align("center")

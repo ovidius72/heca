@@ -32,8 +32,16 @@ pub const DEFAULT_TERMINAL_BOLD_BYTES: &[u8] =
 /// be taken away by a user's own font choice.
 pub(crate) fn embedded_font_system() -> cosmic_text::FontSystem {
     let mut fonts = cosmic_text::FontSystem::new();
-    let others = [heca_grid_ui::font::ICON_FONT_BYTES, DEFAULT_TERMINAL_BYTES, DEFAULT_TERMINAL_BOLD_BYTES];
-    for face in heca_grid_ui::font::DEFAULT_MONO_FACES.iter().copied().chain(others) {
+    let others = [
+        heca_grid_ui::font::ICON_FONT_BYTES,
+        DEFAULT_TERMINAL_BYTES,
+        DEFAULT_TERMINAL_BOLD_BYTES,
+    ];
+    for face in heca_grid_ui::font::DEFAULT_MONO_FACES
+        .iter()
+        .copied()
+        .chain(others)
+    {
         fonts.db_mut().load_font_data(face.to_vec());
     }
     fonts

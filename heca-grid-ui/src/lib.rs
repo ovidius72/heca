@@ -29,17 +29,18 @@
 // not only in downstream ones. Without it the macro would need a different path when used here.
 extern crate self as heca_grid_ui;
 
-/// The library's clock: what time it is, for every widget that moves with time. See [`clock`].
-pub mod clock;
 pub mod action;
 pub mod animation;
 pub mod builders;
+/// The library's clock: what time it is, for every widget that moves with time. See [`clock`].
+pub mod clock;
 pub mod color;
 pub mod component;
 pub mod cursor;
 pub mod drag;
 pub mod effects;
 pub mod event;
+mod flash;
 pub mod focus;
 pub mod font;
 pub mod hint;
@@ -57,7 +58,6 @@ pub mod search;
 pub mod style;
 pub mod theme;
 pub mod tone;
-mod flash;
 pub use flash::FlashHandle;
 pub mod widgets;
 
@@ -71,14 +71,15 @@ pub use animation::{
     smoothstep,
 };
 pub use builders::{
-    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
-    StyleExt, ToneExt, TooltipExt, FlashExt, BoundChildren, MapChildren,
+    BoundChildren, DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MapChildren,
+    MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
 };
 pub use color::Color;
 pub use component::{
-    Base, Component, WidgetModel, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, area, area_slot,
-    collect_damage, deliver, dispatch, frame_served, holds_keyboard, install_frame_request,
-    needs_layout, overlay_occluded_at, paint_child, request_frame, frame_waker, FrameWake, shift_subtree, unmount_child,
+    Base, Component, Event, FrameWake, GridKey, Handled, Modifiers, PaintCx, WidgetIntent,
+    WidgetModel, area, area_slot, collect_damage, deliver, dispatch, frame_served, frame_waker,
+    holds_keyboard, install_frame_request, needs_layout, overlay_occluded_at, paint_child,
+    request_frame, shift_subtree, unmount_child,
 };
 pub use cursor::{Cursor, cursor_at};
 pub use drag::{DropAction, DropHit, DropSide, resolve_at, source_at};
@@ -102,9 +103,13 @@ pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
-pub use pointer::{EdgeScroll, PointerState, clear_hover, dragged_kind, dragging, edge_scroll, hit_test, pointer_held};
+pub use pointer::{
+    EdgeScroll, PointerState, clear_hover, dragged_kind, dragging, edge_scroll, hit_test,
+    pointer_held,
+};
 pub use scene::{
-    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, ImageAt, TextStyle,
+    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, ImageAt, Scene, SurfaceAt,
+    TextStyle,
 };
 pub mod prop;
 pub mod props;
@@ -118,14 +123,16 @@ pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use tone::Tone;
 pub use widgets::{
     ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonVariant,
-    Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DockFrameVariant,
-    DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton,
-    Caption, Image, ImageFit, ImageState, Svg, Input, Item, ItemGroup, MessageList, MessageFeed, Elapsed, ElapsedFormat, Line, TreeLayout, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
-    LandingSlot, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel,
-    ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, RowVariant, ScrollAxes, ScrollBar, ScrollInfo,
-    ScrollRegion, Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast,
-    ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
-    Visibility, container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
+    Caption, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog,
+    DockFrame, DockFrameVariant, DotStatus, Elapsed, ElapsedFormat, Ellipsis, Flex, FocusScope,
+    Gauge, Glyph, Grid, HintPlacement, Icon, IconButton, Image, ImageFit, ImageState, Input, Item,
+    ItemGroup, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide, LandingSlot, Line,
+    MarkerGroup, MessageFeed, MessageList, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition,
+    Pane, Panel, ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, RowVariant,
+    ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner, Splitter,
+    StatusDot, Surface, Svg, Tabs, Tag, Tile, Toast, ToastAction, ToastPosition, ToastSeverity,
+    ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, TreeLayout, Visibility, container,
+    keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
 
 /// Common imports for building UIs.
@@ -136,11 +143,13 @@ pub mod prelude {
         Animate, Animation, AnimationFrame, Fade, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     };
     pub use crate::builders::{
-        DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
-        StyleExt, ToneExt, TooltipExt, FlashExt, BoundChildren, MapChildren,
+        BoundChildren, DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MapChildren,
+        MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
     };
     pub use crate::color::Color;
-    pub use crate::component::{Component, WidgetModel, Event, GridKey, Handled, Modifiers, WidgetIntent};
+    pub use crate::component::{
+        Component, Event, GridKey, Handled, Modifiers, WidgetIntent, WidgetModel,
+    };
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
     pub use crate::focus::FocusManager;
     pub use crate::hint::{
@@ -159,14 +168,15 @@ pub mod prelude {
     pub use crate::tone::Tone;
     pub use crate::widgets::{
         ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonGroup,
-        ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container,
-        ContextMenu, Dialog, DockFrame, DockFrameVariant, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid,
-        Caption, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, Line, TreeLayout, MessageList, MessageFeed, Elapsed, ElapsedFormat, KeyHint, KeyHintGroup, Label,
-        LabelSide, LandingSlot, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation,
-        Pane, ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row, RowVariant, ScrollAxes, ScrollBar,
-        ScrollInfo, ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile,
-        Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,
-        TooltipSide, Visibility, container,
+        ButtonVariant, Caption, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette,
+        Container, ContextMenu, Dialog, DockFrame, DockFrameVariant, DotStatus, Elapsed,
+        ElapsedFormat, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon,
+        IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Label, LabelSide, LandingSlot,
+        Line, MarkerGroup, MenuEntry, MenuItem, MessageFeed, MessageList, NfGlyph, NfIcon,
+        Orientation, Pane, ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row,
+        RowVariant, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
+        StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction, ToastPosition, ToastSeverity,
+        ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, TreeLayout, Visibility, container,
     };
 }
 

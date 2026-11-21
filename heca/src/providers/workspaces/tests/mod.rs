@@ -1,5 +1,5 @@
-use super::*;
 use super::dock_view::DockView;
+use super::*;
 use crate::chrome::BuildCx;
 use crate::chrome::{
     ChromeEventBus, ChromeHost, ChromeIntentEmitter, ChromeSignals, DragItemRegistry, RegionId,
@@ -9,7 +9,6 @@ use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceEntry, Works
 use heca_core::layout::PaneId;
 use heca_grid_ui::theme::Theme as GuiTheme;
 use std::rc::Rc;
-
 
 mod build;
 mod cursor;
@@ -47,7 +46,10 @@ pub(super) fn store() -> SharedChromeState {
     store
 }
 
-pub(super) fn container(p: &WorkspacesContainerProvider, ctx: &ChromeCtx<'_>) -> ContainerContribution {
+pub(super) fn container(
+    p: &WorkspacesContainerProvider,
+    ctx: &ChromeCtx<'_>,
+) -> ContainerContribution {
     match p.build_contribution(ctx) {
         Contribution::Container(c) => c,
         _ => panic!("the workspaces provider contributes a Container"),
@@ -99,7 +101,10 @@ fn provider_metadata_is_self_consistent() {
 #[test]
 fn register_seats_in_the_left_sidebar() {
     let mut host = ChromeHost::new(ChromeEventBus::default());
-    host.register(RegionId::LeftSidebar, Box::new(WorkspacesContainerProvider::new("workspaces")));
+    host.register(
+        RegionId::LeftSidebar,
+        Box::new(WorkspacesContainerProvider::new("workspaces")),
+    );
     // Seated in the left sidebar, where it was put, not the right.
     let left = host.contributions(RegionId::LeftSidebar);
     assert_eq!(left.len(), 1);

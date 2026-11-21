@@ -1,16 +1,23 @@
 use super::*;
 
 impl Component for Input {
-    fn base(&self) -> &Base { &self.base }
-    fn base_mut(&mut self) -> &mut Base { &mut self.base }
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
     fn taffy_style(&self) -> taffy::Style {
         let mut layout = self.base.style.layout;
-        if layout.width == Length::Auto { layout.width = Length::Px(self.base.input_style.width); }
+        if layout.width == Length::Auto {
+            layout.width = Length::Px(self.base.input_style.width);
+        }
         if layout.padding == crate::style::Space::default() {
             layout.padding = crate::style::Space::Px(self.pad() as f32);
         }
         let minimum = self.base.font * MONO_LINE_RATIO
-            + layout.pad_top(self.base.font) + layout.pad_bottom(self.base.font);
+            + layout.pad_top(self.base.font)
+            + layout.pad_bottom(self.base.font);
         layout.min_height = match layout.min_height {
             None | Some(Length::Auto) => Some(Length::Px(minimum)),
             Some(Length::Px(height)) => Some(Length::Px(height.max(minimum))),
@@ -38,11 +45,17 @@ impl Component for Input {
         view.placeholder_on_focus = self.placeholder_on_focus;
         view.font = self.base.font;
         view.caret_width = self.base.input_style.caret_width.max(0.0);
-        let lines = if self.multiline { self.max_lines.unwrap_or(self.base.input_style.max_lines).max(1) } else { 1 };
+        let lines = if self.multiline {
+            self.max_lines
+                .unwrap_or(self.base.input_style.max_lines)
+                .max(1)
+        } else {
+            1
+        };
         let automatic_height = self.base.style.layout.height == Length::Auto;
         let region = self.base.children[0].base_mut();
-        region.style.layout.max_height = automatic_height
-            .then_some(Length::Px(self.base.font * MONO_LINE_RATIO * lines as f32));
+        region.style.layout.max_height =
+            automatic_height.then_some(Length::Px(self.base.font * MONO_LINE_RATIO * lines as f32));
         region.style.layout.flex_grow = 1.0;
         region.style.layout.width = Length::Percent(1.0);
     }
@@ -56,13 +69,35 @@ impl Component for Input {
             view.selection = self.selection();
         }
         let colors = &cx.theme().colors;
-        let border = Border { color: if focused { cx.accent() } else { colors.muted.with_alpha(colors.interaction.control_rest_border) },
-            width: colors.border_width };
-        cx.rect(self.base.bounds, colors.surface, Some(border), colors.control_radius(),
-            cx.rest_glow(self.base.input_style.glow_radius));
-        for child in &self.base.children { crate::component::paint_child(child.as_ref(), cx); }
-        if !self.base.disabled.get_untracked() && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
-            cx.focus_ring(self.base.bounds, cx.theme().colors.effective_focus_ring(), cx.theme().colors.control_radius());
+        let border = Border {
+            color: if focused {
+                cx.accent()
+            } else {
+                colors
+                    .muted
+                    .with_alpha(colors.interaction.control_rest_border)
+            },
+            width: colors.border_width,
+        };
+        cx.rect(
+            self.base.bounds,
+            colors.surface,
+            Some(border),
+            colors.control_radius(),
+            cx.rest_glow(self.base.input_style.glow_radius),
+        );
+        for child in &self.base.children {
+            crate::component::paint_child(child.as_ref(), cx);
+        }
+        if !self.base.disabled.get_untracked()
+            && self.base.shows_focus_ring()
+            && cx.theme().colors.show_focus_border
+        {
+            cx.focus_ring(
+                self.base.bounds,
+                cx.theme().colors.effective_focus_ring(),
+                cx.theme().colors.control_radius(),
+            );
         }
     }
     /// The scrolling child takes its thumb and track gestures first. Text presses and editing
@@ -80,9 +115,14 @@ impl Component for Input {
         let handled = match ev {
             Event::Widget(WidgetIntent::EditSubmit) => {
                 if let Some(submit) = &self.on_submit {
-                    submit(Action::value("input-submit", SignalData::String(self.value_str())));
+                    submit(Action::value(
+                        "input-submit",
+                        SignalData::String(self.value_str()),
+                    ));
                     Handled::Yes
-                } else { Handled::No }
+                } else {
+                    Handled::No
+                }
             }
             // The **click run comes with the event**. This widget kept its own clock and its own
             // counter to work out that a press was the second one; both are gone, and with them
@@ -94,12 +134,20 @@ impl Component for Input {
             Event::PointerDown(p) => {
                 self.blink_origin = crate::clock::now();
                 self.anchor = None;
-                self.cursor = self.view.borrow().index_at(p.pos, self.base.children[0].base().bounds.loc, true);
+                self.cursor = self.view.borrow().index_at(
+                    p.pos,
+                    self.base.children[0].base().bounds.loc,
+                    true,
+                );
                 Handled::Yes
             }
             Event::DoubleClick(p) => {
                 let chars = self.chars_vec();
-                let idx = self.view.borrow().index_at(p.pos, self.base.children[0].base().bounds.loc, false).min(chars.len().saturating_sub(1));
+                let idx = self
+                    .view
+                    .borrow()
+                    .index_at(p.pos, self.base.children[0].base().bounds.loc, false)
+                    .min(chars.len().saturating_sub(1));
                 let (s, e) = word_bounds(&chars, idx);
                 self.anchor = (e > s).then_some(s);
                 self.cursor = e;
@@ -114,7 +162,11 @@ impl Component for Input {
             Event::TripleClick(p) => {
                 // The fourth click and beyond: deselect, caret where the pointer is.
                 self.anchor = None;
-                self.cursor = self.view.borrow().index_at(p.pos, self.base.children[0].base().bounds.loc, true);
+                self.cursor = self.view.borrow().index_at(
+                    p.pos,
+                    self.base.children[0].base().bounds.loc,
+                    true,
+                );
                 Handled::Yes
             }
             // Typed text, IME commits and pastes: one event, whatever produced them. The field no
@@ -122,7 +174,10 @@ impl Component for Input {
             // key it sends so that reconstruction comes out right.
             Event::TextInput(text) => {
                 let text = text.replace("\r\n", "\n").replace('\r', "\n");
-                let text: String = text.chars().filter(|ch| self.multiline || *ch != '\n').collect();
+                let text: String = text
+                    .chars()
+                    .filter(|ch| self.multiline || *ch != '\n')
+                    .collect();
                 self.insert_text(&text);
                 Handled::Yes
             }
@@ -144,7 +199,9 @@ impl Component for Input {
             }
             _ => Handled::No,
         };
-        if handled == Handled::Yes { self.base.mark_needs_layout(); }
+        if handled == Handled::Yes {
+            self.base.mark_needs_layout();
+        }
         handled
     }
 
@@ -154,7 +211,9 @@ impl Component for Input {
     // wake at the next toggle is scheduled via `next_redraw`.
     fn tick(&mut self, dt: f32) -> bool {
         let mut moving = self.base.tick_presence(dt);
-        for child in &mut self.base.children { moving |= child.tick(dt); }
+        for child in &mut self.base.children {
+            moving |= child.tick(dt);
+        }
         if self.base.focused.get_untracked() {
             let vis = self.caret_visible();
             if vis != self.last_caret.get() {
@@ -172,7 +231,9 @@ impl Component for Input {
         if !self.base.focused.get_untracked() {
             return tip;
         }
-        if self.base.input_style.blink_period <= 0.0 { return tip; }
+        if self.base.input_style.blink_period <= 0.0 {
+            return tip;
+        }
         // Time until the caret flips: the next half-`self.base.input_style.blink_period.max(f32::MIN_POSITIVE)` boundary.
         let phase = self
             .blink_origin

@@ -50,7 +50,9 @@ pub fn reconcile_children<C: crate::builders::IntoComponent>(
         .collect();
     let wanted: Vec<(String, Option<String>)> =
         wanted.iter().map(|name| (name.clone(), None)).collect();
-    reconcile_named(parent.base_mut(), names, &wanted, |name| build(name).into_component())
+    reconcile_named(parent.base_mut(), names, &wanted, |name| {
+        build(name).into_component()
+    })
 }
 
 /// [`reconcile_children`] for a widget that has only its own [`Base`] — a props handler places its
@@ -102,7 +104,9 @@ fn reconcile_named(
         .collect();
     let same = |i: usize, (name, version): &(String, Option<String>)| {
         names[i].as_deref() == Some(name.as_str())
-            && version.as_ref().is_none_or(|v| versions[i].as_ref() == Some(v))
+            && version
+                .as_ref()
+                .is_none_or(|v| versions[i].as_ref() == Some(v))
     };
     reconcile_matching(&mut parent.children, wanted, same, |(name, _)| build(name)).0
 }

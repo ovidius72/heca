@@ -28,7 +28,10 @@ fn a_timed_toast_paints_a_countdown_bar_only_with_progress() {
                 && r.rect.loc.y + r.rect.size.h < card.loc.y + card.size.h)
         })
     };
-    assert!(bar(&t), "a progress toast draws a hairline inside its lower edge");
+    assert!(
+        bar(&t),
+        "a progress toast draws a hairline inside its lower edge"
+    );
 
     // The span alone is not enough: the library prop is off by default.
     let mut off = Toast::success("Configuration reloaded").countdown(Duration::from_secs(4));

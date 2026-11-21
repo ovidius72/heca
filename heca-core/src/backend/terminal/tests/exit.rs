@@ -161,9 +161,15 @@ fn reconcile_exit_state_closes_when_the_reap_fails_and_the_reader_is_gone() {
 fn the_end_waits_for_the_last_output() {
     let _serial = shell_test_guard();
     let mut backend = TerminalBackend::with_command(
-        80, 24, DEFAULT_CELL_SIZE.0, DEFAULT_CELL_SIZE.1,
+        80,
+        24,
+        DEFAULT_CELL_SIZE.0,
+        DEFAULT_CELL_SIZE.1,
         "printf 'last-words\\n'; exit 7",
-        TerminalBackendOptions { shell_override: Some("/bin/sh".to_string()), ..TerminalBackendOptions::default() },
+        TerminalBackendOptions {
+            shell_override: Some("/bin/sh".to_string()),
+            ..TerminalBackendOptions::default()
+        },
     )
     .expect("command backend should initialize");
 
@@ -174,10 +180,20 @@ fn the_end_waits_for_the_last_output() {
         backend.reaped
     });
     assert!(reaped, "the child should end");
-    assert_eq!(backend.runtime().exit_code, None, "not announced while its output is unread");
+    assert_eq!(
+        backend.runtime().exit_code,
+        None,
+        "not announced while its output is unread"
+    );
     assert_eq!(backend.take_exit_code(), None);
 
-    assert!(pump_backend_until(&mut backend, |backend| backend.runtime().exit_code == Some(7)));
-    assert!(terminal_text(&backend).contains("last-words"), "the output is on screen when the end is told");
+    assert!(pump_backend_until(&mut backend, |backend| backend
+        .runtime()
+        .exit_code
+        == Some(7)));
+    assert!(
+        terminal_text(&backend).contains("last-words"),
+        "the output is on screen when the end is told"
+    );
     assert_eq!(backend.take_exit_code(), Some(7));
 }

@@ -226,9 +226,14 @@ impl Shared {
         let content = self.content_bounds();
         let (cell_w, cell_h) = self.cell.get();
         let (half_w, half_h) = (f64::from(cell_w) / 2.0, f64::from(cell_h) / 2.0);
-        let clamp = |at: f64, start: f64, size: f64, half: f64| at.clamp(start + half, (start + size - half).max(start + half));
+        let clamp = |at: f64, start: f64, size: f64, half: f64| {
+            at.clamp(start + half, (start + size - half).max(start + half))
+        };
         GridCell::at(
-            (clamp(p.pos.x, content.loc.x, content.size.w, half_w), clamp(p.pos.y, content.loc.y, content.size.h, half_h)),
+            (
+                clamp(p.pos.x, content.loc.x, content.size.w, half_w),
+                clamp(p.pos.y, content.loc.y, content.size.h, half_h),
+            ),
             content,
             f64::from(cell_w),
             f64::from(cell_h),
@@ -239,8 +244,12 @@ impl Shared {
     /// become whole rows of history (what is left is kept for the next frame), said with the edge
     /// cell the selection stretches to.
     pub(super) fn edge_scroll(&self, cx: &mut heca_grid_ui::event::EventCx<'_>) {
-        let Some(p) = cx.pointer().copied() else { return };
-        let Some((_, dy)) = p.delta_pixels else { return };
+        let Some(p) = cx.pointer().copied() else {
+            return;
+        };
+        let Some((_, dy)) = p.delta_pixels else {
+            return;
+        };
         let (_, cell_h) = self.cell.get();
         if cell_h <= 0.0 {
             return;
@@ -249,7 +258,11 @@ impl Shared {
         let lines = moved.trunc();
         self.edge_rest.set(moved - lines);
         if lines != 0.0 {
-            self.emit(TerminalInput::EdgeScroll { lines: lines as i32, cell: self.cell_nearest(&p), modifiers: p.modifiers });
+            self.emit(TerminalInput::EdgeScroll {
+                lines: lines as i32,
+                cell: self.cell_nearest(&p),
+                modifiers: p.modifiers,
+            });
         }
     }
 

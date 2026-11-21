@@ -46,10 +46,12 @@ pub(super) fn entries(records: &[NotificationRecord], now: u64) -> Vec<PaletteEn
                 format!("notification:{id}:{}", action.intent.action),
                 format!("{} › {}", record.view.title, action.label),
                 String::new(),
-                Some(InteractionIntent::ActivateAction(WmAction::NotificationActionRelay {
-                    notification_id: id,
-                    key: action.intent.action.clone(),
-                })),
+                Some(InteractionIntent::ActivateAction(
+                    WmAction::NotificationActionRelay {
+                        notification_id: id,
+                        key: action.intent.action.clone(),
+                    },
+                )),
             ));
         }
     }
@@ -88,9 +90,17 @@ fn age(seconds: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::notification::{NotificationAction, NotificationDraft, NotificationSource, NotificationStore};
-    use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Scene, Size, Theme, WidgetIntent};
-    use std::{cell::RefCell, rc::Rc, time::{Duration, Instant, SystemTime}};
+    use crate::notification::{
+        NotificationAction, NotificationDraft, NotificationSource, NotificationStore,
+    };
+    use heca_grid_ui::{
+        DrawCommand, Event, LayoutEngine, PaintCx, Scene, Size, Theme, WidgetIntent,
+    };
+    use std::{
+        cell::RefCell,
+        rc::Rc,
+        time::{Duration, Instant, SystemTime},
+    };
 
     const WALL: u64 = 1_000_000;
 
@@ -114,8 +124,14 @@ mod tests {
                     .source(NotificationSource::app("restore"))
                     .severity(crate::notification::NotificationSeverity::Warning)
                     .body("the folder moved\nand was not found")
-                    .action(NotificationAction::new("Retry", heca_view::Intent::new("restore.retry")))
-                    .action(NotificationAction::new("Open log", heca_view::Intent::new("restore.log"))),
+                    .action(NotificationAction::new(
+                        "Retry",
+                        heca_view::Intent::new("restore.retry"),
+                    ))
+                    .action(NotificationAction::new(
+                        "Open log",
+                        heca_view::Intent::new("restore.log"),
+                    )),
                 start + Duration::from_millis(1),
             )
             .unwrap();
@@ -133,14 +149,29 @@ mod tests {
         let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
         assert_eq!(
             labels,
-            ["Restore failed", "Restore failed › Retry", "Restore failed › Open log", "Config reloaded"],
+            [
+                "Restore failed",
+                "Restore failed › Retry",
+                "Restore failed › Open log",
+                "Config reloaded"
+            ],
         );
         let restore = &rows[0];
-        assert_eq!(restore.description, "the folder moved\nand was not found", "the whole body, not a cut");
-        assert_eq!(restore.detail.as_deref(), Some("5 min ago · visible"), "no level word, no source for heca");
+        assert_eq!(
+            restore.description, "the folder moved\nand was not found",
+            "the whole body, not a cut"
+        );
+        assert_eq!(
+            restore.detail.as_deref(),
+            Some("5 min ago · visible"),
+            "no level word, no source for heca"
+        );
         assert!(restore.icon.is_some(), "the level is the toast's own glyph");
         assert_eq!(rows[3].detail.as_deref(), Some("5 min ago · dismissed"));
-        assert_ne!(restore.icon, rows[3].icon, "a warning does not look like an info");
+        assert_ne!(
+            restore.icon, rows[3].icon,
+            "a warning does not look like an info"
+        );
     }
 
     #[test]
@@ -148,15 +179,32 @@ mod tests {
         let start = Instant::now();
         let mut store = NotificationStore::with_capacity(10, 10);
         let raise = |store: &mut NotificationStore, draft: NotificationDraft, at: u64| {
-            store.push(draft, start + Duration::from_millis(at)).unwrap();
+            store
+                .push(draft, start + Duration::from_millis(at))
+                .unwrap();
         };
         raise(&mut store, NotificationDraft::new("heca"), 0);
-        raise(&mut store, NotificationDraft::new("ext").source(NotificationSource::new(
-            crate::notification::NotificationSourceKind::Plugin, "git-watch")), 1);
-        raise(&mut store, NotificationDraft::new("bare").source(NotificationSource::of(
-            crate::notification::NotificationSourceKind::Pane)), 2);
+        raise(
+            &mut store,
+            NotificationDraft::new("ext").source(NotificationSource::new(
+                crate::notification::NotificationSourceKind::Plugin,
+                "git-watch",
+            )),
+            1,
+        );
+        raise(
+            &mut store,
+            NotificationDraft::new("bare").source(NotificationSource::of(
+                crate::notification::NotificationSourceKind::Pane,
+            )),
+            2,
+        );
         for at in 3..6 {
-            raise(&mut store, NotificationDraft::new("reload").dedup_key("reload"), at);
+            raise(
+                &mut store,
+                NotificationDraft::new("reload").dedup_key("reload"),
+                at,
+            );
         }
         let records = store.history_records_for(
             1,
@@ -165,12 +213,31 @@ mod tests {
         );
         let detail = |title: &str| {
             let rows = entries(&records, WALL);
-            rows.iter().find(|row| row.label == title).and_then(|row| row.detail.clone()).unwrap()
+            rows.iter()
+                .find(|row| row.label == title)
+                .and_then(|row| row.detail.clone())
+                .unwrap()
         };
-        assert_eq!(detail("heca"), "2 min ago · visible", "heca itself is not named");
-        assert_eq!(detail("ext"), "git-watch · 2 min ago · visible", "an extension is");
-        assert_eq!(detail("bare"), "pane · 2 min ago · visible", "with no name, its kind");
-        assert_eq!(detail("reload"), "2 min ago · visible · ×3", "three raises, one entry");
+        assert_eq!(
+            detail("heca"),
+            "2 min ago · visible",
+            "heca itself is not named"
+        );
+        assert_eq!(
+            detail("ext"),
+            "git-watch · 2 min ago · visible",
+            "an extension is"
+        );
+        assert_eq!(
+            detail("bare"),
+            "pane · 2 min ago · visible",
+            "with no name, its kind"
+        );
+        assert_eq!(
+            detail("reload"),
+            "2 min ago · visible · ×3",
+            "three raises, one entry"
+        );
         let rows = entries(&records, WALL);
         assert_eq!(rows.iter().filter(|row| row.label == "reload").count(), 1);
     }
@@ -180,12 +247,19 @@ mod tests {
         let rows = entries(&history(), WALL);
         let offered = |label: &str| rows.iter().find(|row| row.label == label).unwrap();
 
-        assert!(offered("Restore failed").intent.is_none(), "the entry itself only shows");
+        assert!(
+            offered("Restore failed").intent.is_none(),
+            "the entry itself only shows"
+        );
         assert!(matches!(
             &offered("Restore failed › Open log").intent,
             Some(InteractionIntent::ActivateAction(WmAction::NotificationActionRelay { key, .. })) if key == "restore.log"
         ));
-        assert!(rows.iter().all(|row| !row.label.starts_with("Config reloaded ›")), "a dismissed one has none");
+        assert!(
+            rows.iter()
+                .all(|row| !row.label.starts_with("Config reloaded ›")),
+            "a dismissed one has none"
+        );
         assert!(offered("Config reloaded").intent.is_none());
     }
 
@@ -222,13 +296,23 @@ mod tests {
             last_visited: None,
         };
         let chosen: Rc<RefCell<Vec<String>>> = Default::default();
-        let (palette, _) = modes::populate(CommandPalette::new(), modes::MODES, &sources, |row| {
-            let chosen = chosen.clone();
-            let id = row.id.clone();
-            row_command(row, 0, move || chosen.borrow_mut().push(id.clone()))
-        }, |_| Box::new(|| {}));
+        let (palette, _) = modes::populate(
+            CommandPalette::new(),
+            modes::MODES,
+            &sources,
+            |row| {
+                let chosen = chosen.clone();
+                let id = row.id.clone();
+                row_command(row, 0, move || chosen.borrow_mut().push(id.clone()))
+            },
+            |_| Box::new(|| {}),
+        );
         // Opened on the mode by name (what the action does), or left empty for the sigil to be typed.
-        let palette = if named { palette.query_in(Some(modes::MODE_NOTIFICATION), "") } else { palette };
+        let palette = if named {
+            palette.query_in(Some(modes::MODE_NOTIFICATION), "")
+        } else {
+            palette
+        };
         (palette.default_open(true), chosen)
     }
 
@@ -244,7 +328,10 @@ mod tests {
         LayoutEngine::new().compute(palette, size);
         let theme = Theme::default();
         let mut scene = Scene::new();
-        heca_grid_ui::Component::paint(&*palette, &mut PaintCx::new(&mut scene, &theme).with_viewport(size));
+        heca_grid_ui::Component::paint(
+            &*palette,
+            &mut PaintCx::new(&mut scene, &theme).with_viewport(size),
+        );
         scene
             .iter()
             .filter_map(|command| match command {
@@ -258,15 +345,29 @@ mod tests {
     fn the_mode_lists_the_notifications_and_not_the_commands() {
         let (mut open, _) = palette(true);
         let texts = drawn(&mut open);
-        for shown in ["Restore failed", "Config reloaded", "Restore failed › Retry"] {
-            assert!(texts.iter().any(|text| text == shown), "{shown} is in the built tree, got {texts:?}");
+        for shown in [
+            "Restore failed",
+            "Config reloaded",
+            "Restore failed › Retry",
+        ] {
+            assert!(
+                texts.iter().any(|text| text == shown),
+                "{shown} is in the built tree, got {texts:?}"
+            );
         }
-        assert!(texts.iter().all(|text| text != "Close"), "the command list is not on show: {texts:?}");
+        assert!(
+            texts.iter().all(|text| text != "Close"),
+            "the command list is not on show: {texts:?}"
+        );
 
         // Typing the sigil by hand reaches the same list.
         let (mut typed, _) = palette(false);
         type_into(&mut typed, "!");
-        assert!(drawn(&mut typed).iter().any(|text| text == "Config reloaded"));
+        assert!(
+            drawn(&mut typed)
+                .iter()
+                .any(|text| text == "Config reloaded")
+        );
     }
 
     #[test]
@@ -274,14 +375,24 @@ mod tests {
         let (mut open, chosen) = palette(false);
         type_into(&mut open, "!config");
         let texts = drawn(&mut open);
-        assert!(texts.iter().any(|text| text == "Config reloaded"), "{texts:?}");
-        assert!(texts.iter().all(|text| !text.starts_with("Restore failed")), "the other entries are filtered out: {texts:?}");
+        assert!(
+            texts.iter().any(|text| text == "Config reloaded"),
+            "{texts:?}"
+        );
+        assert!(
+            texts.iter().all(|text| !text.starts_with("Restore failed")),
+            "the other entries are filtered out: {texts:?}"
+        );
 
         let (mut open, chosen_action) = palette(false);
         type_into(&mut open, "!log");
         heca_grid_ui::dispatch(&mut open, &Event::Widget(WidgetIntent::Activate));
         assert!(chosen.borrow().is_empty());
         assert_eq!(chosen_action.borrow().len(), 1);
-        assert!(chosen_action.borrow()[0].ends_with(":restore.log"), "{:?}", chosen_action.borrow());
+        assert!(
+            chosen_action.borrow()[0].ends_with(":restore.log"),
+            "{:?}",
+            chosen_action.borrow()
+        );
     }
 }

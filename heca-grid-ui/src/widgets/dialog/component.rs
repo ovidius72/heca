@@ -78,10 +78,12 @@ impl Dialog {
         let font = panel.font;
         let available_w = (overlay.bounds.size.w as f32
             - overlay.style.layout.pad_left(overlay.font)
-            - overlay.style.layout.pad_right(overlay.font)).max(0.0);
+            - overlay.style.layout.pad_right(overlay.font))
+        .max(0.0);
         let available_h = (overlay.bounds.size.h as f32
             - overlay.style.layout.pad_top(overlay.font)
-            - overlay.style.layout.pad_bottom(overlay.font)).max(0.0);
+            - overlay.style.layout.pad_bottom(overlay.font))
+        .max(0.0);
         let resolve = |length, available| match length {
             crate::Length::Em(em) => em * font,
             crate::Length::Px(px) => px,
@@ -89,26 +91,53 @@ impl Dialog {
             crate::Length::Auto => available,
         };
         let mut style = self.authored_style;
-        if !style.layout.size_explicit { style.layout.size = panel.style.layout.size; }
-        let requested = style.layout.max_width.unwrap_or(crate::Length::Em(self.base.dialog_style.max_width_em));
+        if !style.layout.size_explicit {
+            style.layout.size = panel.style.layout.size;
+        }
+        let requested = style
+            .layout
+            .max_width
+            .unwrap_or(crate::Length::Em(self.base.dialog_style.max_width_em));
         let maximum = resolve(requested, available_w);
-        let maximum = if overlay.bounds.size.w > 0.0 { maximum.min(available_w) } else { maximum };
-        let minimum = style.layout.min_width.unwrap_or(if style.layout.width == crate::Length::Auto {
-            Self::BASELINE_WIDTH
-        } else { crate::Length::Auto });
-        style.layout.min_width = Some(crate::Length::Px(resolve(minimum, available_w).min(maximum)));
-        if minimum == crate::Length::Auto { style.layout.min_width = Some(crate::Length::Auto); }
+        let maximum = if overlay.bounds.size.w > 0.0 {
+            maximum.min(available_w)
+        } else {
+            maximum
+        };
+        let minimum =
+            style
+                .layout
+                .min_width
+                .unwrap_or(if style.layout.width == crate::Length::Auto {
+                    Self::BASELINE_WIDTH
+                } else {
+                    crate::Length::Auto
+                });
+        style.layout.min_width = Some(crate::Length::Px(
+            resolve(minimum, available_w).min(maximum),
+        ));
+        if minimum == crate::Length::Auto {
+            style.layout.min_width = Some(crate::Length::Auto);
+        }
         style.layout.max_width = Some(crate::Length::Px(maximum));
         if overlay.bounds.size.h > 0.0 {
-            let limit = style.layout.max_height.map_or(available_h, |height| resolve(height, available_h).min(available_h));
+            let limit = style.layout.max_height.map_or(available_h, |height| {
+                resolve(height, available_h).min(available_h)
+            });
             style.layout.max_height = Some(crate::Length::Px(limit));
             if let Some(minimum) = style.layout.min_height {
-                style.layout.min_height = Some(crate::Length::Px(resolve(minimum, available_h).min(limit)));
+                style.layout.min_height =
+                    Some(crate::Length::Px(resolve(minimum, available_h).min(limit)));
             }
         } else {
-            style.layout.max_height.get_or_insert(crate::Length::Percent(1.0));
+            style
+                .layout
+                .max_height
+                .get_or_insert(crate::Length::Percent(1.0));
         }
-        let panel = &mut self.base.children[0].base_mut().children[0].base_mut().style;
+        let panel = &mut self.base.children[0].base_mut().children[0]
+            .base_mut()
+            .style;
         let changed = *panel != style;
         *panel = style;
         changed
@@ -122,8 +151,12 @@ impl Component for Dialog {
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
     }
-    fn authored_style(&self) -> &crate::style::Style { &self.authored_style }
-    fn authored_style_mut(&mut self) -> &mut crate::style::Style { &mut self.authored_style }
+    fn authored_style(&self) -> &crate::style::Style {
+        &self.authored_style
+    }
+    fn authored_style_mut(&mut self) -> &mut crate::style::Style {
+        &mut self.authored_style
+    }
 
     fn remeasure(&mut self) {
         self.constrain_panel_width();

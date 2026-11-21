@@ -845,7 +845,10 @@ mod tests {
             &["say x\r"],
         ] {
             assert!(
-                matches!(from_argv(&argv(words)), Err(LineError::ControlCharacter { .. })),
+                matches!(
+                    from_argv(&argv(words)),
+                    Err(LineError::ControlCharacter { .. })
+                ),
                 "{words:?}"
             );
         }

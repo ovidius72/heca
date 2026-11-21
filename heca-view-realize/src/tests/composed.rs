@@ -78,7 +78,8 @@ fn a_composed_described_surface_swallows_only_what_it_declared_it_would() {
             &Theme::default(),
             &(Rc::new(|_| {}) as IntentEmitter),
             &mut FormBindings::default(),
-        ).expect("valid described test widget")
+        )
+        .expect("valid described test widget")
     };
 
     let mut blocking = realized(&described_confirm());
@@ -124,7 +125,8 @@ fn a_described_dialog_is_spaced_by_the_same_recipe_a_native_one_is() {
         &Theme::default(),
         &(Rc::new(|_| {}) as IntentEmitter),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     // The overlay's single child is the panel.
     let panel = surface.base().children[0].as_ref();
     let layout = &panel.base().style.layout;
@@ -185,7 +187,8 @@ fn every_widget_kind_can_be_shown_and_closed() {
             &theme,
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
 
         if w.presence().is_none() {
             deaf.push(format!("{kind:?}: has no arrival or exit at all"));
@@ -241,7 +244,8 @@ fn a_described_splitter_reports_its_drag_as_an_intent_with_the_distance() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     LayoutEngine::new().compute(widget.as_mut(), Size::new(200.0, 100.0));
 
     let at = |x: f64| Point::new(x, 50.0);

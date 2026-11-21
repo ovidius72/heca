@@ -173,12 +173,15 @@ pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
 /// Uses the declaring component, or the focused target when it declares no menu.
 pub fn keyboard_anchor(root: &dyn Component, cursor: Option<&str>) -> Option<MenuAnchor> {
     let path = keyboard_path(root, cursor)?;
-    let bounds = menu_owner(root, &path).map_or_else(|| node_bounds(root, &path), |node| node.base().bounds);
+    let bounds =
+        menu_owner(root, &path).map_or_else(|| node_bounds(root, &path), |node| node.base().bounds);
     Some(MenuAnchor::Center(bounds))
 }
 
 fn keyboard_path(root: &dyn Component, cursor: Option<&str>) -> Option<Vec<usize>> {
-    cursor.and_then(|key| key_path(root, key)).or_else(|| focused_path(root))
+    cursor
+        .and_then(|key| key_path(root, key))
+        .or_else(|| focused_path(root))
 }
 
 /// The path to the widget that declared `key`.

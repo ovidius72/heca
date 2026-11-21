@@ -224,9 +224,19 @@ pub(crate) async fn init_state(
     apply_window_vibrancy(window.as_ref(), &appearance);
     let scale_factor = window.scale_factor();
 
-    let gpu = heca_renderer::gpu::WindowGpu::new(window.clone(), "heca_device", appearance.is_transparent()).await;
+    let gpu = heca_renderer::gpu::WindowGpu::new(
+        window.clone(),
+        "heca_device",
+        appearance.is_transparent(),
+    )
+    .await;
     let surface_format = gpu.format();
-    let heca_renderer::gpu::WindowGpu { surface, device, queue, config } = gpu;
+    let heca_renderer::gpu::WindowGpu {
+        surface,
+        device,
+        queue,
+        config,
+    } = gpu;
     let physical = window.inner_size();
 
     let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
@@ -292,12 +302,18 @@ pub(crate) async fn init_state(
     // One wake in flight at a time: the loop resets the latch as it starts the turn (`BackendWake`).
     let (waker, wake_latch) = crate::server::ServerWaker::latched({
         let proxy = event_proxy.clone();
-        move || { let _ = proxy.send_event(crate::app::events::AppEvent::BackendWake); }
+        move || {
+            let _ = proxy.send_event(crate::app::events::AppEvent::BackendWake);
+        }
     });
     let (client, content) = crate::client::ClientState::connect(app_config, waker, launch_mode)?;
     let session = content.rebuild(client.session.id, layout_options);
     let view = WindowView::new(viewport_size, scale_factor);
-    let focused_pane = session.through(&view).active_workspace().and_then(|workspace| workspace.active_pane()).map(|pane| pane.id);
+    let focused_pane = session
+        .through(&view)
+        .active_workspace()
+        .and_then(|workspace| workspace.active_pane())
+        .map(|pane| pane.id);
 
     let ws_count = session.workspaces.len();
 
@@ -332,7 +348,10 @@ pub(crate) async fn init_state(
     // time writes the same call and does not have to find the host. This applies it, once, with the
     // user's `[[docks]]` deciding where each dock starts; a `regions(..)` call after this is
     // refused out loud.
-    chrome_host.mount_pending(&crate::providers::ChromeCtx::new(&chrome_state), &app_config.config.docks);
+    chrome_host.mount_pending(
+        &crate::providers::ChromeCtx::new(&chrome_state),
+        &app_config.config.docks,
+    );
 
     // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
     // unknown-version file is simply an empty store, so a first run and a broken file behave

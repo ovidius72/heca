@@ -18,27 +18,27 @@
 mod action;
 mod bootstrap;
 mod change;
+mod connection;
 mod cx;
 mod events;
-mod handlers;
-mod layout;
-mod poll;
 pub(crate) mod feedback;
+mod handlers;
 pub(crate) mod identity;
+mod layout;
 pub(crate) mod persist;
+mod poll;
 pub(crate) mod private_fs;
 pub(crate) mod process;
-/// The local socket clients and scripts reach the server through.
-pub(crate) mod socket;
 pub(crate) mod run;
 pub(crate) mod runtime;
-mod terminals;
-mod sizing;
-mod stream;
-mod session;
 pub(crate) mod services;
-mod connection;
+mod session;
 pub(crate) mod sessions;
+mod sizing;
+/// The local socket clients and scripts reach the server through.
+pub(crate) mod socket;
+mod stream;
+mod terminals;
 #[cfg(test)]
 mod testing;
 mod waker;
@@ -51,8 +51,8 @@ use heca_config::programs::ProgramsConfig;
 
 pub(crate) use action::{NotificationCommand, NotificationSettings, ServerAction};
 pub(crate) use change::{Change, Refusal};
-pub(crate) use events::{EventFanout, StreamEvent};
 pub(crate) use cx::{Asker, ServerCx};
+pub(crate) use events::{EventFanout, StreamEvent};
 pub(crate) use layout::ServerLayout;
 pub(crate) use poll::BackendPoll;
 pub(crate) use terminals::Terminals;
@@ -121,7 +121,9 @@ impl ServerState {
             ServerAction::Hover(hovered) => self.notifications.set_hovered(hovered, now),
             ServerAction::Run(id, key) => {
                 if !self.notifications.run_action(id, &key) {
-                    eprintln!("[heca] notification button `{key}` has nothing to run here (raised in a window?)");
+                    eprintln!(
+                        "[heca] notification button `{key}` has nothing to run here (raised in a window?)"
+                    );
                 }
                 false
             }
@@ -185,7 +187,10 @@ impl ServerState {
 
     /// The agent drivers terminals are started with, when agent reporting has any.
     pub(crate) fn agent_drivers(&self) -> Option<&heca_core::agent::AgentDrivers> {
-        self.terminal_settings.agents.as_ref().map(|agents| &agents.drivers)
+        self.terminal_settings
+            .agents
+            .as_ref()
+            .map(|agents| &agents.drivers)
     }
 
     /// This server, building terminal processes with `launch` — the app's, or a test's that starts
@@ -201,7 +206,9 @@ impl ServerState {
         let palette = terminal_palette_defaults(&settings.theme);
         for backend in self.backends.values_mut() {
             if let Err(error) = backend.reload_agent_config(settings.agents.clone()) {
-                crate::chrome::warn_author(format!("[heca] cannot update terminal agent reporting: {error}"));
+                crate::chrome::warn_author(format!(
+                    "[heca] cannot update terminal agent reporting: {error}"
+                ));
             }
             backend.set_scroll_animations_enabled(settings.scroll_animations);
             backend.set_link_detection(settings.link_detection);
@@ -236,7 +243,10 @@ impl ServerState {
             true => None,
             false => self.notifications.next_expiry(),
         };
-        [notification, self.backends.next_wake()].into_iter().flatten().min()
+        [notification, self.backends.next_wake()]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// **The notifications on show**, as plain serializable data — the projection the server sends
@@ -246,14 +256,20 @@ impl ServerState {
     /// The projection for the window on connection `client`: session-wide notifications plus any
     /// addressed to that window. Sent to each client on attach and on every
     /// [`Change::NotificationsChanged`], so a window only ever draws what is meant for it.
-    pub(crate) fn visible_notifications_for(&self, client: u64) -> Vec<crate::notification::NotificationView> {
+    pub(crate) fn visible_notifications_for(
+        &self,
+        client: u64,
+    ) -> Vec<crate::notification::NotificationView> {
         self.notifications.visible_views_for(client)
     }
 
     /// **The notification history** for the window on connection `client`, newest first — what
     /// the server answers a [`ClientMsg::NotificationHistory`](wire::ClientMsg::NotificationHistory)
     /// with. Server-owned, so every window reads the same list, a reattached one included.
-    pub(crate) fn notification_history_for(&self, client: u64) -> Vec<crate::notification::NotificationRecord> {
+    pub(crate) fn notification_history_for(
+        &self,
+        client: u64,
+    ) -> Vec<crate::notification::NotificationRecord> {
         self.notifications.history_for(client)
     }
 

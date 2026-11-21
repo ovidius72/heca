@@ -208,7 +208,10 @@ mod tests {
 
         let json = serde_json::to_string(&content).expect("serialize");
         let back: SessionContent = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(content, back, "SessionContent changed across a serde round-trip");
+        assert_eq!(
+            content, back,
+            "SessionContent changed across a serde round-trip"
+        );
     }
 
     /// Rebuilding a session from the projection and projecting it again yields the same content —

@@ -40,7 +40,8 @@ pub(crate) fn open_modal(
         &emit,
         &state.action_shortcuts,
         &mut forms,
-    ).inspect_err(report_view_error)?;
+    )
+    .inspect_err(report_view_error)?;
     // **Nothing about the surface is said here.** A `Dialog` locks what is behind it because it is
     // a dialog, and an open layer holds focus, which IS how it takes the keyboard. Both travel with
     // the widget, so this path cannot disagree with a dialog raised any other way.
@@ -87,7 +88,8 @@ pub(crate) fn open_view_layer(
     // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
     // — a plugin's panel is judged by *which* surface acted, exactly as the exposé is.
     let id = state.layers.reserve_id();
-    let emit = crate::chrome::layer_emitter(&state.event_proxy, crate::chrome::surface_key_of(None, id));
+    let emit =
+        crate::chrome::layer_emitter(&state.event_proxy, crate::chrome::surface_key_of(None, id));
     let view_emit = emit.intent_sink();
     let theme = crate::chrome::chrome_gui_theme(state);
     let mut forms = FormBindings::default();

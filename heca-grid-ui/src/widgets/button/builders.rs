@@ -48,7 +48,8 @@ impl Button {
     /// [`Label`] child.
     pub fn new(label: impl Into<String>) -> Self {
         let label = label.into();
-        let mut b = Self::empty().child(Label::new(label.clone()).font_weight(crate::style::FontWeight::Bold));
+        let mut b = Self::empty()
+            .child(Label::new(label.clone()).font_weight(crate::style::FontWeight::Bold));
         b.label = label;
         b
     }
@@ -58,7 +59,9 @@ impl Button {
     #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.glyph = Some(glyph);
-        self.base.children.insert(0, crate::WidgetModel::new(Icon::new(glyph)));
+        self.base
+            .children
+            .insert(0, crate::WidgetModel::new(Icon::new(glyph)));
         self
     }
 

@@ -9,9 +9,9 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::Component;
+use heca_grid_ui::RowVariant;
 use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::Length;
-use heca_grid_ui::RowVariant;
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, Row};
 
@@ -180,7 +180,8 @@ impl PaneCard<'_> {
                 // Nothing to show *is* the setting being off — `model` resolved both into the same
                 // absence, an empty path, so a card has one question to answer rather than two. A
                 // card centres its content, so there is nothing to step in from (no indent).
-                let folder = crate::components::FolderLine::new(theme).path(self.folder.unwrap_or_default());
+                let folder =
+                    crate::components::FolderLine::new(theme).path(self.folder.unwrap_or_default());
                 Flex::column()
                     .align("center")
                     .gap(heca_grid_ui::style::Spacing::Hairline)

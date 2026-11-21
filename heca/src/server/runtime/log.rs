@@ -12,7 +12,13 @@ pub(super) fn send_output_to(log: &Path) {
     use std::os::fd::AsRawFd;
     let previous = log.with_extension("log.1");
     let _ = std::fs::rename(log, previous);
-    let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(log) else { return };
+    let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log)
+    else {
+        return;
+    };
     // SAFETY: `dup2` on two valid descriptors this process owns; it only redirects 1 and 2.
     unsafe {
         libc::dup2(file.as_raw_fd(), libc::STDOUT_FILENO);

@@ -18,8 +18,8 @@ mod tree;
 
 pub use base::Base;
 pub use behavior::Component;
-pub use model::WidgetModel;
 pub use dispatch::*;
+pub use model::WidgetModel;
 pub use paint_cx::PaintCx;
 pub use paint_walk::*;
 pub use tree::*;
@@ -46,4 +46,4 @@ pub use crate::event::{
 };
 
 mod frame;
-pub use frame::{FrameWake, frame_waker, install_frame_request, request_frame, frame_served};
+pub use frame::{FrameWake, frame_served, frame_waker, install_frame_request, request_frame};

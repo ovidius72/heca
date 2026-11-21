@@ -3,11 +3,20 @@ use crate::{Intent, PropValue, ViewEvent, ViewNode, WidgetId};
 
 #[test]
 fn marker_and_tag_properties_reach_the_described_tree() {
-    let marker = MarkerGroup::new().marker(false).gutter(crate::ViewSpacing::Lg).into_node();
+    let marker = MarkerGroup::new()
+        .marker(false)
+        .gutter(crate::ViewSpacing::Lg)
+        .into_node();
     assert_eq!(marker.props.get("marker"), Some(&PropValue::Bool(false)));
-    assert_eq!(marker.props.get("gutter"), Some(&PropValue::Text("lg".into())));
+    assert_eq!(
+        marker.props.get("gutter"),
+        Some(&PropValue::Text("lg".into()))
+    );
     let tag = Tag::new("status").segment_shrink(false).into_node();
-    assert_eq!(tag.props.get("segment_shrink"), Some(&PropValue::Bool(false)));
+    assert_eq!(
+        tag.props.get("segment_shrink"),
+        Some(&PropValue::Bool(false))
+    );
 }
 
 /// The builders produce the same node hand-authoring does — they are sugar, not a second model.
@@ -132,7 +141,10 @@ fn every_kind_has_a_builder_that_can_be_given_a_hint() {
     /// The builder for `kind` as a node, or `None` where the SDK has none — with the reason.
     fn builder(kind: WidgetId) -> Option<ViewNode> {
         Some(match kind.as_str() {
-            "image" => Image::new().svg(r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#).on_hint(Intent::new("pick")).into_node(),
+            "image" => Image::new()
+                .svg(r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#)
+                .on_hint(Intent::new("pick"))
+                .into_node(),
             "v_stack" => VStack::new().on_hint(Intent::new("pick")).into_node(),
             "h_stack" => HStack::new().on_hint(Intent::new("pick")).into_node(),
             "row" => Row::new().on_hint(Intent::new("pick")).into_node(),
@@ -168,7 +180,11 @@ fn every_kind_has_a_builder_that_can_be_given_a_hint() {
             "status_dot" => StatusDot::new().on_hint(Intent::new("pick")).into_node(),
             "gauge" => Gauge::new().on_hint(Intent::new("pick")).into_node(),
             // Host-only: its state is live host signals, and `realize` refuses it outright.
-            "scroll_bar" => ScrollBar::new().content_extent(100.0).viewport_extent(10.0).on_hint(Intent::new("pick")).into_node(),
+            "scroll_bar" => ScrollBar::new()
+                .content_extent(100.0)
+                .viewport_extent(10.0)
+                .on_hint(Intent::new("pick"))
+                .into_node(),
             "alert" => Alert::new().on_hint(Intent::new("pick")).into_node(),
             "toast" => Toast::new().on_hint(Intent::new("pick")).into_node(),
             "rail_cell" => RailCell::new().on_hint(Intent::new("pick")).into_node(),
@@ -187,7 +203,9 @@ fn every_kind_has_a_builder_that_can_be_given_a_hint() {
     }
 
     for kind in crate::kind::legacy_wire_ids() {
-        let Some(node) = builder(kind.clone()) else { continue };
+        let Some(node) = builder(kind.clone()) else {
+            continue;
+        };
         assert_eq!(
             node.kind, kind,
             "the builder for {kind:?} builds another kind"

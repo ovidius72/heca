@@ -157,7 +157,11 @@ impl ScrollRegion {
     }
     /// Hand one listener the current position. Silent when nobody is listening — the region drives
     /// itself either way, which is the whole point of these being optional.
-    pub(super) fn fire(&self, listener: Option<&dyn for<'a> Fn(ScrollInfo<'a>)>, cause: Option<&Event>) {
+    pub(super) fn fire(
+        &self,
+        listener: Option<&dyn for<'a> Fn(ScrollInfo<'a>)>,
+        cause: Option<&Event>,
+    ) {
         let Some(listener) = listener else { return };
         listener(ScrollInfo {
             offset_x: self.scroll_offset_x.get_untracked(),

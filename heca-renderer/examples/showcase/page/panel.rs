@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let theme = cx.theme;
 
-
     Flex::row()
         .gap(16.0)
         .align("start")

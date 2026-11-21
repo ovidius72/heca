@@ -64,7 +64,12 @@ impl RowVariant {
     fn fill(self, theme: &crate::theme::Theme) -> Option<Color> {
         match self {
             RowVariant::Plain => None,
-            RowVariant::Tinted => Some(theme.colors.foreground.with_alpha_f32(theme.colors.card_background_alpha)),
+            RowVariant::Tinted => Some(
+                theme
+                    .colors
+                    .foreground
+                    .with_alpha_f32(theme.colors.card_background_alpha),
+            ),
             RowVariant::Filled => Some(theme.colors.surface),
         }
     }
@@ -352,7 +357,11 @@ impl Component for Row {
         let s = &self.base.style;
         // A background or radius set by hand wins over the variant's.
         let fill = s.visual.fill.or_else(|| self.variant.fill(cx.theme()));
-        let radius = if s.visual.radius > 0.0 || self.variant == RowVariant::Plain { s.visual.radius } else { ctrl_radius };
+        let radius = if s.visual.radius > 0.0 || self.variant == RowVariant::Plain {
+            s.visual.radius
+        } else {
+            ctrl_radius
+        };
         if let (Some(fill), None) = (fill, s.visual.glow) {
             cx.rect(
                 b,
@@ -389,10 +398,19 @@ impl Component for Row {
             // Selection stays quiet behind content. The stronger glowing navigation ring below
             // still identifies the keyboard cursor when it coincides with the selected row.
             let hue = self.highlight.unwrap_or(selected_bg);
-            cx.rect(sel, hue.with_alpha(ia.row_active_fill), Some(Border {
-                color: self.highlight.unwrap_or(accent).with_alpha(ia.row_active_border),
-                width: sel_border_w,
-            }), sel_radius, None);
+            cx.rect(
+                sel,
+                hue.with_alpha(ia.row_active_fill),
+                Some(Border {
+                    color: self
+                        .highlight
+                        .unwrap_or(accent)
+                        .with_alpha(ia.row_active_border),
+                    width: sel_border_w,
+                }),
+                sel_radius,
+                None,
+            );
         } else if self.base.hovered() {
             let c = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_hover_fill)

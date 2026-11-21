@@ -33,9 +33,7 @@ impl Dialog {
                 .child(Label::new(title).area(TITLE_AREA));
         }
         // Surface owns the panel box; Grid arranges its content inside that box.
-        let panel = Surface::new()
-            .padding(DIALOG_PAD)
-            .child(layout);
+        let panel = Surface::new().padding(DIALOG_PAD).child(layout);
         let authored_style = panel.base().style;
 
         // The base Overlay owns the layer presentation: blocking (scrim + swallow),
@@ -115,14 +113,20 @@ impl Dialog {
         if self.part_mut(BODY_AREA).is_none() {
             let body = Flex::column().gap(DIALOG_GAP).area(BODY_AREA);
             let layout = self.layout_mut().base_mut();
-            let before_actions = layout.children.iter().position(|part| {
-                part.base().grid_area.as_deref() == Some(ACTIONS_AREA)
-            }).unwrap_or(layout.children.len());
-            layout.children.insert(before_actions, crate::WidgetModel::new(body));
+            let before_actions = layout
+                .children
+                .iter()
+                .position(|part| part.base().grid_area.as_deref() == Some(ACTIONS_AREA))
+                .unwrap_or(layout.children.len());
+            layout
+                .children
+                .insert(before_actions, crate::WidgetModel::new(body));
         }
         self.part_mut(BODY_AREA)
             .expect("the body was just created")
-            .base_mut().children.extend(children);
+            .base_mut()
+            .children
+            .extend(children);
         self.tone_body();
         self.sync_template();
         self
@@ -152,7 +156,9 @@ impl Dialog {
     /// Put the danger tone on the body, when there is one and the dialog is destructive. Never
     /// clears a tone: a body that set its own keeps it when the dialog is not destructive.
     fn tone_body(&mut self) {
-        if self.danger && let Some(body) = self.part_mut(BODY_AREA) {
+        if self.danger
+            && let Some(body) = self.part_mut(BODY_AREA)
+        {
             for child in &mut body.base_mut().children {
                 child.base_mut().style.visual.content_tone = Some(crate::Tone::Danger);
             }
@@ -200,10 +206,17 @@ impl Dialog {
     pub fn action(mut self, button: impl crate::builders::IntoComponent) -> Self {
         if self.part_mut(ACTIONS_AREA).is_none() {
             // Lazily create the right-aligned action row on first use.
-            let row = Flex::row().gap(DIALOG_BTN_GAP).justify("end").area(ACTIONS_AREA);
-            self.layout_mut().base_mut().children.push(crate::WidgetModel::new(row));
+            let row = Flex::row()
+                .gap(DIALOG_BTN_GAP)
+                .justify("end")
+                .area(ACTIONS_AREA);
+            self.layout_mut()
+                .base_mut()
+                .children
+                .push(crate::WidgetModel::new(row));
         }
-        self.part_mut(ACTIONS_AREA).expect("the action row was just created")
+        self.part_mut(ACTIONS_AREA)
+            .expect("the action row was just created")
             .base_mut()
             .children
             .push(button.into_component());
@@ -286,7 +299,10 @@ impl Dialog {
         "a live signal; a description carries a starting value, `open`"
     )]
     pub fn open_when(mut self, open: Signal<bool>) -> Self {
-        let overlay = std::mem::replace(&mut self.base.children[0], crate::WidgetModel::new(Flex::column()));
+        let overlay = std::mem::replace(
+            &mut self.base.children[0],
+            crate::WidgetModel::new(Flex::column()),
+        );
         self.base.children[0] = overlay;
         self.base.open = open;
         self.base.children[0].follow_open(open);
@@ -319,7 +335,8 @@ impl Dialog {
     }
 
     fn layout_mut(&mut self) -> &mut crate::WidgetModel {
-        self.panel_mut().child_in_area(LAYOUT_AREA)
+        self.panel_mut()
+            .child_in_area(LAYOUT_AREA)
             .expect("the panel owns its layout")
     }
 
@@ -331,11 +348,18 @@ impl Dialog {
         let mut areas = Vec::new();
         for part in &slot.base().children {
             if let Some(name) = &part.base().grid_area {
-                rows.push(if name == BODY_AREA { Track::Fr(1.0) } else { Track::Auto });
+                rows.push(if name == BODY_AREA {
+                    Track::Fr(1.0)
+                } else {
+                    Track::Auto
+                });
                 areas.push(name.clone());
             }
         }
-        let mut panel = Grid::new().template_column("1fr").template_row(rows).template_area(areas);
+        let mut panel = Grid::new()
+            .template_column("1fr")
+            .template_row(rows)
+            .template_area(areas);
         std::mem::swap(panel.base_mut(), slot.base_mut());
         *slot = crate::WidgetModel::new(panel);
     }

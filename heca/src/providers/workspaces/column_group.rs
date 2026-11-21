@@ -133,7 +133,9 @@ mod tests {
             heca_core::layout::types::Point::new(0.0, 0.0),
             heca_core::layout::types::Size::new(300.0, 800.0),
         );
-        root.base_mut().children.push(heca_grid_ui::WidgetModel::new(group));
+        root.base_mut()
+            .children
+            .push(heca_grid_ui::WidgetModel::new(group));
 
         let key = column_key(column.col_id);
         assert!(

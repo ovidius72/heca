@@ -218,10 +218,19 @@ mod tests {
     fn numbers_keep_full_precision_and_narrow_without_wrapping() {
         let epoch_ms = 1_763_745_123_456.0;
         assert_eq!(PropInput::Number(epoch_ms).as_f64(), Some(epoch_ms));
-        assert_eq!(PropInput::Number(epoch_ms).as_whole::<u64>(), Some(1_763_745_123_456));
-        assert_eq!(PropInput::Text("1763745123456".into()).as_whole::<i64>(), Some(1_763_745_123_456));
+        assert_eq!(
+            PropInput::Number(epoch_ms).as_whole::<u64>(),
+            Some(1_763_745_123_456)
+        );
+        assert_eq!(
+            PropInput::Text("1763745123456".into()).as_whole::<i64>(),
+            Some(1_763_745_123_456)
+        );
         assert_eq!(PropInput::Number(-3.0).as_whole::<usize>(), Some(0));
-        assert_eq!(PropInput::Number(70_000.0).as_whole::<u16>(), Some(u16::MAX));
+        assert_eq!(
+            PropInput::Number(70_000.0).as_whole::<u16>(),
+            Some(u16::MAX)
+        );
         assert_eq!(PropInput::Number(2.6).as_whole::<u32>(), Some(3));
         assert_eq!(PropInput::Number(f64::NAN).as_whole::<u32>(), None);
     }

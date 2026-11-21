@@ -159,7 +159,9 @@ pub(super) fn region_body(
     let mut host = super::ChromeHost::new(chrome.events());
     host.register(
         super::RegionId::LeftSidebar,
-        Box::new(crate::providers::WorkspacesContainerProvider::new("workspaces")),
+        Box::new(crate::providers::WorkspacesContainerProvider::new(
+            "workspaces",
+        )),
     );
     let emit: super::ChromeIntentEmitter = ChromeIntentEmitter::of(
         crate::app::interaction::InteractionSource::Keyboard,

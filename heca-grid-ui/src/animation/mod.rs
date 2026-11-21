@@ -57,11 +57,11 @@
 //! **surface** as it comes and goes, and they are driven by whoever mounts it.
 
 mod fade;
+mod model;
 mod presence;
 mod sequence;
 mod slide;
 mod vocabulary;
-mod model;
 pub use model::AnimationModel;
 mod zoom;
 mod zoom_fade;

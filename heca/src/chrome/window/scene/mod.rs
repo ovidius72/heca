@@ -200,17 +200,19 @@ pub(in crate::chrome) fn build_region_content(
             // natural 1px and the docks divide what is left exactly as they asked. Its colour comes
             // from the theme's border token, so it follows a reload.
             let count = bodies.len();
-            Some(heca_grid_ui::WidgetModel::new(bodies.into_iter().enumerate().fold(
-                stack,
-                |col, (i, body)| {
-                    let col = if i > 0 && i < count {
-                        col.child(Separator::horizontal())
-                    } else {
-                        col
-                    };
-                    col.child(body)
-                },
-            )))
+            Some(heca_grid_ui::WidgetModel::new(
+                bodies
+                    .into_iter()
+                    .enumerate()
+                    .fold(stack, |col, (i, body)| {
+                        let col = if i > 0 && i < count {
+                            col.child(Separator::horizontal())
+                        } else {
+                            col
+                        };
+                        col.child(body)
+                    }),
+            ))
         }
     }
 }

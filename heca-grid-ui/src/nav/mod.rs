@@ -39,7 +39,7 @@ mod ambiguity;
 mod collect;
 mod identity;
 
-pub use ambiguity::{ambiguous_identities, Ambiguity};
+pub use ambiguity::{Ambiguity, ambiguous_identities};
 pub use collect::{collect_keys, key_at};
 pub use identity::{child_name, identity_of, node_with_key, node_with_key_mut};
 

@@ -12,11 +12,11 @@ use std::time::Instant;
 use heca_core::layout::Session;
 
 use super::connection::{Attachment, Connection};
-use super::sessions::{SessionInfo, SessionStatus};
-use crate::entry::service::SessionKey;
-use super::wire::{ClientMsg, ServerMsg};
 use super::services::Call;
+use super::sessions::{SessionInfo, SessionStatus};
+use super::wire::{ClientMsg, ServerMsg};
 use super::{Asker, Change, ServerState};
+use crate::entry::service::SessionKey;
 
 mod lifecycle;
 mod publish;
@@ -54,7 +54,10 @@ pub(crate) struct SessionRuntime {
     /// The live frame last sent for each terminal and the screen version it was built at: a
     /// terminal whose screen did not change is not snapshotted again, and is not sent again unless
     /// its title or state changed. Cleared on a reload (colours may have changed).
-    published: std::collections::HashMap<crate::app::backend_store::TerminalOwner, (u64, std::sync::Arc<super::wire::terminal::TerminalFrame>)>,
+    published: std::collections::HashMap<
+        crate::app::backend_store::TerminalOwner,
+        (u64, std::sync::Arc<super::wire::terminal::TerminalFrame>),
+    >,
     /// `heca rpc --events` subscribers (shared across sessions), fanned to from this session's
     /// broadcast. Empty until the owner loop installs the shared fanout.
     events: super::EventFanout,
@@ -128,7 +131,9 @@ impl SessionRuntime {
         self.services = services;
         let restored = std::mem::take(&mut self.restored_state);
         if !restored.is_empty() {
-            self.services.borrow().adopt_saved_entries(self.key, restored);
+            self.services
+                .borrow()
+                .adopt_saved_entries(self.key, restored);
         }
     }
 
@@ -143,14 +148,23 @@ impl SessionRuntime {
 
     /// This session as the services are told of it.
     pub(crate) fn service_ref(&self) -> super::services::SessionRef {
-        let workspace = self.last_focus.and_then(|focus| self.workspace_key(focus.workspace));
-        super::services::SessionRef { id: self.session.id, key: self.key, workspace }
+        let workspace = self
+            .last_focus
+            .and_then(|focus| self.workspace_key(focus.workspace));
+        super::services::SessionRef {
+            id: self.session.id,
+            key: self.key,
+            workspace,
+        }
     }
 
     /// This session as the services are told of it **for a call from window `i`**: the workspace is
     /// the one that window shows (else the one shown last, as [`service_ref`](Self::service_ref)).
     pub(crate) fn service_ref_for(&self, i: usize) -> super::services::SessionRef {
-        let shown = self.clients[i].presence.get().and_then(|(workspace, _)| self.workspace_key(workspace));
+        let shown = self.clients[i]
+            .presence
+            .get()
+            .and_then(|(workspace, _)| self.workspace_key(workspace));
         let mut session = self.service_ref();
         session.workspace = shown.or(session.workspace);
         session
@@ -159,7 +173,10 @@ impl SessionRuntime {
     /// The lasting key of the workspace at position `ws_idx`, if there is one there.
     fn workspace_key(&self, ws_idx: usize) -> Option<crate::entry::service::WorkspaceKey> {
         let workspace = self.session.workspaces.get(ws_idx)?;
-        Some(crate::entry::service::WorkspaceKey::new(self.key, workspace.id))
+        Some(crate::entry::service::WorkspaceKey::new(
+            self.key,
+            workspace.id,
+        ))
     }
 
     /// **This session as a service reads it** — the one place its key, name, folder and state are
@@ -180,8 +197,12 @@ impl SessionRuntime {
             session: self.session.id,
             key: self.key,
             config: self.config(),
-            clients: self.clients.iter()
-                .filter(|client| !client.is_closed() && matches!(client.attachment.get(), Attachment::Attached))
+            clients: self
+                .clients
+                .iter()
+                .filter(|client| {
+                    !client.is_closed() && matches!(client.attachment.get(), Attachment::Attached)
+                })
                 .cloned()
                 .collect(),
         }
@@ -205,27 +226,42 @@ impl SessionRuntime {
     /// **The live frame to send for a terminal now**, or `None` when it has nothing new: its screen
     /// is snapshotted only when its [screen version](ServerState::screen_version) moved, and a frame
     /// is made only when that or its title or state changed since the one last sent.
-    fn live_frame(&mut self, owner: &crate::app::backend_store::TerminalOwner)
-        -> Option<std::sync::Arc<super::wire::terminal::TerminalFrame>> {
+    fn live_frame(
+        &mut self,
+        owner: &crate::app::backend_store::TerminalOwner,
+    ) -> Option<std::sync::Arc<super::wire::terminal::TerminalFrame>> {
         let runtime = match owner {
-            crate::app::backend_store::TerminalOwner::Pane(pane) => self.session.workspaces.iter()
-                .find_map(|workspace| workspace.find_pane(*pane)).map(|pane| pane.runtime.clone()),
+            crate::app::backend_store::TerminalOwner::Pane(pane) => self
+                .session
+                .workspaces
+                .iter()
+                .find_map(|workspace| workspace.find_pane(*pane))
+                .map(|pane| pane.runtime.clone()),
             _ => None,
         };
         let version = self.state.screen_version(owner);
         if let (Some(version), Some((sent_at, sent))) = (version, self.published.get(owner))
-            && version == *sent_at && self.state.facts_unchanged(owner, sent, runtime.as_ref()) {
+            && version == *sent_at
+            && self.state.facts_unchanged(owner, sent, runtime.as_ref())
+        {
             return None;
         }
         let (mut frame, images) = self.state.viewport(owner, 0)?;
-        if let Some(runtime) = runtime { frame.runtime = runtime; }
+        if let Some(runtime) = runtime {
+            frame.runtime = runtime;
+        }
         for image in images {
             self.images.insert(image.id, image);
         }
         let frame = std::sync::Arc::new(frame);
         match version {
-            Some(version) => { self.published.insert(owner.clone(), (version, frame.clone())); }
-            None => { self.published.remove(owner); }
+            Some(version) => {
+                self.published
+                    .insert(owner.clone(), (version, frame.clone()));
+            }
+            None => {
+                self.published.remove(owner);
+            }
         }
         Some(frame)
     }
@@ -272,7 +308,9 @@ impl SessionRuntime {
     }
 
     pub(crate) fn next_wake(&self) -> Option<Instant> {
-        self.clients.iter().filter_map(|client| client.rpc_deadline())
+        self.clients
+            .iter()
+            .filter_map(|client| client.rpc_deadline())
             .chain(self.state.next_wake())
             .min()
     }
@@ -285,7 +323,10 @@ impl SessionRuntime {
         // borrows never overlap.
         let mut pending: Vec<(usize, ClientMsg)> = Vec::new();
         let mut detached: Vec<usize> = Vec::new();
-        let mut publish_terminals = self.clients.iter().any(|client| client.projection_pending.get());
+        let mut publish_terminals = self
+            .clients
+            .iter()
+            .any(|client| client.projection_pending.get());
         for (i, client) in self.clients.iter().enumerate() {
             loop {
                 match client.poll() {
@@ -327,10 +368,16 @@ impl SessionRuntime {
                     } else {
                         self.clients[i].attachment.set(Attachment::Attached);
                         self.clients[i].projection_pending.set(true);
-                        if self.clients[i].link.send(ServerMsg::Feedback {
-                            session_id: self.session.id,
-                            panes: self.state.feedback.snapshot(),
-                        }).is_err() { detached.push(i); }
+                        if self.clients[i]
+                            .link
+                            .send(ServerMsg::Feedback {
+                                session_id: self.session.id,
+                                panes: self.state.feedback.snapshot(),
+                            })
+                            .is_err()
+                        {
+                            detached.push(i);
+                        }
                         // The attaching (or reattaching) window gets the current notifications so
                         // its toast stack comes back exactly as the session left it — the
                         // session-wide ones plus any addressed to this window.
@@ -350,7 +397,9 @@ impl SessionRuntime {
                 }
                 ClientMsg::Detach => detached.push(i),
                 // Routed by the server loop, which owns them; never queued to a session.
-                ClientMsg::AttachTo { .. } | ClientMsg::Session { .. } | ClientMsg::LeaveSession
+                ClientMsg::AttachTo { .. }
+                | ClientMsg::Session { .. }
+                | ClientMsg::LeaveSession
                 | ClientMsg::ServiceResync { .. } => detached.push(i),
                 ClientMsg::Act {
                     mut action,
@@ -369,7 +418,14 @@ impl SessionRuntime {
                         super::services::refused(&name, reason);
                         // The window is waiting on this request: answer it, with nothing changed.
                         if let Some(request_id) = request_id
-                            && self.clients[i].link.send(ServerMsg::Reply { request_id, changes: Vec::new() }).is_err() {
+                            && self.clients[i]
+                                .link
+                                .send(ServerMsg::Reply {
+                                    request_id,
+                                    changes: Vec::new(),
+                                })
+                                .is_err()
+                        {
                             detached.push(i);
                         }
                         continue;
@@ -394,7 +450,9 @@ impl SessionRuntime {
                             | crate::input::WmAction::TerminalKill { terminal, .. } => {
                                 *terminal = Some(id.0)
                             }
-                            crate::input::WmAction::TerminalRenameTo { terminal, .. } => *terminal = id.0.to_string(),
+                            crate::input::WmAction::TerminalRenameTo { terminal, .. } => {
+                                *terminal = id.0.to_string()
+                            }
                             _ => {}
                         }
                     }
@@ -482,18 +540,36 @@ impl SessionRuntime {
                 ClientMsg::NotificationHistory => {
                     // Answered to the window that asked, with what that window is meant to see.
                     let records = self.state.notification_history_for(self.clients[i].id);
-                    if self.clients[i].link.send(ServerMsg::NotificationHistory(records)).is_err() {
+                    if self.clients[i]
+                        .link
+                        .send(ServerMsg::NotificationHistory(records))
+                        .is_err()
+                    {
                         detached.push(i);
                     }
                 }
-                ClientMsg::AcknowledgeFeedback { session_id, pane_id, revision } => {
+                ClientMsg::AcknowledgeFeedback {
+                    session_id,
+                    pane_id,
+                    revision,
+                } => {
                     if session_id == self.session.id {
                         self.state.feedback.acknowledge(pane_id, revision);
                     }
                 }
-                ClientMsg::RequestFeedbackSound { session_id, pane_id, revision } => {
-                    if session_id == self.session.id && self.state.feedback.claim_sound(pane_id, revision) {
-                        let _ = self.clients[i].link.send(ServerMsg::FeedbackSound { session_id, pane_id, revision });
+                ClientMsg::RequestFeedbackSound {
+                    session_id,
+                    pane_id,
+                    revision,
+                } => {
+                    if session_id == self.session.id
+                        && self.state.feedback.claim_sound(pane_id, revision)
+                    {
+                        let _ = self.clients[i].link.send(ServerMsg::FeedbackSound {
+                            session_id,
+                            pane_id,
+                            revision,
+                        });
                     }
                 }
                 ClientMsg::Reload => {
@@ -504,14 +580,23 @@ impl SessionRuntime {
                     publish_terminals = true;
                 }
                 ClientMsg::Invoke { intent } => {
-                    if let Err(reason) = self.window_may(self.clients[i].id, &intent.action, &intent.args) {
+                    if let Err(reason) =
+                        self.window_may(self.clients[i].id, &intent.action, &intent.args)
+                    {
                         super::services::refused(&intent.action, reason);
                         continue;
                     }
                     if self.services.borrow().owns(&intent.action) {
-                        let reply = super::services::Reply::Window { action: intent.action.clone() };
-                        self.services.borrow_mut().invoke(self.service_ref_for(i), &Call::local(Some(self.clients[i].id)),
-                            self.config.as_deref(), &intent, reply);
+                        let reply = super::services::Reply::Window {
+                            action: intent.action.clone(),
+                        };
+                        self.services.borrow_mut().invoke(
+                            self.service_ref_for(i),
+                            &Call::local(Some(self.clients[i].id)),
+                            self.config.as_deref(),
+                            &intent,
+                            reply,
+                        );
                         continue;
                     }
                     crate::chrome::window::signals::sync_pane_runtime_state(
@@ -641,9 +726,15 @@ impl SessionRuntime {
                     // Mirror at once from the leader's last known view, so following is not blank
                     // until the leader next moves.
                     if let Some(leader) = target
-                        && let Some(view) =
-                            self.clients.iter().find(|c| c.id == leader).and_then(|c| c.view.borrow().clone())
-                        && self.clients[i].link.send(ServerMsg::FollowView(view)).is_err()
+                        && let Some(view) = self
+                            .clients
+                            .iter()
+                            .find(|c| c.id == leader)
+                            .and_then(|c| c.view.borrow().clone())
+                        && self.clients[i]
+                            .link
+                            .send(ServerMsg::FollowView(view))
+                            .is_err()
                     {
                         detached.push(i);
                     }
@@ -664,19 +755,33 @@ impl SessionRuntime {
                         None => (None, None),
                     };
                     if prev_workspace != Some(workspace) {
-                        self.events.emit(&super::StreamEvent::Workspace { window, workspace });
+                        self.events
+                            .emit(&super::StreamEvent::Workspace { window, workspace });
                     }
                     if prev_pane != Some(pane) {
-                        self.events.emit(&super::StreamEvent::Focus { window, workspace, pane });
+                        self.events.emit(&super::StreamEvent::Focus {
+                            window,
+                            workspace,
+                            pane,
+                        });
                     }
                 }
             }
         }
 
-        let ticks = { let _s = crate::slow_steps::step("session.tick"); self.state.tick(now) };
+        let ticks = {
+            let _s = crate::slow_steps::step("session.tick");
+            self.state.tick(now)
+        };
         detached.extend(self.publish_notifications(&ticks));
-        let poll = { let _s = crate::slow_steps::step("session.poll_backends"); self.state.poll_backends() };
-        { let _s = crate::slow_steps::step("session.collect_feedback"); self.state.collect_feedback(&self.session) };
+        let poll = {
+            let _s = crate::slow_steps::step("session.poll_backends");
+            self.state.poll_backends()
+        };
+        {
+            let _s = crate::slow_steps::step("session.collect_feedback");
+            self.state.collect_feedback(&self.session)
+        };
         let _reconcile = crate::slow_steps::step("session.reconcile_processes");
         let (process_changes, exits) = self.state.reconcile_processes(
             &mut self.session,
@@ -686,7 +791,10 @@ impl SessionRuntime {
         drop(_reconcile);
         detached.extend(self.broadcast(&process_changes));
         detached.extend(self.publish_feedback());
-        { let _s = crate::slow_steps::step("session.refresh_git"); self.state.refresh_git(&mut self.session, now) };
+        {
+            let _s = crate::slow_steps::step("session.refresh_git");
+            self.state.refresh_git(&mut self.session, now)
+        };
         for (pane, code) in exits {
             for (i, client) in self.clients.iter().enumerate() {
                 if matches!(client.attachment.get(), Attachment::Attached)
@@ -726,9 +834,15 @@ impl SessionRuntime {
                 // What changed goes to every window; a window still waiting for its first picture
                 // gets every terminal, changed or not.
                 let fresh = self.live_frame(&owner);
-                let last = fresh.clone().or_else(|| self.published.get(&owner).map(|(_, frame)| frame.clone()));
+                let last = fresh
+                    .clone()
+                    .or_else(|| self.published.get(&owner).map(|(_, frame)| frame.clone()));
                 for (i, client) in self.clients.iter().enumerate() {
-                    let frame = if client.projection_pending.get() { last.as_ref() } else { fresh.as_ref() };
+                    let frame = if client.projection_pending.get() {
+                        last.as_ref()
+                    } else {
+                        fresh.as_ref()
+                    };
                     if let Some(frame) = frame
                         && !detached.contains(&i)
                         && matches!(client.attachment.get(), Attachment::Attached)
@@ -769,8 +883,14 @@ impl SessionRuntime {
 
         // End the initial projection only after every available terminal snapshot was queued.
         for (i, client) in self.clients.iter().enumerate() {
-            if !detached.contains(&i) && client.projection_pending.replace(false)
-                && client.link.send(ServerMsg::ProjectionReady { session_id: self.session.id }).is_err()
+            if !detached.contains(&i)
+                && client.projection_pending.replace(false)
+                && client
+                    .link
+                    .send(ServerMsg::ProjectionReady {
+                        session_id: self.session.id,
+                    })
+                    .is_err()
             {
                 detached.push(i);
             }
@@ -801,7 +921,9 @@ impl SessionRuntime {
                 client.close();
             }
         }
-        for client in &self.clients { client.expire_rpc(now); }
+        for client in &self.clients {
+            client.expire_rpc(now);
+        }
     }
 
     /// Run one server action on the shared state for the window that asked, and say what changed.

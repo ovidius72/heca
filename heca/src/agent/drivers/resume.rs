@@ -59,7 +59,10 @@ fn is_option(word: &OsStr) -> bool {
 
 impl Grammar {
     fn arity(&self, name: &str) -> Option<Arity> {
-        self.options.iter().find(|(option, _)| *option == name).map(|(_, arity)| *arity)
+        self.options
+            .iter()
+            .find(|(option, _)| *option == name)
+            .map(|(_, arity)| *arity)
     }
 
     /// The launch split the way the program itself would split it.
@@ -76,9 +79,15 @@ impl Grammar {
                 continue;
             }
             let text = word.to_string_lossy().into_owned();
-            let (name, attached) = text.split_once('=').map_or((text.as_str(), false), |(name, _)| (name, true));
+            let (name, attached) = text
+                .split_once('=')
+                .map_or((text.as_str(), false), |(name, _)| (name, true));
             let mut words = vec![word.clone()];
-            let arity = if attached { Some(Arity::Flag) } else { self.arity(name) };
+            let arity = if attached {
+                Some(Arity::Flag)
+            } else {
+                self.arity(name)
+            };
             match arity {
                 Some(Arity::Flag) => {}
                 Some(Arity::One) => words.extend(rest.next().cloned()),
@@ -87,9 +96,14 @@ impl Grammar {
                         words.push(value.clone());
                     }
                 }
-                Some(Arity::Optional) | None => words.extend(rest.next_if(|value| !is_option(value)).cloned()),
+                Some(Arity::Optional) | None => {
+                    words.extend(rest.next_if(|value| !is_option(value)).cloned())
+                }
             }
-            parts.push(Part::Option { name: name.to_owned(), words });
+            parts.push(Part::Option {
+                name: name.to_owned(),
+                words,
+            });
         }
         parts
     }
@@ -97,7 +111,11 @@ impl Grammar {
     /// **`original`, continuing the program's conversation `session_id`** — or `None` when it is not
     /// a conversation that can be continued: a non-interactive run, another command, or an id that
     /// could be read as an option.
-    pub(super) fn resumed(&self, original: &ProcessLaunch, session_id: &str) -> Option<ProcessLaunch> {
+    pub(super) fn resumed(
+        &self,
+        original: &ProcessLaunch,
+        session_id: &str,
+    ) -> Option<ProcessLaunch> {
         if session_id.is_empty() || session_id.starts_with('-') {
             return None;
         }
@@ -126,6 +144,10 @@ impl Grammar {
         }
         let mut resumed = vec![OsString::from(self.resume), OsString::from(session_id)];
         resumed.extend(arguments);
-        Some(ProcessLaunch { executable: original.executable.clone(), arguments: resumed, cwd: original.cwd.clone() })
+        Some(ProcessLaunch {
+            executable: original.executable.clone(),
+            arguments: resumed,
+            cwd: original.cwd.clone(),
+        })
     }
 }

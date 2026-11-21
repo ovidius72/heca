@@ -20,13 +20,14 @@ fn tops(root: &dyn Component) -> Vec<f64> {
 /// the letter picker still walk children as they were added.
 #[test]
 fn order_moves_where_a_child_is_laid_out_and_not_where_it_is_in_the_tree() {
-    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().child([
-        block().key("a"),               // 0
-        block().key("b").order(-1),     // first
-        block().key("c").order([0, 5]), // after every plain 0, before 1
-        block().key("d"),               // 0, after `a` — a tie keeps the order added
-        block().key("e").order(1),      // last
-    ]));
+    let mut root: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::column().child([
+            block().key("a"),               // 0
+            block().key("b").order(-1),     // first
+            block().key("c").order([0, 5]), // after every plain 0, before 1
+            block().key("d"),               // 0, after `a` — a tie keeps the order added
+            block().key("e").order(1),      // last
+        ]));
     LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 1000.0));
 
     let t = tops(root.as_ref());
@@ -49,7 +50,8 @@ fn order_moves_where_a_child_is_laid_out_and_not_where_it_is_in_the_tree() {
 /// Nobody says anything → exactly the order added, so every existing tree is unchanged.
 #[test]
 fn a_parent_where_nobody_says_an_order_lays_out_as_added() {
-    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().child([block(), block(), block()]));
+    let mut root: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::column().child([block(), block(), block()]));
     LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 1000.0));
     assert_eq!(tops(root.as_ref()), vec![0.0, 100.0, 200.0]);
 }

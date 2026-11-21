@@ -322,7 +322,8 @@ impl Component for Item {
                         Some(Glow {
                             color: glow_c,
                             radius: cx.theme().colors.active_glow_radius * BAR_GLOW_RADIUS_SCALE,
-                            intensity: cx.theme().colors.active_glow_strength * BAR_GLOW_STRENGTH_SCALE,
+                            intensity: cx.theme().colors.active_glow_strength
+                                * BAR_GLOW_STRENGTH_SCALE,
                         }),
                     );
                 }
@@ -361,14 +362,8 @@ impl Component for Item {
                 return;
             }
             let frame = Rectangle::new(
-                Point::new(
-                    slot.loc.x - border_x,
-                    slot.loc.y - border_y,
-                ),
-                Size::new(
-                    slot.size.w + 2.0 * border_x,
-                    slot.size.h + 2.0 * border_y,
-                ),
+                Point::new(slot.loc.x - border_x, slot.loc.y - border_y),
+                Size::new(slot.size.w + 2.0 * border_x, slot.size.h + 2.0 * border_y),
             );
             cx.rect(
                 frame,

@@ -255,12 +255,21 @@ impl TerminalSnapshot {
     /// copied: a server sending a screen has no use for the snapshot after.
     pub fn into_wire(self) -> (WireSnapshot, Vec<TerminalImage>) {
         let wire = WireSnapshot {
-            cols: self.cols, rows: self.rows, cell_w: self.cell_w, cell_h: self.cell_h,
-            default_fg: self.default_fg, default_bg: self.default_bg, cursor_color: self.cursor_color,
-            cursor: self.cursor, lines: self.lines, viewport_offset: self.viewport_offset,
-            at_bottom: self.at_bottom, scrollback_rows: self.scrollback_rows,
+            cols: self.cols,
+            rows: self.rows,
+            cell_w: self.cell_w,
+            cell_h: self.cell_h,
+            default_fg: self.default_fg,
+            default_bg: self.default_bg,
+            cursor_color: self.cursor_color,
+            cursor: self.cursor,
+            lines: self.lines,
+            viewport_offset: self.viewport_offset,
+            at_bottom: self.at_bottom,
+            scrollback_rows: self.scrollback_rows,
             viewport_top_stable_row: self.viewport_top_stable_row,
-            hyperlinks: self.hyperlinks, graphics: self.graphics,
+            hyperlinks: self.hyperlinks,
+            graphics: self.graphics,
         };
         (wire, self.images)
     }
@@ -321,12 +330,22 @@ impl WireSnapshot {
     /// Reconstruct drawing data with separately transported image resources.
     pub fn into_snapshot(self, images: Vec<TerminalImage>) -> TerminalSnapshot {
         TerminalSnapshot {
-            cols: self.cols, rows: self.rows, cell_w: self.cell_w, cell_h: self.cell_h,
-            default_fg: self.default_fg, default_bg: self.default_bg, cursor_color: self.cursor_color,
-            cursor: self.cursor, lines: self.lines, viewport_offset: self.viewport_offset,
-            at_bottom: self.at_bottom, scrollback_rows: self.scrollback_rows,
+            cols: self.cols,
+            rows: self.rows,
+            cell_w: self.cell_w,
+            cell_h: self.cell_h,
+            default_fg: self.default_fg,
+            default_bg: self.default_bg,
+            cursor_color: self.cursor_color,
+            cursor: self.cursor,
+            lines: self.lines,
+            viewport_offset: self.viewport_offset,
+            at_bottom: self.at_bottom,
+            scrollback_rows: self.scrollback_rows,
             viewport_top_stable_row: self.viewport_top_stable_row,
-            hyperlinks: self.hyperlinks, graphics: self.graphics, images,
+            hyperlinks: self.hyperlinks,
+            graphics: self.graphics,
+            images,
         }
     }
 }

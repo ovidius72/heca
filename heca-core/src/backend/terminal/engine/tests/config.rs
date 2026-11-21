@@ -218,10 +218,19 @@ impl std::io::Write for SlowReader {
 fn keys_text_and_paste_arrive_in_the_order_sent() {
     let arrived = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let writer = SharedWriter::new(Box::new(SlowReader(arrived.clone())));
-    let mut engine = TerminalEngine::new(80, 24, (8.0, 16.0), writer, None,
-        crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
-        .expect("terminal engine should initialize");
-    let key = |c| crate::backend::BackendKeyEvent { code: crate::backend::BackendKeyCode::Char(c), modifiers: Default::default() };
+    let mut engine = TerminalEngine::new(
+        80,
+        24,
+        (8.0, 16.0),
+        writer,
+        None,
+        crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+    )
+    .expect("terminal engine should initialize");
+    let key = |c| crate::backend::BackendKeyEvent {
+        code: crate::backend::BackendKeyCode::Char(c),
+        modifiers: Default::default(),
+    };
     assert!(engine.process_key_event(&key('c')));
     assert!(engine.type_text("ia"));
     assert!(engine.process_key_event(&key('o')));
@@ -234,5 +243,9 @@ fn keys_text_and_paste_arrive_in_the_order_sent() {
     while arrived.lock().unwrap().len() < want.len() && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    assert_eq!(arrived.lock().unwrap().as_slice(), want, "in order, and the paste verbatim");
+    assert_eq!(
+        arrived.lock().unwrap().as_slice(),
+        want,
+        "in order, and the paste verbatim"
+    );
 }

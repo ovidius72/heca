@@ -138,7 +138,10 @@ impl NotificationStore {
     /// ([`NotificationAction::run`]) are released here rather than kept alive in the history.
     pub(super) fn retain_history(&mut self, notification_id: NotificationId) {
         if let Some(notification) = self.notifications.get_mut(&notification_id) {
-            notification.actions.iter_mut().for_each(NotificationAction::release_closure);
+            notification
+                .actions
+                .iter_mut()
+                .for_each(NotificationAction::release_closure);
         }
         if self.history_limit == 0 {
             self.remove_canonical(notification_id);
@@ -175,7 +178,9 @@ impl NotificationStore {
         let (_, update) = self.transition_at(now, |store, now| {
             let previous = store.notifications[&notification_id].placement;
             let mut replacement = draft.build(notification_id, now);
-            replacement.repeats = store.notifications[&notification_id].repeats.saturating_add(1);
+            replacement.repeats = store.notifications[&notification_id]
+                .repeats
+                .saturating_add(1);
             let projection_changed = match previous {
                 NotificationPlacement::Visible { .. } => {
                     replacement.placement = NotificationPlacement::Visible {

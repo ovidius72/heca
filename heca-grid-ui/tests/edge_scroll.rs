@@ -8,7 +8,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// 40 px outside for full speed, 100 px a second at full speed.
-const SPEED: EdgeScroll = EdgeScroll { distance: 40.0, speed: 100.0 };
+const SPEED: EdgeScroll = EdgeScroll {
+    distance: 40.0,
+    speed: 100.0,
+};
 
 fn tree(steps: Rc<RefCell<Vec<(f32, f32)>>>) -> Flex {
     Flex::column().child(
@@ -30,22 +33,54 @@ fn a_held_drag_past_the_edge_scrolls_each_frame_until_the_button_is_up() {
     let mut root = tree(steps.clone());
     LayoutEngine::new().compute(&mut root, Size::new(300.0, 300.0));
 
-    let pressed = heca_grid_ui::dispatch(&mut root, &Event::pointer_pressed(Point::new(50.0, 50.0), PointerButton::Left));
-    assert_eq!(pressed, heca_grid_ui::Handled::No, "the press is not taken: a window gesture can still claim it");
-    assert!(heca_grid_ui::pointer_held(&root), "held: leaving the window must not drop the gesture");
-    assert!(!heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED), "inside the widget nothing scrolls");
+    let pressed = heca_grid_ui::dispatch(
+        &mut root,
+        &Event::pointer_pressed(Point::new(50.0, 50.0), PointerButton::Left),
+    );
+    assert_eq!(
+        pressed,
+        heca_grid_ui::Handled::No,
+        "the press is not taken: a window gesture can still claim it"
+    );
+    assert!(
+        heca_grid_ui::pointer_held(&root),
+        "held: leaving the window must not drop the gesture"
+    );
+    assert!(
+        !heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED),
+        "inside the widget nothing scrolls"
+    );
 
     heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(50.0, -20.0)));
     assert!(heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED));
-    assert!(heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED), "again, with no move in between");
-    assert_eq!(steps.borrow().as_slice(), [(0.0, -5.0), (0.0, -5.0)],
-        "20 px above, half of the 40 px distance: half speed, upwards");
+    assert!(
+        heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED),
+        "again, with no move in between"
+    );
+    assert_eq!(
+        steps.borrow().as_slice(),
+        [(0.0, -5.0), (0.0, -5.0)],
+        "20 px above, half of the 40 px distance: half speed, upwards"
+    );
 
     heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(50.0, 200.0)));
     heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED);
-    assert_eq!(steps.borrow().last(), Some(&(0.0, 10.0)), "far below: full speed, downwards");
+    assert_eq!(
+        steps.borrow().last(),
+        Some(&(0.0, 10.0)),
+        "far below: full speed, downwards"
+    );
 
-    heca_grid_ui::dispatch(&mut root, &Event::pointer_released(Point::new(50.0, 200.0), PointerButton::Left));
-    assert!(!heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED), "the button is up: it stops");
-    assert!(!heca_grid_ui::pointer_held(&root), "and nothing holds the pointer any more");
+    heca_grid_ui::dispatch(
+        &mut root,
+        &Event::pointer_released(Point::new(50.0, 200.0), PointerButton::Left),
+    );
+    assert!(
+        !heca_grid_ui::edge_scroll(&mut root, 0.1, SPEED),
+        "the button is up: it stops"
+    );
+    assert!(
+        !heca_grid_ui::pointer_held(&root),
+        "and nothing holds the pointer any more"
+    );
 }

@@ -9,11 +9,14 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let radius_idx = cx.radius_idx;
     let border_idx = cx.border_idx;
 
-
     Flex::row()
         .gap(16.0)
         .align("center")
-        .child(Label::new("GLOW").color(theme.colors.muted).font_scale(0.85))
+        .child(
+            Label::new("GLOW")
+                .color(theme.colors.muted)
+                .font_scale(0.85),
+        )
         .child(
             Select::new(GlowLevel::ALL.map(|g| g.label()))
                 .selected(glow_idx)
@@ -24,7 +27,11 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                     }
                 }),
         )
-        .child(Label::new("RADIUS").color(theme.colors.muted).font_scale(0.85))
+        .child(
+            Label::new("RADIUS")
+                .color(theme.colors.muted)
+                .font_scale(0.85),
+        )
         .child(
             Select::new(["0", "4", "8", "16"])
                 .selected(radius_idx)
@@ -34,7 +41,11 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                     }
                 }),
         )
-        .child(Label::new("BORDER").color(theme.colors.muted).font_scale(0.85))
+        .child(
+            Label::new("BORDER")
+                .color(theme.colors.muted)
+                .font_scale(0.85),
+        )
         .child(
             Select::new(["0", "1", "2", "3"])
                 .selected(border_idx)

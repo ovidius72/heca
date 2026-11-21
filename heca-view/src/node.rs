@@ -170,7 +170,10 @@ pub struct ViewNode {
     /// Which registered implementation should realize this node.
     pub kind: WidgetId,
     /// Version of this widget's described contract. Omitted legacy descriptions use version 1.
-    #[serde(default = "default_schema_version", skip_serializing_if = "is_default_schema_version")]
+    #[serde(
+        default = "default_schema_version",
+        skip_serializing_if = "is_default_schema_version"
+    )]
     pub schema_version: u32,
     /// This node's **own** styling/content values (`name → PropValue`), ordered for deterministic
     /// (de)serialisation. Per-node: never inherited by children. See the "Props & events by kind"
@@ -245,7 +248,9 @@ impl<N: Into<ViewNode>, const K: usize> IntoNodes for [N; K] {
 }
 
 impl AsRef<ViewNode> for ViewNode {
-    fn as_ref(&self) -> &ViewNode { self }
+    fn as_ref(&self) -> &ViewNode {
+        self
+    }
 }
 
 impl ViewNode {
@@ -485,5 +490,9 @@ fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedIte
     }
 }
 
-fn default_schema_version() -> u32 { 1 }
-fn is_default_schema_version(version: &u32) -> bool { *version == default_schema_version() }
+fn default_schema_version() -> u32 {
+    1
+}
+fn is_default_schema_version(version: &u32) -> bool {
+    *version == default_schema_version()
+}

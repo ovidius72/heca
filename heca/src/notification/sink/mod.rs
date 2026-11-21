@@ -27,11 +27,17 @@ pub(crate) fn collect_during<T>(work: impl FnOnce() -> T) -> (T, Vec<Notificatio
     use std::{cell::RefCell, rc::Rc};
     struct Restore(Option<NotificationSink>);
     impl Drop for Restore {
-        fn drop(&mut self) { NOTIFICATION_SINK.with(|c| *c.borrow_mut() = self.0.take()); }
+        fn drop(&mut self) {
+            NOTIFICATION_SINK.with(|c| *c.borrow_mut() = self.0.take());
+        }
     }
     let drafts = Rc::new(RefCell::new(Vec::new()));
     let pending = drafts.clone();
-    let previous = NOTIFICATION_SINK.with(|c| c.replace(Some(Box::new(move |draft| pending.borrow_mut().push(draft)))));
+    let previous = NOTIFICATION_SINK.with(|c| {
+        c.replace(Some(Box::new(move |draft| {
+            pending.borrow_mut().push(draft)
+        })))
+    });
     let restore = Restore(previous);
     let result = work();
     drop(restore);
@@ -53,13 +59,17 @@ mod collection_tests {
             Notification::info("outer").send();
             let (_, inner) = collect_during(|| Notification::info("inner").send());
             assert_eq!(inner.len(), 1);
-            assert!(std::panic::catch_unwind(|| collect_during(|| panic!("request failed"))).is_err());
+            assert!(
+                std::panic::catch_unwind(|| collect_during(|| panic!("request failed"))).is_err()
+            );
             Notification::info("outer again").send();
         });
         assert_eq!(outer.len(), 2);
         Notification::info("original").send();
         assert_eq!(received.borrow().len(), 1);
-        NOTIFICATION_SINK.with(|sink| { sink.borrow_mut().take(); });
+        NOTIFICATION_SINK.with(|sink| {
+            sink.borrow_mut().take();
+        });
     }
 }
 
@@ -78,7 +88,9 @@ pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationD
     // Over the wire to the server, which owns the queue, timers and dedup. It drops the draft under
     // `mode = "none"` and falls back to the in-app stack under `system` — both are its rules, not
     // the window's — then sends the new projection back for the window to draw.
-    state.client.notify(crate::server::NotificationCommand::Raise(draft));
+    state
+        .client
+        .notify(crate::server::NotificationCommand::Raise(draft));
 }
 
 /// **The raise capability — the one public door.** A native producer and an extension author type

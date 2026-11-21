@@ -25,16 +25,22 @@ fn part_path(node: &dyn Component, area: &str) -> Option<Vec<usize>> {
     if node.base().grid_area.as_deref() == Some(area) {
         return Some(Vec::new());
     }
-    node.base().children.iter().enumerate().find_map(|(i, child)| {
-        let mut path = part_path(child.as_ref(), area)?;
-        path.insert(0, i);
-        Some(path)
-    })
+    node.base()
+        .children
+        .iter()
+        .enumerate()
+        .find_map(|(i, child)| {
+            let mut path = part_path(child.as_ref(), area)?;
+            path.insert(0, i);
+            Some(path)
+        })
 }
 
 /// The path to the first shown widget in `node` (itself included) that takes the keyboard.
 fn first_taker(node: &dyn Component) -> Option<Vec<usize>> {
-    if !node.is_shown() || node.base().disabled.get_untracked() { return None; }
+    if !node.is_shown() || node.base().disabled.get_untracked() {
+        return None;
+    }
     if node.focusable() {
         return Some(Vec::new());
     }

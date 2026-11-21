@@ -12,12 +12,19 @@ use crate::server::{Change, ServerCx};
 /// asker's focused pane is in now, as a split does in other terminals. With no focused pane, or no
 /// folder known for it, the shell starts where a shell starts by default.
 fn with_shell(cx: &mut ServerCx<'_>, added: Option<Added>) -> Vec<Change> {
-    let cwd = cx.asker.focused_pane.and_then(|pane| cx.terminals.cwd_of(pane));
+    let cwd = cx
+        .asker
+        .focused_pane
+        .and_then(|pane| cx.terminals.cwd_of(pane));
     start_shell_in(cx, added, cwd)
 }
 
 /// [`with_shell`], in a folder the caller chose (`None` = where a shell starts by default).
-fn start_shell_in(cx: &mut ServerCx<'_>, added: Option<Added>, cwd: Option<std::path::PathBuf>) -> Vec<Change> {
+fn start_shell_in(
+    cx: &mut ServerCx<'_>,
+    added: Option<Added>,
+    cwd: Option<std::path::PathBuf>,
+) -> Vec<Change> {
     let Some(a) = added else {
         return Vec::new();
     };

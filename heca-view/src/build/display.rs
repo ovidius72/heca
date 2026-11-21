@@ -1,8 +1,7 @@
 use super::Style;
 use crate::{
-    PropValue, ViewEllipsis, ViewFontWeight, ViewGlyph, ViewLetterSpacing, ViewLineHeight, ViewNode,
-    ViewOrientation, ViewSeverity, ViewTextAlign, ViewTextTransform,
-    WidgetId,
+    PropValue, ViewEllipsis, ViewFontWeight, ViewGlyph, ViewLetterSpacing, ViewLineHeight,
+    ViewNode, ViewOrientation, ViewSeverity, ViewTextAlign, ViewTextTransform, WidgetId,
 };
 
 builder_text!(
@@ -36,7 +35,9 @@ builder!(
     StatusDot => StatusDot
 );
 impl StatusDot {
-    pub fn status(self, status: crate::ViewDotStatus) -> Self { self.prop("status", status) }
+    pub fn status(self, status: crate::ViewDotStatus) -> Self {
+        self.prop("status", status)
+    }
 }
 
 builder!(
@@ -96,7 +97,9 @@ builder!(
 
 impl Label {
     /// Preserve spaces and explicit newlines when wrapping (default false).
-    pub fn preserve_whitespace(self, preserve: bool) -> Self { self.prop("preserve_whitespace", preserve) }
+    pub fn preserve_whitespace(self, preserve: bool) -> Self {
+        self.prop("preserve_whitespace", preserve)
+    }
 
     /// How the text sits in its box.
     pub fn align_text(self, a: ViewTextAlign) -> Self {
@@ -244,7 +247,9 @@ impl Alert {
     pub fn severity(self, s: ViewSeverity) -> Self {
         self.prop("variant", s)
     }
-    pub fn variant(self, variant: ViewSeverity) -> Self { self.prop("variant", variant) }
+    pub fn variant(self, variant: ViewSeverity) -> Self {
+        self.prop("variant", variant)
+    }
     /// The supporting line under the title.
     pub fn body(self, text: impl Into<String>) -> Self {
         self.prop("body", PropValue::Text(text.into()))
@@ -253,7 +258,9 @@ impl Alert {
 
 impl Toast {
     /// Countdown presentation; the host owns queue lifetime and removal.
-    pub fn countdown_ms(self, millis: u32) -> Self { self.prop("countdown_ms", i64::from(millis)) }
+    pub fn countdown_ms(self, millis: u32) -> Self {
+        self.prop("countdown_ms", i64::from(millis))
+    }
     /// Show the host-driven countdown bar over this toast's lifetime.
     pub fn progress(self, on: bool) -> Self {
         self.prop("progress", PropValue::Bool(on))
@@ -349,17 +356,37 @@ builder!(
     Image => Image
 );
 impl Image {
-    pub fn load(path: impl Into<String>) -> Self { Self::new().source(path) }
-    pub fn source(self, path: impl Into<String>) -> Self { self.prop("source", path.into()) }
-    pub fn svg(self, svg: impl Into<String>) -> Self { self.prop("svg", svg.into()) }
-    pub fn asset_root(self, root: impl Into<String>) -> Self { self.prop("asset_root", root.into()) }
-    pub fn fit(self, fit: crate::ViewImageFit) -> Self { self.prop("fit", fit) }
-    pub fn color(self, color: impl Into<String>) -> Self { self.prop("color", color.into()) }
-    pub fn alt(self, alt: impl Into<String>) -> Self { self.prop("alt", alt.into()) }
+    pub fn load(path: impl Into<String>) -> Self {
+        Self::new().source(path)
+    }
+    pub fn source(self, path: impl Into<String>) -> Self {
+        self.prop("source", path.into())
+    }
+    pub fn svg(self, svg: impl Into<String>) -> Self {
+        self.prop("svg", svg.into())
+    }
+    pub fn asset_root(self, root: impl Into<String>) -> Self {
+        self.prop("asset_root", root.into())
+    }
+    pub fn fit(self, fit: crate::ViewImageFit) -> Self {
+        self.prop("fit", fit)
+    }
+    pub fn color(self, color: impl Into<String>) -> Self {
+        self.prop("color", color.into())
+    }
+    pub fn alt(self, alt: impl Into<String>) -> Self {
+        self.prop("alt", alt.into())
+    }
     pub fn placeholder(mut self, child: impl Into<ViewNode>) -> Self {
-        self.0.children.push(child.into().prop("slot", PropValue::Text("loading".into()))); self
+        self.0
+            .children
+            .push(child.into().prop("slot", PropValue::Text("loading".into())));
+        self
     }
     pub fn fallback(mut self, child: impl Into<ViewNode>) -> Self {
-        self.0.children.push(child.into().prop("slot", PropValue::Text("error".into()))); self
+        self.0
+            .children
+            .push(child.into().prop("slot", PropValue::Text("error".into())));
+        self
     }
 }

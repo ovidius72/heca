@@ -76,10 +76,14 @@ impl Default for SidebarAppearance {
 /// on heca can add its own (`demo.status`).
 pub fn default_sidebar_pane_lines() -> Vec<String> {
     static LINES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-    LINES.get_or_init(|| {
-        let defaults: toml::Value = toml::from_str(crate::loader::CONFIG_DEFAULT)
-            .expect("embedded config.default.toml must be valid TOML");
-        defaults["appearance"]["sidebar"]["pane_lines"].clone().try_into()
-            .expect("embedded appearance.sidebar.pane_lines must be a list of names")
-    }).clone()
+    LINES
+        .get_or_init(|| {
+            let defaults: toml::Value = toml::from_str(crate::loader::CONFIG_DEFAULT)
+                .expect("embedded config.default.toml must be valid TOML");
+            defaults["appearance"]["sidebar"]["pane_lines"]
+                .clone()
+                .try_into()
+                .expect("embedded appearance.sidebar.pane_lines must be a list of names")
+        })
+        .clone()
 }

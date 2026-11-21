@@ -10,8 +10,12 @@ fn scene(widget: &dyn Component, theme: &Theme) -> Vec<DrawCommand> {
 #[test]
 fn the_default_caption_matches_the_approved_label_and_rule_composition() {
     let mut caption = Caption::new("Build");
-    let mut previous = Flex::row().width("100%").size(WidgetSize::Small)
-        .align("center").gap(Spacing::Xs).padding_x(Spacing::Xs)
+    let mut previous = Flex::row()
+        .width("100%")
+        .size(WidgetSize::Small)
+        .align("center")
+        .gap(Spacing::Xs)
+        .padding_x(Spacing::Xs)
         .child(Label::new("Build").muted(true))
         .child(Separator::horizontal().align_self("center").grow(1.0));
     let mut layout = LayoutEngine::new();
@@ -24,7 +28,8 @@ fn the_default_caption_matches_the_approved_label_and_rule_composition() {
 #[test]
 fn blank_text_removes_padding_rule_and_parent_gap_without_caller_visibility() {
     let text = signal("Build".to_owned());
-    let mut root = Flex::column().gap(Spacing::Sm)
+    let mut root = Flex::column()
+        .gap(Spacing::Sm)
         .child(Caption::new("").with_text_signal(text).padding(Spacing::Lg))
         .child(Label::new("Body"));
     let mut layout = LayoutEngine::new();
@@ -36,7 +41,9 @@ fn blank_text_removes_padding_rule_and_parent_gap_without_caller_visibility() {
         if value.trim().is_empty() {
             assert_eq!(body.loc.y, 0.0);
             assert!(scene(root.base().children[0].as_ref(), &Theme::default()).is_empty());
-        } else { assert!(body.loc.y > 0.0); }
+        } else {
+            assert!(body.loc.y > 0.0);
+        }
     }
 }
 
@@ -44,25 +51,52 @@ fn blank_text_removes_padding_rule_and_parent_gap_without_caller_visibility() {
 fn text_updates_keep_the_same_label_and_rule() {
     let mut caption = Caption::new("Build");
     let text = caption.text_signal();
-    let nodes: Vec<_> = caption.base().children.iter().map(|child| child.base().focus_id()).collect();
+    let nodes: Vec<_> = caption
+        .base()
+        .children
+        .iter()
+        .map(|child| child.base().focus_id())
+        .collect();
     for value in ["Logs", "", "Tests"] {
         text.set(value.to_owned());
         caption.tick(0.0);
         LayoutEngine::new().compute(&mut caption, Size::new(300.0, 100.0));
-        assert_eq!(caption.base().children.iter().map(|child| child.base().focus_id()).collect::<Vec<_>>(), nodes);
-        assert_eq!(caption.text_summary().as_deref(), (!value.is_empty()).then_some(value));
+        assert_eq!(
+            caption
+                .base()
+                .children
+                .iter()
+                .map(|child| child.base().focus_id())
+                .collect::<Vec<_>>(),
+            nodes
+        );
+        assert_eq!(
+            caption.text_summary().as_deref(),
+            (!value.is_empty()).then_some(value)
+        );
     }
 }
 
 #[test]
 fn constructor_and_signal_builders_preserve_common_properties_in_either_order() {
     let text = signal("Release".to_owned());
-    let mut first = Caption::new("Build").size(WidgetSize::Normal).gap("sm").padding_x("md").with_text_signal(text);
-    let mut last = Caption::new("Build").with_text_signal(text).size(WidgetSize::Normal).gap("sm").padding_x("md");
+    let mut first = Caption::new("Build")
+        .size(WidgetSize::Normal)
+        .gap("sm")
+        .padding_x("md")
+        .with_text_signal(text);
+    let mut last = Caption::new("Build")
+        .with_text_signal(text)
+        .size(WidgetSize::Normal)
+        .gap("sm")
+        .padding_x("md");
     let mut layout = LayoutEngine::new();
     layout.compute(&mut first, Size::new(400.0, 100.0));
     layout.compute(&mut last, Size::new(400.0, 100.0));
-    assert_eq!(scene(&first, &Theme::default()), scene(&last, &Theme::default()));
+    assert_eq!(
+        scene(&first, &Theme::default()),
+        scene(&last, &Theme::default())
+    );
     let renamed = first.text("Deploy");
     assert_eq!(text.get_untracked(), "Deploy");
     assert_eq!(renamed.text_summary().as_deref(), Some("Deploy"));
@@ -107,8 +141,12 @@ fn theme_changes_and_content_tone_are_read_live() {
         }
     }
     let caption = caption.content_tone(Tone::Danger);
-    assert!(scene(&caption, &theme).iter().any(|command| matches!(command,
-        DrawCommand::Text(text) if text.color == theme.colors.danger)));
+    assert!(
+        scene(&caption, &theme)
+            .iter()
+            .any(|command| matches!(command,
+        DrawCommand::Text(text) if text.color == theme.colors.danger))
+    );
 }
 
 #[test]
@@ -116,8 +154,13 @@ fn text_and_rule_fit_narrow_layouts_at_different_font_sizes() {
     for font in [12.0, 20.0, 30.0] {
         for width in [90.0, 240.0, 560.0] {
             let mut caption = Caption::new("A long deployment caption that must fit");
-            LayoutEngine::new().base_font(font).compute(&mut caption, Size::new(width, 100.0));
-            let theme = Theme { font_size: font, ..Default::default() };
+            LayoutEngine::new()
+                .base_font(font)
+                .compute(&mut caption, Size::new(width, 100.0));
+            let theme = Theme {
+                font_size: font,
+                ..Default::default()
+            };
             for command in scene(&caption, &theme) {
                 let rect = match command {
                     DrawCommand::Text(text) => {
@@ -128,7 +171,10 @@ fn text_and_rule_fit_narrow_layouts_at_different_font_sizes() {
                     DrawCommand::Rect(rule) => rule.rect,
                     _ => panic!("a caption must not add a field or another frame"),
                 };
-                assert!(rect.loc.x >= 0.0 && rect.loc.x + rect.size.w <= width + 0.01, "{rect:?}");
+                assert!(
+                    rect.loc.x >= 0.0 && rect.loc.x + rect.size.w <= width + 0.01,
+                    "{rect:?}"
+                );
             }
         }
     }

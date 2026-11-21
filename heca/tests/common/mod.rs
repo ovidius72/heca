@@ -51,7 +51,8 @@ pub fn all_sources() -> Vec<(String, String)> {
                 .unwrap_or(&f)
                 .to_string_lossy()
                 .replace('\\', "/");
-            let src = std::fs::read_to_string(&f).unwrap_or_else(|e| panic!("read {}: {e}", f.display()));
+            let src =
+                std::fs::read_to_string(&f).unwrap_or_else(|e| panic!("read {}: {e}", f.display()));
             (label, src)
         })
         .collect()
@@ -73,7 +74,10 @@ pub fn source_defining(definition: &str) -> (String, String) {
         found.len() == 1,
         "expected exactly one file under heca/src containing `{definition}`, found {}: {:?}",
         found.len(),
-        found.iter().map(|(label, _)| label.as_str()).collect::<Vec<_>>(),
+        found
+            .iter()
+            .map(|(label, _)| label.as_str())
+            .collect::<Vec<_>>(),
     );
     found.remove(0)
 }
@@ -112,7 +116,8 @@ pub fn app_lines(src: &str) -> impl Iterator<Item = (usize, &str)> {
                 && lines.get(i + 1).is_some_and(|next| {
                     let next = next.trim();
                     next.ends_with('{')
-                        && (next.starts_with("mod ") || next.starts_with("pub(crate) mod ")
+                        && (next.starts_with("mod ")
+                            || next.starts_with("pub(crate) mod ")
                             || next.starts_with("pub(super) mod "))
                 })
         })

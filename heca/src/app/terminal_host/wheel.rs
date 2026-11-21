@@ -188,7 +188,13 @@ impl WheelRemainders {
     /// **The whole lines `(x, y)` this turn completes**, keeping the rest for the next. A notch is
     /// `per_notch` lines; a trackpad's pixels are counted in cells (`cell` = width, height), a cell
     /// being a notch.
-    fn lines(&mut self, terminal: TerminalId, delta: MouseScrollDelta, cell: (f64, f64), per_notch: f64) -> (i32, i32) {
+    fn lines(
+        &mut self,
+        terminal: TerminalId,
+        delta: MouseScrollDelta,
+        cell: (f64, f64),
+        per_notch: f64,
+    ) -> (i32, i32) {
         let (nx, ny) = match delta {
             MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
             MouseScrollDelta::PixelDelta(p) => (per_cell(p.x, cell.0), per_cell(p.y, cell.1)),
@@ -216,7 +222,12 @@ fn lines_of(state: &mut AppState, terminal: TerminalId, delta: MouseScrollDelta)
         .get_by_id(terminal)
         .map(|b| b.cell_size())
         .unwrap_or(state.terminal_cell_size);
-    state.terminal_wheel.lines(terminal, delta, (f64::from(cell.0), f64::from(cell.1)), per_notch)
+    state.terminal_wheel.lines(
+        terminal,
+        delta,
+        (f64::from(cell.0), f64::from(cell.1)),
+        per_notch,
+    )
 }
 
 /// Lines per notch — `terminal_wheel_scroll_lines`, for the history and the program alike.
@@ -233,8 +244,16 @@ fn wheel_reports((x, y): (i32, i32)) -> Vec<BackendMouseButton> {
         let button = if lines > 0 { positive } else { negative };
         reports.extend(std::iter::repeat_n(button, lines.unsigned_abs() as usize));
     };
-    push(y, BackendMouseButton::WheelUp(1), BackendMouseButton::WheelDown(1));
-    push(x, BackendMouseButton::WheelRight(1), BackendMouseButton::WheelLeft(1));
+    push(
+        y,
+        BackendMouseButton::WheelUp(1),
+        BackendMouseButton::WheelDown(1),
+    );
+    push(
+        x,
+        BackendMouseButton::WheelRight(1),
+        BackendMouseButton::WheelLeft(1),
+    );
     reports
 }
 
@@ -279,7 +298,15 @@ mod tests {
         ));
         // And the pixels, not the lines, decide the unit: 14 px is one 14-px cell.
         let mut left = WheelRemainders::default();
-        assert_eq!(left.lines(TerminalId(1), device_delta((0.0, 0.7), Some((0.0, 14.0))), (8.0, 14.0), 1.0), (0, -1));
+        assert_eq!(
+            left.lines(
+                TerminalId(1),
+                device_delta((0.0, 0.7), Some((0.0, 14.0))),
+                (8.0, 14.0),
+                1.0
+            ),
+            (0, -1)
+        );
     }
 
     /// **A slow trackpad gesture adds up**: turns smaller than a cell scroll nothing until they make
@@ -289,12 +316,32 @@ mod tests {
         let mut left = WheelRemainders::default();
         let (a, b) = (TerminalId(1), TerminalId(2));
         let turn = |px: f32| device_delta((0.0, 0.0), Some((0.0, px)));
-        assert_eq!(left.lines(a, turn(5.0), (8.0, 14.0), 1.0), (0, 0), "under a cell: nothing yet");
-        assert_eq!(left.lines(b, turn(5.0), (8.0, 14.0), 1.0), (0, 0), "another terminal starts from zero");
+        assert_eq!(
+            left.lines(a, turn(5.0), (8.0, 14.0), 1.0),
+            (0, 0),
+            "under a cell: nothing yet"
+        );
+        assert_eq!(
+            left.lines(b, turn(5.0), (8.0, 14.0), 1.0),
+            (0, 0),
+            "another terminal starts from zero"
+        );
         assert_eq!(left.lines(a, turn(5.0), (8.0, 14.0), 1.0), (0, 0));
-        assert_eq!(left.lines(a, turn(5.0), (8.0, 14.0), 1.0), (0, -1), "15 px make one 14-px cell");
-        assert_eq!(left.lines(a, turn(13.0), (8.0, 14.0), 1.0), (0, -1), "the 1 px left over counts");
-        assert_eq!(left.lines(a, device_delta((0.0, 2.0), None), (8.0, 14.0), 1.0), (0, -2), "a wheel's notches are whole");
+        assert_eq!(
+            left.lines(a, turn(5.0), (8.0, 14.0), 1.0),
+            (0, -1),
+            "15 px make one 14-px cell"
+        );
+        assert_eq!(
+            left.lines(a, turn(13.0), (8.0, 14.0), 1.0),
+            (0, -1),
+            "the 1 px left over counts"
+        );
+        assert_eq!(
+            left.lines(a, device_delta((0.0, 2.0), None), (8.0, 14.0), 1.0),
+            (0, -2),
+            "a wheel's notches are whole"
+        );
     }
 
     /// **A program hears as many lines per notch as the history scrolls**: notches × the setting,
@@ -303,15 +350,26 @@ mod tests {
     #[test]
     fn a_program_is_sent_one_report_per_line_of_every_notch() {
         use BackendMouseButton::{WheelDown, WheelLeft, WheelRight, WheelUp};
-        assert_eq!(wheel_reports((0, 6)), vec![WheelUp(1); 6], "six lines, six reports");
+        assert_eq!(
+            wheel_reports((0, 6)),
+            vec![WheelUp(1); 6],
+            "six lines, six reports"
+        );
         assert_eq!(wheel_reports((0, -6)), vec![WheelDown(1); 6]);
         assert_eq!(wheel_reports((2, 0)), vec![WheelRight(1); 2]);
         assert_eq!(wheel_reports((-1, 1)), vec![WheelUp(1), WheelLeft(1)]);
         assert!(wheel_reports((0, 0)).is_empty(), "no line, no report");
         // Two notches of three lines each, counted the way a turn is.
         let mut left = WheelRemainders::default();
-        assert_eq!(wheel_reports(left.lines(TerminalId(1), device_delta((0.0, 2.0), None), (8.0, 14.0), 3.0)),
-            vec![WheelDown(1); 6]);
+        assert_eq!(
+            wheel_reports(left.lines(
+                TerminalId(1),
+                device_delta((0.0, 2.0), None),
+                (8.0, 14.0),
+                3.0
+            )),
+            vec![WheelDown(1); 6]
+        );
     }
 
     /// **A wheel turned slowly scrolls** (macOS reports a tenth of a notch at a time): with six lines
@@ -321,8 +379,16 @@ mod tests {
     fn a_slow_wheel_moves_a_line_after_a_couple_of_small_turns() {
         let mut left = WheelRemainders::default();
         let tenth = || device_delta((0.0, 0.1), None);
-        assert_eq!(left.lines(TerminalId(1), tenth(), (8.0, 14.0), 6.0), (0, 0), "0.6 of a line: not yet");
-        assert_eq!(left.lines(TerminalId(1), tenth(), (8.0, 14.0), 6.0), (0, -1), "1.2 lines: one moves");
+        assert_eq!(
+            left.lines(TerminalId(1), tenth(), (8.0, 14.0), 6.0),
+            (0, 0),
+            "0.6 of a line: not yet"
+        );
+        assert_eq!(
+            left.lines(TerminalId(1), tenth(), (8.0, 14.0), 6.0),
+            (0, -1),
+            "1.2 lines: one moves"
+        );
     }
 
     /// **A modified wheel zooms the terminal it turned over**, whoever owns it — a docked one as

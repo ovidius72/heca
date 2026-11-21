@@ -427,8 +427,22 @@ fn coverage_of(img: &cosmic_text::SwashImage) -> std::borrow::Cow<'_, [u8]> {
     use cosmic_text::SwashContent;
     match img.content {
         SwashContent::Mask => std::borrow::Cow::Borrowed(&img.data),
-        SwashContent::Color => std::borrow::Cow::Owned(img.data.as_chunks::<4>().0.iter().map(|pixel| pixel[3]).collect()),
-        SwashContent::SubpixelMask => std::borrow::Cow::Owned(img.data.as_chunks::<4>().0.iter().map(|pixel| pixel[1]).collect()),
+        SwashContent::Color => std::borrow::Cow::Owned(
+            img.data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pixel| pixel[3])
+                .collect(),
+        ),
+        SwashContent::SubpixelMask => std::borrow::Cow::Owned(
+            img.data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pixel| pixel[1])
+                .collect(),
+        ),
     }
 }
 
@@ -453,7 +467,11 @@ mod coverage_tests {
         let mask = image(SwashContent::Mask, vec![0, 200]);
         assert_eq!(&*coverage_of(&mask), &[0, 200]);
         let colour = image(SwashContent::Color, vec![255, 0, 0, 0, 10, 20, 30, 255]);
-        assert_eq!(&*coverage_of(&colour), &[0, 255], "transparent where the emoji is not");
+        assert_eq!(
+            &*coverage_of(&colour),
+            &[0, 255],
+            "transparent where the emoji is not"
+        );
         let subpixel = image(SwashContent::SubpixelMask, vec![1, 2, 3, 0, 4, 5, 6, 0]);
         assert_eq!(&*coverage_of(&subpixel), &[2, 5]);
     }

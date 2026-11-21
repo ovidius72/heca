@@ -13,12 +13,17 @@ fn a_spec_with_a_lifetime_draws_a_countdown_bar() {
     ]);
     let mut stack = ToastStack::new(items).hovered_signal(hovered);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
-    let scene =
-        common::paint(stack.base().children[0].as_ref(), &heca_grid_ui::Theme::default());
+    let scene = common::paint(
+        stack.base().children[0].as_ref(),
+        &heca_grid_ui::Theme::default(),
+    );
     let bar = scene
         .iter()
         .any(|c| matches!(c, DrawCommand::Rect(r) if (r.rect.size.h - 3.0).abs() < 0.6));
-    assert!(bar, "a spec with a lifetime draws a countdown bar in the stack");
+    assert!(
+        bar,
+        "a spec with a lifetime draws a countdown bar in the stack"
+    );
 }
 
 #[test]
@@ -186,10 +191,16 @@ fn a_held_countdown_resumes_when_the_pointer_leaves_the_card() {
     let card = stack.base().children[0].base().bounds;
 
     // Pointer onto the card → the stack reports it is held.
-    let on = Point::new(card.loc.x + card.size.w / 2.0, card.loc.y + card.size.h / 2.0);
+    let on = Point::new(
+        card.loc.x + card.size.w / 2.0,
+        card.loc.y + card.size.h / 2.0,
+    );
     heca_grid_ui::dispatch(&mut stack, &Event::pointer_moved(on));
     stack.tick(1.0 / 60.0);
-    assert!(hovered.get_untracked(), "a pointer resting on a card holds the stack");
+    assert!(
+        hovered.get_untracked(),
+        "a pointer resting on a card holds the stack"
+    );
 
     // Pointer leaves downward for the content below. Even when the stack never hears the move, the
     // framework has cleared the card's hover, and the tick publishes it.
@@ -198,7 +209,10 @@ fn a_held_countdown_resumes_when_the_pointer_leaves_the_card() {
         &Event::pointer_moved(Point::new(on.x, card.loc.y + card.size.h + 300.0)),
     );
     stack.tick(1.0 / 60.0);
-    assert!(!hovered.get_untracked(), "leaving the card clears the hold so the countdown resumes");
+    assert!(
+        !hovered.get_untracked(),
+        "leaving the card clears the hold so the countdown resumes"
+    );
 }
 
 /// **A widget that changes the shape of its own tree asks the host to lay it out again.**

@@ -3,7 +3,10 @@
 use crate::app_state::AppState;
 use crate::input::{FontZoomStep, WmAction};
 
-pub fn handle_command_palette(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_command_palette(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let (mode, query) = match action {
         WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
         _ => (None, None),
@@ -19,7 +22,10 @@ pub fn handle_command_palette(state: &mut AppState, action: &WmAction) -> crate:
 /// stashed in `pending_context`, because the mode the handler ran in could no longer say a
 /// container had been driving. Chrome focus is not a mode and the transition does not touch it, so
 /// there is nothing left to carry across and the stash is gone.
-pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_open_context_menu(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     // **The focused widget's own menu first**. Generalised, not duplicated: this
     // action stopped meaning "the focused pane's menu" and started meaning "the focused widget's,
     // bubbling outwards" — so `prefix+>`, `Shift+F10` and the Menu key all reach a pane row, a
@@ -47,7 +53,10 @@ pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) -> cra
     Ok(())
 }
 
-pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_reload_config(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     state.pending_reload = Some(crate::app_state::ReloadReason::Explicit);
     Ok(())
 }
@@ -62,7 +71,10 @@ pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) -> crate::
 /// appears and sometimes the key acts immediately" is a rule a user has to learn from surprise.
 /// Nothing mounted, or nothing on screen, means nothing to focus: a no-op.
 /// Forget the past queries every search surface remembers, or just one scope's.
-pub fn handle_clear_search_history(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_clear_search_history(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let scope = match action {
         WmAction::ClearSearchHistory { scope } => scope.clone(),
         _ => None,
@@ -76,7 +88,10 @@ pub fn handle_clear_search_history(state: &mut AppState, action: &WmAction) -> c
 }
 
 /// Forget the usage counts that rank a search surface's list.
-pub fn handle_clear_search_ranking(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_clear_search_ranking(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let scope = match action {
         WmAction::ClearSearchRanking { scope } => scope.clone(),
         _ => None,
@@ -92,31 +107,49 @@ pub fn handle_clear_search_ranking(state: &mut AppState, action: &WmAction) -> c
 /// Dismiss one notification by id — the toast's own × (a real, automatically-pickable
 /// `Button`), or RPC/a plugin naming a specific id. No default keybinding: a keypress cannot
 /// supply an id.
-pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_notification_dismiss_one(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::NotificationDismissOne { notification_id } = action else {
         return Ok(());
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    state.client.notify(crate::server::NotificationCommand::DismissOne(id));
+    state
+        .client
+        .notify(crate::server::NotificationCommand::DismissOne(id));
     Ok(())
 }
 
 /// Dismiss every currently visible notification — no on-screen control; reachable from the
 /// command palette, a keybinding, and RPC.
-pub fn handle_notification_dismiss_all(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
-    state.client.notify(crate::server::NotificationCommand::DismissAll);
+pub fn handle_notification_dismiss_all(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
+    state
+        .client
+        .notify(crate::server::NotificationCommand::DismissAll);
     Ok(())
 }
 
 /// Dismiss the first eligible visible notification in stable toast order.
-pub fn handle_notification_dismiss_last(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
-    state.client.notify(crate::server::NotificationCommand::DismissLast);
+pub fn handle_notification_dismiss_last(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
+    state
+        .client
+        .notify(crate::server::NotificationCommand::DismissLast);
     Ok(())
 }
 
 /// Toggle the scoped picker over the visible toast actions/×, in addition to (never instead
 /// of) their global `prefix+/` letters. `KeyHintGroup::open_when` reads this signal directly.
-pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_notification_pick(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
     let open = state.notification_pick_open.get_untracked();
     state.notification_pick_open.set(!open);
@@ -125,7 +158,10 @@ pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) -> cra
 
 /// List the notification history. The server owns it, so this only asks; the palette's
 /// notifications mode opens when the answer arrives (`AppState::receive_client`).
-pub fn handle_notification_history(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_notification_history(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     state.client.request_notification_history();
     Ok(())
 }
@@ -134,7 +170,10 @@ pub fn handle_notification_history(state: &mut AppState, _action: &WmAction) -> 
 /// notification's real Intent cannot be known until the notification exists — see
 /// chrome::surfaces::notifications) into the notification's real `Intent` and fire it through the
 /// same layer_emitter the mount built, landing on the event loop's next turn.
-pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_notification_action_relay(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::NotificationActionRelay {
         notification_id,
         key,
@@ -158,9 +197,13 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     // **A button made with `NotificationAction::run`** runs its closure where the notification was
     // raised — the server — whichever window it was pressed in.
     if runs {
-        state.client.notify(crate::server::NotificationCommand::Run(id, key.clone()));
+        state
+            .client
+            .notify(crate::server::NotificationCommand::Run(id, key.clone()));
         if dismiss_after {
-            state.client.notify(crate::server::NotificationCommand::DismissOne(id));
+            state
+                .client
+                .notify(crate::server::NotificationCommand::DismissOne(id));
         }
         return Ok(());
     }
@@ -172,7 +215,9 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     );
     emit.fire_intent(intent);
     if dismiss_after {
-        state.client.notify(crate::server::NotificationCommand::DismissOne(id));
+        state
+            .client
+            .notify(crate::server::NotificationCommand::DismissOne(id));
     }
     Ok(())
 }
@@ -196,7 +241,10 @@ pub(crate) fn font_zoom_delta(state: &AppState, step: FontZoomStep) -> f32 {
 }
 
 /// App-wide terminal font zoom — steps every pane's size.
-pub fn handle_app_font_zoom(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_app_font_zoom(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::AppFontZoom { step } = action else {
         return Ok(());
     };

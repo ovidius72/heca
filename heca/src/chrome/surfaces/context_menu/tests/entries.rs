@@ -53,7 +53,10 @@ fn a_destructive_entry_uses_the_same_verb_as_the_action_it_names() {
 #[test]
 fn pane_action_items_include_rename_and_end_in_close() {
     let items = pane_action_items(true);
-    assert_eq!(items[0].id, "paste_clipboard", "Paste first, as in every terminal's menu");
+    assert_eq!(
+        items[0].id, "paste_clipboard",
+        "Paste first, as in every terminal's menu"
+    );
     assert_eq!(items[1].id, "split_horizontal");
     assert!(items.iter().any(|i| i.id == "rename_pane"), "has Rename");
     assert!(

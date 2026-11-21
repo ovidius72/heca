@@ -27,7 +27,9 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
     vec![
         own("cwd", |cx| heca_grid_ui::WidgetModel::new(cwd_line(cx))),
         own("git", |cx| heca_grid_ui::WidgetModel::new(git_line(cx))),
-        own("agent", |cx| heca_grid_ui::WidgetModel::new(super::agent_line::build(cx))),
+        own("agent", |cx| {
+            heca_grid_ui::WidgetModel::new(super::agent_line::build(cx))
+        }),
     ]
 }
 
@@ -36,14 +38,21 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
 /// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
 /// pane_lines`, and nothing else.
 fn cwd_line(cx: &LineCx<'_>) -> crate::components::FolderLine {
-    let line = crate::components::FolderLine::new(cx.theme).size(WidgetSize::Caption).indent(META_INDENT);
+    let line = crate::components::FolderLine::new(cx.theme)
+        .size(WidgetSize::Caption)
+        .indent(META_INDENT);
     let path = line.path_signal();
     let facts = cx.facts.clone();
     create_effect(move |_| {
         // Cut to a home-relative form here, at the binding, so there is one spelling of "where this
         // pane is". No directory is an empty path, which hides the line.
         let cwd = facts().cwd;
-        set_if_changed(path, cwd.as_deref().map(crate::chrome::home_relative_path).unwrap_or_default());
+        set_if_changed(
+            path,
+            cwd.as_deref()
+                .map(crate::chrome::home_relative_path)
+                .unwrap_or_default(),
+        );
     });
     line
 }
@@ -66,12 +75,14 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
         // so it keeps its own width and the branch beside it is what gives way.
         let label = Label::new("").color(color).truncate(Ellipsis::None);
         let text = label.text_signal();
-        let segment = Visibility::new().visible(false).child(Flex::row()
+        let segment = Visibility::new().visible(false).child(
+            Flex::row()
                 .align("center")
                 .gap(Spacing::Xs)
                 .shrink(0.0)
                 .child(Icon::new(glyph).color(color))
-                .child(label));
+                .child(label),
+        );
         let visible = segment.visible_signal();
         (segment, text, visible)
     };
@@ -144,13 +155,15 @@ pub(crate) fn text_line(produce: Rc<ProduceLine>) -> Rc<BuildLine> {
         let text = label.text_signal();
         let icon = Icon::new(Glyph::Circle).color(cx.theme.colors.foreground);
         let glyph = icon.glyph_signal();
-        let row = Visibility::new().visible(false).child(Flex::row()
+        let row = Visibility::new().visible(false).child(
+            Flex::row()
                 .align("center")
                 .size(WidgetSize::Caption)
                 .gap(Spacing::Sm)
                 .padding_x(META_INDENT)
                 .child(icon)
-                .child(label));
+                .child(label),
+        );
         let visible = row.visible_signal();
         let facts = cx.facts.clone();
         let produce = produce.clone();
@@ -196,11 +209,14 @@ mod tests {
         let line = build(&LineCx {
             theme: &theme,
             facts,
-            agent_statuses: signal(Rc::new(heca_config::settings::AgentsConfig::default().statuses)),
+            agent_statuses: signal(Rc::new(
+                heca_config::settings::AgentsConfig::default().statuses,
+            )),
             agent_session_line: signal(Default::default()),
         });
         // Visibility is applied at layout, so each check lays the row out first.
-        let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::column().child(line));
+        let mut root: heca_grid_ui::WidgetModel =
+            heca_grid_ui::WidgetModel::new(Flex::column().child(line));
         let hidden = |root: &mut heca_grid_ui::WidgetModel| {
             heca_grid_ui::LayoutEngine::new()
                 .compute(root.as_mut(), heca_grid_ui::Size::new(300.0, 100.0));
@@ -248,7 +264,9 @@ mod tests {
         let line = git_line(&LineCx {
             theme: &theme,
             facts,
-            agent_statuses: signal(Rc::new(heca_config::settings::AgentsConfig::default().statuses)),
+            agent_statuses: signal(Rc::new(
+                heca_config::settings::AgentsConfig::default().statuses,
+            )),
             agent_session_line: signal(Default::default()),
         });
         // A card about as wide as a sidebar row, narrower than the row's natural width.

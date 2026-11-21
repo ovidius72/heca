@@ -137,6 +137,10 @@ mod scheme_tests {
     /// `detect_row_links` skips a row without a ':' — true only while every scheme has one.
     #[test]
     fn every_scheme_has_the_colon_rows_are_screened_by() {
-        assert!(super::LINK_SCHEMES.iter().all(|scheme| scheme.contains(':')));
+        assert!(
+            super::LINK_SCHEMES
+                .iter()
+                .all(|scheme| scheme.contains(':'))
+        );
     }
 }

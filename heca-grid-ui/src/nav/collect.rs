@@ -123,7 +123,9 @@ mod tests {
         group = group.child(at(Surface::new().key("pane:7"), 10.0, 20.0));
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        root.base_mut().children.push(crate::WidgetModel::new(group));
+        root.base_mut()
+            .children
+            .push(crate::WidgetModel::new(group));
 
         assert_eq!(
             key_at(&root, Point::new(5.0, 15.0)),

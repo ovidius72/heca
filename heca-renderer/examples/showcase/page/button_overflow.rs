@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Surface {
     let theme = cx.theme;
 
-
     Surface::new()
         .background(theme.colors.surface)
         .padding(Spacing::Xs)

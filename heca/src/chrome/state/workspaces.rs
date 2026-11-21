@@ -83,11 +83,11 @@ pub struct WorkspacesContainerState {
 }
 
 impl WorkspacesContainerState {
-    pub(crate) fn set_agent_statuses(
-        &self,
-        statuses: &heca_config::settings::AgentStatuses,
-    ) {
-        if self.agent_statuses.with(|current| current.as_ref() != statuses) {
+    pub(crate) fn set_agent_statuses(&self, statuses: &heca_config::settings::AgentStatuses) {
+        if self
+            .agent_statuses
+            .with(|current| current.as_ref() != statuses)
+        {
             self.agent_statuses.set(std::rc::Rc::new(statuses.clone()));
         }
     }
@@ -218,7 +218,8 @@ impl WorkspacesContainerState {
             return;
         }
         self.selection.active_workspace.set(workspace);
-        self.events.emit(ChromeEvent::WorkspaceFocused { workspace });
+        self.events
+            .emit(ChromeEvent::WorkspaceFocused { workspace });
     }
 
     /// The workspace this window shows, as a value to follow.

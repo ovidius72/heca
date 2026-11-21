@@ -1,7 +1,10 @@
 use super::*;
-use std::time::Duration;
+use crate::server::{
+    ServerState,
+    wire::{ClientLink, ClientMsg, ServerMsg, in_process_waking},
+};
 use heca_core::layout::{LayoutOptions, Session, SessionId};
-use crate::server::{ServerState, wire::{ClientLink, ClientMsg, ServerMsg, in_process_waking}};
+use std::time::Duration;
 
 #[test]
 fn the_owner_loop_survives_a_client_detaching() {
@@ -14,7 +17,9 @@ fn the_owner_loop_survives_a_client_detaching() {
     });
     for _ in 0..2 {
         let (reply_tx, reply_rx) = mpsc::channel();
-        let reply_wake = ServerWaker::new(move || { let _ = reply_tx.send(()); });
+        let reply_wake = ServerWaker::new(move || {
+            let _ = reply_tx.send(());
+        });
         let (client, server) = in_process_waking(handle.waker(), reply_wake);
         handle.connect(server).unwrap();
         client.send(ClientMsg::Attach).unwrap();
@@ -25,7 +30,9 @@ fn the_owner_loop_survives_a_client_detaching() {
                 break;
             }
             assert!(Instant::now() < deadline, "owner did not process attach");
-            reply_rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("reply woke client");
+            reply_rx
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .expect("reply woke client");
         }
         client.send(ClientMsg::Detach).unwrap();
     }
@@ -53,9 +60,12 @@ fn wakeups_coalesce_when_the_inbox_is_full() {
 fn a_server_deadline_wakes_an_otherwise_idle_owner() {
     let (handle, inbox) = channel(ConnectionConfig::default());
     let (reply_tx, reply_rx) = mpsc::channel();
-    let (client, link) = in_process_waking(handle.waker(), ServerWaker::new(move || {
-        let _ = reply_tx.send(());
-    }));
+    let (client, link) = in_process_waking(
+        handle.waker(),
+        ServerWaker::new(move || {
+            let _ = reply_tx.send(());
+        }),
+    );
     handle.connect(link).unwrap();
     client.send(ClientMsg::Attach).unwrap();
     let worker = std::thread::spawn(move || {
@@ -84,10 +94,12 @@ fn a_server_deadline_wakes_an_otherwise_idle_owner() {
     // once the card expired.
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
-        if matches!(client.poll().unwrap(), Some(ServerMsg::Notifications(views)) if views.is_empty()) {
+        if matches!(client.poll().unwrap(), Some(ServerMsg::Notifications(views)) if views.is_empty())
+        {
             break;
         }
-        reply_rx.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        reply_rx
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
             .expect("the notification deadline must wake the owner without client traffic");
     }
     handle.stop().unwrap();
@@ -106,9 +118,7 @@ fn kill_server_ends_the_owner_loop() {
         inbox.run(ServerLoop::new(state, session));
     });
     let (reply_tx, reply_rx) = mpsc::channel();
-    handle
-        .rpc("kill_server".to_string(), reply_tx)
-        .unwrap();
+    handle.rpc("kill_server".to_string(), reply_tx).unwrap();
     assert_eq!(
         reply_rx.recv_timeout(Duration::from_secs(3)).unwrap(),
         "heca: server stopped\n"

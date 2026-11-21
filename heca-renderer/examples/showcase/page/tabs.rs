@@ -1,7 +1,6 @@
 use super::*;
 
 pub(super) fn build(_cx: &DemoCx<'_>) -> Tabs {
-
     let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
     Tabs::empty()
         .tab(

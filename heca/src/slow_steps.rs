@@ -42,16 +42,28 @@ pub(crate) struct Step {
 
 /// **Time a step until the returned value is dropped.** `let _slow = slow_steps::step("server.pump");`
 pub(crate) fn step(name: &'static str) -> Step {
-    Step { name, started: threshold().map(|_| { origin(); Instant::now() }) }
+    Step {
+        name,
+        started: threshold().map(|_| {
+            origin();
+            Instant::now()
+        }),
+    }
 }
 
 impl Drop for Step {
     fn drop(&mut self) {
-        let (Some(started), Some(threshold)) = (self.started, threshold()) else { return };
+        let (Some(started), Some(threshold)) = (self.started, threshold()) else {
+            return;
+        };
         let took = started.elapsed();
         if took >= threshold {
             let at = started.duration_since(origin()).as_secs_f64();
-            eprintln!("[slow] {at:>9.3}s {:>7.1} ms  {}", took.as_secs_f64() * 1000.0, self.name);
+            eprintln!(
+                "[slow] {at:>9.3}s {:>7.1} ms  {}",
+                took.as_secs_f64() * 1000.0,
+                self.name
+            );
         }
     }
 }

@@ -115,19 +115,37 @@ pub(super) struct PtyLaunchOptions<'a> {
 }
 
 impl PtyHandle {
-    pub(super) fn command_launch(&self, command: &str, cwd: Option<&Path>) -> Result<crate::backend::ProcessLaunch, PtyError> {
+    pub(super) fn command_launch(
+        &self,
+        command: &str,
+        cwd: Option<&Path>,
+    ) -> Result<crate::backend::ProcessLaunch, PtyError> {
         process_launch(&command_for_spawned_command(&self.shell, command, cwd), cwd)
     }
 
-    pub(super) fn new_with_process(cols: usize, rows: usize, cell_px: (f32, f32),
-        wake: Option<WakeCallback>, process: &crate::backend::ProcessLaunch) -> Result<Self, PtyError> {
+    pub(super) fn new_with_process(
+        cols: usize,
+        rows: usize,
+        cell_px: (f32, f32),
+        wake: Option<WakeCallback>,
+        process: &crate::backend::ProcessLaunch,
+    ) -> Result<Self, PtyError> {
         check_cwd(process.cwd.as_deref())?;
         let mut command = CommandBuilder::new(&process.executable);
         command.args(&process.arguments);
-        if let Some(cwd) = &process.cwd { command.cwd(cwd); }
-        let pair = native_pty_system().openpty(pty_size(cols, rows, cell_px))
+        if let Some(cwd) = &process.cwd {
+            command.cwd(cwd);
+        }
+        let pair = native_pty_system()
+            .openpty(pty_size(cols, rows, cell_px))
             .map_err(|error| PtyError::new(PtyOperation::OpenPty, error))?;
-        Self::spawn_with_command_builder(pair, process.executable.display().to_string(), command, process.clone(), wake)
+        Self::spawn_with_command_builder(
+            pair,
+            process.executable.display().to_string(),
+            command,
+            process.clone(),
+            wake,
+        )
     }
     pub(super) fn new_with_shell(
         cols: usize,
@@ -143,13 +161,28 @@ impl PtyHandle {
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
-        let shell = options.shell_override
+        let shell = options
+            .shell_override
             .map(str::to_string)
             .unwrap_or_else(default_shell);
-        let mut cmd = command_for_shell(&shell, options.shell_integration, options.env_clear, options.env, options.cwd);
+        let mut cmd = command_for_shell(
+            &shell,
+            options.shell_integration,
+            options.env_clear,
+            options.env,
+            options.cwd,
+        );
         let original = command_for_shell(&shell, None, options.env_clear, options.env, options.cwd);
-        if let Some(agents) = options.agents { cmd.env("HECA_AGENT_BIN", agents.bin()); }
-        Self::spawn_with_command_builder(pair, shell, cmd, process_launch(&original, options.cwd)?, wake_on_output)
+        if let Some(agents) = options.agents {
+            cmd.env("HECA_AGENT_BIN", agents.bin());
+        }
+        Self::spawn_with_command_builder(
+            pair,
+            shell,
+            cmd,
+            process_launch(&original, options.cwd)?,
+            wake_on_output,
+        )
     }
 
     pub(super) fn new_with_command(
@@ -169,13 +202,26 @@ impl PtyHandle {
 
         // An explicit shell wins over `$SHELL`: a caller that needs the same behaviour on every
         // machine cannot have the user's interactive rc in the way.
-        let shell = options.shell_override
+        let shell = options
+            .shell_override
             .map(str::to_string)
             .unwrap_or_else(default_shell);
-        let prepared = options.agents.map(|agents| agent_command(&shell, &agents.bin(), command));
-        let cmd = command_for_spawned_command(&shell, prepared.as_deref().unwrap_or(command), options.cwd);
+        let prepared = options
+            .agents
+            .map(|agents| agent_command(&shell, &agents.bin(), command));
+        let cmd = command_for_spawned_command(
+            &shell,
+            prepared.as_deref().unwrap_or(command),
+            options.cwd,
+        );
         let original = command_for_spawned_command(&shell, command, options.cwd);
-        Self::spawn_with_command_builder(pair, shell, cmd, process_launch(&original, options.cwd)?, wake_on_output)
+        Self::spawn_with_command_builder(
+            pair,
+            shell,
+            cmd,
+            process_launch(&original, options.cwd)?,
+            wake_on_output,
+        )
     }
 
     fn spawn_with_command_builder(
@@ -311,7 +357,9 @@ impl PtyHandle {
         cell_px: (f32, f32),
     ) -> Result<(), PtyError> {
         // A terminal closed after its program ended has nothing left to resize.
-        let Some(master) = &self.master else { return Ok(()) };
+        let Some(master) = &self.master else {
+            return Ok(());
+        };
         master
             .resize(pty_size(cols, rows, cell_px))
             .map_err(|err| PtyError::new(PtyOperation::Resize, err))
@@ -330,12 +378,24 @@ impl PtyHandle {
     }
 }
 
-fn process_launch(command: &CommandBuilder, cwd: Option<&Path>) -> Result<crate::backend::ProcessLaunch, PtyError> {
+fn process_launch(
+    command: &CommandBuilder,
+    cwd: Option<&Path>,
+) -> Result<crate::backend::ProcessLaunch, PtyError> {
     let [executable, arguments @ ..] = command.get_argv().as_slice() else {
-        return Err(PtyError::new(PtyOperation::Spawn, anyhow::anyhow!("missing executable")));
+        return Err(PtyError::new(
+            PtyOperation::Spawn,
+            anyhow::anyhow!("missing executable"),
+        ));
     };
-    let cwd = cwd.map(Path::to_owned).or_else(|| std::env::current_dir().ok());
-    Ok(crate::backend::ProcessLaunch { executable: executable.into(), arguments: arguments.to_vec(), cwd })
+    let cwd = cwd
+        .map(Path::to_owned)
+        .or_else(|| std::env::current_dir().ok());
+    Ok(crate::backend::ProcessLaunch {
+        executable: executable.into(),
+        arguments: arguments.to_vec(),
+        cwd,
+    })
 }
 
 fn command_for_shell(
@@ -377,7 +437,10 @@ fn command_for_shell(
             if LOGIN_SHELL {
                 cmd.arg("-l");
             }
-            cmd.env("OLD_ZDOTDIR", users_zdotdir(std::env::var_os("ZDOTDIR"), std::env::var_os("OLD_ZDOTDIR")));
+            cmd.env(
+                "OLD_ZDOTDIR",
+                users_zdotdir(std::env::var_os("ZDOTDIR"), std::env::var_os("OLD_ZDOTDIR")),
+            );
             cmd.env("ZDOTDIR", &assets.zsh_zdotdir);
         }
         Some(ShellKind::Fish) => {
@@ -524,8 +587,12 @@ fn resolve_shell(shell: Option<String>, fallback: &str) -> String {
 /// shell started inside a heca pane inherits. Handing a heca folder on would make heca's `.zshenv`
 /// read heca's again — itself, until zsh gives up ("job table full or recursion limit exceeded") —
 /// so the folder the outer heca saved in `OLD_ZDOTDIR` is the user's.
-fn users_zdotdir(inherited: Option<std::ffi::OsString>, saved: Option<std::ffi::OsString>) -> std::ffi::OsString {
-    let is_heca = |dir: &std::ffi::OsStr| super::launch::is_heca_zsh_folder(std::path::Path::new(dir));
+fn users_zdotdir(
+    inherited: Option<std::ffi::OsString>,
+    saved: Option<std::ffi::OsString>,
+) -> std::ffi::OsString {
+    let is_heca =
+        |dir: &std::ffi::OsStr| super::launch::is_heca_zsh_folder(std::path::Path::new(dir));
     match inherited {
         Some(dir) if is_heca(&dir) => saved.filter(|saved| !is_heca(saved)).unwrap_or_default(),
         Some(dir) => dir,
@@ -539,7 +606,9 @@ mod tests {
     fn a_shell_started_inside_heca_still_reads_the_users_own_zsh_folder() {
         use std::ffi::OsString;
         let root = tempfile::tempdir().unwrap();
-        let heca = super::super::launch::ShellIntegrationAssets::write_to(root.path()).unwrap().zsh_zdotdir;
+        let heca = super::super::launch::ShellIntegrationAssets::write_to(root.path())
+            .unwrap()
+            .zsh_zdotdir;
         let heca = heca.to_str().unwrap();
         let own = root.path().join("own");
         std::fs::create_dir_all(&own).unwrap();
@@ -550,7 +619,11 @@ mod tests {
         };
         assert_eq!(users(None, None), "");
         assert_eq!(users(Some(own), None), own);
-        assert_eq!(users(Some(heca), Some(own)), own, "inside a heca pane, the folder the outer heca saved");
+        assert_eq!(
+            users(Some(heca), Some(own)),
+            own,
+            "inside a heca pane, the folder the outer heca saved"
+        );
         assert_eq!(users(Some(heca), Some("")), "");
         assert_eq!(users(Some(heca), Some(heca)), "");
     }
@@ -666,7 +739,10 @@ mod tests {
         }
 
         fn argv(cmd: &portable_pty::CommandBuilder) -> Vec<String> {
-            cmd.get_argv().iter().map(|a| a.to_string_lossy().into_owned()).collect()
+            cmd.get_argv()
+                .iter()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect()
         }
 
         /// **On macOS the user's shell is a login shell**, so it reads the login files (Homebrew's
@@ -677,11 +753,20 @@ mod tests {
             let assets = assets();
             for shell in ["/bin/zsh", "/opt/homebrew/bin/fish"] {
                 let cmd = command_for_shell(shell, Some(&assets), false, &[], None);
-                assert_eq!(argv(&cmd).contains(&"-l".to_string()), LOGIN_SHELL, "{shell}: {:?}", argv(&cmd));
+                assert_eq!(
+                    argv(&cmd).contains(&"-l".to_string()),
+                    LOGIN_SHELL,
+                    "{shell}: {:?}",
+                    argv(&cmd)
+                );
             }
             for shell in ["/bin/zsh", "/bin/bash", "/opt/homebrew/bin/fish"] {
                 let bare = command_for_shell(shell, None, false, &[], None);
-                assert_eq!(argv(&bare).contains(&"-l".to_string()), LOGIN_SHELL, "{shell} without integration");
+                assert_eq!(
+                    argv(&bare).contains(&"-l".to_string()),
+                    LOGIN_SHELL,
+                    "{shell} without integration"
+                );
             }
         }
 
@@ -702,7 +787,12 @@ mod tests {
         #[test]
         fn a_command_runs_under_the_same_kind_of_shell() {
             let cmd = super::super::command_for_spawned_command("/bin/zsh", "lazygit", None);
-            assert_eq!(argv(&cmd).contains(&"-l".to_string()), LOGIN_SHELL, "{:?}", argv(&cmd));
+            assert_eq!(
+                argv(&cmd).contains(&"-l".to_string()),
+                LOGIN_SHELL,
+                "{:?}",
+                argv(&cmd)
+            );
             assert!(argv(&cmd).ends_with(&["-ic".to_string(), "lazygit".to_string()]));
         }
     }

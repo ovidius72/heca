@@ -74,9 +74,19 @@ impl SessionRuntime {
 
     /// **May the window `client` run this?** Asked when its message is about to run, so a rule that
     /// changed applies to what was already on its way.
-    pub(super) fn window_may(&self, client: u64, action: &str, args: &crate::chrome::PropMap) -> Result<(), String> {
-        self.services.borrow_mut()
-            .authorize(&Call::local(Some(client)), Some(self.service_ref()), action, args, None)
+    pub(super) fn window_may(
+        &self,
+        client: u64,
+        action: &str,
+        args: &crate::chrome::PropMap,
+    ) -> Result<(), String> {
+        self.services.borrow_mut().authorize(
+            &Call::local(Some(client)),
+            Some(self.service_ref()),
+            action,
+            args,
+            None,
+        )
     }
 
     /// The one way a line becomes an action in this session: parsed against the catalog, checked,
@@ -101,9 +111,13 @@ impl SessionRuntime {
             if dock.is_some() {
                 return Err(crate::rpc::RpcError::NotRunnable(intent.action));
             }
-            self.registry.execute_server_intent(&mut invocation, &intent)
+            self.registry
+                .execute_server_intent(&mut invocation, &intent)
         })();
-        Executed { result, ran: invocation.ran }
+        Executed {
+            result,
+            ran: invocation.ran,
+        }
     }
 }
 

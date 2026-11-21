@@ -30,15 +30,26 @@ fn enter(root: &mut dyn Component) {
 
 #[test]
 fn programmatic_unmount_returns_focus_to_the_underlying_dialog() {
-    let mut root = Flex::column().child(Dialog::new("Session unavailable")
-        .action(Button::secondary("Exit")).default_open(true));
+    let mut root = Flex::column().child(
+        Dialog::new("Session unavailable")
+            .action(Button::secondary("Exit"))
+            .default_open(true),
+    );
     heca_grid_ui::focus::settle_focus(&mut root);
-    root.base_mut().children.push(heca_grid_ui::WidgetModel::new(
-        CommandPalette::new().command(Command::new("Folder", || {})).default_open(true)));
+    root.base_mut()
+        .children
+        .push(heca_grid_ui::WidgetModel::new(
+            CommandPalette::new()
+                .command(Command::new("Folder", || {}))
+                .default_open(true),
+        ));
     heca_grid_ui::focus::settle_focus(&mut root);
     assert!(holds_keyboard(root.base().children[1].as_ref()));
     heca_grid_ui::unmount_child(&mut root, 1).unwrap();
-    assert!(holds_keyboard(root.base().children[0].as_ref()), "RPC removal must return the keyboard before the old surface is dropped");
+    assert!(
+        holds_keyboard(root.base().children[0].as_ref()),
+        "RPC removal must return the keyboard before the old surface is dropped"
+    );
     assert!(heca_grid_ui::unmount_child(&mut root, 9).is_none());
 }
 
@@ -166,10 +177,17 @@ fn confirming_a_modal_returns_focus_before_the_host_can_unmount_it() {
     let opener = heca_grid_ui::keyboard_holder(&ui);
     open.set(true);
     let keymap = heca_grid_ui::Keymap::with_defaults();
-    assert_eq!(keymap.dispatch(GridKey::Enter, Modifiers::default(), |event| {
-        heca_grid_ui::dispatch(&mut ui, event)
-    }), Handled::Yes);
-    assert_eq!(activated.get(), 0, "the opening control does not receive the confirm");
+    assert_eq!(
+        keymap.dispatch(GridKey::Enter, Modifiers::default(), |event| {
+            heca_grid_ui::dispatch(&mut ui, event)
+        }),
+        Handled::Yes
+    );
+    assert_eq!(
+        activated.get(),
+        0,
+        "the opening control does not receive the confirm"
+    );
     ui.base_mut().children.pop();
     assert_eq!(heca_grid_ui::keyboard_holder(&ui), opener);
     enter(&mut ui);

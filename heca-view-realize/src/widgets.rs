@@ -1,31 +1,30 @@
 //! The widgets that take more than props: flex containers, buttons, options, card grids, grids and
 //! toggles.
 
-use heca_grid_ui::{
-    Action, Button, Choice, Component, Flex, Grid, LayoutExt, Row as GridRow, SignalData,
-    Track,
-};
 use heca_grid_ui::widgets::{CardGrid, GridCell};
+use heca_grid_ui::{
+    Action, Button, Choice, Component, Flex, Grid, LayoutExt, Row as GridRow, SignalData, Track,
+};
 use heca_view::{PropValue, ViewEvent, ViewNode, WidgetId};
 
-use crate::{IntentEmitter, RealizeCx, RealizeError, RealizeErrorKind};
 use crate::intents::press_intent;
-use crate::props::{
-    glyph_prop, size_prop, text_of, value_prop, value_string, variant_prop,
-};
+use crate::props::{glyph_prop, size_prop, text_of, value_prop, value_string, variant_prop};
 use crate::style::with_props;
+use crate::{IntentEmitter, RealizeCx, RealizeError, RealizeErrorKind};
 
 /// Realize a container node onto a base [`Flex`] (row or column), applying layout props and
 /// recursively realizing + attaching children.
-pub(crate) fn realize_flex(node: &ViewNode, mut flex: Flex, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+pub(crate) fn realize_flex(
+    node: &ViewNode,
+    mut flex: Flex,
+    cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
     // `gap`, `align` and every other layout property are applied generically by
     // `merge_layout_props` in `realize`, for every kind — not read per-arm here.
     for index in 0..node.children.len() {
         // `child()` takes an `impl Component` and boxes it; a `heca_grid_ui::WidgetModel` isn't
         // `Component`, so push the already-boxed child directly.
-        flex.base_mut()
-            .children
-            .push(cx.child(node, index)?);
+        flex.base_mut().children.push(cx.child(node, index)?);
     }
     Ok(heca_grid_ui::WidgetModel::new(flex))
 }
@@ -42,7 +41,10 @@ pub(crate) fn realize_flex(node: &ViewNode, mut flex: Flex, cx: &mut RealizeCx<'
 /// (`text` → a bold `Label`, plus an optional leading `icon`), which is the common case and what
 /// every existing caller writes. The sugar produces exactly the children the explicit form
 /// would — there is one content model underneath.
-pub(crate) fn realize_button(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+pub(crate) fn realize_button(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
     Ok(heca_grid_ui::WidgetModel::new(button_of(node, cx)?))
 }
 
@@ -81,10 +83,7 @@ pub(crate) fn button_of(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Butto
     // Attach the composed content. (`heca_grid_ui::WidgetModel` isn't `Component`, so it can't go through
     // `Parent::child`; push it the way every other container here does.)
     for index in 0..node.children.len() {
-        button
-            .base_mut()
-            .children
-            .push(cx.child(node, index)?);
+        button.base_mut().children.push(cx.child(node, index)?);
     }
     Ok(button)
 }
@@ -99,7 +98,10 @@ pub(crate) fn button_of(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Butto
 /// the `text` sugar (→ one `Label` child, exactly the child the explicit form would build). The
 /// `value` prop is what the option *means*, independently of what it shows; with no `value`, the
 /// text stands in for it, so `Choice { text: "HIGH" }` behaves like the native `Choice::labeled`.
-pub(crate) fn realize_choice(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Choice, RealizeError> {
+pub(crate) fn realize_choice(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<Choice, RealizeError> {
     let value = value_prop(node)
         .map(|v| value_string(&v))
         .unwrap_or_else(|| text_of(node));
@@ -110,10 +112,7 @@ pub(crate) fn realize_choice(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<
         Choice::new(value)
     };
     for index in 0..node.children.len() {
-        choice
-            .base_mut()
-            .children
-            .push(cx.child(node, index)?);
+        choice.base_mut().children.push(cx.child(node, index)?);
     }
     Ok(choice)
 }
@@ -122,12 +121,17 @@ pub(crate) fn realize_choice(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<
 ///
 /// A child of another kind is **ignored** (with a debug log): `realize` is total for untrusted
 /// input, and the options of an option-picker are options.
-pub(crate) fn realize_options(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Vec<Choice>, RealizeError> {
+pub(crate) fn realize_options(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<Vec<Choice>, RealizeError> {
     let mut options = Vec::new();
     for (index, child) in node.children.iter().enumerate() {
         if child.kind != WidgetId::Choice {
             return Err(RealizeError::new(RealizeErrorKind::InvalidChild {
-                widget: node.kind.clone(), index, detail: "options must be Choice nodes".into(),
+                widget: node.kind.clone(),
+                index,
+                detail: "options must be Choice nodes".into(),
             }));
         }
         options.push(cx.typed_child(node, index, realize_choice)?);
@@ -146,7 +150,10 @@ pub(crate) fn realize_options(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result
 ///
 /// An option with no `value` falls back to `args["index"]`, so a value-less picker still reports
 /// *something* rather than dispatching a bare intent.
-pub(crate) fn option_change(node: &ViewNode, emit: &IntentEmitter) -> Option<impl Fn(Action) + 'static> {
+pub(crate) fn option_change(
+    node: &ViewNode,
+    emit: &IntentEmitter,
+) -> Option<impl Fn(Action) + 'static> {
     let intent = node.intent(ViewEvent::Change)?.clone();
     let values: Vec<Option<PropValue>> = node
         .children
@@ -194,7 +201,10 @@ pub(crate) fn option_change(node: &ViewNode, emit: &IntentEmitter) -> Option<imp
 /// moves its cursor with. A card that is already a `Row` keeps its own behaviour: the wrapper is
 /// transparent to layout and passes focus and drag straight through, the same trade the exposé's
 /// own cards make.
-pub(crate) fn realize_card_grid(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+pub(crate) fn realize_card_grid(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
     let theme = cx.theme;
     let emit = cx.emit;
     use heca_grid_ui::builders::Parent as _;
@@ -259,7 +269,10 @@ pub(crate) fn realize_card_grid(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Resu
     Ok(heca_grid_ui::WidgetModel::new(grid))
 }
 
-pub(crate) fn realize_grid(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+pub(crate) fn realize_grid(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
     let mut grid = Grid::new();
     if let Some(columns) = track_list(node, "columns") {
         grid = grid.template_column(columns);
@@ -374,7 +387,10 @@ pub(crate) fn parse_track(value: &PropValue) -> Track {
 /// A toggle is only meaningful with its **new state**, so the bound intent is dispatched with
 /// `args["expanded"]` set: an author binds one action and learns which way it went, instead of
 /// having to track the group's state on their side.
-pub(crate) fn toggle_change(node: &ViewNode, emit: &IntentEmitter) -> Option<impl Fn(Action) + 'static> {
+pub(crate) fn toggle_change(
+    node: &ViewNode,
+    emit: &IntentEmitter,
+) -> Option<impl Fn(Action) + 'static> {
     let intent = node.intent(ViewEvent::Toggle)?.clone();
     let emit = emit.clone();
     Some(move |action: Action| {

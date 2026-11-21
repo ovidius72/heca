@@ -20,7 +20,11 @@ fn the_background_server_is_default_and_a_second_one_has_no_folder() {
     let error = second.service_folder("demo.one").unwrap_err();
     assert!(error.to_string().contains("already running"), "{error}");
     drop(first);
-    assert_eq!(name(&claim(ServerKind::Background, root.path())), "default", "free again once the first is gone");
+    assert_eq!(
+        name(&claim(ServerKind::Background, root.path())),
+        "default",
+        "free again once the first is gone"
+    );
 }
 
 /// **Standalone servers take the lowest free slot, and a freed slot is the next one taken.**
@@ -30,11 +34,20 @@ fn standalone_servers_take_the_lowest_free_slot() {
     let first = claim(ServerKind::Standalone, root.path());
     let second = claim(ServerKind::Standalone, root.path());
     let third = claim(ServerKind::Standalone, root.path());
-    assert_eq!([name(&first), name(&second), name(&third)], ["standalone-1", "standalone-2", "standalone-3"]);
+    assert_eq!(
+        [name(&first), name(&second), name(&third)],
+        ["standalone-1", "standalone-2", "standalone-3"]
+    );
     drop(second);
-    assert_eq!(name(&claim(ServerKind::Standalone, root.path())), "standalone-2");
+    assert_eq!(
+        name(&claim(ServerKind::Standalone, root.path())),
+        "standalone-2"
+    );
     drop(first);
-    assert_eq!(name(&claim(ServerKind::Standalone, root.path())), "standalone-1");
+    assert_eq!(
+        name(&claim(ServerKind::Standalone, root.path())),
+        "standalone-1"
+    );
 }
 
 /// **The background server and the standalone ones never take each other's name.**
@@ -43,7 +56,10 @@ fn the_kinds_do_not_collide() {
     let root = tempfile::tempdir().unwrap();
     let background = claim(ServerKind::Background, root.path());
     let standalone = claim(ServerKind::Standalone, root.path());
-    assert_eq!((name(&background), name(&standalone)), ("default".into(), "standalone-1".into()));
+    assert_eq!(
+        (name(&background), name(&standalone)),
+        ("default".into(), "standalone-1".into())
+    );
 }
 
 /// **A service's folder is made owner-only, once per service, and is the same path every time.**

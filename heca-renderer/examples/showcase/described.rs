@@ -1,5 +1,5 @@
-use heca_view::build::{Parent as _, Style as _};
 use super::*;
+use heca_view::build::{Parent as _, Style as _};
 
 pub(super) fn described_tree() -> build::Panel {
     // Written through the typed builders rather than as a bag of properties. The
@@ -75,7 +75,6 @@ pub(super) fn described_tree() -> build::Panel {
                         .on_press(Intent::new("showcase.split")),
                 ),
         )
-
 }
 
 /// The same four widgets built by hand, to compare against [`described_tree`] with the eye.
@@ -141,7 +140,9 @@ pub(super) fn described_vs_native(theme: &Theme) -> Flex {
     let described = realize(&described_tree(), theme, &emit, &mut forms)
         .expect("the compiled showcase fixture must match the library registry");
 
-    Flex::row().gap(28.0).align("start")
+    Flex::row()
+        .gap(28.0)
+        .align("start")
         .child(described)
         .child(native_twin(theme))
 }

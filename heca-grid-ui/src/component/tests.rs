@@ -6,7 +6,9 @@ use super::*;
 fn mark_needs_paint_sets_the_flag_and_requests_a_frame() {
     let frames = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let f = frames.clone();
-    install_frame_request(move || { f.fetch_add(1, std::sync::atomic::Ordering::Relaxed); });
+    install_frame_request(move || {
+        f.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    });
 
     let base = Base::new();
     assert!(base.needs_paint(), "a fresh widget needs its first paint");

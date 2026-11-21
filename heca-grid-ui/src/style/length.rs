@@ -45,7 +45,9 @@ pub enum Length {
 impl crate::prop::PropName for Length {
     // CSS lengths are an open string value rather than a finite list of enum names.
     const VARIANT_NAMES: &'static [&'static str] = &[];
-    fn from_prop_name(name: &str) -> Option<Self> { name.parse().ok() }
+    fn from_prop_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
 }
 
 impl From<f32> for Length {
@@ -96,7 +98,9 @@ impl std::str::FromStr for Length {
                 .map_err(|_| LengthParseError);
         }
         if let Some(em) = t.strip_suffix("em") {
-            return em.trim().parse::<f32>()
+            return em
+                .trim()
+                .parse::<f32>()
                 .map(Length::Em)
                 .map_err(|_| LengthParseError);
         }
@@ -355,11 +359,14 @@ mod length_spellings {
             assert_eq!(s.margin.left, length(0.5 * font));
             let placed = Layout {
                 placement: Some(Placement {
-                    left: Length::from("1em"), top: Length::from("2em"),
-                    width: Length::from("7em"), height: Length::Auto,
+                    left: Length::from("1em"),
+                    top: Length::from("2em"),
+                    width: Length::from("7em"),
+                    height: Length::Auto,
                 }),
                 ..authored
-            }.to_taffy(font);
+            }
+            .to_taffy(font);
             assert_eq!(placed.inset.left, length(font));
             assert_eq!(placed.inset.top, length(2.0 * font));
             assert_eq!(placed.size.width, length(7.0 * font));

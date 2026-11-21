@@ -48,7 +48,10 @@ impl SessionStore {
     /// The store for the server `identity`, or `None` when sessions are not kept: the setting is
     /// off (a file left from before is removed, so it can never bring back what was deleted since),
     /// or the server has no folder of its own to keep one in.
-    pub(crate) fn open(identity: &ServerIdentity, settings: &heca_config::settings::SettingsConfig) -> Option<Self> {
+    pub(crate) fn open(
+        identity: &ServerIdentity,
+        settings: &heca_config::settings::SettingsConfig,
+    ) -> Option<Self> {
         let path = match identity.own_file("sessions.json") {
             Ok(path) => path,
             Err(why) => {
@@ -80,11 +83,22 @@ impl SessionStore {
     /// all — not JSON, or a version this build does not know — is no sessions and one problem, and
     /// is moved aside so the next write cannot destroy what a newer heca left there.
     pub(crate) fn load(&mut self) -> Loaded {
-        let empty = |problems| Loaded { saved: Saved { next_session: 1, ..Saved::default() }, problems };
+        let empty = |problems| Loaded {
+            saved: Saved {
+                next_session: 1,
+                ..Saved::default()
+            },
+            problems,
+        };
         let text = match std::fs::read_to_string(&self.path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return empty(Vec::new()),
-            Err(error) => return empty(vec![format!("{} cannot be read ({error})", self.path.display())]),
+            Err(error) => {
+                return empty(vec![format!(
+                    "{} cannot be read ({error})",
+                    self.path.display()
+                )]);
+            }
         };
         match Saved::decode(&text) {
             Ok((saved, problems)) => {
@@ -139,7 +153,10 @@ impl SessionStore {
             }
             Err(error) => {
                 if !std::mem::replace(&mut self.write_failed, true) {
-                    eprintln!("[heca] could not save sessions to {}: {error}", self.path.display());
+                    eprintln!(
+                        "[heca] could not save sessions to {}: {error}",
+                        self.path.display()
+                    );
                 }
             }
         }
@@ -148,7 +165,10 @@ impl SessionStore {
 
 /// Where a file nobody can read is kept: beside it, with `.unreadable` added.
 fn aside(path: &Path) -> PathBuf {
-    let mut name = path.file_name().map(std::ffi::OsStr::to_owned).unwrap_or_default();
+    let mut name = path
+        .file_name()
+        .map(std::ffi::OsStr::to_owned)
+        .unwrap_or_default();
     name.push(".unreadable");
     path.with_file_name(name)
 }

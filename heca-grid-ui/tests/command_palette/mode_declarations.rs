@@ -6,15 +6,21 @@ use std::rc::Rc;
 fn palette(ran: Rc<Cell<&'static str>>) -> CommandPalette {
     let (command, pane, workspace) = (ran.clone(), ran.clone(), ran);
     CommandPalette::new()
-        .mode_with_commands(':', "command", [
-            Command::new("Close", move || command.set("command")),
-        ])
-        .mode_with_commands('@', "pane", [
-            Command::new("nvim", move || pane.set("pane")),
-        ])
-        .mode_with_commands('$', "workspace", [
-            Command::new("Editing", move || workspace.set("workspace")),
-        ])
+        .mode_with_commands(
+            ':',
+            "command",
+            [Command::new("Close", move || command.set("command"))],
+        )
+        .mode_with_commands(
+            '@',
+            "pane",
+            [Command::new("nvim", move || pane.set("pane"))],
+        )
+        .mode_with_commands(
+            '$',
+            "workspace",
+            [Command::new("Editing", move || workspace.set("workspace"))],
+        )
 }
 
 #[test]
@@ -30,7 +36,9 @@ fn named_prefill_uses_the_declared_modes_and_preserves_fallbacks() {
         (Some("unknown"), "$ed", "workspace"),
     ] {
         let ran = Rc::new(Cell::new(""));
-        let mut p = palette(ran.clone()).query_in(mode, query).default_open(true);
+        let mut p = palette(ran.clone())
+            .query_in(mode, query)
+            .default_open(true);
         heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
         assert_eq!(ran.get(), expected, "mode={mode:?}, query={query:?}");
     }
@@ -41,10 +49,14 @@ fn one_custom_mode_declaration_serves_typed_and_named_queries() {
     for named in [false, true] {
         let ran = Rc::new(Cell::new(""));
         let chosen = ran.clone();
-        let p = palette(ran.clone()).mode_with_commands('!', "custom", [
-            // An existing row annotation is replaced by the containing mode.
-            Command::new("Report", move || chosen.set("custom")).mode("pane"),
-        ]);
+        let p = palette(ran.clone()).mode_with_commands(
+            '!',
+            "custom",
+            [
+                // An existing row annotation is replaced by the containing mode.
+                Command::new("Report", move || chosen.set("custom")).mode("pane"),
+            ],
+        );
         let mut p = if named {
             p.query_in(Some("custom"), "rep").default_open(true)
         } else {
@@ -70,7 +82,11 @@ fn named_queries_keep_the_existing_search_scope_names() {
             .search(SearchModel::new("command", store.clone()))
             .mode_with_commands(':', "command", [Command::new("Close", || {}).id("close")])
             .mode_with_commands('@', "pane", [Command::new("nvim", || {}).id("nvim")])
-            .mode_with_commands('$', "workspace", [Command::new("Editing", || {}).id("editing")])
+            .mode_with_commands(
+                '$',
+                "workspace",
+                [Command::new("Editing", || {}).id("editing")],
+            )
             .query_in(Some(scope), query)
             .default_open(true);
         heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
@@ -88,7 +104,11 @@ fn named_prefill_can_precede_its_mode_declaration() {
     let mut p = palette(ran.clone())
         .query_in(Some("custom"), "rep")
         .default_open(true)
-        .mode_with_commands('!', "custom", [Command::new("Report", move || chosen.set("custom"))]);
+        .mode_with_commands(
+            '!',
+            "custom",
+            [Command::new("Report", move || chosen.set("custom"))],
+        );
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(ran.get(), "custom");
 }

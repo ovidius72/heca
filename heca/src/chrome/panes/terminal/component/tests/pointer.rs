@@ -24,8 +24,10 @@ fn the_wheel_says_which_cell_it_turned_over() {
         Handled::Yes
     );
     let said = pointer_input(&said);
-    let [TerminalInput::Wheel { x, y, cell, .. }, TerminalInput::Wheel { pixels, .. }] =
-        said.as_slice()
+    let [
+        TerminalInput::Wheel { x, y, cell, .. },
+        TerminalInput::Wheel { pixels, .. },
+    ] = said.as_slice()
     else {
         panic!("two wheel messages, got {said:?}");
     };
@@ -38,7 +40,11 @@ fn the_wheel_says_which_cell_it_turned_over() {
 /// A terminal nobody has bound lets the wheel carry on outward, rather than swallowing it.
 #[test]
 fn an_unbound_terminal_leaves_the_wheel_alone() {
-    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(Terminal::unbound()), 300.0, 200.0);
+    let mut root = laid_out_in(
+        heca_grid_ui::WidgetModel::new(Terminal::unbound()),
+        300.0,
+        200.0,
+    );
     let ev = Event::wheel(heca_grid_ui::Point::new(5.0, 5.0), 0.0, 1.0);
     assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &ev), Handled::No);
 }
@@ -183,28 +189,67 @@ fn a_drag_past_the_edge_scrolls_and_names_the_edge_cell() {
     t.show(&scrolled(0));
     let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let _ = painted(root.as_ref());
-    let speed = heca_grid_ui::EdgeScroll { distance: 30.0, speed: 60.0 };
-    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_pressed(Point::new(45.0, 61.0), PointerButton::Left));
-    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_moved(Point::new(45.0, -30.0)));
+    let speed = heca_grid_ui::EdgeScroll {
+        distance: 30.0,
+        speed: 60.0,
+    };
+    heca_grid_ui::dispatch(
+        root.as_mut(),
+        &Event::pointer_pressed(Point::new(45.0, 61.0), PointerButton::Left),
+    );
+    heca_grid_ui::dispatch(
+        root.as_mut(),
+        &Event::pointer_moved(Point::new(45.0, -30.0)),
+    );
     said.borrow_mut().clear();
-    assert!(heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed), "above the terminal, it scrolls");
+    assert!(
+        heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed),
+        "above the terminal, it scrolls"
+    );
     let emitted = pointer_input(&said);
-    let [TerminalInput::EdgeScroll { lines, cell: Some(cell), .. }] = emitted.as_slice() else {
+    let [
+        TerminalInput::EdgeScroll {
+            lines,
+            cell: Some(cell),
+            ..
+        },
+    ] = emitted.as_slice()
+    else {
         panic!("one edge scroll, got {emitted:?}");
     };
     assert!(*lines < 0, "above: back into the history");
-    assert_eq!((cell.row, cell.col), (0, 4), "the top row, under the pointer's column");
+    assert_eq!(
+        (cell.row, cell.col),
+        (0, 4),
+        "the top row, under the pointer's column"
+    );
 
-    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_moved(Point::new(45.0, 400.0)));
+    heca_grid_ui::dispatch(
+        root.as_mut(),
+        &Event::pointer_moved(Point::new(45.0, 400.0)),
+    );
     said.borrow_mut().clear();
     heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed);
     let emitted = pointer_input(&said);
-    let [TerminalInput::EdgeScroll { lines, cell: Some(cell), .. }] = emitted.as_slice() else {
+    let [
+        TerminalInput::EdgeScroll {
+            lines,
+            cell: Some(cell),
+            ..
+        },
+    ] = emitted.as_slice()
+    else {
         panic!("one edge scroll, got {emitted:?}");
     };
     assert!(*lines > 0, "below: towards the live bottom");
     assert!(cell.row > 0, "the bottom row");
 
-    heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_released(Point::new(45.0, 400.0), PointerButton::Left));
-    assert!(!heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed), "the button is up: it stops");
+    heca_grid_ui::dispatch(
+        root.as_mut(),
+        &Event::pointer_released(Point::new(45.0, 400.0), PointerButton::Left),
+    );
+    assert!(
+        !heca_grid_ui::edge_scroll(root.as_mut(), 1.0, speed),
+        "the button is up: it stops"
+    );
 }

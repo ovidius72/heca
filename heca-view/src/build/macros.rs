@@ -33,7 +33,9 @@ macro_rules! builder_impls {
         }
 
         impl AsRef<ViewNode> for $name {
-            fn as_ref(&self) -> &ViewNode { &self.0 }
+            fn as_ref(&self) -> &ViewNode {
+                &self.0
+            }
         }
     };
 }

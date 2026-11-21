@@ -431,7 +431,9 @@ impl Component for ToastStack {
         &mut self.base
     }
 
-    fn remeasure(&mut self) { self.reconcile(); }
+    fn remeasure(&mut self) {
+        self.reconcile();
+    }
 
     /// Overlay-active while it has cards, so a host gives it input first — and passes everything
     /// through that misses them.

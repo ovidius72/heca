@@ -134,7 +134,8 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
         }
         fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
             let (parts, order) = (self.1, self.2);
-            Contribution::Container(ContainerContribution::new(self,
+            Contribution::Container(ContainerContribution::new(
+                self,
                 move |_: &ChromeCtx<'_>, _: &mut BuildCx<'_>| {
                     // A body far taller than any part, so only `.flex` can explain the split.
                     let mut body = Flex::column().flex(parts);
@@ -152,8 +153,14 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
 
     let chrome = SharedChromeState::new(280.0, 260.0);
     let mut host = super::ChromeHost::new(chrome.events());
-    host.register(super::RegionId::LeftSidebar, Box::new(Sized("big", 3.0, None)));
-    host.register(super::RegionId::LeftSidebar, Box::new(Sized("small", 1.0, None)));
+    host.register(
+        super::RegionId::LeftSidebar,
+        Box::new(Sized("big", 3.0, None)),
+    );
+    host.register(
+        super::RegionId::LeftSidebar,
+        Box::new(Sized("small", 1.0, None)),
+    );
     let theme = GuiTheme::default();
     let emit = ChromeIntentEmitter::of(
         crate::app::interaction::InteractionSource::Keyboard,
@@ -202,8 +209,14 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
     // **And where it sits, said the same way**: the dock added second asks for `.order(-1)` and
     // comes first, with the rule still between the two rather than above both.
     let mut host = super::ChromeHost::new(chrome.events());
-    host.register(super::RegionId::LeftSidebar, Box::new(Sized("big", 3.0, None)));
-    host.register(super::RegionId::LeftSidebar, Box::new(Sized("small", 1.0, Some((-1).into()))));
+    host.register(
+        super::RegionId::LeftSidebar,
+        Box::new(Sized("big", 3.0, None)),
+    );
+    host.register(
+        super::RegionId::LeftSidebar,
+        Box::new(Sized("small", 1.0, Some((-1).into()))),
+    );
     let body = super::build_region_content(
         &host,
         super::RegionId::LeftSidebar,

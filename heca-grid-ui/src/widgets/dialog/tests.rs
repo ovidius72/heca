@@ -140,8 +140,7 @@ fn clicking_panel_body_keeps_button_focus() {
     let panel = d.panel_bounds();
     let body = Point::new(panel.loc.x + panel.size.w * 0.5, panel.loc.y + 2.0);
     assert!(panel.contains(body), "test point is inside the panel body");
-    let _ =
-        crate::component::dispatch(&mut d, &Event::pointer_pressed(body, PointerButton::Left));
+    let _ = crate::component::dispatch(&mut d, &Event::pointer_pressed(body, PointerButton::Left));
 
     assert_eq!(
         focused_buttons(&d),
@@ -365,8 +364,12 @@ fn nested_and_multiple_children_stay_between_the_title_and_actions() {
         let mut dialog = Dialog::new("Question")
             .panel_size(crate::Length::Percent(0.8), crate::Length::Percent(0.8))
             .action(Button::new("OK"))
-            .child(Grid::new().template_row("auto auto")
-                .child(Label::new("First")).child(Label::new("Second")))
+            .child(
+                Grid::new()
+                    .template_row("auto auto")
+                    .child(Label::new("First"))
+                    .child(Label::new("Second")),
+            )
             .child(Flex::column().child([Label::new("Third"), Label::new("Fourth")]))
             .default_open(true);
         crate::LayoutEngine::new().compute(&mut dialog, Size::new(width, height));
@@ -376,19 +379,34 @@ fn nested_and_multiple_children_stay_between_the_title_and_actions() {
         let actions = dialog.part_mut(ACTIONS_AREA).unwrap().base().bounds;
         assert!(body.loc.y + body.size.h <= actions.loc.y + 0.01);
         assert!(actions.loc.y + actions.size.h <= panel.loc.y + panel.size.h + 0.01);
-        assert!(body.loc.x >= panel.loc.x && body.loc.x + body.size.w <= panel.loc.x + panel.size.w);
+        assert!(
+            body.loc.x >= panel.loc.x && body.loc.x + body.size.w <= panel.loc.x + panel.size.w
+        );
         let panel_base = dialog.base.children[0].base().children[0].base();
         let inner_width = panel.size.w
             - panel_base.style.layout.pad_left(panel_base.font) as f64
             - panel_base.style.layout.pad_right(panel_base.font) as f64;
-        assert!((body.size.w - inner_width).abs() < 0.01,
-            "the body fills the panel width rather than hugging its text");
-        assert!((actions.size.w - inner_width).abs() < 0.01,
-            "the action row can align its buttons against the panel's right edge");
+        assert!(
+            (body.size.w - inner_width).abs() < 0.01,
+            "the body fills the panel width rather than hugging its text"
+        );
+        assert!(
+            (actions.size.w - inner_width).abs() < 0.01,
+            "the action row can align its buttons against the panel's right edge"
+        );
         // Adding unrelated named areas inside a body cannot shadow the panel's own parts.
-        let nested = Flex::column().area(ACTIONS_AREA).child(Label::new("Not an action"));
+        let nested = Flex::column()
+            .area(ACTIONS_AREA)
+            .child(Label::new("Not an action"));
         let dialog = Parent::child(dialog, nested);
-        assert_eq!(crate::component::area(&dialog, LAYOUT_AREA).unwrap().base().children.len(), 3);
+        assert_eq!(
+            crate::component::area(&dialog, LAYOUT_AREA)
+                .unwrap()
+                .base()
+                .children
+                .len(),
+            3
+        );
     }
 }
 
@@ -397,15 +415,17 @@ fn missing_parts_leave_no_header_or_action_gap() {
     use crate::builders::Parent;
     use crate::widgets::Flex;
 
-    let mut dialog = Parent::child(Dialog::new(""), [Flex::column().height(30.0)])
-        .default_open(true);
+    let mut dialog =
+        Parent::child(Dialog::new(""), [Flex::column().height(30.0)]).default_open(true);
     crate::LayoutEngine::new().compute(&mut dialog, Size::new(600.0, 400.0));
     let panel = dialog.panel_bounds();
     let body = dialog.part_mut(BODY_AREA).unwrap().base().bounds;
     let panel_base = dialog.base.children[0].base().children[0].base();
     let padding = panel_base.style.layout.pad_top(panel_base.font) as f64;
-    assert!((panel.size.h - body.size.h - padding * 2.0).abs() < 0.01,
-        "only body and padding remain, without empty header/action tracks or gaps");
+    assert!(
+        (panel.size.h - body.size.h - padding * 2.0).abs() < 0.01,
+        "only body and padding remain, without empty header/action tracks or gaps"
+    );
 }
 
 #[test]
@@ -422,8 +442,10 @@ fn resizing_a_panel_gives_extra_height_to_its_body() {
         let title = dialog.part_mut(TITLE_AREA).unwrap().base().bounds.size.h;
         let actions = dialog.part_mut(ACTIONS_AREA).unwrap().base().bounds.size.h;
         if let Some((old_height, old_body, old_title, old_actions)) = previous {
-            assert!((body - old_body - (height - old_height) as f64).abs() < 0.01,
-                "the body receives the added space, rather than stretching title/actions");
+            assert!(
+                (body - old_body - (height - old_height) as f64).abs() < 0.01,
+                "the body receives the added space, rather than stretching title/actions"
+            );
             assert_eq!(title, old_title);
             assert_eq!(actions, old_actions);
         }

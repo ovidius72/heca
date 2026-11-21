@@ -429,12 +429,28 @@ mod tests {
             revision: 1,
             status: "done".into(),
         };
-        assert_eq!((feedback.pane(), feedback.feedback()), (Some(PaneId(4)), Some("done")));
+        assert_eq!(
+            (feedback.pane(), feedback.feedback()),
+            (Some(PaneId(4)), Some("done"))
+        );
         assert_eq!(feedback.agent(), None);
 
-        let left = ChromeEvent::PaneAgentChanged { pane: PaneId(3), previous: None, agent: None };
-        assert_eq!(left.agent(), None, "the agent left the foreground: no report");
-        let other = ChromeEvent::HintLettersChanged { letters: Vec::new() };
-        assert_eq!((other.pane(), other.agent(), other.feedback()), (None, None, None));
+        let left = ChromeEvent::PaneAgentChanged {
+            pane: PaneId(3),
+            previous: None,
+            agent: None,
+        };
+        assert_eq!(
+            left.agent(),
+            None,
+            "the agent left the foreground: no report"
+        );
+        let other = ChromeEvent::HintLettersChanged {
+            letters: Vec::new(),
+        };
+        assert_eq!(
+            (other.pane(), other.agent(), other.feedback()),
+            (None, None, None)
+        );
     }
 }

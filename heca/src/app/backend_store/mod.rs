@@ -176,7 +176,10 @@ impl BackendStore {
     /// before heca does, besides [`kill`](Self::kill).
     pub fn kill_for_pane(&mut self, pane: PaneId) -> bool {
         match self.by_owner.remove(&TerminalOwner::Pane(pane)) {
-            Some(id) => { self.custom_titles.remove(&id); self.processes.remove(&id).is_some() },
+            Some(id) => {
+                self.custom_titles.remove(&id);
+                self.processes.remove(&id).is_some()
+            }
             None => false,
         }
     }
@@ -224,12 +227,18 @@ impl BackendStore {
         self.iter_mut().map(|(_, backend)| backend)
     }
 
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (TerminalId, &mut Box<dyn PaneBackend>)> {
-        self.processes.iter_mut().map(|(id, process)| (*id, &mut process.backend))
+    pub(crate) fn iter_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (TerminalId, &mut Box<dyn PaneBackend>)> {
+        self.processes
+            .iter_mut()
+            .map(|(id, process)| (*id, &mut process.backend))
     }
 
     pub(crate) fn owner_of(&self, id: TerminalId) -> Option<&TerminalOwner> {
-        self.by_owner.iter().find_map(|(owner, found)| (*found == id).then_some(owner))
+        self.by_owner
+            .iter()
+            .find_map(|(owner, found)| (*found == id).then_some(owner))
     }
 
     pub(crate) fn find_owner(&self, owner: &TerminalOwner) -> Option<TerminalId> {
@@ -241,7 +250,10 @@ impl BackendStore {
     }
 
     pub(crate) fn next_wake(&self) -> Option<std::time::Instant> {
-        self.processes.values().filter_map(|process| process.backend.next_wake()).min()
+        self.processes
+            .values()
+            .filter_map(|process| process.backend.next_wake())
+            .min()
     }
 
     pub(crate) fn spec_of(&self, id: TerminalId) -> Option<&TerminalSpec> {

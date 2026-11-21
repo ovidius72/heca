@@ -5,7 +5,10 @@ use super::pick::{begin_pick, pane_candidates_with_stable_letters};
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 
-pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_pane_select(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
         return Ok(());

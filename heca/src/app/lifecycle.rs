@@ -152,7 +152,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     heca_grid_ui::frame_served();
     // Docks added or taken out with `regions(..)` since the last pass — a plugin may do it while
     // the app runs.
-    if state.chrome_host.apply_pending(&crate::providers::ChromeCtx::new(&state.chrome_state)) {
+    if state
+        .chrome_host
+        .apply_pending(&crate::providers::ChromeCtx::new(&state.chrome_state))
+    {
         state.mark_full_redraw();
     }
     let prefix_timeout = state.prefix.timeout;
@@ -169,7 +172,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     }
 
     use crate::slow_steps::step;
-    let edge_scrolled = { let _s = step("wait.edge_scroll"); mouse::process_edge_scroll(state) };
+    let edge_scrolled = {
+        let _s = step("wait.edge_scroll");
+        mouse::process_edge_scroll(state)
+    };
     if edge_scrolled {
         after_config_change(state);
     }
@@ -178,13 +184,19 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.mark_full_redraw();
     }
 
-    { let _s = step("wait.layout_animations"); state.layout_mut().advance_animations(); }
+    {
+        let _s = step("wait.layout_animations");
+        state.layout_mut().advance_animations();
+    }
     let dt = FRAME_INTERVAL.as_secs_f32();
     // **Which surfaces are mid-exit, before anything advances.** The tick below is the one that
     // advances them — they are children of this tree — so the registry has to look either side of
     // it to catch the frame an exit finishes. Reading it afterwards misses that frame entirely.
     let leaving_before = state.layers.leaving_before_tick(&state.window_root);
-    let mut chrome_animating = { let _s = step("wait.tree_tick"); state.window_root.tick(dt) };
+    let mut chrome_animating = {
+        let _s = step("wait.tree_tick");
+        state.window_root.tick(dt)
+    };
     // **A drag held past a widget's edge scrolls it**, every frame with the mouse still — a
     // terminal's selection dragged above it scrolls the history. The widget does the scrolling;
     // the host only gives the speed the user set.
@@ -193,18 +205,27 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             distance: state.settings.edge_scroll_distance,
             speed: state.settings.edge_scroll_speed,
         };
-        chrome_animating |= { let _s = step("wait.edge_scroll_held"); heca_grid_ui::edge_scroll(&mut state.window_root, dt, speed) };
+        chrome_animating |= {
+            let _s = step("wait.edge_scroll_held");
+            heca_grid_ui::edge_scroll(&mut state.window_root, dt, speed)
+        };
     }
     // The tree is the one truth about where the keyboard is; the store follows it.
-    { let _s = step("wait.settle_focus"); crate::app::tree_focus::settle_window_focus(state); }
+    {
+        let _s = step("wait.settle_focus");
+        crate::app::tree_focus::settle_window_focus(state);
+    }
     // Every surface — an overlay dialog, a plugin panel, the exposé — advanced in the walk above,
     // because it is a child of that tree. All that is left is to **retire the ones whose exit just
     // finished**, which is the registry's bookkeeping and not an animation pass: a surface that was
     // leaving before the tick and is not leaving now has finished, and its absence needs one more
     // frame to be painted.
-    chrome_animating |= { let _s = step("wait.retire_exits"); state
-        .layers
-        .retire_finished_exits(&mut state.window_root, &leaving_before) };
+    chrome_animating |= {
+        let _s = step("wait.retire_exits");
+        state
+            .layers
+            .retire_finished_exits(&mut state.window_root, &leaving_before)
+    };
     // A surface that opened under a pointer that is not moving covers what the pointer was on:
     // hover is only worked out on a move, so it is prompted here.
     if state.layers.visible_set_changed() {
@@ -236,8 +257,14 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.system_title.clone_from(&state.client.title);
         state.window.set_title(&state.system_title);
     }
-    let backend_poll = { let _s = step("wait.poll_backends"); poll_backends(state) };
-    let chrome_runtime_changed = { let _s = step("wait.sync_chrome_state"); crate::chrome::sync_chrome_state(state) };
+    let backend_poll = {
+        let _s = step("wait.poll_backends");
+        poll_backends(state)
+    };
+    let chrome_runtime_changed = {
+        let _s = step("wait.sync_chrome_state");
+        crate::chrome::sync_chrome_state(state)
+    };
     if backend_poll.bell_any {
         apply_bell_policy(state);
     }
@@ -258,7 +285,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // loop would wake and go straight back to sleep, and the bubble would still be waiting for the
     // user to nudge the mouse. The deadline is remembered, and reaching it is itself a reason to
     // draw.
-    let widget_wake = { let _s = step("wait.next_redraw"); crate::chrome::next_redraw_across_trees(state) };
+    let widget_wake = {
+        let _s = step("wait.next_redraw");
+        crate::chrome::next_redraw_across_trees(state)
+    };
     let widget_due = state
         .widget_frame_due
         .is_some_and(|due| Instant::now() >= due);
@@ -291,7 +321,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         // shows (`WindowEvent::Occluded`). The server still runs: the latch opens every
         // `HIDDEN_READ_EVERY`, so output keeps being read, slower.
         let now = Instant::now();
-        if state.hidden_read_at.is_none_or(|at| now.duration_since(at) >= HIDDEN_READ_EVERY) {
+        if state
+            .hidden_read_at
+            .is_none_or(|at| now.duration_since(at) >= HIDDEN_READ_EVERY)
+        {
             state.hidden_read_at = Some(now);
             state.wake_latch.reset();
         }
@@ -337,7 +370,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     state.widget_frame_due = schedule.widget_frame_due;
     // Hidden, the latch is opened on a beat: come back round on it, so output held by a closed latch
     // is read even if nothing else wakes the loop.
-    let hidden_beat = state.window_occluded.then(|| state.hidden_read_at.map(|at| at + HIDDEN_READ_EVERY)).flatten();
+    let hidden_beat = state
+        .window_occluded
+        .then(|| state.hidden_read_at.map(|at| at + HIDDEN_READ_EVERY))
+        .flatten();
     let wake_at = match (schedule.wake_at, hidden_beat) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
@@ -399,12 +435,19 @@ mod tests {
     fn a_quiet_program_name_deadline_wakes_the_window_without_polling() {
         let now = Instant::now();
         let due = now + Duration::from_millis(1000);
-        let wake = next_wake(now, WakeRequests {
-            pane_name_update: Some(due), ..requests(false, None, None, now)
-        });
+        let wake = next_wake(
+            now,
+            WakeRequests {
+                pane_name_update: Some(due),
+                ..requests(false, None, None, now)
+            },
+        );
         assert_eq!(wake.wake_at, Some(due));
         assert_eq!(wake.widget_frame_due, None);
-        assert_eq!(next_wake(due, requests(false, None, None, due)).wake_at, None);
+        assert_eq!(
+            next_wake(due, requests(false, None, None, due)).wake_at,
+            None
+        );
     }
 
     /// …and it does not outrank a sooner one — the nearest deadline still wins.

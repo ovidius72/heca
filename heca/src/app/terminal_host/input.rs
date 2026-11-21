@@ -300,16 +300,18 @@ pub(crate) fn on_terminal_input(
                 state.needs_redraw = true;
             }
         }
-        TerminalInput::FontZoom(step) => { let _ = dispatch_action(
-            state,
-            registry,
-            InteractionSource::Keyboard,
-            &WmAction::PaneTerminalFontZoom {
-                pane_id: None,
-                terminal: Some(terminal.0),
-                step,
-            },
-        ); }
+        TerminalInput::FontZoom(step) => {
+            let _ = dispatch_action(
+                state,
+                registry,
+                InteractionSource::Keyboard,
+                &WmAction::PaneTerminalFontZoom {
+                    pane_id: None,
+                    terminal: Some(terminal.0),
+                    step,
+                },
+            );
+        }
         // The pointer's buttons and moves.
         TerminalInput::Press {
             button,
@@ -325,7 +327,11 @@ pub(crate) fn on_terminal_input(
             let pane = state.client.backends.pane_of(terminal);
             on_move(state, terminal, pane, cell, modifiers);
         }
-        TerminalInput::EdgeScroll { lines, cell, modifiers } => on_edge_scroll(state, terminal, lines, cell, modifiers),
+        TerminalInput::EdgeScroll {
+            lines,
+            cell,
+            modifiers,
+        } => on_edge_scroll(state, terminal, lines, cell, modifiers),
     }
 }
 

@@ -145,7 +145,10 @@ fn a_dragged_split_keeps_its_proportion_when_the_window_changes() {
     for working in [800.0, 400.0] {
         let heights = col.pane_heights(working, gaps);
         let ratio = heights[0] / heights.iter().sum::<f64>();
-        assert!((ratio - 0.6).abs() < 0.01, "at {working}px the split is {ratio}");
+        assert!(
+            (ratio - 0.6).abs() < 0.01,
+            "at {working}px the split is {ratio}"
+        );
     }
 }
 

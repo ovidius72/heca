@@ -25,8 +25,9 @@ impl Card {
         base.style.layout.direction = Direction::Column;
         base.style.layout.padding = (18.0).into();
         base.style.layout.gap = (10.0).into();
-        base.children
-            .push(crate::WidgetModel::new(Label::new(title).font_scale(TITLE_SCALE)));
+        base.children.push(crate::WidgetModel::new(
+            Label::new(title).font_scale(TITLE_SCALE),
+        ));
         Self { base }
     }
 }

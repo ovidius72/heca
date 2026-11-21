@@ -232,7 +232,7 @@ pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         RawPointerKind::Recheck => {
             let _ = retarget_hover(root, raw);
             Handled::No
-        },
+        }
         RawPointerKind::Pressed => route_press(root, raw),
         RawPointerKind::Released => route_release(root, raw),
         RawPointerKind::Wheel => route_wheel(root, raw),
@@ -494,12 +494,22 @@ pub fn pointer_held(root: &dyn Component) -> bool {
 /// the mouse for a selection to keep growing. Returns whether it is still scrolling, so the host
 /// keeps asking for frames while the pointer stays outside.
 pub fn edge_scroll(root: &mut dyn Component, dt: f32, setting: EdgeScroll) -> bool {
-    let Some(path) = capture_path(root) else { return false };
+    let Some(path) = capture_path(root) else {
+        return false;
+    };
     let node = node_at(root, &path);
-    let Some(raw) = node.base().pointer.held_at.get() else { return false };
+    let Some(raw) = node.base().pointer.held_at.get() else {
+        return false;
+    };
     let bounds = node.base().bounds;
     let past = |at: f64, start: f64, size: f64| -> f32 {
-        if at < start { (at - start) as f32 } else if at > start + size { (at - start - size) as f32 } else { 0.0 }
+        if at < start {
+            (at - start) as f32
+        } else if at > start + size {
+            (at - start - size) as f32
+        } else {
+            0.0
+        }
     };
     let over_x = past(raw.pos.x, bounds.loc.x, bounds.size.w);
     let over_y = past(raw.pos.y, bounds.loc.y, bounds.size.h);
@@ -507,13 +517,20 @@ pub fn edge_scroll(root: &mut dyn Component, dt: f32, setting: EdgeScroll) -> bo
         return false;
     }
     let step = |over: f32| -> f32 {
-        let share = if setting.distance > 0.0 { (over.abs() / setting.distance).min(1.0) } else { 1.0 };
+        let share = if setting.distance > 0.0 {
+            (over.abs() / setting.distance).min(1.0)
+        } else {
+            1.0
+        };
         over.signum() * share * setting.speed * dt
     };
     let mut ev = pointer_event(&raw, 0);
     ev.delta_x = 0.0;
     ev.delta_y = 0.0;
-    ev.delta_pixels = Some((if over_x == 0.0 { 0.0 } else { step(over_x) }, if over_y == 0.0 { 0.0 } else { step(over_y) }));
+    ev.delta_pixels = Some((
+        if over_x == 0.0 { 0.0 } else { step(over_x) },
+        if over_y == 0.0 { 0.0 } else { step(over_y) },
+    ));
     let _ = deliver_targeted(root, &path, Event::EdgeScroll(ev));
     true
 }

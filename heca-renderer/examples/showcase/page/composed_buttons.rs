@@ -1,7 +1,6 @@
 use super::*;
 
 pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
-
     let click = |label: &str| {
         let name = label.to_string();
         move || println!("[showcase] {name} clicked")
@@ -10,8 +9,16 @@ pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
         .gap(14.0)
         .align("center")
         // Sugar: `.icon(..)` prepends an Icon child → [Icon, Label].
-        .child(Button::primary("SAVE").icon(Glyph::Check).on_click(click("SAVE")))
-        .child(Button::destructive("DELETE").icon(Glyph::Trash).on_click(click("DELETE")))
+        .child(
+            Button::primary("SAVE")
+                .icon(Glyph::Check)
+                .on_click(click("SAVE")),
+        )
+        .child(
+            Button::destructive("DELETE")
+                .icon(Glyph::Trash)
+                .on_click(click("DELETE")),
+        )
         // Disabled: the whole cluster (icon + label) fades with the chrome.
         .child(Button::primary("SAVE").icon(Glyph::Check).disabled(true))
         // An arbitrary tree: a column of a row + an accelerator hint. The button hugs it.

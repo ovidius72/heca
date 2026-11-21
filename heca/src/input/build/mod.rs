@@ -6,8 +6,8 @@ use super::WmAction;
 mod chrome;
 mod layout;
 mod naming;
-mod terminal;
 mod session;
+mod terminal;
 #[cfg(test)]
 mod tests;
 

@@ -140,9 +140,15 @@ fn a_change_made_while_the_app_runs_is_applied() {
 
     regions("sidebar.left").append(ws("late"));
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
-    assert!(host.apply_pending(&ChromeCtx::new(&store)), "something was applied");
+    assert!(
+        host.apply_pending(&ChromeCtx::new(&store)),
+        "something was applied"
+    );
     assert_eq!(ids(&host, RegionId::LeftSidebar), ["early", "late"]);
-    assert!(!host.apply_pending(&ChromeCtx::new(&store)), "nothing queued, nothing done");
+    assert!(
+        !host.apply_pending(&ChromeCtx::new(&store)),
+        "nothing queued, nothing done"
+    );
 }
 
 /// **A region keeps the air it was given between its containers** — the one thing it says about
@@ -226,13 +232,16 @@ fn a_placed_dock_is_started_and_hears_events_while_it_is_seated() {
 
 /// `[[docks]]` entries for workspaces docks, one per `(id, location)`, as the user writes them.
 fn entries(docks: &[(&str, &str)]) -> Vec<heca_config::docks::DockEntry> {
-    docks.iter().map(|(id, location)| heca_config::docks::DockEntry {
-        name: "workspaces".into(),
-        id: Some(id.to_string()),
-        location: Some(location.to_string()),
-        order: None,
-        flex: None,
-    }).collect()
+    docks
+        .iter()
+        .map(|(id, location)| heca_config::docks::DockEntry {
+            name: "workspaces".into(),
+            id: Some(id.to_string()),
+            location: Some(location.to_string()),
+            order: None,
+            flex: None,
+        })
+        .collect()
 }
 
 /// Apply the queue with `[[docks]]`, as startup does with the user's config.
@@ -251,7 +260,11 @@ fn the_config_says_where_a_dock_starts_and_the_code_is_the_fallback() {
     regions("sidebar.right").append(ws("notes"));
     mount_with(&mut host, &[("rooms", "sidebar.left")]);
     assert_eq!(ids(&host, RegionId::LeftSidebar), ["rooms"]);
-    assert_eq!(ids(&host, RegionId::RightSidebar), ["notes"], "a dock not named keeps the code's region");
+    assert_eq!(
+        ids(&host, RegionId::RightSidebar),
+        ["notes"],
+        "a dock not named keeps the code's region"
+    );
 }
 
 /// **`none` leaves a dock out** — not seated anywhere.
@@ -305,7 +318,10 @@ fn a_reload_moves_the_docks_whose_entry_changed() {
 
     reload_with(&mut host, &[("a", "sidebar.right")]);
     assert_eq!(ids(&host, RegionId::RightSidebar), ["b", "a"]);
-    assert!(ids(&host, RegionId::LeftSidebar).is_empty(), "b, moved by hand, stays: its entry did not change");
+    assert!(
+        ids(&host, RegionId::LeftSidebar).is_empty(),
+        "b, moved by hand, stays: its entry did not change"
+    );
 }
 
 /// **`"none"` on a reload takes a dock out; back to a region makes it again from its recipe.**
@@ -319,7 +335,11 @@ fn a_reload_takes_a_dock_out_and_makes_it_again_from_its_recipe() {
     assert_eq!(host.placement("workspaces"), None, "\"none\" takes it out");
 
     reload_with(&mut host, &[("workspaces", "sidebar.right")]);
-    assert_eq!(ids(&host, RegionId::RightSidebar), ["workspaces"], "made again, where it now says");
+    assert_eq!(
+        ids(&host, RegionId::RightSidebar),
+        ["workspaces"],
+        "made again, where it now says"
+    );
 }
 
 /// **A dock handed over as itself cannot be made again** once out — said, not silently lost.
@@ -332,7 +352,9 @@ fn a_dock_added_as_itself_cannot_come_back_from_none_and_says_so() {
     reload_with(&mut host, &[("notes", "sidebar.left")]);
     assert_eq!(host.placement("notes"), None);
     assert!(
-        crate::chrome::input::identity::said().iter().any(|m| m.contains("'notes'") && m.contains("restart")),
+        crate::chrome::input::identity::said()
+            .iter()
+            .any(|m| m.contains("'notes'") && m.contains("restart")),
         "the user is told to restart",
     );
 }
@@ -350,9 +372,17 @@ fn a_recipe_with_flex_and_order_comes_back_with_them() {
 
 /// The order a region shows its docks in, by id — what `order` decides.
 fn shown_order(host: &ChromeHost, r: RegionId) -> Vec<String> {
-    let mut docks: Vec<_> = host.contributions(r).iter()
+    let mut docks: Vec<_> = host
+        .contributions(r)
+        .iter()
         .enumerate()
-        .map(|(added, c)| (c.placement().order.unwrap_or_default(), added, c.id().to_string()))
+        .map(|(added, c)| {
+            (
+                c.placement().order.unwrap_or_default(),
+                added,
+                c.id().to_string(),
+            )
+        })
         .collect();
     docks.sort();
     docks.into_iter().map(|(_, _, id)| id).collect()
@@ -365,7 +395,11 @@ fn the_config_order_puts_a_dock_first() {
     regions("sidebar.left").append([ws("x"), ws("y")]);
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
     let docks = vec![heca_config::docks::DockEntry {
-        name: "workspaces".into(), id: Some("y".into()), location: None, order: Some(-1), flex: None,
+        name: "workspaces".into(),
+        id: Some("y".into()),
+        location: None,
+        order: Some(-1),
+        flex: None,
     }];
     host.mount_pending(&ChromeCtx::new(&store), &docks);
     assert_eq!(shown_order(&host, RegionId::LeftSidebar), ["y", "x"]);
@@ -382,8 +416,20 @@ fn an_entry_for_the_kind_places_every_dock_of_it_and_an_id_wins() {
     regions("sidebar.left").append([ws("a"), ws("b")]);
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
     let docks = vec![
-        heca_config::docks::DockEntry { name: "workspaces".into(), id: None, location: Some("sidebar.right".into()), order: None, flex: None },
-        heca_config::docks::DockEntry { name: "workspaces".into(), id: Some("b".into()), location: Some("bar.top".into()), order: None, flex: None },
+        heca_config::docks::DockEntry {
+            name: "workspaces".into(),
+            id: None,
+            location: Some("sidebar.right".into()),
+            order: None,
+            flex: None,
+        },
+        heca_config::docks::DockEntry {
+            name: "workspaces".into(),
+            id: Some("b".into()),
+            location: Some("bar.top".into()),
+            order: None,
+            flex: None,
+        },
     ];
     host.mount_pending(&ChromeCtx::new(&store), &docks);
     assert_eq!(ids(&host, RegionId::RightSidebar), ["a"]);
@@ -397,16 +443,29 @@ fn an_entry_for_a_kind_that_cannot_make_another_does_nothing() {
     regions("sidebar.left").append(ws("workspaces"));
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
     let docks = vec![heca_config::docks::DockEntry {
-        name: "notes".into(), id: Some("notes.2".into()), location: Some("sidebar.right".into()), order: None, flex: None,
+        name: "notes".into(),
+        id: Some("notes.2".into()),
+        location: Some("sidebar.right".into()),
+        order: None,
+        flex: None,
     }];
     host.mount_pending(&ChromeCtx::new(&store), &docks);
     assert_eq!(ids(&host, RegionId::LeftSidebar), ["workspaces"]);
     assert!(ids(&host, RegionId::RightSidebar).is_empty());
 }
 
-fn entry(id: &str, location: &str, order: Option<i64>, flex: Option<f32>) -> heca_config::docks::DockEntry {
+fn entry(
+    id: &str,
+    location: &str,
+    order: Option<i64>,
+    flex: Option<f32>,
+) -> heca_config::docks::DockEntry {
     heca_config::docks::DockEntry {
-        name: "workspaces".into(), id: Some(id.into()), location: Some(location.into()), order, flex,
+        name: "workspaces".into(),
+        id: Some(id.into()),
+        location: Some(location.into()),
+        order,
+        flex,
     }
 }
 
@@ -422,15 +481,30 @@ fn the_config_adds_a_second_dock_of_a_kind_and_a_reload_takes_it_out_and_back() 
         entry("workspaces.2", "sidebar.left", Some(1), Some(2.0)),
     ];
     host.mount_pending(&ChromeCtx::new(&store), &two);
-    assert_eq!(shown_order(&host, RegionId::LeftSidebar), ["workspaces", "workspaces.2"]);
-    let second = host.contributions(RegionId::LeftSidebar).iter().find(|c| c.id() == "workspaces.2").unwrap();
+    assert_eq!(
+        shown_order(&host, RegionId::LeftSidebar),
+        ["workspaces", "workspaces.2"]
+    );
+    let second = host
+        .contributions(RegionId::LeftSidebar)
+        .iter()
+        .find(|c| c.id() == "workspaces.2")
+        .unwrap();
     assert_eq!(second.placement().flex, Some(2.0), "flex from the entry");
 
     host.reload_docks(&ChromeCtx::new(&store), &two[..1]);
-    assert_eq!(ids(&host, RegionId::LeftSidebar), ["workspaces"], "its entry gone, the dock goes");
+    assert_eq!(
+        ids(&host, RegionId::LeftSidebar),
+        ["workspaces"],
+        "its entry gone, the dock goes"
+    );
 
     host.reload_docks(&ChromeCtx::new(&store), &two);
-    assert_eq!(shown_order(&host, RegionId::LeftSidebar), ["workspaces", "workspaces.2"], "and comes back");
+    assert_eq!(
+        shown_order(&host, RegionId::LeftSidebar),
+        ["workspaces", "workspaces.2"],
+        "and comes back"
+    );
 }
 
 /// **A reload that changes only `flex` resizes the dock** where it is.
@@ -440,8 +514,15 @@ fn a_reload_that_changes_flex_resizes_the_dock() {
     regions("sidebar.left").append([ws("a"), ws("b")]);
     let store = crate::chrome::SharedChromeState::new(300.0, 300.0);
     host.mount_pending(&ChromeCtx::new(&store), &[]);
-    host.reload_docks(&ChromeCtx::new(&store), &[entry("b", "sidebar.left", None, Some(3.0))]);
-    let b = host.contributions(RegionId::LeftSidebar).iter().find(|c| c.id() == "b").unwrap();
+    host.reload_docks(
+        &ChromeCtx::new(&store),
+        &[entry("b", "sidebar.left", None, Some(3.0))],
+    );
+    let b = host
+        .contributions(RegionId::LeftSidebar)
+        .iter()
+        .find(|c| c.id() == "b")
+        .unwrap();
     assert_eq!(b.placement().flex, Some(3.0));
 }
 
@@ -460,9 +541,14 @@ fn a_moved_dock_changes_the_arrangement_the_window_rebuilds_on() {
     regions("sidebar.left").append(ws("notes"));
     mount(&mut host);
     let before = arrangement(&host);
-    host.move_container("rooms", RegionId::RightSidebar).unwrap();
+    host.move_container("rooms", RegionId::RightSidebar)
+        .unwrap();
     let moved = arrangement(&host);
     assert_ne!(before, moved, "a move is a different arrangement");
     host.reorder("notes", None).unwrap();
-    assert_eq!(arrangement(&host), moved, "putting a lone dock at its own end changes nothing");
+    assert_eq!(
+        arrangement(&host),
+        moved,
+        "putting a lone dock at its own end changes nothing"
+    );
 }

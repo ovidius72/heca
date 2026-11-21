@@ -1,6 +1,10 @@
 //! Own the watcher outside its callback so registering a report file cannot block the callback.
 
-use std::{fs, path::PathBuf, sync::{Arc, mpsc}};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Arc, mpsc},
+};
 
 use notify::Watcher;
 
@@ -9,7 +13,10 @@ use crate::agent::{AgentDrivers, launcher, watcher::AgentWatcher};
 
 pub(super) enum Message {
     Event(notify::Result<notify::Event>),
-    Configure { drivers: AgentDrivers, reporter: crate::agent::reporting::ReportingHelper },
+    Configure {
+        drivers: AgentDrivers,
+        reporter: crate::agent::reporting::ReportingHelper,
+    },
     Stop,
 }
 
@@ -26,7 +33,10 @@ pub(super) fn run(
     while let Ok(message) = receiver.recv() {
         let event = match message {
             Message::Stop => break,
-            Message::Configure { drivers: next, reporter: next_reporter } => {
+            Message::Configure {
+                drivers: next,
+                reporter: next_reporter,
+            } => {
                 readers.retain_mut(|reader| {
                     if let Some(driver) = next.driver(reader.driver.id()) {
                         reader.driver = driver.clone();
@@ -47,19 +57,28 @@ pub(super) fn run(
             }
             Message::Event(Ok(event)) => event,
         };
-        if !event.kind.is_modify() && !event.kind.is_create() { continue }
+        if !event.kind.is_modify() && !event.kind.is_create() {
+            continue;
+        }
         // Backends can coalesce directory writes and name any child, including an existing bin
         // directory. Every direct-child event must check the queue or a launch can be stranded.
-        if event.paths.iter().any(|path| path == &root || path.parent() == Some(root.as_path()))
+        if event
+            .paths
+            .iter()
+            .any(|path| path == &root || path.parent() == Some(root.as_path()))
             && let Ok(entries) = fs::read_dir(&root)
         {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if !launcher::is_request(&path, &root) { continue }
+                if !launcher::is_request(&path, &root) {
+                    continue;
+                }
                 match launcher::prepare(&path, &drivers, &reporter, &mut watcher) {
                     Ok(Some(reader)) => {
                         readers.retain(|previous| {
-                            if previous.driver.id() != reader.driver.id() { return true }
+                            if previous.driver.id() != reader.driver.id() {
+                                return true;
+                            }
                             let _ = watcher.unwatch(previous.path());
                             false
                         });
@@ -76,6 +95,8 @@ pub(super) fn run(
                 eprintln!("[heca] status report from {}: {error}", reader.driver.id());
             }
         }
-        if let Some(wake) = &wake { wake() }
+        if let Some(wake) = &wake {
+            wake()
+        }
     }
 }

@@ -104,7 +104,12 @@ impl TextRenderer {
     /// Queue text with its top-left at `(x, y)` (logical px) — the simple
     /// point-positioned form used throughout the app (sidebar, chrome, …).
     pub fn queue_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
-        let at = TextBox { x, y, w: 0.0, h: 0.0 };
+        let at = TextBox {
+            x,
+            y,
+            w: 0.0,
+            h: 0.0,
+        };
         let cmd = TextCommand::new(text, at, font_size, color, self.current_clip);
         self.commands.push(cmd);
     }

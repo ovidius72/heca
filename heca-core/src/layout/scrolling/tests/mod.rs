@@ -3,7 +3,6 @@
 use super::*;
 use crate::layout::testing::Seen;
 
-
 pub(super) fn test_scrolling_space() -> Seen {
     Seen::new(
         Rectangle::from_size(Size::new(1000.0, 800.0)),
@@ -11,7 +10,6 @@ pub(super) fn test_scrolling_space() -> Seen {
         LayoutOptions::default(),
     )
 }
-
 
 pub(super) fn test_column(id: u64, width: ColumnWidth) -> Column {
     Column::new(
@@ -21,17 +19,17 @@ pub(super) fn test_column(id: u64, width: ColumnWidth) -> Column {
     )
 }
 
-
 /// A space with columns whose ids are `1..=n`, in order.
 pub(super) fn space_with_columns(n: u64) -> Seen {
     let mut space = test_scrolling_space();
     // activate=true appends in order (activate=false inserts at active+1).
     for id in 1..=n {
-        space.m().add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
+        space
+            .m()
+            .add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
     }
     space
 }
-
 
 pub(super) fn column_ids(space: &ScrollingSpace) -> Vec<u64> {
     space.columns.iter().map(|c| c.id.0).collect()
@@ -41,6 +39,6 @@ mod columns;
 mod laid_out;
 mod pane_effect;
 mod pane_react;
-mod places;
 mod panes;
+mod places;
 mod view;

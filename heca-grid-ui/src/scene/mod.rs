@@ -292,11 +292,10 @@ mod commands;
 mod runs;
 
 pub use commands::{
-    ArrowHeads, LineCmd,
-    Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, Rounded,
-    ScanlineCmd, Shadow, TextAlign, TextCmd, TextStyle,
+    ArrowHeads, Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, LineCmd,
+    RectCmd, Rounded, ScanlineCmd, Shadow, TextAlign, TextCmd, TextStyle,
 };
-pub use runs::{BackdropAt, BaseRun, Escape, HostWork, SurfaceAt, ImageAt};
+pub use runs::{BackdropAt, BaseRun, Escape, HostWork, ImageAt, SurfaceAt};
 
 #[cfg(test)]
 mod tests;

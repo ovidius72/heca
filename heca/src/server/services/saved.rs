@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
-use crate::entry::service::{Scope, SavedError, SessionKey, StateEvent};
+use crate::entry::service::{SavedError, Scope, SessionKey, StateEvent};
 
 /// Entries by full key (`<extension>.<key>`), then by id.
 pub(crate) type Entries = BTreeMap<String, BTreeMap<String, serde_json::Value>>;
@@ -55,7 +55,14 @@ impl SavedStore {
             .filter(|file| file.version == FILE_VERSION)
             .map(|file| file.entries)
             .unwrap_or_default();
-        Self { global, sessions: HashMap::new(), file, limit, changes: Vec::new(), touched: Default::default() }
+        Self {
+            global,
+            sessions: HashMap::new(),
+            file,
+            limit,
+            changes: Vec::new(),
+            touched: Default::default(),
+        }
     }
 
     fn entries(&self, session: Option<SessionKey>) -> Option<&Entries> {
@@ -103,9 +110,18 @@ impl SavedStore {
 
     fn write_global(&self) {
         if let Some(path) = &self.file
-            && let Err(error) = heca_config::state_file::write_json(path, &File { version: FILE_VERSION, entries: self.global.clone() })
+            && let Err(error) = heca_config::state_file::write_json(
+                path,
+                &File {
+                    version: FILE_VERSION,
+                    entries: self.global.clone(),
+                },
+            )
         {
-            eprintln!("[heca] saved state not written ({}): {error}", path.display());
+            eprintln!(
+                "[heca] saved state not written ({}): {error}",
+                path.display()
+            );
         }
     }
 }
@@ -125,25 +141,52 @@ impl Access<'_> {
     }
 
     /// The entry, as `T` — `None` when it is not there, or no longer fits `T`.
-    pub(crate) fn get<T: serde::de::DeserializeOwned>(&self, scope: Scope, key: &str, id: &str) -> Option<T> {
+    pub(crate) fn get<T: serde::de::DeserializeOwned>(
+        &self,
+        scope: Scope,
+        key: &str,
+        id: &str,
+    ) -> Option<T> {
         let session = self.session(scope).ok()?;
         let store = self.store.borrow();
-        let value = store.entries(session)?.get(&self.full(key))?.get(id)?.clone();
+        let value = store
+            .entries(session)?
+            .get(&self.full(key))?
+            .get(id)?
+            .clone();
         serde_json::from_value(value).ok()
     }
 
     /// Save the entry, written at once (global) or with the session's next save.
-    pub(crate) fn set<T: serde::Serialize>(&self, scope: Scope, key: &str, id: &str, value: &T) -> Result<(), SavedError> {
+    pub(crate) fn set<T: serde::Serialize>(
+        &self,
+        scope: Scope,
+        key: &str,
+        id: &str,
+        value: &T,
+    ) -> Result<(), SavedError> {
         let session = self.session(scope)?;
-        let value = serde_json::to_value(value).map_err(|error| SavedError::Encode(error.to_string()))?;
+        let value =
+            serde_json::to_value(value).map_err(|error| SavedError::Encode(error.to_string()))?;
         let bytes = serde_json::to_vec(&value).map_or(0, |bytes| bytes.len());
         let mut store = self.store.borrow_mut();
         if bytes > store.limit {
-            return Err(SavedError::TooLarge { bytes, limit: store.limit });
+            return Err(SavedError::TooLarge {
+                bytes,
+                limit: store.limit,
+            });
         }
         let full = self.full(key);
-        store.entries_mut(session).entry(full.clone()).or_default().insert(id.to_owned(), value);
-        store.changes.push(StateEvent { session, key: full, id: id.to_owned() });
+        store
+            .entries_mut(session)
+            .entry(full.clone())
+            .or_default()
+            .insert(id.to_owned(), value);
+        store.changes.push(StateEvent {
+            session,
+            key: full,
+            id: id.to_owned(),
+        });
         store.touched.insert(self.extension.to_owned());
         if session.is_none() {
             store.write_global();
@@ -157,13 +200,20 @@ impl Access<'_> {
         let full = self.full(key);
         let mut store = self.store.borrow_mut();
         let entries = store.entries_mut(session);
-        let removed = entries.get_mut(&full).and_then(|ids| ids.remove(id)).is_some();
+        let removed = entries
+            .get_mut(&full)
+            .and_then(|ids| ids.remove(id))
+            .is_some();
         if entries.get(&full).is_some_and(BTreeMap::is_empty) {
             entries.remove(&full);
         }
         if removed {
-            store.changes.push(StateEvent { session, key: full, id: id.to_owned() });
-        store.touched.insert(self.extension.to_owned());
+            store.changes.push(StateEvent {
+                session,
+                key: full,
+                id: id.to_owned(),
+            });
+            store.touched.insert(self.extension.to_owned());
             if session.is_none() {
                 store.write_global();
             }
@@ -177,8 +227,16 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    fn access<'a>(store: &'a RefCell<SavedStore>, extension: &'a str, session: Option<SessionKey>) -> Access<'a> {
-        Access { store, extension, session }
+    fn access<'a>(
+        store: &'a RefCell<SavedStore>,
+        extension: &'a str,
+        session: Option<SessionKey>,
+    ) -> Access<'a> {
+        Access {
+            store,
+            extension,
+            session,
+        }
     }
 
     #[test]
@@ -186,24 +244,61 @@ mod tests {
         let store = RefCell::new(SavedStore::open(None, 1024));
         let session = SessionKey::generate();
         let rooms = access(&store, "heca-pro", Some(session));
-        rooms.set(Scope::Session, "room-order", "", &vec!["b", "a"]).unwrap();
-        assert_eq!(rooms.get::<Vec<String>>(Scope::Session, "room-order", ""), Some(vec!["b".into(), "a".into()]));
-        assert_eq!(access(&store, "other", Some(session)).get::<Vec<String>>(Scope::Session, "room-order", ""), None,
-            "another extension cannot read it");
-        assert_eq!(access(&store, "heca-pro", Some(SessionKey::generate())).get::<Vec<String>>(Scope::Session, "room-order", ""),
-            None, "another session has its own");
-        assert_eq!(store.borrow_mut().take_changes(),
-            vec![StateEvent { session: Some(session), key: "heca-pro.room-order".into(), id: String::new() }]);
-        assert_eq!(rooms.get::<u32>(Scope::Session, "room-order", ""), None, "a value that no longer fits T reads as nothing");
+        rooms
+            .set(Scope::Session, "room-order", "", &vec!["b", "a"])
+            .unwrap();
+        assert_eq!(
+            rooms.get::<Vec<String>>(Scope::Session, "room-order", ""),
+            Some(vec!["b".into(), "a".into()])
+        );
+        assert_eq!(
+            access(&store, "other", Some(session)).get::<Vec<String>>(
+                Scope::Session,
+                "room-order",
+                ""
+            ),
+            None,
+            "another extension cannot read it"
+        );
+        assert_eq!(
+            access(&store, "heca-pro", Some(SessionKey::generate())).get::<Vec<String>>(
+                Scope::Session,
+                "room-order",
+                ""
+            ),
+            None,
+            "another session has its own"
+        );
+        assert_eq!(
+            store.borrow_mut().take_changes(),
+            vec![StateEvent {
+                session: Some(session),
+                key: "heca-pro.room-order".into(),
+                id: String::new()
+            }]
+        );
+        assert_eq!(
+            rooms.get::<u32>(Scope::Session, "room-order", ""),
+            None,
+            "a value that no longer fits T reads as nothing"
+        );
     }
 
     #[test]
     fn a_call_in_no_session_names_one_and_a_large_value_is_refused() {
         let store = RefCell::new(SavedStore::open(None, 8));
         let service = access(&store, "x", None);
-        assert_eq!(service.set(Scope::Session, "k", "", &1), Err(SavedError::NoSession));
-        assert!(matches!(service.set(Scope::Global, "k", "", &"a long string"), Err(SavedError::TooLarge { .. })));
-        service.set(Scope::SessionOf(SessionKey::generate()), "k", "", &1).unwrap();
+        assert_eq!(
+            service.set(Scope::Session, "k", "", &1),
+            Err(SavedError::NoSession)
+        );
+        assert!(matches!(
+            service.set(Scope::Global, "k", "", &"a long string"),
+            Err(SavedError::TooLarge { .. })
+        ));
+        service
+            .set(Scope::SessionOf(SessionKey::generate()), "k", "", &1)
+            .unwrap();
     }
 
     #[test]
@@ -211,11 +306,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("heca.saved-state.json");
         let store = RefCell::new(SavedStore::open(Some(path.clone()), 1024));
-        access(&store, "x", None).set(Scope::Global, "theme", "", &"dark").unwrap();
+        access(&store, "x", None)
+            .set(Scope::Global, "theme", "", &"dark")
+            .unwrap();
         let again = RefCell::new(SavedStore::open(Some(path.clone()), 1024));
-        assert_eq!(access(&again, "x", None).get::<String>(Scope::Global, "theme", ""), Some("dark".into()));
+        assert_eq!(
+            access(&again, "x", None).get::<String>(Scope::Global, "theme", ""),
+            Some("dark".into())
+        );
         std::fs::write(&path, b"not json").unwrap();
         let broken = RefCell::new(SavedStore::open(Some(path), 1024));
-        assert_eq!(access(&broken, "x", None).get::<String>(Scope::Global, "theme", ""), None);
+        assert_eq!(
+            access(&broken, "x", None).get::<String>(Scope::Global, "theme", ""),
+            None
+        );
     }
 }

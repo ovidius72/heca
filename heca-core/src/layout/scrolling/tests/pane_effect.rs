@@ -7,7 +7,10 @@ use crate::layout::column::MIN_PANE_HEIGHT;
 fn bare(n: u64) -> ScrollingSpace {
     let mut space = ScrollingSpace::new(LayoutOptions::default());
     for id in 1..=n {
-        space.insert_column(space.columns.len(), test_column(id, ColumnWidth::Proportion(0.5)));
+        space.insert_column(
+            space.columns.len(),
+            test_column(id, ColumnWidth::Proportion(0.5)),
+        );
     }
     space
 }
@@ -28,10 +31,17 @@ fn a_pane_is_inserted_at_its_row_or_at_the_bottom() {
     assert_eq!(effect, Some(PaneEffect::Inserted { col: 0, row: 0 }));
 
     let effect = space.insert_pane(0, Some(99), Pane::new(PaneId(9), ""), HEIGHT);
-    assert_eq!(effect, Some(PaneEffect::Inserted { col: 0, row: 3 }), "a row past the end clamps");
+    assert_eq!(
+        effect,
+        Some(PaneEffect::Inserted { col: 0, row: 3 }),
+        "a row past the end clamps"
+    );
     assert_eq!(pane_ids(&space, 0), vec![8, 1, 7, 9]);
 
-    assert_eq!(space.insert_pane(5, None, Pane::new(PaneId(10), ""), HEIGHT), None);
+    assert_eq!(
+        space.insert_pane(5, None, Pane::new(PaneId(10), ""), HEIGHT),
+        None
+    );
 }
 
 /// A pane arriving in a column whose panes were dragged to fill it still gets on screen: the
@@ -47,8 +57,14 @@ fn an_inserted_pane_is_given_room_in_a_column_that_was_full() {
 
     let heights = space.columns[0].pane_heights(HEIGHT, gaps);
     let room = HEIGHT - gaps * (heights.len() as f64 + 1.0);
-    assert!((heights.iter().sum::<f64>() - room).abs() < 0.5, "heights {heights:?} vs room {room}");
-    assert!(heights.iter().all(|h| *h >= MIN_PANE_HEIGHT - 0.5), "heights {heights:?}");
+    assert!(
+        (heights.iter().sum::<f64>() - room).abs() < 0.5,
+        "heights {heights:?} vs room {room}"
+    );
+    assert!(
+        heights.iter().all(|h| *h >= MIN_PANE_HEIGHT - 0.5),
+        "heights {heights:?}"
+    );
 }
 
 #[test]
@@ -58,18 +74,27 @@ fn taking_a_pane_says_whether_its_column_went_with_it() {
 
     let (pane, effect) = space.take_pane_from(0, 1).expect("row 1 is there");
     assert_eq!(pane.id, PaneId(7));
-    assert_eq!(effect, SpaceEffect::Pane(PaneEffect::Removed { col: 0, row: 1 }));
+    assert_eq!(
+        effect,
+        SpaceEffect::Pane(PaneEffect::Removed { col: 0, row: 1 })
+    );
 
     let (pane, effect) = space.take_pane_from(0, 0).expect("the last pane is there");
     assert_eq!(pane.id, PaneId(1));
-    assert_eq!(effect, SpaceEffect::Column(ColumnEffect::Removed { idx: 0 }));
+    assert_eq!(
+        effect,
+        SpaceEffect::Column(ColumnEffect::Removed { idx: 0 })
+    );
     assert_eq!(column_ids(&space), vec![2]);
 }
 
 #[test]
 fn taking_a_pane_that_is_not_there_changes_nothing() {
     let mut space = bare(2);
-    assert!(space.take_pane_from(0, 1).is_none(), "a column of one has no row 1");
+    assert!(
+        space.take_pane_from(0, 1).is_none(),
+        "a column of one has no row 1"
+    );
     assert!(space.take_pane_from(9, 0).is_none());
     assert_eq!(column_ids(&space), vec![1, 2]);
 }
@@ -145,7 +170,10 @@ fn swapping_panes_reorders_the_column() {
     assert_eq!(pane_ids(&space, 0), vec![8, 7, 1]);
 
     assert!(space.swap_panes_in_column(0, 1, 1).is_none(), "same row");
-    assert!(space.swap_panes_in_column(0, 0, 3).is_none(), "out of range");
+    assert!(
+        space.swap_panes_in_column(0, 0, 3).is_none(),
+        "out of range"
+    );
 }
 
 /// A window shows a swap by sliding each pane from the slot it had: at the start of the slide
@@ -153,13 +181,20 @@ fn swapping_panes_reorders_the_column() {
 #[test]
 fn a_swapped_pane_slides_from_where_it_was() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), ""), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(2), ""), true);
     let drawn = |space: &Seen| -> Vec<(PaneId, Rectangle)> { space.r().panes_with_positions() };
     let was = drawn(&space);
     let before = space.r().positions();
 
-    let effect = space.space.swap_panes_in_column(0, 0, 1).expect("both rows are there");
+    let effect = space
+        .space
+        .swap_panes_in_column(0, 0, 1)
+        .expect("both rows are there");
     space.m().show(&[SpaceEffect::Pane(effect)], &before);
 
     let now = drawn(&space);

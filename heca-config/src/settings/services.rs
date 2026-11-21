@@ -1,8 +1,8 @@
 //! Limits for the long-lived services extensions run inside the server.
 
-use std::num::{NonZeroU64, NonZeroUsize};
-use serde::{Deserialize, Serialize};
 use super::schema::declare_settings;
+use serde::{Deserialize, Serialize};
+use std::num::{NonZeroU64, NonZeroUsize};
 
 declare_settings! {
     defaults: ["services"];
@@ -36,7 +36,12 @@ mod tests {
 
     #[test]
     fn limits_must_be_positive() {
-        for field in ["inbox_capacity", "stop_timeout_ms", "request_queue_capacity", "saved_entry_max_bytes"] {
+        for field in [
+            "inbox_capacity",
+            "stop_timeout_ms",
+            "request_queue_capacity",
+            "saved_entry_max_bytes",
+        ] {
             let input = format!("[settings.services]\n{field} = 0");
             assert!(config_from_layers(&input).is_err(), "{input}");
         }

@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let theme = cx.theme;
 
-
     Flex::row()
         .gap(8.0)
         .align("center")
@@ -11,19 +10,31 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // on every widget. This row used to wrap each button in a `Tooltip`, which is the
         // noise the property removed.
         .child(
-            IconButton::new(Icon::new(Glyph::Search).color(theme.colors.foreground).size(20.0))
-                .on_click(|| println!("[showcase] search"))
-                .tooltip("Search"),
+            IconButton::new(
+                Icon::new(Glyph::Search)
+                    .color(theme.colors.foreground)
+                    .size(20.0),
+            )
+            .on_click(|| println!("[showcase] search"))
+            .tooltip("Search"),
         )
         .child(
-            IconButton::new(Icon::new(Glyph::Gear).color(theme.colors.foreground).size(20.0))
-                .on_click(|| println!("[showcase] settings"))
-                .tooltip("Settings"),
+            IconButton::new(
+                Icon::new(Glyph::Gear)
+                    .color(theme.colors.foreground)
+                    .size(20.0),
+            )
+            .on_click(|| println!("[showcase] settings"))
+            .tooltip("Settings"),
         )
         .child(
-            IconButton::new(Icon::new(Glyph::Plus).color(theme.colors.foreground).size(20.0))
-                .on_click(|| println!("[showcase] add"))
-                .tooltip("New pane"),
+            IconButton::new(
+                Icon::new(Glyph::Plus)
+                    .color(theme.colors.foreground)
+                    .size(20.0),
+            )
+            .on_click(|| println!("[showcase] add"))
+            .tooltip("New pane"),
         )
         // `.active(true)`: held-on (toggled) status — a persistent tone-tinted
         // frame, like the in-pane zoom/float buttons when engaged.
@@ -50,12 +61,22 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // Words with a line break are two lines, inside the bubble.
         .child(Button::new("Two lines").tooltip("zsh\npane-1"))
         // The same door takes a widget: a segmented tag inside the bubble.
-        .child(Button::new("A tag").tooltip(Tag::new("claude").segment_text("opus").segment_text("~/projects/heca")))
+        .child(
+            Button::new("A tag").tooltip(
+                Tag::new("claude")
+                    .segment_text("opus")
+                    .segment_text("~/projects/heca"),
+            ),
+        )
         .child(
             Tooltip::new(
-                IconButton::new(Icon::new(Glyph::Close).color(theme.colors.danger).size(20.0))
-                    .accent(theme.colors.danger)
-                    .on_click(|| println!("[showcase] close")),
+                IconButton::new(
+                    Icon::new(Glyph::Close)
+                        .color(theme.colors.danger)
+                        .size(20.0),
+                )
+                .accent(theme.colors.danger)
+                .on_click(|| println!("[showcase] close")),
                 "Close",
             )
             .side(TooltipSide::Bottom),

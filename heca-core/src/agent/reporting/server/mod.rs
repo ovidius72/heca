@@ -11,9 +11,15 @@ pub(super) fn run(input: impl BufRead, output: impl Write, limit: usize) -> io::
 fn serve(mut input: impl BufRead, mut output: impl Write, reports: &Reports) -> io::Result<()> {
     loop {
         let mut bytes = Vec::new();
-        let read = (&mut input).take(reports.limit as u64 + 1).read_until(b'\n', &mut bytes)?;
-        if read == 0 { return Ok(()) }
-        if bytes.len() > reports.limit { return Err(io::Error::other("MCP request exceeds max_report_bytes")) }
+        let read = (&mut input)
+            .take(reports.limit as u64 + 1)
+            .read_until(b'\n', &mut bytes)?;
+        if read == 0 {
+            return Ok(());
+        }
+        if bytes.len() > reports.limit {
+            return Err(io::Error::other("MCP request exceeds max_report_bytes"));
+        }
         let response = match serde_json::from_slice::<Value>(&bytes) {
             Ok(request) => dispatch(request, reports),
             Err(_) => Some(error(Value::Null, -32700, "invalid JSON request")),
@@ -54,7 +60,9 @@ fn dispatch(request: Value, reports: &Reports) -> Option<Value> {
             match reports.report(params["arguments"].clone()) {
                 // An empty hook result does not add model context or change native permissions.
                 Ok(()) => json!({"content": [{"type": "text", "text": "{}"}]}),
-                Err(error) => json!({"isError": true, "content": [{"type": "text", "text": error.to_string()}]}),
+                Err(error) => {
+                    json!({"isError": true, "content": [{"type": "text", "text": error.to_string()}]})
+                }
             }
         }
         _ => return Some(error(id, -32601, "unknown method")),

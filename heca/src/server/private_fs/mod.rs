@@ -16,7 +16,10 @@ use std::path::Path;
 pub(crate) fn private_folder(folder: &Path) -> io::Result<()> {
     // The folders this call makes, innermost first: every one of them is the owner's.
     #[cfg(windows)]
-    let made: Vec<&Path> = folder.ancestors().take_while(|path| !path.as_os_str().is_empty() && !path.exists()).collect();
+    let made: Vec<&Path> = folder
+        .ancestors()
+        .take_while(|path| !path.as_os_str().is_empty() && !path.exists())
+        .collect();
     let mut builder = DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
@@ -24,12 +27,19 @@ pub(crate) fn private_folder(folder: &Path) -> io::Result<()> {
     builder.create(folder)?;
     // `symlink_metadata`: a link to a folder must not pass for the folder.
     if !std::fs::symlink_metadata(folder)?.file_type().is_dir() {
-        return Err(io::Error::other(format!("{} is not a plain folder (a symlink or a file)", folder.display())));
+        return Err(io::Error::other(format!(
+            "{} is not a plain folder (a symlink or a file)",
+            folder.display()
+        )));
     }
     #[cfg(unix)]
     std::fs::set_permissions(folder, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
     #[cfg(windows)]
-    for path in made.iter().rev().chain((!made.contains(&folder)).then_some(&folder)) {
+    for path in made
+        .iter()
+        .rev()
+        .chain((!made.contains(&folder)).then_some(&folder))
+    {
         acl::restrict_to_current_user(path)?;
     }
     Ok(())
@@ -46,7 +56,9 @@ pub(crate) fn try_lock(path: &Path) -> io::Result<Option<File>> {
     let lock = options.open(path)?;
     match fs2::FileExt::try_lock_exclusive(&lock) {
         Ok(()) => Ok(Some(lock)),
-        Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => Ok(None),
+        Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
+            Ok(None)
+        }
         Err(error) => Err(error),
     }
 }
@@ -56,9 +68,18 @@ pub(crate) fn try_lock(path: &Path) -> io::Result<Option<File>> {
 #[cfg(test)]
 pub(crate) fn assert_owner_only(path: &Path) {
     #[cfg(unix)]
-    assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(path).unwrap().permissions()) & 0o777, 0o700, "{path:?}");
+    assert_eq!(
+        std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(path).unwrap().permissions())
+            & 0o777,
+        0o700,
+        "{path:?}"
+    );
     #[cfg(windows)]
-    assert_eq!(acl::entries(path).unwrap(), (true, vec![acl::current_user().unwrap()]), "{path:?}");
+    assert_eq!(
+        acl::entries(path).unwrap(),
+        (true, vec![acl::current_user().unwrap()]),
+        "{path:?}"
+    );
 }
 
 #[cfg(test)]
@@ -110,7 +131,10 @@ mod tests {
     fn a_folder_open_to_others_is_tightened_back() {
         let scratch = tempfile::tempdir().unwrap();
         // The scratch folder inherits its list from the temp folder, which is not protected.
-        assert_ne!(acl::entries(scratch.path()).unwrap(), (true, vec![acl::current_user().unwrap()]));
+        assert_ne!(
+            acl::entries(scratch.path()).unwrap(),
+            (true, vec![acl::current_user().unwrap()])
+        );
         private_folder(scratch.path()).unwrap();
         assert_owner_only(scratch.path());
     }
@@ -126,8 +150,14 @@ mod tests {
         assert!(lock.is_some());
         let inner = folder.join("inner");
         std::fs::create_dir(&inner).unwrap();
-        assert_eq!(acl::entries(&inner).unwrap().1, vec![acl::current_user().unwrap()]);
-        assert_eq!(acl::entries(&folder.join("default.lock")).unwrap().1, vec![acl::current_user().unwrap()]);
+        assert_eq!(
+            acl::entries(&inner).unwrap().1,
+            vec![acl::current_user().unwrap()]
+        );
+        assert_eq!(
+            acl::entries(&folder.join("default.lock")).unwrap().1,
+            vec![acl::current_user().unwrap()]
+        );
     }
 
     #[test]

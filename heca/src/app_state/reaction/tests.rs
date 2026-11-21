@@ -412,15 +412,12 @@ fn with_a_float(pane: u64) -> Windowed {
 
 /// The rect the window draws a float at, and whether it is the window's active float.
 fn float_in(window: &Windowed, pane: u64) -> Option<(heca_core::layout::Rectangle, bool)> {
-    window
-        .l()
-        .workspace(0)
-        .and_then(|ws| {
-            ws.floating()
-                .into_iter()
-                .find(|f| f.pane.id == PaneId(pane))
-                .map(|f| (f.rect, f.active))
-        })
+    window.l().workspace(0).and_then(|ws| {
+        ws.floating()
+            .into_iter()
+            .find(|f| f.pane.id == PaneId(pane))
+            .map(|f| (f.rect, f.active))
+    })
 }
 
 /// The window that floats a pane places it where it drew it and focuses the floats.
@@ -501,7 +498,12 @@ fn closing_the_last_float_returns_the_window_to_the_tiling() {
     window.session.workspaces[0]
         .floating_panes
         .retain(|f| f.pane.id != PaneId(7));
-    react(&mut window, &mut tracked, &Change::PaneRemoved { pane: PaneId(7) }, None);
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::PaneRemoved { pane: PaneId(7) },
+        None,
+    );
     let ws = window.l().active_workspace().expect("a workspace");
     assert_eq!(ws.focus_domain(), heca_core::layout::FocusDomain::Tiled);
     assert_eq!(ws.active_float(), None);

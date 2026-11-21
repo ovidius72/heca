@@ -73,10 +73,11 @@ fn the_group_adds_nothing_to_the_tree_after_the_first_layout() {
 /// frame: the app never went idle and sat at a full core with nothing happening.
 #[test]
 fn constructing_a_group_does_not_request_a_frame() {
-
     let frames = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let seen = frames.clone();
-    heca_grid_ui::install_frame_request(move || { seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed); });
+    heca_grid_ui::install_frame_request(move || {
+        seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    });
 
     let _g = ButtonGroup::new()
         .size(WidgetSize::Small)

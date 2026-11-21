@@ -13,7 +13,10 @@ fn none_declares_nothing_and_some_declares_it() {
     let row = Row::new().on_hint(pick).tooltip(tip).key(name);
     assert!(row.base().hint.is_none() && row.base().tooltip.is_none() && row.base().key.is_none());
 
-    let row = Row::new().on_hint(Some(|| {})).tooltip(Some("Open")).key(Some("room:1"));
+    let row = Row::new()
+        .on_hint(Some(|| {}))
+        .tooltip(Some("Open"))
+        .key(Some("room:1"));
     assert!(row.base().hint.is_some() && row.base().tooltip.is_some());
     assert_eq!(row.base().key.as_deref(), Some("room:1"));
 
@@ -38,12 +41,24 @@ fn hidden_and_visible_follow_a_changing_value() {
     let lay = |root: &mut Flex| LayoutEngine::new().compute(root, Size::new(200.0, 100.0));
 
     lay(&mut root);
-    assert!(shown(&root, 0) && !shown(&root, 1), "as built: no rooms, nothing failed");
+    assert!(
+        shown(&root, 0) && !shown(&root, 1),
+        "as built: no rooms, nothing failed"
+    );
     rooms.update(|r| r.push("lobby".into()));
     failed.set(true);
     lay(&mut root);
-    assert!(!shown(&root, 0) && shown(&root, 1), "the next layout follows both values");
-    assert!(!in_layout(&root, 0), "hidden is display: none — out of the layout");
+    assert!(
+        !shown(&root, 0) && shown(&root, 1),
+        "the next layout follows both values"
+    );
+    assert!(
+        !in_layout(&root, 0),
+        "hidden is display: none — out of the layout"
+    );
     failed.set(false);
-    assert!(in_layout(&root, 1) && !shown(&root, 1), "visible is visibility: the box stays");
+    assert!(
+        in_layout(&root, 1) && !shown(&root, 1),
+        "visible is visibility: the box stays"
+    );
 }

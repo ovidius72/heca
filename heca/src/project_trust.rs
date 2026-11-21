@@ -31,7 +31,10 @@ const HASH_ARG: &str = "hash";
 /// Raise the notification if the project file here is untrusted. Called at startup and on every
 /// reload, so an ignored file is announced every time, not once ever.
 pub(crate) fn notify_if_untrusted_in(folder: Option<&std::path::Path>) {
-    let Ok(Some(project)) = folder.map_or_else(heca_config::loader::read_project, heca_config::loader::read_project_in) else {
+    let Ok(Some(project)) = folder.map_or_else(
+        heca_config::loader::read_project,
+        heca_config::loader::read_project_in,
+    ) else {
         return;
     };
     if let Some(notice) = notice_for(&project) {
@@ -90,8 +93,9 @@ pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut
             name: FOLDER_ARG.to_string(),
             kind: ArgKind::Text,
             required: false,
-            description: "A folder inside the project; default the folder of the session it runs in."
-                .to_string(),
+            description:
+                "A folder inside the project; default the folder of the session it runs in."
+                    .to_string(),
             values: Vec::new(),
         });
     meta.owner = None;
@@ -284,9 +288,17 @@ mod tests {
     fn a_call_without_a_folder_is_about_the_sessions_project() {
         let session = std::path::Path::new("/work/project");
         let bare = Intent::new(TRUST_PROJECT);
-        assert_eq!(start_folder(&bare, Some(session)), Some(session.to_path_buf()));
-        let named = Intent::new(TRUST_PROJECT).arg(FOLDER_ARG, heca_view::PropValue::Text("/elsewhere".into()));
-        assert_eq!(start_folder(&named, Some(session)), Some(std::path::PathBuf::from("/elsewhere")), "a named folder wins");
+        assert_eq!(
+            start_folder(&bare, Some(session)),
+            Some(session.to_path_buf())
+        );
+        let named = Intent::new(TRUST_PROJECT)
+            .arg(FOLDER_ARG, heca_view::PropValue::Text("/elsewhere".into()));
+        assert_eq!(
+            start_folder(&named, Some(session)),
+            Some(std::path::PathBuf::from("/elsewhere")),
+            "a named folder wins"
+        );
         assert!(describe_trust(&bare).contains("this session's project"));
         assert!(describe_trust(&named).contains("/elsewhere/.heca/config.toml"));
     }

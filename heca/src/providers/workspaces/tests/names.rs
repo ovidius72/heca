@@ -2,26 +2,36 @@
 
 use super::*;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::{DrawCommand, Flex};
 use heca_grid_ui::builders::Parent;
+use heca_grid_ui::{DrawCommand, Flex};
 
 #[test]
 fn a_retained_sidebar_filters_short_names_and_publishes_a_quiet_program_without_rebuilding() {
     let tree = testing::tree();
     let mut fx = testing::Fixture::default();
     let pane = PaneId(1);
-    let mut runtime = PaneRuntime { program: Some("zsh".into()), ..Default::default() };
+    let mut runtime = PaneRuntime {
+        program: Some("zsh".into()),
+        ..Default::default()
+    };
     fx.store.panes.set_runtime(pane, &runtime, None);
     let root = {
         let (seams, mut reg) = fx.split("left");
-        DockView { tree: &tree, scroll: heca_grid_ui::reactive::signal(0.0) }.build(&seams, &mut reg)
+        DockView {
+            tree: &tree,
+            scroll: heca_grid_ui::reactive::signal(0.0),
+        }
+        .build(&seams, &mut reg)
     };
     let mut root = Flex::column().child(root);
     let words = |root: &mut Flex| {
-        crate::chrome::paint_chrome_root(root, 340.0, 800.0, &fx.theme).iter()
+        crate::chrome::paint_chrome_root(root, 340.0, 800.0, &fx.theme)
+            .iter()
             .filter_map(|command| match command {
-                DrawCommand::Text(text) => Some(text.text.clone()), _ => None,
-            }).collect::<Vec<_>>()
+                DrawCommand::Text(text) => Some(text.text.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
     };
     assert!(words(&mut root).iter().any(|text| text == "zsh"));
     for command in ["ls", "cd"] {

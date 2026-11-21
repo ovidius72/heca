@@ -16,7 +16,8 @@ use std::time::Instant;
 /// signal to the child is paced. The last size is always delivered once the gesture settles
 /// ([`flush_pending_pty_size`](TerminalBackend::flush_pending_pty_size) runs on every wake), so the
 /// child never ends up disagreeing with what is on screen.
-pub(super) const PTY_RESIZE_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+pub(super) const PTY_RESIZE_MIN_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(50);
 
 impl TerminalBackend {
     /// Physical cell pixel size `(cell × scale)` reported to the emulation model

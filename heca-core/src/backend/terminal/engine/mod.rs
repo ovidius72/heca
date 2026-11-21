@@ -33,7 +33,6 @@ impl SharedWriter {
             inner: Arc::new(Mutex::new(writer)),
         }
     }
-
 }
 
 impl Write for SharedWriter {
@@ -319,7 +318,11 @@ impl TerminalEngine {
     /// "cia o", the space having gone the direct way. Nothing typed goes the direct way now.
     pub(super) fn type_text(&mut self, text: &str) -> bool {
         text.chars().all(|c| {
-            let key = if c == '\x7f' { KeyCode::Backspace } else { KeyCode::Char(c) };
+            let key = if c == '\x7f' {
+                KeyCode::Backspace
+            } else {
+                KeyCode::Char(c)
+            };
             self.terminal.key_down(key, KeyModifiers::NONE).is_ok()
         })
     }
@@ -361,7 +364,6 @@ impl TerminalEngine {
     pub(super) fn focus_changed(&mut self, focused: bool) {
         self.terminal.focus_changed(focused);
     }
-
 }
 
 mod convert;

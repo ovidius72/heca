@@ -5,8 +5,14 @@ use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Scene, Size
 
 #[test]
 fn the_hovered_fields_tooltip_wins_over_its_rows_general_help() {
-    let mut row = Flex::row().tooltip("General row help").tooltip_delay(0.0)
-        .child(Label::new("Short path").tooltip("/the/complete/folder/path").tooltip_delay(0.0))
+    let mut row = Flex::row()
+        .tooltip("General row help")
+        .tooltip_delay(0.0)
+        .child(
+            Label::new("Short path")
+                .tooltip("/the/complete/folder/path")
+                .tooltip_delay(0.0),
+        )
         .child(Label::new("Other field"));
     LayoutEngine::new().compute(&mut row, Size::new(600.0, 100.0));
     for (index, expected, absent) in [
@@ -14,12 +20,22 @@ fn the_hovered_fields_tooltip_wins_over_its_rows_general_help() {
         (1, "General row help", "/the/complete/folder/path"),
     ] {
         let rect = row.base().children[index].base().bounds;
-        let point = Point::new(rect.loc.x + rect.size.w / 2.0, rect.loc.y + rect.size.h / 2.0);
+        let point = Point::new(
+            rect.loc.x + rect.size.w / 2.0,
+            rect.loc.y + rect.size.h / 2.0,
+        );
         heca_grid_ui::dispatch(&mut row, &Event::pointer_moved(point));
         let scene = common::paint_via_child(&row, &Theme::default());
-        let shown = |word| scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == word));
+        let shown = |word| {
+            scene
+                .iter()
+                .any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == word))
+        };
         assert!(shown(expected), "missing {expected}");
-        assert!(!shown(absent), "wrong tooltip covered the hovered field: {absent}");
+        assert!(
+            !shown(absent),
+            "wrong tooltip covered the hovered field: {absent}"
+        );
     }
 }
 
@@ -241,31 +257,55 @@ fn a_quick_tooltip_rests_for_the_librarys_quick_delay() {
 }
 
 /// The bubble around a widget's tooltip, and every text it drew — hovered, past the delay.
-fn hovered_tip(mut widget: impl Component + 'static) -> (heca_grid_ui::Rectangle, Vec<(String, heca_grid_ui::Rectangle)>) {
+fn hovered_tip(
+    mut widget: impl Component + 'static,
+) -> (
+    heca_grid_ui::Rectangle,
+    Vec<(String, heca_grid_ui::Rectangle)>,
+) {
     use heca_grid_ui::DrawCommand;
     let vp = Size::new(600.0, 400.0);
     LayoutEngine::new().compute(&mut widget, vp);
     let b = widget.base().bounds;
-    heca_grid_ui::dispatch(&mut widget, &Event::pointer_moved(Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0)));
+    heca_grid_ui::dispatch(
+        &mut widget,
+        &Event::pointer_moved(Point::new(
+            b.loc.x + b.size.w / 2.0,
+            b.loc.y + b.size.h / 2.0,
+        )),
+    );
     let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         heca_grid_ui::paint_child(&widget, &mut cx);
     }
-    let texts: Vec<_> = scene.overlay_layer().iter().filter_map(|c| match c {
-        DrawCommand::Text(t) => Some((t.text.clone(), t.rect)),
-        _ => None,
-    }).collect();
-    let bubble = scene.overlay_layer().iter().find_map(|c| match c {
-        DrawCommand::Rect(r) if r.rect.size.w > 0.0 && texts.iter().all(|(_, t)| contains(r.rect, *t)) => Some(r.rect),
-        _ => None,
-    }).expect("the bubble's panel is drawn around what it holds");
+    let texts: Vec<_> = scene
+        .overlay_layer()
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.rect)),
+            _ => None,
+        })
+        .collect();
+    let bubble = scene
+        .overlay_layer()
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r)
+                if r.rect.size.w > 0.0 && texts.iter().all(|(_, t)| contains(r.rect, *t)) =>
+            {
+                Some(r.rect)
+            }
+            _ => None,
+        })
+        .expect("the bubble's panel is drawn around what it holds");
     (bubble, texts)
 }
 
 fn contains(outer: heca_grid_ui::Rectangle, inner: heca_grid_ui::Rectangle) -> bool {
-    inner.loc.x >= outer.loc.x - 0.5 && inner.loc.y >= outer.loc.y - 0.5
+    inner.loc.x >= outer.loc.x - 0.5
+        && inner.loc.y >= outer.loc.y - 0.5
         && inner.loc.x + inner.size.w <= outer.loc.x + outer.size.w + 0.5
         && inner.loc.y + inner.size.h <= outer.loc.y + outer.size.h + 0.5
 }
@@ -276,20 +316,45 @@ fn contains(outer: heca_grid_ui::Rectangle, inner: heca_grid_ui::Rectangle) -> b
 fn a_multi_line_tooltip_stays_inside_its_bubble() {
     let (one, one_texts) = hovered_tip(Button::new("X").tooltip("zsh").tooltip_delay(0.0));
     let (two, two_texts) = hovered_tip(Button::new("X").tooltip("zsh\npane-1").tooltip_delay(0.0));
-    assert_eq!(one_texts.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), ["zsh"]);
-    assert_eq!(two_texts.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), ["zsh", "pane-1"]);
-    assert!(two_texts.iter().all(|(_, rect)| contains(two, *rect)), "every line inside the bubble");
-    assert!(two.size.h > one.size.h * 1.5, "two lines make a taller bubble ({} vs {})", two.size.h, one.size.h);
+    assert_eq!(
+        one_texts
+            .iter()
+            .map(|(t, _)| t.as_str())
+            .collect::<Vec<_>>(),
+        ["zsh"]
+    );
+    assert_eq!(
+        two_texts
+            .iter()
+            .map(|(t, _)| t.as_str())
+            .collect::<Vec<_>>(),
+        ["zsh", "pane-1"]
+    );
+    assert!(
+        two_texts.iter().all(|(_, rect)| contains(two, *rect)),
+        "every line inside the bubble"
+    );
+    assert!(
+        two.size.h > one.size.h * 1.5,
+        "two lines make a taller bubble ({} vs {})",
+        two.size.h,
+        one.size.h
+    );
 }
 
 /// **A tooltip can be a widget** — the same `.tooltip(..)`, handed a segmented `Tag`, shows the tag
 /// inside the bubble.
 #[test]
 fn a_tooltip_holds_a_widget() {
-    let tag = Tag::new("claude").segment_text("opus").segment_text("~/projects/heca");
+    let tag = Tag::new("claude")
+        .segment_text("opus")
+        .segment_text("~/projects/heca");
     let (bubble, texts) = hovered_tip(Button::new("X").tooltip(tag).tooltip_delay(0.0));
     for word in ["claude", "opus", "~/projects/heca"] {
-        let (_, rect) = texts.iter().find(|(t, _)| t == word).unwrap_or_else(|| panic!("{word} is shown"));
+        let (_, rect) = texts
+            .iter()
+            .find(|(t, _)| t == word)
+            .unwrap_or_else(|| panic!("{word} is shown"));
         assert!(contains(bubble, *rect), "{word} inside the bubble");
     }
 }
@@ -299,12 +364,14 @@ fn a_tooltip_holds_a_widget() {
 fn a_tooltip_follows_the_signal_it_was_given() {
     let words = signal("before".to_string());
     let mut button = Button::new("X").tooltip(words).tooltip_delay(0.0);
-    assert_eq!(hovered_tip(Button::new("X").tooltip(words).tooltip_delay(0.0)).1[0].0, "before");
+    assert_eq!(
+        hovered_tip(Button::new("X").tooltip(words).tooltip_delay(0.0)).1[0].0,
+        "before"
+    );
     words.set("after".into());
     LayoutEngine::new().compute(&mut button, Size::new(600.0, 400.0));
     assert_eq!(hovered_tip(button).1[0].0, "after");
 }
-
 
 /// **A bubble that appears, or goes, is a change to repaint — with nothing marking it.** It comes on
 /// a timed wake, when no event touched the widget; a host that repaints only what changed
@@ -326,21 +393,38 @@ fn a_bubble_appearing_or_going_is_damage_with_its_whole_rect() {
     let mut root = Flex::row().child(Button::new("X").tooltip("zsh\npane-1").tooltip_delay(0.05));
     LayoutEngine::new().compute(&mut root, vp);
     let b = root.base().children[0].base().bounds;
-    heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0)));
+    heca_grid_ui::dispatch(
+        &mut root,
+        &Event::pointer_moved(Point::new(
+            b.loc.x + b.size.w / 2.0,
+            b.loc.y + b.size.h / 2.0,
+        )),
+    );
     paint(&root);
-    let _ = heca_grid_ui::collect_damage(&root);           // the hover itself
+    let _ = heca_grid_ui::collect_damage(&root); // the hover itself
     let (bubble, _) = hovered_tip(Button::new("X").tooltip("zsh\npane-1").tooltip_delay(0.0));
     let covers = |damage: heca_grid_ui::Rectangle| damage.size.h >= b.size.h + bubble.size.h;
 
     // Painted before the delay ran out, asked after: the bubble is due but not on screen.
     std::thread::sleep(std::time::Duration::from_millis(100));
     let _ = heca_grid_ui::collect_damage(&root);
-    assert_eq!(root.next_redraw(), Some(0.0), "a due bubble not painted yet asks for a frame now");
+    assert_eq!(
+        root.next_redraw(),
+        Some(0.0),
+        "a due bubble not painted yet asks for a frame now"
+    );
     paint(&root);
-    let shown = heca_grid_ui::collect_damage(&root).expect("the frame that paints the bubble repaints its rect");
-    assert!(covers(shown), "the damage covers the bubble, not only the button: {shown:?}");
+    let shown = heca_grid_ui::collect_damage(&root)
+        .expect("the frame that paints the bubble repaints its rect");
+    assert!(
+        covers(shown),
+        "the damage covers the bubble, not only the button: {shown:?}"
+    );
     paint(&root);
-    assert!(heca_grid_ui::collect_damage(&root).is_none(), "a bubble already on screen is not damage again");
+    assert!(
+        heca_grid_ui::collect_damage(&root).is_none(),
+        "a bubble already on screen is not damage again"
+    );
     assert_eq!(root.next_redraw(), None, "and asks for nothing");
 
     heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(-50.0, -50.0)));
@@ -354,15 +438,43 @@ fn a_bubble_appearing_or_going_is_damage_with_its_whole_rect() {
 #[test]
 fn a_bubble_by_the_right_edge_is_kept_inside_the_window() {
     let vp = Size::new(400.0, 300.0);
-    let mut root = Flex::row().width("100%").justify("end").child(Button::new("X").tooltip("a long tooltip near the right edge").tooltip_delay(0.0));
+    let mut root = Flex::row().width("100%").justify("end").child(
+        Button::new("X")
+            .tooltip("a long tooltip near the right edge")
+            .tooltip_delay(0.0),
+    );
     LayoutEngine::new().compute(&mut root, vp);
     let b = root.base().children[0].base().bounds;
-    assert!(b.loc.x + b.size.w > vp.w - 1.0, "the button sits at the right edge");
-    heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0)));
+    assert!(
+        b.loc.x + b.size.w > vp.w - 1.0,
+        "the button sits at the right edge"
+    );
+    heca_grid_ui::dispatch(
+        &mut root,
+        &Event::pointer_moved(Point::new(
+            b.loc.x + b.size.w / 2.0,
+            b.loc.y + b.size.h / 2.0,
+        )),
+    );
     let theme = Theme::default();
     let mut scene = Scene::new();
-    { let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp); heca_grid_ui::paint_child(&root, &mut cx); }
-    let texts: Vec<_> = scene.overlay_layer().iter().filter_map(|c| match c { DrawCommand::Text(t) => Some(t.rect), _ => None }).collect();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        heca_grid_ui::paint_child(&root, &mut cx);
+    }
+    let texts: Vec<_> = scene
+        .overlay_layer()
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.rect),
+            _ => None,
+        })
+        .collect();
     assert!(!texts.is_empty(), "the tip is drawn");
-    for t in texts { assert!(t.loc.x >= 0.0 && t.loc.x + t.size.w <= vp.w + 0.5, "inside the window: {t:?}"); }
+    for t in texts {
+        assert!(
+            t.loc.x >= 0.0 && t.loc.x + t.size.w <= vp.w + 0.5,
+            "inside the window: {t:?}"
+        );
+    }
 }
