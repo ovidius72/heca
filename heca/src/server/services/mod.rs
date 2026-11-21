@@ -175,8 +175,21 @@ impl ServiceHost {
     }
 
     /// The saved-state changes since the last call, to announce as `state.changed`.
-    pub(crate) fn take_state_changes(&self) -> Vec<crate::entry::service::StateEvent> {
-        self.saved.borrow_mut().take_changes()
+    ///
+    /// **An extension that saved is shown again in every window**, with nothing written by it: what
+    /// each window last saw of its services is forgotten, so the next publish projects them afresh
+    /// and a projection that reads `cx.saved(..)` shows the new value. The author of a dock never
+    /// has to say "my view changed" after a save.
+    pub(crate) fn take_state_changes(&mut self) -> Vec<crate::entry::service::StateEvent> {
+        let (changes, touched) = {
+            let mut saved = self.saved.borrow_mut();
+            (saved.take_changes(), saved.take_touched())
+        };
+        if !touched.is_empty() {
+            let services = &self.services;
+            self.seen.retain(|(_, index), _| !touched.contains(services[*index].extension()));
+        }
+        changes
     }
 
     /// Whether `action` belongs to one of this server's services.
