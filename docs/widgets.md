@@ -469,7 +469,7 @@ A surface that wants keys must **hold focus**, which it already had to do to dra
 | `Overlay`, `ContextMenu`, `CommandPalette` | **follow** their open signal into `Base::focused` (`Base::follow_focus_modal`): open *is* focused, and closing gives the keyboard back to whoever held it |
 | `Select` | opening the list focuses it |
 | `Dialog` | its own `FocusManager` focuses a field or button, so text reaches the field and the dialog hears what the field declined on the way back up |
-| `FocusScope` | holds nothing itself; draws its ring while the keyboard is **anywhere inside it** (`contains_keyboard`, CSS `:focus-within`). A host moves the keyboard into a named region with `focus_scope` (and out with `release_scope`) — host-only, because they take a name |
+| `FocusScope` | holds nothing itself; draws its ring while the keyboard is **anywhere inside it** (`contains_keyboard`, CSS `:focus-within`). A host moves the keyboard into a named region with `focus_scope` (and out with `release_scope`), and `replace_child` rebuilds a subtree without moving it — host-only, because they take a name or a place |
 | `CardGrid` | focusable in its constructor — it moves a cursor with the keyboard |
 
 **`focused` means one thing: the widget the keyboard is aimed at** — `document.activeElement`, **one
@@ -5884,6 +5884,12 @@ set, focused and unfocused.)
   slot, or a region by its name — which is who answers a key, a menu or an action; it never looks
   through a surface) and `page_scope(root)` (the named region the keyboard is in on the page,
   looking through a dialog above it to where it returns).
+- **Rebuilding a part of the tree (host)**: `replace_child(parent, index, new)` puts a freshly
+  built subtree in place of a child and **keeps the keyboard in the same region**: when it was
+  inside a named region of the old subtree, the region of that name in the new one takes it back
+  (through `focus_scope`, so a region that keeps the keyboard holds it itself). A host that rebuilds
+  its docks — heca's chrome on a resize or a workspace switch — calls this, and no dock has to put
+  the keyboard back after it. When the keyboard was anywhere else, only the replacement happens.
 - **One widget, by identity (host)**: `keyboard_holder(root)` — the focus identity
   (`Base::focus_id`) of the widget holding the keyboard, the browser's `document.activeElement` —
   and `focus_widget_by_id(root, id)`, its `element.focus()`. For a host that remembers a widget by
@@ -5899,6 +5905,8 @@ set, focused and unfocused.)
 let framed = FocusScope::new(my_container).scope_key("my-dock");
 // The host, from an action:
 heca_grid_ui::focus_scope(&mut window_root, "my-dock");
+// The host, rebuilding the part that holds the dock: the keyboard stays in "my-dock".
+heca_grid_ui::replace_child(&mut window_root, at, rebuilt.into());
 ```
 
 The typed described counterpart builds the same native wrapper. Its ring reads the realized

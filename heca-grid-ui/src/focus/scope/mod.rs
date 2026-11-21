@@ -83,6 +83,43 @@ pub fn focus_scope(root: &mut dyn Component, name: &str) -> bool {
     true
 }
 
+/// **Put `new` in place of child `index` of `parent`, and keep the keyboard in the same region.**
+///
+/// A host rebuilds a subtree — the chrome on a resize, a sidebar toggle, a workspace switch — and the
+/// widgets that held the keyboard go with the old one. When the keyboard was inside a named region
+/// of the old subtree (a dock), the region of that name in the new one takes it back, through
+/// [`focus_scope`]: a dock that [keeps the keyboard](crate::component::Base::keeps_keyboard) holds
+/// it itself, any other dock hands it to its first control. So a rebuild never moves the keyboard,
+/// and nobody who triggers one has to remember to put it back.
+///
+/// When the keyboard was elsewhere — outside the old subtree, or in it but outside every region —
+/// the replacement is all that happens. An `index` past the last child adds `new` at the end.
+pub fn replace_child(parent: &mut dyn Component, index: usize, new: crate::WidgetModel) {
+    settle(parent);
+    let region = holder_path(parent)
+        .filter(|path| path.first() == Some(&index))
+        .and_then(|path| region_on_path(parent, &path));
+    let children = &mut parent.base_mut().children;
+    match children.get_mut(index) {
+        Some(slot) => *slot = new,
+        None => children.push(new),
+    }
+    if let Some(name) = region {
+        focus_scope(parent, &name);
+    }
+}
+
+/// The innermost named region on `path` below `root` (`root` itself not counted).
+fn region_on_path(root: &dyn Component, path: &[usize]) -> Option<String> {
+    let mut node = root;
+    let mut region = None;
+    for &i in path {
+        node = node.base().children[i].as_ref();
+        region = node.base().scope_key.clone().or(region);
+    }
+    region
+}
+
 /// The path to the first shown, enabled control under the region at `path` (the region itself
 /// excluded) that takes the keyboard, in tree order.
 fn first_control(root: &dyn Component, path: &[usize]) -> Option<Vec<usize>> {

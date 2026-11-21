@@ -32,15 +32,17 @@ pub(crate) const CHROME_KEY: &str = "heca.chrome";
 /// It goes **right after the workspace**, so it is drawn over the panes, and every surface placed
 /// beside it paints and hit-tests above it: child order is z-order in one tree, which is what
 /// replaces the layer stack's separate sort (`docs/surface-compositor.md` § 0.6).
+///
+/// **The keyboard stays in the dock that had it.** A rebuild — a workspace switch from the dock's
+/// own `j`/`k` among them — makes every dock anew, and the one holding the keyboard takes it back
+/// in the new tree ([`heca_grid_ui::replace_child`]), so no dock and no action has to put it back.
 pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
     let chrome = heca_grid_ui::WidgetModel::new(chrome.key(CHROME_KEY));
-    let children = &mut root.base_mut().children;
-    match children
-        .iter()
-        .position(|c| c.base().key.as_deref() == Some(CHROME_KEY))
-    {
-        Some(at) => children[at] = chrome,
+    let seated = root.base().children.iter().position(|c| c.base().key.as_deref() == Some(CHROME_KEY));
+    match seated {
+        Some(at) => heca_grid_ui::replace_child(root, at, chrome),
         None => {
+            let children = &mut root.base_mut().children;
             let after_workspace = children
                 .iter()
                 .position(|c| c.base().key.as_deref() == Some(workspace::WORKSPACE_KEY))
@@ -128,5 +130,28 @@ pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: heca_grid_ui::W
     {
         Some(at) => children[at] = surface,
         None => children.push(surface),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use heca_grid_ui::builders::Parent;
+    use heca_grid_ui::widgets::{Button, FocusScope};
+
+    /// A chrome with one dock that keeps the keyboard, as heca builds a navigable dock.
+    fn chrome() -> Flex {
+        Flex::row().child(FocusScope::new(Button::new("row")).scope_key("rooms").keeps_keyboard(true))
+    }
+
+    /// The bug this guards: a workspace switch from a dock's own keys rebuilt the chrome, the new
+    /// dock was born without the keyboard, and the next key went to the terminal instead.
+    #[test]
+    fn a_rebuilt_chrome_keeps_the_keyboard_in_the_dock_that_had_it() {
+        let mut root = new_window_root();
+        seat_chrome(&mut root, chrome());
+        assert!(heca_grid_ui::focus_scope(&mut root, "rooms"));
+        seat_chrome(&mut root, chrome());
+        assert_eq!(heca_grid_ui::page_scope(&root).as_deref(), Some("rooms"));
     }
 }

@@ -88,7 +88,8 @@ pub use event::{
 };
 pub use focus::{
     FocusManager, KeyboardArea, KeyboardOwner, contains_keyboard, focus_scope, focus_widget_by_id,
-    keyboard_area, keyboard_holder, keyboard_owner, page_scope, release_scope, settle_focus,
+    keyboard_area, keyboard_holder, keyboard_owner, page_scope, release_scope, replace_child,
+    settle_focus,
 };
 pub use hint::{
     DeclaredAction, Hint, SurfaceHints, clear_hints, collect_actions, collect_hints,
