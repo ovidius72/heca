@@ -59,11 +59,12 @@ pub trait EventExt: Component + Sized {
     }
 
 
-    /// **Send every intent dispatched inside this widget to `route`** — by a handler, a row's
-    /// `on_activate`, or a letter — instead of straight to the host. The nearest container that
-    /// says wins. A host uses it to address what a seated dock asks for; widgets inside never know.
-    fn route_intents(mut self, route: impl Fn(heca_view::Intent) + 'static) -> Self {
-        self.base_mut().routes_intents = Some(std::rc::Rc::new(route));
+    /// **An action was dispatched inside this widget** — by a handler's `ev.dispatch`, a row's
+    /// `on_activate`, or a letter. `f` receives it instead of the host, like a DOM listener on a
+    /// container receives what its children fire. The nearest container listening wins. heca uses
+    /// it on the wrapper round every dock to address what the dock asks for; widgets never know.
+    fn on_dispatch(mut self, f: impl Fn(heca_view::Intent) + 'static) -> Self {
+        self.base_mut().dispatch_handler = Some(std::rc::Rc::new(f));
         self
     }
 

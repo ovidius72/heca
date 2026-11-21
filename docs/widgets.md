@@ -4311,7 +4311,7 @@ row that nothing can activate should not look like a control.
 > **Inside a dock, name the action and nothing else.** `.on_activate(..)` (Row, Item, Choice,
 > RailCell) takes a closure **or an `Intent`**, `.on_hint(..)` takes an `Intent`, and a handler
 > calls `ev.dispatch(..)`. Every one of them goes to the route of the container that holds the
-> widget (`EventExt::route_intents`), and heca seats each dock in a wrapper that declares that
+> widget (`EventExt::on_dispatch`), and heca seats each dock in a wrapper that declares that
 > route: the intent goes out seated on that dock and judged as a gesture in its region — exactly
 > what `fires` / `picks` send. So a dock, an extension's or a plugin's included, writes
 >

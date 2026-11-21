@@ -1073,7 +1073,7 @@ Row::new().on_activate(fire).on_hint(hint)
 ```
 
 Inside a seated dock it is shorter still: name the action, and heca addresses it to the dock
-(`EventExt::route_intents` on the wrapper round every dock) —
+(`EventExt::on_dispatch` on the wrapper round every dock) —
 `Row::new().on_activate(pane_row_press(pane_id)).on_hint(row_hint(pane_key(pane_id)))`. The
 `Intent` goes out exactly as `fires` / `picks` would send it; a plugin writes the same line.
 

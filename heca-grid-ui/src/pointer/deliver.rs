@@ -133,10 +133,10 @@ pub(super) fn delivering<T>(f: impl FnOnce() -> T) -> (T, bool) {
 impl Base {
     /// Run this widget's registered handlers for `ev`, if it has any.
     pub(crate) fn run_handlers(&mut self, ev: &Event) -> crate::event::HandlerOutcome {
-        let route = self.intent_route.clone();
+        let route = self.dispatch_to.clone();
         match self.handlers.as_mut() {
             Some(h) => {
-                let out = crate::intent::routed(route, || h.run(ev));
+                let out = crate::intent::dispatching_to(route, || h.run(ev));
                 if out.default_prevented {
                     note_default_prevented();
                 }

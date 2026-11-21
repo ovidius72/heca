@@ -672,14 +672,14 @@ fn or(a: Handled, b: Handled) -> Handled {
 pub(crate) fn fire_mounts(node: &mut dyn Component) {
     // The root keeps the route it already had: a tree laid out on its own is still inside
     // whatever routed it when the whole window was laid out.
-    let held = node.base().intent_route.clone();
+    let held = node.base().dispatch_to.clone();
     mount_walk(node, held);
 }
 
 /// Fire mounts and hand each widget its intent route: its own, else the one above it.
-fn mount_walk(node: &mut dyn Component, above: Option<crate::intent::IntentRoute>) {
-    let route = node.base().routes_intents.clone().or(above);
-    node.base_mut().intent_route = route.clone();
+fn mount_walk(node: &mut dyn Component, above: Option<crate::intent::DispatchHandler>) {
+    let route = node.base().dispatch_handler.clone().or(above);
+    node.base_mut().dispatch_to = route.clone();
     if !node.base().mounted.get() {
         node.base().mounted.set(true);
         let ev = Event::Mount;

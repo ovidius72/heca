@@ -109,7 +109,7 @@ fn focus_and_pick(
                         },
                     ));
                 })
-                .route_intents(move |intent| {
+                .on_dispatch(move |intent| {
                     route.fire_intent(crate::chrome::input::emitter::seated(&seat, intent))
                 })
         }

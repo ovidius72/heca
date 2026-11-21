@@ -10,7 +10,7 @@ fn a_named_action_inside_a_dock_goes_out_seated_on_that_dock() {
     use crate::app::interaction::{InteractionIntent, InteractionSource};
     use crate::chrome::{BuildCx, ContainerContribution, Contribution, RegionSet};
     use crate::providers::{ChromeCtx, Provider};
-    use heca_grid_ui::builders::{EventExt, HintExt};
+    use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt};
     use heca_grid_ui::widgets::Row;
     use heca_grid_ui::{LayoutEngine, Size};
     use heca_view::Intent;
@@ -31,9 +31,13 @@ fn a_named_action_inside_a_dock_goes_out_seated_on_that_dock() {
                 self,
                 |_: &ChromeCtx<'_>, _: &mut BuildCx<'_>| {
                     Flex::column()
-                        .child(Row::new().on_activate(Intent::new("activated")))
-                        .child(Row::new().on_hint(Intent::new("picked")))
-                        .child(Row::new().on_click(|ev| ev.dispatch(Intent::new("clicked"))))
+                        .child(Row::new().key("activated").on_activate(Intent::new("activated")))
+                        .child(Row::new().key("picked").on_hint(Intent::new("picked")))
+                        .child(
+                            Row::new()
+                                .key("clicked")
+                                .on_click(|ev| ev.dispatch(Intent::new("clicked"))),
+                        )
                 },
             ))
         }
@@ -66,7 +70,7 @@ fn a_named_action_inside_a_dock_goes_out_seated_on_that_dock() {
     LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
 
     for name in ["activated", "picked", "clicked"] {
-        let path = row_path(region.as_ref(), name).expect("the row is in the dock");
+        let path = heca_grid_ui::path_with_key(region.as_ref(), name).expect("the row is in the dock");
         assert!(
             heca_grid_ui::fire_hint(region.as_mut(), &path),
             "{name} is a target"
@@ -89,22 +93,4 @@ fn a_named_action_inside_a_dock_goes_out_seated_on_that_dock() {
         })
         .collect();
     assert_eq!(names, ["activated", "picked", "clicked"]);
-}
-
-/// The path to the n-th row of the fixture dock, found by walking to the deepest column of rows.
-fn row_path(root: &dyn heca_grid_ui::Component, name: &str) -> Option<Vec<usize>> {
-    let at = ["activated", "picked", "clicked"]
-        .iter()
-        .position(|n| *n == name)?;
-    let mut path = Vec::new();
-    let mut node = root;
-    // Down the single-child wrappers to the dock's own column of three rows.
-    while node.base().children.len() == 1 {
-        path.push(0);
-        node = node.base().children[0].as_ref();
-    }
-    (node.base().children.len() == 3).then(|| {
-        path.push(at);
-        path
-    })
 }

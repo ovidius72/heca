@@ -192,7 +192,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
 ///    does.
 pub(crate) fn run_pick(node: &mut dyn Component) {
     if let Some(hint) = &node.base().hint {
-        crate::intent::routed(node.base().intent_route.clone(), || hint.run());
+        crate::intent::dispatching_to(node.base().dispatch_to.clone(), || hint.run());
         return;
     }
     if !crate::hint::is_target(node) {
@@ -207,11 +207,11 @@ pub(crate) fn run_pick(node: &mut dyn Component) {
 }
 
 /// **The widget's own event code, as that widget** — a dispatch it makes there takes its route
-/// (`Base::intent_route`). Every walk calls a widget through this, so no widget, and no walk, has
+/// (`Base::dispatch_to`). Every walk calls a widget through this, so no widget, and no walk, has
 /// to remember it.
 pub(crate) fn own_event(node: &mut dyn Component, ev: &Event) -> Handled {
-    let route = node.base().intent_route.clone();
-    crate::intent::routed(route, || node.on_event(ev))
+    let route = node.base().dispatch_to.clone();
+    crate::intent::dispatching_to(route, || node.on_event(ev))
 }
 
 /// Capture down, children last-first, bubble up — for the events that are addressed to everything

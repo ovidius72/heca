@@ -378,11 +378,11 @@ pub struct Base {
     /// **region that is not a widget you can put a builder on**, and nothing else.
     pub hint: Option<crate::hint::Hint>,
     /// Where intents from this widget's subtree go, if this widget says
-    /// ([`route_intents`](crate::builders::EventExt::route_intents)).
-    pub routes_intents: Option<crate::intent::IntentRoute>,
+    /// ([`on_dispatch`](crate::builders::EventExt::on_dispatch)).
+    pub dispatch_handler: Option<crate::intent::DispatchHandler>,
     /// The route this widget's intents take: its own, else the nearest container's above it.
     /// Filled in by the layout pass, the first moment a widget knows what holds it.
-    pub intent_route: Option<crate::intent::IntentRoute>,
+    pub dispatch_to: Option<crate::intent::DispatchHandler>,
     /// **Which pickers this target belongs to.** Empty — the default — means the ordinary one:
     /// `prefix+/`, the picker that letters everything actionable.
     ///

@@ -14,8 +14,8 @@ use std::rc::Rc;
 
 type IntentSink = Box<dyn Fn(heca_view::Intent)>;
 
-/// **Where the intents from inside a subtree go**, declared by the container that holds it
-/// ([`route_intents`](crate::builders::EventExt::route_intents)).
+/// **What receives the actions dispatched inside a container**, declared on it with
+/// [`on_dispatch`](crate::builders::EventExt::on_dispatch).
 ///
 /// The host seats each dock in a wrapper that knows which dock it is and how a gesture there is
 /// judged, and declares this on it. Every widget inside then just names its action — a handler's
@@ -23,14 +23,14 @@ type IntentSink = Box<dyn Fn(heca_view::Intent)>;
 /// [`on_activate`](crate::widgets::Row::on_activate), a letter's
 /// [`on_hint`](crate::builders::HintExt::on_hint) — and the action arrives addressed, with nothing
 /// threaded through the widgets to do it.
-pub type IntentRoute = Rc<dyn Fn(heca_view::Intent)>;
+pub type DispatchHandler = Rc<dyn Fn(heca_view::Intent)>;
 
 thread_local! {
     /// Thread-local because the UI runs single-threaded, exactly like the menu sink.
     static INTENT_SINK: RefCell<Option<IntentSink>> = const { RefCell::new(None) };
     /// The route of the widget acting right now — set while its handlers and its own event code
     /// run ([`routed`]), so a dispatch made there goes where its container said.
-    static ROUTE: RefCell<Option<IntentRoute>> = const { RefCell::new(None) };
+    static ROUTE: RefCell<Option<DispatchHandler>> = const { RefCell::new(None) };
 }
 
 /// **Something a widget does when it is used**: a closure, or an action named as data.
@@ -66,7 +66,7 @@ impl From<heca_view::Intent> for Act {
 /// Run `f` as the widget whose route is `route`: a dispatch made inside goes to that route.
 /// Nested calls restore the outer route, so a widget acting inside another's delivery cannot leak
 /// its route past its own turn.
-pub(crate) fn routed<T>(route: Option<IntentRoute>, f: impl FnOnce() -> T) -> T {
+pub(crate) fn dispatching_to<T>(route: Option<DispatchHandler>, f: impl FnOnce() -> T) -> T {
     let outer = ROUTE.with(|c| c.replace(route));
     let out = f();
     ROUTE.with(|c| *c.borrow_mut() = outer);
@@ -124,7 +124,7 @@ mod tests {
         let (host, routed) = routes();
         let seen = routed.clone();
         let mut root = Flex::column()
-            .route_intents(move |intent| seen.borrow_mut().push(intent.action))
+            .on_dispatch(move |intent| seen.borrow_mut().push(intent.action))
             .child(Row::new().on_activate(Intent::new("activated")))
             .child(Row::new().on_hint(Intent::new("picked")))
             .child(Row::new().on_click(|ev| ev.dispatch(Intent::new("clicked"))));
