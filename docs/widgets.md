@@ -6058,6 +6058,9 @@ Flex::column().child(shown.map(|view| &view.rooms, RoomRow::new))
 - `signal.map(make)` on a `Signal<Vec<T>>`, `shown.map(pick, make)` on a `ServiceState` (heca).
   `T: Clone + PartialEq`. The general form both are built on is `BoundChildren::new(read, make)`,
   where `read` is any function that reads values that change.
+- **A list the component may not have** is an `Option`, exactly as an optional widget is:
+  `.child(report.map(|signal| signal.map(build_line)))` — `None` attaches nothing. No always-present
+  empty signal is needed just to have something to hand over.
 - **Which child an item keeps**: an item is its own identity. An item equal to one already shown
   keeps that child wherever it moved — focus, hover, its own scroll and state included; a gone item
   loses its child; a new one gets one; an item whose data changed is a new item and its child is
