@@ -260,8 +260,8 @@ pub struct AppearanceConfig {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExposeAppearance {
     /// Show each pane's working directory (folder icon + home-relative path) on its card in the
-    /// exposé. On by default. It used to be `[settings] pane_show_cwd`, which is still read when
-    /// this one is not written; once it is written, this one decides.
+    /// exposé. On by default. (It used to be `[settings] pane_show_cwd`; that name is no longer read,
+    /// and the loader says so.)
     #[serde(default)]
     pub show_cwd: Option<bool>,
 }

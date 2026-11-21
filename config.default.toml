@@ -756,6 +756,11 @@ search_current_match_alpha = 150
 # width            = 300
 pane_lines = ["cwd", "git", "agent"]
 agent_session_line = "reported"
+# workspace_numbers: show each workspace's number before its name — 1 to 9, then 0 for the
+#                   tenth, as on the keyboard (a key bound to `focus_workspace` takes
+#                   `ws_idx`, which counts from 0: the workspace shown as 1 is ws_idx 0).
+#                   true (default) | false.
+workspace_numbers = true
 
 # Per-project settings: a `.heca/config.toml` in the folder heca was started in (or the nearest
 # parent that has a `.heca/` folder) is merged over this file key by key — any key it sets wins, and
@@ -767,8 +772,7 @@ agent_session_line = "reported"
 # ─────────────────────────────────────────────────────────────────────────────
 # The exposé (prefix+Tab map of every pane).
 # show_cwd: show each pane's working directory (folder icon + path) on its card.
-#           On by default. Replaces `[settings] pane_show_cwd`, which is still read
-#           only while this key is not written.
+#           On by default. (Replaces `[settings] pane_show_cwd`, no longer read.)
 # show_cwd = true
 
 # ─────────────────────────────────────────────────────────────────────────────

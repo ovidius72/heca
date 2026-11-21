@@ -38,6 +38,9 @@ pub struct SidebarAppearance {
     /// [`AgentSessionLine`].
     #[serde(default)]
     pub agent_session_line: AgentSessionLine,
+    /// Show each workspace's number before its name (1–9, then 0 for the tenth). On by default.
+    #[serde(default = "shown")]
+    pub workspace_numbers: bool,
 }
 
 /// **When the line under an agent shows its session title** — `[appearance.sidebar]
@@ -66,6 +69,7 @@ impl Default for SidebarAppearance {
             width: None,
             pane_lines: default_sidebar_pane_lines(),
             agent_session_line: AgentSessionLine::default(),
+            workspace_numbers: true,
         }
     }
 }
@@ -86,4 +90,8 @@ pub fn default_sidebar_pane_lines() -> Vec<String> {
                 .expect("embedded appearance.sidebar.pane_lines must be a list of names")
         })
         .clone()
+}
+
+fn shown() -> bool {
+    true
 }

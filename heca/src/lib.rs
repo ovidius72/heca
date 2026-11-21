@@ -289,6 +289,7 @@ impl HecaApp {
             // After the plugins' keys are back, for the same reason the startup report waits for
             // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
+            notify_unread_keys();
             state.theme = self.app_config.theme.clone();
             state.client.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
             // Appearance: opacity re-reads every frame, so updating the snapshot
@@ -395,6 +396,37 @@ impl HecaApp {
 /// Retry so clicking it clears the error and the retried reload raises a fresh card rather than
 /// mutating this one in place. Both share `dedup_key` so a fixed-then-reloaded config does not
 /// stack toasts.
+/// **Keys the user's files set that heca does not read**, as one card at start-up and after each
+/// reload — a retired name with the one that replaced it, a misspelling as unknown. The same list
+/// `heca --show-config` ends with; nothing is shown when every key was read.
+fn notify_unread_keys() {
+    use crate::notification::Notification;
+    let unread = heca_config::loader::config_sources()
+        .map(|found| found.unread)
+        .unwrap_or_default();
+    if unread.is_empty() {
+        return;
+    }
+    let body = unread
+        .iter()
+        .map(|(path, key)| {
+            format!(
+                "{}: {key}",
+                path.file_name().map_or_else(
+                    || path.display().to_string(),
+                    |n| n.to_string_lossy().into_owned()
+                )
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Notification::warning("Some configuration keys are not read")
+        .body(body)
+        .dedup_key("config-unread")
+        .originator()
+        .send();
+}
+
 fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) {
     use crate::notification::{Notification, NotificationAction};
     match outcome {
@@ -488,6 +520,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             // Everything that can register has now registered — config, built-ins and every
             // mounted component — so this is the first moment the report can be complete.
             self.conflicts.report();
+            notify_unread_keys();
             self.state = Some(state);
         }
     }
