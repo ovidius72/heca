@@ -1308,7 +1308,7 @@ dependencies = [
 
 [[package]]
 name = "heca"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "arboard",
  "dirs",
@@ -1344,7 +1344,7 @@ dependencies = [
 
 [[package]]
 name = "heca-config"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "dirs",
  "heca-theme",
@@ -1357,7 +1357,7 @@ dependencies = [
 
 [[package]]
 name = "heca-core"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "anyhow",
  "image",
@@ -1373,7 +1373,7 @@ dependencies = [
 
 [[package]]
 name = "heca-grid-ui"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "floem_reactive",
  "heca-core",
@@ -1388,7 +1388,7 @@ dependencies = [
 
 [[package]]
 name = "heca-grid-ui-macros"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1397,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "heca-renderer"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -1417,7 +1417,7 @@ dependencies = [
 
 [[package]]
 name = "heca-theme"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "dirs",
  "serde",
@@ -1426,7 +1426,7 @@ dependencies = [
 
 [[package]]
 name = "heca-view"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "heca-view-realize"
-version = "0.1.0"
+version = "0.1.0-2"
 dependencies = [
  "heca-core",
  "heca-grid-ui",
