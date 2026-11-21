@@ -3,7 +3,7 @@
 The default keys, what each one does, and how the keyboard behaves while a dock holds it or while
 you scroll a terminal. Every key here is a default: change or remove any of them, and add your own,
 as described in [Keybindings](keybindings.md). `keybindings.default.toml` is the source of truth,
-and `heca --keys-show` prints what is bound right now.
+and `heca --show-keys` prints what is bound right now.
 
 In the tables, a key shown without a modifier prefix is pressed **after the prefix key**. `h` means
 `prefix+h` (by default `Ctrl+B`, then `h`).
@@ -196,16 +196,16 @@ scrolling exists only here (`scroll_page_left`, `scroll_page_right`, `scroll_to_
 `scroll_to_right_edge`, also reachable over RPC by the same names), because a
 terminal viewport has a single axis.
 
-## Finding a key — `heca --keys-show`
+## Finding a key — `heca --show-keys`
 
 Keys are no longer all in one file, so reading config can no longer answer "what runs this action":
 a mode's keys are in `[[keys.mode]]`, a surface's in `[[keys.surface]]`, and a plugin's are in no
-file at all. `heca --keys-show` prints every binding name, the key it resolves to and the layer it
+file at all. `heca --show-keys` prints every binding name, the key it resolves to and the layer it
 came from — read out of the **built keymaps**, so it sees all of them alike. `--json` emits the same
 three facts per line for scripting.
 
 ```
-$ heca --keys-show
+$ heca --show-keys
 BINDING                       KEY              LAYER
 close                         prefix+x         [keys]
 workspaces.cursor_down        j                [[keys.surface]] workspaces

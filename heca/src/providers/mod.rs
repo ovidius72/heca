@@ -196,7 +196,7 @@ pub trait Provider {
     ///
     /// **Empty for anything shipped with heca, and that is the point.** A core component writes its
     /// keys in `keybindings.default.toml` under `[[keys.component]]`, where they sit beside every
-    /// other binding, `--keys-show` finds them, and the user edits them in one place. Declaring them
+    /// other binding, `--show-keys` finds them, and the user edits them in one place. Declaring them
     /// in code as well would be a second copy of the file that nothing compares against — which is
     /// exactly what `ActionMeta::default_binding` was, and why it is gone.
     ///

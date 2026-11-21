@@ -222,3 +222,28 @@ fn headless_action_refusals_are_errors_not_successful_rpc_answers() {
         &mut |_| Ok(vec![Change::NamesChanged]));
     assert_eq!(result.unwrap(), vec![Change::NamesChanged]);
 }
+
+/// A script's call with an argument the action does not take is told which one, not that something
+/// is missing — for every action, built-in or contributed, since all go through the one check.
+#[test]
+fn a_wrong_argument_is_named_in_the_refusal() {
+    let mut allow = super::server::AllowLocal;
+    let catalog = ActionCatalog::with_builtins();
+    let registry = ActionRegistry::new();
+    let store = crate::chrome::SharedChromeState::new(0.0, 0.0);
+    let text = |value: &str| crate::chrome::PropValue::Text(value.into());
+    let intent = crate::chrome::Intent::new("terminal_rename_to")
+        .arg("terminal", text("demo.shell"))
+        .arg("name", text("Build"))
+        .arg("orchestrator", text("a"));
+    let result = registry.execute_server_with(&catalog, &Default::default(), store.clone(), &mut allow, &intent,
+        &mut |_| Ok(Vec::new()));
+    let error = result.unwrap_err().to_string();
+    assert!(error.contains("unknown argument 'orchestrator'"), "{error}");
+    assert!(!error.contains("needs arguments"), "{error}");
+
+    let intent = crate::chrome::Intent::new("terminal_rename_to").arg("name", text("Build"));
+    let error = registry.execute_server_with(&catalog, &Default::default(), store, &mut allow, &intent,
+        &mut |_| Ok(Vec::new())).unwrap_err().to_string();
+    assert!(error.contains("missing required argument 'terminal'"), "{error}");
+}

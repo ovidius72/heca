@@ -88,7 +88,7 @@ impl Extension {
     ///
     /// They are layered between heca's defaults and the user's files — heca's, then each
     /// extension's, then `config.toml` / `keybindings.toml` — so its settings and keys are defaults
-    /// like heca's own: `--show-config` and `--keys-show` show them, `[[keys.surface]]` and plain
+    /// like heca's own: `--show-config` and `--show-keys` show them, `[[keys.surface]]` and plain
     /// bindings work for its actions and surfaces, and the user changes them in the same files. A
     /// default key may be given to any of its actions, not only a dock's.
     ///

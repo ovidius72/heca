@@ -144,7 +144,7 @@ fn global_focus_goes_to_the_global_map_not_the_containers_own_layer() {
         index["toggle_dock"]
             .iter()
             .any(|b| b.key == "prefix+d" && b.layer.contains("docker")),
-        "and --keys-show can say where it came from: {index:?}",
+        "and --show-keys can say where it came from: {index:?}",
     );
 }
 

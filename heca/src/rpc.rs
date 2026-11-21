@@ -47,6 +47,9 @@ pub enum RpcError {
     NotRunnable(String),
     /// Called without the arguments it declares as required — `describe-action <name>` lists them.
     MissingArgs(String),
+    /// Called with arguments that do not fit what the action declares — one it does not take, a
+    /// required one left out, a value of the wrong kind. Each problem is named, in a stable order.
+    WrongArgs { name: String, problems: Vec<String> },
     /// The action ran, but its owner rejected the requested operation.
     Failed(String),
     /// The line itself could not be read (an open quote, a stray line break). Nothing ran.
@@ -78,6 +81,11 @@ impl std::fmt::Display for RpcError {
             RpcError::MissingArgs(name) => write!(
                 f,
                 "action '{name}' needs arguments it was not given — see 'describe-action {name}'"
+            ),
+            RpcError::WrongArgs { name, problems } => write!(
+                f,
+                "action '{name}': {} — see 'describe-action {name}'",
+                problems.join("; ")
             ),
             RpcError::NotInitialized => write!(f, "app not initialized"),
             RpcError::Failed(message) => write!(f, "{message}"),

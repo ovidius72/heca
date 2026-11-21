@@ -6,7 +6,7 @@
 # construction. Non-keybinding settings live in `config.default.toml`.
 #
 # A guide with worked examples: docs/keybindings.md
-# Every binding and what it resolved to, live: `heca --keys-show`
+# Every binding and what it resolved to, live: `heca --show-keys`
 #
 #
 # ── CUSTOMIZING ────────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@
 #
 # Action names resolve when the key is PRESSED, not when this file is read, so a binding to a plugin
 # action can be written before the plugin exists. The cost is that a misspelled name is not an error
-# either — it simply never fires. `heca --keys-show` is how you tell the two apart.
+# either — it simply never fires. `heca --show-keys` is how you tell the two apart.
 
 [keys]
 # Prefix key triggers prefix mode for all `prefix+...` bindings (tmux-style).
@@ -426,7 +426,7 @@ args   = { name = "heca.expose" }
 # Those two are what make the rule work: a container that declares nothing at all is still
 # reachable, scrollable and leavable, with no code written for it.
 #
-# `heca --keys-show` lists every binding name and the key it resolves to, for every layer.
+# `heca --show-keys` lists every binding name and the key it resolves to, for every layer.
 
 # ── Chrome container placement (built-in, dotted ids) ──
 # heca's own container-placement actions use the same dotted id scheme, so you can

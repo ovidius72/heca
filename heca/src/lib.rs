@@ -565,7 +565,7 @@ pub fn run(app_name: impl Into<String>) {
         let code = result.unwrap_or_else(|error| { eprintln!("[heca] agent launch: {error}"); 1 });
         std::process::exit(code);
     }
-    // Command-line questions — `--help`, `--keys-show`, `--list-actions`, `--describe-action` —
+    // Command-line questions — `--help`, `--show-keys`, `--list-actions`, `--describe-action` —
     // are answered and exited before the window, so a script can ask heca anything without a GPU.
     // One table dispatches and documents them; see `app::cli`.
     let args: Vec<String> = std::env::args().skip(1).collect();
