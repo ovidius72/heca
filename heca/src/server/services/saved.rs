@@ -32,6 +32,8 @@ pub(crate) struct SavedStore {
     /// The largest value one entry may hold, in bytes of JSON.
     limit: usize,
     changes: Vec<StateEvent>,
+    /// The extensions whose entries changed since the last call — their windows are shown again.
+    touched: std::collections::BTreeSet<String>,
 }
 
 /// One extension's view of the store for one call: its name (the namespace) and the session the
@@ -53,7 +55,7 @@ impl SavedStore {
             .filter(|file| file.version == FILE_VERSION)
             .map(|file| file.entries)
             .unwrap_or_default();
-        Self { global, sessions: HashMap::new(), file, limit, changes: Vec::new() }
+        Self { global, sessions: HashMap::new(), file, limit, changes: Vec::new(), touched: Default::default() }
     }
 
     fn entries(&self, session: Option<SessionKey>) -> Option<&Entries> {
@@ -92,6 +94,11 @@ impl SavedStore {
     /// The changes made since the last call, to announce as `state.changed`.
     pub(crate) fn take_changes(&mut self) -> Vec<StateEvent> {
         std::mem::take(&mut self.changes)
+    }
+
+    /// The extensions whose entries changed since the last call.
+    pub(crate) fn take_touched(&mut self) -> std::collections::BTreeSet<String> {
+        std::mem::take(&mut self.touched)
     }
 
     fn write_global(&self) {
@@ -137,6 +144,7 @@ impl Access<'_> {
         let full = self.full(key);
         store.entries_mut(session).entry(full.clone()).or_default().insert(id.to_owned(), value);
         store.changes.push(StateEvent { session, key: full, id: id.to_owned() });
+        store.touched.insert(self.extension.to_owned());
         if session.is_none() {
             store.write_global();
         }
@@ -155,6 +163,7 @@ impl Access<'_> {
         }
         if removed {
             store.changes.push(StateEvent { session, key: full, id: id.to_owned() });
+        store.touched.insert(self.extension.to_owned());
             if session.is_none() {
                 store.write_global();
             }
