@@ -289,10 +289,12 @@ pub(crate) async fn init_state(
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = layout_options_from(app_config);
-    let (client, content) = crate::client::ClientState::connect(app_config, crate::server::ServerWaker::new({
+    // One wake in flight at a time: the loop resets the latch as it starts the turn (`BackendWake`).
+    let (waker, wake_latch) = crate::server::ServerWaker::latched({
         let proxy = event_proxy.clone();
         move || { let _ = proxy.send_event(crate::app::events::AppEvent::BackendWake); }
-    }), launch_mode)?;
+    });
+    let (client, content) = crate::client::ClientState::connect(app_config, waker, launch_mode)?;
     let session = content.rebuild(client.session.id, layout_options);
     let view = WindowView::new(viewport_size, scale_factor);
     let focused_pane = session.through(&view).active_workspace().and_then(|workspace| workspace.active_pane()).map(|pane| pane.id);
@@ -355,6 +357,9 @@ pub(crate) async fn init_state(
 
     let window_focused = window.has_focus();
     let mut state = Box::new(AppState {
+        wake_latch,
+        frame_asked: false,
+        hidden_read_at: None,
         window,
         event_proxy,
         surface,

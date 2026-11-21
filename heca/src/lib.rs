@@ -56,7 +56,7 @@ use app::events::AppEvent;
 use app::events::handle_window_event;
 pub(crate) use app::focus::switch_workspace_tracked;
 use app::interaction::dispatch_intent;
-use app::lifecycle::{handle_about_to_wait, poll_backends};
+use app::lifecycle::handle_about_to_wait;
 use app::registry::{build_keymaps, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
@@ -509,15 +509,12 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         };
         match event {
             AppEvent::CloseWindow => event_loop.exit(),
-            AppEvent::BackendWake => {
-                let backend_poll = { let _slow = crate::slow_steps::step("client.poll_backends"); poll_backends(state) };
-                let chrome_runtime_changed = { let _slow = crate::slow_steps::step("client.sync_chrome_state"); crate::chrome::sync_chrome_state(state) };
-                if backend_poll.has_data || backend_poll.closed_any || chrome_runtime_changed {
-                    state.mark_full_redraw();
-                    crate::app::frame_reasons::report("event BackendWake");
-                    state.window.request_redraw();
-                }
-            }
+            // **Only a wake.** The turn this event brings round ends in `about_to_wait`, which reads
+            // the terminals and mirrors the chrome once and asks for a frame if anything changed —
+            // doing it here as well read everything twice per wake. The wake latch is reset as the
+            // frame starts (or at the end of a turn that asks for none), so a terminal writing
+            // without pause wakes the loop at most once per frame.
+            AppEvent::BackendWake => {}
             AppEvent::RequestRedraw => {
                 state.needs_redraw = true;
                 crate::app::frame_reasons::report("event RequestRedraw");

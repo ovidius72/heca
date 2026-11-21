@@ -274,9 +274,25 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         chrome_animating,
         widget_due,
     };
-    if reasons.any() && state.client.projection_ready() {
+    if state.window_occluded {
+        // **Hidden: no frames, and the terminals read on a slow beat.** A frame asked for now would
+        // come back at once without drawing (no surface to wait on) and ask again — a spin at full
+        // speed for as long as the window is covered. What changed is drawn in one frame when it
+        // shows (`WindowEvent::Occluded`). The server still runs: the latch opens every
+        // `HIDDEN_READ_EVERY`, so output keeps being read, slower.
+        let now = Instant::now();
+        if state.hidden_read_at.is_none_or(|at| now.duration_since(at) >= HIDDEN_READ_EVERY) {
+            state.hidden_read_at = Some(now);
+            state.wake_latch.reset();
+        }
+    } else if reasons.any() && state.client.projection_ready() {
         reasons.report();
         state.window.request_redraw();
+        state.frame_asked = true;
+    } else if !state.frame_asked {
+        // No frame is coming to reset the wake latch, so reset it here: output that comes next
+        // must still wake the loop — the server rides it in standalone, frames or not.
+        state.wake_latch.reset();
     }
 
     let wake_animating = state.layout().are_animations_ongoing()
@@ -309,11 +325,23 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         },
     );
     state.widget_frame_due = schedule.widget_frame_due;
-    match schedule.wake_at {
+    // Hidden, the latch is opened on a beat: come back round on it, so output held by a closed latch
+    // is read even if nothing else wakes the loop.
+    let hidden_beat = state.window_occluded.then(|| state.hidden_read_at.map(|at| at + HIDDEN_READ_EVERY)).flatten();
+    let wake_at = match (schedule.wake_at, hidden_beat) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    };
+    match wake_at {
         Some(at) => event_loop.set_control_flow(ControlFlow::WaitUntil(at)),
         None => event_loop.set_control_flow(ControlFlow::Wait),
     }
 }
+
+/// **How often a hidden window reads its terminals.** It draws nothing, so reading every chunk of
+/// output would be work nobody sees; the server still needs its turns (a command ending, an agent
+/// asking for attention), and this beat gives them, ten times a second.
+pub(crate) const HIDDEN_READ_EVERY: std::time::Duration = std::time::Duration::from_millis(100);
 
 #[cfg(test)]
 mod tests {

@@ -56,7 +56,7 @@ pub(crate) use cx::{Asker, ServerCx};
 pub(crate) use layout::ServerLayout;
 pub(crate) use poll::BackendPoll;
 pub(crate) use terminals::Terminals;
-pub(crate) use waker::ServerWaker;
+pub(crate) use waker::{ServerWaker, WakeLatch};
 
 use crate::app::backend_factory::{Launch, TerminalSettings, launch, terminal_palette_defaults};
 use crate::app::backend_store::BackendStore;
