@@ -39,6 +39,7 @@ pub use chrome::{
     BuildCx, ChromeEvent, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution,
     Contribution, PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
+pub use chrome::{PaletteItem, PaletteRows};
 pub use components::FolderLine;
 pub use entry::{
     ActionCatalogSnapshot, ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError,

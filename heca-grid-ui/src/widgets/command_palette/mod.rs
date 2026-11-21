@@ -216,7 +216,19 @@ impl CommandPalette {
         // `Signal<String>` already, so writing it re-marks that one label instead of rebuilding the
         // palette — which is what keeps a live list from flashing.
         self.title_text.push(title.text_signal());
-        let mut column = Flex::column().child(title);
+        // The first line: the title alone, or the title giving way to what the command puts after it.
+        let mut column = match &c.trailing {
+            Some(make) => Flex::column().child(
+                crate::widgets::Grid::new()
+                    .template_column("1fr auto")
+                    .width(crate::style::Length::FULL)
+                    .align("center")
+                    .gap(crate::style::Spacing::Sm)
+                    .child(title)
+                    .child(make()),
+            ),
+            None => Flex::column().child(title),
+        };
         self.desc_wrap.push(None);
         self.desc_marks.push(None);
         if let Some(desc) = &c.description {

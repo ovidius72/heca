@@ -78,6 +78,14 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
             .get(state.layout().active_workspace_idx())
             .map(|ws| ws.id),
     );
+    state.chrome_state.set_sessions(
+        state
+            .client
+            .sessions
+            .iter()
+            .filter_map(crate::entry::service::SessionEntry::of)
+            .collect(),
+    );
     state.chrome_state.workspaces.set_active_workspace(
         shown.map(|(session, ws)| crate::entry::service::WorkspaceKey::new(session, ws)),
     );

@@ -136,6 +136,15 @@ impl<'a> StateView<'a> {
         self.state.workspaces.active_workspace()
     }
 
+    /// **Every session the server holds**, terminated ones included, as a value to follow: a list
+    /// bound to it (`Flex::column().child(sessions.map(SessionRow::new))`) follows sessions being
+    /// made, renamed and deleted. `session.changed` says what happened each time.
+    pub fn sessions(
+        &self,
+    ) -> heca_grid_ui::reactive::Signal<Vec<crate::entry::service::SessionEntry>> {
+        self.state.sessions()
+    }
+
     /// A snapshot of a pane's runtime (program, status, cwd, git, kind, exit code).
     /// `None` if the pane has no mirrored runtime.
     pub fn pane_runtime(&self, pane: PaneId) -> Option<PaneRuntime> {
@@ -290,5 +299,45 @@ mod tests {
         // The selector also reads the same value directly.
         assert_eq!(app.state().pane_status(pane), Some(ProcessStatus::Running));
         assert_eq!(app.state().active_pane(), None);
+    }
+
+    /// **A window hears `session.changed` and reads the list after it** — the same kinds the
+    /// server's services hear, each change once, and nothing when nothing changed.
+    #[test]
+    fn a_window_hears_every_session_change_and_follows_the_list() {
+        use crate::entry::service::{SessionChange, SessionEntry, SessionKey, SessionState};
+        let store = store();
+        let app = App::new(&store);
+        let heard: Rc<RefCell<Vec<(SessionChange, String)>>> = Rc::new(RefCell::new(Vec::new()));
+        let log = heard.clone();
+        let _sub = app.on("session.changed", move |ev| {
+            if let ChromeEvent::SessionChanged { kind, session } = ev {
+                log.borrow_mut().push((*kind, session.name().to_owned()));
+            }
+        });
+        let key = SessionKey::generate();
+        let entry = |name: &str, state| SessionEntry::new(key, name.into(), None, state);
+        store.set_sessions(vec![entry("a", SessionState::Active)]);
+        store.set_sessions(vec![entry("a", SessionState::Active)]);
+        store.set_sessions(vec![entry("b", SessionState::Active)]);
+        store.set_sessions(vec![entry("b", SessionState::Terminated)]);
+        store.set_sessions(vec![entry("b", SessionState::Active)]);
+        store.set_sessions(Vec::new());
+        assert_eq!(
+            heard.borrow().as_slice(),
+            [
+                (SessionChange::Created, "a".into()),
+                (SessionChange::Renamed, "b".into()),
+                (SessionChange::Terminated, "b".into()),
+                (SessionChange::Restarted, "b".into()),
+                (SessionChange::Deleted, "b".into()),
+            ],
+            "the same list twice says nothing"
+        );
+        use heca_grid_ui::reactive::SignalGet as _;
+        assert!(
+            app.state().sessions().get_untracked().is_empty(),
+            "the list after the last change"
+        );
     }
 }

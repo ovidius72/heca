@@ -48,6 +48,10 @@ pub struct SharedChromeState {
     /// ([`announce_focused_container`](Self::announce_focused_container)). Nothing reads it to decide
     /// where keys go: the window tree is the one record of where the keyboard is.
     announced_container: Signal<Option<String>>,
+    /// **Every session the server holds**, as this window last heard — what
+    /// `cx.state().sessions()` follows. Written by [`set_sessions`](Self::set_sessions) only, which
+    /// raises `session.changed` for each change.
+    sessions: Signal<Vec<crate::entry::service::SessionEntry>>,
     /// A dock the host asked to give the keyboard to **before the tree had it** — its region was
     /// only just revealed. A request, not a record: the host lands it once the tree is rebuilt and
     /// clears it (`app::tree_focus`).
@@ -71,6 +75,55 @@ pub struct SharedChromeState {
 }
 
 impl SharedChromeState {
+    /// **The sessions, as a value to follow** — every session the server holds, terminated ones
+    /// included, kept current as they change.
+    pub fn sessions(&self) -> Signal<Vec<crate::entry::service::SessionEntry>> {
+        self.sessions
+    }
+
+    /// **Mirror the server's sessions** — the one place a window learns they changed. Each change
+    /// raises `session.changed` with what happened (the same kinds the server's services hear):
+    /// a new key is `created`, a gone one `deleted`, a new name `renamed`, and a stop or a start
+    /// `terminated` or `restarted`.
+    pub fn set_sessions(&self, now: Vec<crate::entry::service::SessionEntry>) {
+        use crate::entry::service::{SessionChange, SessionState};
+        let before = self.sessions.get_untracked();
+        if before == now {
+            return;
+        }
+        let mut changes = Vec::new();
+        for entry in &now {
+            match before.iter().find(|old| old.key() == entry.key()) {
+                None => changes.push((SessionChange::Created, entry.clone())),
+                Some(old) => {
+                    if old.name() != entry.name() {
+                        changes.push((SessionChange::Renamed, entry.clone()));
+                    }
+                    match (old.state(), entry.state()) {
+                        (SessionState::Active, SessionState::Terminated) => {
+                            changes.push((SessionChange::Terminated, entry.clone()))
+                        }
+                        (SessionState::Terminated, SessionState::Active) => {
+                            changes.push((SessionChange::Restarted, entry.clone()))
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        for old in before
+            .iter()
+            .filter(|old| !now.iter().any(|entry| entry.key() == old.key()))
+        {
+            changes.push((SessionChange::Deleted, old.clone()));
+        }
+        self.sessions.set(now);
+        for (kind, session) in changes {
+            self.events
+                .emit(ChromeEvent::SessionChanged { kind, session });
+        }
+    }
+
     /// This mount's own scroll offset signal, created on first ask.
     ///
     /// Keyed by **mount id**, so two mounts of the same container each get their own and scroll
@@ -195,6 +248,7 @@ impl SharedChromeState {
             panes: PaneRuntimeStore::new(events),
             container_scroll: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             announced_container: signal(None),
+            sessions: signal(Vec::new()),
             dock_focus_request: signal(None),
             last_focused_container: signal(None),
             container_cursor: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),

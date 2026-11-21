@@ -190,6 +190,22 @@ impl Extension {
         }
     }
 
+    /// **Add to the rows of a palette mode** — `"session"` (the `#` list) today. What it returns says
+    /// how: [`to_raw`](crate::PaletteRows::to_raw) for native code (a widget),
+    /// [`to_description`](crate::PaletteRows::to_description) for a plugin (a description heca
+    /// realizes). *Client side.*
+    ///
+    /// ```ignore
+    /// let pro = heca::extension("heca-pro");
+    /// pro.palette("session").to_raw(move |item| {
+    ///     let session = item.session()?;
+    ///     rooms.with(|r| r.is_pro(session.key())).then(|| Badge::new("pro").tone(Tone::Accent))
+    /// });
+    /// ```
+    pub fn palette(&self, mode: &str) -> crate::PaletteRows {
+        crate::PaletteRows::new(mode)
+    }
+
     /// `<extension>.<short>`, or `None` — after saying why — when either half is refused. An empty
     /// name is what a refused item carries, and what its `run`/`view` recognise and drop.
     pub(crate) fn full(&self, what: &str, short: &str) -> Option<String> {

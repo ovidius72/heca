@@ -79,6 +79,7 @@ pub(crate) use surfaces::palette::{
     MODE_NOTIFICATION, OpenPalette, ask_action_arguments, open_command_palette,
     open_session_folder, palette_arguments_given,
 };
+pub use surfaces::palette::{PaletteItem, PaletteRows};
 
 // ── window ──
 pub use window::division::ChromeConfig;

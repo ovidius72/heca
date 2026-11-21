@@ -6893,6 +6893,7 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.path(text)` | A single-line second row for a path; preserves its trailing portion when shortened and exposes the complete value in a tooltip. Does not expand when selected. |
 | `.detail(text)` | A separate single-line metadata row below the description or path, sized by the normal layout engine. |
 | `.icon(Glyph)` | Optional leading icon; default absent. The icon column stays aligned for rows without one. |
+| `.trailing(\|\| widget)` | Something at the end of the row's first line, after the title — any widget (a badge, a count). Handed as a way to **make** it, because a row can be built more than once. The title gives way to it on a narrow panel. Host-only (a function). Default absent. |
 | `.keys([KeyCap, …])` | Add one binding as a row of keycaps. Repeat for several bindings; default none. The active mode reserves one shared shortcut column. |
 | `.id(text)` | Optional stable identity for ranking by past choices. Without one the row still matches and sorts, with no usage boost. |
 | `.group(u16)` | Default `0`. Lower groups lead while the effective query is empty. Typing hands ordering to the matcher. |

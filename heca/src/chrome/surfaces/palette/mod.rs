@@ -31,6 +31,7 @@ use crate::input::WmAction;
 
 mod actions;
 mod arguments;
+mod extras;
 mod model;
 mod modes;
 mod notifications;
@@ -38,6 +39,7 @@ mod sessions;
 mod targets;
 mod windows;
 pub(crate) use arguments::{ask_action_arguments, palette_arguments_given};
+pub use extras::{PaletteItem, PaletteRows};
 pub(crate) use modes::MODE_NOTIFICATION;
 pub(crate) use sessions::open_session_folder;
 
@@ -241,6 +243,29 @@ fn standard_palette(
     );
     let notification_rows =
         notifications::entries(answered.as_deref().unwrap_or_default(), unix_now());
+    // **What extensions add at the end of a row**, by row id — read where a row becomes a command.
+    let realize = {
+        let theme = crate::chrome::chrome_gui_theme(state);
+        let sink = emit.intent_sink();
+        std::rc::Rc::new(move |node: &heca_view::ViewNode| {
+            crate::chrome::realize(node, &theme, &sink, &mut Default::default()).ok()
+        }) as extras::Realize
+    };
+    let trailing: std::collections::HashMap<
+        String,
+        std::rc::Rc<dyn Fn() -> heca_grid_ui::WidgetModel>,
+    > = state
+        .client
+        .sessions
+        .iter()
+        .filter_map(|info| {
+            let item = extras::PaletteItem::Session(crate::entry::service::SessionEntry::of(info)?);
+            Some((
+                format!("session:{}", info.id.0),
+                extras::trailing_for(item, realize.clone())?,
+            ))
+        })
+        .collect();
     let sources = modes::RowSources {
         sessions: &session_rows,
         follow: &follow_rows,
@@ -261,11 +286,18 @@ fn standard_palette(
         modes::MODES,
         &sources,
         |row| {
-            row_command(
+            let command = row_command(
                 row,
                 group_of(row, &owners),
                 id.submitter(row.id.clone(), emit),
-            )
+            );
+            match trailing.get(&row.id) {
+                Some(make) => {
+                    let make = make.clone();
+                    command.trailing(move || make())
+                }
+                None => command,
+            }
         },
         enter,
     )

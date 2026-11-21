@@ -158,6 +158,7 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | a terminal | `demo.terminal("s")` | client | the terminal `demo.s` in any tree you build (a dock, an overlay): `.command(..)`, `.cwd(..)`, `.title(..)`; the same name is the same running process, and closing the dock never ends it |
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
+| something at the end of palette rows | `demo.palette("session").to_raw(f)` / `.to_description(f)` | client | `f(&PaletteItem) -> Option<widget>` (native) or `Option<ViewNode>` (a plugin, realized by heca); see [Sessions and their projects](#sessions-and-their-projects) |
 | a service | `demo.service("s", factory)` | server | something that lives inside the server, once; see [A service inside the server](#a-service-inside-the-server) |
 | a listener | `service.on("session.changed", \|svc, cx, ev\| …)` | server | THE EVENTS on a service; see [Sessions and their projects](#sessions-and-their-projects) |
 | a folder line | `heca::FolderLine::new(theme).path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
@@ -754,6 +755,33 @@ let on_heca = cx.sessions().of_project(Path::new("~/projects/heca"));
 
 Folders are compared as the file system resolves them, so a project reached through a symbolic link
 or written with a trailing slash is the same project.
+
+Each session also says how many windows show it and how many agents run in it — `entry.windows()`,
+`entry.agents()`.
+
+**In a window, the same list and the same event.** A dock reads every session with
+`cx.state().sessions()` — a value to follow, so a list bound to it keeps up as sessions are made,
+renamed and deleted — and hears `cx.on("session.changed", |ev| …)` with the same kinds:
+
+```rust
+let sessions = cx.state().sessions();
+Flex::column().child(sessions.map(|list| list, SessionRow::new))
+```
+
+**Something of yours at the end of a palette row.** For a palette mode (`"session"`, the `#` list,
+today), register what to show after a row's title — a widget from native code, or a description
+from a plugin, which heca realizes into the same widget. Several extensions' pieces sit side by side
+in the order they registered; a function that has nothing to say returns `None`:
+
+```rust
+let pro = heca::extension("heca-pro");
+pro.palette("session").to_raw(move |item| {
+    let session = item.session()?;
+    rooms.with(|r| r.is_pro(session.key())).then(|| Badge::new("pro").tone(Tone::Accent))
+});
+// a plugin: the same, as data
+plugin.palette("session").to_description(|item| item.session().map(|_| pro_badge_description()));
+```
 
 **To hear when sessions change, listen** (THE EVENTS): `session.changed` carries what happened
 (`ev.kind()`: `Created`, `Renamed`, `Terminated`, `Restarted`, `Deleted`), the session it happened to
