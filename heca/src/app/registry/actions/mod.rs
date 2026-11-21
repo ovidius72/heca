@@ -166,6 +166,10 @@ pub fn build_registry() -> ActionRegistry {
         WmActionKind::DeleteCurrentColumn,
         handle_delete_current_column,
     );
+    registry.register(
+        WmActionKind::DeleteCurrentWorkspace,
+        handle_delete_current_workspace,
+    );
 
     // ── Take ──
     // (registered above with PaneTake/PaneTakeAndFocus)

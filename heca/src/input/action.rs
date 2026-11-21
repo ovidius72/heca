@@ -233,6 +233,9 @@ pub enum WmAction {
     /// nav cursor never lands on a column, so `delete_selected` can't reach one).
     /// Resolves its target at dispatch and routes through the y/n confirm prompt.
     DeleteCurrentColumn,
+    /// Delete the workspace you are on (and all its panes), after asking — `delete_workspace` aimed
+    /// at the active workspace, so it needs no index and can sit on a key or in the palette.
+    DeleteCurrentWorkspace,
     PaneSelect,
     /// Enter follow-link mode: assign a letter to each visible terminal hyperlink
     /// in the focused pane; the next letter opens that link (via `OpenLink`).

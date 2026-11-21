@@ -26,6 +26,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "float" => Some(WmAction::Float),
         "close" => Some(WmAction::ClosePane),
         "delete_current_column" => Some(WmAction::DeleteCurrentColumn),
+        "delete_current_workspace" => Some(WmAction::DeleteCurrentWorkspace),
         "hint_pick" => Some(WmAction::HintPick),
         "resize_increase" => Some(WmAction::ResizeIncrease),
         "resize_decrease" => Some(WmAction::ResizeDecrease),

@@ -80,6 +80,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_pane_lines(state.pane_lines.shown(&state.appearance.sidebar.pane_lines));
+    state.chrome_state.workspaces.set_workspace_numbers(state.appearance.sidebar.workspace_numbers);
     state.chrome_state.workspaces.set_agent_statuses(&state.settings.agents.statuses);
     state.chrome_state.panes.configure_sounds(&state.settings.agents, state.settings.notification_sound);
     state.chrome_state.panes.set_name_delay(state.settings.pane_name_delay);

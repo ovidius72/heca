@@ -19,6 +19,14 @@ pub fn handle_delete_current_column(state: &mut AppState, _action: &WmAction) ->
     Ok(())
 }
 
+/// Delete the workspace you are on — `delete_workspace` aimed at the active workspace, through the
+/// same confirmation. The last workspace is refused there, as for `delete_workspace`.
+pub fn handle_delete_current_workspace(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+    let ws_idx = current_active_workspace_idx(state).ok_or("there is no workspace to delete")?;
+    request_destructive(state, WmAction::DeleteWorkspace { ws_idx });
+    Ok(())
+}
+
 /// Apply a workspace collapse change: write the canonical `chrome_state.collapsed_ws`,
 /// then project it into the sidebar nav model. `collapse = None` toggles.
 pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: Option<bool>) {

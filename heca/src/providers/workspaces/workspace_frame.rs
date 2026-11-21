@@ -17,7 +17,9 @@ use super::{
 use heca_grid_ui::Tone;
 use heca_grid_ui::builders::{DragExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent};
 use heca_grid_ui::style::Spacing;
-use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement};
+use heca_grid_ui::builders::PresenceExt;
+use heca_grid_ui::style::WidgetSize;
+use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, Label};
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
 /// whose body is the workspace's columns followed by its floating panes.
@@ -72,7 +74,14 @@ impl WorkspaceFrame<'_> {
                     crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
                 );
             })
-            .header_actions(badge);
+            .header_actions(badge)
+            // Its number, as a key would name it — shown while `workspace_numbers` is on.
+            .leading({
+                let numbers = seams.ws_state.workspace_numbers;
+                Label::new(workspace_number(ws_idx))
+                    .size(WidgetSize::Caption)
+                    .hidden(move || !heca_grid_ui::reactive::SignalGet::get(&numbers))
+            });
         // Keep the active identity live. The theme may enable a workspace-wide wash through
         // `active_wash_alpha` (off by default); the count badge also identifies this workspace.
         dock = dock.active(active_ws);
@@ -208,5 +217,23 @@ mod tests {
             fx.signals.ws_previous.iter().any(|(idx, _)| *idx == 0),
             "and the one prefix+Shift+i would return to",
         );
+    }
+}
+
+/// **The number a workspace row shows**: 1 to 9, then `0` for the tenth (the keyboard's order),
+/// then 11, 12, … — `ws_idx` counts from 0.
+pub(crate) fn workspace_number(ws_idx: usize) -> String {
+    match ws_idx + 1 {
+        10 => "0".to_string(),
+        n => n.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod number_tests {
+    #[test]
+    fn a_workspace_is_numbered_as_the_keyboard_counts() {
+        let shown: Vec<String> = [0, 1, 8, 9, 10].into_iter().map(super::workspace_number).collect();
+        assert_eq!(shown, ["1", "2", "9", "0", "11"]);
     }
 }
