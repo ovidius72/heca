@@ -517,4 +517,7 @@ pub struct Base {
     needs_layout: Cell<bool>,
     /// Ranges of the children that follow a value (`.child(items.map(..))`).
     pub(crate) bound: Vec<crate::builders::Bound>,
+    /// The changing value [`hidden`](crate::builders::PresenceExt::hidden) follows, if it was given
+    /// one: applied by the layout pass, because `display: none` is a layout property.
+    pub(crate) hidden_value: Option<crate::builders::BoolValue>,
 }

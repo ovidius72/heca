@@ -55,6 +55,7 @@ impl LayoutEngine {
         // fields here, which destroyed the authored step after the first pass: a font change then
         // had nothing left to re-resolve.
         crate::builders::apply_bound(c.base_mut());
+        c.base_mut().apply_hidden_value();
         c.remeasure();
         let mut style = c.taffy_style();
         // **A wrapper lays its child out as the child's parent would.** A transparent wrapper

@@ -90,8 +90,13 @@ pub trait HintExt: Component + Sized {
     /// [`Hint`](crate::hint::Hint) carrying the [`Intent`](heca_view::Intent) the act *is* — which
     /// is what lets a host ask its own policy about a candidate before spending a letter on it. The
     /// app's `fires` and `realize` both hand over the pair; nothing else has to.
-    fn on_hint(mut self, f: impl Into<crate::hint::Hint>) -> Self {
-        self.base_mut().hint = Some(f.into());
+    ///
+    /// **An `Option` is taken too**: `None` declares nothing and leaves the widget as it was, so a
+    /// row that only sometimes has a pick writes `.on_hint(pick)` with no branch around it.
+    fn on_hint(mut self, f: impl crate::hint::IntoHint) -> Self {
+        if let Some(hint) = f.into_hint() {
+            self.base_mut().hint = Some(hint);
+        }
         self
     }
 
