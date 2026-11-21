@@ -242,6 +242,7 @@ impl TerminalBackend {
             && let Some(code) = exit_code
         {
             self.ended_unannounced = Some(code);
+            self.pty.finish_output();
         }
         // **The end is announced after the last output, never before it.** The child can be reaped
         // while the reader thread is still handing over what it wrote — then "ended" would reach the

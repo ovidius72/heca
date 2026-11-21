@@ -156,6 +156,7 @@ fn reconcile_exit_state_closes_when_the_reap_fails_and_the_reader_is_gone() {
 /// reaped while the reader thread still holds what it wrote; announcing then put "ended" on a pane
 /// whose final lines were missing (a flaky CI run on Linux). Here the reap happens with nothing
 /// read at all — the worst case — and the end must wait for the output.
+#[cfg(unix)] // spawns `/bin/sh`
 #[test]
 fn the_end_waits_for_the_last_output() {
     let _serial = shell_test_guard();
