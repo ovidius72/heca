@@ -151,3 +151,33 @@ fn reconcile_exit_state_closes_when_the_reap_fails_and_the_reader_is_gone() {
     );
     assert!(reaped, "…so stop polling for it");
 }
+
+/// **A program's end is announced after its last output, never before it.** The child can be
+/// reaped while the reader thread still holds what it wrote; announcing then put "ended" on a pane
+/// whose final lines were missing (a flaky CI run on Linux). Here the reap happens with nothing
+/// read at all — the worst case — and the end must wait for the output.
+#[cfg(unix)] // spawns `/bin/sh`
+#[test]
+fn the_end_waits_for_the_last_output() {
+    let _serial = shell_test_guard();
+    let mut backend = TerminalBackend::with_command(
+        80, 24, DEFAULT_CELL_SIZE.0, DEFAULT_CELL_SIZE.1,
+        "printf 'last-words\\n'; exit 7",
+        TerminalBackendOptions { shell_override: Some("/bin/sh".to_string()), ..TerminalBackendOptions::default() },
+    )
+    .expect("command backend should initialize");
+
+    // Reap the child without reading anything it wrote.
+    let reaped = (0..2000).any(|_| {
+        backend.notice_exit();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        backend.reaped
+    });
+    assert!(reaped, "the child should end");
+    assert_eq!(backend.runtime().exit_code, None, "not announced while its output is unread");
+    assert_eq!(backend.take_exit_code(), None);
+
+    assert!(pump_backend_until(&mut backend, |backend| backend.runtime().exit_code == Some(7)));
+    assert!(terminal_text(&backend).contains("last-words"), "the output is on screen when the end is told");
+    assert_eq!(backend.take_exit_code(), Some(7));
+}

@@ -189,7 +189,8 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn should_close(&self) -> bool {
-        self.exited && self.auto_close_on_exit
+        // Not before the end is announced: a pane closed first would lose its `pane.exited`.
+        self.exited && self.auto_close_on_exit && self.ended_unannounced.is_none()
     }
 
     fn cell_size(&self) -> (f32, f32) {

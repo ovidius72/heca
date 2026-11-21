@@ -68,6 +68,10 @@ pub struct TerminalBackend {
     /// One-shot exit code captured when the PTY child is reaped; drained by the
     /// per-wake monitor via [`PaneBackend::take_exit_code`] to emit `pane.exited`.
     pending_exit: Option<i32>,
+    /// The program ended with this code, and its last output may still be on its way from the
+    /// reader: the end is announced when the reader reaches end of file — never before the
+    /// output it wrote is on screen.
+    ended_unannounced: Option<i32>,
     /// Timestamp of the last foreground re-sample (debounce on the output-wake path).
     last_fg_check: Instant,
     /// Passive pre-parse OSC snooper for semantic prompt / cwd sequences.

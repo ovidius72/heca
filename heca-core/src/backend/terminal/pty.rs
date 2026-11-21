@@ -81,7 +81,9 @@ impl std::error::Error for PtyError {
 pub(super) struct PtyHandle {
     pub(super) launch: crate::backend::ProcessLaunch,
     child: Box<dyn portable_pty::Child + Send + Sync>,
-    master: Box<dyn portable_pty::MasterPty + Send>,
+    /// `None` once the program has ended and the terminal was closed so its last output drains
+    /// ([`finish_output`](Self::finish_output)).
+    master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     writer: SharedWriter,
     rx: Receiver<Vec<u8>>,
     /// The resolved shell path this PTY spawned (e.g. `/bin/zsh`). Used by the
@@ -251,11 +253,22 @@ impl PtyHandle {
         Ok(Self {
             launch,
             child,
-            master: pair.master,
+            master: Some(pair.master),
             writer,
             rx,
             shell,
         })
+    }
+
+    /// **Let the last output of an ended program reach end of file.** On unix the terminal hangs up
+    /// by itself when the program's side closes, so the reader sees end of file with nothing done
+    /// here. A Windows pseudo console keeps its output open until it is closed, so the reader would
+    /// never see end of file: it is closed here, which flushes what the program wrote and then ends
+    /// the reader.
+    pub(super) fn finish_output(&mut self) {
+        if cfg!(windows) {
+            self.master = None;
+        }
     }
 
     pub(super) fn writer(&self) -> SharedWriter {
@@ -272,7 +285,7 @@ impl PtyHandle {
     /// the platform exposes no such accessor.
     #[cfg(unix)]
     pub(super) fn process_group_leader(&self) -> Option<libc::pid_t> {
-        self.master.process_group_leader()
+        self.master.as_ref()?.process_group_leader()
     }
 
     /// The PTY child's own process id — the shell or program heca started. Unlike
@@ -288,7 +301,7 @@ impl PtyHandle {
     /// `None` where the platform exposes no such accessor.
     #[cfg(unix)]
     pub(super) fn as_raw_fd(&self) -> Option<std::os::unix::io::RawFd> {
-        self.master.as_raw_fd()
+        self.master.as_ref()?.as_raw_fd()
     }
 
     pub(super) fn resize(
@@ -297,7 +310,9 @@ impl PtyHandle {
         rows: usize,
         cell_px: (f32, f32),
     ) -> Result<(), PtyError> {
-        self.master
+        // A terminal closed after its program ended has nothing left to resize.
+        let Some(master) = &self.master else { return Ok(()) };
+        master
             .resize(pty_size(cols, rows, cell_px))
             .map_err(|err| PtyError::new(PtyOperation::Resize, err))
     }
