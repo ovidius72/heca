@@ -264,6 +264,17 @@ Surface::new()
 The host runs `heca_grid_ui::edge_scroll(root, dt, EdgeScroll { distance, speed })` once a frame
 with the user's settings; a widget never measures where the pointer is.
 
+| Piece | What it is |
+|---|---|
+| `ev.capture_pointer()` | In a `PointerDown` handler: keep the pointer until the button is up — every move, the release and `EdgeScroll` come to this widget wherever the pointer goes — **without** taking the press, so a window gesture (a divider, the move modifier) can still claim it. The browser's `setPointerCapture`. A widget that consumes the press captures anyway. |
+| `.on_edge_scroll(f)` | Hears `Event::EdgeScroll` every frame a held drag is outside the widget, with the mouse still. `ev.pointer().delta_pixels` is how far to scroll **this frame**, in logical pixels: negative `y` above (back), positive below, the same for `x`; it grows with how far outside the pointer is, up to `edge_scroll_speed` px/s at `edge_scroll_distance` px away. `pos` is where the pointer is, so a selection can stretch to the edge it moves towards. The line deltas are zero: convert the pixels to your own unit, keeping what is left over for the next frame. |
+| `heca_grid_ui::edge_scroll(root, dt, EdgeScroll { distance, speed })` | The host's one call per frame; returns whether something is still scrolling, so the host keeps asking for frames. heca passes `[settings] edge_scroll_distance` / `edge_scroll_speed`, gated by `auto_scroll_edge`. |
+| `heca_grid_ui::pointer_held(root)` | Whether a widget holds the pointer. A host asks it before cancelling gestures when the pointer leaves the window: the system keeps sending a held drag's moves and release from outside, so a selection dragged below the window keeps growing. |
+
+Native only: these are handlers (closures), which a description cannot carry (R4 in
+[`plugins.md`](plugins.md)). A described tree gets the behaviour from the widgets that own it — a
+described `Terminal` selects past its edge with nothing written.
+
 **A widget never routes events to its children, and never works out what an event meant.** Both are
 `heca_grid_ui`'s, once, for every widget:
 
@@ -2297,6 +2308,20 @@ factories. An external host registers its own resource implementations. Ownershi
 the host's `WidgetRegistry::realize_for` context; a serialized `owner` property cannot select
 another plugin's session. Same owner/name reuses T449's native session store; configuration after
 startup never restarts its process. Managed workspace creation and restoration remain P094/T452.
+
+What it does by itself, wherever it is placed — nothing for whoever places it to write:
+
+- **A selection dragged past its edge scrolls the history** and stretches to the edge cell, every
+  frame the pointer stays outside, faster the further away, mouse still or not; past the window's
+  edge too. It keeps the pointer from the press (`capture_pointer`) without taking it from a window
+  gesture.
+- **Everything typed reaches the program in order**: keys, typed text and pastes go through one
+  path, so text typed under load never arrives shuffled. A paste is bracketed when the program asked
+  for bracketed paste, verbatim otherwise.
+- **The wheel counts in lines**: a slow turn moves a line after a couple of small turns instead of
+  waiting for whole notches.
+- **A character the terminal font lacks** falls back to another font; one drawn in colour (an emoji,
+  `⏺`) keeps its colours, a plain one takes the text colour.
 
 ```rust
 let demo = heca::extension("demo");
@@ -5352,7 +5377,7 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Badge`; a click on it never folds. With your own `.header` it is usually not needed — put the
   actions inside your header — but the two may be used together),
   `.collapsible(bool)` (default `true`; `false` keeps the body open, hides the chevron and a click
-  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿`, the dock-move handle; a frame that is a row of a reorderable list sets its own, e.g. `"≡"`),
+  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿`, the dock-move handle; a frame that is a row of a reorderable list sets its own, e.g. `"≡"`; described: `heca_view::build::DockFrame::new(..).grip_glyph("≡")`, the `grip_glyph` property),
   `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
@@ -6910,6 +6935,16 @@ bindings and measured description. The widget owns selection,
 mode filtering, search, history, panel drawing and dismissal; the caller supplies rows, callbacks,
 words and optional shared memory.
 
+**Something after a row's title** — `.trailing(|| widget)`: a badge, a count, a status, drawn on the
+title's line, right of it; the title is cut to make room on a narrow panel. Given as a way to make it,
+because a row can be built more than once. In heca, extensions and plugins add to a mode's rows with
+`extension.palette("session").to_raw(..)` / `.to_description(..)`, which arrive here — see
+[`extending-heca.md` → Sessions and their projects](extending-heca.md#sessions-and-their-projects).
+
+```rust
+Command::new("work", run).trailing(|| Badge::accent("pro"))
+```
+
 #### Native composition
 
 ```rust
@@ -7652,6 +7687,11 @@ props a kind reads in addition to the layout set above.
 Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
 and a bad value costs only itself: the good props on the same node still apply.
 
+**A number keeps its full precision** until the builder takes it, then becomes the builder's type in
+one place (`PropInput::as_f64` / `as_f32` / `as_whole::<T>()`): a whole-number builder (`u8`…`u64`,
+`i8`…`i64`, `usize`) gets it rounded and held inside its range — a negative count is `0`, a too-large
+one the largest, never wrapped. So an epoch time in milliseconds (`Elapsed::at_millis`) arrives exact.
+
 > **A `Button`'s children are its content, and they win.** A Button node *with* children is realized
 > as an empty button holding them (an arbitrary tree, any depth); a **childless** node falls back to
 > its scalar sugar — `text` → a bold `Label`, `icon` → a leading `Icon` — which builds the very same
@@ -7918,6 +7958,15 @@ costs only itself and the rest of the call still stands — the same rule a widg
 `describe-action <name>` (below) is how you find out what an action takes without reading its source.
 
 ### Registering a custom (name-keyed) action
+
+> **What an action declares is what the palette asks.** Every argument has a kind — `Int`, `Float`,
+> `Bool`, `Text`, `Enum` (its words in `values`) or **`Dock`** (the id of a dock mounted now; heca's
+> `container_id` arguments are this kind). An action with required arguments is listed in the palette
+> with `…`; choosing it opens one step per required argument not given yet — the words for an `Enum`,
+> the mounted docks for a `Dock`, true/false for a `Bool`, the typed text for the rest (accepted once
+> it reads as the kind) — then it runs, aimed at the component that owns it. A key or a script opens
+> the same steps: `command_palette action=<name> arguments="a=1 b='x y'"`. Declare the right kind and
+> nothing else is needed.
 
 `WmAction` is a **closed enum** — a provider or plugin cannot add a variant to it. An action of your
 own is therefore keyed by a **stable string id** and registered at runtime, after which every surface

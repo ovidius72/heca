@@ -175,7 +175,7 @@ impl Command {
     /// can be built more than once. The title gives way to it when the row is narrow.
     ///
     /// ```ignore
-    /// Command::new("work", run).trailing(|| Badge::new("pro").tone(Tone::Accent))
+    /// Command::new("work", run).trailing(|| Badge::accent("pro"))
     /// ```
     #[heca_grid_ui_macros::host_only("a function cannot cross as a static property")]
     pub fn trailing<C: crate::builders::IntoComponent>(

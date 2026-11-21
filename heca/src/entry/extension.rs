@@ -199,7 +199,7 @@ impl Extension {
     /// let pro = heca::extension("heca-pro");
     /// pro.palette("session").to_raw(move |item| {
     ///     let session = item.session()?;
-    ///     rooms.with(|r| r.is_pro(session.key())).then(|| Badge::new("pro").tone(Tone::Accent))
+    ///     rooms.with(|r| r.is_pro(session.key())).then(|| Badge::accent("pro"))
     /// });
     /// ```
     pub fn palette(&self, mode: &str) -> crate::PaletteRows {

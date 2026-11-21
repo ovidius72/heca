@@ -76,7 +76,7 @@ impl PaletteRows {
     /// ```ignore
     /// pro.palette("session").to_raw(move |item| {
     ///     let session = item.session()?;
-    ///     rooms.with(|r| r.is_pro(session.key())).then(|| Badge::new("pro").tone(Tone::Accent))
+    ///     rooms.with(|r| r.is_pro(session.key())).then(|| Badge::accent("pro"))
     /// });
     /// ```
     pub fn to_raw<C: heca_grid_ui::builders::IntoComponent>(

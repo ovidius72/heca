@@ -765,7 +765,7 @@ renamed and deleted — and hears `cx.on("session.changed", |ev| …)` with the 
 
 ```rust
 let sessions = cx.state().sessions();
-Flex::column().child(sessions.map(|list| list, SessionRow::new))
+Flex::column().child(sessions.map(SessionRow::new))
 ```
 
 **Something of yours at the end of a palette row.** For a palette mode (`"session"`, the `#` list,
@@ -777,10 +777,12 @@ in the order they registered; a function that has nothing to say returns `None`:
 let pro = heca::extension("heca-pro");
 pro.palette("session").to_raw(move |item| {
     let session = item.session()?;
-    rooms.with(|r| r.is_pro(session.key())).then(|| Badge::new("pro").tone(Tone::Accent))
+    rooms.with(|r| r.is_pro(session.key())).then(|| Badge::accent("pro"))
 });
-// a plugin: the same, as data
-plugin.palette("session").to_description(|item| item.session().map(|_| pro_badge_description()));
+// the same as data — what a plugin sends; native code may use it too
+pro.palette("session").to_description(|item| {
+    item.session().map(|_| heca_view::build::Badge::new("pro").variant(heca_view::ViewBadgeVariant::Accent).into())
+});
 ```
 
 **To hear when sessions change, listen** (THE EVENTS): `session.changed` carries what happened
