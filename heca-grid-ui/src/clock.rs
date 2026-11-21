@@ -1,8 +1,8 @@
 //! **The library's clock** — the one place a widget asks what time it is.
 //!
 //! Every widget that moves with time — a flash pulsing, a caret blinking, a double click being told
-//! from two clicks — reads [`now`] here instead of the system's clock directly. In the app it *is*
-//! the system's clock. A test can [`hold`] it and [`advance`] it by hand, so it says "100 ms later"
+//! from two clicks — reads [`now`](crate::clock::now) here instead of the system's clock directly. In the app it *is*
+//! the system's clock. A test can [`hold`](crate::clock::hold) it and [`advance`](crate::clock::advance) it by hand, so it says "100 ms later"
 //! instead of sleeping 100 ms: the test then sees exactly the frames it asked for on any machine,
 //! however slow or busy, and runs in no time.
 //!
