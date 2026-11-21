@@ -89,8 +89,16 @@ pub(crate) fn handle_window_event(
             state.window_occluded = occluded;
             if !occluded { state.mark_full_redraw(); state.window.request_redraw(); }
         }
-        WindowEvent::RedrawRequested if state.window_occluded => state.needs_redraw = true,
+        // Not drawn while hidden. Nothing asks for a frame while hidden (`about_to_wait`), so this is
+        // a request that was already on its way: keep what it wanted for when the window shows.
+        WindowEvent::RedrawRequested if state.window_occluded => {
+            state.frame_asked = false;
+            state.needs_redraw = true;
+        }
         WindowEvent::RedrawRequested => {
+            // The frame reads what the terminals hold now: output from here on wakes the next one.
+            state.frame_asked = false;
+            state.wake_latch.reset();
             state.needs_redraw = true;
             state.frame_times.start();
             render_frame(state);

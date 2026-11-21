@@ -153,14 +153,32 @@ impl ServerIdentity {
     }
 }
 
-/// Take the lowest slot of `kind` nobody holds.
+/// How long a claim waits for a slot that is held only for a moment.
+///
+/// A server that just stopped has let its lock go, but a process started around the same time —
+/// a terminal, any child — can still hold a copy of the lock file for the instant between starting
+/// and running its program, and the lock stays taken while it does. A server started right after
+/// another stopped (a restart) would then find its own slot "in use" and come up without its saved
+/// sessions. Waiting this long covers that instant; a slot held by a running server is still held
+/// after it, and the claim then fails as before.
+const RELEASE_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Take the lowest slot of `kind` nobody holds — waiting [`RELEASE_GRACE`] for one that is being
+/// let go.
 fn claim_slot(kind: ServerKind, servers: &Path) -> io::Result<Claim> {
     private_folder(servers)?;
-    for n in 1.. {
-        let Some(name) = kind.slot(n) else { break };
-        if let Some(lock) = try_lock(&servers.join(format!("{name}.lock")))? {
-            return Ok(Claim { folder: servers.join(name), _lock: lock });
+    let deadline = std::time::Instant::now() + RELEASE_GRACE;
+    loop {
+        for n in 1.. {
+            let Some(name) = kind.slot(n) else { break };
+            if let Some(lock) = try_lock(&servers.join(format!("{name}.lock")))? {
+                return Ok(Claim { folder: servers.join(name), _lock: lock });
+            }
         }
+        if std::time::Instant::now() >= deadline {
+            return Err(io::Error::new(io::ErrorKind::AddrInUse,
+                format!("another server is already running as '{}'", kind.category())));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    Err(io::Error::new(io::ErrorKind::AddrInUse, format!("another server is already running as '{}'", kind.category())))
 }
