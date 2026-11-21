@@ -41,6 +41,7 @@ fn every_exported_component_has_a_plain_external_construction_and_composition_ex
         .child(widget!(ContextMenu, ContextMenu::new("tools").child(Menu::new("Tools", "").child(MenuItem::new().child(|| Label::new("Entry"))))))
         .child(widget!(Dialog, Dialog::new("Question").width("60%").height("70%").child(Label::new("Body")).action(Button::new("OK"))))
         .child(widget!(DockFrame, DockFrame::new("Dock").child(Label::new("Body"))))
+        .child(widget!(Elapsed, Elapsed::since(std::time::SystemTime::now(), Label::new(""))))
         .child(widget!(Flex, Flex::row().child(Label::new("A")).child(Button::new("B"))))
         .child(widget!(FocusScope, FocusScope::new(Button::new("Focus"))))
         .child(widget!(Gauge, Gauge::new()))

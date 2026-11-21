@@ -439,3 +439,22 @@ fn a_hidden_grid_takes_no_room_and_its_neighbours_close_up() {
     assert_eq!(column(grid.into_component()), without, "Grid");
     assert_eq!(column(frame.into_component()), without, "DockFrame");
 }
+
+/// **A wrapper is exactly as big as what it wraps, at the size it really has.**
+///
+/// A caption label's size variant is resolved in the layout pass, after the wrapper was built
+/// around it; a wrapper that copied the child's size at build time kept its first, default-font
+/// measure and stood a whole normal line tall around a caption — the row under it moved down.
+#[test]
+fn a_wrapper_takes_the_size_its_child_measures_in_the_layout_pass() {
+    use crate::builders::{LayoutExt, Parent};
+    use crate::style::WidgetSize;
+    use crate::widgets::{Label, Visibility};
+    let mut root = Flex::column()
+        .child(Label::new("2m").size(WidgetSize::Caption))
+        .child(Visibility::new().child(Label::new("2m").size(WidgetSize::Caption)));
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 200.0));
+    let bare = root.base().children[0].base().bounds.size;
+    let wrapped = root.base().children[1].base().bounds.size;
+    assert_eq!(wrapped, bare);
+}

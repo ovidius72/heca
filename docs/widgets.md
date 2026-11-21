@@ -20,7 +20,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[what every widget gets](#what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Animations](#animations--how-a-surface-arrives-and-leaves)**, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`TreeLayout`](#treelayout), [`MessageList`](#messagelist), [`Resizable`](#resizable), [`Line`](#line), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
-  - Text: [`Label`](#label), [`Caption`](#caption)
+  - Text: [`Label`](#label), [`Caption`](#caption), [`Elapsed`](#elapsed)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Image` / `Svg`](#image), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there), [Cursor](#cursor--what-the-pointer-looks-like-over-a-widget)
@@ -2979,6 +2979,33 @@ let caption = Caption::new("Logs").text("Build output").gap("sm").padding_x("sm"
 Its open registry id is `"caption"`; serialized trees carry the text in the `text` property. Live
 native signals stay inside the host and are not serialized. The showcase's Caption example binds
 an input to the caption, including the empty-text case.
+
+### Elapsed
+
+How long ago something happened — "45s", "2m", "3h", "4d" — kept current without rebuilding the
+tree. It writes the words of a [`Label`](#label) the caller styles, and never redraws on a timer of
+its own: it reports when its words next change through `next_redraw`, so the host sleeps until
+then (each second for the first minute, then each minute, hour, day). Time comes from
+`heca_grid_ui::clock`, so a test holds and advances it instead of sleeping.
+
+| API | Default / meaning |
+|---|---|
+| `Elapsed::since(at: SystemTime, label)` | How long ago `at` was, written into `label`; a future moment reads as no time |
+| `.at_millis(epoch_ms)` | The moment as milliseconds since the Unix epoch, as a stored record carries it |
+| `.format(fn(Duration) -> String)` | Own words (a language, a longer form); default `Elapsed::compact` |
+| `Elapsed::compact(duration)` | The default words: the largest whole unit as a unit symbol |
+
+```rust
+use heca_grid_ui::{Elapsed, Label};
+use heca_grid_ui::style::WidgetSize;
+let ago = Elapsed::since(sent_at, Label::new("").size(WidgetSize::Caption));
+```
+
+The label keeps its own look; `Elapsed` is transparent to layout, so it sits in a row exactly where
+the label would.
+
+A description cannot set the moment yet: its numbers travel as `f32`, which cannot hold an epoch
+time to the second, so `at_millis` and `format` are host-only.
 
 ### Label
 

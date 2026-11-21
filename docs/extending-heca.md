@@ -298,7 +298,25 @@ The registered id is scoped to the extension. Configure its name, executable ali
 under `[settings.agents.programs."demo.custom"]`. Registration does not enable reporting: the user opts in
 with `enabled = true`, as for built-in programs. Status labels, icons and optional sounds use
 `[settings.agents.statuses.<status>]`. `PaneFacts.agent` and `PaneRuntime.agent` carry the current report;
-`pane.agent.changed` carries changes independently of process status.
+`pane.agent.changed` carries changes independently of process status. A component outside heca
+reads a window event through its accessors, not by matching it: `ev.pane()` (the pane of any
+`pane.*` event), `ev.agent()` (the report now, for `pane.agent.changed`) and `ev.feedback()` (the
+granted status, for `pane.feedback`):
+
+```rust
+fn on_activate(&mut self, ctx: &heca::ChromeCtx<'_>) -> heca::ProviderHandles {
+    // The dock's own store of the latest report per pane, read by its rows.
+    let reports = self.reports.clone();
+    heca::ProviderHandles {
+        subscriptions: vec![ctx.on("pane.agent.changed", move |ev| {
+            if let Some(pane) = ev.pane() {
+                reports.record(pane, ev.agent().cloned());
+            }
+        })],
+        ..Default::default()
+    }
+}
+```
 
 Each status can set `label`, `icon` (a shared glyph name), `tone` and `sound`.
 Tones use the current theme: `accent`, `muted`, `warning`, `success` or `danger`.
