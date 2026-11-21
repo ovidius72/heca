@@ -80,12 +80,7 @@ impl ScrollRegion {
     #[heca_grid_ui_macros::host_only("a child: use `children`")]
     pub fn pinned(mut self, child: impl crate::builders::IntoComponent) -> Self {
         let mut child = child.into_component();
-        child.base_mut().style.layout.placement = Some(crate::style::Placement {
-            left: Length::Px(0.0),
-            top: Length::Px(0.0),
-            width: Length::Percent(1.0),
-            height: Length::Percent(1.0),
-        });
+        child.authored_style_mut().layout.placement = Some(crate::style::Placement::FILL);
         self.base.children.push(child);
         self.pinned += 1;
         self

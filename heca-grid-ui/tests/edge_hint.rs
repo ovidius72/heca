@@ -42,27 +42,36 @@ fn rows_wanting_attention_out_of_sight_are_counted_and_a_click_reveals_and_activ
         );
     }
     let mut region = region.pinned(EdgeHint::new());
+    let counts = |texts: &[(String, heca_grid_ui::Rectangle)]| -> Vec<heca_grid_ui::Rectangle> {
+        texts
+            .iter()
+            .filter(|(t, _)| t.parse::<usize>().is_ok())
+            .map(|(_, r)| *r)
+            .collect()
+    };
     let texts = frame(&mut region);
     assert!(
-        !texts
-            .iter()
-            .any(|(t, _)| t.starts_with('↑') || t.starts_with('↓')),
-        "nothing wants attention: no hint"
+        counts(&texts).is_empty(),
+        "nothing wants attention: no hint: {texts:?}"
     );
 
     flashes[0].repeat(Tone::Warning);
     flashes[11].repeat(Tone::Warning);
     region.scroll_to_child(5);
     let texts = frame(&mut region);
-    let below = texts
-        .iter()
-        .find(|(t, _)| t == "↓ 1")
-        .map(|(_, r)| *r)
-        .expect("one wanting attention below");
+    let pills = counts(&texts);
+    assert_eq!(pills.len(), 2, "one above, one below: {texts:?}");
     assert!(
-        texts.iter().any(|(t, _)| t == "↑ 1"),
-        "one wanting attention above: {texts:?}"
+        texts
+            .iter()
+            .filter(|(t, _)| t.parse::<usize>().is_ok())
+            .all(|(t, _)| t == "1"),
+        "each pill counts one: {texts:?}"
     );
+    let below = *pills
+        .iter()
+        .max_by(|a, b| a.loc.y.total_cmp(&b.loc.y))
+        .unwrap();
     assert!(
         texts.iter().any(|(t, _)| t == "row 5"),
         "the rows under the hint still draw"
@@ -72,8 +81,9 @@ fn rows_wanting_attention_out_of_sight_are_counted_and_a_click_reveals_and_activ
     flashes[0].clear();
     flashes[0].trigger(Tone::Success);
     let texts = frame(&mut region);
-    assert!(
-        !texts.iter().any(|(t, _)| t.starts_with('↑')),
+    assert_eq!(
+        counts(&texts).len(),
+        1,
         "a burst is not attention: {texts:?}"
     );
 
@@ -97,6 +107,6 @@ fn rows_wanting_attention_out_of_sight_are_counted_and_a_click_reveals_and_activ
     assert_eq!(
         activated.get(),
         Some(11),
-        "and activated, as a click on it would"
+        "and activated, as picking it would"
     );
 }

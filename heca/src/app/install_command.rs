@@ -14,6 +14,23 @@ pub(crate) struct Installed {
     pub(crate) path_hint: Option<String>,
 }
 
+impl Installed {
+    /// **What the notification says**: where `heca` now runs from, and the line to add when its
+    /// folder is not on the `PATH`. Kept with the result so no caller words it again.
+    pub(crate) fn notification(&self) -> crate::notification::Notification {
+        let mut body = format!(
+            "Run `heca` in a terminal to open it in that folder ({}).",
+            self.at.display()
+        );
+        if let Some(hint) = &self.path_hint {
+            body.push_str(&format!(
+                " If `heca` is not found, add this line to your shell's startup file: {hint}"
+            ));
+        }
+        crate::notification::Notification::success("The heca command is installed").body(body)
+    }
+}
+
 /// **Link `source` as `heca` in `bin`**, replacing a link already there (an older install) but never
 /// a real file — that is someone else's `heca`, and it is said instead.
 #[cfg(unix)]

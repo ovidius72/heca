@@ -272,7 +272,7 @@ impl Component for ScrollRegion {
 impl ScrollRegion {
     /// **Tell the pinned children what is out of sight, and do the reveal one asks for.** Rows that
     /// want attention (a repeating flash) above the viewport or below it are counted; a reveal
-    /// brings the nearest one on that side into view and clicks it, as the user would.
+    /// brings the nearest one on that side into view and picks it, as a letter would.
     fn tell_pinned(&mut self) {
         if self.pinned == 0 {
             return;
@@ -311,23 +311,9 @@ impl ScrollRegion {
         };
         if let Some((rect, path)) = nearest {
             self.ensure_visible(rect);
-            self.click(&path, rect);
-        }
-    }
-
-    /// Click the content widget at `path` — the row a reveal brought into view — as a pointer
-    /// click on it would: the same event, delivered down to it and bubbling back.
-    fn click(&mut self, path: &[usize], rect: crate::Rectangle) {
-        let Some((head, rest)) = path.split_first() else {
-            return;
-        };
-        let centre = crate::Point::new(
-            rect.loc.x + rect.size.w / 2.0,
-            rect.loc.y + rect.size.h / 2.0,
-        );
-        let ev = crate::event::Event::Click(crate::event::PointerEvent::at(centre));
-        if let Some(child) = self.base.children.get_mut(*head) {
-            let _ = crate::pointer::deliver::deliver_path(child.as_mut(), rest, &ev);
+            // **Activated as a pick is**: the keyboard goes where a press would, then the row's own
+            // declaration or click runs — the one path every pick and letter takes.
+            crate::hint::fire_hint(self, &path);
         }
     }
 }

@@ -61,7 +61,7 @@ use heca_core::layout::Point;
 use std::cell::Cell;
 use std::time::Instant;
 
-pub(crate) mod deliver;
+mod deliver;
 mod drag;
 
 use deliver::{broadcast_outside, deliver_path, deliver_self, deliver_targeted, delivering};

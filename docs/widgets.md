@@ -2677,11 +2677,11 @@ clickable. Described: a child of `scroll` with `slot: "pinned"` — `build::Scro
 
 #### EdgeHint
 
-**How many rows wanting attention are out of sight**, on the region's edges — `↑ 2` at the top,
-`↓ 1` at the bottom, hidden when there are none. A row wants attention while it has a **repeating
+**How many rows wanting attention are out of sight**, on the region's edges — a caret up and the
+count at the top, a caret down and the count at the bottom, hidden when there are none. A row wants attention while it has a **repeating
 flash** (`.flash(handle)` + `handle.repeat(tone)`, or `repeat_for` until it runs out); a finite
 burst does not count, and nothing else is declared. A click on a pill brings the nearest such row on
-that side into view and clicks it, as the user would; `prefix+/` letters the pills like any button.
+that side into view and picks it, as its letter would (focus, then its own click); `prefix+/` letters the pills like any button.
 
 ```rust
 ScrollRegion::new()
@@ -8303,6 +8303,12 @@ Nothing here measures text or computes a size — `Tag` hugs its content and the
 the rest. This is what `heca`'s scrollback-search bar does; it previously guessed its own
 width from a hardcoded glyph advance ratio (`chars × font × 0.62`), which broke for any
 font whose advance differed and had to be re-tuned by hand.
+
+#### `fill_parent` — the whole parent, out of the flow
+
+`.fill_parent()` places a widget over its parent's whole content box — what a layer on top of the
+content takes (a scrim, a [`ScrollRegion::pinned`](#scrollregion) child). It is `at_rect` with the
+corner at the origin and both sizes `Length::FULL`, said without numbers.
 
 #### `at_rect` — a rect **inside** a parent, in fractions of it
 
