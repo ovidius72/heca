@@ -120,6 +120,20 @@ impl<'a> StateView<'a> {
         self.state.workspaces.active_pane()
     }
 
+    /// **The workspace this window shows**, by its lasting key, as a value to follow: read it in a
+    /// binding and the binding follows workspace switches with nothing rebuilt.
+    ///
+    /// ```ignore
+    /// let shown = cx.state().active_workspace();
+    /// RoomRow::new(room).hidden(move || shown.get() != Some(room.workspace))
+    /// ```
+    ///
+    /// The same key an action gets from [`ActionCx::workspace`](crate::ActionCx::workspace), so a
+    /// room stored by one is found by the other. `workspace.focused` is raised when it changes.
+    pub fn active_workspace(&self) -> heca_grid_ui::reactive::Signal<Option<crate::entry::service::WorkspaceKey>> {
+        self.state.workspaces.active_workspace()
+    }
+
     /// A snapshot of a pane's runtime (program, status, cwd, git, kind, exit code).
     /// `None` if the pane has no mirrored runtime.
     pub fn pane_runtime(&self, pane: PaneId) -> Option<PaneRuntime> {

@@ -149,6 +149,7 @@ pub struct ActionCx<'a, M> {
     pub(crate) service: ServiceCx<'a, M>,
     pub(crate) session: u64,
     pub(crate) session_key: SessionKey,
+    pub(crate) workspace: Option<super::WorkspaceKey>,
     pub(crate) client: Option<u64>,
     pub(crate) sender: Option<&'a Sender>,
     pub(crate) config: &'a AppConfig,
@@ -166,6 +167,18 @@ impl<M> ActionCx<'_, M> {
     /// its folder or its windows. See [`SessionKey`].
     pub fn session_key(&self) -> SessionKey {
         self.session_key
+    }
+
+    /// **The workspace the action was asked from** — the one the asking window shows; for a script,
+    /// the one a window of the session showed last; `None` before any window has shown one. A
+    /// [`WorkspaceKey`](super::WorkspaceKey), so it can be stored and still name the same workspace
+    /// after a reorder or a restart:
+    ///
+    /// ```ignore
+    /// let room = Room { workspace: cx.workspace(), .. };   // the room belongs to the caller's workspace
+    /// ```
+    pub fn workspace(&self) -> Option<super::WorkspaceKey> {
+        self.workspace
     }
 
     /// The window's connection, when a window asked. `None` for a script with no window.

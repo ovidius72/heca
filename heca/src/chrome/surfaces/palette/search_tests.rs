@@ -73,6 +73,7 @@ fn choose(palette: &mut CommandPalette) {
 
 fn session(id: u64, name: &str, folder: &str) -> SessionInfo {
     SessionInfo {
+        key: None,
         id: heca_core::layout::SessionId(id),
         name: name.into(),
         folder: Some(folder.into()),

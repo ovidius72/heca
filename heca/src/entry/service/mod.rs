@@ -64,6 +64,7 @@ mod declared;
 mod inbox;
 mod request;
 mod session_key;
+mod workspace_key;
 mod sessions;
 #[cfg(test)]
 mod tests;
@@ -78,6 +79,7 @@ pub use request::{
     ActionRequest, ExternalRequest, Permit, RequestOutcome, RequestRef, Requester, Sender, SubmitError,
 };
 pub use session_key::SessionKey;
+pub use workspace_key::WorkspaceKey;
 pub use sessions::{ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions};
 
 use declared::Declared;

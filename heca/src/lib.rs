@@ -42,7 +42,7 @@ pub use chrome::{
 pub use entry::{
     ActionCatalogSnapshot, ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError, ExternalRequest, LayerBuilder, LayerCx,
     Permit, ProjectCx, Projection, RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox,
-    ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop,
+    ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, WorkspaceKey,
     SubmitError, Update, extension, register_widget,
     ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
 };

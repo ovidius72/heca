@@ -467,6 +467,32 @@ key of the session the call or the window is in. A session the server saved when
 with the same key, so data stored against it is found again after a restart; with `save_sessions = false`
 (or a file that cannot be read) the sessions are new and so are their keys.
 
+**Which workspace — `workspace()`.** `cx.workspace()` is the workspace the action was asked from:
+the one the asking window shows; for a script, the one a window of the session showed last; `None`
+before any window has shown one. It is a `WorkspaceKey` — the session's key and the number heca gave
+the workspace when it was made — so, like `SessionKey`, it can be stored and still names the same
+workspace after the workspaces are reordered, renamed or folded and after the server restarts. It
+ends when the workspace is deleted. Its position (`ws_idx`) is a different thing: it changes on a
+reorder, so never store it.
+
+```rust
+// A room belongs to the workspace it was made in — no index passed by the caller.
+fn create_room(rooms: &mut Rooms, cx: &mut ActionCx<'_, Msg>, intent: &Intent) -> ActionResult {
+    let Some(workspace) = cx.workspace() else { return ActionResult::Refused("no workspace yet".into()) };
+    rooms.add(Room { workspace, .. });
+    ActionResult::Done(None)
+}
+```
+
+A dock reads the same key for the workspace **its window** shows, as a value to follow:
+`cx.state().active_workspace()` (a signal, so a binding on it follows workspace switches with nothing
+rebuilt), and the event `workspace.focused` is raised when it changes (THE EVENTS):
+
+```rust
+let shown = cx.state().active_workspace();
+RoomRow::new(&room).hidden(move || shown.get() != Some(room.workspace))   // only this workspace's rooms
+```
+
 **A table of its own.** `cx.extension_config::<T>()` reads `[extensions.<name>]`, where `<name>` is
 the extension the service was declared under, as any type that implements `serde::Deserialize`. A
 table that does not fit `T` is an error that names the table and says what is wrong

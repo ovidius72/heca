@@ -28,6 +28,7 @@ impl SessionRuntime {
         self.key = saved.key;
         self.identity = SessionInfo {
             id: saved.id,
+            key: Some(saved.key),
             name: saved.name,
             folder: saved.folder,
             label: saved.label,
