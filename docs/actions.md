@@ -99,11 +99,16 @@ WmAction::MyCustomAction => ActionPolicy::TiledOnly,
 **4. Write the handler** — in the file under `heca/src/handlers/` for what it acts on:
 
 ```rust
-pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
+pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) -> ActionResult {
     // Your logic here — only the action. The dispatcher asks for the frame, re-syncs focus and
     // refreshes what lists the session afterwards, for every action.
+    Ok(())
 }
 ```
+
+**When it cannot do what it was asked, return the reason** — `Err(format!("no dock '{id}'"))` —
+instead of logging it. `execute` says it once, whoever asked, and a script calling it over RPC is
+answered `error: <action>: <reason>` rather than `ok`. Never `eprintln!` a failure in a handler.
 
 **5. Register the handler** in `build_registry()` — `heca/src/app/registry/actions/mod.rs`:
 

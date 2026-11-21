@@ -87,7 +87,7 @@ fn two_clients_acknowledge_one_session_and_late_joiners_receive_seen_state() {
 #[test]
 fn only_one_attached_client_is_granted_a_feedback_sound() {
     let mut state = ServerState::for_tests(Default::default());
-    state.feedback.completed(PaneId(7), 1);
+    state.feedback.completed(PaneId(7), 1, &[]);
     let mut session = Session::new(SessionId(1), Default::default());
     session.add_column_with(0, 0, Pane::new(PaneId(7), "shell"));
     let mut server = ServerLoop::new(state, session);

@@ -1,4 +1,4 @@
-//! `heca --keys-show` — every binding name and the key it resolves to.
+//! `heca --show-keys` — every binding name and the key it resolves to.
 //!
 //! **Why this exists.** Keys used to be discoverable by reading one file. They no longer are: a
 //! component's keys are in its own `[[keys.component]]` entry, a mode's in `[[keys.mode]]`, and a
@@ -13,7 +13,7 @@
 use crate::keymap::BindingIndex;
 
 /// The flag that selects this mode.
-pub(crate) const FLAG: &str = "--keys-show";
+pub(crate) const FLAG: &str = "--show-keys";
 
 /// The listing, as text — separated from the printing so it can be tested without a process.
 pub(crate) fn render(index: &BindingIndex, json: bool) -> String {

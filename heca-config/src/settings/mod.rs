@@ -78,6 +78,10 @@ declare_settings! {
         /// One server-granted attempt per new background event, not per pulse or window.
         /// Per-status sound mute/source/volume still apply. Independent of agent reporting opt-in.
         pub notification_sound: bool,
+        /// **Exit codes that end a command quietly**: no flash and no sound, in any window.
+        /// Default `[130]`, a command interrupted with Ctrl+C, which is not a failure to look at.
+        /// `[]` flashes for every ending; any code not listed flashes as success (`0`) or error.
+        pub notification_quiet_exit_codes: Vec<i32>,
         pub window_width: u32,
         pub window_height: u32,
         /// Optional terminal default foreground override from `config.toml`.

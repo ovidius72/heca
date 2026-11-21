@@ -41,14 +41,6 @@ pub(crate) struct ChromeSignals {
     /// **The workspace `prefix+Shift+i` would return to**, by index. Bound like
     /// [`ws_active`](Self::ws_active) because it changes on focus, which does not rebuild the tree.
     pub(crate) ws_previous: Vec<(usize, Signal<bool>)>,
-    /// Every navigable row's cursor-outline signal, as `(mount, key, signal)` — driven from
-    /// that **mount's** cursor (`container_cursor`), which is why the mount is part of the key.
-    ///
-    /// Generic: this used to be two domain-keyed families (`pane_nav` by
-    /// `PaneId`, `ws_nav` by `ws_idx`), which no component outside the workspace tree could join. A
-    /// row now declares one identity (`Base::key`) and this is the highlight half of it; the
-    /// cursor highlight stays distinct from `active_pane`, as it always was.
-    pub(crate) row_nav: Vec<(String, String, Signal<bool>)>,
     /// The status-bar label's text signal.
     pub(crate) status: Option<Signal<String>>,
 }
@@ -152,18 +144,16 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
             sig.set(v);
         }
     }
-    // Project each mount's cursor onto its rows' cursor signals — distinct from `active` above, so
-    // the expanded sidebar shows both the real focus and the cursor. Keyed by `(mount, key)`,
-    // so two placements of one container light **different** rows.
-    for (mount, key, sig) in &retained.signals.row_nav {
-        let v = state
-            .chrome_state
-            .container_cursor(mount)
-            .get_untracked()
-            .as_deref()
-            == Some(key.as_str());
-        if sig.get_untracked() != v {
-            sig.set(v);
+    // **Each keyboard-navigable dock's cursor lights its row, by key.** A row declares only its
+    // `.key(..)` — heca's and an extension's alike — and the dock's cursor (`container_cursor`)
+    // reaches it here, distinct from `active` above, so the sidebar shows both the real focus and
+    // the cursor. Per mount, so two placements of one component light **different** rows.
+    for region in crate::chrome::RegionId::ALL {
+        for mounted in state.chrome_host.contributions(region) {
+            if mounted.keyboard_navigable() {
+                let cursor = state.chrome_state.container_cursor(mounted.id()).get_untracked();
+                heca_grid_ui::select_key_in_scope(&state.window_root, mounted.id(), cursor.as_deref());
+            }
         }
     }
     // **The letters are not projected from here any more**.

@@ -11,18 +11,18 @@ use crate::input::WmAction;
 /// A terminal or pane the action names is zoomed. Naming neither means the terminal the keyboard
 /// acts on ([`AppState::keyboard_terminal`]): one placed in a dock or an overlay that holds it is
 /// asked first and answers itself (it says so back with its id, which lands here again).
-pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
+pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
     let WmAction::PaneTerminalFontZoom {
         pane_id,
         terminal,
         step,
     } = action
     else {
-        return;
+        return Ok(());
     };
     let named = pane_id.is_some() || terminal.is_some();
     if !named && crate::app::terminal_host::tree_answers(state, step.intent()) {
-        return;
+        return Ok(());
     }
     let id = match named {
         true => {
@@ -34,8 +34,9 @@ pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
         false => state.keyboard_terminal(),
     };
     let Some(id) = id else {
-        return;
+        return Ok(());
     };
     let delta = super::system::font_zoom_delta(state, *step);
     crate::app::terminal_metrics::apply_terminal_font_zoom(state, id, delta);
+    Ok(())
 }

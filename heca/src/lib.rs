@@ -166,6 +166,7 @@ impl HecaApp {
             IntentOutcome::Blocked => Err(rpc::RpcError::Blocked(intent.action)),
             IntentOutcome::NotRunnable => Err(rpc::RpcError::NotRunnable(intent.action)),
             IntentOutcome::MissingArgs => Err(rpc::RpcError::MissingArgs(intent.action)),
+            IntentOutcome::Failed(reason) => Err(rpc::RpcError::Failed(format!("{}: {reason}", intent.action))),
         }
     }
 
@@ -523,7 +524,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.window.request_redraw();
             }
             AppEvent::ChromeIntent { source, intent } => {
-                dispatch_intent(state, &self.registry, source, intent);
+                let _ = dispatch_intent(state, &self.registry, source, intent);
                 state.mark_full_redraw();
                 crate::app::frame_reasons::report("event ChromeIntent");
                 state.window.request_redraw();
@@ -565,7 +566,7 @@ pub fn run(app_name: impl Into<String>) {
         let code = result.unwrap_or_else(|error| { eprintln!("[heca] agent launch: {error}"); 1 });
         std::process::exit(code);
     }
-    // Command-line questions — `--help`, `--keys-show`, `--list-actions`, `--describe-action` —
+    // Command-line questions — `--help`, `--show-keys`, `--list-actions`, `--describe-action` —
     // are answered and exited before the window, so a script can ask heca anything without a GPU.
     // One table dispatches and documents them; see `app::cli`.
     let args: Vec<String> = std::env::args().skip(1).collect();

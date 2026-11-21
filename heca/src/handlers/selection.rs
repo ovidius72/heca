@@ -25,27 +25,32 @@ use crate::input::WmAction;
 /// `Enter` confirms, `prefix` returns to Prefix, movement keys update the
 /// focus cell) is owned by
 /// `app::input::handle_selection_mode`.
-pub fn handle_enter_selection_mode(state: &mut AppState, _action: &WmAction) {
+pub fn handle_enter_selection_mode(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     // If we can't place a caret on the focused terminal, do nothing.
     // Entering selection mode without a caret violates the contract:
     // the user must have a caret position to move and begin selection from.
     let _ = enter_selection_mode_for_focused_terminal(state);
+    Ok(())
 }
 
-pub fn handle_selection_left(state: &mut AppState, _action: &WmAction) {
+pub fn handle_selection_left(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, 0, -1);
+    Ok(())
 }
 
-pub fn handle_selection_right(state: &mut AppState, _action: &WmAction) {
+pub fn handle_selection_right(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, 0, 1);
+    Ok(())
 }
 
-pub fn handle_selection_up(state: &mut AppState, _action: &WmAction) {
+pub fn handle_selection_up(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, -1, 0);
+    Ok(())
 }
 
-pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) {
+pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, 1, 0);
+    Ok(())
 }
 
 /// Begin selection from the caret position.
@@ -57,14 +62,15 @@ pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) {
 /// If a selection already exists, this is a no-op — the user should clear
 /// and re-enter if they want to restart selection from a different point.
 /// This avoids accidental loss of an in-progress selection.
-pub fn handle_begin_selection(state: &mut AppState, _action: &WmAction) {
+pub fn handle_begin_selection(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     if state.selection.is_caret() {
         state
             .selection
             .begin_selection_from_caret(SelectionSource::KeyboardMode);
     }
     // If selection already exists: no-op. Document the policy — user must
-    // clear (Esc) and re-enter selection mode to restart from caret.
+    // clear (Esc) and re-enter selection mode to restart from caret.;
+    Ok(())
 }
 
 /// Toggle which endpoint of the selection is active (anchor vs focus).
@@ -72,16 +78,18 @@ pub fn handle_begin_selection(state: &mut AppState, _action: &WmAction) {
 /// After toggling, movement keys update the other end of the selection.
 /// This lets the keyboard user grow the selection from both ends without
 /// restarting.
-pub fn handle_toggle_selection_endpoint(state: &mut AppState, _action: &WmAction) {
+pub fn handle_toggle_selection_endpoint(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     state.selection.toggle_selection_endpoint();
+    Ok(())
 }
 
 /// Clear the active selection and exit selection input mode.
-pub fn handle_clear_selection(state: &mut AppState, _action: &WmAction) {
+pub fn handle_clear_selection(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     state.selection.clear();
     if matches!(state.input_mode, InputMode::Selection) {
         state.input_mode = InputMode::Normal;
     }
+    Ok(())
 }
 
 /// Write text to the system clipboard via `arboard`; shared by selection-copy
@@ -115,11 +123,11 @@ pub(crate) fn set_system_clipboard(text: &str) {
 /// - If clipboard write fails, logs in debug builds and keeps app state coherent.
 /// - Does NOT clear the selection after copy — the user clears explicitly.
 /// - Safe no-op when there is no active selection or the owner is unsupported.
-pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
+pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let request = {
         let active = match state.selection.active() {
             Some(a) => a,
-            None => return, // No active selection — safe no-op.
+            None => return Ok(()), // No active selection — safe no-op.
         };
         let SelectionOwner(terminal) = active.owner;
         let SelectionRegion {
@@ -140,7 +148,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
             .and_then(|b| b.terminal_snapshot())
         {
             Some(s) => s,
-            None => return, // No snapshot — safe no-op.
+            None => return Ok(()), // No snapshot — safe no-op.
         };
 
         (terminal, start_stable, end_stable, snapshot.cols, snapshot.default_bg)
@@ -151,6 +159,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         let text = crate::app::terminal_host::selection::extract_selection_text(&selection, &lines, start, cols, background);
         crate::client::ReadEffect::Clipboard { text, selection }
     });
+    Ok(())
 }
 
 pub(crate) fn finish_copy(state: &mut AppState, selection: crate::app::terminal_host::selection::SelectionState, text: Option<String>) {
@@ -188,21 +197,16 @@ pub(crate) fn finish_copy(state: &mut AppState, selection: crate::app::terminal_
 ///
 /// The backend wraps the text in bracketed-paste markers when the program enabled that mode (see
 /// `PaneBackend::paste`), so editors treat it as literal input.
-pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
+pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let text = match arboard::Clipboard::new() {
         Ok(mut cb) => match cb.get_text() {
             Ok(t) => t,
-            Err(e) => {
-                eprintln!("[heca] clipboard read failed: {e}");
-                return;
-            }
+            Err(e) => return Err(format!("clipboard read failed: {e}")),
         },
-        Err(e) => {
-            eprintln!("[heca] clipboard unavailable: {e}");
-            return;
-        }
+        Err(e) => return Err(format!("clipboard unavailable: {e}")),
     };
     if let Some(backend) = state.keyboard_backend_mut() {
         backend.paste(&text);
     }
+    Ok(())
 }

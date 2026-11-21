@@ -111,13 +111,14 @@ fn run_outcome(
             .map(|b| &b.outcome),
     };
     match outcome {
-        Some(Outcome::Proceed) => registry.execute(resolved, state),
-        Some(Outcome::Dispatch(action)) => crate::app::interaction::dispatch_action(
+        // A failure was already said by `execute`; a dialog has nobody else to tell.
+        Some(Outcome::Proceed) => { let _ = registry.execute(resolved, state); }
+        Some(Outcome::Dispatch(action)) => { let _ = crate::app::interaction::dispatch_action(
             state,
             registry,
             crate::app::interaction::InteractionSource::Keyboard,
             action,
-        ),
+        ); }
         Some(Outcome::Callback(cb)) => cb(state, registry),
         Some(Outcome::Cancel) | None => {}
     }

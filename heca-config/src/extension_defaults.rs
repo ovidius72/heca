@@ -7,7 +7,7 @@
 //!
 //! An extension declares them once, before heca starts (`heca::extension("rooms").defaults(..)`), and
 //! from then on every reader of the defaults sees them: the loaded configuration, `KeysConfig::default`
-//! (so its keys bind like heca's own, `[[keys.surface]]` included), `--show-config` and `--keys-show`.
+//! (so its keys bind like heca's own, `[[keys.surface]]` included), `--show-config` and `--show-keys`.
 //! The user overrides them in the same files and the same way as heca's.
 //!
 //! **An extension's defaults speak only for that extension.** Its config file may hold only its own

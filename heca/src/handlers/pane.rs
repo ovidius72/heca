@@ -5,13 +5,14 @@ use super::pick::{begin_pick, pane_candidates_with_stable_letters};
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 
-pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
+pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
-        return;
+        return Ok(());
     }
     let candidates = pane_candidates_with_stable_letters(state);
     begin_pick(state, InputMode::PaneSelect { candidates });
+    Ok(())
 }
 
 /// **Move a mounted container's cursor to the row named by `key`** — the generic form of a click
@@ -19,13 +20,14 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
 ///
 /// It moves the cursor and nothing else. Activating the row, focusing a pane or handing the
 /// keyboard back are separate acts with separate names; a gesture that wants one of those says so.
-pub fn handle_cursor_to(state: &mut AppState, action: &WmAction) {
+pub fn handle_cursor_to(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
     let WmAction::CursorTo { mount, key } = action else {
-        return;
+        return Ok(());
     };
     // The placement's cursor key is the one record: the rows' outlines draw from it, and the dock
     // reads it before each action, so the next `j`/`k` continues from here.
     state
         .chrome_state
         .set_container_cursor(mount, Some(key.clone()));
+    Ok(())
 }

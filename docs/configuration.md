@@ -74,7 +74,7 @@ display:
 
 ```bash
 heca -h  --help                    # these commands
-heca -k  --keys-show [--json]      # every binding name and the key it resolves to
+heca -k  --show-keys [--json]      # every binding name and the key it resolves to
 heca -a  --list-actions [--json]   # every action, its category, and how many arguments it takes
 heca -d  --describe-action resize  # one action in full: what it does, every argument, every value
 heca -d resize -j                  # the same, as JSON (-j is --json)
@@ -777,6 +777,7 @@ and the configured attention events of enabled integrations, not just to agents.
 | --- | --- | --- | --- |
 | `notification_flash` | `8000` | Non-negative TOML integer, in milliseconds | Maximum **total** flashing time, including pauses. Positive values stop the flash at the deadline or earlier on acknowledgement. `0` repeats until acknowledged; it does **not** disable flashing. |
 | `notification_sound` | `true` | TOML boolean `true` or `false` | `true` permits one configured sound for each new background feedback event. `false` mutes feedback sounds without disabling flashes, reporting or status updates. |
+| `notification_quiet_exit_codes` | `[130]` | List of TOML integers | A command that ends with one of these codes neither flashes nor sounds, in any window. `130` is a command you interrupted with Ctrl+C; add `143` for one stopped with `kill`. `[]` flashes for every ending. |
 
 Write both values without quotes. For example, `8000` is eight seconds; `8` is eight
 milliseconds. Negative or fractional durations, strings such as `"8000"`, boolean durations,
@@ -798,6 +799,7 @@ The following example uses the defaults and customises one status sound:
 [settings]
 notification_flash = 8000
 notification_sound = true
+notification_quiet_exit_codes = [130]
 
 [settings.agents.sounds]
 volume = 0.7

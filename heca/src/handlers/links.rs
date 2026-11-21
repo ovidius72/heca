@@ -5,9 +5,10 @@ use crate::app::terminal_host::selection::SelectionOwner;
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 
-pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
+pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let candidates = crate::app::terminal_host::collect_link_hints(state);
     begin_pick(state, InputMode::FollowLink { candidates });
+    Ok(())
 }
 
 /// Schemes we are willing to hand to the OS opener. OSC 8 links come from
@@ -60,21 +61,21 @@ fn open_url_in_os(url: &str) {
 
 /// Open an OSC 8 hyperlink target. Shared by every surface (HintKey follow-link,
 /// Cmd/Ctrl+click, selection-mode `O`, context menu, RPC).
-pub fn handle_open_link(_state: &mut AppState, action: &WmAction) {
+pub fn handle_open_link(_state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
     let WmAction::OpenLink { url } = action else {
-        return;
+        return Ok(());
     };
     if link_scheme_allowed(url) {
         open_url_in_os(url);
+        Ok(())
     } else {
-        #[cfg(debug_assertions)]
-        eprintln!("[heca] refusing to open link with disallowed scheme: {url}");
+        Err(format!("refusing to open a link with a disallowed scheme: {url}"))
     }
 }
 
-pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) {
+pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some((owner, stable_row, col)) = state.selection.cursor_cell() else {
-        return;
+        return Ok(());
     };
     let SelectionOwner(terminal) = owner;
     let Some(url) = state
@@ -82,9 +83,9 @@ pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) {
         .get(&terminal)
         .and_then(|t| t.link_at_stable(stable_row, col))
     else {
-        return;
+        return Ok(());
     };
-    handle_open_link(state, &WmAction::OpenLink { url });
+    handle_open_link(state, &WmAction::OpenLink { url })
 }
 
 #[cfg(test)]

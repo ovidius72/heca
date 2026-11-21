@@ -31,6 +31,7 @@ fn terminal_settings() -> TerminalSettings {
         images: false,
         pane_size: Default::default(),
         new_workspace_cwd: "~".into(),
+        quiet_exit_codes: vec![130],
     }
 }
 

@@ -16,7 +16,7 @@ in `~/.config/heca/keybindings.toml` — or in `config.toml`, which is merged wi
 
 > **A binding to an action that does not exist is not an error.** Action names resolve when the key
 > is pressed, so a plugin's action can be bound before the plugin loads — and a typo produces a key
-> that silently does nothing. `heca --keys-show` lists every binding and what it resolved to.
+> that silently does nothing. `heca --show-keys` lists every binding and what it resolved to.
 
 ---
 
@@ -580,7 +580,7 @@ startup state, not actions. The command palette offers the new action once per r
 ## See also
 
 - `keybindings.default.toml` — every default, with its comments. The single source of truth.
-- `heca --keys-show` — every binding and the key it resolves to, per layer.
+- `heca --show-keys` — every binding and the key it resolves to, per layer.
 - [Keyboard commands](keyboard-commands.md) — the default keys, the docks' keys, scrollback and selection.
 - [Configuration](configuration.md) — the configuration reference.
 - [Actions](actions.md) — how an action is dispatched, and how to add one.

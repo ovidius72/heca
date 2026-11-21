@@ -69,7 +69,7 @@ pub(super) fn bind_flat(
 
 /// Retire a combo from a layer, and from the index with it.
 ///
-/// An `unbind` that left the index alone would have `--keys-show` and every tooltip reporting a key
+/// An `unbind` that left the index alone would have `--show-keys` and every tooltip reporting a key
 /// that no longer does anything — the exact drift the index exists to end. Matched on the parsed
 /// combo rather than the literal string, so `"Prefix+W"` retires `"prefix+w"`.
 pub(super) fn unbind_and_deindex(
@@ -96,7 +96,7 @@ mod tests {
 
     use crate::keymap::BindingIndex;
 
-    /// The index is what `--keys-show` and every tooltip read, so it must carry the **qualified** id
+    /// The index is what `--show-keys` and every tooltip read, so it must carry the **qualified** id
     /// and the layer — and an `unbind` must take its entry out with it.
     #[test]
     fn the_index_records_the_qualified_id_and_forgets_what_is_unbound() {

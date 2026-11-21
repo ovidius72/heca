@@ -163,3 +163,10 @@ fn an_unknown_action_says_so_and_says_where_to_look() {
         "and points at the way to find one"
     );
 }
+
+/// `rpc` is answered before the command table, and is listed by `--help` all the same.
+#[test]
+fn the_help_lists_rpc_too() {
+    let text = help();
+    assert!(text.contains("rpc <action>") && text.contains("rpc --events"), "{text}");
+}

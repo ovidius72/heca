@@ -56,8 +56,10 @@ pub(crate) fn dispatch_view_intent(
     // 1. Built-in. Parameterized variants are built from the intent's args (`build_action`, the same
     //    constructor a config binding uses); unit variants come straight from the name.
     if let Some(action) = builtin_of(&intent.action, &args) {
-        dispatch_action(state, registry, source, &action);
-        return IntentOutcome::Ran;
+        return match dispatch_action(state, registry, source, &action) {
+            Ok(()) => IntentOutcome::Ran,
+            Err(reason) => IntentOutcome::Failed(reason),
+        };
     }
 
     // A built-in the caller could not build is an **arity** failure, and saying so is the whole
@@ -200,7 +202,7 @@ pub(crate) fn view_intent_allowed(
 /// A click can afford to fail silently; a script cannot be told "ok" when nothing happened. The
 /// three failures are genuinely different: a name nothing knows, a name the domain refuses right
 /// now, and an action whose owner is not mounted (or lives across the plugin boundary).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum IntentOutcome {
     /// Dispatched — a built-in ran, or a name-keyed handler did.
     Ran,
@@ -216,6 +218,9 @@ pub(crate) enum IntentOutcome {
     /// Declared, but nothing here can run it: its component is not mounted, or it is a plugin's to
     /// run across a boundary that does not exist yet.
     NotRunnable,
+    /// It ran and could not do what it was asked — a dock id nobody mounted, a region it may not
+    /// go to — with the reason, which a script is answered with.
+    Failed(String),
 }
 
 /// Report a dispatched intent's argument mistakes against the action's declared

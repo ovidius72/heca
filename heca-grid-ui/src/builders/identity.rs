@@ -5,8 +5,15 @@ use crate::component::Component;
 /// **Who a widget is**: the name it is found by, the scope it gives the names inside it, and the
 /// props its owner hands it.
 pub trait IdentityExt: Component + Sized {
-    fn key(mut self, key: impl Into<String>) -> Self {
-        self.base_mut().key = Some(key.into());
+    /// **The name this widget is found by** — the cursor, the pick letter, a drag and a right-click
+    /// all address it by this. Optional: a widget without one is named by what it reads as.
+    ///
+    /// Takes a name, or an `Option` of one: `None` leaves the widget as it was, so a row whose name
+    /// may be missing writes `.key(name)` with no branch around it.
+    fn key(mut self, key: impl IntoKey) -> Self {
+        if let Some(key) = key.into_key() {
+            self.base_mut().key = Some(key);
+        }
         self
     }
 
@@ -37,3 +44,25 @@ pub trait IdentityExt: Component + Sized {
 }
 
 impl<T: Component + Sized> IdentityExt for T {}
+
+/// **What `.key(..)` takes**: a name, or an `Option` of one (`None` names nothing).
+///
+/// Written out per type rather than for every `Into<String>`: the standard library could one day
+/// let an `Option` turn into a `String`, and Rust refuses a rule that might then mean two things.
+pub trait IntoKey {
+    /// The name, or `None` for none.
+    fn into_key(self) -> Option<String>;
+}
+
+macro_rules! into_key {
+    ($($t:ty),*) => {$(
+        impl IntoKey for $t {
+            fn into_key(self) -> Option<String> { Some(self.into()) }
+        }
+        impl IntoKey for Option<$t> {
+            fn into_key(self) -> Option<String> { self.map(Into::into) }
+        }
+    )*};
+}
+
+into_key!(&str, String, &String, std::borrow::Cow<'_, str>, Box<str>, char);

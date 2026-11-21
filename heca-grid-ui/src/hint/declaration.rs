@@ -65,6 +65,26 @@ impl std::fmt::Debug for Hint {
     }
 }
 
+/// **What `.on_hint(..)` takes**: a hint (a closure, or a [`Hint`] carrying its intent), or an
+/// `Option` of one — `None` declares nothing, so a row that only sometimes has a pick writes
+/// `.on_hint(pick)` rather than branching around the builder.
+pub trait IntoHint {
+    /// The hint this declares, or `None` for none.
+    fn into_hint(self) -> Option<Hint>;
+}
+
+impl<T: Into<Hint>> IntoHint for T {
+    fn into_hint(self) -> Option<Hint> {
+        Some(self.into())
+    }
+}
+
+impl<T: Into<Hint>> IntoHint for Option<T> {
+    fn into_hint(self) -> Option<Hint> {
+        self.map(Into::into)
+    }
+}
+
 /// A bare closure is a hint with nothing to say about itself — what every native call site wrote
 /// before there was anything to ask, and what one still writes when the act has no name.
 impl<F: Fn() + 'static> From<F> for Hint {

@@ -24,7 +24,7 @@ const PREFIX_JOIN: &str = " ";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum KeyStyle {
     /// Words, as the config file spells them: `Shift+e`, `ArrowLeft`, `Escape`. The safe spelling
-    /// anywhere, and the one a script or `--keys-show` should get — it is also what the user would
+    /// anywhere, and the one a script or `--show-keys` should get — it is also what the user would
     /// type back into `config.toml`.
     #[default]
     Plain,

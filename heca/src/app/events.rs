@@ -276,7 +276,7 @@ pub(crate) fn handle_window_event(
                 return;
             }
             if let Some(action) = mouse::on_cursor_moved(state, pos) {
-                dispatch_action(state, registry, InteractionSource::MouseContent, &action);
+                let _ = dispatch_action(state, registry, InteractionSource::MouseContent, &action);
             }
             // Feed the move into the retained chrome tree so sidebar hover affordances
             // (MarkerGroup grip "grab" cue, Row hover) light up — the app otherwise
@@ -342,7 +342,7 @@ pub(crate) fn handle_window_event(
                 }
             }
             if let Some((action, source)) = mouse::on_mouse_input(state, &ev) {
-                dispatch_action(state, registry, source, &action);
+                let _ = dispatch_action(state, registry, source, &action);
             }
             // A host selection drag ends where the button does, wherever the pointer is.
             if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
@@ -497,7 +497,7 @@ fn handle_wheel_font_zoom(
     } else {
         FontZoomStep::Out
     };
-    dispatch_action(
+    let _ = dispatch_action(
         state,
         registry,
         InteractionSource::MouseContent,

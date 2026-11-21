@@ -223,9 +223,31 @@ impl Tip {
 /// Label::new(path).tooltip(full_path);                          // a Signal<String>: followed live
 /// row.tooltip(Tag::new().segment(program).segment(folder));     // a widget
 /// ```
+///
+/// An `Option` of any of these is taken too: `None` gives no tooltip and leaves the widget as it was.
 pub trait IntoTip {
     /// The tip this makes.
     fn into_tip(self) -> Tip;
+
+    /// The tip this makes, or `None` when there is none to give — what the builder reads, so an
+    /// `Option` can say "nothing". Every other kind always has one.
+    fn into_tip_if_any(self) -> Option<Tip>
+    where
+        Self: Sized,
+    {
+        Some(self.into_tip())
+    }
+}
+
+impl<T: IntoTip> IntoTip for Option<T> {
+    /// `None` reads as an empty tip, which shows no bubble.
+    fn into_tip(self) -> Tip {
+        self.map_or_else(|| Tip::new(""), IntoTip::into_tip)
+    }
+
+    fn into_tip_if_any(self) -> Option<Tip> {
+        self.map(IntoTip::into_tip)
+    }
 }
 
 impl IntoTip for &str {

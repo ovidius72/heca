@@ -74,11 +74,6 @@ impl ColumnGroup<'_> {
         // Bind the column bar's active signal (lit iff it holds the active pane).
         let pane_ids = column.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
         reg.signals.col_active.push((pane_ids, col.state()));
-        reg.signals.row_nav.push((
-            seams.mount.to_string(),
-            column_key(column.col_id),
-            col.nav_state(),
-        ));
         // **The group says all of this about itself** — no `KeyHint` wrapper. That is for a
         // region which is not a widget you can put a builder on; a `MarkerGroup` is one, and the
         // letter is drawn by `paint_child` for any widget carrying one. The letter itself is

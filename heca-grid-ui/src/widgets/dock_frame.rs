@@ -549,6 +549,16 @@ fn chevron_for(open: bool) -> &'static str {
 const ROWS: [Track; 2] = [Track::Auto, Track::Fr(1.0)];
 
 impl Component for DockFrame {
+    /// **The cursor is on this frame**: lights the outline its nav signal is bound to, the way a
+    /// [`Row`](crate::widgets::Row) does, so a dock's cursor reaches it by key with nothing wired.
+    fn set_selected(&self, on: bool) -> bool {
+        use crate::reactive::{SignalGet as _, SignalUpdate as _};
+        if self.nav.get_untracked() != on {
+            self.nav.set(on);
+        }
+        true
+    }
+
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
     fn wants_visible(&self) -> bool {

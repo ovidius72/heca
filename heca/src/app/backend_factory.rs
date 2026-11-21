@@ -46,6 +46,8 @@ pub(crate) struct TerminalSettings {
     pub(crate) pane_size: heca_config::settings::PaneSize,
     /// The folder a new workspace's shell starts in, as written (`~` allowed).
     pub(crate) new_workspace_cwd: String,
+    /// `[settings] notification_quiet_exit_codes`: the command endings that ask for no attention.
+    pub(crate) quiet_exit_codes: Vec<i32>,
 }
 
 impl TerminalSettings {
@@ -63,6 +65,7 @@ impl TerminalSettings {
             images: app_config.config.appearance.terminal.images,
             pane_size: settings.pane_size,
             new_workspace_cwd: settings.new_workspace_cwd.clone(),
+            quiet_exit_codes: settings.notification_quiet_exit_codes.clone(),
         }
     }
 }

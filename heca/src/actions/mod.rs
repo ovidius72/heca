@@ -31,7 +31,7 @@ pub use catalog::{
 };
 pub use confirm::{ButtonRole, ConfirmSpec, Outcome, ResponseButton};
 pub use registry::{
-    ActionHandle, ActionRegistry, DuplicateAction, register_dynamic, unregister_dynamic,
+    ActionHandle, ActionRegistry, ActionResult, DuplicateAction, register_dynamic, unregister_dynamic,
 };
 pub(crate) use registry::{register_server_dynamic, register_service_dynamic};
 pub(crate) use registry::server::{ServerGate, ServerInvocation, ServerStep};
