@@ -60,6 +60,8 @@ pub(crate) struct SessionRuntime {
     events: super::EventFanout,
     /// The server's extension services, shared with it: a window's call to one runs here.
     services: super::services::SharedServices,
+    /// Saved-state entries restored with the session, held until the services are installed.
+    restored_state: super::services::saved::Entries,
     /// The session's effective configuration — the user's, with a trusted project's on top — as
     /// its services see it. `None` for a session built without one (tests).
     config: Option<Rc<heca_config::loader::AppConfig>>,
@@ -101,6 +103,7 @@ impl SessionRuntime {
             published: Default::default(),
             events: Default::default(),
             services: Default::default(),
+            restored_state: Default::default(),
             config: None,
         }
     }
@@ -123,6 +126,10 @@ impl SessionRuntime {
     /// Share the server's service host, so a window's call to a service action reaches it.
     pub(crate) fn install_services(&mut self, services: super::services::SharedServices) {
         self.services = services;
+        let restored = std::mem::take(&mut self.restored_state);
+        if !restored.is_empty() {
+            self.services.borrow().adopt_saved_entries(self.key, restored);
+        }
     }
 
     pub(crate) fn set_config(&mut self, config: &heca_config::loader::AppConfig) {

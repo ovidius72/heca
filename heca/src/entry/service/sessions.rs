@@ -160,16 +160,19 @@ impl SessionEvent {
 pub enum ServerEvent {
     /// `session.changed`.
     SessionChanged(SessionEvent),
+    /// `state.changed`: an extension's saved entry was saved or forgotten (see [`crate::Scope`]).
+    StateChanged(super::StateEvent),
 }
 
 impl ServerEvent {
     /// Every name a listener can ask for, besides `"*"`.
-    pub const NAMES: &'static [&'static str] = &["session.changed"];
+    pub const NAMES: &'static [&'static str] = &["session.changed", "state.changed"];
 
     /// The event's name, as a listener asks for it.
     pub fn name(&self) -> &'static str {
         match self {
             ServerEvent::SessionChanged(_) => "session.changed",
+            ServerEvent::StateChanged(_) => "state.changed",
         }
     }
 
@@ -177,6 +180,15 @@ impl ServerEvent {
     pub fn as_session(&self) -> Option<&SessionEvent> {
         match self {
             ServerEvent::SessionChanged(event) => Some(event),
+            ServerEvent::StateChanged(_) => None,
+        }
+    }
+
+    /// The saved-state change, when this is `state.changed`.
+    pub fn as_state(&self) -> Option<&super::StateEvent> {
+        match self {
+            ServerEvent::StateChanged(event) => Some(event),
+            ServerEvent::SessionChanged(_) => None,
         }
     }
 }

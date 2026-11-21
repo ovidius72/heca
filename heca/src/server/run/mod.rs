@@ -395,6 +395,7 @@ impl ServerLoop {
         }
         { let _s = crate::slow_steps::step("server.pump_sessions"); self.pump_sessions(now) };
         { let _s = crate::slow_steps::step("server.pump_services"); self.pump_services() };
+        self.announce_state_changes();
         for client in &self.clients { client.expire_rpc(now); }
         self.clients.retain(|c| !c.is_closed());
         { let _s = crate::slow_steps::step("server.publish_directory"); self.publish_directory() };
@@ -523,6 +524,16 @@ impl ServerLoop {
         self.services.borrow_mut().announce(&event);
     }
 
+    /// **`state.changed` — the one place it is raised**, once per saved entry that changed since the
+    /// last turn: the services' listeners hear it, then the scripts' stream gets the same event.
+    pub(super) fn announce_state_changes(&self) {
+        let changes = self.services.borrow().take_state_changes();
+        for change in changes {
+            self.events.emit(&super::StreamEvent::StateChanged(change.clone()));
+            self.services.borrow_mut().announce(&crate::entry::service::ServerEvent::StateChanged(change));
+        }
+    }
+
     fn index_for(&self, id: Option<SessionId>) -> Option<usize> {
         self.sessions.iter().position(|s| Some(s.info().id) == id)
     }
@@ -538,6 +549,8 @@ mod tests;
 mod feedback_tests;
 #[cfg(test)]
 mod service_tests;
+#[cfg(test)]
+mod saved_state_tests;
 #[cfg(test)]
 mod catalog_tests;
 #[cfg(test)]

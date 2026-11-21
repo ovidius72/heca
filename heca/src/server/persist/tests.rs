@@ -23,6 +23,7 @@ fn saved(id: u64, name: &str) -> SavedSession {
         focus: None,
         view: None,
         terminals: Vec::new(),
+        saved_state: Default::default(),
     }
 }
 
