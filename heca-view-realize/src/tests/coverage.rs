@@ -46,6 +46,7 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         ("ImageState", "observable image load state, not a widget"),
         ("Svg", "an alias of Image; inline SVG is the Image.svg property"),
         ("MessageFeed", "a producer handle for MessageList, not a Component"),
+        ("ElapsedFormat", "not a widget: the function type Elapsed.format takes"),
         (
             "GridCell",
             "not a widget: a CardGrid cell, built by realize",
@@ -64,6 +65,11 @@ fn every_library_widget_is_describable_or_deliberately_not() {
         ("Container", "not a widget: a helper for building a `Flex`"),
         ("ScrollRegion", "described as `Scroll`"),
         ("ProgressBar", "described as `Progress`"),
+        // ── Not describable yet: a value a description cannot carry ──
+        (
+            "Elapsed",
+            "its moment is an epoch time, and a description's numbers travel as f32",
+        ),
         // ── Native code composes these; a description has no use for them ──
         // ── Opened through the host API, not placed in a tree ──
         //

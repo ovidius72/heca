@@ -204,13 +204,9 @@ pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
     // **Saying it once, here.** A wrapper is transparent to layout *and* to the picker — it is the
     // widget inside it, so the two must not disagree about what it is.
     base.transparent = true;
+    // Its width and height are taken from the child in the layout pass (`layout/build.rs`), once
+    // the child has measured itself with its real font — not here, where it has not yet.
     let child = child.base().style.layout;
-    if !matches!(child.width, crate::style::Length::Auto) {
-        base.style.layout.width = child.width;
-    }
-    if !matches!(child.height, crate::style::Length::Auto) {
-        base.style.layout.height = child.height;
-    }
     base.style.layout.max_width = base.style.layout.max_width.or(child.max_width);
     base.style.layout.max_height = base.style.layout.max_height.or(child.max_height);
     // **Whether it may be squeezed is the content's answer too.** Everything gives way by default,

@@ -36,7 +36,7 @@ pub use args::{ArgKind, ArgSpec};
 pub use chrome::panes::pane_items::{PANE_ARG, PaneChip, PaneFacts, PaneLine};
 pub use chrome::panes::terminal::Terminal;
 pub use chrome::{
-    BuildCx, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
+    BuildCx, ChromeEvent, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
 pub use entry::{
@@ -64,7 +64,7 @@ use app::startup::init_state as build_initial_state;
 use app::terminal_metrics::refresh_terminal_cell_size;
 use app_state::AppState;
 use heca_config::theme::AppConfig;
-use heca_core::layout::PaneId;
+pub use heca_core::layout::PaneId;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};

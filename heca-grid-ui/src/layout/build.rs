@@ -208,6 +208,16 @@ impl LayoutEngine {
             by_order.sort_by_key(|(order, _)| *order);
             child_nodes = by_order.into_iter().map(|(_, n)| n).collect();
         }
+        // **A wrapper is as big as what it wraps, measured now.** Its child has just measured
+        // itself with the font it really has — its size variant is only resolved in this pass —
+        // so the wrapper takes that size here. Copied when the wrapper was built, it kept the
+        // child's first, default-font measure: a caption label under a `Visibility` stood in a
+        // box a whole normal line tall, and the line under it moved down by the difference.
+        if c.base().transparent {
+            for child in c.base().children.iter() {
+                style.size = child.taffy_style().size;
+            }
+        }
         // A leaf that measures itself from the width it is offered gets taffy's node context; a
         // widget with children is laid out by its children and never measures its own text.
         let context = if child_nodes.is_empty() {
