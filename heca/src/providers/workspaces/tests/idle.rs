@@ -149,7 +149,7 @@ fn a_flash_on_a_row_that_is_not_on_screen_does_not_keep_the_loop_awake() {
 #[test]
 fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
     use heca_grid_ui::Tone;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
     let tree = two_columns();
     let mut fx = testing::Fixture::default();
     let mut root = {
@@ -164,7 +164,9 @@ fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
     theme.colors.flash.duration_s = 0.2;
     theme.colors.flash.pause_s = 0.1;
     let warning = theme.colors.warning.with_alpha(255);
-    let started = Instant::now();
+    // Time moves only when the test moves it, so every pulse is seen on any machine, however busy.
+    heca_grid_ui::clock::hold();
+    let started = heca_grid_ui::clock::now();
     fx.store.panes.signals(PaneId(2)).flash.repeat_for(Tone::Warning, Duration::from_millis(1000));
     let (mut pulses, mut lit_before, mut last_lit) = (0, false, Duration::ZERO);
     loop {
@@ -178,16 +180,19 @@ fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
         if lit && !lit_before {
             pulses += 1;
         }
+        let elapsed = heca_grid_ui::clock::now() - started;
         if lit {
-            last_lit = started.elapsed();
+            last_lit = elapsed;
         }
         lit_before = lit;
         let Some(delay) = root.next_redraw() else { break };
-        std::thread::sleep(Duration::from_secs_f32(delay.max(0.0)));
-        if started.elapsed() > Duration::from_secs(3) {
+        // The frame the widget asked for, and no later: what a real loop does, without sleeping.
+        heca_grid_ui::clock::advance(Duration::from_secs_f32(delay.max(0.001)));
+        if elapsed > Duration::from_secs(3) {
             break;
         }
     }
+    heca_grid_ui::clock::release();
     assert!(pulses >= 3, "a 1 s repeat of 0.3 s cycles pulses at least three times, drew {pulses}");
     assert!(last_lit >= Duration::from_millis(600), "still lit near the end of its time, last at {last_lit:?}");
 }

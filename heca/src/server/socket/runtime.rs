@@ -126,8 +126,14 @@ impl SocketClient {
         let answer = read_line(&mut stream, config.max_frame_bytes.get())?;
         if answer != ATTACH_ACCEPTED {
             return Err(io::Error::new(io::ErrorKind::Unsupported,
-                "the running heca server is another version of heca: stop it with `heca --kill-server` \
-                 and open heca again"));
+                "The heca server already running is another version of heca, so this window cannot \
+                 talk to it and has changed nothing.\n\nTo use this version, stop the server with \
+                 `heca --kill-server` in a terminal (closing the windows does not stop it) and open \
+                 heca again. \
+                 Your sessions come back with their workspaces, columns and panes; the programs \
+                 that ran in them start again where `resume_programs` is on (the default), and \
+                 everything else gets a fresh shell.\n\nTo try this version alongside the running \
+                 one instead: `heca --standalone`."));
         }
         stream.set_write_timeout(None)?;
         stream.set_read_timeout(None)?;

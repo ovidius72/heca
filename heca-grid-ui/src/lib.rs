@@ -29,6 +29,8 @@
 // not only in downstream ones. Without it the macro would need a different path when used here.
 extern crate self as heca_grid_ui;
 
+/// The library's clock: what time it is, for every widget that moves with time. See [`clock`].
+pub mod clock;
 pub mod action;
 pub mod animation;
 pub mod builders;

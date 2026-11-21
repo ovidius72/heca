@@ -581,7 +581,8 @@ pub fn run(app_name: impl Into<String>) {
         .run_app(&mut app)
         .expect("Failed to run event loop");
     if let Some(error) = app.startup_error {
-        eprintln!("[heca] could not attach to the session server: {error}");
+        // Said where it will be seen — also when heca was opened from the Dock, with no terminal.
+        crate::app::startup_notice::show("heca could not open", &error.to_string());
         std::process::exit(1);
     }
 }
