@@ -770,7 +770,7 @@ pub struct ActionRegistry {
     handlers: HashMap<WmActionKind, ActionHandler>,
 }
 
-type ActionHandler = fn(&mut AppState, &WmAction);
+type ActionHandler = fn(&mut AppState, &WmAction) -> ActionResult;   // Result<(), String>: a failure returns its reason
 ```
 
 - **Register** a handler by the action's kind — no sample value: `registry.register(WmActionKind::FocusPane, handle_focus_pane)`. `WmActionKind` is derived from `WmAction` (one per variant, fields dropped).

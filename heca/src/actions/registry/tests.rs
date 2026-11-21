@@ -6,8 +6,9 @@ use heca_grid_ui::Glyph;
 #[test]
 fn test_registry_dispatch() {
     let mut registry = ActionRegistry::new();
-    fn dummy_handler(state: &mut crate::app_state::AppState, _action: &WmAction) {
+    fn dummy_handler(state: &mut crate::app_state::AppState, _action: &WmAction) -> crate::actions::ActionResult {
         state.needs_redraw = true;
+        Ok(())
     }
     registry.register(crate::input::WmActionKind::FocusLeft, dummy_handler);
     assert!(registry.has_handler(&WmAction::FocusLeft));

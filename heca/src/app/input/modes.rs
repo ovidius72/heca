@@ -90,7 +90,7 @@ pub(super) fn handle_prefix_mode(
     if let Some(ref act) = action {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        dispatch_action_ref(state, registry, InteractionSource::Keyboard, act);
+        let _ = dispatch_action_ref(state, registry, InteractionSource::Keyboard, act);
     } else if !ctx.key_text.is_empty() {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
@@ -121,7 +121,7 @@ pub(super) fn handle_chord_mode(
     {
         let ws_idx = (digit as usize).saturating_sub(1);
         if ws_idx < state.session.workspaces.len() {
-            dispatch_action(
+            let _ = dispatch_action(
                 state,
                 registry,
                 InteractionSource::Keyboard,
@@ -233,14 +233,14 @@ pub(super) fn handle_mode(
             state.needs_redraw = true;
         }
         ModeKey::Own { action, stay } => {
-            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
+            let _ = dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
             if !stay {
                 state.input_mode = InputMode::Normal;
                 state.needs_redraw = true;
             }
         }
         ModeKey::Normal(action) => {
-            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
+            let _ = dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
         }
         ModeKey::Swallow => {}
     }
@@ -263,7 +263,7 @@ pub(super) fn leave_mode(registry: &ActionRegistry, state: &mut AppState, keep: 
             state.selection.end();
         }
     } else {
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,

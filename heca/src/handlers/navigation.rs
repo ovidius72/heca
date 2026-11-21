@@ -5,51 +5,59 @@ use crate::app_state::AppState;
 use crate::input::WmAction;
 use crate::switch_workspace_tracked;
 
-pub fn handle_focus_left(state: &mut AppState, _action: &WmAction) {
+pub fn handle_focus_left(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     state.layout_mut().focus_left();
+    Ok(())
 }
 
-pub fn handle_focus_right(state: &mut AppState, _action: &WmAction) {
+pub fn handle_focus_right(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     state.layout_mut().focus_right();
+    Ok(())
 }
 
-pub fn handle_focus_up(state: &mut AppState, _action: &WmAction) {
+pub fn handle_focus_up(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
         ws.focus_up();
     }
+    Ok(())
 }
 
-pub fn handle_focus_down(state: &mut AppState, _action: &WmAction) {
+pub fn handle_focus_down(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
         ws.focus_down();
     }
+    Ok(())
 }
 
-pub fn handle_next_pane(state: &mut AppState, _action: &WmAction) {
+pub fn handle_next_pane(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     state.layout_mut().focus_right();
+    Ok(())
 }
 
-pub fn handle_prev_pane(state: &mut AppState, _action: &WmAction) {
+pub fn handle_prev_pane(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     state.layout_mut().focus_left();
+    Ok(())
 }
 
-pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) {
+pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let current_ws = state.layout().active_workspace_idx();
     let next = (current_ws + 1).min(state.session.workspaces.len().saturating_sub(1));
     if next != current_ws {
         switch_workspace_tracked(state, next);
     }
+    Ok(())
 }
 
-pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) {
+pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let current_ws = state.layout().active_workspace_idx();
     let prev = current_ws.saturating_sub(1);
     if prev != current_ws {
         switch_workspace_tracked(state, prev);
     }
+    Ok(())
 }
 
-pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) {
+pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let ws_idx = state.layout().active_workspace_idx();
     if let Some(prev_pane) = state
         .last_visited_pane_per_ws
@@ -60,20 +68,22 @@ pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) {
     {
         focus_pane_by_id(state, prev_pane);
     }
+    Ok(())
 }
 
-pub fn handle_focus_toggle_global(state: &mut AppState, _action: &WmAction) {
+pub fn handle_focus_toggle_global(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     if let Some(prev_ws) = state.last_visited_ws_idx {
         let current_ws = state.layout().active_workspace_idx();
         if prev_ws != current_ws {
             switch_workspace_tracked(state, prev_ws);
         }
     }
+    Ok(())
 }
 
-pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
+pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
     let WmAction::FocusPane { pane_id } = action else {
-        return;
+        return Ok(());
     };
     // Focusing a pane changes which pane is active and **nothing else**. It does not release
     // container focus.
@@ -88,13 +98,15 @@ pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
     // lands outside every container releases (`mouse.rs`), and another container taking focus
     // takes the keyboard from this one (`tree_focus::focus_dock`).
     focus_pane_by_id(state, *pane_id);
+    Ok(())
 }
 
-pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
+pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
     let WmAction::FocusWorkspace { ws_idx } = action else {
-        return;
+        return Ok(());
     };
     if *ws_idx < state.session.workspaces.len() {
         switch_workspace_tracked(state, *ws_idx);
     }
+    Ok(())
 }

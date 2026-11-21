@@ -65,7 +65,7 @@ pub(crate) fn dispatch_intent(
     registry: &ActionRegistry,
     source: InteractionSource,
     intent: InteractionIntent,
-) {
+) -> crate::actions::ActionResult {
     // Overlay control (§2.7.2): `SubmitOverlay`/`CloseOverlay` are resolved here — not via the
     // `ActionRegistry` — because resolving an overlay runs its completion, which needs the
     // registry to dispatch a follow-up action (a handler gets no registry). Intercepted before
@@ -75,7 +75,7 @@ pub(crate) fn dispatch_intent(
         && action.is_overlay_control()
     {
         resolve_overlay_control(state, registry, action);
-        return;
+        return Ok(());
     }
 
     // The container half of the same composite. Its outcome is dropped here — a click and a menu
@@ -83,7 +83,7 @@ pub(crate) fn dispatch_intent(
     if let InteractionIntent::FocusContainerThenAction { container, action } = &intent {
         let (container, action) = (container.clone(), action.clone());
         focus_container_then_action(state, registry, source, &container, &action);
-        return;
+        return Ok(());
     }
 
     // Composite: focus the pane, then run the action — each half policy-routed on its
@@ -94,14 +94,13 @@ pub(crate) fn dispatch_intent(
             registry,
             source,
             InteractionIntent::FocusPane { pane_id },
-        );
-        dispatch_intent(
+        )?;
+        return dispatch_intent(
             state,
             registry,
             source,
             InteractionIntent::ActivateAction(*action),
         );
-        return;
     }
     // Kept for the debug line below: routing consumes the intent, and a refusal that cannot name
     // what was refused is not actionable.
@@ -118,7 +117,7 @@ pub(crate) fn dispatch_intent(
             // or ran) the action; the confirm dialog runs the raw action directly, never re-entering
             // this gate.
             if !crate::handlers::maybe_confirm_destructive(state, &act) {
-                registry.execute(&act, state);
+                return registry.execute(&act, state);
             }
         }
         // Both composites are expanded before routing, so neither reaches here in practice;
@@ -127,11 +126,11 @@ pub(crate) fn dispatch_intent(
             focus_container_then_action(state, registry, source, &container, &action);
         }
         RouteDecision::Allow(InteractionIntent::FocusPaneThenAction { pane_id, action }) => {
-            registry.execute(&WmAction::FocusPane { pane_id }, state);
-            registry.execute(&action, state);
+            registry.execute(&WmAction::FocusPane { pane_id }, state)?;
+            return registry.execute(&action, state);
         }
         RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
-            registry.execute(&WmAction::FocusPane { pane_id }, state);
+            return registry.execute(&WmAction::FocusPane { pane_id }, state);
         }
         RouteDecision::Allow(InteractionIntent::ExposeCursor { pane_id }) => {
             crate::chrome::record_expose_cursor(state, pane_id);
@@ -156,6 +155,7 @@ pub(crate) fn dispatch_intent(
             eprintln!("[heca] interaction: blocked {refused:?} from {source:?}");
         }
     }
+    Ok(())
 }
 
 /// Focus `container`, then dispatch `action` at it — the one implementation behind
@@ -182,7 +182,7 @@ pub(crate) fn focus_container_then_action(
         return IntentOutcome::NotRunnable;
     }
     if crate::app::tree_focus::focused_dock(state).as_deref() != Some(container) {
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             source,
@@ -199,13 +199,13 @@ pub(crate) fn dispatch_action(
     registry: &ActionRegistry,
     source: InteractionSource,
     action: &WmAction,
-) {
+) -> crate::actions::ActionResult {
     dispatch_intent(
         state,
         registry,
         source,
         InteractionIntent::ActivateAction(action.clone()),
-    );
+    )
 }
 
 /// Dispatch whatever a key was bound to — the press-time half of [`ActionRef`].
@@ -220,7 +220,7 @@ pub(crate) fn dispatch_action_ref(
     registry: &ActionRegistry,
     source: InteractionSource,
     action: &ActionRef,
-) {
+) -> crate::actions::ActionResult {
     match action {
         ActionRef::Builtin(a) => dispatch_action(state, registry, source, a),
         ActionRef::Dynamic(intent) => dispatch_intent(

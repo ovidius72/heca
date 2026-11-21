@@ -172,7 +172,7 @@ pub(crate) fn assign_letters(
     out
 }
 
-pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
+pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     // Which targets are reachable is decided by the layered surface compositor — one rule
     // (active context + geometric occlusion, no hardcoded z) over the whole surface stack.
     // See `chrome::active_hint_targets` and `docs/surface-compositor.md`.
@@ -214,12 +214,13 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
     // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
     // outside all of it.
     begin_pick(state, InputMode::HintPick { candidates });
+    Ok(())
 }
 
 /// Enter the "move active column → workspace" letter pick: assign a letter to each
 /// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
 /// column into that workspace. Says so when there is no other workspace.
-pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
+pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let ws_idx = state.layout().active_workspace_idx();
     let col_idx = state
         .layout()
@@ -234,13 +235,14 @@ pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAc
             target: WorkspacePickTarget::Column { ws_idx, col_idx },
         },
     );
+    Ok(())
 }
 
 /// Enter the "move active pane → workspace" letter pick (see
 /// [`handle_move_column_to_workspace_pick`]). Does nothing without a focused pane.
-pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
+pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some(pane_id) = state.focused_pane else {
-        return;
+        return Ok(());
     };
     let candidates = crate::app::selection::collect_workspace_candidates(state.layout());
     begin_pick(
@@ -250,11 +252,12 @@ pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmActi
             target: WorkspacePickTarget::Pane(pane_id),
         },
     );
+    Ok(())
 }
 
-pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction) {
+pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some(pane_id) = state.focused_pane else {
-        return;
+        return Ok(());
     };
     // The column this pane is already in is not a destination — moving it there does nothing.
     let here = crate::app::selection::column_of_pane(&state.session, pane_id);
@@ -283,6 +286,7 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
             pane_id,
         },
     );
+    Ok(())
 }
 
 #[cfg(test)]

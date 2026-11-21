@@ -22,7 +22,7 @@ pub(super) fn handle_pane_select_mode(
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,
@@ -33,7 +33,7 @@ pub(super) fn handle_pane_select_mode(
         // **Picking a pane is going there** — so a dock holding the keyboard lets it go, and the
         // picked pane's terminal takes it, wherever the pick started. The same two acts a sidebar
         // row's click sends; focusing a pane alone deliberately leaves a dock's keyboard alone.
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,
@@ -56,7 +56,7 @@ pub(super) fn handle_follow_link_mode(
     if let Some(ch) = typed
         && let Some(hint) = candidates.iter().find(|h| h.label == ch)
     {
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,
@@ -115,7 +115,7 @@ pub(super) fn handle_pane_swap_mode(
         && let Some((_, _, _)) = find_pane_location(&state.session, current_id)
         && let Some((_, _, _)) = find_pane_location(&state.session, *target_id)
     {
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,
@@ -126,7 +126,7 @@ pub(super) fn handle_pane_swap_mode(
         );
 
         if focus_after {
-            dispatch_action(
+            let _ = dispatch_action(
                 state,
                 registry,
                 InteractionSource::Keyboard,
@@ -135,7 +135,7 @@ pub(super) fn handle_pane_swap_mode(
                 },
             );
         } else {
-            dispatch_action(
+            let _ = dispatch_action(
                 state,
                 registry,
                 InteractionSource::Keyboard,
@@ -162,7 +162,7 @@ pub(super) fn handle_pane_take_mode(
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,
@@ -215,7 +215,7 @@ pub(super) fn handle_workspace_pick_mode(
                 ws_idx: target_ws,
             },
         };
-        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
+        let _ = dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }
     state.needs_redraw = true;
 }
@@ -272,7 +272,7 @@ pub(super) fn handle_column_pick_mode(
         // keybinding or an RPC call would — the pick is only how a keyboard supplies an argument it
         // cannot type.
         let action = column_pick_action(*target, pane_id, state.layout().active_workspace_idx());
-        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
+        let _ = dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }
     state.needs_redraw = true;
 }
@@ -296,7 +296,7 @@ pub(super) fn handle_dock_pick_mode(
     if let Some(ch) = typed
         && let Some((_, dock)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        dispatch_action(
+        let _ = dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,

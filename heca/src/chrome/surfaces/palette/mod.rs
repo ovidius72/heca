@@ -188,7 +188,7 @@ pub(crate) fn open_command_palette(
                 && let Some(entry) = rows.iter().find(|e| e.id == chosen)
                 && let Some(intent) = &entry.intent
             {
-                dispatch_intent(state, registry, source, intent.clone());
+                let _ = dispatch_intent(state, registry, source, intent.clone());
             }
             // Dynamic and fixed rows persist through the same search-store revision check.
             crate::search_state::persist_if_changed(state);

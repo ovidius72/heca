@@ -90,7 +90,7 @@ pub(super) fn on_wheel(
         WheelZoom::Not => {}
         WheelZoom::Consumed => return,
         WheelZoom::Step(action) => {
-            dispatch_action(state, registry, InteractionSource::MouseContent, &action);
+            let _ = dispatch_action(state, registry, InteractionSource::MouseContent, &action);
             return;
         }
     }

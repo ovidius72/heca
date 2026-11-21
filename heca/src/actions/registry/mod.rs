@@ -11,7 +11,12 @@ pub(crate) mod server;
 /// The `WmAction` parameter carries the full variant (including any embedded
 /// arguments), so the same handler can serve both unit and parameterized
 /// variants that share a discriminant.
-pub type ActionHandler = fn(&mut crate::app_state::AppState, &crate::input::WmAction);
+pub type ActionHandler = fn(&mut crate::app_state::AppState, &crate::input::WmAction) -> ActionResult;
+
+/// **What running an action came to**: done, or not done and why — the words a user or a script is
+/// shown. A handler that cannot do what it was asked returns the reason instead of only logging it,
+/// so an RPC call answers with an error rather than "ok", and no handler has to know who asked.
+pub type ActionResult = Result<(), String>;
 
 /// Registry that maps action discriminants to handler functions.
 ///
@@ -190,9 +195,14 @@ impl ActionRegistry {
         // Clone the `Rc` so the borrow of `self` ends before the handler runs (it takes
         // `&mut AppState`).
         let handler = handler.clone();
-        run_then_follow_up(state, |state| match handler {
-            DynamicHandler::Window(handler) => handler(state, intent),
-            DynamicHandler::Server(_) | DynamicHandler::Service => state.client.invoke(intent.clone()),
+        // Extension handlers do not report an outcome yet (`DynHandler` is part of what heca-pro
+        // builds on): theirs counts as done.
+        let _ = run_then_follow_up(state, |state| {
+            match handler {
+                DynamicHandler::Window(handler) => handler(state, intent),
+                DynamicHandler::Server(_) | DynamicHandler::Service => state.client.invoke(intent.clone()),
+            }
+            Ok(())
         });
         true
     }
@@ -228,7 +238,7 @@ impl ActionRegistry {
     /// In debug builds, panics if no handler is registered (this is a bug —
     /// every `WmAction` variant must have a handler in `build_registry()`).
     /// In release builds, silently does nothing.
-    pub fn execute(&self, action: &crate::input::WmAction, state: &mut crate::app_state::AppState) {
+    pub fn execute(&self, action: &crate::input::WmAction, state: &mut crate::app_state::AppState) -> ActionResult {
         let disc = action.kind();
         // **Routed by the action's side**: a server action runs on the server when it has been
         // moved there; anything else runs here, as it always has.
@@ -236,14 +246,23 @@ impl ActionRegistry {
             && crate::server::ServerState::runs(disc)
         {
             let name = self.sides.name_of(disc).unwrap_or_default();
-            run_then_follow_up(state, |state| state.run_on_server(action, name));
-            return;
-        }
-        if let Some(handler) = self.handlers.get(&disc) {
-            run_then_follow_up(state, |state| handler(state, action));
+            run_then_follow_up(state, |state| {
+                state.run_on_server(action, name);
+                Ok(())
+            })
+        } else if let Some(handler) = self.handlers.get(&disc) {
+            let outcome = run_then_follow_up(state, |state| handler(state, action));
+            // **Said once, here**, whoever asked — a key, a click or a script — so no handler logs
+            // its own failure; a caller that can answer (RPC) also gets it back.
+            if let Err(reason) = &outcome {
+                eprintln!("[heca] {}: {reason}", crate::actions::describe(action).0);
+            }
+            outcome
         } else {
             #[cfg(debug_assertions)]
             panic!("no handler registered for action: {:?}", action);
+            #[cfg(not(debug_assertions))]
+            Ok(())
         }
     }
 
@@ -273,11 +292,12 @@ impl ActionRegistry {
 /// through, so no handler has to ask for a redraw or refresh what lists the session.
 fn run_then_follow_up(
     state: &mut crate::app_state::AppState,
-    handler: impl FnOnce(&mut crate::app_state::AppState),
-) {
+    handler: impl FnOnce(&mut crate::app_state::AppState) -> ActionResult,
+) -> ActionResult {
     let before = state.session.shape();
-    handler(state);
+    let outcome = handler(state);
     crate::app::mutations::after_action(state, &before);
+    outcome
 }
 
 #[cfg(test)]
