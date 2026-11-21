@@ -51,6 +51,16 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
                 ArgKind::Text,
                 "Text to start the search with; omit to open empty.",
             ),
+            ArgDescriptor::optional(
+                "action",
+                ArgKind::Text,
+                "Ask, one step per argument, for what this action requires, then run it.",
+            ),
+            ArgDescriptor::optional(
+                "arguments",
+                ArgKind::Text,
+                "With `action`: the arguments already chosen, as name=value words.",
+            ),
         ],
     },
     ActionDescriptor {

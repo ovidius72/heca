@@ -76,7 +76,8 @@ pub(crate) use surfaces::overlay::{
     content_covered, discard_overlays, open_modal, resolve as resolve_overlay, top_modal,
 };
 pub(crate) use surfaces::palette::{
-    MODE_NOTIFICATION, OpenPalette, open_command_palette, open_session_folder,
+    MODE_NOTIFICATION, OpenPalette, ask_action_arguments, open_command_palette,
+    open_session_folder, palette_arguments_given,
 };
 
 // ── window ──

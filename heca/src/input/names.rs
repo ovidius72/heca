@@ -114,6 +114,8 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "command_palette" => Some(WmAction::CommandPalette {
             mode: None,
             query: None,
+            ask: None,
+            arguments: None,
         }),
         "close_overlay" => Some(WmAction::CloseOverlay { overlay: None }),
         "show_layer" => Some(WmAction::ShowLayer {
@@ -223,7 +225,9 @@ mod tests {
             action_from_name("command_palette"),
             Some(WmAction::CommandPalette {
                 mode: None,
-                query: None
+                query: None,
+                ask: None,
+                arguments: None
             })
         );
         // Font zoom — six names map to two variants with the right step + None pane.

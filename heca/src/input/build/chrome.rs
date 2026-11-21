@@ -70,6 +70,8 @@ pub(super) fn build_chrome(
         "command_palette" => Some(WmAction::CommandPalette {
             mode: get_string(args, "mode"),
             query: get_string(args, "query"),
+            ask: get_string(args, "action"),
+            arguments: get_string(args, "arguments"),
         }),
 
         "clear_search_history" => Some(WmAction::ClearSearchHistory {

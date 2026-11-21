@@ -26,6 +26,9 @@ pub enum ArgKind {
     /// One of a fixed set of spellings, listed in `ArgDescriptor::values` /
     /// [`ArgSpec::values`] — the vocabulary the argument's own `FromStr` accepts.
     Enum,
+    /// **A dock, by its id** (`workspaces`, `heca-pro.rooms`) — text that names one of the docks
+    /// mounted right now, so the palette can offer them instead of a blank field.
+    Dock,
 }
 
 /// Static declaration of **one argument** an action takes. The built-in half of [`ArgSpec`], living
@@ -139,7 +142,7 @@ impl ArgSpec {
             ArgKind::Int => "0".to_string(),
             ArgKind::Float => "0".to_string(),
             ArgKind::Bool => "false".to_string(),
-            ArgKind::Text => String::new(),
+            ArgKind::Text | ArgKind::Dock => String::new(),
             // A vocabulary argument has no neutral value — the first spelling is the only one
             // guaranteed to parse.
             ArgKind::Enum => self.values.first().cloned().unwrap_or_default(),
@@ -153,7 +156,7 @@ impl ArgSpec {
             ArgKind::Int => value.parse::<u64>().is_ok(),
             ArgKind::Float => value.parse::<f64>().is_ok(),
             ArgKind::Bool => value.parse::<bool>().is_ok(),
-            ArgKind::Text => true,
+            ArgKind::Text | ArgKind::Dock => true,
             ArgKind::Enum => self.values.iter().any(|v| v.eq_ignore_ascii_case(value)),
         }
     }
@@ -257,6 +260,7 @@ fn describe_expected(spec: &ArgSpec) -> String {
         ArgKind::Float => "a number".to_string(),
         ArgKind::Bool => "true or false".to_string(),
         ArgKind::Text => "text".to_string(),
+        ArgKind::Dock => "the id of a mounted dock".to_string(),
         ArgKind::Enum => format!("one of {}", spec.values.join(", ")),
     }
 }

@@ -79,7 +79,9 @@ fn action_policy_classifies_these_as_documented() {
     assert_eq!(
         action_policy(&WmAction::CommandPalette {
             mode: None,
-            query: None
+            query: None,
+            ask: None,
+            arguments: None
         }),
         ActionPolicy::AlwaysAllowed
     );

@@ -398,6 +398,11 @@ pub enum WmAction {
     CommandPalette {
         mode: Option<String>,
         query: Option<String>,
+        /// **Ask for this action's arguments, then run it** — one palette step per required argument
+        /// not in `arguments` yet. `mode` and `query` are ignored when it is set.
+        ask: Option<String>,
+        /// The arguments already chosen for `ask`, as `name=value` words (the RPC line's spelling).
+        arguments: Option<String>,
     },
 
     // ── External commands ──

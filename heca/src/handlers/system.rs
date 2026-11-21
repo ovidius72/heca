@@ -8,7 +8,15 @@ pub fn handle_command_palette(
     action: &WmAction,
 ) -> crate::actions::ActionResult {
     let (mode, query) = match action {
-        WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
+        WmAction::CommandPalette {
+            ask: Some(action),
+            arguments,
+            ..
+        } => {
+            let given = crate::chrome::palette_arguments_given(arguments.as_deref());
+            return crate::chrome::ask_action_arguments(state, action, given);
+        }
+        WmAction::CommandPalette { mode, query, .. } => (mode.as_deref(), query.as_deref()),
         _ => (None, None),
     };
     crate::chrome::open_command_palette(state, mode, query, None);

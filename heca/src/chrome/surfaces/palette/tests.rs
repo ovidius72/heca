@@ -192,6 +192,8 @@ fn rpc_keeps_the_mode_and_query_on_the_existing_palette_action() {
             Some(WmAction::CommandPalette {
                 mode: Some(scope.to_string()),
                 query: Some("nvim".to_string()),
+                ask: None,
+                arguments: None
             }),
         );
     }
@@ -339,7 +341,9 @@ fn command_palette_stays_bindable_and_offerable_with_no_arguments() {
         resolve_action("command_palette", &std::collections::HashMap::new()),
         Some(WmAction::CommandPalette {
             mode: None,
-            query: None
+            query: None,
+            ask: None,
+            arguments: None
         }),
         "the bare name still parses, and to the same behaviour",
     );
@@ -390,8 +394,24 @@ fn a_word_list_argument_is_offered_once_per_distinct_word() {
         intent.args.get("region"),
         Some(&PropValue::Text("bar.top".into()))
     );
-    // A target that is not a word list is still not offered at all.
-    assert!(!rows.iter().any(|r| r.id.starts_with("close_pane_by_id")));
+    // A target that is not a word list is one row that asks for it, then runs the action.
+    let ask = rows
+        .iter()
+        .find(|r| r.id == "close_pane_by_id")
+        .expect("an action with a required argument is listed once");
+    assert!(
+        ask.label.ends_with('…'),
+        "it says more is asked: {}",
+        ask.label
+    );
+    let Some(InteractionIntent::View(intent)) = &ask.intent else {
+        panic!("asking is the palette again, got {:?}", ask.intent);
+    };
+    assert_eq!(intent.action, "command_palette");
+    assert_eq!(
+        intent.args.get("action"),
+        Some(&PropValue::Text("close_pane_by_id".into()))
+    );
 }
 
 /// A built-in is the app's own: no scope prefix, and no container to focus.

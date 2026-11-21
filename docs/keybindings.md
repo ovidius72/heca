@@ -145,6 +145,21 @@ For sessions, press the prefix and then `#`; no extra character is needed in the
 Override a binding with a `[[keys.bind]]` entry using the same combo, or remove it with
 `"prefix+#" = true` under `[keys.unbind]`. No additional action registration is needed.
 
+**An action that needs arguments asks for them in the palette.** Choosing one (its row ends in `…`)
+opens a step for each required argument it has not been given: its words for a fixed list, the docks
+mounted right now for a dock, true or false, or what you type for a name or a number. When nothing
+required is missing, it runs. A key can open the same steps for one action, with some arguments
+already chosen:
+
+```toml
+[[keys.bind]]
+keys   = "prefix+m"
+action = "command_palette"
+args   = { action = "chrome.container.move_to_region", arguments = "container_id=workspaces" }
+```
+
+The same works from a script: `heca rpc command_palette action=chrome.container.move_to_region`.
+
 ## 3. A mode — a sub-keymap behind one key
 
 While a mode is active its own bindings come first. A key the mode does not bind falls through to

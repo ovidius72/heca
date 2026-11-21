@@ -30,12 +30,14 @@ use crate::chrome::{Intent, PropValue};
 use crate::input::WmAction;
 
 mod actions;
+mod arguments;
 mod model;
 mod modes;
 mod notifications;
 mod sessions;
 mod targets;
 mod windows;
+pub(crate) use arguments::{ask_action_arguments, palette_arguments_given};
 pub(crate) use modes::MODE_NOTIFICATION;
 pub(crate) use sessions::open_session_folder;
 
