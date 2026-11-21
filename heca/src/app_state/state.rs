@@ -130,6 +130,15 @@ pub struct AppState {
     /// the global size and `terminal_cell_size`.
     pub(crate) terminal_zoom: crate::app::terminal_zoom::TerminalZoom,
     pub scale_factor: f64,
+    /// Lets a terminal's output post one `BackendWake` at a time; reset as that event is handled.
+    pub(crate) wake_latch: crate::server::WakeLatch,
+    /// A frame was asked for and has not started yet: the frame will reset the wake latch, so a
+    /// turn in between must not (it would let every chunk of output wake the loop again).
+    pub(crate) frame_asked: bool,
+    /// While the window is hidden: when the wake latch was last reset. A hidden window draws no
+    /// frames to reset it, so the terminals are read on a slow beat instead of on every chunk of
+    /// output ([`HIDDEN_READ_EVERY`](crate::app::lifecycle::HIDDEN_READ_EVERY)).
+    pub(crate) hidden_read_at: Option<std::time::Instant>,
     pub needs_redraw: bool,
     /// **One line of feedback in the bottom bar**, shown until the next keypress.
     ///
