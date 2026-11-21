@@ -178,26 +178,7 @@ pub fn keyboard_anchor(root: &dyn Component, cursor: Option<&str>) -> Option<Men
 }
 
 fn keyboard_path(root: &dyn Component, cursor: Option<&str>) -> Option<Vec<usize>> {
-    cursor.and_then(|key| key_path(root, key)).or_else(|| focused_path(root))
-}
-
-/// The path to the widget that declared `key`.
-fn key_path(root: &dyn Component, key: &str) -> Option<Vec<usize>> {
-    fn walk(node: &dyn Component, want: &str, at: &mut Vec<usize>) -> bool {
-        if node.base().answers_to(want) {
-            return true;
-        }
-        for (i, child) in node.base().children.iter().enumerate() {
-            at.push(i);
-            if walk(child.as_ref(), want, at) {
-                return true;
-            }
-            at.pop();
-        }
-        false
-    }
-    let mut path = Vec::new();
-    walk(root, key, &mut path).then_some(path)
+    cursor.and_then(|key| crate::nav::path_with_key(root, key)).or_else(|| focused_path(root))
 }
 
 /// Build the menu declared by the innermost widget at or above `path`.

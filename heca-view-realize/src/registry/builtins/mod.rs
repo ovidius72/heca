@@ -7,7 +7,7 @@ use heca_grid_ui::{
     Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Toast, Toggle,
 };
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
-use heca_grid_ui::builders::IdentityExt;
+use heca_grid_ui::builders::{EventExt, IdentityExt};
 use heca_view::{PropValue, ViewEvent, ViewNode, WidgetId};
 
 use super::{RealizeCx, RealizeError, WidgetDefinition, WidgetRegistry};

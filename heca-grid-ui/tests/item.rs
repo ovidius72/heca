@@ -13,7 +13,7 @@ fn item_activates_on_click_when_interactive() {
 
     let hits = Rc::new(Cell::new(0u32));
     let h = hits.clone();
-    let mut item = Item::new("VIEW PROFILE").on_activate(move || h.set(h.get() + 1));
+    let mut item = Item::new("VIEW PROFILE").on_click(move |_| h.set(h.get() + 1));
     LayoutEngine::new().compute(&mut item, Size::new(260.0, 40.0));
 
     assert!(item.focusable(), "interactive item is focusable");
@@ -189,7 +189,7 @@ fn pane_draws_rounded_accent_border_no_brackets() {
 #[test]
 fn item_group_collapses_rows_out_of_layout() {
     use heca_grid_ui::ItemGroup;
-    let row = || Item::new("row").on_activate(|| {});
+    let row = || Item::new("row").on_click(|_| {});
     let mut group = ItemGroup::new("GROUP").child(row()).child(row());
 
     // Expanded: header + 2 rows all take height.
@@ -220,7 +220,7 @@ fn row_activates_on_click_and_key_when_interactive() {
     let sink = clicks.clone();
     let mut row = Row::new()
         .child(Label::new("PANE 1"))
-        .on_activate(move || sink.set(sink.get() + 1));
+        .on_click(move |_| sink.set(sink.get() + 1));
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
 
     assert!(row.focusable(), "an interactive row is focusable");
@@ -252,7 +252,7 @@ fn row_activates_on_click_and_key_when_interactive() {
 #[test]
 fn a_focused_row_leaves_j_and_k_to_the_container_above() {
     use heca_grid_ui::Row;
-    let mut row = Row::new().child(Label::new("pane")).on_activate(|| {});
+    let mut row = Row::new().child(Label::new("pane")).on_click(|_| {});
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
     row.base().focus(false);
 
@@ -348,7 +348,7 @@ fn rail_cell_activates_on_click_and_enter() {
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
     let mut cell = RailCell::new(Icon::new(Glyph::GitBranch).size(20.0))
-        .on_activate(move || sink.set(sink.get() + 1));
+        .on_click(move |_| sink.set(sink.get() + 1));
     LayoutEngine::new().compute(&mut cell, Size::new(200.0, 200.0));
 
     let b = cell.base().bounds;

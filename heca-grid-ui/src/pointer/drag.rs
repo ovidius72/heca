@@ -129,7 +129,7 @@ pub(super) fn announce(root: &mut dyn Component, source: &[usize], ev: &Event) {
     ) {
         if node.is_drop_target() && node.accepts_drag(kind) && here.as_slice() != source {
             let _ = node.base_mut().run_handlers(ev);
-            let _ = node.on_event(ev);
+            let _ = crate::component::own_event(node, ev);
         }
         for i in 0..node.base().children.len() {
             here.push(i);

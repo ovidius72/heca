@@ -5,6 +5,7 @@ use heca_grid_ui::{
     Action, Button, Choice, Component, Flex, Grid, LayoutExt, Row as GridRow, SignalData,
     Track,
 };
+use heca_grid_ui::builders::EventExt;
 use heca_grid_ui::widgets::{CardGrid, GridCell};
 use heca_view::{PropValue, ViewEvent, ViewNode, WidgetId};
 
@@ -76,7 +77,7 @@ pub(crate) fn button_of(node: &ViewNode, cx: &mut RealizeCx<'_>) -> Result<Butto
     }
     if let Some(carrier) = press_intent(node) {
         let emit = emit.clone();
-        button = button.on_click(move || emit(carrier.clone()));
+        button = button.on_click(move |_| emit(carrier.clone()));
     }
     // Attach the composed content. (`heca_grid_ui::WidgetModel` isn't `Component`, so it can't go through
     // `Parent::child`; push it the way every other container here does.)

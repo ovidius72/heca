@@ -16,7 +16,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         let i = states.borrow().len();
         states.borrow_mut().push(item.state());
         let states = states.clone();
-        item.on_activate(move || {
+        item.on_click(move |_| {
             selected.set(i);
             for (j, s) in states.borrow().iter().enumerate() {
                 s.set(j == i);
@@ -79,7 +79,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // it drags is the name it declares about itself. The app resolves a drop via
         // `drag::source_at`/`resolve_at` over the laid-out tree and paints
         // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
-        row.key(format!("pane:{i}")).draggable().on_activate(move || {
+        row.key(format!("pane:{i}")).draggable().on_click(move |_| {
             pane_sel.set(i);
             for (j, s) in pane_states.borrow().iter().enumerate() {
                 s.set(j == i);
@@ -391,7 +391,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
             .active(i == 0);
         rail_states.borrow_mut().push(cell.state());
         let states = rail_states.clone();
-        let cell = cell.on_activate(move || {
+        let cell = cell.on_click(move |_| {
             for (j, s) in states.borrow().iter().enumerate() {
                 s.set(j == i);
             }

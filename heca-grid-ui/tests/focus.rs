@@ -13,8 +13,8 @@ fn focus_traversal_and_keyboard_activation() {
     let clicked = Rc::new(Cell::new(0u32));
     let (a, b) = (clicked.clone(), clicked.clone());
     let mut ui = Flex::row()
-        .child(Button::primary("A").on_click(move || a.set(a.get() + 1)))
-        .child(Button::secondary("B").on_click(move || b.set(b.get() + 1)));
+        .child(Button::primary("A").on_click(move |_| a.set(a.get() + 1)))
+        .child(Button::secondary("B").on_click(move |_| b.set(b.get() + 1)));
 
     let mut focus = FocusManager::new();
     assert_eq!(focus.focused(&mut ui), None);
@@ -211,11 +211,11 @@ fn focusable_is_driven_by_the_base_flag_and_disabled() {
         "a row with no on_activate is not focusable",
     );
     assert!(
-        Row::new().on_activate(|| {}).focusable(),
+        Row::new().on_click(|_| {}).focusable(),
         "a row becomes focusable once on_activate is wired",
     );
     assert!(
-        !Row::new().on_activate(|| {}).disabled(true).focusable(),
+        !Row::new().on_click(|_| {}).disabled(true).focusable(),
         "a disabled interactive row is not focusable",
     );
 }
@@ -311,7 +311,7 @@ fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
 
     let mut row = heca_grid_ui::Row::new()
         .child(Label::new("pane-1"))
-        .on_activate(|| {});
+        .on_click(|_| {});
     row.base_mut().style.layout.width = Length::Px(200.0);
     LayoutEngine::new()
         .base_font(14.0)

@@ -32,23 +32,29 @@ fn a_handler_on_any_widget_hears_its_own_clicks() {
     assert_eq!(hits.get(), 1, "which did not also count as a click");
 }
 
-/// `stop_propagation` is the named opt-out: the handler takes the event, and the widget's own
-/// behaviour does not run.
+/// `stop_propagation` is the named opt-out: the handler takes the event, and the containers around
+/// the widget do not hear it — the DOM's `stopPropagation`.
 #[test]
 fn stop_propagation_takes_the_event_from_the_widget_itself() {
-    let fired = Rc::new(std::cell::Cell::new(false));
-    let f = fired.clone();
-    let mut button = Button::primary("DEREZ")
-        .on_click(move || f.set(true))
-        .on(EventKind::Click, |cx| cx.stop_propagation());
-    LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
-    let b = button.base().bounds;
+    let heard = Rc::new(std::cell::Cell::new(false));
+    let h = heard.clone();
+    let mut dock = heca_grid_ui::widgets::FocusScope::new(
+        Button::primary("DEREZ")
+            .key("derez")
+            .on(EventKind::Click, |cx| cx.stop_propagation()),
+    )
+    .on_click(move |_| h.set(true));
+    LayoutEngine::new().compute(&mut dock, Size::new(200.0, 80.0));
+    let b = heca_grid_ui::node_with_key(&dock, "derez")
+        .expect("the button is in the dock")
+        .base()
+        .bounds;
     click_at(
-        &mut button,
+        &mut dock,
         Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
         PointerButton::Left,
     );
-    assert!(!fired.get(), "the handler owned the click");
+    assert!(!heard.get(), "the handler owned the click");
 }
 
 /// Mount fires once, on the first layout pass that sees the widget — the first moment it is both

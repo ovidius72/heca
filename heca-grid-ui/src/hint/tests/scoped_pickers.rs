@@ -4,6 +4,8 @@
 //! their ⊠ icons mean *remove that*. One picker over both hands out twice the letters, and half of
 //! them delete what you meant to jump to.
 
+use crate::builders::EventExt;
+
 use crate::builders::{HintExt, Parent};
 use crate::component::Component;
 use crate::reactive::{SignalGet, SignalUpdate};
@@ -123,7 +125,7 @@ fn a_picker_stops_at_another_pickers_subtree() {
 #[test]
 fn the_ordinary_picker_stops_at_a_scoped_picker() {
     let mut tree = Flex::column()
-        .child(Button::new("mine").on_click(|| {}))
+        .child(Button::new("mine").on_click(|_| {}))
         .child(KeyHintGroup::new(Button::new("theirs").on_hint(|| {})).scope("other"));
     lay_out(&mut tree);
     assert_eq!(
@@ -144,7 +146,7 @@ fn the_ordinary_picker_stops_at_a_scoped_picker() {
 fn a_surfaces_own_picker_letters_an_ordinary_button() {
     let mut group = KeyHintGroup::new(
         Flex::column()
-            .child(Button::new("act").on_click(|| {}))
+            .child(Button::new("act").on_click(|_| {}))
             .child(Label::new("just text")),
     );
     lay_out(&mut group);
@@ -161,7 +163,7 @@ fn a_surfaces_own_picker_letters_an_ordinary_button() {
 #[test]
 fn a_target_can_belong_to_more_than_one_picker() {
     let button = Button::new("both")
-        .on_click(|| {})
+        .on_click(|_| {})
         .hint_scope(["close", "other"]);
     // Asked through what a picker actually calls, not the scope test underneath it.
     assert!(crate::hint::collect::is_target_of(&button, Some("close")));

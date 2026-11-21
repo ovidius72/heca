@@ -14,10 +14,7 @@ pub(super) fn deliver_self(node: &mut dyn Component, ev: &Event) {
     if node.on_event_capture(ev) == Handled::Yes {
         return;
     }
-    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
-        return;
-    }
-    let _ = node.on_event(ev);
+    let _ = crate::component::react(node, ev);
 }
 
 /// Deliver `ev` down `path` and back up: [`on_event_capture`](Component::on_event_capture) on the
@@ -48,10 +45,7 @@ pub fn deliver_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Han
             return Handled::Yes;
         }
     }
-    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
-        return Handled::Yes;
-    }
-    node.on_event(ev)
+    crate::component::react(node, ev)
 }
 
 /// Whether this widget takes the press because it is
@@ -133,9 +127,18 @@ pub(super) fn delivering<T>(f: impl FnOnce() -> T) -> (T, bool) {
 impl Base {
     /// Run this widget's registered handlers for `ev`, if it has any.
     pub(crate) fn run_handlers(&mut self, ev: &Event) -> crate::event::HandlerOutcome {
+        // **A disabled widget hears no click**, whoever registered for it — the rule is here once,
+        // not in each control's own event code.
+        if matches!(ev, Event::Click(_)) && self.disabled.get_untracked() {
+            return crate::event::HandlerOutcome {
+                handled: Handled::No,
+                default_prevented: false,
+            };
+        }
+        let route = self.dispatch_to.clone();
         match self.handlers.as_mut() {
             Some(h) => {
-                let out = h.run(ev);
+                let out = crate::intent::dispatching_to(route, || h.run(ev));
                 if out.default_prevented {
                     note_default_prevented();
                 }

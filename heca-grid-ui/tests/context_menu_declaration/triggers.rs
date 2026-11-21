@@ -38,7 +38,7 @@ fn a_menu_can_be_opened_by_any_trigger_the_author_invents() {
         Button::new("More")
             .width(Length::Px(100.0))
             .height(Length::Px(40.0))
-            .on_click(|| {
+            .on_click(|_| {
                 heca_grid_ui::menu::show(
                     menu_named("Deploy to staging"),
                     MenuAnchor::At(Point::new(5.0, 5.0)),

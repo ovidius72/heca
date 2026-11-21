@@ -114,7 +114,7 @@ let mut ui = Flex::column()
         .border(theme.accent, 1.5)
         .glow(theme.glow)
         .child(Label::new("ONLINE").color(theme.foreground)))
-    .child(Button::primary("DEREZ").on_click(|| println!("clicked")));
+    .child(Button::primary("DEREZ").on_click(|_| println!("clicked")));
 ```
 
 ### 3. Lay out, paint, render — each frame
@@ -218,7 +218,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `visible` | `Signal<bool>` | Whether the component renders. |
 | `disabled` | `Signal<bool>` | Dimmed + inert + skipped by focus. Set via `LayoutExt::disabled`. |
 | `focused` | `Signal<bool>` | Holds keyboard focus. |
-| `focusable` | `bool` | Whether the widget **opts into** keyboard focus (default `false`). Interactive widgets set it `true` — in the constructor (always-focusable controls) or when a callback is wired (e.g. a `Row`'s `.on_activate`). The `Component::focusable()` default is `focusable && !disabled`, so widgets no longer re-implement that check; only genuinely dynamic ones (an overlay focusable only while open) override the method. |
+| `focusable` | `bool` | Whether the widget **opts into** keyboard focus (default `false`). Interactive widgets set it `true` — in the constructor (always-focusable controls) or when a control gets its first click handler (e.g. a `Row`'s `.on_click`). The `Component::focusable()` default is `focusable && !disabled`, so widgets no longer re-implement that check; only genuinely dynamic ones (an overlay focusable only while open) override the method. |
 | `focus_barrier` | `bool` | Whether this widget is the **only** focus target in its subtree — focus traversal visits it but never descends into its children (default `false`). Set by controls that **compose** their content (`Button`, `Item`): a control is one click target, so it must be one Tab stop, whatever it holds. Without it a focusable child (a `Toggle` used as decoration) would take its own Tab stop while being click-dead, since the control consumes the press in its own `event`. Orthogonal to `style.hidden`, which drops a subtree from layout *and* focus. |
 | `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`: `advance` → `true`, click-focus → `false`). **Every widget gates its focus ring on `Base::shows_focus_ring()`** (= `focused && focus_visible` — CSS `:focus-visible` semantics), so a mouse click focuses a widget (Enter/Space work, the caret shows) **without** drawing the ring; only keyboard navigation rings. The ring is also removable app-wide via `[appearance] show_focus_border = false` (theme token `show_focus_border`). |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
@@ -293,14 +293,9 @@ impl Component for MyControl {
         }
     }
 
-    /// What a click on me does. No `bounds.contains(pos)`: the router already asked that,
+    /// What a click on me does is not written here: whoever uses the widget says it with
+    /// `.on_click(|ev| ..)`. No `bounds.contains(pos)` anywhere: the router already asked that,
     /// including which widget is on top and what is clipped away.
-    fn on_event(&mut self, ev: &Event) -> Handled {
-        match ev {
-            Event::Click(_) => { self.activate(); Handled::Yes }
-            _ => Handled::No,
-        }
-    }
 }
 ```
 
@@ -923,11 +918,16 @@ a right-click on a row reach a menu instead of dying on the row.
 
 **Handlers run in the bubble phase**, after this widget's descendants have had the event and
 **before** the widget's own `on_event` — so a handler sees what its children declined, and
-`stop_propagation()` takes the event from the widget itself (a `Button` will not fire).
+`stop_propagation()` keeps the event from the containers around it.
 
-A widget's own inherent builder wins where it has one: `Button::on_click(|| …)` is the **button's
-action** — what a click *or* Enter *or* `activate()` runs — rather than an event listener, so it
-takes no argument and there is no event to carry.
+**One click path.** No widget has an action of its own: a `Button`, a `Row`, an `Item` do what
+their `.on_click(|ev| ..)` handlers say, and `.on_press(Intent)` is the one-line form — the click
+dispatches the intent and the `prefix+/` letter carries it. Enter or Space on the control holding
+the keyboard is delivered to it as a real click, and a programmatic press is
+`heca_grid_ui::click(root, path)` (the DOM's `el.click()`), so mouse, keyboard, letter and code
+cannot drift apart. **A click is used by one control**: the innermost control under it uses it and
+the controls around it do not (closing a notification does not also open it), while containers
+that are not controls still hear it — a dock focuses itself on any click inside it.
 
 **`Parent`** (containers):
 
@@ -1001,11 +1001,10 @@ Full reference — which of `on_hint` / `hintable` / `KeyHint` / `KeyHintGroup` 
 symptoms when the wrong one is used: [`hint-architecture.md` § 5a](hint-architecture.md).
 
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `EventExt::on`
-for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_double_click`,
-`on_key_down`, `on_key_up`), and in each widget that keeps its own callback instead (`Button`,
-`IconButton`, `BadgeButton`, `Toast` via `on_click`; `Choice`, `RailCell`, `Item`, `Row` via
-`on_activate`). It is a field and not a question asked of the handler list, because those eight
-store their action privately — `Handlers::has(Click)` is `false` for a `Button`. Right-click and
+for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_press`,
+`on_double_click`, `on_key_down`, `on_key_up`). A **control** (`Component::is_control`: `Button`,
+`IconButton`, `BadgeButton`, `Toast`, `Choice`, `RailCell`, `Item`, `Row`) that gets a click
+handler also becomes one keyboard stop and one click target, decided there once. Right-click and
 middle-click are deliberately excluded: a right-click opens a context menu rather than doing the
 thing, so it should not spend one of the 52 letters.
 
@@ -1038,7 +1037,7 @@ in some context — a ⊠ under a "close" verb, a column under "move a pane here
 | an item in a collection you are iterating | **`.key(…)`** — the item's own id, from your data |
 
 ```rust
-IconButton::new(Glyph::ChevronDown).on_click(move || expand(id))   // nothing
+IconButton::new(Glyph::ChevronDown).on_click(move |_| expand(id))   // nothing
 
 for pane in &column.panes {
     Item::new(&pane.name).key(pane.id)                             // its own id
@@ -3226,10 +3225,10 @@ turns the second into the first. Both spellings, in both forms:
 ```rust
 // ── 1. SIMPLE (native) ───────────────────────────────────────────────────────────────
 // The label is sugar: it becomes a bold `Label` child. Every existing call site is this.
-Button::destructive("Delete").on_click(|| confirm_delete());
+Button::destructive("Delete").on_click(|_| confirm_delete());
 
 // With a leading icon — sugar again: children become [Icon, Label].
-Button::destructive("Delete").icon(Glyph::Trash).on_click(|| confirm_delete());
+Button::destructive("Delete").icon(Glyph::Trash).on_click(|_| confirm_delete());
 
 // ── 2. SIMPLE (declarative) ──────────────────────────────────────────────────────────
 // A CHILDLESS node: the scalar props describe the content, and realize() builds the very
@@ -3250,7 +3249,7 @@ Button::empty()
             .child(Icon::new(Glyph::Trash))
             .child(Label::new("Delete")))
         .child(Label::new("Ctrl+D").font_scale(0.75)))
-    .on_click(|| confirm_delete());
+    .on_click(|_| confirm_delete());
 
 // ── 4. COMPOSED (declarative) ────────────────────────────────────────────────────────
 // The identical tree, as data. Children WIN: with children present, `text`/`icon` are ignored.
@@ -3314,7 +3313,7 @@ its own `.color(..)`, or an intrinsic semantic color (`Badge::danger`, `StatusDo
 
 ```rust
 // Sugar — the common cases.
-Button::destructive("DEREZ").size(WidgetSize::Large).on_click(|| wm.derez_focused());
+Button::destructive("DEREZ").size(WidgetSize::Large).on_click(|_| wm.derez_focused());
 Button::primary("Save").icon(Glyph::Check);          // → children [Icon, Label]
 
 // Composed — arbitrary tree, any depth. The Icon/Labels inherit the button's state color.
@@ -3325,7 +3324,7 @@ Button::empty()
             .child(Icon::new(Glyph::Trash))
             .child(Label::new("Delete")))
         .child(Label::new("Ctrl+D")))
-    .on_click(|| confirm_delete());
+    .on_click(|_| confirm_delete());
 ```
 
 **Declarative (`ViewNode` — plugins / RPC / modal bodies):** `realize` reads `text`, `icon`
@@ -3544,7 +3543,7 @@ with `.cell(px)`. Focusable once `.on_click(...)` is set.
 ```rust
 IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
     .tone(theme.danger)
-    .on_click(|| close());
+    .on_click(|_| close());
 ```
 
 ### Toggle
@@ -4086,7 +4085,7 @@ is what lets a declarative author receive `{"value": "high"}` instead of an opaq
 - **Construct**: `Choice::new(value)` (no content — compose it) · `Choice::labeled(value, label)`
   (sugar → one `Label` child, exactly what you'd compose by hand).
 - **Content**: `.child(impl Component)` (`Parent`) — any component, any depth.
-- **Builders**: `.selected(bool)`, `.on_activate(impl Fn())` (click / `Enter` / `Space`; also makes
+- **Builders**: `.selected(bool)`, `.on_click(|ev| ..)` / `.on_press(Intent)` (click / `Enter` / `Space`; also makes
   it focusable), plus `LayoutExt` (`.size(WidgetSize)`, `.disabled(bool)`, …).
 - **Accessors**: `.value() -> &str`, `.state() -> Signal<bool>` (selected — flip it in place, no
   rebuild), `.hovered() -> Signal<bool>`.
@@ -4125,7 +4124,7 @@ Choice::new("high")
             .child(Label::new("HIGH")))
         .child(Label::new("uses more power").font_scale(0.75)))
     .selected(true)
-    .on_activate(|| set_level("high"));
+    .on_click(|_| set_level("high"));
 ```
 
 **Declarative:**
@@ -4156,7 +4155,7 @@ Generic list/menu/sidebar **row**: an optional leading slot, a label, and an opt
 slot, with hover, active (selected), and click-to-activate states. Slots accept any component
 (a `StatusDot`, a kbd-hint `Label`, a `>` chevron, …). The active/hover highlight is an inset pill
 (rounds with the theme radius, so it tucks inside a rounded `Pane`). Becomes focusable/clickable
-once `.on_activate(...)` is set.
+once something listens to its click.
 
 **Its size comes from the theme, like a CSS box.** The air at the sides is the `Md` spacing step,
 above and below the `Sm` step, between a slot and the label the `Sm` step — all relative to the font,
@@ -4178,7 +4177,7 @@ independent focus targets.
 - **Builders**: `.leading(impl IntoComponent)`, `.trailing(impl IntoComponent)`,
   `.leading_bordered(bool)` / `.trailing_bordered(bool)` (chip frame around a slot),
   `.active(bool)`, `.marker(ActiveMarker)`, `.muted(bool)` (section-header look),
-  `.font_size(f32)`, `.on_activate(impl Fn() + 'static)`.
+  `.font_size(f32)`, `.on_click(|ev| ..)` / `.on_press(Intent)`.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.label_signal() -> Signal<String>`.
 - **`ActiveMarker{None, Bar, Check}`** — how the active state reads: `Bar` = vivid left bar
   (sidebar), `Check` = small pip (menu), `None` = tinted bg + accent label only (dropdown).
@@ -4187,11 +4186,11 @@ independent focus targets.
 // single-select sidebar: share each row's `active` signal, set on click
 let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
 // Item::new(label).marker(ActiveMarker::Bar).leading(StatusDot::online())
-//     .on_activate(move || select(i))   // host flips this row's state on, others off
+//     .on_click(move |_| select(i))   // host flips this row's state on, others off
 ```
 
 > **Single-select pattern**: `Item` deliberately does **not** self-select — clicking only
-> fires `on_activate`, so a single source of truth can own which row is active (set the
+> runs its click handlers, so a single source of truth can own which row is active (set the
 > clicked row's `state()` to `true`, the rest to `false`). This keeps multi-select possible.
 
 > **`Item` or [`Choice`](#choice)?** Both are selectable, both compose their content, both are one
@@ -4222,14 +4221,14 @@ ViewNode::new(WidgetId::Item)
 ### Row
 
 `Item`'s open cousin: interactive chrome (hover tint, active/selected outline +
-`ActiveMarker`, press flash, focus ring, `on_activate` on click / Enter / Space) wrapped around
+`ActiveMarker`, press flash, focus ring, its click handlers on click / Enter / Space) wrapped around
 **any** children — e.g. a multi-line [`Grid`](#grid) of `Label`/`Icon`/`Badge`. Use it for rich,
 clickable, selectable Dock rows. Hover follows the row's own background. Selection uses the theme's
 selected hue as a light wash and an accent outline; text keeps the theme foreground for
 readability. The fill and border use `interaction.row_active_fill` and `row_active_border`.
 
 - **Construct**: `Row::new()`. Add content with `.child(...)`.
-- **Builders**: `.on_activate(impl Fn())` (also makes it focusable), `.active(bool)`,
+- **Builders**: `.on_click(|ev| ..)` / `.on_press(Intent)` (also makes it focusable), `.active(bool)`,
   `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
   more strongly than the quiet `active` outline; a row can show one, the other, or both),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
@@ -4295,7 +4294,7 @@ row that nothing can activate should not look like a control.
 > **`Row` is not `HStack`.** The plain horizontal and vertical boxes are `HStack` / `VStack`;
 > `Row` means the same thing in the model as it does in `heca-grid-ui` — the selectable row.
 
-> **A native row's click is a NAME too.** `.on_activate` takes a closure, so it is
+> **A native row's click is a NAME too.** `.on_click` takes a closure, so it is
 > tempting for host code to write one that does the thing directly — and then that gesture is
 > reachable from the click and from nowhere else: not the `prefix+/` picker, not a menu entry, not a
 > keybinding, not RPC, and never a plugin. **A component declares its rows' gestures as `Intent`s,
@@ -4304,9 +4303,24 @@ row that nothing can activate should not look like a control.
 >
 > ```rust
 > // declarative (heca-view-realize)              native (heca/src/chrome)
-> node.on_press(intent)                           row.on_activate(fires(intent, emit))
-> node.on_hint(intent)                            row.on_hint(picks(mount, intent, emit))
+> node.on_press(intent)                           row.on_press(intent)
+> node.on_hint(intent)                            row.on_hint(intent)
 > ```
+>
+> **Name the action and nothing else.** `.on_press(Intent)` and `.on_hint(Intent)`, or a handler's
+> `ev.dispatch(..)`, go to the listener of the container that holds the widget
+> (`EventExt::on_dispatch`), and heca seats each dock in a wrapper that listens: the intent goes
+> out seated on that dock and judged as a gesture in its region — exactly what `fires` / `picks`
+> send. So a dock, an extension's or a plugin's included, writes
+>
+> ```rust
+> Row::new()
+>     .on_press(Intent::new("focus_pane").arg("pane_id", id))
+>     .on_hint(Intent::new("show_pane").arg("pane_id", id))
+> ```
+>
+> and never carries the mount or the emitter. `fires` / `picks` stay for widgets that are not
+> inside a seated dock.
 >
 > **The click and the pick are two declarations, not one**. A click on a sidebar
 > row means *go there and leave*; a `prefix+/` pick means *look at that one* and stays in the dock.
@@ -4322,7 +4336,7 @@ row that nothing can activate should not look like a control.
 ```rust
 let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radius())
     .child(/* a Grid of icon + title + Tag + Badge */)
-    .on_activate(move || select(i));
+    .on_click(move |_| select(i));
 ```
 
 ### Tile
@@ -4366,7 +4380,7 @@ empty track and still spends a gap on each side of it.
 **Native:**
 
 ```rust
-Row::new().on_activate(open).child(
+Row::new().on_click(move |_| open()).child(
     Tile::new()
         .status(StatusDot::online())
         .icon(Icon::new(Glyph::FileCode))
@@ -4466,7 +4480,7 @@ mode toggles.
 - **Signals**: `.label_signal()` (live text), `.hovered()`.
 
 ```rust
-BadgeButton::accent("144 lines above").on_click(|| jump_to_live_bottom());
+BadgeButton::accent("144 lines above").on_click(|_| jump_to_live_bottom());
 ```
 
 ### Splitter
@@ -4674,7 +4688,7 @@ column cannot consult the width the card was actually given. What follows from t
 // Sugar — one line of body text, one action.
 Toast::danger("Connection lost")
     .body_text("Reconnecting to the grid…")
-    .action(Button::outline("Retry").on_click(|| retry()))
+    .action(Button::outline("Retry").on_click(|_| retry()))
     .on_dismiss(|| dismiss(id));
 
 // Composed — the body is anything, and actions repeat. Neither Button carries a colour:
@@ -4683,8 +4697,8 @@ Toast::danger("Build failed")
     .body(Flex::column().gap(Spacing::Xs)
         .child(Label::new("3 errors in heca-grid-ui"))
         .child(Label::new("cargo check exited 1").font_scale(0.85)))
-    .action(Button::new("Retry").on_click(|| rebuild()))
-    .action(Button::ghost("View log").on_click(|| open_log()))
+    .action(Button::new("Retry").on_click(|_| rebuild()))
+    .action(Button::ghost("View log").on_click(|_| open_log()))
     .animation(Animation::Fade)        // it slides in unless you say otherwise
     .on_dismiss(|| dismiss(id));
 ```
@@ -5445,7 +5459,7 @@ sidebar.toggle();   // or the host sets mode_signal() from a key / RPC
 A focusable **square icon cell** — the per-item unit a *list* Dock (workspaces / panes) shows
 when collapsed to a rail, so every pane stays visible and addressable (vs a tool Dock folding to
 one icon). Centers one `Icon`; active = accent tint + same-hue border + glow; hover/press flash;
-focus ring. It wears a move/swap/select pick letter with nothing written, because `on_activate`
+focus ring. It wears a move/swap/select pick letter with nothing written, because its click
 makes it actionable — see [`.hintable`](#hintable-and-being-pickable).
 
 **At rest it publishes a content glow so its bare glyph still haloes.** The cell draws no surface
@@ -5464,17 +5478,17 @@ ownership of the halo's *reach* — only it knows how big it is.
 > those are additions to make then.
 
 - **Construct**: `RailCell::new(Icon)`.
-- **Builders**: `.cell_size(px)`, `.active(bool)`, `.on_activate(impl Fn())`.
+- **Builders**: `.cell_size(px)`, `.active(bool)`, `.on_click(|ev| ..)` / `.on_press(Intent)`.
 - **Accessors**: `.state() -> Signal<bool>` (active/selected).
 
 ```rust
 RailCell::new(Icon::new(Glyph::Terminal).color(theme.success).size(22.0))
-    .cell_size(44.0).active(true).on_activate(move || focus_pane(i));
+    .cell_size(44.0).active(true).on_click(move |_| focus_pane(i));
 
 // The child needs no `.glow(true)`: at rest the cell publishes one and the icon
 // inherits it. Setting it explicitly would light the glyph in hover/active too,
 // where the cell's own chrome is already lit.
-RailCell::new(Icon::new(Glyph::Terminal).size(22.0)).on_activate(move || focus_pane(i));
+RailCell::new(Icon::new(Glyph::Terminal).size(22.0)).on_click(move |_| focus_pane(i));
 ```
 
 **Declarative (`ViewNode`).** `WidgetId::RailCell`, prop `icon` (a Glyph **name**) + `size`,
@@ -5555,7 +5569,7 @@ with no downcasting.
 
 ```rust
 let pick = signal(None);
-let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
+let cell = KeyHint::new(RailCell::new(icon).on_click(|_| { /* … */ }))
     .hint(pick)
     .placement(HintPlacement::Center)
     // A pick is not a click: this row activates and leaves on a click, and stays put on a hint.
@@ -5805,8 +5819,8 @@ widget picker all spend letters in the same order.
 ```rust
 let picker = KeyHintGroup::new(
     Flex::column()
-        .child(Item::new("one").on_activate(|| choose(1)))
-        .child(Item::new("two").on_activate(|| choose(2))),
+        .child(Item::new("one").on_click(|_| choose(1)))
+        .child(Item::new("two").on_click(|_| choose(2))),
 )
 .opens_on("mypanel.pick")          // config binds the key to this name
 .letters("asdfghjkl".chars());     // optional — home row only, for a small panel
@@ -6205,7 +6219,7 @@ so a tooltip cannot drift away from the rest of the overlay family:
 
 ```rust
 Tooltip::new(
-    IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0)).on_click(|| close()),
+    IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0)).on_click(|_| close()),
     "Close",
 ).side(TooltipSide::Bottom);
 ```
@@ -8291,7 +8305,7 @@ depends on the font, read from `self.base.font`), and opt into builder traits. R
 and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.
 
 If the widget is **interactive**, set `base.focusable = true` (in the constructor for an
-always-focusable control, or inside the `.on_click`/`.on_activate` builder for one that is
+always-focusable control, or by `EventExt::on` when a control gets its first click handler, for one that is
 interactive only once a callback is wired) — do **not** re-implement `Component::focusable()`. The
 trait default already returns `base.focusable && !disabled`; override the method only for genuinely
 dynamic focusability (e.g. an overlay focusable only while its `open` signal is set).

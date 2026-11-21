@@ -13,18 +13,18 @@ pub(super) fn build(theme: &Theme) -> Grid {
             if let SignalData::String(text) = action.data { feed.message(text); }
         }});
     let text = editor.text();
-    let send = Button::new("Append entry").on_click(move || {
+    let send = Button::new("Append entry").on_click(move |_| {
         let message = text.get_untracked();
         if !message.is_empty() { feed.message(message); text.set(String::new()); }
     });
     // A list kept in step with a value: add and remove items, and the rows still there are kept.
     let items = signal(vec!["first".to_string(), "second".to_string()]);
     let added = signal(2usize);
-    let add = Button::secondary("Add item").on_click(move || {
+    let add = Button::secondary("Add item").on_click(move |_| {
         added.update(|n| *n += 1);
         items.update(|list| list.push(format!("item {}", added.get_untracked())));
     });
-    let remove = Button::secondary("Remove first").on_click(move || items.update(|list| { if !list.is_empty() { list.remove(0); } }));
+    let remove = Button::secondary("Remove first").on_click(move |_| items.update(|list| { if !list.is_empty() { list.remove(0); } }));
     let list = Flex::column().gap("xs").child(items.map(|item: &String| Label::new(item.clone())));
     Grid::new().template_column("1fr 1fr").template_row("auto auto auto")
         .gap("lg").width("100%")

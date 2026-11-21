@@ -296,25 +296,20 @@ pub trait Component {
         let _ = (ev, handled);
     }
 
-    /// `true` when this widget wants an enclosing scroll region to **keep it in view**.
-    ///
-    /// The default is keyboard focus, which is what browsers do: focus something off-screen and the
-    /// view comes to it. A widget that is "current" by some other measure — a list's navigation
-    /// cursor, a search hit — overrides this to say so, and then every
-    /// [`ScrollRegion`](crate::widgets::ScrollRegion) it is ever placed inside follows it, with
-    /// nothing wired at the call site.
-    /// **Run this widget's primary action** — what a click or Enter on it would do — and report
-    /// whether it had one. `false` by default: most widgets do nothing on their own.
-    ///
-    /// The equivalent of `button.click()` in the DOM, and it exists because there was no way to say
-    /// "activate this child" through `dyn Component`. Without it a caller has only one lever: build
-    /// a fake `Event::Key { Enter }` and dispatch it, hoping the target claims raw keys — which is
-    /// what [`Dialog::submit`](crate::widgets::Dialog) did to fire its primary button. That worked
-    /// only because seven widgets claimed `Enter` without checking whether they owned the keyboard,
-    /// and it broke the moment they stopped. Synthesising input to reach behaviour is a symptom of
-    /// a missing call, not a technique.
-    fn activate(&mut self) -> bool {
+
+    /// **Whether this widget is a control** — a button, a row — that becomes one keyboard stop
+    /// and one click target as soon as something listens to its click. `false` by default: a
+    /// container that listens to clicks (to focus itself) stays a container.
+    fn is_control(&self) -> bool {
         false
+    }
+
+    /// **Whether this control takes the press for its whole box** (one click target), so its
+    /// composed content never sees it. `true` for a control by default; a control built from other
+    /// controls — a notification card with its own buttons — says `false`, so those still take
+    /// their own press.
+    fn takes_whole_press(&self) -> bool {
+        self.is_control()
     }
 
     /// **Show only your icon, keeping your words** — or go back to showing both.
@@ -323,7 +318,7 @@ pub trait Component {
     /// happens to be. `false` by default: a widget with nothing to shorten simply ignores it, and a
     /// widget with no icon must ignore it, since hiding its words would leave an empty box.
     ///
-    /// It is a trait method for the same reason [`activate`](Self::activate) is: a container holds
+    /// It is a trait method because a container holds
     /// `dyn Component`, so without one the only way to ask would be to know the child's concrete
     /// type — which is exactly the coupling a container must not have. The container decides *what*
     /// is shown; the widget owns *how it looks* when it is, including that a button with no words

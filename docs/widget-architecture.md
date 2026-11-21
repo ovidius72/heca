@@ -65,7 +65,7 @@ over the boundary, what RPC can send, and what native code authors when it wants
 
 **Layer 2 — the widgets (`heca-grid-ui`).** Real retained components: embed `Base`, hold
 `children: Vec<WidgetModel>`, own paint/event/tick, expose a builder API with **closures**
-(`.on_click(move || …)`) and **signals** (`.state()`, `.text_signal()`). The native chrome
+(`.on_click(move |_| …)`) and **signals** (`.state()`, `.text_signal()`). The native chrome
 (sidebar, pane headers) is built directly here.
 
 **The bridge — `realize`.** The single mapper. It owns the theme lookup and the intent emitter, so
@@ -121,7 +121,7 @@ because `ViewNode` **cannot carry closures or signals** (it must serialize for W
 chrome depends on both:
 
 ```rust
-Row::new().on_activate(move || select(i))   // a closure — impossible in ViewNode
+Row::new().on_click(move |_| select(i))   // a closure — impossible in ViewNode
 row.state().set(true)                       // flip active IN PLACE, no rebuild
 label.text_signal().set(new_name)           // live text, no rebuild
 ```
@@ -192,7 +192,7 @@ ViewNode::new(WidgetId::Button)
 ```rust
 Button::destructive("Delete")
     .child(Icon::new(Glyph::Trash))
-    .on_click(move || emit(intent))
+    .on_click(move |_| emit(intent))
 ```
 
 `realize` turns the first into the second. **Same widget, same retained tree.**

@@ -85,7 +85,7 @@ pub(super) fn native_twin(theme: &Theme) -> Panel {
         .child(
             Row::new()
                 .padding(6.0)
-                .on_activate(|| println!("[showcase] native row activated"))
+                .on_click(|_| println!("[showcase] native row activated"))
                 // The native half of the pair above: one builder, on the widget.
                 .tooltip("Running · 3 days")
                 .tooltip_side(TooltipSide::Bottom)
@@ -113,12 +113,12 @@ pub(super) fn native_twin(theme: &Theme) -> Panel {
                 .child(
                     Button::new("Close")
                         .icon(Glyph::Close)
-                        .on_click(|| println!("[showcase] native close")),
+                        .on_click(|_| println!("[showcase] native close")),
                 )
                 .child(
                     Button::new("Split")
                         .icon(Glyph::SquareSplitHorizontal)
-                        .on_click(|| println!("[showcase] native split")),
+                        .on_click(|_| println!("[showcase] native split")),
                 ),
         )
 }

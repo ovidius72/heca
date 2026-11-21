@@ -15,22 +15,22 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Surface {
                 .child(
                     Button::new("Split")
                         .icon(Glyph::Plus)
-                        .on_click(|| println!("[showcase] split")),
+                        .on_click(|_| println!("[showcase] split")),
                 )
                 .child(
                     Button::new("Zoom")
                         .icon(Glyph::FrameCorners)
-                        .on_click(|| println!("[showcase] zoom")),
+                        .on_click(|_| println!("[showcase] zoom")),
                 )
                 .child(
                     Button::new("Float")
                         .icon(Glyph::Sidebar)
-                        .on_click(|| println!("[showcase] float")),
+                        .on_click(|_| println!("[showcase] float")),
                 )
                 .child(
                     Button::new("Close")
                         .icon(Glyph::Minus)
-                        .on_click(|| println!("[showcase] close")),
+                        .on_click(|_| println!("[showcase] close")),
                 ),
         )
 }

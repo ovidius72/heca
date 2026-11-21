@@ -76,3 +76,4 @@ mod appearing;
 mod coverage;
 mod naming;
 mod order;
+mod dispatching;
