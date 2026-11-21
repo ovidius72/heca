@@ -13,6 +13,11 @@ pub(crate) enum SessionStatus {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct SessionInfo {
     pub id: SessionId,
+    /// The session's lasting key ([`SessionKey`](crate::entry::service::SessionKey)), so a window
+    /// can name its workspaces the way the server does ([`WorkspaceKey`](crate::entry::service::WorkspaceKey)).
+    /// `None` only in a value not made from a live session.
+    #[serde(default)]
+    pub key: Option<crate::entry::service::SessionKey>,
     pub name: String,
     pub folder: Option<PathBuf>,
     pub label: Option<String>,
@@ -25,6 +30,7 @@ impl SessionInfo {
     pub(super) fn unnamed(id: SessionId, template: &str, folder: Option<PathBuf>) -> Self {
         Self {
             id,
+            key: None,
             name: template.replace("{number}", &id.0.to_string()),
             folder,
             label: None,

@@ -70,6 +70,13 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_active_pane(state.focused_pane);
+    // The workspace this window shows, by its lasting key: the session's key and the workspace's id.
+    let shown = state.client.session.key.zip(
+        state.session.workspaces.get(state.layout().active_workspace_idx()).map(|ws| ws.id),
+    );
+    state.chrome_state.workspaces.set_active_workspace(
+        shown.map(|(session, ws)| crate::entry::service::WorkspaceKey::new(session, ws)),
+    );
     state
         .chrome_state
         .workspaces

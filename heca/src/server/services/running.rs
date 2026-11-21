@@ -43,6 +43,9 @@ pub(crate) struct Home {
 pub(crate) struct SessionRef {
     pub(crate) id: heca_core::layout::SessionId,
     pub(crate) key: SessionKey,
+    /// The workspace the asker is on: the one the asking window shows, else — a script — the one
+    /// a window of the session showed last. `None` before any window said.
+    pub(crate) workspace: Option<crate::entry::service::WorkspaceKey>,
 }
 
 /// Who asked for an action: the session, who is asking, and the session's configuration.
@@ -184,6 +187,7 @@ impl<S: Service> Hosted for Running<S> {
             service: cx,
             session: caller.session.id.0,
             session_key: caller.session.key,
+            workspace: caller.session.workspace,
             client,
             sender,
             config: caller.config,

@@ -369,3 +369,41 @@ fn an_unchanged_terminal_is_sent_only_to_a_window_that_does_not_have_it() {
     assert_eq!(frames(&first), 1, "a changed screen goes to every window");
     assert_eq!(frames(&second), 1);
 }
+
+/// **An action asked from a window gets the workspace that window shows**, by a key that stays the
+/// same when the workspaces are reordered — the position changes, the key does not.
+#[test]
+fn a_windows_call_gets_the_workspace_it_shows_by_a_key_a_reorder_keeps() {
+    use crate::server::wire::in_process;
+    use heca_core::layout::PaneId;
+    let mut session = Session::new(SessionId(42), Default::default());
+    session.add_workspace();
+    let shown = session.workspaces[1].id;
+    let mut runtime = SessionRuntime::new(ServerState::for_tests(Default::default()), session);
+    let (_client, server) = in_process();
+    let conn = Rc::new(Connection::new(7, Box::new(server)));
+    conn.queue(ClientMsg::Attach);
+    conn.queue(ClientMsg::ReportPresence { workspace: 1, pane: None::<PaneId> });
+    runtime.add_connection(conn.clone());
+    runtime.pump(Instant::now());
+    let key = runtime.service_ref().key;
+    let expected = Some(crate::entry::service::WorkspaceKey::new(key, shown));
+    assert_eq!(runtime.service_ref_for(0).workspace, expected, "the window's workspace");
+    assert_eq!(runtime.service_ref().workspace, expected, "a script gets the one shown last");
+
+    // Reorder: the shown workspace moves to the front, and the window says so.
+    runtime.session.workspaces.swap(0, 1);
+    conn.queue(ClientMsg::ReportPresence { workspace: 0, pane: None });
+    runtime.pump(Instant::now());
+    assert_eq!(runtime.service_ref_for(0).workspace, expected, "same workspace, same key, new position");
+}
+
+/// The window learns its session's key from what the server sends it, so it names a workspace with
+/// the same key an action gets.
+#[test]
+fn the_session_a_window_is_sent_carries_the_key_actions_use() {
+    let runtime = SessionRuntime::new(ServerState::for_tests(Default::default()), Session::new(SessionId(5), Default::default()));
+    let sent: crate::server::sessions::SessionInfo =
+        serde_json::from_str(&serde_json::to_string(&runtime.info()).unwrap()).unwrap();
+    assert_eq!(sent.key, Some(runtime.service_ref().key));
+}

@@ -137,6 +137,7 @@ mod tests {
             ..Default::default()
         };
         let session = SessionInfo {
+            key: None,
             id: SessionId(17), name: "A free session name".into(),
             folder: Some("/workspace/long/project/path".into()), label: Some("extension label".into()),
             status: SessionStatus::Active, windows: 2, agents: 3,
@@ -161,14 +162,14 @@ mod tests {
     #[test]
     fn a_terminated_current_session_is_not_offered_as_its_own_alternative() {
         use heca_core::layout::SessionId;
-        let current = SessionInfo { id: SessionId(1), name: "Stopped".into(), folder: None,
+        let current = SessionInfo { id: SessionId(1), key: None, name: "Stopped".into(), folder: None,
             label: None, status: SessionStatus::Terminated, windows: 1, agents: 0 };
         let words = heca_config::settings::SessionText::default();
         assert!(entries(std::slice::from_ref(&current), &current, &words).is_empty());
         let stale = SessionInfo { status: SessionStatus::Active, ..current.clone() };
         assert!(entries(&[stale], &current, &words).is_empty(), "current state wins over a stale directory");
-        let active = SessionInfo { id: SessionId(2), name: "Active".into(), status: SessionStatus::Active, ..current.clone() };
-        let stopped = SessionInfo { id: SessionId(3), name: "Another stopped session".into(), ..current.clone() };
+        let active = SessionInfo { id: SessionId(2), key: None, name: "Active".into(), status: SessionStatus::Active, ..current.clone() };
+        let stopped = SessionInfo { id: SessionId(3), key: None, name: "Another stopped session".into(), ..current.clone() };
         let rows = entries(&[current.clone(), active.clone(), stopped.clone()], &current, &words);
         assert_eq!(rows.iter().map(|row| row.label.as_str()).collect::<Vec<_>>(), [active.name.as_str(), stopped.name.as_str()]);
         let rows = entries(std::slice::from_ref(&active), &active, &words);
