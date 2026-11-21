@@ -104,7 +104,10 @@ fn a_server_of_another_version_stops_the_window_with_what_to_do() {
         .map(|_| ()).unwrap_err();
     older.join().unwrap();
     assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
-    assert!(error.to_string().contains("heca --kill-server"), "got: {error}");
+    let said = error.to_string();
+    assert!(said.contains("heca --kill-server"), "how to stop it: {said}");
+    assert!(said.contains("sessions come back"), "what happens to the sessions: {said}");
+    assert!(said.contains("heca --standalone"), "how to try this version without stopping it: {said}");
 }
 
 /// `heca rpc --events`: the preface subscribes, and the stream ends when the server does.
