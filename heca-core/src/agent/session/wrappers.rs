@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, fs, io::Write, path::Path};
 
-use super::{AgentError, AgentOptions, encode, quote, validate_program};
+use super::{AgentError, AgentOptions, encode, launcher_words, quote, validate_program};
 
 pub(super) fn scripts(
     options: &AgentOptions,
@@ -23,17 +23,16 @@ pub(super) fn scripts(
                  heca_agent_executable=$(command -v -- {}) || exit 127\n\
                  printf '\\033]133;E;%s\\a' {}\n\
                  unset HECA_AGENT_BIN\n\
-                 exec {} {} {} {} {} {} \"$heca_agent_executable\" \"$@\"\n",
+                 exec {} \"$heca_agent_executable\" \"$@\"\n",
                     quote(&bin.to_string_lossy()),
                     include_str!("path.sh"),
                     quote(program),
                     quote(&encode(program)),
-                    quote(&options.launcher.to_string_lossy()),
-                    super::super::launcher::FLAG,
-                    quote(&directory.to_string_lossy()),
-                    options.launch_timeout.as_millis(),
-                    options.max_report_bytes,
-                    quote(program),
+                    launcher_words(options, directory, program)
+                        .iter()
+                        .map(|word| quote(&word.to_string_lossy()))
+                        .collect::<Vec<_>>()
+                        .join(" "),
                 ),
             );
         }

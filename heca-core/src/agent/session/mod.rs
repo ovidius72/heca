@@ -26,9 +26,29 @@ pub struct AgentOptions {
     pub launched_status: String,
 }
 
+/// **How heca's launcher is invoked for `program`**, up to the program's own executable and
+/// arguments — the one spelling of it, for the PATH wrappers a typed command runs and for a program
+/// heca starts itself (a resumed agent), so the two cannot drift.
+pub(super) fn launcher_words(
+    options: &AgentOptions,
+    directory: &std::path::Path,
+    program: &str,
+) -> Vec<std::ffi::OsString> {
+    vec![
+        options.launcher.clone().into(),
+        super::launcher::FLAG.into(),
+        directory.into(),
+        options.launch_timeout.as_millis().to_string().into(),
+        options.max_report_bytes.to_string().into(),
+        program.into(),
+    ]
+}
+
 pub(crate) struct AgentSession {
     // Stop the watcher before its private directory is removed.
     channel: Option<ReportChannel>,
+    /// The options last configured, for starting a program through the launcher.
+    options: Option<AgentOptions>,
     directory: tempfile::TempDir,
     drivers: AgentDrivers,
     updates: VecDeque<Option<AgentState>>,
@@ -45,6 +65,7 @@ impl AgentSession {
         fs::create_dir(directory.path().join("bin"))?;
         let mut session = Self {
             channel: None,
+            options: None,
             directory,
             drivers: AgentDrivers::new(),
             updates: VecDeque::new(),
@@ -90,8 +111,31 @@ impl AgentSession {
         while self.updates.len() > self.capacity {
             self.updates.pop_front();
         }
-        self.drivers = options.drivers;
+        self.drivers = options.drivers.clone();
+        self.options = Some(options);
         Ok(())
+    }
+
+    /// **`process` started through heca's launcher**, when a driver recognizes it — so an agent heca
+    /// starts itself (resumed with a saved session) reports exactly as one typed at a prompt does:
+    /// the launch handshake, its integration, its line from launch. `None` when no driver claims it
+    /// (it is started as it is).
+    pub(crate) fn through_launcher(
+        &self,
+        process: &crate::backend::ProcessLaunch,
+    ) -> Option<crate::backend::ProcessLaunch> {
+        let options = self.options.as_ref()?;
+        let program = process.executable.file_name()?.to_str()?;
+        self.drivers.recognize(program)?;
+        let mut words = launcher_words(options, self.directory.path(), program);
+        words.push(process.executable.clone().into());
+        words.extend(process.arguments.iter().cloned());
+        let executable = std::path::PathBuf::from(words.remove(0));
+        Some(crate::backend::ProcessLaunch {
+            executable,
+            arguments: words,
+            cwd: process.cwd.clone(),
+        })
     }
 
     pub(crate) fn bin(&self) -> PathBuf {
@@ -100,6 +144,7 @@ impl AgentSession {
     pub(crate) fn disable(&mut self) -> Result<(), AgentError> {
         wrappers::publish(&self.bin(), Default::default())?;
         self.channel = None;
+        self.options = None;
         self.drivers = AgentDrivers::new();
         Ok(())
     }
