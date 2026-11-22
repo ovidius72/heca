@@ -18,15 +18,15 @@ use heca_config::appearance::AgentSessionLine;
 
 pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let initial = (cx.facts)();
-    let primary = text(cx, FontWeight::Bold);
+    let primary = text(FontWeight::Bold);
     let primary_text = primary.text_signal();
-    let session = text(cx, FontWeight::Regular);
+    let session = text(FontWeight::Regular);
     let session_text = session.text_signal();
     let session = Visibility::new().visible(false).child(session);
     let session_visible = session.visible_signal();
     // The status is its glyph alone; its words are the glyph's tooltip.
     let status_text = signal(String::new());
-    let task = text(cx, FontWeight::Regular).muted(true);
+    let task = text(FontWeight::Regular).muted(true);
     let task_text = task.text_signal();
     let task = Visibility::new().visible(false).child(task);
     let task_visible = task.visible_signal();
@@ -136,16 +136,12 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     row
 }
 
-fn text(cx: &LineCx<'_>, weight: FontWeight) -> Label {
-    PaneName {
-        text: "",
-        color: None,
-        weight,
-        font_scale: WidgetSize::Normal.font_scale(),
-        theme: cx.theme,
-    }
-    .build()
-    .widget
+fn text(weight: FontWeight) -> Label {
+    PaneName::new("")
+        .weight(weight)
+        .font_scale(WidgetSize::Normal.font_scale())
+        .build()
+        .widget
 }
 
 #[cfg(test)]

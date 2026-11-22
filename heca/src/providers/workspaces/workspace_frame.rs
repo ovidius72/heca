@@ -32,7 +32,7 @@ impl WorkspaceFrame<'_> {
         self,
         seams: &DockSeams<'_>,
         reg: &mut DockRegistries<'_>,
-    ) -> impl heca_grid_ui::Component + use<> {
+    ) -> heca_grid_ui::widgets::DockFrame {
         let ws = self.workspace;
         let theme = seams.theme;
         let ws_idx = ws.ws_idx;
@@ -105,12 +105,21 @@ impl WorkspaceFrame<'_> {
             .chain(&ws.floating_panes)
             .map(|p| p.pane_id)
             .collect::<Vec<_>>();
-        reg.signals
-            .ws_active
-            .push((ws_pane_ids, dock.active_state()));
-        reg.signals
-            .ws_previous
-            .push((ws_idx, dock.previous_state()));
+        // **The frame follows focus itself**: active while it holds the active pane, "previous" while
+        // it is the workspace back-and-forth would return to — both read from the store's
+        // signals, so nothing is handed to the host to write every frame.
+        {
+            let store = seams.ws_state.clone();
+            let (active_sig, previous_sig) = (dock.active_state(), dock.previous_state());
+            heca_grid_ui::reactive::create_effect(move |_| {
+                let active = store.active_pane();
+                super::pane_row::set_if_changed(
+                    active_sig,
+                    active.is_some_and(|a| ws_pane_ids.contains(&a)),
+                );
+                super::pane_row::set_if_changed(previous_sig, store.previous_ws() == Some(ws_idx));
+            });
+        }
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
@@ -128,13 +137,7 @@ impl WorkspaceFrame<'_> {
             cols = cols.child(ColumnGroup { column, ws_idx }.build(seams, reg));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(
-                PaneRow {
-                    pane: float,
-                    column_of_pane: None,
-                }
-                .build(seams, reg),
-            );
+            cols = cols.child(PaneRow::new(float).build(seams, reg));
         }
         // **The dock says all of this about itself** — no wrapper.
         //
@@ -191,22 +194,34 @@ mod tests {
         }
     }
 
-    /// The frame's own two states are signals, for the same reason a row's are.
+    /// The frame's own two states follow focus from the store, for the same reason a row's do:
+    /// change them after the frame is built and it follows, with nothing handed to the host.
     #[test]
-    fn a_frame_publishes_both_of_its_states() {
+    fn a_frame_follows_both_of_its_states() {
+        use heca_grid_ui::reactive::SignalGet;
         let mut fx = Fixture::default();
         let tree = testing::tree();
-        {
+        let frame = {
             let (seams, mut reg) = fx.split("left");
-            let _ = WorkspaceFrame {
+            WorkspaceFrame {
                 workspace: &tree.workspaces[0],
             }
-            .build(&seams, &mut reg);
-        }
-
-        assert!(!fx.signals.ws_active.is_empty(), "the workspace you are in",);
+            .build(&seams, &mut reg)
+        };
+        let store = fx.store.workspaces.clone();
+        store.set_active_pane(Some(PaneId(1)));
         assert!(
-            fx.signals.ws_previous.iter().any(|(idx, _)| *idx == 0),
+            frame.active_state().get_untracked(),
+            "the workspace you are in"
+        );
+        store.set_active_pane(Some(PaneId(99)));
+        assert!(
+            !frame.active_state().get_untracked(),
+            "and not once focus leaves it"
+        );
+        store.set_previous_ws(Some(0));
+        assert!(
+            frame.previous_state().get_untracked(),
             "and the one prefix+Shift+i would return to",
         );
     }

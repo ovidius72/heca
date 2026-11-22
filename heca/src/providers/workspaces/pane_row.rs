@@ -42,18 +42,29 @@ pub(super) const META_INDENT: Spacing = Spacing::Xs;
 /// A single pane **card**: a state-tinted background + radius, a leading program icon, the display
 /// name, an optional exceptional-state indicator, and cwd/git metadata when present.
 ///
-/// Properties are struct fields and the constructor is a struct literal — Flutter/SwiftUI named
-/// parameters in Rust's spelling (AGENTS.md § 0b-bis step 2). This replaces an eleven-argument
-/// positional `pane_card()` whose call sites could not be read without counting.
+/// Written in THE SYNTAX: `PaneRow::new(pane).column(Some((ws, col))).build(seams, reg)`.
 pub(crate) struct PaneRow<'a> {
-    /// The pane this row draws, already reduced to plain data by `model.rs`.
-    pub(crate) pane: &'a PaneEntry,
-    /// Which column this pane sits in, or `None` for a **floating** pane — which is in no column,
-    /// so its menu simply lacks the entries that need one rather than aiming them at a guess.
-    pub(crate) column_of_pane: Option<(usize, usize)>,
+    pane: &'a PaneEntry,
+    column_of_pane: Option<(usize, usize)>,
 }
 
-impl PaneRow<'_> {
+impl<'a> PaneRow<'a> {
+    /// The row for `pane`, already reduced to plain data by `model.rs`. Floating until told its
+    /// column.
+    pub(crate) fn new(pane: &'a PaneEntry) -> Self {
+        Self {
+            pane,
+            column_of_pane: None,
+        }
+    }
+
+    /// Which column this pane sits in, as `(ws_idx, col_idx)`, or `None` for a **floating** pane —
+    /// which is in no column, so its menu simply lacks the entries that need one rather than
+    /// aiming them at a guess.
+    pub(crate) fn column(mut self, column: Option<(usize, usize)>) -> Self {
+        self.column_of_pane = column;
+        self
+    }
     /// Build the row, returning the concrete widget so the **parent** can still size it
     /// (§ 0b-bis step 5).
     pub(crate) fn build(self, seams: &DockSeams<'_>, reg: &mut DockRegistries<'_>) -> Row {
@@ -90,7 +101,9 @@ impl PaneRow<'_> {
         // This row kind's declared click, by name — so a menu entry, a keybinding or RPC can fire the
         // same one. A **pick** is declared separately, on the wrapper below: it is a
         // different gesture and this row answers it differently.
-        let icon_widget = Icon::new(info.icon).color(theme.colors.foreground);
+        // No colour of its own: it inherits the readable foreground the row hands its content at
+        // paint, so a theme change reaches it.
+        let icon_widget = Icon::new(info.icon);
         let icon_signal = icon_widget.glyph_signal();
         // The pane's name — one label. Its colour follows the readable content colour
         // the `Row` publishes each paint, which unstyled labels
@@ -100,14 +113,7 @@ impl PaneRow<'_> {
         // hidden — so the visible name sat at the top of that stack when selected and the bottom
         // when not, and never shared a line with the `(program)` suffix beside it.
         // And it cuts rather than spilling when the sidebar is narrow (`components::PaneName`).
-        let name = crate::components::PaneName {
-            text: &info.title,
-            color: None,
-            weight: heca_grid_ui::style::FontWeight::Bold,
-            font_scale: 1.0,
-            theme,
-        }
-        .build();
+        let name = crate::components::PaneName::new(&info.title).build();
         let title_label = name.widget;
         let title_signal = name.text;
         // **One pip that changes what it says**, not one pip per state hidden behind the others.
@@ -127,9 +133,8 @@ impl PaneRow<'_> {
         // are what make it read as secondary. The two runs sit on one shared baseline because
         // `Flex` puts them there; a row of text at two sizes is the framework's problem, not this
         // call site's.
-        let process_hint_label = Label::new(process_hint_text)
-            .color(theme.colors.foreground)
-            .size(heca_grid_ui::style::WidgetSize::Caption);
+        let process_hint_label =
+            Label::new(process_hint_text).size(heca_grid_ui::style::WidgetSize::Caption);
         let process_hint_signal = process_hint_label.text_signal();
         let process_hint = Visibility::new()
             .visible(info.process_hint.is_some())
@@ -242,13 +247,22 @@ impl PaneRow<'_> {
             // `on_press`: the row's pick is its own declaration (`on_hint` below).
             .on_click(move |ev| ev.dispatch(pane_row_press(pane_id)))
             .child(content);
-        // **Every state that moves with focus, published in the same breath as its initial value.**
-        // See this module's note: a bool read at build time freezes, because the tree does not
-        // rebuild on a focus change.
-        reg.signals.pane_active.push((pane_id, card.state()));
-        reg.signals
-            .pane_previous
-            .push((pane_id, card.previous_state()));
+        // **The row follows focus itself.** Selected and last-visited are the store's signals
+        // (`active_pane`, `previous_panes`), so the row subscribes here instead of handing its own
+        // signals to the host to write every frame — the tree does not rebuild on a focus change,
+        // and nobody else has to know this row exists to keep it right.
+        {
+            let store = ws_state.clone();
+            let (selected, previous) = (card.state(), card.previous_state());
+            create_effect(move |_| {
+                let active = store.active_pane();
+                set_if_changed(selected, active == Some(pane_id));
+                set_if_changed(
+                    previous,
+                    store.is_previous_pane(pane_id) && active != Some(pane_id),
+                );
+            });
+        }
         // A move/swap/take pick stamps this pane's letter over the card. **The letter is offered
         // by key** (`chrome::hint`) and drawn by `paint_child` on the card itself — which is why
         // there is no wrapper: the card is a widget, so it can simply say so.
@@ -364,35 +378,45 @@ mod tests {
     /// **The bug class this whole split exists for**.
     ///
     /// A row's states change with focus, and `chrome_signature` deliberately excludes focus — so
-    /// the tree does **not** rebuild when focus moves. A state published as a plain bool at build
-    /// time is therefore frozen for the session, and looks perfectly correct in the source.
+    /// the tree does **not** rebuild when focus moves. A state read as a plain bool at build time
+    /// is therefore frozen for the session, and looks perfectly correct in the source.
     ///
-    /// Every state a pane row owns must appear in `ChromeSignals` for that pane. Adding a fifth
-    /// state without publishing it fails here, which is the only place it can fail.
+    /// So the row follows the store's focus signals itself: change the active pane or the
+    /// last-visited mark after the row is built, and the row follows — with nothing handed to the
+    /// host to write back.
     #[test]
-    fn a_pane_row_publishes_every_state_that_moves_with_focus() {
+    fn a_pane_row_follows_every_state_that_moves_with_focus() {
+        use heca_grid_ui::reactive::SignalGet;
         let mut fx = Fixture::default();
         let pane = testing::pane(PaneId(7), "seven");
         let row = {
             let (seams, mut reg) = fx.split("left");
-            PaneRow {
-                pane: &pane,
-                column_of_pane: Some((0, 0)),
-            }
-            .build(&seams, &mut reg)
+            PaneRow::new(&pane)
+                .column(Some((0, 0)))
+                .build(&seams, &mut reg)
         };
+        let (selected, previous) = (row.state(), row.previous_state());
+        let store = fx.store.workspaces.clone();
 
+        store.set_active_pane(Some(PaneId(7)));
         assert!(
-            fx.signals.pane_active.iter().any(|(p, _)| *p == PaneId(7)),
-            "selected is a signal, so focus can flip it without a rebuild",
+            selected.get_untracked(),
+            "selected follows focus without a rebuild"
         );
+        store.set_active_pane(Some(PaneId(8)));
+        assert!(!selected.get_untracked(), "and leaves when focus moves on");
+
+        store.set_previous_panes(vec![Some(PaneId(7))]);
         assert!(
-            fx.signals
-                .pane_previous
-                .iter()
-                .any(|(p, _)| *p == PaneId(7)),
-            "last-visited is a signal too — this is the one that was read at build time and froze",
+            previous.get_untracked(),
+            "last-visited follows too — the one that was read at build time and froze",
         );
+        store.set_active_pane(Some(PaneId(7)));
+        assert!(
+            !previous.get_untracked(),
+            "the pane you are on is not \"where you were\""
+        );
+
         assert_eq!(
             heca_grid_ui::Component::base(&row).key.as_deref(),
             Some(pane_key(PaneId(7)).as_str()),
@@ -421,11 +445,9 @@ mod tests {
         let pane = testing::pane(PaneId(7), "seven");
         let row = {
             let (seams, mut reg) = fx.split("left");
-            PaneRow {
-                pane: &pane,
-                column_of_pane: Some((0, 0)),
-            }
-            .build(&seams, &mut reg)
+            PaneRow::new(&pane)
+                .column(Some((0, 0)))
+                .build(&seams, &mut reg)
         };
 
         // The directory arrives. Nothing rebuilds the tree and no sync pass runs — the row is
@@ -498,11 +520,9 @@ mod tests {
         let pane = testing::pane(PaneId(7), "seven");
         let row = {
             let (seams, mut reg) = fx.split("left");
-            PaneRow {
-                pane: &pane,
-                column_of_pane: Some((0, 0)),
-            }
-            .build(&seams, &mut reg)
+            PaneRow::new(&pane)
+                .column(Some((0, 0)))
+                .build(&seams, &mut reg)
         };
 
         pane_reports(
@@ -536,11 +556,9 @@ mod tests {
         let pane = testing::pane(PaneId(7), "seven");
         let row = {
             let (seams, mut reg) = fx.split("left");
-            PaneRow {
-                pane: &pane,
-                column_of_pane: Some((0, 0)),
-            }
-            .build(&seams, &mut reg)
+            PaneRow::new(&pane)
+                .column(Some((0, 0)))
+                .build(&seams, &mut reg)
         };
 
         let mut root = Flex::column().child(row);
@@ -565,11 +583,7 @@ mod tests {
         let pane = testing::pane(PaneId(9), "float");
         let row = {
             let (seams, mut reg) = fx.split("left");
-            PaneRow {
-                pane: &pane,
-                column_of_pane: None,
-            }
-            .build(&seams, &mut reg)
+            PaneRow::new(&pane).build(&seams, &mut reg)
         };
 
         assert!(

@@ -64,16 +64,22 @@ impl ColumnGroup<'_> {
             .accepts_beside(["column"]);
         for pane in &column.panes {
             col = col.child(
-                PaneRow {
-                    pane,
-                    column_of_pane: Some((ws_idx, column.col_idx)),
-                }
-                .build(seams, reg),
+                PaneRow::new(pane)
+                    .column(Some((ws_idx, column.col_idx)))
+                    .build(seams, reg),
             );
         }
-        // Bind the column bar's active signal (lit iff it holds the active pane).
-        let pane_ids = column.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
-        reg.signals.col_active.push((pane_ids, col.state()));
+        // **The column bar follows focus itself**: lit while it holds the active pane, read from the
+        // store's signal, so nothing is handed to the host to write every frame.
+        {
+            let pane_ids = column.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
+            let store = seams.ws_state.clone();
+            let lit = col.state();
+            heca_grid_ui::reactive::create_effect(move |_| {
+                let active = store.active_pane();
+                super::pane_row::set_if_changed(lit, active.is_some_and(|a| pane_ids.contains(&a)));
+            });
+        }
         // **The group says all of this about itself** — no `KeyHint` wrapper. That is for a
         // region which is not a widget you can put a builder on; a `MarkerGroup` is one, and the
         // letter is drawn by `paint_child` for any widget carrying one. The letter itself is
@@ -182,27 +188,31 @@ mod tests {
         );
     }
 
-    /// The bar lights from a signal, not from a bool baked in at build time — the column's half of
-    /// the rule in [`PaneRow`](super::super::pane_row)'s module note.
+    /// The bar lights from the store's focus, not from a bool baked in at build time — the
+    /// column's half of the rule in [`PaneRow`](super::super::pane_row)'s module note.
     #[test]
     fn the_columns_bar_follows_focus_through_a_signal() {
+        use heca_grid_ui::reactive::SignalGet;
         let mut fx = Fixture::default();
         let column = testing::column();
-        {
+        let bar = {
             let (seams, mut reg) = fx.split("left");
-            let _ = ColumnGroup {
+            ColumnGroup {
                 column: &column,
                 ws_idx: 0,
             }
-            .build(&seams, &mut reg);
-        }
-
+            .build(&seams, &mut reg)
+        };
+        let store = fx.store.workspaces.clone();
+        store.set_active_pane(Some(PaneId(1)));
         assert!(
-            fx.signals
-                .col_active
-                .iter()
-                .any(|(panes, _)| panes.contains(&PaneId(1))),
-            "the bar is lit by whichever of its panes is active",
+            bar.state().get_untracked(),
+            "lit by whichever of its panes is active"
+        );
+        store.set_active_pane(Some(PaneId(99)));
+        assert!(
+            !bar.state().get_untracked(),
+            "and dark once focus leaves the column"
         );
     }
 }
