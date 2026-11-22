@@ -22,13 +22,13 @@ fn focus_traversal_and_keyboard_activation() {
     // Tab → first focusable; Space activates it.
     focus.advance(&mut ui, true);
     assert_eq!(focus.focused(&mut ui), Some(0));
-    focus.deliver_key(&mut ui, GridKey::Space);
+    common::press_key(&mut ui, GridKey::Space);
     assert_eq!(clicked.get(), 1);
 
     // Tab → second; Enter activates it.
     focus.advance(&mut ui, true);
     assert_eq!(focus.focused(&mut ui), Some(1));
-    focus.deliver_key(&mut ui, GridKey::Enter);
+    common::press_key(&mut ui, GridKey::Enter);
     assert_eq!(clicked.get(), 2);
 
     // Forward wraps to first; backward wraps to last.
