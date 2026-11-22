@@ -195,15 +195,11 @@ impl PaneCard<'_> {
                     // The name as every surface shows it — and it stays inside the card, however
                     // narrow the window makes it (`components::PaneName`).
                     .child(
-                        crate::components::PaneName {
-                            text: self.name,
-                            color: Some(theme.colors.foreground),
-                            weight: heca_grid_ui::style::FontWeight::Regular,
-                            font_scale: 1.0,
-                            theme,
-                        }
-                        .build()
-                        .widget,
+                        // Regular, and the readable foreground the card hands its content.
+                        crate::components::PaneName::new(self.name)
+                            .weight(heca_grid_ui::style::FontWeight::Regular)
+                            .build()
+                            .widget,
                     )
                     .child(folder)
             });
