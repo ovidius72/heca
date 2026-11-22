@@ -77,14 +77,86 @@ impl DropAction {
 
 /// Where, relative to a drop target, a drop would land. The app decides what each
 /// means (insert before/after a sibling, or drop *onto* a container).
+///
+/// **Before and after are list order, not screen directions.** In a column they are above and
+/// below; in a row, left and right — whichever way the list the target sits in runs
+/// ([`Flow`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DropSide {
-    /// Above/before the target (top third of a vertically-stacked target).
+    /// Before the target in its list — the half (or third) nearer the item that comes before it.
     Before,
     /// Onto the target itself (its middle band) — e.g. drop into a container.
     Onto,
-    /// Below/after the target (bottom third).
+    /// After the target in its list.
     After,
+}
+
+/// **Which way the list a drop target sits in runs** — the way to its next item.
+///
+/// Read from where the target's neighbours are drawn, so nothing declares it: a row of tabs is
+/// read left to right, a column of rows top to bottom, and a reversed list the other way round.
+/// It decides which half of a target is *before* and which edge the insertion line is drawn on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Flow {
+    /// Top to bottom — a column, and what a target with no neighbours is read as.
+    #[default]
+    Down,
+    /// Bottom to top.
+    Up,
+    /// Left to right — a row.
+    Right,
+    /// Right to left.
+    Left,
+}
+
+impl Flow {
+    /// Whether the list runs across the screen rather than down it.
+    pub fn is_horizontal(self) -> bool {
+        matches!(self, Self::Right | Self::Left)
+    }
+
+    /// Whether *before* is the far end of the axis — the bottom, or the right.
+    fn is_reversed(self) -> bool {
+        matches!(self, Self::Up | Self::Left)
+    }
+
+    /// The way the list runs at child `index` of `parent`, from where its nearest drawn
+    /// neighbour sits. A neighbour that also takes drops is preferred, because that is the list
+    /// the target belongs to; a header beside it is only the fallback.
+    fn of(parent: &dyn Component, index: usize) -> Self {
+        let children = &parent.base().children;
+        let Some(this) = children.get(index).map(|c| c.base().bounds) else {
+            return Self::default();
+        };
+        let pick = |targets_only: bool| {
+            let fits = |c: &dyn Component| {
+                c.is_shown()
+                    && c.base().bounds.size.w > 0.0
+                    && (!targets_only || c.is_drop_target())
+            };
+            let before = children[..index].iter().rev().find(|c| fits(c.as_ref()));
+            let after = children
+                .get(index + 1..)
+                .and_then(|rest| rest.iter().find(|c| fits(c.as_ref())));
+            // From the item before to this one, or from this one to the item after: either way
+            // the step points the way the list runs.
+            before
+                .map(|b| (b.base().bounds, this))
+                .or_else(|| after.map(|a| (this, a.base().bounds)))
+        };
+        let Some((from, to)) = pick(true).or_else(|| pick(false)) else {
+            return Self::default();
+        };
+        let centre = |r: Rectangle| (r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0);
+        let ((fx, fy), (tx, ty)) = (centre(from), centre(to));
+        let (dx, dy) = (tx - fx, ty - fy);
+        match (dx.abs() > dy.abs(), dx > 0.0, dy >= 0.0) {
+            (true, true, _) => Self::Right,
+            (true, false, _) => Self::Left,
+            (false, _, true) => Self::Down,
+            (false, _, false) => Self::Up,
+        }
+    }
 }
 
 /// A resolved drop position: which target, its laid-out bounds, and the side the
@@ -107,24 +179,34 @@ pub struct DropHit {
     pub bounds: Rectangle,
     /// Which side of the target the cursor is over.
     pub side: DropSide,
+    /// Which way the target's list runs — where *before* is, and which edge a line is drawn on.
+    pub flow: Flow,
 }
 
-/// Classify `point` against `bounds` into a [`DropSide`] by vertical thirds
-/// (the common vertically-stacked list case).
-fn side_for(bounds: Rectangle, point: Point, onto: bool) -> DropSide {
-    let dy = point.y - bounds.loc.y;
+/// Classify `point` against `bounds` into a [`DropSide`], along the way the target's list runs:
+/// thirds for a target with a real middle, halves for a sibling.
+fn side_for(bounds: Rectangle, point: Point, onto: bool, flow: Flow) -> DropSide {
+    let (offset, length) = match flow.is_horizontal() {
+        true => (point.x - bounds.loc.x, bounds.size.w),
+        false => (point.y - bounds.loc.y, bounds.size.h),
+    };
+    // Measured from the edge the list starts at, so the near part is always *before*.
+    let offset = match flow.is_reversed() {
+        true => length - offset,
+        false => offset,
+    };
     if !onto {
         // A sibling in an ordered list: two halves, and the line flips at the midpoint. There is no
         // third band, because "onto" would have to silently mean one of the other two.
-        return match dy < bounds.size.h / 2.0 {
+        return match offset < length / 2.0 {
             true => DropSide::Before,
             false => DropSide::After,
         };
     }
-    let third = bounds.size.h / 3.0;
-    if dy < third {
+    let third = length / 3.0;
+    if offset < third {
         DropSide::Before
-    } else if dy > bounds.size.h - third {
+    } else if offset > length - third {
         DropSide::After
     } else {
         DropSide::Onto
@@ -152,7 +234,7 @@ pub fn resolve_at(root: &dyn Component, point: Point) -> Option<DropHit> {
 /// else is ever drawn on.
 pub fn resolve_at_for(root: &dyn Component, point: Point, kind: Option<&str>) -> Option<DropHit> {
     let mut path = Vec::new();
-    drop_at(root, root, point, &|_| true, kind, &mut path)
+    drop_at(root, None, root, point, &|_| true, kind, &mut path)
 }
 
 /// Like [`resolve_at`], but only considers drop targets whose id satisfies
@@ -167,14 +249,19 @@ pub fn resolve_at_filtered(
     accept: &dyn Fn(&str) -> bool,
 ) -> Option<DropHit> {
     let mut path = Vec::new();
-    drop_at(root, root, point, accept, None, &mut path)
+    drop_at(root, None, root, point, accept, None, &mut path)
 }
 
 /// The recursive half of [`resolve_at_filtered`], carrying the path so a hit can be named by
 /// [`identity_of`](crate::nav::identity_of) — which needs the whole chain from the root to derive a
 /// name for a widget that declared none.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "a recursive walk: the parent and the path ride along so a hit can be read in place"
+)]
 fn drop_at(
     root: &dyn Component,
+    parent: Option<&dyn Component>,
     node: &dyn Component,
     point: Point,
     accept: &dyn Fn(&str) -> bool,
@@ -190,7 +277,7 @@ fn drop_at(
     }
     for (i, child) in node.base().children.iter().enumerate().rev() {
         path.push(i);
-        if let Some(hit) = drop_at(root, child.as_ref(), point, accept, kind, path) {
+        if let Some(hit) = drop_at(root, Some(node), child.as_ref(), point, accept, kind, path) {
             return Some(hit);
         }
         path.pop();
@@ -203,11 +290,16 @@ fn drop_at(
         // A widget that reacts over more (or less) than it is drawn over says so, as in a click.
         let bounds = node.hit_bounds().unwrap_or(node.base().bounds);
         if bounds.contains(point) {
+            let flow = match (parent, path.last()) {
+                (Some(parent), Some(&index)) => Flow::of(parent, index),
+                _ => Flow::default(),
+            };
             return Some(DropHit {
                 key,
                 path: path.clone(),
                 bounds,
-                side: side_for(bounds, point, node.base().accepts_onto),
+                side: side_for(bounds, point, node.base().accepts_onto, flow),
+                flow,
             });
         }
     }
@@ -374,6 +466,139 @@ mod tests {
     fn at(mut w: impl Component + 'static, x: f64, y: f64, w_: f64, h_: f64) -> crate::WidgetModel {
         w.base_mut().bounds = Rectangle::new(Point::new(x, y), Size::new(w_, h_));
         crate::WidgetModel::new(w)
+    }
+
+    /// **Before and after follow the way the list runs.** In a row of tabs the left half of a tab
+    /// is before it and the right half after; in a column it is the top and bottom; in a list laid
+    /// out back to front it is the other way round. Nothing declares the direction: it is read
+    /// from where the neighbours are drawn.
+    #[test]
+    fn before_and_after_follow_the_way_the_list_runs() {
+        let list = |positions: [(f64, f64); 2]| {
+            let mut root = Flex::row();
+            root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(400.0, 400.0));
+            for (i, (x, y)) in positions.into_iter().enumerate() {
+                root.base_mut().children.push(at(
+                    Surface::new()
+                        .key(format!("tab:{i}"))
+                        .accepts_beside(["tab"]),
+                    x,
+                    y,
+                    100.0,
+                    100.0,
+                ));
+            }
+            root
+        };
+        let side = |root: &Flex, x: f64, y: f64| {
+            resolve_at_for(root, Point::new(x, y), Some("tab")).map(|h| (h.side, h.flow))
+        };
+
+        let row = list([(0.0, 0.0), (100.0, 0.0)]);
+        assert_eq!(
+            side(&row, 120.0, 90.0),
+            Some((DropSide::Before, Flow::Right))
+        );
+        assert_eq!(
+            side(&row, 180.0, 10.0),
+            Some((DropSide::After, Flow::Right))
+        );
+        assert_eq!(
+            side(&row, 20.0, 50.0),
+            Some((DropSide::Before, Flow::Right)),
+            "the first tab reads its next one"
+        );
+
+        let column = list([(0.0, 0.0), (0.0, 100.0)]);
+        assert_eq!(
+            side(&column, 90.0, 120.0),
+            Some((DropSide::Before, Flow::Down))
+        );
+        assert_eq!(
+            side(&column, 10.0, 180.0),
+            Some((DropSide::After, Flow::Down))
+        );
+
+        let back_to_front = list([(100.0, 0.0), (0.0, 0.0)]);
+        assert_eq!(
+            side(&back_to_front, 20.0, 50.0),
+            Some((DropSide::After, Flow::Left)),
+            "the second item drawn to the left of the first: its left half is after it",
+        );
+
+        let alone = list([(0.0, 0.0), (0.0, 0.0)]);
+        let mut alone = alone;
+        alone.base_mut().children.truncate(1);
+        assert_eq!(
+            side(&alone, 50.0, 20.0),
+            Some((DropSide::Before, Flow::Down)),
+            "no neighbour: a column"
+        );
+    }
+
+    /// **A row that is only sometimes dragged needs no branch.** The drag builders take an
+    /// `Option`: `None` leaves the widget as it was, `Some` is the same as the plain value.
+    #[test]
+    fn the_drag_builders_take_an_option() {
+        let kind: Option<&str> = None;
+        let plain = Surface::new()
+            .key("room:a")
+            .draggable_as(kind)
+            .accepts_beside(kind.map(|k| [k]));
+        assert!(!plain.base().draggable, "None: not draggable");
+        assert!(!plain.is_drop_target(), "None: not a drop target");
+
+        let kind = Some("room");
+        let reorderable = Surface::new()
+            .key("room:a")
+            .draggable_as(kind)
+            .accepts_beside(kind.map(|k| [k]));
+        assert_eq!(reorderable.base().drag_kind.as_deref(), Some("room"));
+        assert!(reorderable.is_drop_target());
+        assert!(reorderable.accepts_drag(Some("room")));
+        assert!(!reorderable.accepts_drag(Some("pane")));
+    }
+
+    /// **The line turns with the list.** In a row it stands on the edge the drop lands on; in a
+    /// column it lies along it.
+    #[test]
+    fn the_insertion_line_turns_with_the_list() {
+        let theme = crate::Theme::default();
+        let bounds = Rectangle::new(Point::new(100.0, 0.0), Size::new(100.0, 40.0));
+        let line = |side, flow| {
+            let mut scene = crate::Scene::new();
+            crate::PaintCx::new(&mut scene, &theme).drop_indicator(bounds, side, flow);
+            scene
+                .iter()
+                .find_map(|c| match c {
+                    crate::DrawCommand::Rect(r) => Some(r.rect),
+                    _ => None,
+                })
+                .expect("a line is drawn")
+        };
+        let after_in_row = line(DropSide::After, Flow::Right);
+        assert!(
+            after_in_row.size.h > after_in_row.size.w,
+            "standing up in a row"
+        );
+        assert!(
+            after_in_row.loc.x > 190.0,
+            "on the right edge: {after_in_row:?}"
+        );
+        let before_in_row = line(DropSide::Before, Flow::Right);
+        assert!(
+            before_in_row.loc.x < 101.0,
+            "on the left edge: {before_in_row:?}"
+        );
+        let after_in_column = line(DropSide::After, Flow::Down);
+        assert!(
+            after_in_column.size.w > after_in_column.size.h,
+            "lying down in a column"
+        );
+        assert!(
+            after_in_column.loc.y > 35.0,
+            "on the bottom edge: {after_in_column:?}"
+        );
     }
 
     #[test]

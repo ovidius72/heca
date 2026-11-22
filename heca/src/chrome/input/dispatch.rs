@@ -201,20 +201,16 @@ pub(crate) fn drain_pending_drops(state: &mut crate::app_state::AppState) {
         // decides it — reading the modifier again here is what let the swap outline promise
         // something this code then did not do.
         let swap = dropped.action.is_swap();
-        match source {
-            ChromeDragItem::Pane(pane_id) => {
-                let Some((ws_idx, _, _)) = crate::find_pane_location(&state.session, pane_id)
-                else {
-                    continue;
-                };
-                let row = pane_drop_row(state, target).map(|row| (row, dropped.side));
-                crate::mouse::surface_left::accept_drop(state, pane_id, ws_idx, swap, row);
-            }
-            ChromeDragItem::Column { ws, col } => {
-                crate::mouse::release::column_drop(state, ws, col, swap, target, dropped.side);
-            }
-            // A workspace is a drop target only — nothing picks one up.
-            ChromeDragItem::Workspace { .. } => {}
+        // **What the drop means is the dock's own knowledge**, beside the rows that declare the
+        // drag (`providers/workspaces/drop.rs`). It answers with an action; this only posts it.
+        if let Some(action) =
+            crate::providers::workspaces::drop_action(state, source, target, dropped.side, swap)
+        {
+            crate::mouse::dispatch_drop(
+                state,
+                crate::app::interaction::InteractionSource::MouseLeftSidebar,
+                action,
+            );
         }
     }
 }

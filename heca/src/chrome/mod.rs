@@ -27,7 +27,7 @@ pub(crate) use input::dispatch::{
     cancel_every_tree, deliver, dispatch_surface_pointer, drag_in_flight, drain_pending_drops,
     drain_pending_menus, next_redraw_across_trees, open_declared_menu_for_focus,
 };
-pub(crate) use input::drag::{ChromeDragItem, DragItemRegistry, pane_drop_row};
+pub(crate) use input::drag::{ChromeDragItem, DragItemRegistry};
 pub(crate) use input::emitter::layer_emitter;
 pub use input::emitter::{ChromeIntentEmitter, fires, picks};
 pub(crate) use input::identity::warn_author;

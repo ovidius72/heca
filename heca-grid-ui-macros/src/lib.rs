@@ -170,7 +170,9 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
         "usize" => quote!(value.as_f32().map(|v| v.max(0.0) as usize)),
         "u16" => quote!(value.as_f32().map(|v| v.max(0.0) as u16)),
         "String" => quote!(value.as_text().map(::std::string::ToString::to_string)),
-        t if t.contains("Into<String>") => {
+        // A name, or a builder that also takes an optional one (`IntoName`): static data always
+        // brings a name, which is the `Some` half.
+        t if t.contains("Into<String>") || t.contains("IntoName") => {
             quote!(value.as_text().map(::std::string::ToString::to_string))
         }
         t if t.starts_with('&') || t.contains("dyn") || t.contains("implFn") => return None,

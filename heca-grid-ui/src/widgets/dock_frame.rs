@@ -378,10 +378,15 @@ impl DockFrame {
     /// ```ignore
     /// DockFrame::new("Lobby").grip_glyph("≡")
     /// ```
+    ///
+    /// Takes an `Option` too: `None` keeps the glyph it has, so a frame that is only sometimes a
+    /// reorderable row needs no branch.
     #[heca_grid_ui_macros::prop]
-    pub fn grip_glyph(mut self, glyph: impl Into<String>) -> Self {
-        self.grip_glyph = glyph.into();
-        self.build_toggle();
+    pub fn grip_glyph(mut self, glyph: impl crate::builders::IntoName) -> Self {
+        if let Some(glyph) = glyph.into_name() {
+            self.grip_glyph = glyph;
+            self.build_toggle();
+        }
         self
     }
 

@@ -811,4 +811,10 @@ fn the_grip_shows_the_glyph_it_is_given() {
         handle.iter().any(|t| t == "≡") && !handle.iter().any(|t| t == "⠿"),
         "its own glyph: {handle:?}"
     );
+    let mut kept = Vec::new();
+    labels(&DockFrame::new("Lobby").grip_glyph(None::<&str>), &mut kept);
+    assert!(
+        kept.iter().any(|t| t == "⠿"),
+        "None keeps the glyph it has: {kept:?}"
+    );
 }

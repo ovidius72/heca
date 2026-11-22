@@ -56,7 +56,7 @@ pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPoi
     let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
     update_drag_over(
         root,
-        hit.as_ref().map(|h| (h.path.clone(), h.side)),
+        hit.as_ref().map(|h| (h.path.clone(), h.side, h.flow)),
         &item,
         raw,
     );
@@ -143,14 +143,14 @@ pub(super) fn announce(root: &mut dyn Component, source: &[usize], ev: &Event) {
 /// Move the "a drag is over me" flag to `now`, emitting enter/leave/over as it goes.
 pub(super) fn update_drag_over(
     root: &mut dyn Component,
-    now: Option<(Path, DropSide)>,
+    now: Option<(Path, DropSide, crate::drag::Flow)>,
     item: &str,
     raw: &RawPointer,
 ) {
     let previous = drag_over_path(root);
     // **The node the walk found, not a second search for its name.** Two seatings of one container
     // give their rows the same name, so a search lights whichever comes first — the other sidebar.
-    let current = now.as_ref().map(|(path, _)| path.clone());
+    let current = now.as_ref().map(|(path, _, _)| path.clone());
     if previous != current
         && let Some(path) = previous.clone()
     {
@@ -159,8 +159,11 @@ pub(super) fn update_drag_over(
         let _ = deliver_path(root, &path, &ev);
     }
     if let Some(path) = current {
-        let side = now.map_or(DropSide::Onto, |(_, s)| s);
+        let (side, flow) = now.map_or((DropSide::Onto, crate::drag::Flow::Down), |(_, s, f)| {
+            (s, f)
+        });
         node_at(root, &path).base().pointer.drag_side.set(side);
+        node_at(root, &path).base().pointer.drag_flow.set(flow);
         if previous.as_ref() != Some(&path) {
             node_at(root, &path).base().pointer.drag_over.set(true);
             let ev = Event::DragEnter(drag_event(item, raw, side));

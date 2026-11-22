@@ -50,27 +50,3 @@ impl DragItemRegistry {
         self.items.values().cloned().collect()
     }
 }
-
-/// **What a pane can be dropped onto**, as the workspaces component names it.
-///
-/// One translation, so the two callers that need it — the pointer path and the drop the framework
-/// hands back — cannot disagree about what a pane landing on a workspace means. A column is not a
-/// pane target: pane-into-column placement does not exist yet, and a pane dropped there falls
-/// through to "re-add to the active workspace".
-pub(crate) fn pane_drop_row(
-    state: &crate::app_state::AppState,
-    item: ChromeDragItem,
-) -> Option<crate::providers::workspaces::WorkspaceRow> {
-    match item {
-        ChromeDragItem::Pane(pane_id) => {
-            Some(crate::providers::workspaces::WorkspaceRow::Pane { pane_id })
-        }
-        // Dropping a pane on a workspace's header or empty area moves it INTO that workspace — the
-        // only way to reach an *empty* one, which has no pane card to aim at.
-        ChromeDragItem::Workspace { ws } => {
-            let ws_id = state.session.workspaces.get(ws).map(|w| w.id)?;
-            Some(crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws, ws_id })
-        }
-        ChromeDragItem::Column { .. } => None,
-    }
-}
