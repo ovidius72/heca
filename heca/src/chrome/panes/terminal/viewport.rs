@@ -3,7 +3,7 @@
 //! They are children of the [`Terminal`](super::Terminal), so they are placed by the layout, drawn
 //! by the same walk that draws the terminal, and hear the pointer from the same tree. Nothing
 //! outside positions, paints or routes them; the host only says what the viewport looks like
-//! ([`Viewport`]) and what a click means ([`ScrollIntents`]).
+//! ([`Viewport`]) and what a click means ([`ScrollTarget`]).
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -77,13 +77,43 @@ impl Viewport {
     }
 }
 
-/// What a click on the controls means, said by whoever owns the terminal. Two callbacks, as one
-/// group — the seams a component binds travel together.
-pub(crate) struct ScrollIntents {
-    /// The chip was clicked: back to the live bottom.
-    pub to_bottom: Box<dyn Fn()>,
-    /// The thumb moved: scroll to this many rows above the live bottom.
-    pub to_offset: Box<dyn Fn(usize)>,
+/// **Which terminal the scrollback controls scroll** — and the pane to focus first, if one owns it.
+/// The controls name their actions from this; nothing is handed in to send them.
+pub(crate) struct ScrollTarget {
+    pub pane: Option<heca_core::layout::PaneId>,
+    pub terminal: super::TerminalId,
+}
+
+impl ScrollTarget {
+    /// The chip was clicked: back to the live bottom, after focusing the pane.
+    fn to_bottom(&self) -> Vec<crate::chrome::Intent> {
+        self.after_focus(
+            crate::chrome::Intent::new("scroll_to_bottom").arg("terminal", self.terminal_arg()),
+        )
+    }
+
+    /// The thumb moved: scroll to `rows` above the live bottom, after focusing the pane.
+    fn to_offset(&self, rows: usize) -> Vec<crate::chrome::Intent> {
+        self.after_focus(
+            crate::chrome::Intent::new("scroll_to_offset")
+                .arg("rows", crate::chrome::PropValue::Int(rows as i64))
+                .arg("terminal", self.terminal_arg()),
+        )
+    }
+
+    fn terminal_arg(&self) -> crate::chrome::PropValue {
+        crate::chrome::PropValue::Int(self.terminal.0 as i64)
+    }
+
+    /// `then`, preceded by focusing the owning pane, if there is one — so the scroll is of the
+    /// terminal the user is now on.
+    fn after_focus(&self, then: crate::chrome::Intent) -> Vec<crate::chrome::Intent> {
+        let focus = self.pane.map(|pane| {
+            crate::chrome::Intent::new("focus_pane")
+                .arg("pane_id", crate::chrome::PropValue::Int(pane.0 as i64))
+        });
+        focus.into_iter().chain([then]).collect()
+    }
 }
 
 /// Where a terminal keeps what a click means, shared by every node placed for it.
@@ -123,9 +153,11 @@ impl Controls {
     /// container's own top-right corner — a layout, not a measurement.
     pub(super) fn build(intents: &IntentSlot) -> (Self, [heca_grid_ui::WidgetModel; 2]) {
         let to_bottom = intents.clone();
-        let mut badge = BadgeButton::accent("0 lines above").on_click(move |_| {
+        let mut badge = BadgeButton::accent("0 lines above").on_click(move |ev| {
             if let Some(i) = to_bottom.borrow().as_ref() {
-                (i.scroll.to_bottom)();
+                for intent in i.scroll.to_bottom() {
+                    ev.dispatch(intent);
+                }
             }
         });
         badge.base_mut().visible.set(false);
@@ -138,11 +170,11 @@ impl Controls {
             if let SignalData::Float(top) = action.data
                 && let Some(i) = to_offset.borrow().as_ref()
             {
-                (i.scroll.to_offset)(rows_above(
-                    content.get_untracked(),
-                    viewport.get_untracked(),
-                    top,
-                ));
+                // Handed the thumb's position, not the event, so it sends — to the same place.
+                let rows = rows_above(content.get_untracked(), viewport.get_untracked(), top);
+                for intent in i.scroll.to_offset(rows) {
+                    heca_grid_ui::intent::send(intent);
+                }
             }
         });
         bar.base_mut().visible.set(false);

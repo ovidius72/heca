@@ -356,6 +356,10 @@ pub enum WmAction {
     CollapseCurrentWorkspace,
     ExpandCurrentWorkspace,
     ToggleCurrentWorkspaceCollapsed,
+    /// Fold or unfold one workspace's row in the sidebar tree — the fold control of that row.
+    ToggleWorkspaceCollapsed {
+        ws_idx: usize,
+    },
     CollapseCurrentColumn,
     ExpandCurrentColumn,
     ToggleCurrentColumnCollapsed,
@@ -435,8 +439,11 @@ pub enum WmAction {
     ScrollPageDown,
     /// Scroll to the top of scrollback (immediate).
     ScrollToTop,
-    /// Scroll to the live bottom (immediate).
-    ScrollToBottom,
+    /// Scroll to the live bottom (immediate). `terminal` names one terminal by its id — the
+    /// scrollback chip of the terminal clicked; `None` is the terminal the keyboard is on.
+    ScrollToBottom {
+        terminal: Option<u64>,
+    },
     /// Scroll the focused chrome container one page **left**.
     ///
     /// The four horizontal variants have no terminal half: a pane's scrollback has one axis, so
@@ -453,6 +460,8 @@ pub enum WmAction {
     /// Used by the GUI scrollbar / RPC; no default keybinding.
     ScrollToOffset {
         rows: usize,
+        /// One terminal by its id — the scrollbar dragged; `None` is the keyboard's.
+        terminal: Option<u64>,
     },
 
     // ── Selection (host capability, reusable across pane types) ──

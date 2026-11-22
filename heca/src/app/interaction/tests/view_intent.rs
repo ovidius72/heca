@@ -59,7 +59,13 @@ fn intent_args_build_the_same_parameterized_action_as_a_config_binding() {
     let from_config = crate::input::resolve_action("scroll_to_offset", &config_args);
 
     assert_eq!(from_intent, from_config);
-    assert_eq!(from_intent, Some(WmAction::ScrollToOffset { rows: 12 }));
+    assert_eq!(
+        from_intent,
+        Some(WmAction::ScrollToOffset {
+            rows: 12,
+            terminal: None
+        })
+    );
 }
 
 /// A unit built-in with no args still resolves by name (the `action_from_name` fallback), so the
@@ -74,4 +80,38 @@ fn a_unit_builtin_still_resolves_by_name_with_no_args() {
         crate::input::resolve_action("reload_config", &args),
         Some(WmAction::ReloadConfig)
     );
+}
+
+/// **Whatever door a named action is called through, it reads its arguments as declared** — here a
+/// palette call to a dock's action, which carries its value as text, and a plain view intent. An
+/// action the catalog does not know is left as it was.
+#[test]
+fn a_window_dispatch_hands_the_action_its_declared_types() {
+    use crate::chrome::PropValue;
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let to_dock = InteractionIntent::FocusContainerThenAction {
+        container: "workspaces".into(),
+        action: ViewIntent::new("scroll_to_offset").arg("rows", PropValue::Text("4".into())),
+    };
+    let InteractionIntent::FocusContainerThenAction { action, .. } =
+        super::super::dispatch::typed(&catalog, to_dock)
+    else {
+        panic!("the intent keeps its kind");
+    };
+    assert_eq!(action.args.get("rows"), Some(&PropValue::Int(4)));
+
+    let view = InteractionIntent::View(
+        ViewIntent::new("toggle_workspace_collapsed").arg("ws_idx", PropValue::Text("1".into())),
+    );
+    let InteractionIntent::View(action) = super::super::dispatch::typed(&catalog, view) else {
+        panic!("the intent keeps its kind");
+    };
+    assert_eq!(action.args.get("ws_idx"), Some(&PropValue::Int(1)));
+
+    let unknown =
+        InteractionIntent::View(ViewIntent::new("no.such").arg("n", PropValue::Text("1".into())));
+    let InteractionIntent::View(action) = super::super::dispatch::typed(&catalog, unknown) else {
+        panic!("the intent keeps its kind");
+    };
+    assert_eq!(action.args.get("n"), Some(&PropValue::Text("1".into())));
 }

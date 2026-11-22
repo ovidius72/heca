@@ -37,17 +37,16 @@ pub(super) fn shipped_keys() -> ExposeDeleteKeys {
 pub(super) type Sink =
     std::rc::Rc<std::cell::RefCell<Vec<crate::app::interaction::InteractionIntent>>>;
 
-/// The seams, wired to a sink instead of to the app.
+/// The seams, with what they send caught by a sink instead of reaching the app. A component built
+/// alone sits in no layer, so what it sends reaches the host's sink — this one.
 pub(super) fn callbacks() -> (ExposeCallbacks, Sink) {
     let sink: Sink = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
-    let emit: crate::chrome::ChromeIntentEmitter = {
-        let sink = sink.clone();
-        crate::chrome::ChromeIntentEmitter::of(
-            crate::app::interaction::InteractionSource::Keyboard,
-            move |_, i| sink.borrow_mut().push(i),
-        )
-    };
-    (super::callbacks(emit, shipped_keys()), sink)
+    let seen = sink.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| {
+        seen.borrow_mut()
+            .push(crate::app::interaction::InteractionIntent::View(intent))
+    });
+    (super::callbacks(shipped_keys()), sink)
 }
 
 /// The actions a sink saw, as `("name", [(arg, value)…])` with the args sorted — the shape an
@@ -127,4 +126,17 @@ pub(super) fn cards_bounds(root: &dyn Component) -> Option<heca_grid_ui::Rectang
 /// A default theme — every component reads all of its styling from one.
 pub(super) fn theme() -> GuiTheme {
     GuiTheme::default()
+}
+
+/// What choosing the card of `pane` sends, in order: focus it, hand the keyboard back, put the map
+/// away.
+pub(super) fn chose_pane(pane: i64) -> Vec<(String, Vec<(String, i64)>)> {
+    vec![
+        (
+            "focus_pane".to_string(),
+            vec![("pane_id".to_string(), pane)],
+        ),
+        ("unfocus_dock".to_string(), vec![]),
+        ("close_overlay".to_string(), vec![]),
+    ]
 }

@@ -158,7 +158,7 @@ fn candidate_allowed(
 /// Each surface answers from the emitter that built it, so there is nothing to keep in step:
 /// the chrome tree carries its emitter's source, a layer's is its own id, and a pane's pick is the
 /// keyboard gesture `chrome/pane/mod.rs` posts.
-fn pick_source(
+pub(super) fn pick_source(
     state: &crate::app_state::AppState,
     target: &HintTarget,
 ) -> crate::app::interaction::InteractionSource {

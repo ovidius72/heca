@@ -28,7 +28,7 @@ fn a_spec_with_a_lifetime_draws_a_countdown_bar() {
 
 #[test]
 fn toast_stack_is_overlay_active_only_when_it_has_toasts() {
-    use heca_grid_ui::{Component, ToastSpec, ToastStack};
+    use heca_grid_ui::{ToastSpec, ToastStack};
 
     let items = signal(Vec::<ToastSpec>::new());
     let mut stack = ToastStack::new(items);
@@ -179,7 +179,7 @@ fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
 /// never expired).
 #[test]
 fn a_held_countdown_resumes_when_the_pointer_leaves_the_card() {
-    use heca_grid_ui::{Component, ToastSpec, ToastStack};
+    use heca_grid_ui::{ToastSpec, ToastStack};
     use std::time::Duration;
 
     let hovered = signal(false);
@@ -391,4 +391,35 @@ fn a_toast_opens_hides_and_takes_no_space_while_closed() {
         0.0,
         "gone, it is gone"
     );
+}
+
+/// **A toast's × sends from its callback to the container that listens** — the stack hands the
+/// callback only the toast's id, and `send` takes it to the surface's listener, so the host needs
+/// no emitter in the callback.
+#[test]
+fn a_dismiss_sends_to_the_surface_that_listens() {
+    use heca_grid_ui::builders::EventExt;
+    use heca_grid_ui::{ToastSpec, ToastStack};
+    use heca_view::{Intent, PropValue};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    let items = signal(vec![ToastSpec::new(9, "Configuration reloaded")]);
+    let mut stack = ToastStack::new(items).on_dismiss(|id| {
+        heca_grid_ui::intent::send(Intent::new("dismiss").arg("id", PropValue::Int(id as i64)))
+    });
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
+    let heard: Rc<RefCell<Vec<Intent>>> = Rc::default();
+    let seen = heard.clone();
+    let mut surface = heca_grid_ui::Flex::column()
+        .on_dispatch(move |intent| seen.borrow_mut().push(intent))
+        .child(stack);
+    LayoutEngine::new().compute(&mut surface, Size::new(800.0, 600.0));
+    // The ×, found as the one thing on the card a pick can press (the card itself has no click).
+    let targets = heca_grid_ui::collect_hints(&surface);
+    assert_eq!(targets.len(), 1, "the × is the card's one target");
+    let _ = heca_grid_ui::click(&mut surface, &targets[0].0);
+    let heard = heard.borrow();
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0].action, "dismiss");
+    assert_eq!(heard[0].args.get("id"), Some(&PropValue::Int(9)));
 }

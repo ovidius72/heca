@@ -281,7 +281,7 @@ mod tests {
             ("PageUp", WmAction::ScrollPageUp),
             ("PageDown", WmAction::ScrollPageDown),
             ("Home", WmAction::ScrollToTop),
-            ("End", WmAction::ScrollToBottom),
+            ("End", WmAction::ScrollToBottom { terminal: None }),
             ("Alt+PageUp", WmAction::ScrollPageLeft),
             ("Alt+PageDown", WmAction::ScrollPageRight),
             ("Alt+Home", WmAction::ScrollToLeftEdge),

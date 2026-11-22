@@ -1,7 +1,7 @@
 //! Opening a dialog, or a panel from a description, as a layer.
 
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, EventExt as _, HintExt as _};
+use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, EventExt as _};
 use heca_view::ViewNode;
 
 use super::spec::{ModalResult, ModalSpec, OverlayId};
@@ -141,11 +141,13 @@ pub(super) fn build_modal_root(
         } else {
             ButtonVariant::Secondary
         };
-        let fire = id.submitter(action.id.clone(), emit);
-        let hint = fire.clone();
-        let button = Button::new(action.label.clone())
-            .variant(variant)
-            .on_click(move |_| fire());
+        // **The button names its answer**: `submit_overlay` with its id, for a click and its
+        // `prefix+/` letter alike. The dialog's layer listens, so the call is stamped with this
+        // dialog and answers it, whichever modal is in front.
+        let button = Button::new(action.label.clone()).variant(variant).on_press(
+            crate::chrome::Intent::new("submit_overlay")
+                .arg("action", crate::chrome::PropValue::Text(action.id.clone())),
+        );
         // Reactive validation: disable this button while a required form field is empty (blocks
         // blank submission). Binds the button's `disabled` signal to the field's live value.
         if let Some(field) = &action.disable_when_empty
@@ -158,7 +160,7 @@ pub(super) fn build_modal_root(
         // declaration goes on the button itself, which is what `on_hint` is for (AGENTS §
         // 5a): a `KeyHint` wrapper used to carry it, costing the button a second pick target.
         dialog = dialog.action(crate::chrome::action_tooltip(
-            button.on_hint(hint),
+            button,
             &action.id,
             &action.label,
             shortcuts,

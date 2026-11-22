@@ -303,6 +303,11 @@ pub trait Component {
         false
     }
 
+    /// **Show that this control was used** — its press flash. Called by the framework when this
+    /// control is the one that uses an event, so a row never flashes for a click a button inside
+    /// it took. Nothing by default.
+    fn show_press(&mut self) {}
+
     /// **Whether this control takes the press for its whole box** (one click target), so its
     /// composed content never sees it. `true` for a control by default; a control built from other
     /// controls — a notification card with its own buttons — says `false`, so those still take

@@ -10,9 +10,9 @@ fn the_handle_runs_and_kills_by_id() {
     let seen = told.clone();
     let t = Terminal::unbound();
     t.bind(Seams {
-        scroll: ScrollIntents {
-            to_bottom: Box::new(|| {}),
-            to_offset: Box::new(|_| {}),
+        scroll: super::super::super::viewport::ScrollTarget {
+            pane: None,
+            terminal: super::super::super::TerminalId(1),
         },
         input: Box::new(|_| {}),
         command: Box::new(move |id, c| seen.borrow_mut().push((id.0, c))),

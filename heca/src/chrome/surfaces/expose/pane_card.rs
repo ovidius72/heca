@@ -305,7 +305,9 @@ fn delete_keys(
 mod tests {
     use super::*;
     use crate::chrome::surfaces::expose::model::ExposePane;
-    use crate::chrome::surfaces::expose::testing::{actions, callbacks, lay_out, theme};
+    use crate::chrome::surfaces::expose::testing::{
+        actions, callbacks, chose_pane, lay_out, theme,
+    };
     use heca_grid_ui::event::Event;
     use heca_grid_ui::reactive::SignalUpdate;
 
@@ -557,22 +559,20 @@ mod tests {
         };
 
         press("x");
+        // The cursor is handed to the neighbour FIRST, while it can still be resolved, then the
+        // card's pane is closed.
         assert_eq!(
             actions(&sink),
-            vec![(
-                "close_pane_by_id".to_string(),
-                vec![("pane_id".to_string(), 7)]
-            )],
-        );
-        // …and the cursor was handed to the neighbour FIRST, while it could still be resolved.
-        assert!(
-            matches!(
-                sink.borrow().first(),
-                Some(crate::app::interaction::InteractionIntent::ExposeCursor { pane_id })
-                    if *pane_id == PaneId(8)
-            ),
-            "the neighbour takes the cursor before the card goes: {:?}",
-            sink.borrow(),
+            vec![
+                (
+                    "expose_cursor_to".to_string(),
+                    vec![("pane_id".to_string(), 8)]
+                ),
+                (
+                    "close_pane_by_id".to_string(),
+                    vec![("pane_id".to_string(), 7)]
+                ),
+            ],
         );
 
         sink.borrow_mut().clear();
@@ -628,12 +628,11 @@ mod tests {
                 }),
             );
         }
-        let got = format!("{:?}", sink.borrow());
-        assert!(
-            got.contains("FocusPaneThenAction") && got.contains("PaneId(7)"),
-            "it focuses its own pane: {got}",
+        assert_eq!(
+            actions(&sink),
+            chose_pane(7),
+            "it focuses its own pane, hands the keyboard back and puts the map away",
         );
-        assert!(got.contains("CloseOverlay"), "and puts the map away: {got}");
     }
 
     /// **Every card declares a pick, and it chooses that card's pane**.
@@ -653,10 +652,10 @@ mod tests {
             heca_grid_ui::fire_hint(root.as_mut(), &hints[0].0),
             "and the declaration runs",
         );
-        let got = format!("{:?}", sink.borrow());
-        assert!(
-            got.contains("FocusPaneThenAction") && got.contains("PaneId(7)"),
-            "the pick chooses this card's pane, exactly as a click does: {got}",
+        assert_eq!(
+            actions(&sink),
+            chose_pane(7),
+            "the pick chooses this card's pane, exactly as a click does",
         );
     }
     /// **A card is ONE pick target, not two.**

@@ -26,6 +26,7 @@
 //! Neither callback touches `AppState` — each builds an [`Intent`] and fires it through the
 //! surface's own emitter.
 
+use heca_grid_ui::builders::EventExt as _;
 use heca_grid_ui::widgets::{KeyHintGroup, ToastPosition, ToastStack};
 use heca_view::{Intent, PropValue};
 
@@ -70,31 +71,31 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
         // **How much of a message a card shows is the user's to say** — a path must show whole, so
         // the card wraps and this only stops a runaway message from covering the window.
         .max_lines_signal(state.notification_max_lines)
-        .on_dismiss({
-            let emit = emit.clone();
-            move |toast_id| {
-                let intent = Intent::new("notification_dismiss_one")
-                    .arg("id", PropValue::Int(toast_id as i64));
-                emit.fire_intent(intent);
-            }
+        .on_dismiss(|toast_id| {
+            heca_grid_ui::intent::send(
+                Intent::new("notification_dismiss_one").arg("id", PropValue::Int(toast_id as i64)),
+            );
         })
-        .on_action({
-            let emit = emit.clone();
-            move |toast_id, key| {
-                // The store owns the mapping from `key` back to a real `Intent`
-                // (`NotificationRuntime::action_intent_for_visible`) — it cannot be resolved here,
-                // at mount time, because the notification that will eventually carry it does not
-                // exist yet. So this names the relay action, which does the lookup at fire time
-                // and re-dispatches the real Intent — see handle_notification_action_relay.
-                let intent = Intent::new("notification_action_relay")
+        .on_action(|toast_id, key| {
+            // The store owns the mapping from `key` back to a real `Intent`
+            // (`NotificationRuntime::action_intent_for_visible`) — it cannot be resolved here,
+            // at mount time, because the notification that will eventually carry it does not
+            // exist yet. So this names the relay action, which does the lookup at fire time
+            // and re-dispatches the real Intent — see handle_notification_action_relay.
+            heca_grid_ui::intent::send(
+                Intent::new("notification_action_relay")
                     .arg("id", PropValue::Int(toast_id as i64))
-                    .arg("key", PropValue::Text(key.to_string()));
-                emit.fire_intent(intent);
-            }
+                    .arg("key", PropValue::Text(key.to_string())),
+            );
         });
 
+    // **The stack listens for its cards**: what a toast's × or button sends goes out as this
+    // surface's gesture — the same source the picker reads for it. Seated here, once; the cards'
+    // callbacks only name their action.
     let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
-        KeyHintGroup::new(stack).open_when(state.notification_pick_open),
+        KeyHintGroup::new(stack)
+            .open_when(state.notification_pick_open)
+            .on_dispatch(move |intent| emit.fire_intent(intent)),
     );
     // **It says what it is, like every other surface** — and what it says is "nothing".
     // The stack spans the window because that is how it *positions* its cards in

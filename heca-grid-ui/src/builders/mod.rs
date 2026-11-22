@@ -39,7 +39,7 @@ pub(crate) use bound::{Bound, apply as apply_bound};
 pub use bound::{BoundChildren, MapChildren};
 pub use children::{IntoChildren, IntoComponent, IntoContextMenu, Parent};
 pub use drag::DragExt;
-pub use events::EventExt;
+pub use events::{EventExt, listen, listen_to_dispatch};
 pub use flash::FlashExt;
 pub use hint::HintExt;
 pub use identity::{IdentityExt, IntoKey};

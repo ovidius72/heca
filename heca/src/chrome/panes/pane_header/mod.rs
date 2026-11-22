@@ -41,7 +41,6 @@ impl HeaderEnv {
             programs: state.client.programs.clone(),
             shortcuts: state.action_shortcuts.clone(),
             catalog: state.action_catalog.clone(),
-            event_proxy: state.event_proxy.clone(),
         })
     }
 }

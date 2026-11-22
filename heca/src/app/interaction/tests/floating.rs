@@ -335,7 +335,7 @@ fn floating_allows_focused_pane_local_via_keyboard() {
         WmAction::ScrollPageUp,
         WmAction::ScrollPageDown,
         WmAction::ScrollToTop,
-        WmAction::ScrollToBottom,
+        WmAction::ScrollToBottom { terminal: None },
         // Selection (host capability, Task 02) — allowed in both domains.
         WmAction::EnterSelectionMode,
         WmAction::SelectionLeft,

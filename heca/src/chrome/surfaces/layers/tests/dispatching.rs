@@ -46,3 +46,19 @@ fn a_named_action_inside_a_layer_goes_out_as_that_layers_gesture() {
         other => panic!("the row's own action went out: {other:?}"),
     }
 }
+
+/// **A layer is found again from the key its widgets' calls carry** — what lets a dialog's
+/// `submit_overlay` answer that dialog rather than whichever modal is in front.
+#[test]
+fn a_layer_is_found_from_its_surface_key() {
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+    for raw in [3, 4] {
+        let root = heca_grid_ui::WidgetModel::new(Flex::column());
+        reg.insert(LayerId(raw), None, LayerKind::OnDemand, root, &mut window);
+    }
+    for raw in [3, 4] {
+        let key = reg.surface_key(LayerId(raw));
+        assert_eq!(reg.layer_of_surface(key), Some(LayerId(raw)));
+    }
+}

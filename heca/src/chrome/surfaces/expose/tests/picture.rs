@@ -10,14 +10,9 @@ fn a_row_carries_no_workspace_label() {
     let s = session();
     let rows = model(s.l(), |p| p.title.clone(), false);
     let theme = GuiTheme::default();
-    let emit: crate::chrome::ChromeIntentEmitter = crate::chrome::ChromeIntentEmitter::of(
-        crate::app::interaction::InteractionSource::Keyboard,
-        |_, _| {},
-    );
     let mut root = map(
         &rows,
         &theme,
-        emit,
         None,
         &LayoutOptions::default(),
         &shipped_keys(),
@@ -81,14 +76,9 @@ fn the_assembled_map_stays_inside_the_window() {
         let s = session();
         let rows = model(s.l(), |p| p.title.clone(), false);
         let theme = GuiTheme::default();
-        let emit: crate::chrome::ChromeIntentEmitter = crate::chrome::ChromeIntentEmitter::of(
-            crate::app::interaction::InteractionSource::Keyboard,
-            |_, _| {},
-        );
         let mut root = map(
             &rows,
             &theme,
-            emit,
             Some(PaneId(1)),
             &LayoutOptions::default(),
             &shipped_keys(),
@@ -122,14 +112,9 @@ fn the_map_owns_its_picker_and_every_card_is_a_target() {
     let s = session();
     let rows = model(s.l(), |p| p.title.clone(), false);
     let theme = GuiTheme::default();
-    let emit: crate::chrome::ChromeIntentEmitter = crate::chrome::ChromeIntentEmitter::of(
-        crate::app::interaction::InteractionSource::Keyboard,
-        |_, _| {},
-    );
     let mut root = map(
         &rows,
         &theme,
-        emit,
         Some(PaneId(1)),
         &LayoutOptions::default(),
         &shipped_keys(),

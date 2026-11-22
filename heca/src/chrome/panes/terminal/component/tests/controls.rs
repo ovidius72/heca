@@ -49,16 +49,21 @@ fn the_chip_never_leaves_the_terminal_it_belongs_to() {
     }
 }
 
-/// Clicking the chip means "back to the live bottom" — said to whoever bound the terminal.
+/// What the controls send, by name, whoever ends up running it.
+fn sent() -> Rc<RefCell<Vec<crate::chrome::Intent>>> {
+    let sent = Rc::new(RefCell::new(Vec::new()));
+    let seen = sent.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| seen.borrow_mut().push(intent));
+    sent
+}
+
+/// Clicking the chip means "back to the live bottom": focus the terminal's pane, then
+/// `scroll_to_bottom` for this terminal, by name.
 #[test]
 fn clicking_the_chip_asks_for_the_live_bottom() {
-    let to_bottom = Rc::new(Cell::new(0));
+    let sent = sent();
     let t = Terminal::unbound();
-    let seen = to_bottom.clone();
-    t.bind(seams(ScrollIntents {
-        to_bottom: Box::new(move || seen.set(seen.get() + 1)),
-        to_offset: Box::new(|_| {}),
-    }));
+    t.bind(seams());
     t.show(&scrolled(5));
     let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     let rect = chip(&painted(root.as_ref())).expect("chip is shown");
@@ -72,19 +77,25 @@ fn clicking_the_chip_asks_for_the_live_bottom() {
     ] {
         let _ = heca_grid_ui::dispatch(root.as_mut(), &ev);
     }
-    assert_eq!(to_bottom.get(), 1);
+    let sent = sent.borrow();
+    let names: Vec<&str> = sent.iter().map(|i| i.action.as_str()).collect();
+    assert_eq!(names, ["focus_pane", "scroll_to_bottom"]);
+    assert_eq!(
+        sent[0].args.get("pane_id"),
+        Some(&crate::chrome::PropValue::Int(3))
+    );
+    assert_eq!(
+        sent[1].args.get("terminal"),
+        Some(&crate::chrome::PropValue::Int(7))
+    );
 }
 
 /// Dragging the thumb asks to scroll to the row it points at.
 #[test]
 fn pressing_the_scrollbar_asks_to_scroll_to_where_it_points() {
-    let asked = Rc::new(RefCell::new(Vec::new()));
+    let sent = sent();
     let t = Terminal::unbound();
-    let seen = asked.clone();
-    t.bind(seams(ScrollIntents {
-        to_bottom: Box::new(|| {}),
-        to_offset: Box::new(move |rows| seen.borrow_mut().push(rows)),
-    }));
+    t.bind(seams());
     t.show(&scrolled(50));
     let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), 300.0, 200.0);
     // The bar is on the right edge, under the chip; press in its upper half, below the chip.
@@ -96,7 +107,16 @@ fn pressing_the_scrollbar_asks_to_scroll_to_where_it_points() {
         ),
         Handled::Yes
     );
-    let rows = asked.borrow().last().copied().expect("asked to scroll");
+    let rows = sent
+        .borrow()
+        .iter()
+        .rev()
+        .find(|i| i.action == "scroll_to_offset")
+        .and_then(|i| match i.args.get("rows") {
+            Some(crate::chrome::PropValue::Int(rows)) => Some(*rows),
+            _ => None,
+        })
+        .expect("asked to scroll");
     assert!(
         rows > 50,
         "the upper half of the track is far up the history: {rows}"

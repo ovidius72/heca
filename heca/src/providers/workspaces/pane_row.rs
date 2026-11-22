@@ -90,7 +90,6 @@ impl PaneRow<'_> {
         // This row kind's declared click, by name — so a menu entry, a keybinding or RPC can fire the
         // same one. A **pick** is declared separately, on the wrapper below: it is a
         // different gesture and this row answers it differently.
-        let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
         let icon_widget = Icon::new(info.icon).color(theme.colors.foreground);
         let icon_signal = icon_widget.glyph_signal();
         // The pane's name — one label. Its colour follows the readable content colour
@@ -204,21 +203,18 @@ impl PaneRow<'_> {
             // card's own `on_activate`. A pick is a third, separate declaration — the `on_hint`
             // below — because a click, an activation and a pick are three different acts.
             .on_click({
-                let emit = seams.emit.clone();
                 let mount = seams.mount.to_string();
                 let key = pane_key(pane_id);
-                move |_| {
-                    emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
-                        crate::input::WmAction::FocusDock {
-                            dock: Some(mount.clone()),
-                        },
-                    ));
-                    emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
-                        crate::input::WmAction::CursorTo {
-                            mount: mount.clone(),
-                            key: key.clone(),
-                        },
-                    ));
+                move |ev| {
+                    use heca_view::PropValue::Text;
+                    ev.dispatch(
+                        crate::chrome::Intent::new("focus_dock").arg("dock", Text(mount.clone())),
+                    );
+                    ev.dispatch(
+                        crate::chrome::Intent::new("cursor_to")
+                            .arg("mount", Text(mount.clone()))
+                            .arg("key", Text(key.clone())),
+                    );
                 }
             })
             // **This row's menu, built where this row's data is.** No `context_path`, no registered
@@ -241,7 +237,9 @@ impl PaneRow<'_> {
             .draggable_as("pane")
             .accepts(["pane"])
             // Click / Enter / Space run the row's declared click.
-            .on_click(move |_| press())
+            // The card's own press, named — seated on this dock by the dock's listener. Not
+            // `on_press`: the row's pick is its own declaration (`on_hint` below).
+            .on_click(move |ev| ev.dispatch(pane_row_press(pane_id)))
             .child(content);
         // **Every state that moves with focus, published in the same breath as its initial value.**
         // See this module's note: a bool read at build time freezes, because the tree does not
