@@ -252,7 +252,7 @@ impl ServerState {
 
     /// **The notifications on show**, as plain serializable data — the projection the server sends
     /// a window, which builds its own toasts from it
-    /// ([`toast_spec`](crate::notification::toast_spec)). Sent on attach and whenever
+    /// ([`toasts_for`](crate::notification::toasts_for)). Sent on attach and whenever
     /// [`Change::NotificationsChanged`] is produced.
     /// The projection for the window on connection `client`: session-wide notifications plus any
     /// addressed to that window. Sent to each client on attach and on every

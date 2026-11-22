@@ -176,3 +176,40 @@ fn only_a_queued_notification_has_no_record() {
         NotificationDraft::new("Waiting").build(NotificationId::from_raw(51), Instant::now());
     assert!(notification_record(&queued, Instant::now(), std::time::SystemTime::now()).is_none());
 }
+
+/// **A card about the pane in focus is held back** — the user is looking at it — while a card about
+/// another pane, or about no pane, is shown.
+#[test]
+fn a_card_about_the_focused_pane_is_held_back() {
+    use heca_core::layout::PaneId;
+    let view = |id: u64, pane: Option<PaneId>| {
+        let mut draft = NotificationDraft::new(format!("n{id}"));
+        if let Some(pane) = pane {
+            draft = draft.about_pane(pane);
+        }
+        let mut notification = draft.build(NotificationId::from_raw(id), Instant::now());
+        notification.placement = NotificationPlacement::Visible {
+            visible_since: Instant::now(),
+            expires_at: None,
+        };
+        notification_view(&notification).expect("visible")
+    };
+    let views = [
+        view(1, Some(PaneId(7))),
+        view(2, Some(PaneId(8))),
+        view(3, None),
+    ];
+    let titles = |focused| -> Vec<String> {
+        toasts_for(&views, focused)
+            .into_iter()
+            .map(|toast| toast.title)
+            .collect()
+    };
+    assert_eq!(
+        titles(Some(PaneId(7))),
+        ["n2", "n3"],
+        "the one about the focused pane is held back"
+    );
+    assert_eq!(titles(Some(PaneId(9))), ["n1", "n2", "n3"]);
+    assert_eq!(titles(None), ["n1", "n2", "n3"]);
+}

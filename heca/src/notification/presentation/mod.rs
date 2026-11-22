@@ -31,6 +31,10 @@ pub struct NotificationView {
     pub auto_dismiss: Option<Duration>,
     /// Every action the card offers, in order; each dispatched by its own `intent.action` name.
     pub actions: Vec<NotificationAction>,
+    /// The pane it is about, when it is about one: a window holds the card back while that pane is
+    /// the one it has focused.
+    #[serde(default)]
+    pub pane: Option<heca_core::layout::PaneId>,
 }
 
 impl NotificationView {
@@ -66,6 +70,7 @@ fn entry_view(notification: &AppNotification) -> NotificationView {
             NotificationLifetime::Sticky => None,
         },
         actions: notification.actions.clone(),
+        pane: notification.pane,
     }
 }
 
@@ -73,6 +78,20 @@ fn entry_view(notification: &AppNotification) -> NotificationView {
 ///
 /// This is the window's half of the projection — the only place a `ToastSpec` is built from a
 /// notification, so the cut, reflow and action wiring live in one place. Keyed by each action's
+/// **The cards a window shows** from the notifications it was sent, with `focused` the pane it has
+/// in focus: a card about that pane is held back — the user is looking at it — and stays in the
+/// history.
+pub fn toasts_for(
+    views: &[NotificationView],
+    focused: Option<heca_core::layout::PaneId>,
+) -> Vec<ToastSpec> {
+    views
+        .iter()
+        .filter(|view| view.pane.is_none() || view.pane != focused)
+        .map(toast_spec)
+        .collect()
+}
+
 /// own `intent.action` name, which is what `on_action(id, key)` reports back.
 pub fn toast_spec(view: &NotificationView) -> ToastSpec {
     let mut spec = ToastSpec::new(view.id.as_u64(), view.title.clone())

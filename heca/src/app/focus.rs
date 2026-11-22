@@ -109,6 +109,9 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     notify_focus_changed(state, prev_focused, state.focused_pane);
     if prev_focused != state.focused_pane {
         crate::app::tree_focus::give_focused_pane_the_keyboard(state);
+        // A card held back because it was about the pane in focus may now be worth showing, and
+        // one about the newly focused pane is not.
+        state.rebuild_toasts();
     }
 
     let focus_changed = prev_focused != state.focused_pane;

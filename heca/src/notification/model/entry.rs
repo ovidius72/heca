@@ -139,6 +139,10 @@ pub struct AppNotification {
     /// time a notification with the same dedup key replaces it in place. The store counts it, in
     /// one place; the history shows it.
     pub repeats: u32,
+    /// **The pane it is about**, when it is about one — a window does not pop it up while that pane
+    /// is the one it has focused, since the user is already looking at it. It is kept in the
+    /// history either way.
+    pub pane: Option<heca_core::layout::PaneId>,
 }
 
 impl AppNotification {
@@ -167,6 +171,7 @@ impl AppNotification {
             placement: NotificationPlacement::default(),
             audience: Audience::Session,
             repeats: 1,
+            pane: None,
         }
     }
 
