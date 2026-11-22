@@ -110,9 +110,13 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
             };
             set_if_changed(logo_source, source);
         }
-        // **The agent's name, never its model**: one shape for every agent — a model is right for one
-        // and stale or missing for the others (decision on T567/C57).
-        let primary = agent.name;
+        // **The model the agent answers with, else its name.** Every built-in agent now keeps its
+        // model current: Codex names it on each event, and Claude's is read from its conversation
+        // log at each event (`reporting::command::last_model`). One that names none shows its name.
+        let primary = agent
+            .model
+            .filter(|model| !model.is_empty())
+            .unwrap_or(agent.name);
         let reported = agent.session_title.filter(|text| !text.is_empty());
         let session = match session_line.get() {
             AgentSessionLine::Reported => reported.filter(|title| *title != facts.title),

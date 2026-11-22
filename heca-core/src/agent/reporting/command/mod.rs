@@ -93,11 +93,51 @@ fn receive(
     forward(native, event, reports)
 }
 
+/// How much of the end of a conversation log is read to find the model of its last answer — the last
+/// answer is near the end, and a log can be very long.
+const TRANSCRIPT_TAIL: u64 = 256 * 1024;
+
+/// **The model of the last answer in the conversation log at `path`** — `message.model` of the last
+/// `assistant` line. A harness whose hooks name the model only at start (Claude Code) still writes
+/// it on every answer, so a model changed mid-session (`/model`) shows at the next event. Read in the
+/// hook's own process, never on heca's loop.
+fn last_model(path: &std::path::Path) -> Option<String> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let length = file.metadata().ok()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(TRANSCRIPT_TAIL)))
+        .ok()?;
+    let mut tail = String::new();
+    file.take(TRANSCRIPT_TAIL).read_to_string(&mut tail).ok()?;
+    tail.lines().rev().find_map(|line| {
+        let entry: Value = serde_json::from_str(line).ok()?;
+        (entry.get("type")? == "assistant")
+            .then(|| {
+                entry
+                    .get("message")?
+                    .get("model")?
+                    .as_str()
+                    .map(str::to_owned)
+            })
+            .flatten()
+    })
+}
+
 fn forward(
     mut native: serde_json::Map<String, Value>,
     event: &str,
     reports: &Reports,
 ) -> io::Result<()> {
+    // The model the harness is answering with now, from its own conversation log, when the hook
+    // does not name it.
+    if !native.get("model").is_some_and(Value::is_string)
+        && let Some(model) = native
+            .get("transcript_path")
+            .and_then(Value::as_str)
+            .and_then(|path| last_model(std::path::Path::new(path)))
+    {
+        native.insert("model".into(), Value::String(model));
+    }
     // Native hooks also contain prompts, paths and permission settings. Only the contract's
     // session fields cross this boundary; the configured driver owns the event and status.
     native.retain(|key, _| {

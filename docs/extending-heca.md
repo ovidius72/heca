@@ -286,9 +286,10 @@ do not repeat SVG contents in every event or in the launch environment. A user c
 with `icon = "/path/to/logo.svg"` under that program's configuration; this works for added drivers too.
 
 `AgentState` also accepts optional `model`, `session_id` and `session_title` values supplied by a
-driver. The row shows the program's icon and its configured name — never the model, for any agent:
-one shape for all of them, rather than a model that is right for one and stale or missing for the
-others. Under it, the reported session title, as `[appearance.sidebar] agent_session_line` says
+driver. The row shows the program's icon and the model it answers with, or its configured name when
+it reports none. A driver keeps the model current by naming it on its events; for a hook that does
+not, heca reads it from the conversation log the hook names (`transcript_path`, the model of the last
+answer), so Claude Code's model follows `/model` at the next event. Under it, the reported session title, as `[appearance.sidebar] agent_session_line` says
 (by default only a title the program reported that is not the pane's name already). It never
 invents a title. Omitted model/title metadata is retained
 only when the driver and an explicit, nonempty session identity match; a different session clears

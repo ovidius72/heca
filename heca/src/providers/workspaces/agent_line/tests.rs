@@ -207,11 +207,11 @@ fn long_reported_text_stays_inside_a_narrow_sidebar() {
     }
 }
 
-/// **The agent's name, never its model** (one shape for every agent), and the session line as
+/// **The model the agent answers with, else its name**, and the session line as
 /// `[appearance.sidebar] agent_session_line` says: by default only a title the agent reported that is
 /// not the pane's name already; `always` falls back to the pane's name; `never` hides it.
 #[test]
-fn the_identity_is_the_agents_name_and_the_session_line_follows_its_setting() {
+fn the_identity_is_the_model_else_the_name_and_the_session_line_follows_its_setting() {
     use heca_config::appearance::AgentSessionLine;
     let theme = Theme::default();
     let agent = signal(Some(AgentState::new(
@@ -250,7 +250,10 @@ fn the_identity_is_the_agents_name_and_the_session_line_follows_its_setting() {
             .collect::<Vec<_>>()
     };
     let painted = words(&mut root);
-    assert!(painted.iter().any(|text| text == "Program"));
+    assert!(
+        painted.iter().any(|text| text == "Program"),
+        "no model: the name"
+    );
     assert!(
         !painted.iter().any(|text| text == "My pane"),
         "no reported title: the pane's name is not repeated"
@@ -263,10 +266,10 @@ fn the_identity_is_the_agents_name_and_the_session_line_follows_its_setting() {
     });
     let painted = words(&mut root);
     assert!(
-        painted.iter().any(|text| text == "Program"),
-        "the name, not the model"
+        painted.iter().any(|text| text == "Actual model"),
+        "the model, once reported"
     );
-    assert!(!painted.iter().any(|text| text == "Actual model"));
+    assert!(!painted.iter().any(|text| text == "Program"));
     assert!(painted.iter().any(|text| text == "Actual session"));
 
     agent.update(|agent| agent.as_mut().unwrap().session_title = Some("My pane".into()));

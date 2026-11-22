@@ -186,3 +186,46 @@ fn a_hook_outside_heca_reports_to_the_pane_its_session_was_seen_in() {
     assert!(!endpoint.exists());
     assert!(!folder.join("example.abc-1.json").exists());
 }
+
+/// **A hook that does not name the model gets it from the conversation log** — the model of the last
+/// answer, so a model changed mid-session (`/model`) shows at the next event. A hook that names it
+/// keeps its own, and nothing else of the log crosses over.
+#[test]
+fn a_hook_without_the_model_reads_the_last_answers_model_from_the_log() {
+    let root = tempfile::tempdir().unwrap();
+    let reports = reports(root.path());
+    let log = root.path().join("transcript.jsonl");
+    fs::write(
+        &log,
+        [
+            json!({"type":"assistant","message":{"model":"model-old","content":"secret one"}}),
+            json!({"type":"user","message":{"content":"private prompt"}}),
+            json!({"type":"assistant","message":{"model":"model-new","content":"secret two"}}),
+            json!({"type":"system","subtype":"note"}),
+        ]
+        .map(|line| line.to_string())
+        .join("\n"),
+    )
+    .unwrap();
+    let native = json!({"session_id":"s", "transcript_path": log.to_string_lossy()});
+    receive(
+        Cursor::new(native.to_string()),
+        "example",
+        "Stop",
+        &reports,
+        &root.path().join("sessions"),
+    )
+    .unwrap();
+    let bytes = fs::read(reports.endpoint.as_ref().unwrap()).unwrap();
+    let report: AgentState = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        report.model.as_deref(),
+        Some("model-new"),
+        "the last answer's model"
+    );
+    let text = String::from_utf8(bytes).unwrap();
+    assert!(
+        !text.contains("secret") && !text.contains("private"),
+        "{text}"
+    );
+}
