@@ -257,6 +257,24 @@
           "number": 4,
           "title": "USER confirms keyboard and mouse agree",
           "checked": false
+        },
+        {
+          "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8-check-005-a-drop-s-before-after-follows-the-list-s-direction-left-right-in-a-row-of-targets-and-the-insertion-line-turns-with-it-today-drag-resolve-rs-side-for-reads-only-y",
+          "number": 5,
+          "title": "A drop's before/after follows the list's direction (left/right in a row of targets), and the insertion line turns with it — today drag/resolve.rs side_for reads only y",
+          "checked": false
+        },
+        {
+          "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8-check-006-drag-builders-draggable-as-accepts-accepts-beside-on-drop-grip-glyph-accept-option-like-child-and-on-hint",
+          "number": 6,
+          "title": "Drag builders (draggable_as, accepts, accepts_beside, on_drop, grip_glyph) accept Option, like .child and .on_hint",
+          "checked": false
+        },
+        {
+          "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8-check-007-t318-s-remaining-point-3-the-workspace-drop-logic-in-heca-src-mouse-surface-left-rs-called-from-chrome-input-dispatch-rs-moves-beside-the-rows-in-providers-workspaces",
+          "number": 7,
+          "title": "T318's remaining point 3: the workspace drop logic in heca/src/mouse/surface_left.rs (called from chrome/input/dispatch.rs) moves beside the rows in providers/workspaces/",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -266,7 +284,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-10-19T15:59:22.315Z",
+      "updatedAt": "2026-11-22T15:25:30.192Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -281,7 +299,7 @@
       "status": "planned",
       "description": "Split out of `P079(F004)/T318` (which deletes the region layer) because this is the one part that\n**moves into `heca-grid-ui`** rather than being deleted. Decided with T318, 2026-08-06.\n\n# What exists\n\n- **App-side, per surface.** `SurfaceDragState.ghost_label: Option<DragLabel>` carries the chip's\n  text and a hand-maintained `x`/`y` (`heca/src/mouse/drag.rs` sets it on threshold and moves it on\n  every cursor step); `heca/src/app/render.rs` paints it. The insertion indicator is drawn from\n  `DropHit { bounds, side }` at the app's own call sites.\n- `DragLabel` and `DropSide`/`DropHit` already live in `heca-grid-ui/src/drag/`, so the *types* are\n  in the right crate; only the drawing and the position bookkeeping are not.\n- Since F004/P084/T394 the framework owns the gesture: `DragStart`/`Drag`/`DragEnd` on the source,\n  `DragEnter`/`DragOver`/`DragLeave`/`Drop` on the target, with `DragEvent::side` computed for it.\n\n# Why it moves\n\nA plugin's widget can be draggable (it declares one id) but **cannot draw the drag**: the ghost and\nthe insertion line are painted by app code that knows which sidebar it is in. One drag should look\nlike one drag wherever it happens, and the widget author should write none of it — the same bargain\nas `Base::hovered` and the focus ring.\n\n# The work\n\n1. A framework-owned overlay for the in-flight drag: the ghost follows the pointer (the router\n   already has every move), and the insertion line draws against the current drop target's bounds\n   and `side`. Both painted through `PaintCx::with_overlay`, so they composite above everything, and\n   both read every colour/radius/width from the `Theme` — no magic numbers, per the widget rules.\n2. What the ghost *shows* is the widget's to say, not the framework's: reuse\n   `Component::text_summary()` (the accessible-name path) for the default, with an explicit\n   override for a source that wants something else. **Do not** re-introduce a host-supplied string\n   that the app has to keep in step with the row it came from\n   (`heca/src/mouse/drag.rs::drag_ghost_label` re-derives it from the session on every drag start).\n3. Delete `SurfaceDragState.ghost_label` and its two writers, and the ghost paint in\n   `heca/src/app/render.rs`.\n4. Showcase: a drag demo that is not a sidebar — two lists in a panel — so the \"works anywhere\"\n   claim is visible and not just asserted.\n5. Docs: `docs/widgets.md` drag section + rustdoc, per the mandatory both-audiences rule.\n\n# Edge cases\n\n- A drag that ends over nothing still clears the ghost (`DragEnd` always fires — the framework\n  guarantees it).\n- The pointer leaving the window mid-drag (`Event::pointer_cancelled()`) clears both visuals.\n- A source removed mid-drag (a rebuild during the gesture) must not leave a ghost painted.\n\n# Done when\n\nAntonio drags a row in the app and sees the same ghost and the same insertion line in the left\nsidebar, the right sidebar, and a non-sidebar surface — with no app code drawing any of it.",
       "descriptionUpdatedAt": "2026-08-06T15:34:42.957Z",
-      "notes": "",
+      "notes": "2026-11-22, checked in code on main (not by eye): the ghost and the insertion line are painted by heca-grid-ui (component/paint_cx/chrome.rs, component/paint_walk.rs) and no ghost_label is left in heca. Its \"Done when\" is Antonio's eye check of a drag in the left sidebar, the right sidebar and a non-sidebar surface, so it stays open until that check.",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
@@ -293,13 +311,13 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-06T15:34:42.957Z",
-      "updatedAt": "2026-08-06T15:34:42.957Z",
+      "updatedAt": "2026-11-22T15:25:37.831Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-26T08:37:59.875Z",
-  "updatedAt": "2026-10-19T16:17:45.930Z",
+  "updatedAt": "2026-11-22T15:25:37.831Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
