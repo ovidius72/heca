@@ -278,3 +278,40 @@ fn wait_for(backend: &mut TerminalBackend, receiver: &mpsc::Receiver<()>, status
             });
     }
 }
+
+/// **An agent heca starts itself — a resumed one — reports like a typed one**: the recorded process
+/// goes through the real launcher and the integration's reports reach the pane.
+#[test]
+fn a_program_heca_starts_itself_reports_through_the_real_launcher() {
+    let directory = tempfile::tempdir().unwrap();
+    let script = directory.path().join("example.sh");
+    std::fs::write(
+        &script,
+        "printf '%s\\n' \"$EXAMPLE_STATE_0\" >> \"$EXAMPLE_REPORT\"\nread step\n",
+    )
+    .unwrap();
+    let (sender, receiver) = mpsc::channel();
+    let wake = Arc::new(move || {
+        let _ = sender.send(());
+    });
+    let options = TerminalBackendOptions {
+        agents: Some(AgentOptions {
+            drivers: example_drivers(),
+            max_report_bytes: 65536,
+            channel_capacity: 16,
+            launch_timeout: Duration::from_secs(10),
+            launcher: PathBuf::from(env!("CARGO_BIN_EXE_heca")),
+            launched_status: String::new(),
+        }),
+        wake_on_output: Some(wake),
+        cwd: Some(directory.path().into()),
+        ..Default::default()
+    };
+    let process = heca_core::backend::ProcessLaunch {
+        executable: "/bin/sh".into(),
+        arguments: vec![script.into_os_string()],
+        cwd: Some(directory.path().into()),
+    };
+    let mut backend = TerminalBackend::with_process(80, 24, 8.0, 16.0, &process, options).unwrap();
+    wait_for(&mut backend, &receiver, "working");
+}

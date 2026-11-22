@@ -72,10 +72,9 @@ fn the_wrapper_preserves_literal_user_arguments_for_the_private_launcher() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(
-        text.starts_with("\x1b]133;E;demo-agent\x07<--heca-agent-launch>\n"),
-        "{text}"
-    );
+    // The launcher itself tells the terminal which program runs (OSC 133;E), for a typed command
+    // and a program heca starts alike — the wrapper only hands it the words.
+    assert!(text.starts_with("<--heca-agent-launch>\n"), "{text}");
     assert!(
         text.contains(&format!("<{}>", executable.display())),
         "resolve through the command's current PATH: {text}"
