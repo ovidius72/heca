@@ -40,7 +40,7 @@ pub fn deliver_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Han
         };
         // Always, consumed or not: a container that reports what its subtree did must hear about
         // the click the row inside it took.
-        node.after_subtree(ev, from_subtree);
+        crate::component::after_subtree(node, ev, from_subtree);
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }

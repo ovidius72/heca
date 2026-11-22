@@ -194,7 +194,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
             Some(child) => deliver_to_path(child.as_mut(), rest, ev),
             None => Handled::No,
         };
-        node.after_subtree(ev, from_subtree);
+        after_subtree(node, ev, from_subtree);
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
@@ -220,7 +220,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
                 break;
             }
         }
-        node.after_subtree(ev, from_subtree);
+        after_subtree(node, ev, from_subtree);
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
@@ -307,6 +307,14 @@ pub(crate) fn react(node: &mut dyn Component, ev: &Event) -> Handled {
     own_event(node, ev)
 }
 
+/// **What the widget makes of its subtree's answer, as that widget** — a container reporting
+/// what happened inside it (a dock frame's fold) sends its action from here, so it takes the
+/// container's route like its handlers and its own event code do.
+pub(crate) fn after_subtree(node: &mut dyn Component, ev: &Event, handled: Handled) {
+    let route = node.base().dispatch_to.clone();
+    crate::intent::dispatching_to(route, || node.after_subtree(ev, handled));
+}
+
 /// **The widget's own event code, as that widget** — a dispatch it makes there takes its route
 /// (`Base::dispatch_to`). Every walk calls a widget through this, so no widget, and no walk, has
 /// to remember it.
@@ -328,7 +336,7 @@ fn broadcast(node: &mut dyn Component, ev: &Event) -> Handled {
             break;
         }
     }
-    node.after_subtree(ev, from_subtree);
+    after_subtree(node, ev, from_subtree);
     if from_subtree == Handled::Yes {
         return Handled::Yes;
     }

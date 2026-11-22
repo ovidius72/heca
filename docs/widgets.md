@@ -957,6 +957,22 @@ instead of `.on_click(move |ev| ev.dispatch(intent.clone()))` plus a separate `.
   can bind it.
 - **A description** writes the same with `.on_press(intent)` on its node (`ViewEvent::Press`).
 
+#### `intent::send(Intent)` — an action from a callback handed a value
+
+Some widgets hand their callback a value instead of the event: a `DockFrame`'s fold gets the new
+state, a `CardGrid` the card chosen, a `ToastStack` the toast's id, a `ScrollBar` its position.
+Such a callback names its action with `heca_grid_ui::intent::send`:
+
+```rust
+DockFrame::new(name).on_toggle(move |_| {
+    send(Intent::new("toggle_workspace_collapsed").arg("ws_idx", PropValue::Int(i)))
+})
+```
+
+It goes where `on_press` and `ev.dispatch` go — the listener of the dock or layer the widget sits
+in, so the action arrives seated and judged as a gesture there — because the framework runs every
+widget's handlers, event code and `after_subtree` as that widget. No emitter is passed in.
+
 **Every use of a widget follows one set of rules** — a click of any button, a double or triple
 click (`EventKind::uses_widget`):
 - a disabled widget is not used;

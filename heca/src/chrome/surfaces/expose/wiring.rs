@@ -11,72 +11,45 @@ use super::{DispatchAction, ExposeCallbacks, ExposeDeleteKeys, SURFACE, map, mod
 /// Separate from [`map`] because a component test needs exactly these and nothing else: they are
 /// the only things in the surface that reach the app, so a test that supplies them can build any
 /// part of the map on its own.
-pub(super) fn callbacks(
-    emit: crate::chrome::ChromeIntentEmitter,
-    keys: ExposeDeleteKeys,
-) -> ExposeCallbacks {
+pub(super) fn callbacks(keys: ExposeDeleteKeys) -> ExposeCallbacks {
+    use crate::chrome::{Intent, PropValue};
+    use heca_grid_ui::intent::send;
+    // Each act names its action and `send`s it: the map is a layer, and the layer registry's seat
+    // listens for it, so every action goes out as the map's own gesture with nothing handed in.
+    //
     // **Deleting is the card's own key handler, dispatching the actions that already exist.** No
     // new `WidgetIntent`, no new `ActionPolicy` arm, no host-side key match: a handler on the
     // widget, exactly as a click is (AGENTS § 0c). The action carries the confirm with it —
     // `close`, `delete_column` and `delete_workspace` all declare a `ConfirmSpec`
     // (`actions::builtin_confirm_specs`), so the central destructive gate raises the same prompt
     // the sidebar and a header button raise, and this surface neither asks for it nor can skip it.
-    //
-    // The card reuses the catalogued action; its only job is to handle the key on itself.
-    let delete: DispatchAction = {
-        let emit = emit.clone();
-        std::rc::Rc::new(move |action: &str, args: &[(&str, i64)]| {
-            let intent = heca_view::Intent::new(action).args(
-                args.iter()
-                    .map(|(k, v)| (*k, heca_view::PropValue::Int(*v))),
-            );
-            emit.fire_intent(intent);
-        })
-    };
-    // Moving the map's highlight is its own intent — the same one `CardGrid::on_move` sends when
-    // you arrow around — so handing the cursor on before a delete goes through the one door that
-    // already exists rather than a second way to move it.
-    let cursor_to: std::rc::Rc<dyn Fn(PaneId)> = {
-        let emit = emit.clone();
-        std::rc::Rc::new(move |pane_id: PaneId| {
-            emit.fire(crate::app::interaction::InteractionIntent::ExposeCursor { pane_id });
-        })
-    };
-    let choose: std::rc::Rc<dyn Fn(PaneId)> = {
-        let emit = emit.clone();
-        std::rc::Rc::new(move |pane_id: PaneId| {
-            // **Choosing a card is activate-and-leave**, the same three-part act the sidebar
-            // performs when you pick a pane from it (`providers/workspaces/mod.rs:466`):
-            //
-            //   focus the pane → hand the keyboard back → put the surface away.
-            //
-            // The middle step is the one that is invisible until it is missing. `focus_pane`
-            // changes which pane is *active* and deliberately nothing else — it does not release
-            // container focus, because whether the keyboard should follow is a property of what
-            // the user asked for, not of a pane being focused (a hint focuses without leaving).
-            // Without it the map focused the right pane and the keyboard stayed where it was, so
-            // choosing a card looked like it had done nothing at all.
-            emit.fire(
-                crate::app::interaction::InteractionIntent::FocusPaneThenAction {
-                    pane_id,
-                    action: Box::new(crate::input::WmAction::UnfocusDock),
-                },
-            );
-            emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
-                crate::input::WmAction::CloseOverlay { overlay: None },
-            ));
-        })
-    };
+    let delete: DispatchAction = std::rc::Rc::new(|action: &str, args: &[(&str, i64)]| {
+        send(Intent::new(action).args(args.iter().map(|(k, v)| (*k, PropValue::Int(*v)))));
+    });
+    // Moving the map's highlight is its own action — what an arrow key on the map does — so
+    // handing the cursor on before a delete goes through the one door that already exists.
+    let cursor_to: std::rc::Rc<dyn Fn(PaneId)> = std::rc::Rc::new(|pane_id: PaneId| {
+        send(Intent::new(CURSOR_ACTION).arg("pane_id", PropValue::Int(pane_id.0 as i64)));
+    });
+    let choose: std::rc::Rc<dyn Fn(PaneId)> = std::rc::Rc::new(|pane_id: PaneId| {
+        // **Choosing a card is activate-and-leave**, the same three-part act the sidebar
+        // performs when you pick a pane from it:
+        //
+        //   focus the pane → hand the keyboard back → put the surface away.
+        //
+        // The middle step is the one that is invisible until it is missing. `focus_pane`
+        // changes which pane is *active* and deliberately nothing else — it does not release
+        // container focus, because whether the keyboard should follow is a property of what
+        // the user asked for, not of a pane being focused (a hint focuses without leaving).
+        // Without it the map focused the right pane and the keyboard stayed where it was, so
+        // choosing a card looked like it had done nothing at all.
+        send(Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id.0 as i64)));
+        send(Intent::new("unfocus_dock"));
+        send(Intent::new("close_overlay"));
+    });
     // Dismissal goes through the **action**, not a bespoke hide: `close_overlay` is in the registry,
     // so it is bindable, rebindable in config, listed in the palette and reachable over RPC.
-    let dismiss: std::rc::Rc<dyn Fn()> = {
-        let emit = emit.clone();
-        std::rc::Rc::new(move || {
-            emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
-                crate::input::WmAction::CloseOverlay { overlay: None },
-            ));
-        })
-    };
+    let dismiss: std::rc::Rc<dyn Fn()> = std::rc::Rc::new(|| send(Intent::new("close_overlay")));
     ExposeCallbacks {
         choose,
         delete,
@@ -86,7 +59,7 @@ pub(super) fn callbacks(
     }
 }
 
-pub(crate) fn record_expose_cursor(state: &mut crate::app_state::AppState, pane_id: PaneId) {
+fn record_expose_cursor(state: &mut crate::app_state::AppState, pane_id: PaneId) {
     let Some(ws) = crate::app::focus::find_pane_workspace(&state.session, pane_id) else {
         return;
     };
@@ -222,8 +195,10 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<crate::
     // The frost and the animation are declared on the surface too, in `map` — one builder on the
     // widget, exactly what a plugin writes.
     let options = state.session.options.clone();
-    Some(crate::chrome::register_named_layer(state, &name, |emit| {
-        let mut root = map(&rows, &theme, emit.clone(), here, &options, &keys, previous);
+    // The layer's seat listens for what the map sends (`LayerRegistry::seat`), so the map itself
+    // takes no emitter.
+    Some(crate::chrome::register_named_layer(state, &name, |_| {
+        let mut root = map(&rows, &theme, here, &options, &keys, previous);
         root.base_mut().lock = false;
         root
     }))

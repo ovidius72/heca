@@ -50,6 +50,21 @@ pub fn install_intent_sink(f: impl Fn(heca_view::Intent) + 'static) {
     INTENT_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
 }
 
+/// **Send an action from inside a widget's callback** — the one way a callback that is handed a
+/// value rather than the event (a fold's new state, the card a grid chose, a toast's id, a
+/// scrollbar's position) names what it does:
+///
+/// ```ignore
+/// DockFrame::new(name).on_toggle(move |_| send(Intent::new("toggle_workspace_collapsed").arg("ws_idx", i)))
+/// ```
+///
+/// It goes exactly where [`EventCx::dispatch`](crate::event::EventCx::dispatch) and `on_press` go:
+/// to the listener of the dock or layer holding the widget acting now, else to the host. So the
+/// callback carries no emitter, mount or seat. Called outside any event, it reaches the host.
+pub fn send(intent: heca_view::Intent) {
+    dispatch(intent);
+}
+
 /// Post an intent: to the route of the widget acting now, if its container declared one, else to
 /// the host. A no-op when there is neither.
 pub(crate) fn dispatch(intent: heca_view::Intent) {
@@ -121,5 +136,41 @@ mod tests {
         assert_eq!(*host.borrow(), ["activated"]);
         // And the route is gone once the widget's turn is over.
         assert!(ROUTE.with(|c| c.borrow().is_none()));
+    }
+
+    /// **A callback handed a value sends to its container too** — here a dock frame's fold, which
+    /// it reports from `after_subtree`, after the click inside it was handled.
+    #[test]
+    fn a_fold_reported_after_the_subtree_reaches_the_container() {
+        use crate::widgets::DockFrame;
+        let (host, routed) = routes();
+        let seen = routed.clone();
+        let mut root = Flex::column()
+            .on_dispatch(move |intent| seen.borrow_mut().push(intent.action))
+            .child(DockFrame::new("Lobby").on_toggle(|_| send(Intent::new("folded"))));
+        crate::pointer::fire_mounts(&mut root);
+        crate::layout::LayoutEngine::new().compute(&mut root, crate::Size::new(300.0, 200.0));
+        fn path_to_area(
+            node: &dyn crate::component::Component,
+            area: &str,
+            at: &mut Vec<usize>,
+        ) -> bool {
+            if node.base().grid_area.as_deref() == Some(area) {
+                return true;
+            }
+            for (i, child) in node.base().children.iter().enumerate() {
+                at.push(i);
+                if path_to_area(child.as_ref(), area, at) {
+                    return true;
+                }
+                at.pop();
+            }
+            false
+        }
+        let mut path = Vec::new();
+        assert!(path_to_area(&root, "toggle", &mut path));
+        let _ = crate::component::click(&mut root, &path);
+        assert_eq!(*routed.borrow(), ["folded"]);
+        assert!(host.borrow().is_empty());
     }
 }

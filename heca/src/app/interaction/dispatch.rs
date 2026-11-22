@@ -73,7 +73,7 @@ pub(crate) fn dispatch_intent(
     // Overlay control (§2.7.2): `SubmitOverlay`/`CloseOverlay` are resolved here — not via the
     // `ActionRegistry` — because resolving an overlay runs its completion, which needs the
     // registry to dispatch a follow-up action (a handler gets no registry). Intercepted before
-    // routing, like the `FocusPaneThenAction` composite below. Always allowed (overlay control
+    // routing, like the container composite below. Always allowed (overlay control
     // has no focus-domain policy; the follow-up action it dispatches is routed on its own).
     if let InteractionIntent::ActivateAction(action) = &intent
         && action.is_overlay_control()
@@ -82,7 +82,7 @@ pub(crate) fn dispatch_intent(
         return Ok(());
     }
 
-    // The container half of the same composite. Its outcome is dropped here — a click and a menu
+    // **Focus a container, then act on it.** Its outcome is dropped here — a click and a menu
     // pick have nowhere to report one — while RPC calls the same function for the answer.
     if let InteractionIntent::FocusContainerThenAction { container, action } = &intent {
         let (container, action) = (container.clone(), action.clone());
@@ -90,22 +90,6 @@ pub(crate) fn dispatch_intent(
         return Ok(());
     }
 
-    // Composite: focus the pane, then run the action — each half policy-routed on its
-    // own (mirrors what an active-targeted pane button does across two events on click).
-    if let InteractionIntent::FocusPaneThenAction { pane_id, action } = intent {
-        dispatch_intent(
-            state,
-            registry,
-            source,
-            InteractionIntent::FocusPane { pane_id },
-        )?;
-        return dispatch_intent(
-            state,
-            registry,
-            source,
-            InteractionIntent::ActivateAction(*action),
-        );
-    }
     // Kept for the debug line below: routing consumes the intent, and a refusal that cannot name
     // what was refused is not actionable.
     #[cfg(debug_assertions)]
@@ -129,18 +113,8 @@ pub(crate) fn dispatch_intent(
         RouteDecision::Allow(InteractionIntent::FocusContainerThenAction { container, action }) => {
             focus_container_then_action(state, registry, source, &container, &action);
         }
-        RouteDecision::Allow(InteractionIntent::FocusPaneThenAction { pane_id, action }) => {
-            registry.execute(&WmAction::FocusPane { pane_id }, state)?;
-            return registry.execute(&action, state);
-        }
         RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
             return registry.execute(&WmAction::FocusPane { pane_id }, state);
-        }
-        RouteDecision::Allow(InteractionIntent::ExposeCursor { pane_id }) => {
-            crate::chrome::record_expose_cursor(state, pane_id);
-        }
-        RouteDecision::Allow(InteractionIntent::ToggleWorkspaceCollapsed { ws_idx }) => {
-            crate::handlers::apply_ws_collapse(state, ws_idx, None);
         }
         RouteDecision::Allow(InteractionIntent::StartSidebarDrag { .. }) => {
             #[cfg(debug_assertions)]

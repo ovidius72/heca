@@ -107,7 +107,7 @@ mod tests {
     use crate::chrome::surfaces::expose::model::{ExposeColumn, ExposePane, ExposeWorkspace};
     use crate::chrome::surfaces::expose::pane_card::pane_key;
     use crate::chrome::surfaces::expose::testing::{
-        callbacks, card_of, cards_bounds, lay_out, theme,
+        actions, callbacks, card_of, cards_bounds, lay_out, theme,
     };
 
     /// A workspace of `cols` columns on a screen of `screen`, each column one pane.
@@ -400,19 +400,14 @@ mod tests {
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(WidgetIntent::Activate));
 
-        let focused: Vec<PaneId> = sink
-            .borrow()
-            .iter()
-            .filter_map(|i| match i {
-                crate::app::interaction::InteractionIntent::FocusPaneThenAction {
-                    pane_id, ..
-                } => Some(*pane_id),
-                _ => None,
-            })
+        let focused: Vec<i64> = actions(&sink)
+            .into_iter()
+            .filter(|(name, _)| name == "focus_pane")
+            .flat_map(|(_, args)| args.into_iter().map(|(_, pane)| pane))
             .collect();
         assert_eq!(
             focused,
-            vec![PaneId(9)],
+            vec![9],
             "one step past the last tiled pane lands on the float, and choosing it focuses it",
         );
     }

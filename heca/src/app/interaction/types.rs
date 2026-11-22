@@ -92,25 +92,13 @@ pub(crate) enum InteractionSource {
 /// Intent variants are dispatched in `dispatch_action()`:
 /// - `FocusPane` → `WmAction::FocusPane`
 /// - `FocusWorkspace` → `WmAction::FocusWorkspace`
-/// - `ToggleWorkspaceCollapsed` → `handlers::apply_ws_collapse`
 /// - `StartSidebarDrag` → mouse-layer drag (no registry dispatch)
 #[derive(Debug, Clone)]
 pub(crate) enum InteractionIntent {
     /// A keyboard shortcut resolved to a WM action.
     ActivateAction(WmAction),
-    /// Focus a specific pane, then run an action on it — the single-intent form of
-    /// what an **active-targeted** pane button does on click (focus first so the
-    /// action lands on the clicked pane, not whatever was active). Used by the pane
-    /// header's KeyHint targets for `zoom`/`float`, whose `WmAction` acts on the
-    /// focused pane and carries no pane id of its own. `dispatch_intent` expands it
-    /// into a `FocusPane` then the action, each policy-routed on its own.
-    FocusPaneThenAction {
-        pane_id: PaneId,
-        action: Box<WmAction>,
-    },
-    /// Focus a mounted **container**, then run an action on it — the container half of
-    /// [`FocusPaneThenAction`](Self::FocusPaneThenAction), and the way the palette and RPC reach a
-    /// component's own verbs.
+    /// Focus a mounted **container**, then run an action on it — the way the palette and RPC
+    /// reach a component's own verbs.
     ///
     /// A component's selection-dependent actions declare
     /// [`ActionPolicy::ContainerFocused`](super::policy::ActionPolicy::ContainerFocused), so "delete the row my
@@ -129,15 +117,6 @@ pub(crate) enum InteractionIntent {
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
     FocusPane { pane_id: PaneId },
-    /// Toggle a specific workspace header's collapsed state from the sidebar.
-    ToggleWorkspaceCollapsed { ws_idx: usize },
-    /// Record where the **exposé's highlight** now is, so the map can reopen there and can return
-    /// to it after a trip through another workspace.
-    ///
-    /// Not an action and not a focus change — moving a highlight around a map is *looking*. It
-    /// touches no session state, so it is permitted in every domain including `Overlay`; refusing
-    /// it there would make it useless, since the only time it fires is while the map is up.
-    ExposeCursor { pane_id: PaneId },
     /// Start dragging a sidebar item (no WmAction equivalent).
     ///
     /// Policy-routed only — the drag itself is initiated in the mouse layer.

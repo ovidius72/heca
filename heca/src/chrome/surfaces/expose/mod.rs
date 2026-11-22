@@ -51,7 +51,6 @@ pub(crate) mod expose_grid;
 pub(crate) mod model;
 pub(crate) mod pane_card;
 mod wiring;
-pub(crate) use wiring::register_cursor_action;
 pub(crate) mod workspace_row;
 
 #[cfg(test)]
@@ -70,7 +69,7 @@ pub(crate) use expose_grid::ExposeGrid;
 pub(crate) use model::{ExposeWorkspace, model};
 pub(crate) use pane_card::{DispatchAction, ExposeCallbacks, ExposeDeleteKeys};
 use wiring::callbacks;
-pub(crate) use wiring::{record_expose_cursor, register};
+pub(crate) use wiring::{register, register_cursor_action};
 
 /// The surface name the map registers under, and the one a `[[keys.surface]]` entry addresses. One
 /// constant so the layer, the config entry and the key lookup cannot drift apart.
@@ -100,7 +99,6 @@ pub(crate) const PICK_ACTION: &str = "heca.expose.pick";
 pub(crate) fn map(
     rows: &[ExposeWorkspace],
     theme: &GuiTheme,
-    emit: crate::chrome::ChromeIntentEmitter,
     start: Option<PaneId>,
     geometry: &heca_core::layout::LayoutOptions,
     keys: &ExposeDeleteKeys,
@@ -108,7 +106,7 @@ pub(crate) fn map(
     // the same field `prefix+i` reads.
     previous: Option<PaneId>,
 ) -> heca_grid_ui::WidgetModel {
-    let cb = callbacks(emit, keys.clone());
+    let cb = callbacks(keys.clone());
 
     let grid = ExposeGrid {
         rows,

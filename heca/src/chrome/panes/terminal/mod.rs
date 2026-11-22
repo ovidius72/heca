@@ -147,7 +147,8 @@ fn seams(
     let input_proxy = proxy.clone();
     let command_proxy = proxy.clone();
     input::Seams {
-        scroll: scroll_intents(proxy, pane, terminal),
+        // The controls name their actions; this only says which terminal, and which pane to focus.
+        scroll: viewport::ScrollTarget { pane, terminal },
         input: Box::new(move |input| {
             let _ = input_proxy
                 .send_event(crate::app::events::AppEvent::TerminalInput { terminal, input });
@@ -176,34 +177,6 @@ fn seams(
                 intent: InteractionIntent::ActivateAction(action),
             });
         }),
-    }
-}
-
-/// **What a click on a terminal's scrollback controls means**: scroll that terminal — by its id, so
-/// it is the one clicked whether or not any pane owns it — after focusing its pane, if it has one.
-fn scroll_intents(
-    proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
-    pane: Option<PaneId>,
-    terminal: TerminalId,
-) -> viewport::ScrollIntents {
-    use crate::app::events::AppEvent;
-    use crate::app::interaction::{InteractionIntent, InteractionSource};
-    let send = move |input: TerminalInput| {
-        if let Some(pane_id) = pane {
-            let _ = proxy.send_event(AppEvent::ChromeIntent {
-                source: InteractionSource::MouseContent,
-                intent: InteractionIntent::FocusPane { pane_id },
-            });
-        }
-        let _ = proxy.send_event(AppEvent::TerminalInput { terminal, input });
-    };
-    let to_offset = send.clone();
-    viewport::ScrollIntents {
-        to_bottom: Box::new({
-            let send = send.clone();
-            move || send(TerminalInput::ScrollToBottom)
-        }),
-        to_offset: Box::new(move |rows| to_offset(TerminalInput::ScrollTo { rows })),
     }
 }
 

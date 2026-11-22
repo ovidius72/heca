@@ -239,18 +239,6 @@ pub(crate) fn on_terminal_input(
     match input {
         // Its grid and its scrollback.
         TerminalInput::Resize(grid) => on_resize(state, terminal, grid),
-        TerminalInput::ScrollToBottom => {
-            if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
-                backend.scroll_to_bottom_animated();
-                state.needs_redraw = true;
-            }
-        }
-        TerminalInput::ScrollTo { rows } => {
-            if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
-                crate::handlers::scroll_backend_to_offset(backend, rows);
-                state.needs_redraw = true;
-            }
-        }
         TerminalInput::Wheel {
             x,
             y,

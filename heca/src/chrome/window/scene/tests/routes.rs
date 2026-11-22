@@ -223,3 +223,88 @@ fn a_click_on_a_pane_row_goes_out_seated_on_the_workspaces_dock() {
         "the row's two acts, then the card's press, all seated on the dock",
     );
 }
+
+/// **Folding a workspace names its action**: the fold control sends `toggle_workspace_collapsed`
+/// for that workspace, seated on the workspaces dock — from a callback handed only the new state,
+/// through `heca_grid_ui::intent::send`, with no emitter in the row.
+#[test]
+fn folding_a_workspace_sends_its_named_action_seated_on_the_dock() {
+    use crate::app::interaction::{InteractionIntent, InteractionSource};
+    use heca_grid_ui::{LayoutEngine, Size};
+    let chrome = SharedChromeState::new(280.0, 260.0);
+    *chrome.workspaces.tree_mut() = super::one_pane_tree(1);
+    let mut host = super::ChromeHost::new(chrome.events());
+    host.register(
+        super::RegionId::LeftSidebar,
+        Box::new(crate::providers::WorkspacesContainerProvider::new(
+            "workspaces",
+        )),
+    );
+    let theme = GuiTheme::default();
+    let sent = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let seen = sent.clone();
+    let emit = ChromeIntentEmitter::of(
+        InteractionSource::MouseLeftSidebar,
+        move |source, intent| {
+            seen.borrow_mut().push((source, intent));
+        },
+    );
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let ctx = crate::providers::ChromeCtx::for_build(&chrome, &theme, &emit, &catalog);
+    let body = super::build_region_content(
+        &host,
+        super::RegionId::LeftSidebar,
+        &ctx,
+        &mut super::ChromeSignals::default(),
+        &mut super::DragItemRegistry::default(),
+    )
+    .expect("the workspaces dock is seated");
+    let mut region: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::column().width(280.0).height(400.0).child(body));
+    LayoutEngine::new().compute(region.as_mut(), Size::new(280.0, 400.0));
+
+    // The fold control is the workspace frame's part named for it, found by name, not position.
+    fn path_to_area(node: &dyn heca_grid_ui::Component, area: &str, at: &mut Vec<usize>) -> bool {
+        if node.base().grid_area.as_deref() == Some(area) {
+            return true;
+        }
+        for (i, child) in node.base().children.iter().enumerate() {
+            at.push(i);
+            if path_to_area(child.as_ref(), area, at) {
+                return true;
+            }
+            at.pop();
+        }
+        false
+    }
+    let frame_key = crate::providers::workspaces::workspace_key(heca_core::layout::WorkspaceId(0));
+    let mut path =
+        heca_grid_ui::path_with_key(region.as_ref(), &frame_key).expect("the workspace row");
+    let frame = heca_grid_ui::node_with_key(region.as_ref(), &frame_key).unwrap();
+    let mut inner = Vec::new();
+    assert!(
+        path_to_area(frame, "toggle", &mut inner),
+        "its fold control"
+    );
+    path.extend(inner);
+    let _ = heca_grid_ui::click(region.as_mut(), &path);
+
+    let folds: Vec<_> = sent
+        .borrow()
+        .iter()
+        .filter_map(|(source, intent)| match intent {
+            InteractionIntent::View(intent) if intent.action == "toggle_workspace_collapsed" => {
+                Some((*source, intent.args.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(folds.len(), 1, "{folds:?}");
+    let (source, args) = &folds[0];
+    assert_eq!(*source, InteractionSource::MouseLeftSidebar);
+    assert_eq!(args.get("ws_idx"), Some(&heca_view::PropValue::Int(0)));
+    assert_eq!(
+        args.get(crate::providers::SEAT_ARG),
+        Some(&heca_view::PropValue::Text("workspaces".into()))
+    );
+}
