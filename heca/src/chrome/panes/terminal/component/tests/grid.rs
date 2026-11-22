@@ -64,12 +64,19 @@ fn changing_cell_metrics_requests_layout_even_when_the_controls_do_not_change() 
     terminal.bind(seams);
     let viewport = scrolled(0);
     terminal.show(&viewport);
-    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(terminal.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(
+        heca_grid_ui::WidgetModel::new(terminal.clone()),
+        300.0,
+        200.0,
+    );
     assert!(!terminal.show(&viewport));
     let mut zoomed = viewport;
     zoomed.nominal_cell = (20.0, 40.0);
     zoomed.cell = zoomed.nominal_cell;
-    assert!(terminal.show(&zoomed), "a new font must schedule its own layout");
+    assert!(
+        terminal.show(&zoomed),
+        "a new font must schedule its own layout"
+    );
     heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 200.0));
     let grid = grids(&said).last().copied().unwrap();
     assert_eq!((grid.cols, grid.rows), (15, 5));

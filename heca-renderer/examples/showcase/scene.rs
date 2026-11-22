@@ -90,4 +90,3 @@ pub(super) fn build_scene(
     }));
     scene
 }
-

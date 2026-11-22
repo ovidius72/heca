@@ -120,12 +120,10 @@ impl IconButton {
         self
     }
 
-
     /// The hover-state signal.
     pub fn hovered(&self) -> Signal<bool> {
         self.base.pointer.hovered
     }
-
 }
 
 impl Component for IconButton {
@@ -238,7 +236,6 @@ impl Component for IconButton {
     fn is_control(&self) -> bool {
         true
     }
-
 
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = false;

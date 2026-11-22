@@ -1,7 +1,7 @@
 //! The part a widget embeds: ranks a caller's list with the matcher plus the
 //! scope's frecency, and drives history recall from the intents it forwards.
 
-use super::matcher::{fuzzy, Match, MatchCase};
+use super::matcher::{Match, MatchCase, fuzzy};
 use super::store::SearchStore;
 use crate::component::WidgetIntent;
 use std::cell::RefCell;
@@ -135,11 +135,21 @@ impl SearchModel {
             .filter_map(|(index, item)| {
                 let (id, text, secondary) = key(item);
                 let on_text = fuzzy(query, text, case_sensitive);
-                let on_secondary = secondary.and_then(|secondary| fuzzy(query, secondary, case_sensitive));
-                let secondary_hits = on_secondary.as_ref().map(|m| m.hits.clone()).unwrap_or_default();
+                let on_secondary =
+                    secondary.and_then(|secondary| fuzzy(query, secondary, case_sensitive));
+                let secondary_hits = on_secondary
+                    .as_ref()
+                    .map(|m| m.hits.clone())
+                    .unwrap_or_default();
                 let (secondary_only, m) = match (on_text, on_secondary) {
                     (Some(m), _) => (false, m),
-                    (None, Some(m)) => (true, Match { hits: Vec::new(), ..m }),
+                    (None, Some(m)) => (
+                        true,
+                        Match {
+                            hits: Vec::new(),
+                            ..m
+                        },
+                    ),
                     (None, None) => return None,
                 };
                 let boost = match (id, frecency) {
@@ -148,7 +158,12 @@ impl SearchModel {
                 };
                 Some((
                     secondary_only,
-                    Ranked { index, score: m.score + boost, hits: m.hits, secondary_hits },
+                    Ranked {
+                        index,
+                        score: m.score + boost,
+                        hits: m.hits,
+                        secondary_hits,
+                    },
                 ))
             })
             .collect();

@@ -1,6 +1,6 @@
 use super::{
-    graphics_signature, image_row_ranges, merge_row_ranges, ranges_overlap,
-    retained_damage_to_apply, terminal_damage_copy_bands, TerminalCopyBand,
+    TerminalCopyBand, graphics_signature, image_row_ranges, merge_row_ranges, ranges_overlap,
+    retained_damage_to_apply, terminal_damage_copy_bands,
 };
 use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 

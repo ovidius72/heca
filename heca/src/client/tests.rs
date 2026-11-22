@@ -34,21 +34,38 @@ fn info(id: u64, name: &str) -> SessionInfo {
 
 #[test]
 fn terminal_title_snapshots_peer_changes_and_own_replies_use_owner_identity() {
-    use heca_core::backend::PaneBackend;
     use crate::app::backend_store::Program;
     use crate::server::wire::terminal::TerminalFrame;
+    use heca_core::backend::PaneBackend;
     let incoming = Arc::new(Mutex::new(VecDeque::new()));
     let sent = Arc::new(Mutex::new(Vec::new()));
-    let mut client = client(RecordingLink { incoming: incoming.clone(), sent: sent.clone() });
-    client.backends.id_for(TerminalOwner::Named("unrelated".into()));
+    let mut client = client(RecordingLink {
+        incoming: incoming.clone(),
+        sent: sent.clone(),
+    });
+    client
+        .backends
+        .id_for(TerminalOwner::Named("unrelated".into()));
     let owner = TerminalOwner::Named("demo.logs".into());
     let backend = heca_core::backend::FakeBackend::new(20, 6);
-    incoming.lock().unwrap().push_back(ServerMsg::Terminal(Arc::new(TerminalFrame {
-        id: 90, owner: owner.clone(), title: "program title".into(), display_title: Some("Logs".into()),
-        spec: TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 6) },
-        screen: backend.terminal_snapshot().unwrap().to_wire(), damage: TerminalDamage::Full,
-        runtime: Default::default(), mouse_grabbed: false,
-    })));
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::Terminal(Arc::new(TerminalFrame {
+            id: 90,
+            owner: owner.clone(),
+            title: "program title".into(),
+            display_title: Some("Logs".into()),
+            spec: TerminalSpec {
+                program: Program::Shell,
+                cwd: None,
+                grid: (20, 6),
+            },
+            screen: backend.terminal_snapshot().unwrap().to_wire(),
+            damage: TerminalDamage::Full,
+            runtime: Default::default(),
+            mouse_grabbed: false,
+        })));
     client.poll().unwrap();
     let local = client.backends.find_owner(&owner).unwrap();
     assert_ne!(local.0, 90);
@@ -61,7 +78,10 @@ fn terminal_title_snapshots_peer_changes_and_own_replies_use_owner_identity() {
                 intent = intent.arg("name", crate::chrome::PropValue::Text("Updated".into()));
             }
             client.normalize_server_intent(&mut intent).unwrap();
-            assert_eq!(intent.args.get("terminal"), Some(&crate::chrome::PropValue::Int(local.0 as i64)));
+            assert_eq!(
+                intent.args.get("terminal"),
+                Some(&crate::chrome::PropValue::Int(local.0 as i64))
+            );
         }
         for missing in ["demo.missing", "Logs", "9999"] {
             let mut intent = crate::chrome::Intent::new(action)
@@ -69,17 +89,39 @@ fn terminal_title_snapshots_peer_changes_and_own_replies_use_owner_identity() {
             if action == "terminal_rename_to" {
                 intent = intent.arg("name", crate::chrome::PropValue::Text("Updated".into()));
             }
-            assert!(client.normalize_server_intent(&mut intent).is_err(), "{missing}");
+            assert!(
+                client.normalize_server_intent(&mut intent).is_err(),
+                "{missing}"
+            );
         }
     }
-    incoming.lock().unwrap().push_back(ServerMsg::Changed(Change::TerminalTitleChanged { owner: owner.clone(), title: Some("Peer label".into()) }));
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::Changed(Change::TerminalTitleChanged {
+            owner: owner.clone(),
+            title: Some("Peer label".into()),
+        }));
     client.poll().unwrap();
     assert_eq!(client.backends.custom_title(local), Some("Peer label"));
     let window = heca_core::layout::testing::Windowed::with_shape(&[&[&[1]]]);
     let asker = Asker::seen_through(window.l(), None, (10.0, 20.0));
-    client.act(WmAction::TerminalRenameTo { terminal: "demo.logs".into(), name: "Mine".into() }, asker, "terminal_rename_to".into(), window.l().before());
-    incoming.lock().unwrap().push_back(ServerMsg::Reply { request_id: 1,
-        changes: vec![Change::TerminalTitleChanged { owner: owner.clone(), title: Some("Mine".into()) }] });
+    client.act(
+        WmAction::TerminalRenameTo {
+            terminal: "demo.logs".into(),
+            name: "Mine".into(),
+        },
+        asker,
+        "terminal_rename_to".into(),
+        window.l().before(),
+    );
+    incoming.lock().unwrap().push_back(ServerMsg::Reply {
+        request_id: 1,
+        changes: vec![Change::TerminalTitleChanged {
+            owner: owner.clone(),
+            title: Some("Mine".into()),
+        }],
+    });
     client.poll().unwrap();
     assert_eq!(client.backends.custom_title(local), Some("Mine"));
     assert!(sent.lock().unwrap().iter().any(|message| matches!(message,
@@ -150,7 +192,12 @@ fn selection_sends_the_rpc_answer_before_attach_and_discards_old_terminal_reques
         window_ordinal: 2,
         content: Session::new(SessionId(2), Default::default()).content(),
     });
-    incoming.lock().unwrap().push_back(ServerMsg::ProjectionReady { session_id: SessionId(2) });
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::ProjectionReady {
+            session_id: SessionId(2),
+        });
     let update = client.poll().unwrap();
     assert!(update.session_attached);
     assert_eq!(client.session.id, SessionId(2));
@@ -166,11 +213,16 @@ fn selection_sends_the_rpc_answer_before_attach_and_discards_old_terminal_reques
 #[test]
 fn closing_a_window_flushes_its_rpc_answer_before_detaching() {
     let sent = Arc::new(Mutex::new(Vec::new()));
-    let client = client(RecordingLink { sent: sent.clone(), incoming: Default::default() });
+    let client = client(RecordingLink {
+        sent: sent.clone(),
+        incoming: Default::default(),
+    });
     client.reply_rpc(17, "ok".into());
     drop(client);
     let messages = sent.lock().unwrap();
-    assert!(matches!(&messages[0], ClientMsg::RpcReply { request_id: 17, answer } if answer == "ok"));
+    assert!(
+        matches!(&messages[0], ClientMsg::RpcReply { request_id: 17, answer } if answer == "ok")
+    );
     assert!(matches!(&messages[1], ClientMsg::Detach));
 }
 
@@ -181,10 +233,15 @@ fn reconnecting_with_the_same_session_id_does_not_keep_old_feedback_acknowledgem
     let chrome = crate::chrome::SharedChromeState::new(0.0, 0.0);
     let agents = heca_config::settings::AgentsConfig::default();
     let feedback = |revision| PaneFeedback {
-        pane_id: PaneId(7), feedback_revision: revision,
-        seen_through_revision: 0, status: "error".into(),
+        pane_id: PaneId(7),
+        feedback_revision: revision,
+        seen_through_revision: 0,
+        status: "error".into(),
     };
-    let mut client = client(RecordingLink { sent: Default::default(), incoming: Default::default() });
+    let mut client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: Default::default(),
+    });
     client.feedback.receive(vec![feedback(42)]);
     client.sync_feedback(Some(PaneId(7)), &chrome.panes, &agents, 8000, false);
     client.failed = true;
@@ -194,11 +251,18 @@ fn reconnecting_with_the_same_session_id_does_not_keep_old_feedback_acknowledgem
         sent: sent.clone(),
         incoming: Arc::new(Mutex::new(VecDeque::from([
             ServerMsg::Attached {
-                session: info(1, "A"), client_id: 9, window_ordinal: 4,
+                session: info(1, "A"),
+                client_id: 9,
+                window_ordinal: 4,
                 content: Session::new(SessionId(1), Default::default()).content(),
             },
-            ServerMsg::Feedback { session_id: SessionId(1), panes: vec![feedback(1)] },
-            ServerMsg::ProjectionReady { session_id: SessionId(1) },
+            ServerMsg::Feedback {
+                session_id: SessionId(1),
+                panes: vec![feedback(1)],
+            },
+            ServerMsg::ProjectionReady {
+                session_id: SessionId(1),
+            },
         ]))),
     };
     let (_send, ready) = mpsc::sync_channel(1);
@@ -213,84 +277,156 @@ fn reconnecting_with_the_same_session_id_does_not_keep_old_feedback_acknowledgem
     drop(client);
     let messages = sent.lock().unwrap();
     assert!(matches!(&messages[0], ClientMsg::AttachTo { name } if name == "A"));
-    assert!(messages.iter().any(|m| matches!(m, ClientMsg::AcknowledgeFeedback { revision: 1, .. })));
-    assert!(!messages.iter().any(|m| matches!(m, ClientMsg::AcknowledgeFeedback { revision: 42, .. })));
+    assert!(
+        messages
+            .iter()
+            .any(|m| matches!(m, ClientMsg::AcknowledgeFeedback { revision: 1, .. }))
+    );
+    assert!(
+        !messages
+            .iter()
+            .any(|m| matches!(m, ClientMsg::AcknowledgeFeedback { revision: 42, .. }))
+    );
 }
 
 #[test]
 fn failed_reconnect_keeps_the_intended_session_without_fallback() {
     for reply in [
-        ServerMsg::Sessions { request_id: 0, result: Err("session not found".into()) },
+        ServerMsg::Sessions {
+            request_id: 0,
+            result: Err("session not found".into()),
+        },
         ServerMsg::Attached {
-            session: info(2, "another-session"), client_id: 9, window_ordinal: 1,
+            session: info(2, "another-session"),
+            client_id: 9,
+            window_ordinal: 1,
             content: Session::new(SessionId(2), Default::default()).content(),
         },
     ] {
-        let mut client = client(RecordingLink { sent: Default::default(), incoming: Default::default() });
+        let mut client = client(RecordingLink {
+            sent: Default::default(),
+            incoming: Default::default(),
+        });
         client.failed = true;
         let sent = Arc::new(Mutex::new(Vec::new()));
-        let link = RecordingLink { sent: sent.clone(), incoming: Arc::new(Mutex::new(VecDeque::from([reply]))) };
+        let link = RecordingLink {
+            sent: sent.clone(),
+            incoming: Arc::new(Mutex::new(VecDeque::from([reply]))),
+        };
         let (_send, ready) = mpsc::sync_channel(1);
         assert!(client.reconnect_link(Box::new(link), &ready).is_err());
         assert!(client.failed);
         assert_eq!(client.session, info(1, "A"));
         assert!(client.outbox.check().is_ok());
-        assert!(matches!(sent.lock().unwrap().as_slice(), [ClientMsg::AttachTo { name }] if name == "A"));
+        assert!(
+            matches!(sent.lock().unwrap().as_slice(), [ClientMsg::AttachTo { name }] if name == "A")
+        );
     }
 }
 
 #[test]
 fn session_projection_is_not_presented_between_attach_and_the_last_snapshot() {
     let incoming = Arc::new(Mutex::new(VecDeque::new()));
-    let mut client = client(RecordingLink { sent: Default::default(), incoming: incoming.clone() });
+    let mut client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: incoming.clone(),
+    });
     incoming.lock().unwrap().push_back(ServerMsg::Attached {
-        session: info(2, "B"), client_id: 1, window_ordinal: 2,
+        session: info(2, "B"),
+        client_id: 1,
+        window_ordinal: 2,
         content: Session::new(SessionId(2), Default::default()).content(),
     });
     assert!(client.poll().unwrap().session_attached);
-    assert!(!client.projection_ready(), "an attach alone must not expose an incomplete frame");
-    incoming.lock().unwrap().push_back(ServerMsg::ProjectionReady { session_id: SessionId(1) });
+    assert!(
+        !client.projection_ready(),
+        "an attach alone must not expose an incomplete frame"
+    );
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::ProjectionReady {
+            session_id: SessionId(1),
+        });
     client.poll().unwrap();
-    assert!(!client.projection_ready(), "another session cannot finish this snapshot");
+    assert!(
+        !client.projection_ready(),
+        "another session cannot finish this snapshot"
+    );
     use heca_core::backend::PaneBackend;
     let owner = TerminalOwner::Pane(heca_core::layout::PaneId(7));
     let backend = heca_core::backend::FakeBackend::new(20, 6);
     let frame = crate::server::wire::terminal::TerminalFrame {
-        id: 1, owner: owner.clone(), title: "shell".into(), display_title: None,
-        spec: TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (20, 6) },
+        id: 1,
+        owner: owner.clone(),
+        title: "shell".into(),
+        display_title: None,
+        spec: TerminalSpec {
+            program: crate::app::backend_store::Program::Shell,
+            cwd: None,
+            grid: (20, 6),
+        },
         screen: backend.terminal_snapshot().unwrap().to_wire(),
-        damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
+        damage: TerminalDamage::Full,
+        runtime: Default::default(),
+        mouse_grabbed: false,
     };
-    incoming.lock().unwrap().push_back(ServerMsg::Terminal(Arc::new(frame)));
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::Terminal(Arc::new(frame)));
     client.poll().unwrap();
-    assert!(!client.projection_ready(), "an early terminal snapshot must not end the batch");
+    assert!(
+        !client.projection_ready(),
+        "an early terminal snapshot must not end the batch"
+    );
     assert!(client.backends.find_owner(&owner).is_some());
-    incoming.lock().unwrap().push_back(ServerMsg::ProjectionReady { session_id: SessionId(2) });
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::ProjectionReady {
+            session_id: SessionId(2),
+        });
     let update = client.poll().unwrap();
     assert!(client.projection_ready());
-    assert!(update.effects.has_data, "completing the snapshot must wake rendering");
+    assert!(
+        update.effects.has_data,
+        "completing the snapshot must wake rendering"
+    );
 }
 
 #[test]
 fn incomplete_projection_times_out_instead_of_freezing_rendering_forever() {
-    let mut client = client(RecordingLink { sent: Default::default(), incoming: Default::default() });
+    let mut client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: Default::default(),
+    });
     client.reset_projection();
     assert!(!client.projection_ready());
     assert_eq!(client.next_wake(), client.projection_deadline);
     client.projection_deadline = Some(Instant::now());
     assert_eq!(client.poll().err().unwrap().kind(), io::ErrorKind::TimedOut);
-    assert!(client.projection_ready(), "the disconnected-session dialog must still render");
+    assert!(
+        client.projection_ready(),
+        "the disconnected-session dialog must still render"
+    );
     assert!(client.next_wake().is_none());
 }
 
 #[test]
 fn terminating_an_incomplete_projection_allows_the_unavailable_dialog_to_render() {
     let incoming = Arc::new(Mutex::new(VecDeque::new()));
-    let mut client = client(RecordingLink { sent: Default::default(), incoming: incoming.clone() });
+    let mut client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: incoming.clone(),
+    });
     client.reset_projection();
     let mut stopped = info(1, "A");
     stopped.status = SessionStatus::Terminated;
-    incoming.lock().unwrap().push_back(ServerMsg::SessionTerminated { session: stopped });
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::SessionTerminated { session: stopped });
     assert!(client.poll().unwrap().session_terminated);
     assert!(client.projection_ready());
 }
@@ -298,46 +434,81 @@ fn terminating_an_incomplete_projection_allows_the_unavailable_dialog_to_render(
 #[test]
 fn destination_reload_is_not_lost_while_its_projection_is_loading() {
     let sent = Arc::new(Mutex::new(Vec::new()));
-    let mut client = client(RecordingLink { sent: sent.clone(), incoming: Default::default() });
+    let mut client = client(RecordingLink {
+        sent: sent.clone(),
+        incoming: Default::default(),
+    });
     client.reset_projection();
     client.reload();
     client.poll().unwrap();
     assert!(!client.projection_ready());
     drop(client);
-    assert!(matches!(sent.lock().unwrap().first(), Some(ClientMsg::Reload)));
+    assert!(matches!(
+        sent.lock().unwrap().first(),
+        Some(ClientMsg::Reload)
+    ));
 }
 
 #[test]
 fn recreating_a_terminal_view_never_restores_its_original_launch_grid() {
-    use heca_core::backend::PaneBackend;
     use crate::server::wire::terminal::{ProcessInput, TerminalFrame};
+    use heca_core::backend::PaneBackend;
     for grid in [(37, 40), (136, 20)] {
         let sent = Arc::new(Mutex::new(Vec::new()));
         let owner = TerminalOwner::Pane(heca_core::layout::PaneId(7));
         let backend = heca_core::backend::FakeBackend::new(grid.0, grid.1);
-        let incoming = Arc::new(Mutex::new(VecDeque::from([
-            ServerMsg::Terminal(Arc::new(TerminalFrame {
-                id: 1, owner: owner.clone(), title: "shell".into(), display_title: None,
-                spec: TerminalSpec { program: crate::app::backend_store::Program::Shell,
-                    cwd: None, grid: (80, 24) },
+        let incoming = Arc::new(Mutex::new(VecDeque::from([ServerMsg::Terminal(Arc::new(
+            TerminalFrame {
+                id: 1,
+                owner: owner.clone(),
+                title: "shell".into(),
+                display_title: None,
+                spec: TerminalSpec {
+                    program: crate::app::backend_store::Program::Shell,
+                    cwd: None,
+                    grid: (80, 24),
+                },
                 screen: backend.terminal_snapshot().unwrap().to_wire(),
-                damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
-            })),
-        ])));
-        let mut client = client(RecordingLink { sent: sent.clone(), incoming });
+                damage: TerminalDamage::Full,
+                runtime: Default::default(),
+                mouse_grabbed: false,
+            },
+        ))])));
+        let mut client = client(RecordingLink {
+            sent: sent.clone(),
+            incoming,
+        });
         client.poll().unwrap();
         let id = client.backends.find_owner(&owner).unwrap();
-        assert_eq!(client.backends.spec_of(id).unwrap().grid, (80, 24), "the original launch spec stays unchanged");
+        assert_eq!(
+            client.backends.spec_of(id).unwrap().grid,
+            (80, 24),
+            "the original launch spec stays unchanged"
+        );
         client.terminal_view(id, 2.0).unwrap();
-        client.backends.get_mut_by_id(id).unwrap().set_size(grid.0, grid.1);
+        client
+            .backends
+            .get_mut_by_id(id)
+            .unwrap()
+            .set_size(grid.0, grid.1);
         client.poll().unwrap();
         drop(client);
         let messages = sent.lock().unwrap();
-        let sizes: Vec<_> = messages.iter().filter_map(|message| match message {
-            ClientMsg::Terminal { input: ProcessInput::Resize { cols, rows, .. }, .. } => Some((*cols, *rows)),
-            _ => None,
-        }).collect();
-        assert_eq!(sizes, vec![grid], "reattach must preserve the live grid, not briefly restore 80x24");
+        let sizes: Vec<_> = messages
+            .iter()
+            .filter_map(|message| match message {
+                ClientMsg::Terminal {
+                    input: ProcessInput::Resize { cols, rows, .. },
+                    ..
+                } => Some((*cols, *rows)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            sizes,
+            vec![grid],
+            "reattach must preserve the live grid, not briefly restore 80x24"
+        );
     }
 }
 
@@ -345,29 +516,65 @@ fn recreating_a_terminal_view_never_restores_its_original_launch_grid() {
 fn a_terminal_without_a_received_screen_still_uses_its_launch_grid() {
     use heca_core::backend::PaneBackend;
     let sent = Arc::new(Mutex::new(Vec::new()));
-    let mut client = client(RecordingLink { sent: sent.clone(), incoming: Default::default() });
-    let spec = TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (80, 24) };
-    let mut view = terminal::TerminalView::new(TerminalOwner::Pane(heca_core::layout::PaneId(7)),
-        &spec, client.data.clone(), client.outbox.clone(), (8.0, 14.0));
+    let mut client = client(RecordingLink {
+        sent: sent.clone(),
+        incoming: Default::default(),
+    });
+    let spec = TerminalSpec {
+        program: crate::app::backend_store::Program::Shell,
+        cwd: None,
+        grid: (80, 24),
+    };
+    let mut view = terminal::TerminalView::new(
+        TerminalOwner::Pane(heca_core::layout::PaneId(7)),
+        &spec,
+        client.data.clone(),
+        client.outbox.clone(),
+        (8.0, 14.0),
+    );
     view.set_scale_factor(2.0);
     client.poll().unwrap();
     drop(client);
-    assert!(matches!(sent.lock().unwrap().first(), Some(ClientMsg::Terminal {
-        input: crate::server::wire::terminal::ProcessInput::Resize { cols: 80, rows: 24, .. }, ..
-    })));
+    assert!(matches!(
+        sent.lock().unwrap().first(),
+        Some(ClientMsg::Terminal {
+            input: crate::server::wire::terminal::ProcessInput::Resize {
+                cols: 80,
+                rows: 24,
+                ..
+            },
+            ..
+        })
+    ));
 }
 
 #[test]
 fn changing_terminal_geometry_invalidates_its_retained_picture() {
     use heca_core::backend::PaneBackend;
-    let client = client(RecordingLink { sent: Default::default(), incoming: Default::default() });
-    let spec = TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (80, 24) };
-    let mut view = terminal::TerminalView::new(TerminalOwner::Pane(heca_core::layout::PaneId(7)),
-        &spec, client.data.clone(), client.outbox.clone(), (8.0, 14.0));
+    let client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: Default::default(),
+    });
+    let spec = TerminalSpec {
+        program: crate::app::backend_store::Program::Shell,
+        cwd: None,
+        grid: (80, 24),
+    };
+    let mut view = terminal::TerminalView::new(
+        TerminalOwner::Pane(heca_core::layout::PaneId(7)),
+        &spec,
+        client.data.clone(),
+        client.outbox.clone(),
+        (8.0, 14.0),
+    );
     assert_eq!(view.take_terminal_damage(), TerminalDamage::Full);
     assert_eq!(view.take_terminal_damage(), TerminalDamage::None);
     view.set_cell_size(9.0, 16.0);
-    assert_eq!(view.take_terminal_damage(), TerminalDamage::Full, "new cell metrics change the picture before a server reply");
+    assert_eq!(
+        view.take_terminal_damage(),
+        TerminalDamage::Full,
+        "new cell metrics change the picture before a server reply"
+    );
     view.set_cell_size(9.0, 16.0);
     assert_eq!(view.take_terminal_damage(), TerminalDamage::None);
     view.set_size(90, 30);
@@ -384,18 +591,37 @@ fn changing_terminal_geometry_invalidates_its_retained_picture() {
 fn pending_terminal_geometry_is_sent_as_one_final_resize() {
     use heca_core::backend::PaneBackend;
     let sent = Arc::new(Mutex::new(Vec::new()));
-    let mut client = client(RecordingLink { sent: sent.clone(), incoming: Default::default() });
-    let spec = TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (80, 24) };
-    let mut view = terminal::TerminalView::new(TerminalOwner::Pane(heca_core::layout::PaneId(7)),
-        &spec, client.data.clone(), client.outbox.clone(), (8.0, 14.0));
+    let mut client = client(RecordingLink {
+        sent: sent.clone(),
+        incoming: Default::default(),
+    });
+    let spec = TerminalSpec {
+        program: crate::app::backend_store::Program::Shell,
+        cwd: None,
+        grid: (80, 24),
+    };
+    let mut view = terminal::TerminalView::new(
+        TerminalOwner::Pane(heca_core::layout::PaneId(7)),
+        &spec,
+        client.data.clone(),
+        client.outbox.clone(),
+        (8.0, 14.0),
+    );
     view.set_scale_factor(2.0);
     view.set_cell_size(9.0, 16.0);
     view.set_size(90, 30);
     client.poll().unwrap();
     drop(client);
     let messages = sent.lock().unwrap();
-    let messages: Vec<_> = messages.iter().filter(|msg| !matches!(msg, ClientMsg::Detach)).collect();
-    assert_eq!(messages.len(), 1, "intermediate metrics must not resize the running shell");
+    let messages: Vec<_> = messages
+        .iter()
+        .filter(|msg| !matches!(msg, ClientMsg::Detach))
+        .collect();
+    assert_eq!(
+        messages.len(),
+        1,
+        "intermediate metrics must not resize the running shell"
+    );
     assert!(matches!(&messages[0], ClientMsg::Terminal {
         input: crate::server::wire::terminal::ProcessInput::Resize { cols: 90, rows: 30, cell, scale: 2.0 }, ..
     } if *cell == (9.0, 16.0)));
@@ -405,16 +631,25 @@ fn pending_terminal_geometry_is_sent_as_one_final_resize() {
 fn logical_detach_keeps_rpc_working_and_allows_explicit_session_selection() {
     let sent = Arc::new(Mutex::new(Vec::new()));
     let incoming = Arc::new(Mutex::new(VecDeque::new()));
-    let mut client = client(RecordingLink { sent: sent.clone(), incoming: incoming.clone() });
+    let mut client = client(RecordingLink {
+        sent: sent.clone(),
+        incoming: incoming.clone(),
+    });
     client.detach_session().unwrap();
     client.reply_rpc(8, "ok".into());
     client.poll().unwrap();
     {
         let messages = sent.lock().unwrap();
-        assert!(matches!(&messages[0], ClientMsg::RpcReply { request_id: 8, .. }));
+        assert!(matches!(
+            &messages[0],
+            ClientMsg::RpcReply { request_id: 8, .. }
+        ));
         assert!(matches!(&messages[1], ClientMsg::LeaveSession));
     }
-    incoming.lock().unwrap().push_back(ServerMsg::SessionDetached { id: SessionId(1) });
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(ServerMsg::SessionDetached { id: SessionId(1) });
     let update = client.poll().unwrap();
     assert!(update.session_detached && !update.session_deleted);
     assert!(client.detached && client.projection_ready());
@@ -423,7 +658,10 @@ fn logical_detach_keeps_rpc_working_and_allows_explicit_session_selection() {
     client.poll().unwrap();
     drop(client);
     let messages = sent.lock().unwrap();
-    assert!(matches!(&messages[2], ClientMsg::RpcReply { request_id: 9, .. }));
+    assert!(matches!(
+        &messages[2],
+        ClientMsg::RpcReply { request_id: 9, .. }
+    ));
     assert!(matches!(&messages[3], ClientMsg::AttachTo { name } if name == "B"));
 }
 
@@ -432,19 +670,39 @@ fn terminal_frame(owner: &TerminalOwner, title: &str) -> ServerMsg {
     use heca_core::backend::PaneBackend;
     let backend = heca_core::backend::FakeBackend::new(20, 6);
     ServerMsg::Terminal(Arc::new(crate::server::wire::terminal::TerminalFrame {
-        id: 1, owner: owner.clone(), title: title.into(), display_title: None,
-        spec: TerminalSpec { program: crate::app::backend_store::Program::Shell, cwd: None, grid: (20, 6) },
+        id: 1,
+        owner: owner.clone(),
+        title: title.into(),
+        display_title: None,
+        spec: TerminalSpec {
+            program: crate::app::backend_store::Program::Shell,
+            cwd: None,
+            grid: (20, 6),
+        },
         screen: backend.terminal_snapshot().unwrap().to_wire(),
-        damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
+        damage: TerminalDamage::Full,
+        runtime: Default::default(),
+        mouse_grabbed: false,
     }))
 }
 
 /// A client holding one terminal that has had its first frame, and the terminal's id.
-fn client_with_a_terminal() -> (ClientState, Arc<Mutex<VecDeque<ServerMsg>>>, TerminalOwner, crate::chrome::panes::terminal::TerminalId) {
+fn client_with_a_terminal() -> (
+    ClientState,
+    Arc<Mutex<VecDeque<ServerMsg>>>,
+    TerminalOwner,
+    crate::chrome::panes::terminal::TerminalId,
+) {
     let incoming = Arc::new(Mutex::new(VecDeque::new()));
-    let mut client = client(RecordingLink { sent: Default::default(), incoming: incoming.clone() });
+    let mut client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: incoming.clone(),
+    });
     let owner = TerminalOwner::Pane(heca_core::layout::PaneId(7));
-    incoming.lock().unwrap().push_back(terminal_frame(&owner, "one"));
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(terminal_frame(&owner, "one"));
     client.poll().unwrap();
     let id = client.backends.find_owner(&owner).unwrap();
     (client, incoming, owner, id)
@@ -458,13 +716,25 @@ fn client_with_a_terminal() -> (ClientState, Arc<Mutex<VecDeque<ServerMsg>>>, Te
 fn a_terminal_wakes_the_loop_once_for_what_it_was_sent_and_not_again() {
     let (mut client, incoming, owner, id) = client_with_a_terminal();
     let on_screen = std::collections::HashSet::from([id]);
-    assert!(client.poll_views(&on_screen).has_data, "its first frame is news");
+    assert!(
+        client.poll_views(&on_screen).has_data,
+        "its first frame is news"
+    );
     for _ in 0..5 {
-        assert!(!client.poll_views(&on_screen).has_data, "nothing new, nothing to draw for");
+        assert!(
+            !client.poll_views(&on_screen).has_data,
+            "nothing new, nothing to draw for"
+        );
     }
-    incoming.lock().unwrap().push_back(terminal_frame(&owner, "two"));
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(terminal_frame(&owner, "two"));
     client.poll().unwrap();
-    assert!(client.poll_views(&on_screen).has_data, "more output is news");
+    assert!(
+        client.poll_views(&on_screen).has_data,
+        "more output is news"
+    );
     assert!(!client.poll_views(&on_screen).has_data);
 }
 
@@ -474,12 +744,22 @@ fn output_in_a_terminal_that_is_not_on_screen_wakes_nothing() {
     let (mut client, incoming, owner, id) = client_with_a_terminal();
     let nowhere = std::collections::HashSet::new();
     assert!(!client.poll_views(&nowhere).has_data);
-    incoming.lock().unwrap().push_back(terminal_frame(&owner, "two"));
+    incoming
+        .lock()
+        .unwrap()
+        .push_back(terminal_frame(&owner, "two"));
     let update = client.poll().unwrap();
-    assert!(!update.effects.has_data, "receiving a frame is not a reason to draw");
+    assert!(
+        !update.effects.has_data,
+        "receiving a frame is not a reason to draw"
+    );
     assert!(!client.poll_views(&nowhere).has_data);
     let (_, damage) = client.terminal_view(id, 1.0).unwrap();
-    assert_eq!(damage, TerminalDamage::Full, "what arrived meanwhile is painted once it is shown");
+    assert_eq!(
+        damage,
+        TerminalDamage::Full,
+        "what arrived meanwhile is painted once it is shown"
+    );
 }
 
 /// **A new size still gets its repaint**: the next time the terminal is drawn, in full, and the
@@ -489,12 +769,27 @@ fn a_new_size_is_painted_on_the_next_draw_and_wakes_the_loop_once() {
     let (mut client, _incoming, _owner, id) = client_with_a_terminal();
     let on_screen = std::collections::HashSet::from([id]);
     client.poll_views(&on_screen);
-    assert_eq!(client.terminal_view(id, 1.0).unwrap().1, TerminalDamage::Full);
-    assert_eq!(client.terminal_view(id, 1.0).unwrap().1, TerminalDamage::None);
+    assert_eq!(
+        client.terminal_view(id, 1.0).unwrap().1,
+        TerminalDamage::Full
+    );
+    assert_eq!(
+        client.terminal_view(id, 1.0).unwrap().1,
+        TerminalDamage::None
+    );
     assert!(!client.poll_views(&on_screen).has_data);
 
     client.backends.get_mut_by_id(id).unwrap().set_size(90, 30);
-    assert!(client.poll_views(&on_screen).has_data, "the resize asks for a frame");
-    assert!(!client.poll_views(&on_screen).has_data, "once, not until something draws");
-    assert_eq!(client.terminal_view(id, 1.0).unwrap().1, TerminalDamage::Full);
+    assert!(
+        client.poll_views(&on_screen).has_data,
+        "the resize asks for a frame"
+    );
+    assert!(
+        !client.poll_views(&on_screen).has_data,
+        "once, not until something draws"
+    );
+    assert_eq!(
+        client.terminal_view(id, 1.0).unwrap().1,
+        TerminalDamage::Full
+    );
 }

@@ -1,6 +1,6 @@
 use super::*;
-use std::time::Instant;
 use heca_view::Intent;
+use std::time::Instant;
 
 /// The host's notification state and timers, with a retained toast projection.
 ///
@@ -156,7 +156,9 @@ impl NotificationRuntime {
     /// ([`NotificationAction::run`](crate::notification::NotificationAction::run)). `false` when
     /// there is no such button here, or it has no closure in this process.
     pub(crate) fn run_action(&self, id: NotificationId, key: &str) -> bool {
-        self.store.action_for_visible(id, key).is_some_and(|action| action.run_closure())
+        self.store
+            .action_for_visible(id, key)
+            .is_some_and(|action| action.run_closure())
     }
 
     /// Resolve the `Intent` behind `on_action(id, key)` — `key` is the action's own

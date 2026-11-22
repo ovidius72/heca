@@ -24,17 +24,19 @@ pub(crate) fn builtin_name(kind: crate::input::WmActionKind) -> Option<&'static 
     sides::shared().name_of(kind)
 }
 
-pub(crate) use described::describe;
 pub use builtins::builtins;
 pub use catalog::{
-    ActionCatalog, ActionCatalogSnapshot, ActionCategory, ActionMeta, GENERIC_ACTION_ICON, Side, builtin_args, builtin_side,
+    ActionCatalog, ActionCatalogSnapshot, ActionCategory, ActionMeta, GENERIC_ACTION_ICON, Side,
+    builtin_args, builtin_side,
 };
 pub use confirm::{ButtonRole, ConfirmSpec, Outcome, ResponseButton};
+pub(crate) use described::describe;
+pub(crate) use registry::server::{ServerGate, ServerInvocation, ServerStep};
 pub use registry::{
-    ActionHandle, ActionRegistry, ActionResult, DuplicateAction, register_dynamic, unregister_dynamic,
+    ActionHandle, ActionRegistry, ActionResult, DuplicateAction, register_dynamic,
+    unregister_dynamic,
 };
 pub(crate) use registry::{register_server_dynamic, register_service_dynamic};
-pub(crate) use registry::server::{ServerGate, ServerInvocation, ServerStep};
 
 // Read outside this module only by tests (RPC introspection).
 #[cfg(test)]

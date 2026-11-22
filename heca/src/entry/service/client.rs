@@ -34,7 +34,9 @@ impl<C: 'static> Copy for ServiceState<C> {}
 
 impl<C: 'static> ServiceState<C> {
     pub(super) fn new(initial: C) -> Self {
-        Self { value: signal(initial) }
+        Self {
+            value: signal(initial),
+        }
     }
 
     /// Read it without copying it out.
@@ -99,10 +101,13 @@ struct Typed<S: Service, C: 'static> {
 
 impl<S: Service, C: Clone + 'static> Typed<S, C> {
     fn refuse(&self, error: impl std::fmt::Display) {
-        crate::notification::Notification::danger(format!("Service {} sent something unreadable", self.name))
-            .body(error.to_string())
-            .dedup_key(format!("service:{}:unreadable", self.name))
-            .send();
+        crate::notification::Notification::danger(format!(
+            "Service {} sent something unreadable",
+            self.name
+        ))
+        .body(error.to_string())
+        .dedup_key(format!("service:{}:unreadable", self.name))
+        .send();
     }
 }
 
@@ -134,13 +139,18 @@ impl<S: Service, C: Clone + 'static> Entry for Typed<S, C> {
                     self.reset();
                 }
             },
-            ServiceUpdateKind::Delta { base_revision, value } => {
+            ServiceUpdateKind::Delta {
+                base_revision,
+                value,
+            } => {
                 if self.held.get() != Some((update.server_epoch, base_revision)) {
                     return Applied::OutOfStep;
                 }
                 match serde_json::from_value(value) {
                     Ok(delta) => {
-                        self.state.value.update(|current| (self.apply)(current, Update::Delta(delta)));
+                        self.state
+                            .value
+                            .update(|current| (self.apply)(current, Update::Delta(delta)));
                         self.held.set(Some((update.server_epoch, update.revision)));
                     }
                     Err(error) => {
@@ -166,21 +176,38 @@ pub(super) fn register<S: Service, C: Clone + 'static>(
     initial: C,
     apply: ApplyFn<S, C>,
 ) {
-    let entry = Typed::<S, C> { name: name.to_owned(), state, initial, apply, held: Cell::new(None) };
+    let entry = Typed::<S, C> {
+        name: name.to_owned(),
+        state,
+        initial,
+        apply,
+        held: Cell::new(None),
+    };
     ENTRIES.with(|entries| entries.borrow_mut().insert(name.to_owned(), Rc::new(entry)));
 }
 
 /// Apply what the server sent this window. `reset` first when the window changed session or left
 /// one, so nothing of the old one survives. `resync` is told each service that fell out of step.
-pub(crate) fn apply_updates(reset: bool, updates: Vec<ServiceUpdate>, mut resync: impl FnMut(&str)) {
+pub(crate) fn apply_updates(
+    reset: bool,
+    updates: Vec<ServiceUpdate>,
+    mut resync: impl FnMut(&str),
+) {
     let entries: Vec<_> = ENTRIES.with(|entries| entries.borrow().values().cloned().collect());
     if reset {
-        for entry in &entries { entry.reset(); }
+        for entry in &entries {
+            entry.reset();
+        }
     }
     for update in updates {
-        let Some(entry) = ENTRIES.with(|entries| entries.borrow().get(&update.service).cloned()) else { continue };
+        let Some(entry) = ENTRIES.with(|entries| entries.borrow().get(&update.service).cloned())
+        else {
+            continue;
+        };
         let service = update.service.clone();
-        if let Applied::OutOfStep = entry.apply(update) { resync(&service); }
+        if let Applied::OutOfStep = entry.apply(update) {
+            resync(&service);
+        }
     }
 }
 

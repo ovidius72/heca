@@ -1,15 +1,24 @@
-use std::{fs, io::{self, Read}, path::Path};
+use std::{
+    fs,
+    io::{self, Read},
+    path::Path,
+};
 
 use notify::{RecursiveMode, Watcher};
 
 use super::{LaunchRequest, LaunchResponse, REQUEST_SUFFIX, RESPONSE};
-use crate::agent::{AgentDrivers, AgentError, AgentLaunchContext};
 use crate::agent::channel::ReportReader;
+use crate::agent::{AgentDrivers, AgentError, AgentLaunchContext};
 
 pub(in crate::agent) fn is_request(path: &Path, root: &Path) -> bool {
     path.parent() == Some(root)
-        && path.file_name().and_then(|name| name.to_str())
-            .is_some_and(|name| name.strip_suffix(REQUEST_SUFFIX).is_some_and(|name| !name.is_empty()))
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name.strip_suffix(REQUEST_SUFFIX)
+                    .is_some_and(|name| !name.is_empty())
+            })
 }
 
 pub(in crate::agent) fn prepare(
@@ -18,26 +27,40 @@ pub(in crate::agent) fn prepare(
     reporter: &crate::agent::reporting::ReportingHelper,
     watcher: &mut crate::agent::watcher::AgentWatcher,
 ) -> io::Result<Option<ReportReader>> {
-    let root = path.parent().ok_or_else(|| io::Error::other("missing launch root"))?;
-    let name = path.file_name().and_then(|name| name.to_str())
+    let root = path
+        .parent()
+        .ok_or_else(|| io::Error::other("missing launch root"))?;
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
         .and_then(|name| name.strip_suffix(REQUEST_SUFFIX))
         .ok_or_else(|| io::Error::other("invalid launch request name"))?;
     let directory = root.join(name);
     let mut reader = None;
     let limit = reporter.max_report_bytes;
     let result = read(path, limit).and_then(|request| {
-        let driver = drivers.recognize(&request.program)
-            .ok_or_else(|| AgentError::Report(format!("no agent driver recognizes {}", request.program)))?;
+        let driver = drivers.recognize(&request.program).ok_or_else(|| {
+            AgentError::Report(format!("no agent driver recognizes {}", request.program))
+        })?;
         let endpoint = directory.join("reports.jsonl");
-        reader = Some(ReportReader::create(endpoint.clone(), driver.clone(), limit)?.with_launch(crate::backend::ProcessLaunch {
-            executable: request.executable, arguments: request.arguments, cwd: Some(request.cwd.clone()),
-        }));
-        watcher.watch(&endpoint, RecursiveMode::NonRecursive)
+        reader = Some(
+            ReportReader::create(endpoint.clone(), driver.clone(), limit)?.with_launch(
+                crate::backend::ProcessLaunch {
+                    executable: request.executable,
+                    arguments: request.arguments,
+                    cwd: Some(request.cwd.clone()),
+                },
+            ),
+        );
+        watcher
+            .watch(&endpoint, RecursiveMode::NonRecursive)
             .map_err(|error| io::Error::other(error.to_string()))?;
         driver.prepare(&AgentLaunchContext {
             reporter: reporter.clone(),
-            directory: directory.clone(), cwd: request.cwd,
-            endpoint: Some(endpoint), environment: request.environment,
+            directory: directory.clone(),
+            cwd: request.cwd,
+            endpoint: Some(endpoint),
+            environment: request.environment,
         })
     });
     // The request can contain the user's environment. Keep it in memory only while preparing.
@@ -56,9 +79,14 @@ pub(in crate::agent) fn prepare(
 
 fn read(path: &Path, limit: usize) -> Result<LaunchRequest, AgentError> {
     let mut bytes = Vec::new();
-    fs::File::open(path)?.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+    fs::File::open(path)?
+        .take(limit as u64 + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() > limit {
-        return Err(AgentError::Report("agent launch request exceeds max_report_bytes".into()));
+        return Err(AgentError::Report(
+            "agent launch request exceeds max_report_bytes".into(),
+        ));
     }
-    serde_json::from_slice(&bytes).map_err(|_| AgentError::Report("invalid agent launch request".into()))
+    serde_json::from_slice(&bytes)
+        .map_err(|_| AgentError::Report("invalid agent launch request".into()))
 }

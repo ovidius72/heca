@@ -111,7 +111,10 @@ fn laid_out(model: &WorkspaceModel) -> (Flex, heca_grid_ui::WidgetModel) {
 }
 
 /// The same, with the app's edges a test chooses — to see what a gesture asked the app for.
-fn laid_out_with(model: &WorkspaceModel, seams: WorkspaceSeams) -> (Flex, heca_grid_ui::WidgetModel) {
+fn laid_out_with(
+    model: &WorkspaceModel,
+    seams: WorkspaceSeams,
+) -> (Flex, heca_grid_ui::WidgetModel) {
     let mut window = Flex::column().width(800.0).height(600.0);
     let mut ws: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(workspace(seams));
     assert!(ws.set_props(model), "the workspace takes its model");

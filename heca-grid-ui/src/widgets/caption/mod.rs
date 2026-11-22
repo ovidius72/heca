@@ -1,9 +1,9 @@
 //! A small caption aligned with a quiet horizontal rule.
 
-use crate::{Base, Component, LayoutExt, PaintCx, Tone, ToneExt, WidgetModel, WidgetSize};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::Spacing;
 use crate::widgets::{Flex, Label, Separator};
+use crate::{Base, Component, LayoutExt, PaintCx, Tone, ToneExt, WidgetModel, WidgetSize};
 
 /// A theme-sized label and rule, composed from ordinary widgets.
 ///
@@ -39,7 +39,11 @@ impl Caption {
             .padding_x(Spacing::Xs);
         row.base_mut().children = parts(text);
         let was_empty = text.get_untracked().trim().is_empty();
-        Self { row, text, was_empty }
+        Self {
+            row,
+            text,
+            was_empty,
+        }
     }
 
     /// Set the caption text without replacing its label or rule.
@@ -78,8 +82,12 @@ impl Caption {
 }
 
 impl Component for Caption {
-    fn base(&self) -> &Base { self.row.base() }
-    fn base_mut(&mut self) -> &mut Base { self.row.base_mut() }
+    fn base(&self) -> &Base {
+        self.row.base()
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        self.row.base_mut()
+    }
 
     fn set_text(&self, text: String) -> bool {
         self.text.set(text);
@@ -93,24 +101,34 @@ impl Component for Caption {
     fn taffy_style(&self) -> taffy::Style {
         let mut style = self.row.taffy_style();
         // Content presence must not overwrite an author's own `.hidden(true)` setting.
-        if self.is_empty() { style.display = taffy::Display::None; }
+        if self.is_empty() {
+            style.display = taffy::Display::None;
+        }
         style
     }
 
-    fn is_shown(&self) -> bool { !self.is_empty() && self.row.is_shown() }
+    fn is_shown(&self) -> bool {
+        !self.is_empty() && self.row.is_shown()
+    }
 
     fn paint(&self, cx: &mut PaintCx) {
         let size = self.row.base().bounds.size;
-        if self.is_shown() && size.w > 0.0 && size.h > 0.0 { self.row.paint(cx); }
+        if self.is_shown() && size.w > 0.0 && size.h > 0.0 {
+            self.row.paint(cx);
+        }
     }
 
-    fn on_layout(&mut self) { self.row.on_layout(); }
+    fn on_layout(&mut self) {
+        self.row.on_layout();
+    }
 
     fn tick(&mut self, dt: f32) -> bool {
         let empty = self.is_empty();
         let changed = empty != self.was_empty;
         self.was_empty = empty;
-        if changed { self.row.base().mark_needs_layout(); }
+        if changed {
+            self.row.base().mark_needs_layout();
+        }
         self.row.tick(dt) || changed
     }
 }

@@ -36,14 +36,20 @@ pub(crate) struct Call {
 impl Call {
     /// The user, through a window or a script.
     pub(crate) fn local(window: Option<u64>) -> Self {
-        Self { origin: Origin::Local { window }, request: None }
+        Self {
+            origin: Origin::Local { window },
+            request: None,
+        }
     }
 
     /// A request a service handed in.
     pub(crate) fn external(handle: Handle) -> Self {
         let reference = &handle.reference;
         Self {
-            origin: Origin::External { service: reference.service().to_owned(), sender: reference.sender().clone() },
+            origin: Origin::External {
+                service: reference.service().to_owned(),
+                sender: reference.sender().clone(),
+            },
             request: Some(handle),
         }
     }
@@ -58,14 +64,33 @@ impl Call {
 
 impl ServiceHost {
     /// **May `call` run `action`?** `Err` carries the first policy's reason.
-    pub(crate) fn authorize(&mut self, call: &Call, session: Option<SessionRef>, action: &str, args: &PropMap,
-        parent: Option<&str>) -> Result<(), String> {
-        let judges: Vec<usize> = (0..self.services.len()).filter(|&index| self.services[index].has_policy()).collect();
+    pub(crate) fn authorize(
+        &mut self,
+        call: &Call,
+        session: Option<SessionRef>,
+        action: &str,
+        args: &PropMap,
+        parent: Option<&str>,
+    ) -> Result<(), String> {
+        let judges: Vec<usize> = (0..self.services.len())
+            .filter(|&index| self.services[index].has_policy())
+            .collect();
         if let Origin::External { service, .. } = &call.origin
-            && !judges.iter().any(|&index| self.services[index].name() == service) {
-            return Err(format!("{service} declares no action policy, so requests handed in for others are refused"));
+            && !judges
+                .iter()
+                .any(|&index| self.services[index].name() == service)
+        {
+            return Err(format!(
+                "{service} declares no action policy, so requests handed in for others are refused"
+            ));
         }
-        let request = ActionRequest { requester: call.requester(), action, args, session: session.map(|s| s.key), parent };
+        let request = ActionRequest {
+            requester: call.requester(),
+            action,
+            args,
+            session: session.map(|s| s.key),
+            parent,
+        };
         for index in judges {
             let permit = self.services[index].permit(self.epoch, &request);
             self.settle(index);
@@ -80,9 +105,16 @@ impl ServiceHost {
 /// The question as [`execute_server_with`](crate::actions::ActionRegistry::execute_server_with)
 /// asks it before each action of a call and each follow-up: for `call`, in the session `session`
 /// names for that action.
-pub(crate) fn gate<'a, F: Fn(&Intent) -> Option<SessionRef>>(services: &'a SharedServices, call: &'a Call,
-    session: F) -> Gate<'a, F> {
-    Gate { services, call, session }
+pub(crate) fn gate<'a, F: Fn(&Intent) -> Option<SessionRef>>(
+    services: &'a SharedServices,
+    call: &'a Call,
+    session: F,
+) -> Gate<'a, F> {
+    Gate {
+        services,
+        call,
+        session,
+    }
 }
 
 pub(crate) struct Gate<'a, F> {
@@ -97,8 +129,15 @@ impl<F: Fn(&Intent) -> Option<SessionRef>> ServerGate for Gate<'_, F> {
     }
 
     fn permit(&mut self, intent: &Intent, parent: Option<&str>) -> Result<(), RpcError> {
-        self.services.borrow_mut()
-            .authorize(self.call, (self.session)(intent), &intent.action, &intent.args, parent)
+        self.services
+            .borrow_mut()
+            .authorize(
+                self.call,
+                (self.session)(intent),
+                &intent.action,
+                &intent.args,
+                parent,
+            )
             .map_err(RpcError::Denied)
     }
 }

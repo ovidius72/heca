@@ -233,7 +233,12 @@ fn a_terminal_far_from_the_origin_gets_its_bar_in_its_own_corner() {
     let t = Terminal::unbound();
     t.bind(seams);
     t.show(&viewport());
-    let mut root = super::super::testing::header_above(heca_grid_ui::WidgetModel::new(t.clone()), 80.0, 300.0, 300.0);
+    let mut root = super::super::testing::header_above(
+        heca_grid_ui::WidgetModel::new(t.clone()),
+        80.0,
+        300.0,
+        300.0,
+    );
     t.find();
     root.tick(0.0);
     LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(300.0, 300.0));
@@ -338,8 +343,11 @@ fn enter_gives_the_keyboard_back_to_the_terminal() {
             pressed: true,
         },
     );
-    assert_eq!(*said.borrow(), vec![TerminalInput::Search(Search::Editing(false))],
-        "focus returns during Enter, without waiting for another event");
+    assert_eq!(
+        *said.borrow(),
+        vec![TerminalInput::Search(Search::Editing(false))],
+        "focus returns during Enter, without waiting for another event"
+    );
     heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("x".into()));
 
     assert_eq!(

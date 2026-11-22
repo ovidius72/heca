@@ -255,7 +255,11 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Jump the terminal viewport to an explicit offset in rows above the live bottom. Used by the GUI scrollbar and RPC; no default keybinding.",
         icon: None,
         args: &[
-            ArgDescriptor::required("rows", ArgKind::Int, "Rows above the live bottom to jump to."),
+            ArgDescriptor::required(
+                "rows",
+                ArgKind::Int,
+                "Rows above the live bottom to jump to.",
+            ),
             ArgDescriptor::optional(
                 "terminal",
                 ArgKind::Int,
@@ -516,18 +520,34 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         ],
     },
     ActionDescriptor {
-        name: "terminal_rename", side: Side::Client,
-        label: "Rename Terminal", description: "Rename this terminal's display label without changing its process.",
+        name: "terminal_rename",
+        side: Side::Client,
+        label: "Rename Terminal",
+        description: "Rename this terminal's display label without changing its process.",
         icon: Some(Glyph::Pencil),
-        args: &[ArgDescriptor::required("terminal", ArgKind::Text, "The terminal's qualified name or numeric ID.")],
+        args: &[ArgDescriptor::required(
+            "terminal",
+            ArgKind::Text,
+            "The terminal's qualified name or numeric ID.",
+        )],
     },
     ActionDescriptor {
-        name: "terminal_rename_to", side: Side::Server,
-        label: "Set Terminal Name", description: "Set a terminal's display label. An empty name clears it.",
+        name: "terminal_rename_to",
+        side: Side::Server,
+        label: "Set Terminal Name",
+        description: "Set a terminal's display label. An empty name clears it.",
         icon: Some(Glyph::Pencil),
         args: &[
-            ArgDescriptor::required("terminal", ArgKind::Text, "The terminal's qualified name or numeric ID."),
-            ArgDescriptor::required("name", ArgKind::Text, "The display label; empty restores its default."),
+            ArgDescriptor::required(
+                "terminal",
+                ArgKind::Text,
+                "The terminal's qualified name or numeric ID.",
+            ),
+            ArgDescriptor::required(
+                "name",
+                ArgKind::Text,
+                "The display label; empty restores its default.",
+            ),
         ],
     },
 ];

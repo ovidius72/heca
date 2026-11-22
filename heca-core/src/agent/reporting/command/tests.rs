@@ -8,9 +8,15 @@ use crate::agent::{AgentState, AgentStatus};
 fn reports(root: &std::path::Path) -> Reports {
     let endpoint = root.join("reports");
     fs::write(&endpoint, []).unwrap();
-    Reports { endpoint: Some(endpoint), events: [(
-        "Stop".into(), AgentState::new("example", "Example", AgentStatus::new("finished")).event("Stop"),
-    )].into(), limit: 4096 }
+    Reports {
+        endpoint: Some(endpoint),
+        events: [(
+            "Stop".into(),
+            AgentState::new("example", "Example", AgentStatus::new("finished")).event("Stop"),
+        )]
+        .into(),
+        limit: 4096,
+    }
 }
 
 #[test]
@@ -37,12 +43,18 @@ fn native_payload_forwards_only_metadata_and_cannot_override_the_configured_repo
 fn disabled_events_do_not_read_input_and_closed_endpoints_are_not_recreated() {
     struct Unreadable;
     impl Read for Unreadable {
-        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> { panic!("inactive hook read stdin") }
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            panic!("inactive hook read stdin")
+        }
     }
     let root = tempfile::tempdir().unwrap();
     let reports = reports(root.path());
     receive(Unreadable, "Disabled", &reports).unwrap();
-    assert!(fs::read(reports.endpoint.as_ref().unwrap()).unwrap().is_empty());
+    assert!(
+        fs::read(reports.endpoint.as_ref().unwrap())
+            .unwrap()
+            .is_empty()
+    );
     fs::remove_file(reports.endpoint.as_ref().unwrap()).unwrap();
     receive(Cursor::new("{}"), "Stop", &reports).unwrap();
     assert!(!reports.endpoint.as_ref().unwrap().exists());
@@ -52,9 +64,18 @@ fn disabled_events_do_not_read_input_and_closed_endpoints_are_not_recreated() {
 fn invalid_native_metadata_and_oversized_inputs_do_not_write() {
     let root = tempfile::tempdir().unwrap();
     let reports = reports(root.path());
-    for native in ["not-json".into(), "[]".into(), json!({"session_id":5}).to_string(),
-        json!({"model":{"id":"invalid"}}).to_string(), " ".repeat(reports.limit + 1)] {
+    for native in [
+        "not-json".into(),
+        "[]".into(),
+        json!({"session_id":5}).to_string(),
+        json!({"model":{"id":"invalid"}}).to_string(),
+        " ".repeat(reports.limit + 1),
+    ] {
         assert!(receive(Cursor::new(native), "Stop", &reports).is_err());
     }
-    assert!(fs::read(reports.endpoint.as_ref().unwrap()).unwrap().is_empty());
+    assert!(
+        fs::read(reports.endpoint.as_ref().unwrap())
+            .unwrap()
+            .is_empty()
+    );
 }

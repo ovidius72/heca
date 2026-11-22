@@ -21,12 +21,16 @@ impl ActionCatalogSnapshot {
     pub(super) fn of(catalog: &ActionCatalog) -> Self {
         let mut names: Vec<String> = catalog.all().map(|meta| meta.name.clone()).collect();
         names.sort_unstable();
-        Self { names: names.into() }
+        Self {
+            names: names.into(),
+        }
     }
 
     /// Whether an action of this name exists.
     pub fn contains(&self, name: &str) -> bool {
-        self.names.binary_search_by(|have| have.as_str().cmp(name)).is_ok()
+        self.names
+            .binary_search_by(|have| have.as_str().cmp(name))
+            .is_ok()
     }
 
     /// Every action's name, in alphabetical order.

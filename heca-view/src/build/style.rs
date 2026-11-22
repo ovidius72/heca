@@ -32,7 +32,9 @@ pub trait Style: Sized {
     }
 
     /// Preferred width / height, shared with the native layout engine.
-    fn aspect_ratio(self, ratio: f32) -> Self { self.prop("aspect_ratio", ratio) }
+    fn aspect_ratio(self, ratio: f32) -> Self {
+        self.prop("aspect_ratio", ratio)
+    }
 
     // ── Arrangement ──
     /// **Space between children** — a number of pixels, a theme step, or either said as a string.
@@ -521,7 +523,9 @@ pub trait Style: Sized {
     /// view::Label::new("zsh").on(ViewEvent::RightClick, Intent::new("docker.menu"))
     /// ```
     fn on(mut self, event: ViewEvent, intent: Intent) -> Self {
-        self.node_mut().events.insert(event.name().to_string(), intent);
+        self.node_mut()
+            .events
+            .insert(event.name().to_string(), intent);
         self
     }
 

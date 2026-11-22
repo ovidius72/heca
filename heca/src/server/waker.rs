@@ -86,13 +86,23 @@ mod tests {
     fn many_wakes_before_the_loop_runs_are_one_and_a_reset_opens_the_next() {
         let posted = Arc::new(AtomicUsize::new(0));
         let count = posted.clone();
-        let (waker, latch) = ServerWaker::latched(move || { count.fetch_add(1, Ordering::SeqCst); });
+        let (waker, latch) = ServerWaker::latched(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+        });
         for _ in 0..1000 {
             waker.wake();
         }
-        assert_eq!(posted.load(Ordering::SeqCst), 1, "a thousand chunks of output, one wake");
+        assert_eq!(
+            posted.load(Ordering::SeqCst),
+            1,
+            "a thousand chunks of output, one wake"
+        );
         latch.reset();
         waker.wake();
-        assert_eq!(posted.load(Ordering::SeqCst), 2, "after the turn starts, the next output wakes again");
+        assert_eq!(
+            posted.load(Ordering::SeqCst),
+            2,
+            "after the turn starts, the next output wakes again"
+        );
     }
 }

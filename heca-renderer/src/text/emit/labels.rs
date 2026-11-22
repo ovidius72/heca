@@ -5,11 +5,11 @@ use heca_grid_ui::scene::TextAlign;
 
 use super::{Emitted, Ink, glyph_quad};
 use crate::text::TextBox;
-use crate::text::shape;
+use crate::text::TextRenderer;
 use crate::text::layout::{LabelKey, LabelLayout, PlacedGlyph};
 use crate::text::pipeline::TextVertex;
 use crate::text::queue::TextCommand;
-use crate::text::TextRenderer;
+use crate::text::shape;
 use crate::text::style::{HALO_DARK_GAIN, HALO_LIGHT_GAIN, HALO_SIGMA_FRAC};
 
 impl TextRenderer {
@@ -115,7 +115,11 @@ impl TextRenderer {
                     .collect();
                 LabelLayout {
                     glyphs,
-                    content_w: if cmd.icon { advance_w } else { (max_x - min_x) as f32 },
+                    content_w: if cmd.icon {
+                        advance_w
+                    } else {
+                        (max_x - min_x) as f32
+                    },
                     line_top,
                     line_height,
                     min_y,
@@ -267,17 +271,30 @@ mod tests {
                             letter_spacing: 0.0,
                             ligatures: true,
                         };
-                        let buffer = shape::shape(&mut renderer.font_system, &text, size * scale, &face);
+                        let buffer =
+                            shape::shape(&mut renderer.font_system, &text, size * scale, &face);
                         let run = buffer.layout_runs().next().unwrap();
                         let physical = run.glyphs[0].physical((0.0, run.line_y), 1.0);
-                        let image = renderer.swash_cache
+                        let image = renderer
+                            .swash_cache
                             .get_image(&mut renderer.font_system, physical.cache_key)
-                            .as_ref().expect("the icon layer rasterizes");
+                            .as_ref()
+                            .expect("the icon layer rasterizes");
                         let expected_x = (size - run.line_w / scale) * 0.5
                             + (physical.x + image.placement.left) as f32 / scale;
                         renderer.queue_text_in_box(
-                            &text, 0.0, 0.0, size, size, size, [1.0; 4],
-                            heca_grid_ui::scene::TextStyle::REGULAR, TextAlign::Center, true, None, None,
+                            &text,
+                            0.0,
+                            0.0,
+                            size,
+                            size,
+                            size,
+                            [1.0; 4],
+                            heca_grid_ui::scene::TextStyle::REGULAR,
+                            TextAlign::Center,
+                            true,
+                            None,
+                            None,
                         );
                         let cmd = renderer.commands.pop().unwrap();
                         let emitted = renderer.build_emission(&queue, &cmd, size * scale, scale);

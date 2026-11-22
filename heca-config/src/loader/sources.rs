@@ -3,7 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{ConfigError, config_file_paths, keybindings_file_paths, read_first_toml, read_project};
+use super::{
+    ConfigError, config_file_paths, keybindings_file_paths, read_first_toml, read_project,
+};
 
 /// One setting a user's file or the project's file sets, and the file it came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,7 +28,12 @@ pub fn config_sources() -> Result<ConfigSources, ConfigError> {
     // seen to win over them.
     let mut layers: Vec<(PathBuf, toml::Value)> = crate::extension_defaults::layers()
         .into_iter()
-        .map(|(name, value)| (PathBuf::from(format!("(defaults of extension {name})")), value))
+        .map(|(name, value)| {
+            (
+                PathBuf::from(format!("(defaults of extension {name})")),
+                value,
+            )
+        })
         .collect();
     for paths in [config_file_paths(), keybindings_file_paths()] {
         layers.extend(read_first_toml(&paths)?);

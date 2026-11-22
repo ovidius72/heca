@@ -20,7 +20,8 @@ fn a_described_overlay_names_how_it_arrives_and_leaves() {
         .prop("animation", PropValue::Text("zoom_fade".into()))
         .prop("default_open", PropValue::Bool(true))
         .child(ViewNode::new(WidgetId::Label).text("MAP"));
-    let mut surface = realize(&node, &theme, &emit, &mut forms).expect("valid described test widget");
+    let mut surface =
+        realize(&node, &theme, &emit, &mut forms).expect("valid described test widget");
 
     assert!(
         surface.presence().is_some(),
@@ -45,7 +46,8 @@ fn a_described_overlay_names_how_it_arrives_and_leaves() {
     let unknown = ViewNode::new(WidgetId::Overlay)
         .prop("animation", PropValue::Text("supernova".into()))
         .child(ViewNode::new(WidgetId::Label).text("MAP"));
-    let mut cut = realize(&unknown, &theme, &emit, &mut forms).expect("valid described test widget");
+    let mut cut =
+        realize(&unknown, &theme, &emit, &mut forms).expect("valid described test widget");
     cut.show();
     cut.close();
     assert!(

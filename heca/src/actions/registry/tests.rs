@@ -6,7 +6,10 @@ use heca_grid_ui::Glyph;
 #[test]
 fn test_registry_dispatch() {
     let mut registry = ActionRegistry::new();
-    fn dummy_handler(state: &mut crate::app_state::AppState, _action: &WmAction) -> crate::actions::ActionResult {
+    fn dummy_handler(
+        state: &mut crate::app_state::AppState,
+        _action: &WmAction,
+    ) -> crate::actions::ActionResult {
         state.needs_redraw = true;
         Ok(())
     }
@@ -181,24 +184,46 @@ fn headless_session_confirmations_fail_closed_and_have_independent_overrides() {
     for (terminate, delete) in [(true, true), (false, true), (true, false), (false, false)] {
         let config = heca_config::loader::config_from_layers(&format!(
             "[confirm]\nterminate_session={terminate}\ndelete_session={delete}\n"
-        )).unwrap();
+        ))
+        .unwrap();
         for (owner, enabled) in [("terminate_session", terminate), ("delete_session", delete)] {
-            let intent = crate::chrome::Intent::new(owner)
-                .arg("session", crate::chrome::PropValue::Text("Project A".into()));
+            let intent = crate::chrome::Intent::new(owner).arg(
+                "session",
+                crate::chrome::PropValue::Text("Project A".into()),
+            );
             let mut ran = Vec::new();
-            let result = registry.execute_server_with(&catalog, &config.confirm, store.clone(), &mut allow, &intent,
+            let result = registry.execute_server_with(
+                &catalog,
+                &config.confirm,
+                store.clone(),
+                &mut allow,
+                &intent,
                 &mut |step| {
-                    if let super::server::ServerStep::Action(action) = step { ran.push(action); }
+                    if let super::server::ServerStep::Action(action) = step {
+                        ran.push(action);
+                    }
                     Ok(Vec::new())
-                });
+                },
+            );
             if enabled {
-                assert!(matches!(result, Err(crate::rpc::RpcError::Blocked(name)) if name == owner));
-                assert!(ran.is_empty(), "a missing confirmation must not execute the action");
+                assert!(
+                    matches!(result, Err(crate::rpc::RpcError::Blocked(name)) if name == owner)
+                );
+                assert!(
+                    ran.is_empty(),
+                    "a missing confirmation must not execute the action"
+                );
             } else {
                 assert!(result.is_ok());
-                assert_eq!(ran.len(), 1, "disabling one prompt runs its action exactly once");
-                assert!(matches!(&ran[0], crate::input::WmAction::TerminateSession { session }
-                    | crate::input::WmAction::DeleteSession { session } if session.as_deref() == Some("Project A")));
+                assert_eq!(
+                    ran.len(),
+                    1,
+                    "disabling one prompt runs its action exactly once"
+                );
+                assert!(
+                    matches!(&ran[0], crate::input::WmAction::TerminateSession { session }
+                    | crate::input::WmAction::DeleteSession { session } if session.as_deref() == Some("Project A"))
+                );
             }
         }
     }
@@ -212,15 +237,30 @@ fn headless_action_refusals_are_errors_not_successful_rpc_answers() {
     let registry = ActionRegistry::new();
     let store = crate::chrome::SharedChromeState::new(0.0, 0.0);
     let intent = crate::chrome::Intent::new("terminal_rename_to")
-        .arg("terminal", crate::chrome::PropValue::Text("demo.shell".into()))
+        .arg(
+            "terminal",
+            crate::chrome::PropValue::Text("demo.shell".into()),
+        )
         .arg("name", crate::chrome::PropValue::Text("Build".into()));
     for reason in [Refusal::TerminalUnavailable, Refusal::OnlyPaneInColumn] {
-        let result = registry.execute_server_with(&catalog, &Default::default(), store.clone(), &mut allow, &intent,
-            &mut |_| Ok(vec![Change::Refused(reason)]));
+        let result = registry.execute_server_with(
+            &catalog,
+            &Default::default(),
+            store.clone(),
+            &mut allow,
+            &intent,
+            &mut |_| Ok(vec![Change::Refused(reason)]),
+        );
         assert!(matches!(result, Err(crate::rpc::RpcError::Failed(_))));
     }
-    let result = registry.execute_server_with(&catalog, &Default::default(), store, &mut allow, &intent,
-        &mut |_| Ok(vec![Change::NamesChanged]));
+    let result = registry.execute_server_with(
+        &catalog,
+        &Default::default(),
+        store,
+        &mut allow,
+        &intent,
+        &mut |_| Ok(vec![Change::NamesChanged]),
+    );
     assert_eq!(result.unwrap(), vec![Change::NamesChanged]);
 }
 
@@ -237,14 +277,32 @@ fn a_wrong_argument_is_named_in_the_refusal() {
         .arg("terminal", text("demo.shell"))
         .arg("name", text("Build"))
         .arg("orchestrator", text("a"));
-    let result = registry.execute_server_with(&catalog, &Default::default(), store.clone(), &mut allow, &intent,
-        &mut |_| Ok(Vec::new()));
+    let result = registry.execute_server_with(
+        &catalog,
+        &Default::default(),
+        store.clone(),
+        &mut allow,
+        &intent,
+        &mut |_| Ok(Vec::new()),
+    );
     let error = result.unwrap_err().to_string();
     assert!(error.contains("unknown argument 'orchestrator'"), "{error}");
     assert!(!error.contains("needs arguments"), "{error}");
 
     let intent = crate::chrome::Intent::new("terminal_rename_to").arg("name", text("Build"));
-    let error = registry.execute_server_with(&catalog, &Default::default(), store, &mut allow, &intent,
-        &mut |_| Ok(Vec::new())).unwrap_err().to_string();
-    assert!(error.contains("missing required argument 'terminal'"), "{error}");
+    let error = registry
+        .execute_server_with(
+            &catalog,
+            &Default::default(),
+            store,
+            &mut allow,
+            &intent,
+            &mut |_| Ok(Vec::new()),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("missing required argument 'terminal'"),
+        "{error}"
+    );
 }

@@ -86,7 +86,10 @@ pub fn described(kind: EventKind) -> Option<ViewEvent> {
 
 /// The native event a node's bound name listens to, if it is one.
 pub(crate) fn native_by_name(name: &str) -> Option<EventKind> {
-    ViewEvent::ALL.iter().find(|event| event.name() == name).and_then(|event| native(*event))
+    ViewEvent::ALL
+        .iter()
+        .find(|event| event.name() == name)
+        .and_then(|event| native(*event))
 }
 
 #[cfg(test)]

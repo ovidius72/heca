@@ -34,7 +34,10 @@ enum ParseState {
 
 impl OscSnooper {
     pub(super) fn with_notification_limit(notification_limit: Option<usize>) -> Self {
-        Self { state: ParseState::Ground, notification_limit }
+        Self {
+            state: ParseState::Ground,
+            notification_limit,
+        }
     }
 
     pub(super) fn set_notification_limit(&mut self, limit: usize) {
@@ -63,7 +66,11 @@ impl OscSnooper {
                         self.state = ParseState::Ground;
                     }
                 }
-                ParseState::Osc { payload, saw_esc, discarded } => {
+                ParseState::Osc {
+                    payload,
+                    saw_esc,
+                    discarded,
+                } => {
                     if *saw_esc {
                         if byte == b'\\' || byte == 0x9c {
                             if !*discarded && let Some(event) = parse_osc_payload(payload) {
@@ -101,10 +108,14 @@ impl OscSnooper {
 }
 
 fn append(payload: &mut Vec<u8>, discarded: &mut bool, byte: u8, limit: Option<usize>) {
-    if *discarded { return }
+    if *discarded {
+        return;
+    }
     payload.push(byte);
     if limit.is_some_and(|limit| payload.len() > limit)
-        && [b"9;".as_slice(), b"99;", b"777;"].iter().any(|prefix| payload.starts_with(prefix))
+        && [b"9;".as_slice(), b"99;", b"777;"]
+            .iter()
+            .any(|prefix| payload.starts_with(prefix))
     {
         payload.clear();
         *discarded = true;
@@ -122,7 +133,10 @@ fn parse_osc_payload(payload: &[u8]) -> Option<OscEvent> {
     let (code, payload) = payload.split_once(';')?;
     let code = code.parse().ok()?;
     matches!(code, 9 | 99 | 777).then(|| {
-        OscEvent::Notification(TerminalNotification { code, payload: payload.to_owned() })
+        OscEvent::Notification(TerminalNotification {
+            code,
+            payload: payload.to_owned(),
+        })
     })
 }
 
@@ -227,12 +241,13 @@ mod tests {
         for code in [9, 99, 777] {
             let mut snooper = OscSnooper::default();
             let bytes = format!("\x1b]{code};notify;title;body\x07");
-            assert_eq!(snooper.observe(bytes.as_bytes()), vec![
-                OscEvent::Notification(TerminalNotification {
+            assert_eq!(
+                snooper.observe(bytes.as_bytes()),
+                vec![OscEvent::Notification(TerminalNotification {
                     code,
                     payload: "notify;title;body".into(),
-                }),
-            ]);
+                }),]
+            );
         }
     }
 
@@ -249,10 +264,13 @@ mod tests {
                 let mut snooper = OscSnooper::default();
                 let mut events = snooper.observe(&bytes[..split]);
                 events.extend(snooper.observe(&bytes[split..]));
-                assert_eq!(events, vec![OscEvent::Notification(TerminalNotification {
-                    code: 99,
-                    payload: "i=work;p=body;ready".into(),
-                })]);
+                assert_eq!(
+                    events,
+                    vec![OscEvent::Notification(TerminalNotification {
+                        code: 99,
+                        payload: "i=work;p=body;ready".into(),
+                    })]
+                );
             }
         }
     }
@@ -269,7 +287,14 @@ mod tests {
     #[test]
     fn oversized_notifications_are_discarded_until_the_terminator() {
         let mut snooper = OscSnooper::with_notification_limit(Some(8));
-        assert!(snooper.observe(b"\x1b]9;this-report-is-too-long").is_empty());
-        assert_eq!(snooper.observe(b"133;D;1\x07\x1b]133;A\x07"), [OscEvent::PromptStart]);
+        assert!(
+            snooper
+                .observe(b"\x1b]9;this-report-is-too-long")
+                .is_empty()
+        );
+        assert_eq!(
+            snooper.observe(b"133;D;1\x07\x1b]133;A\x07"),
+            [OscEvent::PromptStart]
+        );
     }
 }

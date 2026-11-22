@@ -3,7 +3,7 @@
 //! rules, and [`paint_hint_label`] — called by `paint_child` for every widget
 //! carrying a letter, which is what lets any widget be pickable without a wrapper.
 
-use super::keycap::{keycap_size, paint_keycap, KeycapVariant};
+use super::keycap::{KeycapVariant, keycap_size, paint_keycap};
 use crate::Tone;
 use crate::color::Color;
 use crate::component::{Component, PaintCx};
@@ -290,7 +290,7 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
 
 #[cfg(test)]
 mod tests {
-    use super::{fit_into_view, keycap_rect, HintStyle};
+    use super::{HintStyle, fit_into_view, keycap_rect};
     use heca_core::layout::{Point, Rectangle, Size};
 
     fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {

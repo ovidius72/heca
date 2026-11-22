@@ -22,7 +22,6 @@ pub trait PresenceExt: Component + Sized {
         self
     }
 
-
     /// **What the cursor looks like over this widget** (CSS `cursor`): the nearest widget that
     /// declared one, on the way up from what the pointer is over, decides — see
     /// [`cursor_at`](crate::cursor_at).
@@ -31,14 +30,12 @@ pub trait PresenceExt: Component + Sized {
         self
     }
 
-
     /// **Clip what this widget holds to its own box** (CSS `overflow: hidden`): a child that is
     /// placed or grows past the edge is not drawn there and cannot be hit there.
     fn clip_children(mut self, clip: bool) -> Self {
         self.base_mut().clip_children = clip;
         self
     }
-
 
     /// **Lock what is behind this surface** — refuse actions on it while this is up.
     ///
@@ -58,7 +55,6 @@ pub trait PresenceExt: Component + Sized {
         self
     }
 
-
     /// **Override whether this surface takes the keyboard while it is up.**
     ///
     /// ```ignore
@@ -75,7 +71,6 @@ pub trait PresenceExt: Component + Sized {
         self.base_mut().captures_keyboard = Some(yes);
         self
     }
-
 
     /// **Pressing this widget gives the keyboard to its part named `area`** — HTML's
     /// `<label for>`, for any container.
@@ -114,7 +109,6 @@ pub trait PresenceExt: Component + Sized {
         self.base_mut().focus_fallback = yes;
         self
     }
-
 
     /// **Take this widget out of the layout entirely** — CSS `display: none`. Its neighbours close
     /// up, and it is neither painted nor Tab-focused.
@@ -157,7 +151,6 @@ pub trait PresenceExt: Component + Sized {
         }
         self
     }
-
 
     /// **Whether this widget's ink is drawn**, keeping its box either way — CSS `visibility`.
     ///

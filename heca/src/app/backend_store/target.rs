@@ -72,7 +72,14 @@ mod tests {
             assert_eq!(store.resolve_reference(name), Some(first));
         }
         assert_eq!(store.resolve_reference("other.shell"), Some(other));
-        for missing in ["shell", "Renamed", "DEMO.shell", "missing.shell", "9999", ""] {
+        for missing in [
+            "shell",
+            "Renamed",
+            "DEMO.shell",
+            "missing.shell",
+            "9999",
+            "",
+        ] {
             assert_eq!(store.resolve_reference(missing), None, "{missing}");
         }
     }

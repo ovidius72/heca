@@ -17,26 +17,45 @@ use heca_core::runtime::PaneClosePolicy;
 /// Each variant's **kind** ([`WmActionKind`], one per variant, fields dropped) is derived, not
 /// written: the registry keys handlers by it, and tests walk every kind without keeping a list.
 // WmAction itself does not derive Hash: f64 fields in parameterized variants do not implement it.
-#[derive(Clone, Debug, PartialEq, strum::EnumDiscriminants, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, strum::EnumDiscriminants, serde::Serialize, serde::Deserialize,
+)]
 #[strum_discriminants(name(WmActionKind), derive(Hash, strum::EnumIter))]
 pub enum WmAction {
     // Session lifecycle is shared; selection and prompts belong to this window.
     ListSessions,
-    CreateSession { folder: String, name: Option<String>, label: Option<String> },
-    RenameSessionTo { session: Option<String>, name: String },
-    TerminateSession { session: Option<String> },
-    RestartSession { session: Option<String> },
-    DeleteSession { session: Option<String> },
+    CreateSession {
+        folder: String,
+        name: Option<String>,
+        label: Option<String>,
+    },
+    RenameSessionTo {
+        session: Option<String>,
+        name: String,
+    },
+    TerminateSession {
+        session: Option<String>,
+    },
+    RestartSession {
+        session: Option<String>,
+    },
+    DeleteSession {
+        session: Option<String>,
+    },
     /// Stop the server and with it every session, pane and terminal.
     KillServer,
     NewSession,
     RenameSession,
-    SwitchSession { name: String },
+    SwitchSession {
+        name: String,
+    },
     DetachSession,
     ReconnectSession,
     /// Mirror another window on this session (follow), by its id from the window directory, or
     /// `None` to stop. Window-local: it changes only what this window looks at.
-    Follow { target: Option<u64> },
+    Follow {
+        target: Option<u64>,
+    },
     // ── Navigation (unit) ──
     FocusLeft,
     FocusRight,
@@ -221,9 +240,14 @@ pub enum WmAction {
         terminal: Option<u64>,
     },
     /// Open the shared rename dialog for a terminal, wherever it is placed.
-    TerminalRename { terminal: String },
+    TerminalRename {
+        terminal: String,
+    },
     /// Set a terminal's display label without changing its identity or process.
-    TerminalRenameTo { terminal: String, name: String },
+    TerminalRenameTo {
+        terminal: String,
+        name: String,
+    },
 
     // ── Pane (unit) ──
     Float,

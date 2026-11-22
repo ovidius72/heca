@@ -25,7 +25,10 @@ use crate::input::WmAction;
 /// `Enter` confirms, `prefix` returns to Prefix, movement keys update the
 /// focus cell) is owned by
 /// `app::input::handle_selection_mode`.
-pub fn handle_enter_selection_mode(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_enter_selection_mode(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     // If we can't place a caret on the focused terminal, do nothing.
     // Entering selection mode without a caret violates the contract:
     // the user must have a caret position to move and begin selection from.
@@ -33,22 +36,34 @@ pub fn handle_enter_selection_mode(state: &mut AppState, _action: &WmAction) -> 
     Ok(())
 }
 
-pub fn handle_selection_left(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_selection_left(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, 0, -1);
     Ok(())
 }
 
-pub fn handle_selection_right(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_selection_right(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, 0, 1);
     Ok(())
 }
 
-pub fn handle_selection_up(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_selection_up(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, -1, 0);
     Ok(())
 }
 
-pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_selection_down(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let _ = move_focused_terminal_selection(state, 1, 0);
     Ok(())
 }
@@ -62,7 +77,10 @@ pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) -> crate:
 /// If a selection already exists, this is a no-op — the user should clear
 /// and re-enter if they want to restart selection from a different point.
 /// This avoids accidental loss of an in-progress selection.
-pub fn handle_begin_selection(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_begin_selection(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if state.selection.is_caret() {
         state
             .selection
@@ -78,13 +96,19 @@ pub fn handle_begin_selection(state: &mut AppState, _action: &WmAction) -> crate
 /// After toggling, movement keys update the other end of the selection.
 /// This lets the keyboard user grow the selection from both ends without
 /// restarting.
-pub fn handle_toggle_selection_endpoint(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_toggle_selection_endpoint(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     state.selection.toggle_selection_endpoint();
     Ok(())
 }
 
 /// Clear the active selection and exit selection input mode.
-pub fn handle_clear_selection(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_clear_selection(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     state.selection.clear();
     if matches!(state.input_mode, InputMode::Selection) {
         state.input_mode = InputMode::Normal;
@@ -123,7 +147,10 @@ pub(crate) fn set_system_clipboard(text: &str) {
 /// - If clipboard write fails, logs in debug builds and keeps app state coherent.
 /// - Does NOT clear the selection after copy — the user clears explicitly.
 /// - Safe no-op when there is no active selection or the owner is unsupported.
-pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_copy_selection(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let request = {
         let active = match state.selection.active() {
             Some(a) => a,
@@ -151,22 +178,38 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) -> crate:
             None => return Ok(()), // No snapshot — safe no-op.
         };
 
-        (terminal, start_stable, end_stable, snapshot.cols, snapshot.default_bg)
+        (
+            terminal,
+            start_stable,
+            end_stable,
+            snapshot.cols,
+            snapshot.default_bg,
+        )
     };
     let selection = state.selection.clone();
     let (terminal, start, end, cols, background) = request;
     state.client.read_lines(terminal, start, end, move |lines| {
-        let text = crate::app::terminal_host::selection::extract_selection_text(&selection, &lines, start, cols, background);
+        let text = crate::app::terminal_host::selection::extract_selection_text(
+            &selection, &lines, start, cols, background,
+        );
         crate::client::ReadEffect::Clipboard { text, selection }
     });
     Ok(())
 }
 
-pub(crate) fn finish_copy(state: &mut AppState, selection: crate::app::terminal_host::selection::SelectionState, text: Option<String>) {
-    let Some(text) = text.filter(|text| !text.is_empty()) else { return };
+pub(crate) fn finish_copy(
+    state: &mut AppState,
+    selection: crate::app::terminal_host::selection::SelectionState,
+    text: Option<String>,
+) {
+    let Some(text) = text.filter(|text| !text.is_empty()) else {
+        return;
+    };
     set_system_clipboard(&text);
     // A delayed response must not clear a selection the user made after this copy request.
-    if state.selection != selection { return; }
+    if state.selection != selection {
+        return;
+    }
 
     // Copying ends the selection, however it was made. Outside selection mode — a mouse selection —
     // that is all; inside it, the caret below stays where the selection ended so the keyboard can
@@ -186,7 +229,9 @@ pub(crate) fn finish_copy(state: &mut AppState, selection: crate::app::terminal_
             ..
         } = active.region;
         let owner = active.owner;
-        state.selection.set_caret(owner, focus_stable_row, focus_col);
+        state
+            .selection
+            .set_caret(owner, focus_stable_row, focus_col);
     } else {
         state.selection.clear();
     }
@@ -197,7 +242,10 @@ pub(crate) fn finish_copy(state: &mut AppState, selection: crate::app::terminal_
 ///
 /// The backend wraps the text in bracketed-paste markers when the program enabled that mode (see
 /// `PaneBackend::paste`), so editors treat it as literal input.
-pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_paste_clipboard(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let text = match arboard::Clipboard::new() {
         Ok(mut cb) => match cb.get_text() {
             Ok(t) => t,

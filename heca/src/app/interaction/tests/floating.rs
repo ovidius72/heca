@@ -295,7 +295,10 @@ fn floating_allows_global_reload() {
 fn floating_allows_the_notification_history() {
     let mut session = test_session();
     session.ws().set_focus_domain(FocusDomain::Floating);
-    assert_eq!(action_policy(&WmAction::NotificationHistory), ActionPolicy::Global);
+    assert_eq!(
+        action_policy(&WmAction::NotificationHistory),
+        ActionPolicy::Global
+    );
 
     let decision = route_in_domain(
         session.l(),
@@ -303,7 +306,10 @@ fn floating_allows_the_notification_history() {
         InteractionSource::Keyboard,
         InteractionIntent::ActivateAction(WmAction::NotificationHistory),
     );
-    assert!(matches!(decision, RouteDecision::Allow(_)), "got {decision:?}");
+    assert!(
+        matches!(decision, RouteDecision::Allow(_)),
+        "got {decision:?}"
+    );
 }
 
 /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane,

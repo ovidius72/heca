@@ -54,7 +54,10 @@ impl SessionRuntime {
 #[cfg(test)]
 impl SessionRuntime {
     /// Shape the session directly — its layout and its terminals — as a test's starting point.
-    pub(crate) fn arrange(&mut self, shape: impl FnOnce(&mut heca_core::layout::Session, &mut ServerState)) {
+    pub(crate) fn arrange(
+        &mut self,
+        shape: impl FnOnce(&mut heca_core::layout::Session, &mut ServerState),
+    ) {
         shape(&mut self.session, &mut self.state);
     }
 }

@@ -35,7 +35,10 @@ fn visible_notification_projects_presentation_data_and_keyed_actions() {
     assert_eq!(view.id.as_u64(), 21);
     assert_eq!(view.title, "Build failed");
     assert_eq!(view.severity, NotificationSeverity::Error);
-    assert_eq!(view.action("build.retry").map(|a| a.label.as_str()), Some("Retry"));
+    assert_eq!(
+        view.action("build.retry").map(|a| a.label.as_str()),
+        Some("Retry")
+    );
 
     // The window builds the grid-ui spec from the view; only the action's name crosses into it.
     let spec = toast_spec(&view);
@@ -60,7 +63,10 @@ fn a_timed_notification_carries_its_lifetime_to_the_spec_and_a_sticky_one_does_n
     };
     let view = notification_view(&timed).expect("visible");
     assert_eq!(view.auto_dismiss, Some(std::time::Duration::from_secs(4)));
-    assert_eq!(toast_spec(&view).countdown, Some(std::time::Duration::from_secs(4)));
+    assert_eq!(
+        toast_spec(&view).countdown,
+        Some(std::time::Duration::from_secs(4))
+    );
 
     // A sticky card carries no span, so no bar.
     let mut sticky = NotificationDraft::new("Fix me")
@@ -79,9 +85,7 @@ fn a_timed_notification_carries_its_lifetime_to_the_spec_and_a_sticky_one_does_n
 fn a_view_survives_the_wire_with_its_intent() {
     let mut notification = NotificationDraft::new("Config reload failed")
         .severity(NotificationSeverity::Error)
-        .action(
-            NotificationAction::new("Retry", Intent::new("reload_config")).dismiss_after(true),
-        )
+        .action(NotificationAction::new("Retry", Intent::new("reload_config")).dismiss_after(true))
         .build(NotificationId::from_raw(30), Instant::now());
     notification.placement = NotificationPlacement::Visible {
         visible_since: Instant::now(),
@@ -93,7 +97,9 @@ fn a_view_survives_the_wire_with_its_intent() {
     let back: NotificationView = serde_json::from_str(&json).expect("deserializes");
     assert_eq!(view, back);
     // The Intent and its post-dispatch policy ride across — a ToastSpec could carry neither.
-    let action = back.action("reload_config").expect("action by its intent name");
+    let action = back
+        .action("reload_config")
+        .expect("action by its intent name");
     assert_eq!(action.intent.action, "reload_config");
     assert!(action.dismiss_after);
 }
@@ -129,7 +135,10 @@ fn a_history_record_survives_the_wire_with_its_source_time_and_standing() {
         .source(NotificationSource::app("restore"))
         .severity(NotificationSeverity::Warning)
         .body("the folder is gone\nthe second line stays")
-        .action(NotificationAction::new("Retry", Intent::new("restore.retry")))
+        .action(NotificationAction::new(
+            "Retry",
+            Intent::new("restore.retry"),
+        ))
         .build(NotificationId::from_raw(50), now);
     notification.placement = NotificationPlacement::History {
         cause: NotificationArchiveCause::Expired,
@@ -137,13 +146,24 @@ fn a_history_record_survives_the_wire_with_its_source_time_and_standing() {
     };
 
     let wall = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(5_000);
-    let record = notification_record(&notification, now + std::time::Duration::from_secs(60), wall)
-        .expect("an archived notification is in the history");
-    assert_eq!(record.view.body.as_deref(), Some("the folder is gone\nthe second line stays"), "the whole body");
+    let record = notification_record(
+        &notification,
+        now + std::time::Duration::from_secs(60),
+        wall,
+    )
+    .expect("an archived notification is in the history");
+    assert_eq!(
+        record.view.body.as_deref(),
+        Some("the folder is gone\nthe second line stays"),
+        "the whole body"
+    );
     assert_eq!(record.source, NotificationSource::app("restore"));
     assert_eq!(record.raised_at, 4_940);
     assert_eq!(record.standing.word(), "expired");
-    assert!(record.view.actions.is_empty(), "a gone notification offers nothing");
+    assert!(
+        record.view.actions.is_empty(),
+        "a gone notification offers nothing"
+    );
 
     let json = serde_json::to_string(&record).expect("serializes");
     let back: NotificationRecord = serde_json::from_str(&json).expect("deserializes");
@@ -152,6 +172,7 @@ fn a_history_record_survives_the_wire_with_its_source_time_and_standing() {
 
 #[test]
 fn only_a_queued_notification_has_no_record() {
-    let queued = NotificationDraft::new("Waiting").build(NotificationId::from_raw(51), Instant::now());
+    let queued =
+        NotificationDraft::new("Waiting").build(NotificationId::from_raw(51), Instant::now());
     assert!(notification_record(&queued, Instant::now(), std::time::SystemTime::now()).is_none());
 }

@@ -43,9 +43,11 @@ pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::sync_pane_runtime_from_backends_impl;
-    use crate::server::process::{exit_should_close as pane_exit_should_close, notify_exited as notify_pane_exited};
     use crate::app::backend_store::BackendStore;
     use crate::chrome::{ChromeEvent, ChromeEventBus};
+    use crate::server::process::{
+        exit_should_close as pane_exit_should_close, notify_exited as notify_pane_exited,
+    };
     use heca_core::backend::FakeBackend;
     use heca_core::layout::{Pane, PaneId, Session, Size, testing::Windowed};
     use heca_core::runtime::{ContentKind, PaneClosePolicy, PaneRuntime, ProcessStatus};
@@ -157,7 +159,10 @@ mod tests {
             crate::notification::NotificationSeverity::Info
         );
         assert_eq!(clean.dedup_key.as_deref(), Some("pane.exited:7"));
-        assert_eq!(clean.title, "htop ended", "the program's name, not the pane's number");
+        assert_eq!(
+            clean.title, "htop ended",
+            "the program's name, not the pane's number"
+        );
         assert_eq!(clean.actions.len(), 1, "carries a Focus action");
 
         let crashed = drafts[1]

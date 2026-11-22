@@ -72,7 +72,9 @@ impl Terminal {
     /// The title to show: the one given, else the name; `None` for a terminal that was not
     /// declared by an extension.
     pub fn shown_title(&self) -> Option<String> {
-        if let Some(title) = self.shared.custom_title.borrow().as_ref() { return Some(title.clone()); }
+        if let Some(title) = self.shared.custom_title.borrow().as_ref() {
+            return Some(title.clone());
+        }
         self.shared
             .declared
             .borrow()
@@ -210,7 +212,9 @@ impl Terminal {
     }
 
     /// Open the shared rename dialog for this terminal. Its process is not restarted.
-    pub fn rename(&self) { self.tell(TerminalCommand::Rename); }
+    pub fn rename(&self) {
+        self.tell(TerminalCommand::Rename);
+    }
 
     fn tell(&self, command: TerminalCommand) {
         let Some(id) = self.shared.id.get() else {
@@ -256,7 +260,11 @@ impl Terminal {
         let taken = self
             .node()
             .is_some_and(|node| heca_grid_ui::focus_widget_by_id(root, node));
-        WAITING_FOR_KEYBOARD.set(if taken { std::rc::Weak::new() } else { std::rc::Rc::downgrade(&self.shared) });
+        WAITING_FOR_KEYBOARD.set(if taken {
+            std::rc::Weak::new()
+        } else {
+            std::rc::Rc::downgrade(&self.shared)
+        });
     }
 
     /// **The grid cell under `pos`**, in window coordinates — `None` when the terminal was not drawn
@@ -365,7 +373,9 @@ thread_local! {
 pub(super) fn take_waiting_keyboard(shared: &std::rc::Rc<Shared>) -> bool {
     WAITING_FOR_KEYBOARD.with_borrow_mut(|waiting| {
         let mine = std::ptr::eq(waiting.as_ptr(), std::rc::Rc::as_ptr(shared));
-        if mine { *waiting = std::rc::Weak::new(); }
+        if mine {
+            *waiting = std::rc::Weak::new();
+        }
         mine
     })
 }

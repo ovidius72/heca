@@ -69,18 +69,42 @@ pub(crate) fn status_mode_parts(
 pub(crate) fn render_frame(state: &mut AppState) {
     use crate::slow_steps::step;
     let _slow = step("frame");
-    let Some(v) = ({ let _s = step("frame.begin"); frame::begin(state) }) else {
+    let Some(v) = ({
+        let _s = step("frame.begin");
+        frame::begin(state)
+    }) else {
         return;
     };
-    let scene = { let _s = step("frame.paint_window"); frame::paint_window(state, &v) };
-    let terminals = { let _s = step("frame.collect_panes"); frame::collect_panes(state, &v) };
-    { let _s = step("frame.sync_terminal_layers"); frame::sync_terminal_layers(state, &v, &terminals) };
-    let Some(mut frame) = ({ let _s = step("frame.open"); frame::Frame::open(state, v) }) else {
+    let scene = {
+        let _s = step("frame.paint_window");
+        frame::paint_window(state, &v)
+    };
+    let terminals = {
+        let _s = step("frame.collect_panes");
+        frame::collect_panes(state, &v)
+    };
+    {
+        let _s = step("frame.sync_terminal_layers");
+        frame::sync_terminal_layers(state, &v, &terminals)
+    };
+    let Some(mut frame) = ({
+        let _s = step("frame.open");
+        frame::Frame::open(state, v)
+    }) else {
         return;
     };
-    { let _s = step("frame.clear_and_background"); frame.clear_and_background(state) };
-    { let _s = step("frame.flush_window"); frame.flush_window(state, &scene, &terminals) };
-    { let _s = step("frame.finish"); frame.finish(state, &terminals) };
+    {
+        let _s = step("frame.clear_and_background");
+        frame.clear_and_background(state)
+    };
+    {
+        let _s = step("frame.flush_window");
+        frame.flush_window(state, &scene, &terminals)
+    };
+    {
+        let _s = step("frame.finish");
+        frame.finish(state, &terminals)
+    };
 }
 
 /// Update session viewport to match current chrome/content area size.

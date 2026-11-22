@@ -59,7 +59,13 @@ fn intent_args_build_the_same_parameterized_action_as_a_config_binding() {
     let from_config = crate::input::resolve_action("scroll_to_offset", &config_args);
 
     assert_eq!(from_intent, from_config);
-    assert_eq!(from_intent, Some(WmAction::ScrollToOffset { rows: 12, terminal: None }));
+    assert_eq!(
+        from_intent,
+        Some(WmAction::ScrollToOffset {
+            rows: 12,
+            terminal: None
+        })
+    );
 }
 
 /// A unit built-in with no args still resolves by name (the `action_from_name` fallback), so the
@@ -102,7 +108,8 @@ fn a_window_dispatch_hands_the_action_its_declared_types() {
     };
     assert_eq!(action.args.get("ws_idx"), Some(&PropValue::Int(1)));
 
-    let unknown = InteractionIntent::View(ViewIntent::new("no.such").arg("n", PropValue::Text("1".into())));
+    let unknown =
+        InteractionIntent::View(ViewIntent::new("no.such").arg("n", PropValue::Text("1".into())));
     let InteractionIntent::View(action) = super::super::dispatch::typed(&catalog, unknown) else {
         panic!("the intent keeps its kind");
     };

@@ -10,7 +10,10 @@ pub fn handle_focus_left(state: &mut AppState, _action: &WmAction) -> crate::act
     Ok(())
 }
 
-pub fn handle_focus_right(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_focus_right(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     state.layout_mut().focus_right();
     Ok(())
 }
@@ -39,7 +42,10 @@ pub fn handle_prev_pane(state: &mut AppState, _action: &WmAction) -> crate::acti
     Ok(())
 }
 
-pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_workspace_next(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let current_ws = state.layout().active_workspace_idx();
     let next = (current_ws + 1).min(state.session.workspaces.len().saturating_sub(1));
     if next != current_ws {
@@ -48,7 +54,10 @@ pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) -> crate:
     Ok(())
 }
 
-pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_workspace_prev(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let current_ws = state.layout().active_workspace_idx();
     let prev = current_ws.saturating_sub(1);
     if prev != current_ws {
@@ -57,7 +66,10 @@ pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) -> crate:
     Ok(())
 }
 
-pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_focus_toggle_local(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let ws_idx = state.layout().active_workspace_idx();
     if let Some(prev_pane) = state
         .last_visited_pane_per_ws
@@ -71,7 +83,10 @@ pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) -> cr
     Ok(())
 }
 
-pub fn handle_focus_toggle_global(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_focus_toggle_global(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if let Some(prev_ws) = state.last_visited_ws_idx {
         let current_ws = state.layout().active_workspace_idx();
         if prev_ws != current_ws {
@@ -101,7 +116,10 @@ pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) -> crate::acti
     Ok(())
 }
 
-pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_focus_workspace(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::FocusWorkspace { ws_idx } = action else {
         return Ok(());
     };

@@ -52,7 +52,9 @@ impl ScrollingRef<'_> {
 impl Positions {
     /// Where pane `id` was stacked. `None` when it was not in a column.
     pub fn pane(&self, id: PaneId) -> Option<Point> {
-        self.panes.iter().find_map(|(pane, at)| (*pane == id).then_some(*at))
+        self.panes
+            .iter()
+            .find_map(|(pane, at)| (*pane == id).then_some(*at))
     }
 
     /// Add the panes of `other` — where things were in another strip — as they sit on screen
@@ -122,7 +124,12 @@ impl ScrollingSpace {
     /// How much width the boundary to the left of column `idx` can move by when asked for
     /// `delta` (positive is right): what both neighbours can give, clamped once by whichever runs
     /// out first. `None` when there is nothing to trade with or nothing to move.
-    pub fn left_boundary_transfer(&self, idx: usize, delta: f64, working_width: f64) -> Option<f64> {
+    pub fn left_boundary_transfer(
+        &self,
+        idx: usize,
+        delta: f64,
+        working_width: f64,
+    ) -> Option<f64> {
         let left = idx.checked_sub(1)?;
         let grow = self.achievable_delta(left, delta, working_width);
         let shrink = self.achievable_delta(idx, -delta, working_width);
@@ -165,7 +172,8 @@ impl ScrollingSpace {
 
     /// Take the column at `idx` out, whole.
     pub fn take_column(&mut self, idx: usize) -> Option<(Column, ColumnEffect)> {
-        (idx < self.columns.len()).then(|| (self.columns.remove(idx), ColumnEffect::Removed { idx }))
+        (idx < self.columns.len())
+            .then(|| (self.columns.remove(idx), ColumnEffect::Removed { idx }))
     }
 
     /// Move the column at `from` to `to` (clamped to the last place). `None` when there is
@@ -250,7 +258,9 @@ impl ScrollView {
                 // on another column does not yank the view.
                 if idx == self.active_column && !space.columns.is_empty() && self.offset.is_static()
                 {
-                    let fit = space.through(self).compute_view_offset_for_column(self.active_column, None);
+                    let fit = space
+                        .through(self)
+                        .compute_view_offset_for_column(self.active_column, None);
                     self.offset = ViewOffset::Static(fit);
                 }
             }
@@ -276,7 +286,8 @@ impl ScrollView {
             false => (&space.columns[..idx], offset),
         };
         for column in others {
-            self.motion.slide_column(column.id, signed, AnimationConfig::default());
+            self.motion
+                .slide_column(column.id, signed, AnimationConfig::default());
         }
     }
 
@@ -288,7 +299,8 @@ impl ScrollView {
             false => (&space.columns[..idx.min(space.columns.len())], -offset),
         };
         for column in others {
-            self.motion.slide_column(column.id, signed, AnimationConfig::default());
+            self.motion
+                .slide_column(column.id, signed, AnimationConfig::default());
         }
         if space.columns.is_empty() {
             self.active_column = 0;
@@ -305,7 +317,9 @@ impl ScrollView {
             self.activate_prev_on_removal = None;
             // The scroll is measured from the active column, which is now another one.
             self.keep_view_in_place(space, before);
-            let fit = space.through(self).compute_view_offset_for_column(new_idx, None);
+            let fit = space
+                .through(self)
+                .compute_view_offset_for_column(new_idx, None);
             self.offset = ViewOffset::Static(fit);
         }
     }
@@ -313,7 +327,9 @@ impl ScrollView {
     /// Bring the active column fully into view, easing there unless it is already (within a
     /// pixel).
     pub(crate) fn align_to_active(&mut self, space: &ScrollingSpace) {
-        let target = space.through(self).compute_view_offset_for_column(self.active_column, None);
+        let target = space
+            .through(self)
+            .compute_view_offset_for_column(self.active_column, None);
         let current = self.offset.current();
         match (target - current).abs() < 1.0 / self.scale {
             true => self.offset = ViewOffset::Static(target),
@@ -344,7 +360,8 @@ impl ScrollView {
                 .map_or(now[i], |(_, x)| *x);
             let diff = was - now[i];
             if diff.abs() > 0.5 {
-                self.motion.slide_column(column.id, diff, AnimationConfig::default());
+                self.motion
+                    .slide_column(column.id, diff, AnimationConfig::default());
             }
         }
     }

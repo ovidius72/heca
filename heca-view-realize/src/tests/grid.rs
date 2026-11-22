@@ -3,8 +3,8 @@
 use heca_grid_ui::Track;
 use heca_view::WidgetId;
 
-use crate::widgets::parse_track;
 use super::*;
+use crate::widgets::parse_track;
 
 // ── Grid (tracks / areas / placement) ──
 
@@ -40,9 +40,8 @@ fn grid_tracks_parse_and_garbage_degrades_to_auto() {
 /// child** — `area` by name, or `col`/`row` (+ spans). A child with neither auto-places.
 #[test]
 fn grid_node_realizes_tracks_areas_and_per_child_placement() {
-    let tracks = |t: [&str; 3]| {
-        PropValue::List(t.iter().map(|s| PropValue::Text((*s).into())).collect())
-    };
+    let tracks =
+        |t: [&str; 3]| PropValue::List(t.iter().map(|s| PropValue::Text((*s).into())).collect());
     let node = ViewNode::new(WidgetId::Grid)
         .prop("columns", tracks(["auto", "1fr", "auto"]))
         .prop(
@@ -79,7 +78,8 @@ fn grid_node_realizes_tracks_areas_and_per_child_placement() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     // **A described child carries its own placement**, exactly as a native one does: the area
     // by name, the explicit cell as numbers. The name is resolved during layout, against
     // whichever template ends up holding it — so it is still a name here.
@@ -99,8 +99,7 @@ fn grid_node_realizes_tracks_areas_and_per_child_placement() {
     }
 
     let mut grid = grid;
-    heca_grid_ui::LayoutEngine::new()
-        .compute(grid.as_mut(), heca_grid_ui::Size::new(300.0, 200.0));
+    heca_grid_ui::LayoutEngine::new().compute(grid.as_mut(), heca_grid_ui::Size::new(300.0, 200.0));
     let children = &grid.base().children;
 
     // The `icon` area spans both rows of column 1 (it appears twice in the template).
@@ -154,7 +153,8 @@ fn grid_alignment_is_authorable_on_both_axes() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let style = grid.base().style.layout;
     assert_eq!(
         style.align,
@@ -189,7 +189,8 @@ fn grid_child_in_an_unknown_area_auto_places() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(grid.base().children[0].base().style.layout.grid_cell, None);
 }
 
@@ -224,7 +225,9 @@ fn label_text_attributes_are_authorable() {
 #[test]
 fn the_old_bold_property_still_draws_bold() {
     use heca_grid_ui::{FontWeight, TextStyle};
-    let node = ViewNode::new(WidgetId::Label).text("x").prop("bold", PropValue::Bool(true));
+    let node = ViewNode::new(WidgetId::Label)
+        .text("x")
+        .prop("bold", PropValue::Bool(true));
     let (_, style, _) = painted_label(&node);
     assert_eq!(style, TextStyle::REGULAR.weight(FontWeight::Bold));
 }
@@ -235,8 +238,13 @@ fn the_old_bold_property_still_draws_bold() {
 fn painted_label(node: &ViewNode) -> (String, heca_grid_ui::TextStyle, usize) {
     use heca_core::layout::Size;
     use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Theme};
-    let mut label = realize(node, &Theme::default(), &noop_emitter(), &mut FormBindings::default())
-        .expect("valid described test widget");
+    let mut label = realize(
+        node,
+        &Theme::default(),
+        &noop_emitter(),
+        &mut FormBindings::default(),
+    )
+    .expect("valid described test widget");
     LayoutEngine::new().compute(label.as_mut(), Size::new(200.0, 40.0));
     let theme = Theme::default();
     let mut scene = Scene::new();
@@ -251,7 +259,10 @@ fn painted_label(node: &ViewNode) -> (String, heca_grid_ui::TextStyle, usize) {
             _ => None,
         })
         .expect("the label paints its run");
-    let rules = scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count();
+    let rules = scene
+        .iter()
+        .filter(|c| matches!(c, DrawCommand::Rect(_)))
+        .count();
     (text, style, rules)
 }
 
@@ -285,7 +296,8 @@ fn a_described_child_is_placed_as_a_native_one_is() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let placed = |i: usize| {
         let c = &grid.base().children[i];
         (c.base().style.layout.grid_cell, c.base().grid_area.clone())
@@ -294,7 +306,13 @@ fn a_described_child_is_placed_as_a_native_one_is() {
         (w.base().style.layout.grid_cell, w.base().grid_area.clone())
     };
     use heca_grid_ui::widgets::Label;
-    assert_eq!(placed(0), native(Label::new("header").column("1 / -1").row("1")));
-    assert_eq!(placed(1), native(Label::new("wide").column_span("span 2").row_span(3)));
+    assert_eq!(
+        placed(0),
+        native(Label::new("header").column("1 / -1").row("1"))
+    );
+    assert_eq!(
+        placed(1),
+        native(Label::new("wide").column_span("span 2").row_span(3))
+    );
     assert_eq!(placed(2), native(Label::new("named").area("body")));
 }

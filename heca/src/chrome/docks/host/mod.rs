@@ -202,7 +202,9 @@ impl ChromeHost {
             }
         }
         // `Space` holds a float, so it is not `Hash`: its spelled form stands in.
-        self.layouts.iter().for_each(|layout| format!("{:?}", layout.gap).hash(into));
+        self.layouts
+            .iter()
+            .for_each(|layout| format!("{:?}", layout.gap).hash(into));
     }
 
     /// The ordered containers currently mounted in `region`.

@@ -218,7 +218,6 @@ impl Item {
         self
     }
 
-
     /// The active-state signal — bind UI to it reactively.
     pub fn state(&self) -> Signal<bool> {
         self.active
@@ -232,7 +231,6 @@ impl Item {
     fn interactive(&self) -> bool {
         self.base.activatable
     }
-
 }
 
 impl Component for Item {
@@ -305,7 +303,8 @@ impl Component for Item {
                         Some(Glow {
                             color: glow_c,
                             radius: cx.theme().colors.active_glow_radius * BAR_GLOW_RADIUS_SCALE,
-                            intensity: cx.theme().colors.active_glow_strength * BAR_GLOW_STRENGTH_SCALE,
+                            intensity: cx.theme().colors.active_glow_strength
+                                * BAR_GLOW_STRENGTH_SCALE,
                         }),
                     );
                 }
@@ -344,14 +343,8 @@ impl Component for Item {
                 return;
             }
             let frame = Rectangle::new(
-                Point::new(
-                    slot.loc.x - border_x,
-                    slot.loc.y - border_y,
-                ),
-                Size::new(
-                    slot.size.w + 2.0 * border_x,
-                    slot.size.h + 2.0 * border_y,
-                ),
+                Point::new(slot.loc.x - border_x, slot.loc.y - border_y),
+                Size::new(slot.size.w + 2.0 * border_x, slot.size.h + 2.0 * border_y),
             );
             cx.rect(
                 frame,
@@ -403,7 +396,6 @@ impl Component for Item {
     fn is_control(&self) -> bool {
         true
     }
-
 
     fn tick(&mut self, dt: f32) -> bool {
         // The active row bolds its label. Color is inherited at paint time, but weight is not part

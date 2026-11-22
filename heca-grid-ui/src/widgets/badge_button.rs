@@ -85,7 +85,6 @@ impl BadgeButton {
         self
     }
 
-
     /// The reactive label signal, so hosts can update the text live.
     pub fn label_signal(&self) -> Signal<String> {
         self.label
@@ -212,7 +211,6 @@ impl Component for BadgeButton {
         true
     }
 
-
     fn tick(&mut self, dt: f32) -> bool {
         let next = self.label.get_untracked();
         if next != self.seen_label {
@@ -229,8 +227,8 @@ impl LayoutExt for BadgeButton {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::component::{Event, Handled};
     use crate::builders::EventExt;
+    use crate::component::{Event, Handled};
     use crate::event::PointerButton;
     use crate::reactive::SignalUpdate;
     use std::cell::Cell;
@@ -255,7 +253,8 @@ mod tests {
         assert_eq!(hit.get(), 0, "the press alone has not clicked anything yet");
         // The click bubbles on to whatever holds the button, as a mouse click does; what matters
         // is that the button's own handler heard it.
-        let _ = crate::component::dispatch(&mut b, &Event::pointer_released(pos, PointerButton::Left));
+        let _ =
+            crate::component::dispatch(&mut b, &Event::pointer_released(pos, PointerButton::Left));
         assert_eq!(hit.get(), 1);
     }
 

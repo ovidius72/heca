@@ -414,6 +414,9 @@ impl EventKind {
     /// and one click target. A right or middle click does not: a row listening only to right
     /// clicks must not take the left press meant for the buttons inside it.
     pub fn presses_widget(self) -> bool {
-        matches!(self, EventKind::Click | EventKind::DoubleClick | EventKind::TripleClick)
+        matches!(
+            self,
+            EventKind::Click | EventKind::DoubleClick | EventKind::TripleClick
+        )
     }
 }

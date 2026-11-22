@@ -52,9 +52,15 @@ impl Serialize for SessionKey {
 impl<'de> Deserialize<'de> for SessionKey {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let text = String::deserialize(deserializer)?;
-        let digit = |pair: &[u8]| std::str::from_utf8(pair).ok().and_then(|pair| u8::from_str_radix(pair, 16).ok());
+        let digit = |pair: &[u8]| {
+            std::str::from_utf8(pair)
+                .ok()
+                .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+        };
         let bytes: Option<Vec<u8>> = text.as_bytes().chunks(2).map(digit).collect();
-        bytes.and_then(|bytes| <[u8; 16]>::try_from(bytes).ok()).map(Self)
+        bytes
+            .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
+            .map(Self)
             .ok_or_else(|| de::Error::custom("a session key is 32 hex digits"))
     }
 }

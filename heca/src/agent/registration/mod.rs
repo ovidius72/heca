@@ -2,10 +2,10 @@
 
 use std::{cell::RefCell, sync::Arc};
 
+use crate::chrome::StartupQueue;
 use heca_config::settings::{AgentProgramConfig, AgentsConfig};
 use heca_core::agent::AgentDrivers;
 use heca_core::backend::ProcessLaunch;
-use crate::chrome::StartupQueue;
 
 use super::*;
 
@@ -20,14 +20,19 @@ impl crate::Extension {
     /// A program built on Heca calls this before `heca::run(..)`. Recognition, setup and reports
     /// use the same contract as the built-in programs; no private registry is needed.
     pub fn agent_driver(&self, driver: impl AgentDriver + 'static) {
-        let Some(id) = self.full("agent driver", driver.id()) else { return };
+        let Some(id) = self.full("agent driver", driver.id()) else {
+            return;
+        };
         let scoped = ConfiguredDriver {
             id,
             inner: Arc::new(driver),
             config: None,
         };
         if let Err(late) = QUEUE.with(|queue| queue.add(scoped)) {
-            crate::chrome::warn_author(format!("[heca] agent driver '{}' was added after the app started and is refused", late.id));
+            crate::chrome::warn_author(format!(
+                "[heca] agent driver '{}' was added after the app started and is refused",
+                late.id
+            ));
         }
     }
 }
@@ -42,35 +47,63 @@ struct ConfiguredDriver {
 }
 
 impl AgentDriver for ConfiguredDriver {
-    fn id(&self) -> &str { &self.id }
+    fn id(&self) -> &str {
+        &self.id
+    }
     fn name(&self) -> &str {
-        self.config.as_ref().and_then(|config| config.name.as_deref()).unwrap_or_else(|| self.inner.name())
+        self.config
+            .as_ref()
+            .and_then(|config| config.name.as_deref())
+            .unwrap_or_else(|| self.inner.name())
     }
     fn icon(&self) -> Option<AgentIcon> {
-        self.config.as_ref().and_then(|config| config.icon.as_ref()).map(AgentIcon::file)
+        self.config
+            .as_ref()
+            .and_then(|config| config.icon.as_ref())
+            .map(AgentIcon::file)
             .or_else(|| self.inner.icon())
     }
     fn programs(&self) -> &[String] {
-        self.config.as_ref().and_then(|config| config.executables.as_deref()).unwrap_or_else(|| self.inner.programs())
+        self.config
+            .as_ref()
+            .and_then(|config| config.executables.as_deref())
+            .unwrap_or_else(|| self.inner.programs())
     }
     fn recognizes(&self, program: &str) -> bool {
-        self.config.as_ref().and_then(|config| config.executables.as_ref()).map_or_else(
-            || self.inner.recognizes(program),
-            |executables| executables.iter().any(|name| name == heca_core::agent::program_name(program)),
-        )
+        self.config
+            .as_ref()
+            .and_then(|config| config.executables.as_ref())
+            .map_or_else(
+                || self.inner.recognizes(program),
+                |executables| {
+                    executables
+                        .iter()
+                        .any(|name| name == heca_core::agent::program_name(program))
+                },
+            )
     }
-    fn prepare(&self, context: &AgentLaunchContext) -> Result<AgentSetup, AgentError> { self.inner.prepare(context) }
-    fn integration(&self, context: &IntegrationContext) -> Result<Option<AgentIntegration>, AgentError> {
+    fn prepare(&self, context: &AgentLaunchContext) -> Result<AgentSetup, AgentError> {
+        self.inner.prepare(context)
+    }
+    fn integration(
+        &self,
+        context: &IntegrationContext,
+    ) -> Result<Option<AgentIntegration>, AgentError> {
         self.inner.integration(context)
     }
     fn resume(&self, original: &ProcessLaunch, session_id: &str) -> Option<ProcessLaunch> {
         self.inner.resume(original, session_id)
     }
     fn read_status(&self, input: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> {
-        let Some(mut report) = self.inner.read_status(input)? else { return Ok(None) };
+        let Some(mut report) = self.inner.read_status(input)? else {
+            return Ok(None);
+        };
         // Validate before scoping: an implementation cannot claim another one's identity.
         if report.driver != self.inner.id() {
-            return Err(AgentError::Report(format!("report identity differs from {}", self.inner.id())));
+            return Err(AgentError::Report(format!(
+                "report identity differs from {}",
+                self.inner.id()
+            )));
         }
         report.driver.clone_from(&self.id);
         report.name = self.name().to_owned();
@@ -99,9 +132,13 @@ fn append_with(drivers: &mut AgentDrivers, config: &AgentsConfig, include_disabl
     });
     for driver in added.iter() {
         let setting = config.programs.get(driver.id());
-        if !include_disabled && setting.is_none_or(|setting| setting.enabled != Some(true)) { continue }
+        if !include_disabled && setting.is_none_or(|setting| setting.enabled != Some(true)) {
+            continue;
+        }
         let driver = ConfiguredDriver {
-            id: driver.id().to_owned(), inner: driver.clone(), config: setting.cloned().map(Box::new),
+            id: driver.id().to_owned(),
+            inner: driver.clone(),
+            config: setting.cloned().map(Box::new),
         };
         if let Err(error) = drivers.register(driver) {
             crate::chrome::warn_author(format!("[heca] agent registration: {error}"));

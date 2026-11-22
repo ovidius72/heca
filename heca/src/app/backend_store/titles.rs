@@ -12,8 +12,12 @@ impl BackendStore {
             return false;
         }
         match title {
-            Some(title) => { self.custom_titles.insert(id, title); }
-            None => { self.custom_titles.remove(&id); }
+            Some(title) => {
+                self.custom_titles.insert(id, title);
+            }
+            None => {
+                self.custom_titles.remove(&id);
+            }
         }
         true
     }

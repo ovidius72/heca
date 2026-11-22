@@ -93,7 +93,6 @@ impl Button {
             None,
         );
     }
-
 }
 
 impl Component for Button {
@@ -130,9 +129,9 @@ impl Component for Button {
             // A child that is not there has no such disagreement.
             self.base.children.retain(|c| c.text_summary().is_none());
         } else if !self.label.is_empty() {
-            self.base
-                .children
-                .push(crate::WidgetModel::new(Label::new(self.label.clone()).font_weight(crate::style::FontWeight::Bold)));
+            self.base.children.push(crate::WidgetModel::new(
+                Label::new(self.label.clone()).font_weight(crate::style::FontWeight::Bold),
+            ));
         }
         // **Its words, on hover, only while they are not on screen** — a button showing its icon
         // alone says what it does when the pointer rests on it; with its words back it has nothing
@@ -140,13 +139,14 @@ impl Component for Button {
         use crate::widgets::tooltip::Tip;
         let automatic = self.base.tooltip.as_ref().map(Tip::is_automatic);
         match (automatic, on) {
-            (None, true) if !self.label.is_empty() => self.base.tooltip = Some(Tip::hidden_words(self.label.clone())),
+            (None, true) if !self.label.is_empty() => {
+                self.base.tooltip = Some(Tip::hidden_words(self.label.clone()))
+            }
             (Some(true), false) => self.base.tooltip = None,
             _ => {}
         }
         self.remeasure();
     }
-
 
     fn base(&self) -> &Base {
         &self.base
@@ -450,7 +450,6 @@ impl Component for Button {
     fn is_control(&self) -> bool {
         true
     }
-
 
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = false;

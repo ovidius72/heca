@@ -10,7 +10,6 @@ pub use effect::{ColumnEffect, Positions};
 pub use pane_effect::{PaneEffect, SpaceEffect};
 pub use places::{Place, PlaceKind};
 
-
 /// Minimum width (logical px) a column may be shrunk to by a manual resize, so a
 /// column never becomes a thin line.
 pub const MIN_COLUMN_WIDTH: f64 = 150.0;
@@ -94,7 +93,6 @@ impl ScrollingSpace {
         self.options.center_focused_column == CenterFocusedColumn::Always
             || (self.options.always_center_single_column && self.columns.len() <= 1)
     }
-
 }
 
 impl<'a> ScrollingRef<'a> {
@@ -128,9 +126,12 @@ impl<'a> ScrollingRef<'a> {
 
     /// How tall each pane of column `col_idx` is.
     pub fn pane_heights(&self, col_idx: usize) -> Vec<f64> {
-        self.space.columns.get(col_idx).map_or_else(Vec::new, |column| {
-            column.pane_heights(self.view.area.size.h, self.space.options.gaps)
-        })
+        self.space
+            .columns
+            .get(col_idx)
+            .map_or_else(Vec::new, |column| {
+                column.pane_heights(self.view.area.size.h, self.space.options.gaps)
+            })
     }
 
     /// Compute the Y offset of a pane within a column.
@@ -210,11 +211,15 @@ impl<'a> ScrollingRef<'a> {
         let view_off = Point::new(-self.view_pos(), 0.0);
         let gaps = self.space.options.gaps;
 
-        self.space.columns
+        self.space
+            .columns
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
-                let col_pos = Point::new(self.column_x(col_idx) + self.view.motion.column_offset(col.id), 0.0);
+                let col_pos = Point::new(
+                    self.column_x(col_idx) + self.view.motion.column_offset(col.id),
+                    0.0,
+                );
                 let mut pane_y = self.view.area.loc.y + gaps;
                 let mut panes = Vec::with_capacity(col.panes.len());
                 let width = self.column_width(col_idx);

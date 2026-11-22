@@ -24,7 +24,7 @@ fn palette_with_markers() -> (
 mod editing;
 mod filtering;
 mod history;
+mod mode_declarations;
 mod modes;
 mod secondary;
-mod mode_declarations;
 mod sizing;

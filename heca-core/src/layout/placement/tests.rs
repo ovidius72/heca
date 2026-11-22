@@ -22,7 +22,11 @@ fn a_pane_is_taken_from_its_column_or_from_the_floating_layer() {
     assert!(ws.scrolling.pane_indices(PaneId(2)).is_none());
 
     ws.add_floating_pane(Pane::new(PaneId(9), ""), None);
-    assert_eq!(ws.take_pane(PaneId(9)).map(|(p, e)| (p.id, e)), Some((PaneId(9), None)), "a float leaves the columns as they are");
+    assert_eq!(
+        ws.take_pane(PaneId(9)).map(|(p, e)| (p.id, e)),
+        Some((PaneId(9), None)),
+        "a float leaves the columns as they are"
+    );
     assert!(ws.floating_panes.is_empty());
     assert_eq!(ws.focus_domain(), FocusDomain::Tiled);
     assert!(ws.take_pane(PaneId(42)).is_none());
@@ -47,7 +51,6 @@ fn with_no_row_the_pane_gets_a_column_of_its_own() {
     assert_eq!(ws.scrolling.pane_indices(PaneId(3)), Some((0, 0)));
 }
 
-
 /// Columns by the panes they hold, for the tests that move a pane among them.
 fn strip(columns: &[&[u64]]) -> Windowed {
     Windowed::with_shape(&[columns])
@@ -65,7 +68,10 @@ fn shape(s: &Windowed) -> Vec<Vec<u64>> {
 
 fn moved(s: &mut Windowed, pane: u64, col: usize, row: Option<usize>) -> Vec<Vec<u64>> {
     let mut ws = s.ws();
-    assert!(ws.move_pane(PaneId(pane), col, row, ColumnId(99), HEIGHT).is_some());
+    assert!(
+        ws.move_pane(PaneId(pane), col, row, ColumnId(99), HEIGHT)
+            .is_some()
+    );
     shape(s)
 }
 
@@ -73,11 +79,20 @@ fn moved(s: &mut Windowed, pane: u64, col: usize, row: Option<usize>) -> Vec<Vec
 #[test]
 fn a_new_column_lands_at_the_gap_that_was_drawn() {
     let mut s = strip(&[&[1, 2], &[3], &[4]]);
-    assert_eq!(moved(&mut s, 1, 3, None), [vec![2], vec![3], vec![4], vec![1]]);
+    assert_eq!(
+        moved(&mut s, 1, 3, None),
+        [vec![2], vec![3], vec![4], vec![1]]
+    );
     let mut s = strip(&[&[1, 2], &[3], &[4]]);
-    assert_eq!(moved(&mut s, 1, 1, None), [vec![2], vec![1], vec![3], vec![4]]);
+    assert_eq!(
+        moved(&mut s, 1, 1, None),
+        [vec![2], vec![1], vec![3], vec![4]]
+    );
     let mut s = strip(&[&[1, 2], &[3], &[4]]);
-    assert_eq!(moved(&mut s, 2, 0, None), [vec![2], vec![1], vec![3], vec![4]]);
+    assert_eq!(
+        moved(&mut s, 2, 0, None),
+        [vec![2], vec![1], vec![3], vec![4]]
+    );
 }
 
 /// A pane alone in its column takes the column with it, so a gap to its right is one nearer.
@@ -124,7 +139,10 @@ fn the_gaps_that_change_the_strip_leave_out_the_two_beside_a_lone_pane() {
     let ws = &s.session.workspaces[0];
     assert_eq!(ws.new_column_gaps(PaneId(1)), [0, 3]);
     let s = strip(&[&[1, 2], &[3]]);
-    assert_eq!(s.session.workspaces[0].new_column_gaps(PaneId(1)), [0, 1, 2]);
+    assert_eq!(
+        s.session.workspaces[0].new_column_gaps(PaneId(1)),
+        [0, 1, 2]
+    );
 }
 
 #[test]

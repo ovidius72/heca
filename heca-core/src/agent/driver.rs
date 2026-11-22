@@ -49,7 +49,9 @@ pub trait AgentDriver: Send + Sync {
     fn name(&self) -> &str;
 
     /// Optional logo. Built-in and added drivers use the same image metadata contract.
-    fn icon(&self) -> Option<super::AgentIcon> { None }
+    fn icon(&self) -> Option<super::AgentIcon> {
+        None
+    }
 
     /// Executable names recognized by this implementation.
     fn programs(&self) -> &[String];
@@ -67,7 +69,10 @@ pub trait AgentDriver: Send + Sync {
     ///
     /// # Errors
     /// Return a configuration error when the native installation cannot be described.
-    fn integration(&self, _context: &IntegrationContext) -> Result<Option<AgentIntegration>, AgentError> {
+    fn integration(
+        &self,
+        _context: &IntegrationContext,
+    ) -> Result<Option<AgentIntegration>, AgentError> {
         Ok(None)
     }
 
@@ -86,7 +91,9 @@ pub trait AgentDriver: Send + Sync {
     ///
     /// The default is `None`: this program has no way to continue a conversation, and the host will
     /// say so rather than start a fresh one. Return `None` too when `session_id` cannot be used.
-    fn resume(&self, _original: &ProcessLaunch, _session_id: &str) -> Option<ProcessLaunch> { None }
+    fn resume(&self, _original: &ProcessLaunch, _session_id: &str) -> Option<ProcessLaunch> {
+        None
+    }
 
     /// Read a status report. Return `None` for unrelated input; do not infer a state from it.
     ///
@@ -97,5 +104,8 @@ pub trait AgentDriver: Send + Sync {
 
 /// Executable basename used by recognition and configured executable aliases.
 pub fn program_name(program: &str) -> &str {
-    std::path::Path::new(program).file_name().and_then(|name| name.to_str()).unwrap_or(program)
+    std::path::Path::new(program)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(program)
 }

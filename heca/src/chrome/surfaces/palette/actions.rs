@@ -76,7 +76,10 @@ pub(crate) fn entries(
 /// with nothing typed that focus is the only context there is. Once something is typed the query is
 /// better context and the widget drops the blocks entirely — an action whose name the user spelled
 /// correctly must not sit below one they did not, merely because its component holds focus.
-pub(super) fn group_of(entry: &PaletteEntry, owners: &std::collections::HashMap<String, OwnerInfo>) -> u16 {
+pub(super) fn group_of(
+    entry: &PaletteEntry,
+    owners: &std::collections::HashMap<String, OwnerInfo>,
+) -> u16 {
     match owners.get(&entry.id) {
         Some(o) if o.focused => 0,
         _ => 1,

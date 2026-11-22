@@ -35,7 +35,10 @@ pub(crate) fn notify_if_untrusted() {
 }
 
 pub(crate) fn notify_if_untrusted_in(folder: Option<&std::path::Path>) {
-    let Ok(Some(project)) = folder.map_or_else(heca_config::loader::read_project, heca_config::loader::read_project_in) else {
+    let Ok(Some(project)) = folder.map_or_else(
+        heca_config::loader::read_project,
+        heca_config::loader::read_project_in,
+    ) else {
         return;
     };
     if let Some(notice) = notice_for(&project) {

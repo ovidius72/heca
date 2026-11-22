@@ -40,7 +40,9 @@ fn a_declaration_outranks_mere_actionability_when_offering_by_key() {
     let inner = Surface::new().key("pane:7").on_click(|_| {});
     let wrapper = KeyHint::new(inner).on_hint(|| {});
     let mut root = Flex::column();
-    root.base_mut().children.push(crate::WidgetModel::new(wrapper));
+    root.base_mut()
+        .children
+        .push(crate::WidgetModel::new(wrapper));
 
     assert!(offer_hint_by_key(&root, "pane:7", Some("a".into())));
 
@@ -69,9 +71,14 @@ fn a_declaration_inside_the_named_node_still_wins() {
 
     let declaring = KeyHint::new(Surface::new()).on_hint(|| {});
     let mut named = Flex::column().key("workspaces");
-    named.base_mut().children.push(crate::WidgetModel::new(declaring));
+    named
+        .base_mut()
+        .children
+        .push(crate::WidgetModel::new(declaring));
     let mut root = Flex::column();
-    root.base_mut().children.push(crate::WidgetModel::new(named));
+    root.base_mut()
+        .children
+        .push(crate::WidgetModel::new(named));
 
     assert!(offer_hint_by_key(&root, "workspaces", Some("b".into())));
     assert_eq!(
@@ -104,10 +111,15 @@ fn a_letter_never_crosses_into_something_that_names_itself() {
     // pane row that names itself and declares its own pick.
     let row = KeyHint::new(Surface::new().key("pane:7").on_click(|_| {})).on_hint(|| {});
     let mut workspace = Flex::column().key("ws:1");
-    workspace.base_mut().children.push(crate::WidgetModel::new(row));
+    workspace
+        .base_mut()
+        .children
+        .push(crate::WidgetModel::new(row));
     let outer = KeyHint::new(workspace).on_hint(|| {});
     let mut root = Flex::column();
-    root.base_mut().children.push(crate::WidgetModel::new(outer));
+    root.base_mut()
+        .children
+        .push(crate::WidgetModel::new(outer));
 
     assert!(offer_hint_by_key(&root, "ws:1", Some("f".into())));
 
@@ -147,8 +159,8 @@ fn a_real_container_keeps_its_letter_however_many_children_it_holds() {
     let dock_with = |rows: usize| {
         let mut list = Flex::column();
         for i in 0..rows {
-            let row = KeyHint::new(Surface::new().key(format!("ws:{i}")).on_click(|_| {}))
-                .on_hint(|| {});
+            let row =
+                KeyHint::new(Surface::new().key(format!("ws:{i}")).on_click(|_| {})).on_hint(|| {});
             list.base_mut().children.push(crate::WidgetModel::new(row));
         }
         let mut dock = Flex::column().key("workspaces").on_click(|_| {});
@@ -233,7 +245,9 @@ fn a_transparent_wrapper_does_not_spend_a_letter_of_its_own() {
     let inner = Surface::new().key("pane:7").on_click(|_| {});
     let wrapped = KeyHint::new(inner).on_hint(|| {});
     let mut root = Flex::column();
-    root.base_mut().children.push(crate::WidgetModel::new(wrapped));
+    root.base_mut()
+        .children
+        .push(crate::WidgetModel::new(wrapped));
 
     let targets = collect_hints(&root);
     assert_eq!(
@@ -252,10 +266,15 @@ fn a_nested_identity_still_gets_the_letter_that_is_its_own() {
 
     let row = KeyHint::new(Surface::new().key("pane:7").on_click(|_| {})).on_hint(|| {});
     let mut workspace = Flex::column().key("ws:1");
-    workspace.base_mut().children.push(crate::WidgetModel::new(row));
+    workspace
+        .base_mut()
+        .children
+        .push(crate::WidgetModel::new(row));
     let outer = KeyHint::new(workspace).on_hint(|| {});
     let mut root = Flex::column();
-    root.base_mut().children.push(crate::WidgetModel::new(outer));
+    root.base_mut()
+        .children
+        .push(crate::WidgetModel::new(outer));
 
     assert!(offer_hint_by_key(&root, "pane:7", Some("j".into())));
 
@@ -324,8 +343,14 @@ fn a_button_inside_a_declaring_container_still_gets_its_own_letter() {
     label.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 40.0));
     let mut button = Button::new("Close").on_click(|_| {});
     button.base_mut().bounds = Rectangle::new(Point::new(0.0, 50.0), Size::new(40.0, 40.0));
-    region.base_mut().children.push(crate::WidgetModel::new(label));
-    region.base_mut().children.push(crate::WidgetModel::new(button));
+    region
+        .base_mut()
+        .children
+        .push(crate::WidgetModel::new(label));
+    region
+        .base_mut()
+        .children
+        .push(crate::WidgetModel::new(button));
 
     let targets = collect_hints(&region);
     assert_eq!(
@@ -386,11 +411,15 @@ fn skips_hidden_subtrees_and_silent_nodes() {
         .base_mut()
         .children
         .push(hint_at("nested", &log, 0.0, 0.0, 10.0, 10.0));
-    root.base_mut().children.push(crate::WidgetModel::new(silent_parent));
+    root.base_mut()
+        .children
+        .push(crate::WidgetModel::new(silent_parent));
 
     let mut hidden = KeyHint::new(Surface::new()).on_hint(|| unreachable!("hidden"));
     hidden.base_mut().visible.set(false);
-    root.base_mut().children.push(crate::WidgetModel::new(hidden));
+    root.base_mut()
+        .children
+        .push(crate::WidgetModel::new(hidden));
 
     let targets = collect_hints(&root);
     assert_eq!(

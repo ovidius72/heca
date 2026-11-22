@@ -17,7 +17,10 @@ use crate::server::sessions::{RecordedAgent, RecordedTerminal};
 impl SessionRuntime {
     /// Every driver heca knows, switched on or not: what tells a harness from an ordinary program.
     pub(super) fn known_agents(&self) -> AgentDrivers {
-        let settings = self.config().map(|config| config.config.settings.agents.clone()).unwrap_or_default();
+        let settings = self
+            .config()
+            .map(|config| config.config.settings.agents.clone())
+            .unwrap_or_default();
         crate::agent::known(&settings)
     }
 
@@ -25,16 +28,25 @@ impl SessionRuntime {
     ///
     /// # Errors
     /// An ordinary program that should come back as it was, but whose launch was never recorded.
-    pub(super) fn relaunch(&self, recorded: &RecordedTerminal, known: &AgentDrivers) -> Result<TerminalSpec, String> {
+    pub(super) fn relaunch(
+        &self,
+        recorded: &RecordedTerminal,
+        known: &AgentDrivers,
+    ) -> Result<TerminalSpec, String> {
         let mut spec = recorded.spec.clone();
         // What reported itself as a harness, or else what a driver says the recorded command is.
         let inferred = recorded.agent.is_none();
         let agent = recorded.agent.clone().or_else(|| {
             let driver = known.recognize_launch(recorded.launch.as_ref()?)?;
-            Some(RecordedAgent { driver: driver.id().to_owned(), session_id: None })
+            Some(RecordedAgent {
+                driver: driver.id().to_owned(),
+                session_id: None,
+            })
         });
         match &agent {
-            Some(agent) if self.resume_harness => self.resume_harness(recorded, agent, inferred, known, &mut spec),
+            Some(agent) if self.resume_harness => {
+                self.resume_harness(recorded, agent, inferred, known, &mut spec)
+            }
             Some(_) => spec.program = Program::Shell,
             None if !self.resume_programs => spec.program = Program::Shell,
             None if recorded.running => {
@@ -86,7 +98,9 @@ impl SessionRuntime {
                 spec.program = Program::Recorded(launch);
             }
             Err(why) => {
-                let name = known.driver(&agent.driver).map_or(agent.driver.as_str(), |driver| driver.name());
+                let name = known
+                    .driver(&agent.driver)
+                    .map_or(agent.driver.as_str(), |driver| driver.name());
                 let hint = if inferred {
                     format!(
                         " Agent reporting was not on for {name} where it ran (it needs `enabled = true` under \
@@ -100,7 +114,11 @@ impl SessionRuntime {
                     .body(format!("{why}. A new conversation was not started; this pane has your shell instead.{hint}"))
                     .dedup_key(format!("session.resume:{}:{:?}", self.session.id.0, recorded.owner))
                     .send();
-                spec.cwd = recorded.launch.as_ref().and_then(|launch| launch.cwd.clone()).or(spec.cwd.take());
+                spec.cwd = recorded
+                    .launch
+                    .as_ref()
+                    .and_then(|launch| launch.cwd.clone())
+                    .or(spec.cwd.take());
                 spec.program = Program::Shell;
             }
         }

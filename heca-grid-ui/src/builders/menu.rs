@@ -1,7 +1,7 @@
 //! **The menu a right-click opens on a widget.**
 
-use crate::component::Component;
 use super::IntoContextMenu;
+use crate::component::Component;
 
 /// **The menu a right-click opens on a widget** — a value, or a way to make one at the point.
 pub trait MenuExt: Component + Sized {

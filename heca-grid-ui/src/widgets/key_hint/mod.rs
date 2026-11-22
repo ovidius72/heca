@@ -21,16 +21,18 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
-use crate::component::{paint_child, Base, Component, PaintCx};
+use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet};
 use crate::style::{Direction, Length};
 
 mod keycap;
 mod placement;
 
-pub use keycap::{keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf, KeyCap, KeycapVariant};
-pub use placement::{HintPlacement, HintStyle};
+pub use keycap::{
+    KeyCap, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
+};
 pub(crate) use placement::paint_hint_label;
+pub use placement::{HintPlacement, HintStyle};
 
 /// A transparent wrapper that carries a hint letter on behalf of a **region** — a group of widgets,
 /// or something that is not a widget you can put a builder on.

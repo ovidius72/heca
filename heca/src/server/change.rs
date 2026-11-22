@@ -54,7 +54,10 @@ pub(crate) enum Change {
     /// A pane, column or workspace has a different name.
     NamesChanged,
     /// A named terminal's user label changed, independently of its program's OSC title.
-    TerminalTitleChanged { owner: crate::app::backend_store::TerminalOwner, title: Option<String> },
+    TerminalTitleChanged {
+        owner: crate::app::backend_store::TerminalOwner,
+        title: Option<String>,
+    },
     /// The server did not do what was asked, and why. Not a change to anything: a window says it
     /// in its own words.
     Refused(Refusal),
@@ -119,7 +122,9 @@ impl Change {
 #[cfg(test)]
 mod tests {
     use super::{Change, Refusal};
-    use heca_core::layout::{ColumnEffect, PaneEffect, PaneId, Point, Rectangle, Size, SpaceEffect};
+    use heca_core::layout::{
+        ColumnEffect, PaneEffect, PaneId, Point, Rectangle, Size, SpaceEffect,
+    };
 
     /// Serialize, deserialize, and assert the change is unchanged — the connection
     /// carries `Change`s (F012, P099/T543), so each variant must survive the trip.
@@ -133,9 +138,20 @@ mod tests {
     fn every_change_variant_round_trips() {
         roundtrip(Change::NotificationsChanged);
         roundtrip(Change::LayoutChanged);
-        roundtrip(Change::ColumnZoomed { workspace: 1, column: 2 });
-        roundtrip(Change::PaneMoved { pane: PaneId(5), workspace: 0, column: 3 });
-        roundtrip(Change::PaneAdded { pane: PaneId(6), workspace: 1, column: 0 });
+        roundtrip(Change::ColumnZoomed {
+            workspace: 1,
+            column: 2,
+        });
+        roundtrip(Change::PaneMoved {
+            pane: PaneId(5),
+            workspace: 0,
+            column: 3,
+        });
+        roundtrip(Change::PaneAdded {
+            pane: PaneId(6),
+            workspace: 1,
+            column: 0,
+        });
         roundtrip(Change::Floated {
             pane: PaneId(7),
             workspace: 2,
@@ -149,7 +165,10 @@ mod tests {
                 SpaceEffect::Pane(PaneEffect::Inserted { col: 0, row: 2 }),
             ],
         });
-        roundtrip(Change::ColumnMoved { workspace: 1, column: 0 });
+        roundtrip(Change::ColumnMoved {
+            workspace: 1,
+            column: 0,
+        });
         roundtrip(Change::WorkspaceAdded { index: 3 });
         roundtrip(Change::WorkspaceRemoved { index: 2 });
         roundtrip(Change::NamesChanged);

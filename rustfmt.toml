@@ -1,0 +1,4 @@
+# The one formatting style for the workspace — rustfmt's defaults, written down so the toolchain
+# pinned in rust-toolchain.toml formats every file the same way, here and in CI
+# (`cargo fmt --all -- --check`).
+edition = "2024"

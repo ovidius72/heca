@@ -1,7 +1,7 @@
 //! Putting a retained terminal texture on screen, and the cursor and selection over it.
 
 use crate::app::terminal_host::TerminalMount;
-use crate::app::terminal_render::{rect_to_text_box, TerminalTarget};
+use crate::app::terminal_render::{TerminalTarget, rect_to_text_box};
 use crate::app_state::AppState;
 use crate::chrome::panes::terminal::TerminalId;
 use heca_core::layout::Rectangle;

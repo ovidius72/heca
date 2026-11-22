@@ -20,11 +20,23 @@ fn native_construction_and_cloning_control_the_same_session() {
     first.resolved();
     again.run("pwd");
     clone.kill();
-    assert_eq!(*told.borrow(), vec![
-        (71, TerminalCommand::Run { text: "pwd".into(), enter: true }),
-        (71, TerminalCommand::Kill),
-    ]);
-    assert!(again.to_start().is_none(), "a shared session is started only once");
+    assert_eq!(
+        *told.borrow(),
+        vec![
+            (
+                71,
+                TerminalCommand::Run {
+                    text: "pwd".into(),
+                    enter: true
+                }
+            ),
+            (71, TerminalCommand::Kill),
+        ]
+    );
+    assert!(
+        again.to_start().is_none(),
+        "a shared session is started only once"
+    );
 }
 
 #[test]
@@ -33,7 +45,10 @@ fn native_names_and_extension_owners_have_distinct_sessions() {
     let other = Terminal::new("other-native-owner");
     let plugin = crate::extension("native_terminal_owner_test").terminal("native-owner");
     assert_eq!(native.shown_title().as_deref(), Some("heca.native-owner"));
-    assert_eq!(plugin.shown_title().as_deref(), Some("native_terminal_owner_test.native-owner"));
+    assert_eq!(
+        plugin.shown_title().as_deref(),
+        Some("native_terminal_owner_test.native-owner")
+    );
     assert!(!Rc::ptr_eq(&native.shared, &other.shared));
     assert!(!Rc::ptr_eq(&native.shared, &plugin.shared));
 }

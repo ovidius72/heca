@@ -86,7 +86,10 @@ impl MenuItem {
     #[heca_grid_ui_macros::host_only(
         "a subtree builder — composed content crosses as ViewNode children"
     )]
-    pub fn child<C: crate::builders::IntoComponent + 'static>(mut self, f: impl Fn() -> C + 'static) -> Self {
+    pub fn child<C: crate::builders::IntoComponent + 'static>(
+        mut self,
+        f: impl Fn() -> C + 'static,
+    ) -> Self {
         self.content = Some(Rc::new(move || f().into_component()));
         self
     }

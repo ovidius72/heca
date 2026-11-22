@@ -9,8 +9,9 @@ use heca_config::loader::AppConfig;
 
 use crate::chrome::Intent;
 use crate::entry::service::{
-    ActionCx, ActionFn, ActionRequest, ActionResult, Effects, ListenFn, Permit, PolicyFn, ProjectCx, Projection,
-    RequestOutcome, RequestRef, Requester, ServerEvent, Service, ServiceCx, ServiceInbox, SessionKey, Sessions, Stop,
+    ActionCx, ActionFn, ActionRequest, ActionResult, Effects, ListenFn, Permit, PolicyFn,
+    ProjectCx, Projection, RequestOutcome, RequestRef, Requester, ServerEvent, Service, ServiceCx,
+    ServiceInbox, SessionKey, Sessions, Stop,
 };
 use crate::server::{ServerWaker, identity::ServerIdentity, wire::service::ServiceUpdateKind};
 
@@ -62,7 +63,10 @@ pub(crate) enum Projected {
     Remove,
     /// The window already has the latest.
     Unchanged,
-    Send { revision: u64, kind: ServiceUpdateKind },
+    Send {
+        revision: u64,
+        kind: ServiceUpdateKind,
+    },
 }
 
 /// A started service with its type erased.
@@ -125,9 +129,26 @@ impl<S: Service> Running<S> {
         messages: Receiver<S::Message>,
         declared: Brought<S>,
     ) -> Self {
-        let Brought { actions, policies, listeners, effects, capacity } = declared;
-        Self { home, service, inbox, messages, actions, policies, listeners, effects, capacity, sessions: Sessions::default(),
-            saved: Rc::default() }
+        let Brought {
+            actions,
+            policies,
+            listeners,
+            effects,
+            capacity,
+        } = declared;
+        Self {
+            home,
+            service,
+            inbox,
+            messages,
+            actions,
+            policies,
+            listeners,
+            effects,
+            capacity,
+            sessions: Sessions::default(),
+            saved: Rc::default(),
+        }
     }
 
     /// The service, what it is handed at each call, and who it is: borrowed apart so a call can
@@ -170,7 +191,9 @@ impl<S: Service> Hosted for Running<S> {
     fn drain(&mut self, epoch: u64) {
         let mut delivered = 0;
         while delivered < self.capacity {
-            let Ok(message) = self.messages.try_recv() else { return };
+            let Ok(message) = self.messages.try_recv() else {
+                return;
+            };
             delivered += 1;
             let (service, mut cx, home) = self.call(epoch);
             if let Err(error) = service.receive(&mut cx, message) {
@@ -183,7 +206,10 @@ impl<S: Service> Hosted for Running<S> {
 
     fn invoke(&mut self, epoch: u64, caller: Caller<'_>, intent: &Intent) -> ActionResult {
         let Some(run) = self.actions.get(&intent.action).cloned() else {
-            return ActionResult::Refused(format!("'{}' is not an action of {}", intent.action, self.home.name));
+            return ActionResult::Refused(format!(
+                "'{}' is not an action of {}",
+                intent.action, self.home.name
+            ));
         };
         let (service, cx, home) = self.call(epoch);
         let (client, sender) = match caller.requester {
@@ -210,7 +236,9 @@ impl<S: Service> Hosted for Running<S> {
     fn permit(&mut self, epoch: u64, request: &ActionRequest<'_>) -> Permit {
         let policies = self.policies.clone();
         let (service, mut cx, _) = self.call(epoch);
-        policies.iter().map(|policy| policy(service, &mut cx, request))
+        policies
+            .iter()
+            .map(|policy| policy(service, &mut cx, request))
             .find(|permit| matches!(permit, Permit::Deny(_)))
             .unwrap_or(Permit::Allow)
     }
@@ -221,13 +249,27 @@ impl<S: Service> Hosted for Running<S> {
     }
 
     fn project(&self, cx: &ProjectCx<'_>) -> Result<Projected, String> {
-        let Some(projection) = self.service.project(cx) else { return Ok(Projected::Remove) };
+        let Some(projection) = self.service.project(cx) else {
+            return Ok(Projected::Remove);
+        };
         match (projection, cx.since) {
-            (Projection::Snapshot { revision, value }, _) =>
-                Ok(Projected::Send { revision, kind: ServiceUpdateKind::Snapshot(Self::encode(value)?) }),
-            (Projection::Delta { base, revision, value }, Some(since)) if base == since => Ok(Projected::Send {
+            (Projection::Snapshot { revision, value }, _) => Ok(Projected::Send {
                 revision,
-                kind: ServiceUpdateKind::Delta { base_revision: base, value: Self::encode(value)? },
+                kind: ServiceUpdateKind::Snapshot(Self::encode(value)?),
+            }),
+            (
+                Projection::Delta {
+                    base,
+                    revision,
+                    value,
+                },
+                Some(since),
+            ) if base == since => Ok(Projected::Send {
+                revision,
+                kind: ServiceUpdateKind::Delta {
+                    base_revision: base,
+                    value: Self::encode(value)?,
+                },
             }),
             (Projection::Unchanged, Some(_)) => Ok(Projected::Unchanged),
             // Not an answer for what this window has: ask for the whole thing instead.
@@ -254,7 +296,9 @@ impl<S: Service> Hosted for Running<S> {
     }
 
     fn listen(&mut self, epoch: u64, event: &ServerEvent) {
-        let listeners: Vec<_> = self.listeners.iter()
+        let listeners: Vec<_> = self
+            .listeners
+            .iter()
             .filter(|(name, _)| name == "*" || name == event.name())
             .map(|(_, listen)| listen.clone())
             .collect();

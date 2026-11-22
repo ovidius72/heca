@@ -326,12 +326,35 @@ fn arguments_are_read_as_the_action_declared_them() {
     assert_eq!(typed.get("pane_id"), Some(&PropValue::Int(7)));
     assert_eq!(typed.get("ratio"), Some(&PropValue::Float(0.5)));
     assert_eq!(typed.get("open"), Some(&PropValue::Bool(true)));
-    assert_eq!(typed.get("label"), Some(&PropValue::Text("42".into())), "declared text stays text");
-    assert_eq!(typed.get("@seat"), Some(&PropValue::Text("rooms".into())), "undeclared: untouched");
-    assert_eq!(typed.get("extra"), Some(&PropValue::Text("3".into())), "undeclared: untouched");
+    assert_eq!(
+        typed.get("label"),
+        Some(&PropValue::Text("42".into())),
+        "declared text stays text"
+    );
+    assert_eq!(
+        typed.get("@seat"),
+        Some(&PropValue::Text("rooms".into())),
+        "undeclared: untouched"
+    );
+    assert_eq!(
+        typed.get("extra"),
+        Some(&PropValue::Text("3".into())),
+        "undeclared: untouched"
+    );
     assert_eq!(typed.len(), 6, "nothing is removed");
-    assert_eq!(meta.typed_args(typed.clone()), typed, "turning twice changes nothing");
+    assert_eq!(
+        meta.typed_args(typed.clone()),
+        typed,
+        "turning twice changes nothing"
+    );
 
-    let bad = meta.typed_args(PropMap::from([("pane_id".to_string(), PropValue::Text("seven".into()))]));
-    assert_eq!(bad.get("pane_id"), Some(&PropValue::Text("seven".into())), "what does not parse stays");
+    let bad = meta.typed_args(PropMap::from([(
+        "pane_id".to_string(),
+        PropValue::Text("seven".into()),
+    )]));
+    assert_eq!(
+        bad.get("pane_id"),
+        Some(&PropValue::Text("seven".into())),
+        "what does not parse stays"
+    );
 }

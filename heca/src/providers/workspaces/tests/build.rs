@@ -38,7 +38,6 @@ fn every_row_kind_carries_a_key_the_hit_test_can_find() {
     }
 }
 
-
 #[test]
 fn build_produces_the_real_workspace_tree_and_registers_host_ids() {
     // The seam builds the *same* body the bespoke path builds: a column with one
@@ -149,8 +148,7 @@ fn no_two_pick_targets_in_the_sidebar_share_an_identity() {
     let targets = heca_grid_ui::collect_hints(body.as_ref());
     assert!(!targets.is_empty(), "the sidebar declares pick targets");
 
-    let mut seen: std::collections::HashMap<String, Vec<usize>> =
-        std::collections::HashMap::new();
+    let mut seen: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
     let mut anonymous = 0usize;
     for (i, (path, _)) in targets.iter().enumerate() {
         match heca_grid_ui::identity_of(body.as_ref(), path) {
@@ -284,9 +282,7 @@ fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
         .borrow()
         .iter()
         .filter_map(|intent| match intent {
-            InteractionIntent::View(vi) => {
-                Some((vi.action.clone(), vi.args.get("key").cloned()))
-            }
+            InteractionIntent::View(vi) => Some((vi.action.clone(), vi.args.get("key").cloned())),
             _ => None,
         })
         .collect();

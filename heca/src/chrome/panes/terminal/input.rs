@@ -268,7 +268,10 @@ mod tests {
 /// by a space — so `/tmp/a b.txt` and `/tmp/c.txt` become `'/tmp/a b.txt' /tmp/c.txt ` and the
 /// command line reads them as two words, ready for the next one.
 pub(crate) fn dropped_paths(paths: &[std::path::PathBuf]) -> String {
-    paths.iter().map(|path| format!("{} ", shell_quoted(&path.to_string_lossy()))).collect()
+    paths
+        .iter()
+        .map(|path| format!("{} ", shell_quoted(&path.to_string_lossy())))
+        .collect()
 }
 
 /// `text` as one word for a POSIX shell: as it is when every character is safe, otherwise in single
@@ -288,10 +291,22 @@ mod dropped_paths_tests {
 
     #[test]
     fn dropped_paths_paste_as_shell_words_followed_by_a_space() {
-        let paste = |paths: &[&str]| dropped_paths(&paths.iter().map(PathBuf::from).collect::<Vec<_>>());
+        let paste =
+            |paths: &[&str]| dropped_paths(&paths.iter().map(PathBuf::from).collect::<Vec<_>>());
         assert_eq!(paste(&["/tmp/c.txt"]), "/tmp/c.txt ");
-        assert_eq!(paste(&["/tmp/a b.txt", "/tmp/c.txt"]), "'/tmp/a b.txt' /tmp/c.txt ");
-        assert_eq!(paste(&["/tmp/it's"]), r"'/tmp/it'\''s' ", "a quote inside a quoted word");
-        assert_eq!(paste(&["/tmp/$HOME (1)"]), "'/tmp/$HOME (1)' ", "nothing is expanded");
+        assert_eq!(
+            paste(&["/tmp/a b.txt", "/tmp/c.txt"]),
+            "'/tmp/a b.txt' /tmp/c.txt "
+        );
+        assert_eq!(
+            paste(&["/tmp/it's"]),
+            r"'/tmp/it'\''s' ",
+            "a quote inside a quoted word"
+        );
+        assert_eq!(
+            paste(&["/tmp/$HOME (1)"]),
+            "'/tmp/$HOME (1)' ",
+            "nothing is expanded"
+        );
     }
 }

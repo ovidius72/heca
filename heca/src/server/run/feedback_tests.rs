@@ -93,19 +93,43 @@ fn only_one_attached_client_is_granted_a_feedback_sound() {
     let mut server = ServerLoop::new(state, session);
     let first = server.connect();
     let second = server.connect();
-    for client in [&first, &second] { client.send(ClientMsg::Attach).unwrap(); }
-    server.pump(Instant::now());
-    for client in [&first, &second] { feedbacks(client); }
-    first.send(ClientMsg::RequestFeedbackSound { session_id: SessionId(99), pane_id: PaneId(7), revision: 1 }).unwrap();
     for client in [&first, &second] {
-        client.send(ClientMsg::RequestFeedbackSound { session_id: SessionId(1), pane_id: PaneId(7), revision: 1 }).unwrap();
+        client.send(ClientMsg::Attach).unwrap();
+    }
+    server.pump(Instant::now());
+    for client in [&first, &second] {
+        feedbacks(client);
+    }
+    first
+        .send(ClientMsg::RequestFeedbackSound {
+            session_id: SessionId(99),
+            pane_id: PaneId(7),
+            revision: 1,
+        })
+        .unwrap();
+    for client in [&first, &second] {
+        client
+            .send(ClientMsg::RequestFeedbackSound {
+                session_id: SessionId(1),
+                pane_id: PaneId(7),
+                revision: 1,
+            })
+            .unwrap();
     }
     server.pump(Instant::now());
     let mut grants = 0;
     for client in [&first, &second] {
         while let Some(message) = client.poll().unwrap() {
-            if let ServerMsg::FeedbackSound { session_id, pane_id, revision } = message {
-                assert_eq!((session_id, pane_id, revision), (SessionId(1), PaneId(7), 1));
+            if let ServerMsg::FeedbackSound {
+                session_id,
+                pane_id,
+                revision,
+            } = message
+            {
+                assert_eq!(
+                    (session_id, pane_id, revision),
+                    (SessionId(1), PaneId(7), 1)
+                );
                 grants += 1;
             }
         }

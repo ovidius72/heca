@@ -88,11 +88,9 @@ impl RailCell {
         self.active
     }
 
-
     fn interactive(&self) -> bool {
         self.base.activatable
     }
-
 }
 
 impl Component for RailCell {
@@ -203,7 +201,6 @@ impl Component for RailCell {
     fn is_control(&self) -> bool {
         true
     }
-
 
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = self.flash.tick(dt);

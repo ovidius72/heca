@@ -78,7 +78,10 @@ fn action_policy_classifies_these_as_documented() {
         );
     }
     assert_eq!(
-        action_policy(&WmAction::ScrollToOffset { rows: 0, terminal: None }),
+        action_policy(&WmAction::ScrollToOffset {
+            rows: 0,
+            terminal: None
+        }),
         ActionPolicy::KeyboardTerminal
     );
     assert_eq!(

@@ -15,12 +15,17 @@ use heca_config::loader::AppConfig;
 use heca_core::layout::SessionId;
 
 use crate::chrome::Intent;
-use crate::entry::service::{ActionResult, ProjectCx, ServerEvent, ServiceTicket, SessionKey, Sessions, Stop};
+use crate::entry::service::{
+    ActionResult, ProjectCx, ServerEvent, ServiceTicket, SessionKey, Sessions, Stop,
+};
 
+use super::ServerWaker;
 use super::connection::{Attachment, Connection};
 use super::identity::ServerIdentity;
-use super::wire::{ServerMsg, service::{ServiceUpdate, ServiceUpdateKind}};
-use super::ServerWaker;
+use super::wire::{
+    ServerMsg,
+    service::{ServiceUpdate, ServiceUpdateKind},
+};
 
 mod book;
 mod permit;
@@ -30,8 +35,8 @@ pub(crate) mod saved;
 
 pub(crate) use book::{Handle, Queued, Requests};
 pub(crate) use permit::{Call, gate};
-pub(crate) use running::{Caller, Brought, Home, Hosted, Running, SessionRef, StartArgs};
 use running::Projected;
+pub(crate) use running::{Brought, Caller, Home, Hosted, Running, SessionRef, StartArgs};
 
 /// The one host, shared by the server and every session it owns.
 pub(crate) type SharedServices = Rc<RefCell<ServiceHost>>;
@@ -77,7 +82,9 @@ struct Seen {
 
 /// Show a window that an action it asked for was refused, and why.
 pub(crate) fn refused(action: &str, reason: String) {
-    crate::notification::Notification::danger(format!("{action} was refused")).body(reason).send();
+    crate::notification::Notification::danger(format!("{action} was refused"))
+        .body(reason)
+        .send();
 }
 
 /// A deferred answer owed to a request a service handed in: which service's, and which request.
@@ -109,8 +116,12 @@ impl ServiceHost {
     /// Run every declared service's factory for this server, each in its own folder under
     /// `identity`. A factory that fails — or has no folder to run in — is reported and skipped; the
     /// server starts without it.
-    pub(crate) fn start(config: &AppConfig, identity: &ServerIdentity, wake: &ServerWaker,
-        catalog: &crate::actions::ActionCatalogSnapshot) -> Self {
+    pub(crate) fn start(
+        config: &AppConfig,
+        identity: &ServerIdentity,
+        wake: &ServerWaker,
+        catalog: &crate::actions::ActionCatalogSnapshot,
+    ) -> Self {
         let (nudge_tx, nudge) = mpsc::sync_channel(1);
         let server = wake.clone();
         let wake = ServerWaker::new(move || {
@@ -130,9 +141,14 @@ impl ServiceHost {
         // Nothing can show a notification yet — no session, and in a standalone window no sink — so
         // a failing factory's report is held for the first session.
         let (services, held) = crate::notification::collect_notifications(|| {
-            crate::entry::service::declared().into_iter()
-                .filter_map(|declared| declared.start(&args)
-                    .map_err(|error| report(declared.name(), "could not start", &error)).ok())
+            crate::entry::service::declared()
+                .into_iter()
+                .filter_map(|declared| {
+                    declared
+                        .start(&args)
+                        .map_err(|error| report(declared.name(), "could not start", &error))
+                        .ok()
+                })
                 .collect()
         });
         let saved = Rc::new(std::cell::RefCell::new(saved::SavedStore::open(
@@ -160,12 +176,19 @@ impl ServiceHost {
     }
 
     /// A session's saved entries, for its save.
-    pub(crate) fn saved_entries(&self, session: crate::entry::service::SessionKey) -> saved::Entries {
+    pub(crate) fn saved_entries(
+        &self,
+        session: crate::entry::service::SessionKey,
+    ) -> saved::Entries {
         self.saved.borrow().session_entries(session)
     }
 
     /// A restored session's saved entries come back.
-    pub(crate) fn adopt_saved_entries(&self, session: crate::entry::service::SessionKey, entries: saved::Entries) {
+    pub(crate) fn adopt_saved_entries(
+        &self,
+        session: crate::entry::service::SessionKey,
+        entries: saved::Entries,
+    ) {
         self.saved.borrow_mut().adopt_session(session, entries);
     }
 
@@ -187,7 +210,8 @@ impl ServiceHost {
         };
         if !touched.is_empty() {
             let services = &self.services;
-            self.seen.retain(|(_, index), _| !touched.contains(services[*index].extension()));
+            self.seen
+                .retain(|(_, index), _| !touched.contains(services[*index].extension()));
         }
         changes
     }
@@ -199,14 +223,28 @@ impl ServiceHost {
 
     /// Start a service action as `call`. An immediate answer comes back now; a ticket is the
     /// service's promise to settle it later.
-    fn begin(&mut self, session: SessionRef, call: &Call, config: Option<&AppConfig>, intent: &Intent) -> Started {
-        let Some(index) = self.services.iter().position(|service| service.owns(&intent.action)) else {
+    fn begin(
+        &mut self,
+        session: SessionRef,
+        call: &Call,
+        config: Option<&AppConfig>,
+        intent: &Intent,
+    ) -> Started {
+        let Some(index) = self
+            .services
+            .iter()
+            .position(|service| service.owns(&intent.action))
+        else {
             return Started::Now(Err(format!("no service runs '{}'", intent.action)));
         };
         let Some(config) = config.or(self.config.as_deref()) else {
             return Started::Now(Err("the server has no configuration".into()));
         };
-        let caller = Caller { session, requester: call.requester(), config };
+        let caller = Caller {
+            session,
+            requester: call.requester(),
+            config,
+        };
         let now = match self.services[index].invoke(self.epoch, caller, intent) {
             ActionResult::Done(line) => Ok(line),
             ActionResult::Refused(reason) => Err(reason),
@@ -219,8 +257,14 @@ impl ServiceHost {
 
     /// Run a service action. An immediate answer goes to `reply` now; a ticket keeps it until the
     /// service settles it. Whether `call` may ask is decided by the caller, before this.
-    pub(crate) fn invoke(&mut self, session: SessionRef, call: &Call, config: Option<&AppConfig>,
-        intent: &Intent, reply: Reply) {
+    pub(crate) fn invoke(
+        &mut self,
+        session: SessionRef,
+        call: &Call,
+        config: Option<&AppConfig>,
+        intent: &Intent,
+        reply: Reply,
+    ) {
         match self.begin(session, call, config, intent) {
             Started::Now(result) => reply.answer(result),
             Started::Later(index, ticket) => {
@@ -233,8 +277,13 @@ impl ServiceHost {
     /// A service action that a chain reached (no window to hand it to): a refusal fails the chain.
     /// A deferred answer is not waited for, unless the chain is a request a service handed in —
     /// then that request is not over until it comes.
-    pub(crate) fn run_step(&mut self, session: SessionRef, call: &Call, config: Option<&AppConfig>, intent: &Intent)
-        -> Result<(), crate::rpc::RpcError> {
+    pub(crate) fn run_step(
+        &mut self,
+        session: SessionRef,
+        call: &Call,
+        config: Option<&AppConfig>,
+        intent: &Intent,
+    ) -> Result<(), crate::rpc::RpcError> {
         match self.begin(session, call, config, intent) {
             Started::Now(Err(reason)) => Err(crate::rpc::RpcError::Failed(reason)),
             Started::Now(Ok(line)) => {
@@ -269,8 +318,11 @@ impl ServiceHost {
     /// Deliver the deferred answers a service settled during its last call.
     fn settle(&mut self, index: usize) {
         for (ticket, result) in std::mem::take(&mut self.services[index].effects().completed) {
-            if let Some(reply) = self.pending.remove(&(index, ticket)) { reply.answer(result); }
-            else if let Some(owed) = self.owed.remove(&(index, ticket)) { self.book(owed.origin).settled(owed.serial, result); }
+            if let Some(reply) = self.pending.remove(&(index, ticket)) {
+                reply.answer(result);
+            } else if let Some(owed) = self.owed.remove(&(index, ticket)) {
+                self.book(owed.origin).settled(owed.serial, result);
+            }
         }
     }
 
@@ -281,7 +333,11 @@ impl ServiceHost {
 
     /// This window lost step with `service` and asked for a fresh snapshot.
     pub(crate) fn forget(&mut self, client: u64, service: &str) {
-        if let Some(index) = self.services.iter().position(|hosted| hosted.name() == service) {
+        if let Some(index) = self
+            .services
+            .iter()
+            .position(|hosted| hosted.name() == service)
+        {
             self.seen.remove(&(client, index));
         }
     }
@@ -289,49 +345,94 @@ impl ServiceHost {
     /// Send each attached window what each service shows it: everyone after a republish, and any
     /// window that has nothing yet. `max_frame_bytes` bounds one update.
     pub(super) fn publish(&mut self, audience: &[Audience<'_>], max_frame_bytes: usize) {
-        let Some(server_config) = self.config.clone() else { return };
+        let Some(server_config) = self.config.clone() else {
+            return;
+        };
         for index in 0..self.services.len() {
             let republish = std::mem::take(&mut self.services[index].effects().republish);
             for group in audience {
                 for client in &group.clients {
                     let key = (client.id, index);
-                    let seen = self.seen.get(&key).filter(|seen| seen.session == group.session);
-                    if seen.is_some() && !republish { continue; }
+                    let seen = self
+                        .seen
+                        .get(&key)
+                        .filter(|seen| seen.session == group.session);
+                    if seen.is_some() && !republish {
+                        continue;
+                    }
                     let since = seen.and_then(|seen| seen.revision);
                     let cx = ProjectCx {
-                        session: group.session.0, session_key: group.key, client: client.id,
+                        session: group.session.0,
+                        session_key: group.key,
+                        client: client.id,
                         config: group.config.unwrap_or(&server_config),
-                        extension: self.services[index].extension(), epoch: self.epoch, since,
+                        extension: self.services[index].extension(),
+                        epoch: self.epoch,
+                        since,
                         sessions: &self.sessions,
                         saved: &self.saved,
                     };
                     let revision = match self.services[index].project(&cx) {
                         Ok(Projected::Unchanged) => since,
                         Ok(Projected::Remove) => {
-                            if since.is_some() { self.send(index, client, 0, ServiceUpdateKind::Removed, max_frame_bytes); }
+                            if since.is_some() {
+                                self.send(
+                                    index,
+                                    client,
+                                    0,
+                                    ServiceUpdateKind::Removed,
+                                    max_frame_bytes,
+                                );
+                            }
                             None
                         }
-                        Ok(Projected::Send { revision, kind }) =>
+                        Ok(Projected::Send { revision, kind }) => {
                             match self.send(index, client, revision, kind, max_frame_bytes) {
                                 Some(true) => Some(revision),
                                 // Not sent: the next republish tries again from what it has.
                                 Some(false) => since,
                                 // The link refused it: start this window again from a snapshot.
-                                None => { self.seen.remove(&key); continue; }
-                            },
-                        Err(error) => { report(self.services[index].name(), "could not show a window", &error); since }
+                                None => {
+                                    self.seen.remove(&key);
+                                    continue;
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            report(
+                                self.services[index].name(),
+                                "could not show a window",
+                                &error,
+                            );
+                            since
+                        }
                     };
-                    self.seen.insert(key, Seen { session: group.session, revision });
+                    self.seen.insert(
+                        key,
+                        Seen {
+                            session: group.session,
+                            revision,
+                        },
+                    );
                 }
             }
         }
-        let live: Vec<u64> = audience.iter().flat_map(|group| group.clients.iter().map(|client| client.id)).collect();
+        let live: Vec<u64> = audience
+            .iter()
+            .flat_map(|group| group.clients.iter().map(|client| client.id))
+            .collect();
         self.seen.retain(|(client, _), _| live.contains(client));
     }
 
     /// `Some(true)` sent, `Some(false)` too large to send, `None` the link refused it.
-    fn send(&self, index: usize, client: &Connection, revision: u64, kind: ServiceUpdateKind,
-        max_frame_bytes: usize) -> Option<bool> {
+    fn send(
+        &self,
+        index: usize,
+        client: &Connection,
+        revision: u64,
+        kind: ServiceUpdateKind,
+        max_frame_bytes: usize,
+    ) -> Option<bool> {
         let hosted = &self.services[index];
         let message = ServerMsg::Service(ServiceUpdate {
             service: hosted.name().to_owned(),
@@ -342,19 +443,25 @@ impl ServiceHost {
         });
         let size = serde_json::to_vec(&message).map_or(usize::MAX, |bytes| bytes.len());
         if size > max_frame_bytes {
-            report(hosted.name(), "could not show a window",
-                &format!("an update of {size} bytes is over the {max_frame_bytes}-byte limit"));
+            report(
+                hosted.name(),
+                "could not show a window",
+                &format!("an update of {size} bytes is over the {max_frame_bytes}-byte limit"),
+            );
             return Some(false);
         }
-        (matches!(client.attachment.get(), Attachment::Attached) && client.link.send(message).is_ok()).then_some(true)
+        (matches!(client.attachment.get(), Attachment::Attached)
+            && client.link.send(message).is_ok())
+        .then_some(true)
     }
 
     /// Stop every service: ask each until it is done, delivering its inbox in between, for at most
     /// `[settings.services] stop_timeout_ms`. Then answer every caller still waiting and drop the
     /// services, so a second call finds nothing to stop.
     pub(crate) fn shutdown(&mut self) {
-        let timeout = self.config.as_ref()
-            .map_or(0, |config| config.config.settings.services.stop_timeout_ms.get());
+        let timeout = self.config.as_ref().map_or(0, |config| {
+            config.config.settings.services.stop_timeout_ms.get()
+        });
         let deadline = Instant::now() + Duration::from_millis(timeout);
         let mut stopping: Vec<usize> = (0..self.services.len()).collect();
         loop {
@@ -362,25 +469,38 @@ impl ServiceHost {
                 self.services[index].drain(self.epoch);
                 self.services[index].stop(self.epoch) == Stop::Pending
             });
-            for index in 0..self.services.len() { self.settle(index); }
+            for index in 0..self.services.len() {
+                self.settle(index);
+            }
             self.tell_outcomes();
-            if stopping.is_empty() { break; }
+            if stopping.is_empty() {
+                break;
+            }
             let left = deadline.saturating_duration_since(Instant::now());
             let woken = self.nudge.as_ref().map(|nudge| nudge.recv_timeout(left));
             if left.is_zero() || !matches!(woken, Some(Ok(()) | Err(RecvTimeoutError::Timeout))) {
                 for &index in &stopping {
-                    report(self.services[index].name(), "did not stop",
-                        &format!("still busy after {timeout} ms (`[settings.services] stop_timeout_ms`)"));
+                    report(
+                        self.services[index].name(),
+                        "did not stop",
+                        &format!(
+                            "still busy after {timeout} ms (`[settings.services] stop_timeout_ms`)"
+                        ),
+                    );
                 }
                 break;
             }
         }
         // What was handed in and never finished is over: refused if it never started, unknown if it
         // did. The service is told while it is still there to hear it.
-        for index in 0..self.services.len() { self.book(index).close(); }
+        for index in 0..self.services.len() {
+            self.book(index).close();
+        }
         self.tell_outcomes();
         self.owed.clear();
-        for (_, reply) in self.pending.drain() { reply.answer(Err("the server stopped".into())); }
+        for (_, reply) in self.pending.drain() {
+            reply.answer(Err("the server stopped".into()));
+        }
         // Dropping the services closes their inboxes: a worker still sending is told so.
         self.services.clear();
     }

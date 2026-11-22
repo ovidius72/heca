@@ -23,7 +23,11 @@ struct Pressable {
 
 impl Pressable {
     fn new(name: &'static str, log: &Log) -> Self {
-        Self { base: Base::new(), name, log: log.clone() }
+        Self {
+            base: Base::new(),
+            name,
+            log: log.clone(),
+        }
     }
 }
 
@@ -46,7 +50,10 @@ impl LayoutExt for Pressable {}
 impl Parent for Pressable {}
 
 fn centre_of(root: &dyn Component, key: &str) -> heca_core::layout::Point {
-    let b = heca_grid_ui::node_with_key(root, key).expect("keyed").base().bounds;
+    let b = heca_grid_ui::node_with_key(root, key)
+        .expect("keyed")
+        .base()
+        .bounds;
     heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0)
 }
 
@@ -67,9 +74,11 @@ fn heard(log: &Log, who: &'static str) -> impl FnMut(&mut heca_grid_ui::EventCx<
 #[test]
 fn a_double_click_is_used_by_the_button_not_also_by_the_row_around_it() {
     let log: Log = Rc::default();
-    let mut row = Row::new()
-        .on_double_click(heard(&log, "row"))
-        .child(Button::new("Go").key("btn").on_double_click(heard(&log, "button")));
+    let mut row = Row::new().on_double_click(heard(&log, "row")).child(
+        Button::new("Go")
+            .key("btn")
+            .on_double_click(heard(&log, "button")),
+    );
     lay(&mut row);
     let at = centre_of(&row, "btn");
     double_click(&mut row, at);
@@ -79,7 +88,10 @@ fn a_double_click_is_used_by_the_button_not_also_by_the_row_around_it() {
 #[test]
 fn a_disabled_button_hears_no_double_click() {
     let log: Log = Rc::default();
-    let mut button = Button::new("Go").key("btn").disabled(true).on_double_click(heard(&log, "button"));
+    let mut button = Button::new("Go")
+        .key("btn")
+        .disabled(true)
+        .on_double_click(heard(&log, "button"));
     lay(&mut button);
     let at = centre_of(&button, "btn");
     double_click(&mut button, at);
@@ -95,7 +107,11 @@ fn a_field_keeps_its_double_click_from_the_row_around_it() {
     lay(&mut row);
     let at = centre_of(&row, "field");
     double_click(&mut row, at);
-    assert!(log.borrow().is_empty(), "the field selects the word itself: {:?}", log.borrow());
+    assert!(
+        log.borrow().is_empty(),
+        "the field selects the word itself: {:?}",
+        log.borrow()
+    );
 }
 
 #[test]
@@ -120,7 +136,12 @@ fn a_click_in_a_field_inside_a_clickable_row_is_the_rows_and_focuses_the_field()
     let at = centre_of(&row, "field");
     click_at(&mut row, at, PointerButton::Left);
     assert_eq!(*log.borrow(), ["row"]);
-    assert!(heca_grid_ui::node_with_key(&row, "field").unwrap().base().is_focused());
+    assert!(
+        heca_grid_ui::node_with_key(&row, "field")
+            .unwrap()
+            .base()
+            .is_focused()
+    );
 }
 
 /// **Only the control that used the event shows the press.** The outer control listens to double
@@ -143,12 +164,21 @@ fn only_the_control_that_used_the_event_shows_the_press() {
     lay(&mut outer);
     let at = centre_of(&outer, "inner");
     click_at(&mut outer, at, PointerButton::Left);
-    assert_eq!(*log.borrow(), ["inner pressed", "inner heard"], "a single click");
+    assert_eq!(
+        *log.borrow(),
+        ["inner pressed", "inner heard"],
+        "a single click"
+    );
     log.borrow_mut().clear();
     click_at(&mut outer, at, PointerButton::Left);
     assert_eq!(
         *log.borrow(),
-        ["inner pressed", "inner heard", "outer pressed", "outer heard"],
+        [
+            "inner pressed",
+            "inner heard",
+            "outer pressed",
+            "outer heard"
+        ],
         "the second click of a pair: the click is the inner one's, the double click the outer one's",
     );
 }

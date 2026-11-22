@@ -1,10 +1,10 @@
 mod actions;
 pub mod agent;
-pub mod audio;
 mod announced;
 mod app;
 mod app_state;
 mod args;
+pub mod audio;
 mod chrome;
 mod client;
 mod components;
@@ -36,19 +36,20 @@ pub use args::{ArgKind, ArgSpec};
 pub use chrome::panes::pane_items::{PANE_ARG, PaneChip, PaneFacts, PaneLine};
 pub use chrome::panes::terminal::Terminal;
 pub use chrome::{
-    BuildCx, ChromeEvent, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
-    PlaceDock, RegionId, RegionSet, fires, picks, regions,
-};
-pub use entry::{
-    ActionCatalogSnapshot, ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError, ExternalRequest, LayerBuilder, LayerCx,
-    Permit, ProjectCx, Projection, RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox,
-    ServiceRegistration, ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, WorkspaceKey, Scope, SavedError, StateEvent,
-    SubmitError, Update, extension, register_widget,
-    ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
+    BuildCx, ChromeEvent, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution,
+    Contribution, PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
 pub use components::FolderLine;
-pub use heca_view_realize::WidgetDefinition;
+pub use entry::{
+    ActionCatalogSnapshot, ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError,
+    ExternalRequest, LayerBuilder, LayerCx, Permit, ProjectCx, Projection, RequestOutcome,
+    RequestRef, Requester, SavedError, Scope, Sender, ServerEvent, Service, ServiceCx,
+    ServiceInbox, ServiceRegistration, ServiceResult, ServiceSendError, ServiceState,
+    ServiceTicket, SessionChange, SessionEntry, SessionEvent, SessionKey, SessionState, Sessions,
+    StartCx, StateEvent, Stop, SubmitError, Update, WorkspaceKey, extension, register_widget,
+};
 pub use heca_view::{Intent, PropMap, PropValue};
+pub use heca_view_realize::WidgetDefinition;
 pub use notification::{Notification, NotificationAction};
 pub use providers::{ChromeCtx, Provider, ProviderCx, ProviderHandles};
 
@@ -111,7 +112,9 @@ impl HecaApp {
         };
         for (request_id, line) in calls {
             let answer = self.run_rpc(&line);
-            if let Some(state) = &self.state { state.client.reply_rpc(request_id, answer); }
+            if let Some(state) = &self.state {
+                state.client.reply_rpc(request_id, answer);
+            }
         }
     }
     /// Parse and execute an RPC command string.
@@ -166,7 +169,10 @@ impl HecaApp {
             IntentOutcome::Blocked => Err(rpc::RpcError::Blocked(intent.action)),
             IntentOutcome::NotRunnable => Err(rpc::RpcError::NotRunnable(intent.action)),
             IntentOutcome::MissingArgs => Err(rpc::RpcError::MissingArgs(intent.action)),
-            IntentOutcome::Failed(reason) => Err(rpc::RpcError::Failed(format!("{}: {reason}", intent.action))),
+            IntentOutcome::Failed(reason) => Err(rpc::RpcError::Failed(format!(
+                "{}: {reason}",
+                intent.action
+            ))),
         }
     }
 
@@ -196,7 +202,10 @@ impl HecaApp {
         }
     }
 
-    fn new(event_proxy: EventLoopProxy<AppEvent>, launch_mode: crate::app::cli::LaunchMode) -> Self {
+    fn new(
+        event_proxy: EventLoopProxy<AppEvent>,
+        launch_mode: crate::app::cli::LaunchMode,
+    ) -> Self {
         let app_config = AppConfig::load();
         let registry = build_registry();
         // Every collision — a key bound twice, an id declared twice — is collected here and
@@ -225,12 +234,20 @@ impl HecaApp {
     /// untouched (a bad config must never overwrite settings that work). The caller turns the
     /// result into a notification. The stderr lines stay for a terminal user watching
     /// the process.
-    fn reload_config(&mut self, reason: crate::app_state::ReloadReason) -> Result<(), heca_config::loader::ConfigError> {
+    fn reload_config(
+        &mut self,
+        reason: crate::app_state::ReloadReason,
+    ) -> Result<(), heca_config::loader::ConfigError> {
         let Some(state) = self.state.as_mut() else {
             return Ok(());
         };
         {
-            let loaded = state.client.session.folder.as_deref().map_or_else(AppConfig::try_load, AppConfig::try_load_for);
+            let loaded = state
+                .client
+                .session
+                .folder
+                .as_deref()
+                .map_or_else(AppConfig::try_load, AppConfig::try_load_for);
             let new_config = match loaded {
                 Ok(cfg) => cfg,
                 Err(e) => {
@@ -360,7 +377,13 @@ impl HecaApp {
     }
 
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> std::io::Result<Box<AppState>> {
-        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone(), self.launch_mode.clone()).await
+        build_initial_state(
+            &self.app_config,
+            event_loop,
+            self.event_proxy.clone(),
+            self.launch_mode.clone(),
+        )
+        .await
     }
 }
 
@@ -423,7 +446,9 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut state.action_catalog,
                 &mut self.conflicts,
             );
-            state.client.install_actions(self.registry.clone(), state.action_catalog.clone());
+            state
+                .client
+                .install_actions(self.registry.clone(), state.action_catalog.clone());
             // What another crate added with an extension's `.layer(..)`: registered hidden, under its name,
             // so `toggle_layer` finds it from a key, a menu, the palette and RPC.
             crate::entry::register_queued_layers(&mut state);
@@ -485,13 +510,20 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         let _slow = crate::slow_steps::step("client.about_to_wait");
         self.receive_server();
         // Config reload requested via keybinding — do it before borrowing state.
-        let reload = self.state.as_mut().and_then(|state| state.pending_reload.take());
+        let reload = self
+            .state
+            .as_mut()
+            .and_then(|state| state.pending_reload.take());
         if let Some(reason) = reload {
             let result = self.reload_config(reason);
             match reason {
                 crate::app_state::ReloadReason::Explicit => notify_reload_outcome(result),
                 crate::app_state::ReloadReason::Session => {
-                    if let Err(error) = result && let Some(state) = &mut self.state { state.status_note = Some(error.to_string()); }
+                    if let Err(error) = result
+                        && let Some(state) = &mut self.state
+                    {
+                        state.status_note = Some(error.to_string());
+                    }
                 }
             }
         }
@@ -548,8 +580,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 crate::notification::raise(state, draft);
                 crate::app::frame_reasons::report("event RaiseNotification");
                 state.window.request_redraw();
-            }
-            // Answered before the state guard above (it must reply even while starting).
+            } // Answered before the state guard above (it must reply even while starting).
         }
     }
 }
@@ -564,7 +595,10 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 pub fn run(app_name: impl Into<String>) {
     crate::entry::app_name::set(app_name.into());
     if let Some(result) = heca_core::agent::launcher::run_if_requested() {
-        let code = result.unwrap_or_else(|error| { eprintln!("[heca] agent launch: {error}"); 1 });
+        let code = result.unwrap_or_else(|error| {
+            eprintln!("[heca] agent launch: {error}");
+            1
+        });
         std::process::exit(code);
     }
     // Command-line questions — `--help`, `--show-keys`, `--list-actions`, `--describe-action` —

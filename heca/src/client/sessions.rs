@@ -4,10 +4,17 @@ use super::*;
 
 impl ClientState {
     /// Keep the last complete frame while an attach's snapshots are still arriving.
-    pub(crate) fn projection_ready(&self) -> bool { self.failed || self.projection_deadline.is_none() }
+    pub(crate) fn projection_ready(&self) -> bool {
+        self.failed || self.projection_deadline.is_none()
+    }
 
     pub(crate) fn switch_session(&mut self, name: String) -> io::Result<()> {
-        if self.failed { return Err(io::Error::new(io::ErrorKind::BrokenPipe, "server unavailable")); }
+        if self.failed {
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "server unavailable",
+            ));
+        }
         if self.switching {
             return Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
@@ -22,9 +29,21 @@ impl ClientState {
     }
 
     pub(crate) fn detach_session(&mut self) -> io::Result<()> {
-        if self.failed { return Err(io::Error::new(io::ErrorKind::BrokenPipe, "server unavailable")); }
-        if self.detached { return Ok(()); }
-        if self.switching { return Err(io::Error::new(io::ErrorKind::WouldBlock, "session selection is pending")); }
+        if self.failed {
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "server unavailable",
+            ));
+        }
+        if self.detached {
+            return Ok(());
+        }
+        if self.switching {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "session selection is pending",
+            ));
+        }
         self.pending_selection = Some(ClientMsg::LeaveSession);
         self.switching = true;
         self.wake.wake();
@@ -33,8 +52,7 @@ impl ClientState {
 
     /// An attach is a projection boundary. Old pane ids and outboxes must not reach the new one.
     pub(super) fn reset_projection(&mut self) {
-        let (outbox, requests) =
-            outbox::channel(self.wake.clone());
+        let (outbox, requests) = outbox::channel(self.wake.clone());
         self.outbox = outbox;
         self.requests = requests;
         self.pending.clear();
@@ -44,8 +62,10 @@ impl ClientState {
         self.reads = Default::default();
         self.switching = false;
         self.pending_selection = None;
-        self.projection_deadline = Some(Instant::now()
-            + std::time::Duration::from_millis(self.connection.request_timeout_ms.get()));
+        self.projection_deadline = Some(
+            Instant::now()
+                + std::time::Duration::from_millis(self.connection.request_timeout_ms.get()),
+        );
     }
 
     pub(crate) fn reconnect_session(&mut self) -> io::Result<()> {
@@ -58,11 +78,19 @@ impl ClientState {
             wake.wake();
             let _ = ready.try_send(());
         });
-        let link = crate::server::socket::connect(self.connection, wake, crate::server::socket::Start::IfMissing)?;
+        let link = crate::server::socket::connect(
+            self.connection,
+            wake,
+            crate::server::socket::Start::IfMissing,
+        )?;
         self.reconnect_link(link, &receive)
     }
 
-    pub(super) fn reconnect_link(&mut self, link: Box<dyn ClientLink>, ready: &mpsc::Receiver<()>) -> io::Result<()> {
+    pub(super) fn reconnect_link(
+        &mut self,
+        link: Box<dyn ClientLink>,
+        ready: &mpsc::Receiver<()>,
+    ) -> io::Result<()> {
         link.send(ClientMsg::AttachTo {
             name: self.session.name.clone(),
         })?;
@@ -72,7 +100,10 @@ impl ClientState {
                 if let ServerMsg::Attached { session, .. } = &message
                     && session.name != self.session.name
                 {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "server attached a different session"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "server attached a different session",
+                    ));
                 }
                 self.link = Box::new(Reattached {
                     first: std::cell::RefCell::new(Some(message)),
@@ -104,7 +135,9 @@ impl ClientLink for Reattached {
     fn send(&self, message: ClientMsg) -> io::Result<()> {
         self.link.send(message)
     }
-    fn flush(&self) -> io::Result<()> { self.link.flush() }
+    fn flush(&self) -> io::Result<()> {
+        self.link.flush()
+    }
     fn poll(&self) -> io::Result<Option<ServerMsg>> {
         if let Some(first) = self.first.borrow_mut().take() {
             Ok(Some(first))

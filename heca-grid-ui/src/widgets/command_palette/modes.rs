@@ -111,7 +111,11 @@ impl CommandPalette {
     /// there is one place that knows the mode was entered, whatever route led to it. Entering is
     /// announced once; leaving the mode and coming back announces it again, and so does reopening.
     #[heca_grid_ui_macros::host_only("a callback, not a scalar")]
-    pub fn on_mode_enter(mut self, scope: impl Into<String>, callback: impl Fn() + 'static) -> Self {
+    pub fn on_mode_enter(
+        mut self,
+        scope: impl Into<String>,
+        callback: impl Fn() + 'static,
+    ) -> Self {
         self.mode_enter.push(ModeEnter {
             scope: scope.into(),
             callback: std::rc::Rc::new(callback),
@@ -130,11 +134,17 @@ impl CommandPalette {
         if self.entered.borrow().as_deref() != Some(scope.as_str()) {
             // A different mode: every callback may announce again the next time its own is entered.
             *self.entered.borrow_mut() = Some(scope.clone());
-            self.mode_enter.iter().for_each(|enter| enter.announced.set(false));
+            self.mode_enter
+                .iter()
+                .for_each(|enter| enter.announced.set(false));
         }
         // One at a time and only the ones not yet announced, so a callback registered after the
         // mode was entered still hears about it, and none hears twice.
-        for enter in self.mode_enter.iter().filter(|enter| enter.scope == scope && !enter.announced.get()) {
+        for enter in self
+            .mode_enter
+            .iter()
+            .filter(|enter| enter.scope == scope && !enter.announced.get())
+        {
             enter.announced.set(true);
             (enter.callback)();
         }
@@ -188,5 +198,4 @@ impl CommandPalette {
             None => text.to_string(),
         }
     }
-
 }

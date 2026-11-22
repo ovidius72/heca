@@ -110,11 +110,8 @@ pub(super) fn populate(
     let mut rows = Vec::new();
     for mode in modes {
         let batch = (mode.rows)(sources);
-        palette = palette.mode_with_commands(
-            mode.sigil,
-            mode.scope,
-            batch.iter().map(&mut command),
-        );
+        palette =
+            palette.mode_with_commands(mode.sigil, mode.scope, batch.iter().map(&mut command));
         if mode.search_description {
             palette = palette.match_description_in(mode.scope);
         }

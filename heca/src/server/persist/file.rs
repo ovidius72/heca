@@ -98,7 +98,12 @@ impl Saved {
                 }
             })
             .collect();
-        let written = Written { version: VERSION, next_session: self.next_session, recent: &self.recent, sessions };
+        let written = Written {
+            version: VERSION,
+            next_session: self.next_session,
+            recent: &self.recent,
+            sessions,
+        };
         let text = serde_json::to_string_pretty(&written).expect("a list of JSON values is JSON");
         (text, left_out)
     }
@@ -106,13 +111,22 @@ impl Saved {
     /// The sessions in `text`, and a line for everything that was left out. `Err` is a file that
     /// cannot be read at all: not JSON, or a version this build does not know.
     pub(super) fn decode(text: &str) -> Result<(Self, Vec<String>), String> {
-        let header: Header = serde_json::from_str(text).map_err(|error| format!("it is not readable ({error})"))?;
+        let header: Header =
+            serde_json::from_str(text).map_err(|error| format!("it is not readable ({error})"))?;
         if header.version != VERSION {
-            return Err(format!("it is version {}, and this heca reads version {VERSION}", header.version));
+            return Err(format!(
+                "it is version {}, and this heca reads version {VERSION}",
+                header.version
+            ));
         }
-        let read: Read = serde_json::from_str(text).map_err(|error| format!("it is not readable ({error})"))?;
+        let read: Read =
+            serde_json::from_str(text).map_err(|error| format!("it is not readable ({error})"))?;
         let mut problems = Vec::new();
-        let mut saved = Self { next_session: read.next_session, recent: read.recent, sessions: Vec::new() };
+        let mut saved = Self {
+            next_session: read.next_session,
+            recent: read.recent,
+            sessions: Vec::new(),
+        };
         let mut seen: Vec<(SessionId, String, SessionKey)> = Vec::new();
         for (index, value) in read.sessions.into_iter().enumerate() {
             let label = || format!("session {}", index + 1);
@@ -127,8 +141,13 @@ impl Saved {
                 problems.push(format!("session '{}' {why}", session.name));
                 continue;
             }
-            if seen.iter().any(|(id, name, key)| *id == session.id || *name == session.name || *key == session.key) {
-                problems.push(format!("session '{}' repeats the number, name or key of another", session.name));
+            if seen.iter().any(|(id, name, key)| {
+                *id == session.id || *name == session.name || *key == session.key
+            }) {
+                problems.push(format!(
+                    "session '{}' repeats the number, name or key of another",
+                    session.name
+                ));
                 continue;
             }
             seen.push((session.id, session.name.clone(), session.key));
@@ -141,8 +160,13 @@ impl Saved {
 impl SavedSession {
     /// Whether this is a session that can be rebuilt, or why not.
     fn check(&self) -> Result<(), String> {
-        crate::server::sessions::validate_name(&self.name).map_err(|why| format!("has a bad name: {why}"))?;
-        if self.folder.as_deref().is_some_and(|folder| !folder.is_absolute()) {
+        crate::server::sessions::validate_name(&self.name)
+            .map_err(|why| format!("has a bad name: {why}"))?;
+        if self
+            .folder
+            .as_deref()
+            .is_some_and(|folder| !folder.is_absolute())
+        {
             return Err("has a folder that is not an absolute path".into());
         }
         if self.content.workspaces.is_empty() {

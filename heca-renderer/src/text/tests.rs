@@ -1,5 +1,5 @@
-use super::emit::{EmitKey, align_bits, glow_bits};
 use super::TextGlow;
+use super::emit::{EmitKey, align_bits, glow_bits};
 use heca_grid_ui::scene::TextAlign;
 
 #[test]
@@ -116,7 +116,11 @@ fn a_quad_leans_and_its_ink_box_covers_it() {
     let mut ink = Ink::new();
     ink.add(rect, 2.0);
     assert_eq!(ink.bbox(0.0), [9.0, 20.0, 6.0, 8.0]);
-    assert_eq!(ink.bbox(1.0), [8.0, 19.0, 8.0, 10.0], "a halo's reach grows every side");
+    assert_eq!(
+        ink.bbox(1.0),
+        [8.0, 19.0, 8.0, 10.0],
+        "a halo's reach grows every side"
+    );
 }
 
 /// **Upright text does not lean; a faux italic leans by a share of its line, at least a pixel.**
@@ -125,7 +129,11 @@ fn a_faux_italic_leans_by_a_share_of_its_line() {
     use super::shape::faux_italic_slant;
     assert_eq!(faux_italic_slant(40.0, 2.0, false), 0.0);
     assert!((faux_italic_slant(40.0, 2.0, true) - 2.8).abs() < 1e-5);
-    assert_eq!(faux_italic_slant(4.0, 2.0, true), 1.0, "never less than a pixel");
+    assert_eq!(
+        faux_italic_slant(4.0, 2.0, true),
+        1.0,
+        "never less than a pixel"
+    );
 }
 
 /// **One way to shape**: a line is 1.2× its size, and turning ligatures off changes the glyphs `=>`
@@ -160,7 +168,12 @@ fn each_ui_weight_shapes_with_its_own_face() {
     use heca_grid_ui::FontWeight;
     let mut fonts = crate::font::embedded_font_system();
     let mut faces = Vec::new();
-    for weight in [FontWeight::Regular, FontWeight::Medium, FontWeight::SemiBold, FontWeight::Bold] {
+    for weight in [
+        FontWeight::Regular,
+        FontWeight::Medium,
+        FontWeight::SemiBold,
+        FontWeight::Bold,
+    ] {
         let face = Face {
             family: heca_grid_ui::font::DEFAULT_MONO_FAMILY,
             weight: weight.value(),
@@ -169,10 +182,19 @@ fn each_ui_weight_shapes_with_its_own_face() {
             ligatures: true,
         };
         let buffer = shape(&mut fonts, "M", 24.0, &face);
-        let id = buffer.layout_runs().next().and_then(|run| run.glyphs.first()).map(|g| g.font_id);
+        let id = buffer
+            .layout_runs()
+            .next()
+            .and_then(|run| run.glyphs.first())
+            .map(|g| g.font_id);
         let id = id.expect("the UI family shapes an M");
         let found = fonts.db().face(id).expect("a loaded face");
-        assert_eq!(found.weight.0, weight.value(), "{weight:?} shaped with a {}-weight face", found.weight.0);
+        assert_eq!(
+            found.weight.0,
+            weight.value(),
+            "{weight:?} shaped with a {}-weight face",
+            found.weight.0
+        );
         faces.push(id);
     }
     faces.dedup();
@@ -193,7 +215,10 @@ fn letter_spacing_widens_a_shaped_run_by_its_em() {
             letter_spacing,
             ligatures: true,
         };
-        shape(fonts, "abcd", 20.0, &face).layout_runs().next().map_or(0.0, |run| run.line_w)
+        shape(fonts, "abcd", 20.0, &face)
+            .layout_runs()
+            .next()
+            .map_or(0.0, |run| run.line_w)
     };
     let plain = width(&mut fonts, 0.0);
     let spaced = width(&mut fonts, 0.1);

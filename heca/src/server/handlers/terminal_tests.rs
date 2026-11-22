@@ -23,17 +23,37 @@ fn renaming_a_named_terminal_changes_only_metadata_and_clear_restores_its_defaul
     use crate::app::backend_store::{Program, TerminalOwner, TerminalSpec};
     let (mut state, mut window) = (server(), two_workspaces_of_two_columns());
     let owner = TerminalOwner::Named("demo.logs".into());
-    let spec = TerminalSpec { program: Program::Shell, cwd: None, grid: (80, 24) };
-    let id = state.backends.ensure(owner.clone(), spec.clone(), |_| Ok(Box::new(heca_core::backend::FakeBackend::new(80, 24)))).unwrap().id();
-    let rename = |name: &str| WmAction::TerminalRenameTo { terminal: "demo.logs".into(), name: name.into() };
-    assert_eq!(run_on(&mut state, &mut window, None, rename("Logs")),
-        vec![Change::TerminalTitleChanged { owner: owner.clone(), title: Some("Logs".into()) }]);
+    let spec = TerminalSpec {
+        program: Program::Shell,
+        cwd: None,
+        grid: (80, 24),
+    };
+    let id = state
+        .backends
+        .ensure(owner.clone(), spec.clone(), |_| {
+            Ok(Box::new(heca_core::backend::FakeBackend::new(80, 24)))
+        })
+        .unwrap()
+        .id();
+    let rename = |name: &str| WmAction::TerminalRenameTo {
+        terminal: "demo.logs".into(),
+        name: name.into(),
+    };
+    assert_eq!(
+        run_on(&mut state, &mut window, None, rename("Logs")),
+        vec![Change::TerminalTitleChanged {
+            owner: owner.clone(),
+            title: Some("Logs".into())
+        }]
+    );
     assert_eq!(state.backends.find_owner(&owner), Some(id));
     assert_eq!(state.backends.spec_of(id), Some(&spec));
     assert_eq!(state.backends.custom_title(id), Some("Logs"));
     assert!(run_on(&mut state, &mut window, None, rename("Logs")).is_empty());
-    assert_eq!(run_on(&mut state, &mut window, None, rename("")),
-        vec![Change::TerminalTitleChanged { owner, title: None }]);
+    assert_eq!(
+        run_on(&mut state, &mut window, None, rename("")),
+        vec![Change::TerminalTitleChanged { owner, title: None }]
+    );
     assert_eq!(state.backends.custom_title(id), None);
 }
 
@@ -41,11 +61,35 @@ fn renaming_a_named_terminal_changes_only_metadata_and_clear_restores_its_defaul
 fn renaming_a_panes_terminal_reuses_its_existing_pane_name() {
     let (mut state, mut window) = (server(), two_workspaces_of_two_columns());
     let pane = PaneId(1);
-    state.terminals().start_shell(pane, None, (80, 24), (10.0, 20.0));
+    state
+        .terminals()
+        .start_shell(pane, None, (80, 24), (10.0, 20.0));
     let id = state.backends.identity_of(pane).unwrap();
-    assert_eq!(run_on(&mut state, &mut window, Some(pane), WmAction::TerminalRenameTo { terminal: id.0.to_string(), name: "Build".into() }), vec![Change::NamesChanged]);
-    assert_eq!(window.session.workspaces[0].find_pane(pane).unwrap().custom_name.as_deref(), Some("Build"));
-    assert_eq!(state.backends.custom_title(id), None, "there is no second competing terminal label");
+    assert_eq!(
+        run_on(
+            &mut state,
+            &mut window,
+            Some(pane),
+            WmAction::TerminalRenameTo {
+                terminal: id.0.to_string(),
+                name: "Build".into()
+            }
+        ),
+        vec![Change::NamesChanged]
+    );
+    assert_eq!(
+        window.session.workspaces[0]
+            .find_pane(pane)
+            .unwrap()
+            .custom_name
+            .as_deref(),
+        Some("Build")
+    );
+    assert_eq!(
+        state.backends.custom_title(id),
+        None,
+        "there is no second competing terminal label"
+    );
 }
 
 /// The pane a change says was made — tiled ([`Change::PaneAdded`]) or floating
@@ -215,22 +259,49 @@ fn a_pane_made_from_a_pane_starts_in_that_panes_folder() {
     let started_in = |action: WmAction| {
         let (mut server, mut w) = (server(), two_workspaces_of_two_columns());
         let mut asker = heca_core::backend::FakeBackend::new(80, 24);
-        asker.set_runtime(heca_core::runtime::PaneRuntime { cwd: Some(folder.clone()), ..Default::default() });
-        let spec = TerminalSpec { program: Program::Shell, cwd: None, grid: (80, 24) };
-        server.backends.ensure(TerminalOwner::Pane(PaneId(1)), spec, move |_| Ok(Box::new(asker))).unwrap();
+        asker.set_runtime(heca_core::runtime::PaneRuntime {
+            cwd: Some(folder.clone()),
+            ..Default::default()
+        });
+        let spec = TerminalSpec {
+            program: Program::Shell,
+            cwd: None,
+            grid: (80, 24),
+        };
+        server
+            .backends
+            .ensure(TerminalOwner::Pane(PaneId(1)), spec, move |_| {
+                Ok(Box::new(asker))
+            })
+            .unwrap();
         w.ws().scroll_mut().activate_column(0);
         let pane = made(&run_on(&mut server, &mut w, Some(PaneId(1)), action)).expect("a pane");
         let id = server.backends.identity_of(pane).expect("its terminal");
-        server.backends.spec_of(id).and_then(|spec| spec.cwd.clone())
+        server
+            .backends
+            .spec_of(id)
+            .and_then(|spec| spec.cwd.clone())
     };
-    assert_eq!(started_in(WmAction::SplitHorizontal), Some(folder.clone()), "a split");
-    assert_eq!(started_in(WmAction::SplitVertical), Some(folder.clone()), "a pane under it");
+    assert_eq!(
+        started_in(WmAction::SplitHorizontal),
+        Some(folder.clone()),
+        "a split"
+    );
+    assert_eq!(
+        started_in(WmAction::SplitVertical),
+        Some(folder.clone()),
+        "a pane under it"
+    );
     assert_eq!(
         started_in(WmAction::AddColumnToWorkspace { ws_idx: 0 }),
         Some(folder.clone()),
         "a new column"
     );
-    assert_eq!(started_in(WmAction::CreateWorkspace), dirs::home_dir(), "a new workspace: `~`, the home folder");
+    assert_eq!(
+        started_in(WmAction::CreateWorkspace),
+        dirs::home_dir(),
+        "a new workspace: `~`, the home folder"
+    );
 }
 
 /// **A new workspace starts in `[settings] new_workspace_cwd`** — a folder that exists is used as
@@ -240,11 +311,28 @@ fn a_new_workspace_starts_in_the_configured_folder_or_home() {
     let started_in = |cwd: &str| {
         let (mut server, mut w) = (server(), two_workspaces_of_two_columns());
         server.terminal_settings.new_workspace_cwd = cwd.into();
-        let pane = made(&run_on(&mut server, &mut w, None, WmAction::CreateWorkspace)).expect("a pane");
+        let pane = made(&run_on(
+            &mut server,
+            &mut w,
+            None,
+            WmAction::CreateWorkspace,
+        ))
+        .expect("a pane");
         let id = server.backends.identity_of(pane).expect("its terminal");
-        server.backends.spec_of(id).and_then(|spec| spec.cwd.clone())
+        server
+            .backends
+            .spec_of(id)
+            .and_then(|spec| spec.cwd.clone())
     };
     let folder = std::env::temp_dir();
-    assert_eq!(started_in(folder.to_str().unwrap()), Some(folder.clone()), "a folder that exists");
-    assert_eq!(started_in("/no/such/folder/for/heca"), dirs::home_dir(), "one that does not: home");
+    assert_eq!(
+        started_in(folder.to_str().unwrap()),
+        Some(folder.clone()),
+        "a folder that exists"
+    );
+    assert_eq!(
+        started_in("/no/such/folder/for/heca"),
+        dirs::home_dir(),
+        "one that does not: home"
+    );
 }

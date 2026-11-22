@@ -49,7 +49,11 @@ pub(super) fn spawn_command(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Cha
         true => {
             // Where the asking window draws it, in that window's area. The content add is viewless;
             // the window places and focuses it when it reacts to the `Floated` fact.
-            let Some(rect) = cx.layout.workspaces.get(ws).map(|w| w.float_rect_in(cx.asker.area))
+            let Some(rect) = cx
+                .layout
+                .workspaces
+                .get(ws)
+                .map(|w| w.float_rect_in(cx.asker.area))
             else {
                 cx.terminals.end([pane]);
                 return Vec::new();
@@ -128,7 +132,9 @@ pub(super) fn terminal_kill(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Cha
 
 /// Rename metadata only; a pane-owned terminal retains the existing pane naming contract.
 pub(super) fn terminal_rename_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
-    let WmAction::TerminalRenameTo { terminal, name } = action else { return Vec::new(); };
+    let WmAction::TerminalRenameTo { terminal, name } = action else {
+        return Vec::new();
+    };
     let Some(id) = cx.terminals.backends.resolve_reference(terminal) else {
         return vec![Change::Refused(crate::server::Refusal::TerminalUnavailable)];
     };
@@ -136,9 +142,17 @@ pub(super) fn terminal_rename_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Ve
         return vec![Change::Refused(crate::server::Refusal::TerminalUnavailable)];
     };
     if let crate::app::backend_store::TerminalOwner::Pane(pane) = owner {
-        return super::names::rename_target(cx, &WmAction::RenameTarget { pane_id: pane, name: name.clone() });
+        return super::names::rename_target(
+            cx,
+            &WmAction::RenameTarget {
+                pane_id: pane,
+                name: name.clone(),
+            },
+        );
     }
     let title = (!name.trim().is_empty()).then(|| name.trim().to_owned());
-    if !cx.terminals.backends.set_custom_title(id, title.clone()) { return Vec::new(); }
+    if !cx.terminals.backends.set_custom_title(id, title.clone()) {
+        return Vec::new();
+    }
     vec![Change::TerminalTitleChanged { owner, title }]
 }

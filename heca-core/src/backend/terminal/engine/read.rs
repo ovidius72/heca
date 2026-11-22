@@ -8,7 +8,11 @@ impl TerminalEngine {
         self.snapshot_at(cell_size, self.viewport_offset)
     }
 
-    pub(in crate::backend::terminal) fn snapshot_at(&self, cell_size: (f32, f32), offset: usize) -> TerminalSnapshot {
+    pub(in crate::backend::terminal) fn snapshot_at(
+        &self,
+        cell_size: (f32, f32),
+        offset: usize,
+    ) -> TerminalSnapshot {
         let (cell_w, cell_h) = cell_size;
         let palette = self.terminal.palette();
         let blank = blank_cell(&palette);
@@ -53,7 +57,8 @@ impl TerminalEngine {
             viewport_offset,
             at_bottom: viewport_offset == 0,
             scrollback_rows,
-            viewport_top_stable_row: self.terminal.screen().visible_row_to_stable_row(0) - viewport_offset as isize,
+            viewport_top_stable_row: self.terminal.screen().visible_row_to_stable_row(0)
+                - viewport_offset as isize,
             hyperlinks,
             graphics,
             images,
@@ -125,8 +130,16 @@ impl TerminalEngine {
         self.search_stable_range(query, cols, top_stable, bottom_stable)
     }
 
-    pub(in crate::backend::terminal) fn search_stable_range(&self, query: &str, cols: usize, start: isize, end: isize) -> Vec<SearchMatch> {
-        if query.is_empty() || cols == 0 { return Vec::new(); }
+    pub(in crate::backend::terminal) fn search_stable_range(
+        &self,
+        query: &str,
+        cols: usize,
+        start: isize,
+        end: isize,
+    ) -> Vec<SearchMatch> {
+        if query.is_empty() || cols == 0 {
+            return Vec::new();
+        }
         let needle: Vec<char> = query.to_lowercase().chars().collect();
         let screen = self.terminal.screen();
         let mut out = Vec::new();

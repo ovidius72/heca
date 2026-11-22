@@ -9,5 +9,7 @@ pub struct DialogStyle {
 }
 
 impl Default for DialogStyle {
-    fn default() -> Self { Self { max_width_em: 40.0 } }
+    fn default() -> Self {
+        Self { max_width_em: 40.0 }
+    }
 }

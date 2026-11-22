@@ -1,6 +1,6 @@
 use super::*;
 use crate::builders::EventExt;
-use crate::component::{dispatch, Component, Event, Handled};
+use crate::component::{Component, Event, Handled, dispatch};
 use crate::event::WidgetIntent;
 use crate::reactive::SignalUpdate;
 use std::cell::Cell;

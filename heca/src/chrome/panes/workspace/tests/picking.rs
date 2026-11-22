@@ -13,7 +13,8 @@ fn node_at<'a>(root: &'a dyn Component, path: &[usize]) -> &'a dyn Component {
 
 /// The pane `id`'s path, and the ordinary picker's targets inside it.
 fn letters_in_pane(ws: &dyn Component, id: u64) -> (Vec<usize>, Vec<Vec<usize>>) {
-    let pane = heca_grid_ui::path_with_key(ws, &crate::chrome::pane_key(PaneId(id))).expect("the pane is built");
+    let pane = heca_grid_ui::path_with_key(ws, &crate::chrome::pane_key(PaneId(id)))
+        .expect("the pane is built");
     let inside = heca_grid_ui::collect_hints(ws)
         .into_iter()
         .map(|(path, _)| path)
@@ -25,8 +26,13 @@ fn letters_in_pane(ws: &dyn Component, id: u64) -> (Vec<usize>, Vec<Vec<usize>>)
 /// Whose turn the keyboard is in `root`: the focus identity of what runs in the pane `id`.
 fn content_of(root: &dyn Component, id: u64) -> u64 {
     fn terminal(node: &dyn Component) -> Option<&dyn Component> {
-        if node.focusable() && node.text_summary().as_deref() == Some("terminal") { return Some(node); }
-        node.base().children.iter().find_map(|child| terminal(child.as_ref()))
+        if node.focusable() && node.text_summary().as_deref() == Some("terminal") {
+            return Some(node);
+        }
+        node.base()
+            .children
+            .iter()
+            .find_map(|child| terminal(child.as_ref()))
     }
     let pane = heca_grid_ui::node_with_key(root, &crate::chrome::pane_key(PaneId(id)))
         .expect("the pane is built");
@@ -47,7 +53,11 @@ fn each_pane_wears_one_letter_shared_with_its_sidebar_row() {
     let (_window, ws) = laid_out(&two_columns_and_a_float());
     for id in [10, 11, 20, 30] {
         let (pane, inside) = letters_in_pane(ws.as_ref(), id);
-        assert_eq!(inside, vec![pane.clone()], "pane {id}: one letter, on the pane");
+        assert_eq!(
+            inside,
+            vec![pane.clone()],
+            "pane {id}: one letter, on the pane"
+        );
         assert_eq!(
             node_at(ws.as_ref(), &pane).base().key,
             Some(crate::chrome::pane_key(PaneId(id))),
@@ -74,8 +84,9 @@ fn a_column_is_not_lettered_by_the_ordinary_picker() {
         .map(|(path, _)| path)
         .collect();
     for col in [1, 2] {
-        let column = heca_grid_ui::path_with_key(ws.as_ref(), &crate::chrome::column_key(ColumnId(col)))
-            .expect("the column is built");
+        let column =
+            heca_grid_ui::path_with_key(ws.as_ref(), &crate::chrome::column_key(ColumnId(col)))
+                .expect("the column is built");
         assert!(
             !targets.contains(&column),
             "column {col} wears a letter of its own"
@@ -94,7 +105,8 @@ fn picking_a_pane_gives_what_runs_in_it_the_keyboard() {
             ..seams()
         },
     );
-    let pane = heca_grid_ui::path_with_key(ws.as_ref(), &crate::chrome::pane_key(PaneId(11))).expect("built");
+    let pane = heca_grid_ui::path_with_key(ws.as_ref(), &crate::chrome::pane_key(PaneId(11)))
+        .expect("built");
     assert!(heca_grid_ui::fire_hint(ws.as_mut(), &pane));
     assert_eq!(*picked.borrow(), vec![PaneId(11)], "the pane was focused");
     assert_eq!(
@@ -114,7 +126,9 @@ fn a_panes_letter_takes_the_keyboard_out_of_a_dock() {
     window
         .base_mut()
         .children
-        .push(heca_grid_ui::WidgetModel::new(Flex::column().child(Terminal::unbound())));
+        .push(heca_grid_ui::WidgetModel::new(
+            Flex::column().child(Terminal::unbound()),
+        ));
     window.base_mut().children.push(ws);
     let docked = vec![0, 0];
     assert!(
@@ -161,5 +175,8 @@ fn a_pane_asked_for_by_name_wears_the_letter() {
 #[test]
 fn a_terminal_is_named_for_what_it_is() {
     use heca_grid_ui::Component as _;
-    assert_eq!(Terminal::unbound().text_summary().as_deref(), Some("terminal"));
+    assert_eq!(
+        Terminal::unbound().text_summary().as_deref(),
+        Some("terminal")
+    );
 }

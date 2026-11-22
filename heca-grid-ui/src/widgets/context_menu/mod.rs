@@ -97,13 +97,13 @@
 use crate::component::Event;
 use heca_core::layout::{Point, Rectangle};
 
-mod presenter;
 mod item;
 mod menu;
+mod presenter;
 
-pub use presenter::ContextMenu;
 pub use item::{MenuEntry, MenuItem};
 pub use menu::Menu;
+pub use presenter::ContextMenu;
 
 /// Panel inner padding (around the list).
 const PAD: f32 = 4.0;
@@ -158,7 +158,10 @@ impl MenuAnchor {
         match self {
             Self::At(p) => panel.anchor(p).centered(false).default_open(true),
             Self::Center(bounds) => panel
-                .anchor(Point::new(bounds.loc.x + bounds.size.w / 2.0, bounds.loc.y + bounds.size.h / 2.0))
+                .anchor(Point::new(
+                    bounds.loc.x + bounds.size.w / 2.0,
+                    bounds.loc.y + bounds.size.h / 2.0,
+                ))
                 .centered(true)
                 .default_open(true),
             Self::Under(b) => panel

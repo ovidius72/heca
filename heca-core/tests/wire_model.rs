@@ -34,7 +34,10 @@ fn geometry_and_ids_round_trip() {
     roundtrip(PaneId(7));
     roundtrip(Point::new(1.5, -2.25));
     roundtrip(Size::new(640.0, 480.0));
-    roundtrip(Rectangle::new(Point::new(10.0, 20.0), Size::new(300.0, 200.0)));
+    roundtrip(Rectangle::new(
+        Point::new(10.0, 20.0),
+        Size::new(300.0, 200.0),
+    ));
 }
 
 #[test]
@@ -42,7 +45,11 @@ fn layout_effects_round_trip() {
     roundtrip(SpaceEffect::Column(ColumnEffect::Moved { from: 2, to: 0 }));
     roundtrip(SpaceEffect::Column(ColumnEffect::Swapped { a: 1, b: 3 }));
     roundtrip(SpaceEffect::Pane(PaneEffect::Inserted { col: 1, row: 4 }));
-    roundtrip(SpaceEffect::Pane(PaneEffect::Swapped { col: 0, a: 1, b: 2 }));
+    roundtrip(SpaceEffect::Pane(PaneEffect::Swapped {
+        col: 0,
+        a: 1,
+        b: 2,
+    }));
     // A move is several effects at once — the shape `Change::Arranged` carries.
     roundtrip(vec![
         SpaceEffect::Column(ColumnEffect::Removed { idx: 2 }),
@@ -76,7 +83,9 @@ fn sample_snapshot() -> TerminalSnapshot {
         TerminalLine {
             cells: vec![cell("h"), cell("i")],
         },
-        TerminalLine { cells: vec![cell("!")] },
+        TerminalLine {
+            cells: vec![cell("!")],
+        },
     ];
     TerminalSnapshot {
         cols: 2,
@@ -140,6 +149,12 @@ fn to_wire_keeps_image_handles_but_drops_the_bytes() {
     assert_eq!(wire.graphics[0].image_id, 42);
     let json = serde_json::to_string(&wire).expect("serialize");
     // No image byte buffer rode along: WireSnapshot has no `images`/`rgba` field.
-    assert!(!json.contains("rgba"), "wire form must not carry decoded image bytes");
-    assert!(!json.contains("images"), "wire form must not carry the images registry");
+    assert!(
+        !json.contains("rgba"),
+        "wire form must not carry decoded image bytes"
+    );
+    assert!(
+        !json.contains("images"),
+        "wire form must not carry the images registry"
+    );
 }

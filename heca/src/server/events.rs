@@ -24,11 +24,19 @@ pub(crate) enum StreamEvent {
     /// A shared change to the session content (layout): a window reacts to the same thing.
     Change(Change),
     /// A window's focused pane changed (per-window view state).
-    Focus { window: u64, workspace: usize, pane: Option<PaneId> },
+    Focus {
+        window: u64,
+        workspace: usize,
+        pane: Option<PaneId>,
+    },
     /// A window's shown workspace changed (per-window view state).
     Workspace { window: u64, workspace: usize },
     /// A window attached to or switched to a session.
-    Session { window: u64, session: SessionId, name: String },
+    Session {
+        window: u64,
+        session: SessionId,
+        name: String,
+    },
     /// `session.changed`: a session was created, renamed, terminated, restarted or deleted — the
     /// same event the services hear (THE EVENTS).
     SessionChanged {
@@ -95,14 +103,21 @@ mod tests {
         fanout.subscribe(b_tx);
         assert!(!fanout.is_empty());
 
-        let one = StreamEvent::Workspace { window: 1, workspace: 0 };
+        let one = StreamEvent::Workspace {
+            window: 1,
+            workspace: 0,
+        };
         fanout.emit(&one);
         assert_eq!(recv(&a_rx), one);
         assert_eq!(recv(&b_rx), one);
 
         // B's socket side goes: the next emit drops it, and A still receives.
         drop(b_rx);
-        let two = StreamEvent::Focus { window: 1, workspace: 0, pane: Some(PaneId(5)) };
+        let two = StreamEvent::Focus {
+            window: 1,
+            workspace: 0,
+            pane: Some(PaneId(5)),
+        };
         fanout.emit(&two);
         assert_eq!(recv(&a_rx), two);
         assert!(!fanout.is_empty(), "A is still listening");
@@ -120,7 +135,10 @@ mod tests {
         fanout.subscribe(slow_tx);
         fanout.subscribe(live_tx);
 
-        let event = StreamEvent::Workspace { window: 1, workspace: 0 };
+        let event = StreamEvent::Workspace {
+            window: 1,
+            workspace: 0,
+        };
         // Emit more events than the queue holds; the live one is read each time. Emit returns
         // every time (it would hang here if it blocked on the full queue).
         for _ in 0..3 {
@@ -130,7 +148,11 @@ mod tests {
         // The slow one got its two queued lines, then was dropped: its stream ends.
         assert_eq!(recv(&slow_rx), event);
         assert_eq!(recv(&slow_rx), event);
-        assert_eq!(slow_rx.try_recv(), Err(mpsc::TryRecvError::Disconnected), "dropped subscriber's stream ends");
+        assert_eq!(
+            slow_rx.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected),
+            "dropped subscriber's stream ends"
+        );
         // The live one is still subscribed and keeps receiving.
         fanout.emit(&event);
         assert_eq!(recv(&live_rx), event);

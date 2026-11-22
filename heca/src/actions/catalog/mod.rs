@@ -142,13 +142,21 @@ impl ActionMeta {
         use heca_view::PropValue;
         args.into_iter()
             .map(|(name, value)| {
-                let declared = self.args.iter().find(|spec| spec.name == name).map(|spec| spec.kind);
+                let declared = self
+                    .args
+                    .iter()
+                    .find(|spec| spec.name == name)
+                    .map(|spec| spec.kind);
                 let typed = match (declared, &value) {
-                    (Some(ArgKind::Int), PropValue::Text(text)) => text.trim().parse().ok().map(PropValue::Int),
+                    (Some(ArgKind::Int), PropValue::Text(text)) => {
+                        text.trim().parse().ok().map(PropValue::Int)
+                    }
                     (Some(ArgKind::Float), PropValue::Text(text)) => {
                         text.trim().parse().ok().map(PropValue::Float)
                     }
-                    (Some(ArgKind::Bool), PropValue::Text(text)) => text.trim().parse().ok().map(PropValue::Bool),
+                    (Some(ArgKind::Bool), PropValue::Text(text)) => {
+                        text.trim().parse().ok().map(PropValue::Bool)
+                    }
                     _ => None,
                 };
                 (name, typed.unwrap_or(value))

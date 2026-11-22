@@ -1,7 +1,7 @@
 //! Each pane's live facts (program, status, folder, git, scroll), mirrored as signals.
 
-use super::*;
 use super::pane_presentation::ProgramName;
+use super::*;
 use std::time::{Duration, Instant};
 
 /// Per-pane reactive mirror of canonical [`PaneRuntime`] fields.
@@ -63,7 +63,10 @@ impl PaneRuntimeSignals {
 
     /// Display names and immediate runtime facts from the same shared projection.
     pub(crate) fn presentation(&self) -> PanePresentation {
-        PanePresentation { program: self.program_name.get().shown, runtime: self.snapshot() }
+        PanePresentation {
+            program: self.program_name.get().shown,
+            runtime: self.snapshot(),
+        }
     }
 
     /// Read every field of this pane's runtime at once.
@@ -112,12 +115,25 @@ pub struct PaneRuntimeStore {
 }
 
 impl PaneRuntimeStore {
-    pub(crate) fn play_feedback(&self, session: heca_core::layout::SessionId, pane: PaneId, revision: u64, status: String) {
-        self.events.emit(ChromeEvent::PaneFeedback { session, pane, revision, status });
+    pub(crate) fn play_feedback(
+        &self,
+        session: heca_core::layout::SessionId,
+        pane: PaneId,
+        revision: u64,
+        status: String,
+    ) {
+        self.events.emit(ChromeEvent::PaneFeedback {
+            session,
+            pane,
+            revision,
+            status,
+        });
     }
 
     pub(crate) fn clear_feedback(&self) {
-        for pane in self.panes.get_untracked().values() { pane.flash.clear(); }
+        for pane in self.panes.get_untracked().values() {
+            pane.flash.clear();
+        }
     }
 
     pub(super) fn new(events: ChromeEventBus) -> Self {
@@ -132,7 +148,11 @@ impl PaneRuntimeStore {
         }
     }
 
-    pub(crate) fn configure_sounds(&self, config: &heca_config::settings::AgentsConfig, notification_sound: bool) {
+    pub(crate) fn configure_sounds(
+        &self,
+        config: &heca_config::settings::AgentsConfig,
+        notification_sound: bool,
+    ) {
         self.sounds.configure(config, notification_sound);
     }
 
@@ -177,7 +197,9 @@ impl PaneRuntimeStore {
 
     /// Shared display projection; raw process facts remain available through `runtime`.
     pub fn presentation(&self, pane: PaneId) -> Option<PanePresentation> {
-        self.with(pane, |runtime| runtime.map(PaneRuntimeSignals::presentation))
+        self.with(pane, |runtime| {
+            runtime.map(PaneRuntimeSignals::presentation)
+        })
     }
 
     pub(crate) fn set_name_delay(&self, millis: u64) {
@@ -186,8 +208,12 @@ impl PaneRuntimeStore {
 
     pub(crate) fn next_name_update(&self) -> Option<Instant> {
         let delay = self.name_delay.get();
-        self.panes.with(|panes| panes.values()
-            .filter_map(|pane| pane.program_name.get_untracked().deadline(delay)).min())
+        self.panes.with(|panes| {
+            panes
+                .values()
+                .filter_map(|pane| pane.program_name.get_untracked().deadline(delay))
+                .min()
+        })
     }
 
     pub(crate) fn advance_names(&self, now: Instant) -> bool {
@@ -197,7 +223,10 @@ impl PaneRuntimeStore {
             let mut name = pane.program_name.get_untracked();
             let previous = name.clone();
             name.advance(self.name_delay.get(), now);
-            if name != previous { pane.program_name.set(name); changed = true; }
+            if name != previous {
+                pane.program_name.set(name);
+                changed = true;
+            }
         }
         changed
     }
@@ -243,7 +272,10 @@ impl PaneRuntimeStore {
             let mut name = sigs.program_name.get_untracked();
             let previous = name.clone();
             name.observe(runtime, self.name_delay.get(), Instant::now());
-            if name != previous { sigs.program_name.set(name); changed = true; }
+            if name != previous {
+                sigs.program_name.set(name);
+                changed = true;
+            }
             if cur.program != runtime.program {
                 sigs.program.set(runtime.program.clone());
                 self.events.emit(ChromeEvent::PaneProcessChanged { pane });
@@ -290,13 +322,21 @@ impl PaneRuntimeStore {
     }
 
     /// Publish each backend report before the final runtime snapshot is mirrored.
-    pub(crate) fn set_agent(&self, pane: PaneId, agent: Option<heca_core::agent::AgentState>) -> bool {
+    pub(crate) fn set_agent(
+        &self,
+        pane: PaneId,
+        agent: Option<heca_core::agent::AgentState>,
+    ) -> bool {
         let signal = self.signals(pane).agent;
         let previous = signal.get_untracked();
-        if previous == agent { return false }
+        if previous == agent {
+            return false;
+        }
         signal.set(agent.clone());
         self.events.emit(ChromeEvent::PaneAgentChanged {
-            pane, previous: previous.map(Box::new), agent: agent.map(Box::new),
+            pane,
+            previous: previous.map(Box::new),
+            agent: agent.map(Box::new),
         });
         true
     }

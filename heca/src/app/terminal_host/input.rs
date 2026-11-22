@@ -274,16 +274,18 @@ pub(crate) fn on_terminal_input(
                 state.needs_redraw = true;
             }
         }
-        TerminalInput::FontZoom(step) => { let _ = dispatch_action(
-            state,
-            registry,
-            InteractionSource::Keyboard,
-            &WmAction::PaneTerminalFontZoom {
-                pane_id: None,
-                terminal: Some(terminal.0),
-                step,
-            },
-        ); }
+        TerminalInput::FontZoom(step) => {
+            let _ = dispatch_action(
+                state,
+                registry,
+                InteractionSource::Keyboard,
+                &WmAction::PaneTerminalFontZoom {
+                    pane_id: None,
+                    terminal: Some(terminal.0),
+                    step,
+                },
+            );
+        }
         // The pointer's buttons and moves.
         TerminalInput::Press {
             button,

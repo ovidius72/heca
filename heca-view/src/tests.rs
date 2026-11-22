@@ -194,9 +194,11 @@ fn custom_widget_names_roundtrip_without_an_enum_change() {
     let node = ViewNode::new("example.custom_control").text("Hello");
     let encoded = serde_json::to_string(&node).expect("serializable node");
     assert!(encoded.contains("example.custom_control"));
-    assert_eq!(serde_json::from_str::<ViewNode>(&encoded).expect("open node"), node);
+    assert_eq!(
+        serde_json::from_str::<ViewNode>(&encoded).expect("open node"),
+        node
+    );
 }
-
 
 #[test]
 fn actionable_reflects_click_binding() {

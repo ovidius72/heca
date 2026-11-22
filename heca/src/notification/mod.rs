@@ -42,13 +42,12 @@ mod store;
 pub use action::register_notify_action;
 pub use model::*;
 pub use presentation::{
-    NotificationRecord, NotificationView, notification_record, notification_view,
-    toast_spec,
+    NotificationRecord, NotificationView, notification_record, notification_view, toast_spec,
 };
 pub use runtime::NotificationRuntime;
-pub use sink::{Notification, install_notification_sink};
 pub(crate) use sink::collect_during as collect_notifications;
 pub(crate) use sink::raise;
+pub use sink::{Notification, install_notification_sink};
 pub use store::*;
 
 #[cfg(test)]

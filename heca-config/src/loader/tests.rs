@@ -310,9 +310,12 @@ fn toml_value(text: &str) -> toml::Value {
 #[test]
 fn project_sound_controls_override_sources_without_losing_other_status_defaults() {
     use crate::sound::{Sound, SoundSource};
-    let user = deep_merge(embedded_base(), toml_value(
-        "[settings]\nnotification_sound = true\n[settings.agents.statuses.finished.sound]\nvolume = 0.3",
-    ));
+    let user = deep_merge(
+        embedded_base(),
+        toml_value(
+            "[settings]\nnotification_sound = true\n[settings.agents.statuses.finished.sound]\nvolume = 0.3",
+        ),
+    );
     let project = toml_value(
         "[settings.agents.statuses.finished.sound]\nsource = '/project/completed.mp3'\n\
          [settings.agents.statuses.waiting_permission.sound]\nenabled = false",
@@ -320,9 +323,18 @@ fn project_sound_controls_override_sources_without_losing_other_status_defaults(
     let config = layered(user, Some((PathBuf::from(".heca/config.toml"), project))).unwrap();
     let agents = &config.settings.agents;
     assert!(config.settings.notification_sound);
-    assert_eq!(agents.statuses["finished"].sound, Some(Sound::load("/project/completed.mp3").volume(0.3)));
-    assert_eq!(agents.statuses["waiting_permission"].sound, Some(Sound::asset("locked").enabled(false)));
-    assert_eq!(agents.statuses["error"].sound.as_ref().unwrap().source, SoundSource::Asset("error".into()));
+    assert_eq!(
+        agents.statuses["finished"].sound,
+        Some(Sound::load("/project/completed.mp3").volume(0.3))
+    );
+    assert_eq!(
+        agents.statuses["waiting_permission"].sound,
+        Some(Sound::asset("locked").enabled(false))
+    );
+    assert_eq!(
+        agents.statuses["error"].sound.as_ref().unwrap().source,
+        SoundSource::Asset("error".into())
+    );
 }
 
 /// **A project file that sets one colour and one key changes only those two**, and everything
@@ -459,25 +471,40 @@ struct Limits {
 
 impl Default for Limits {
     fn default() -> Self {
-        Self { max: 7, name: "plain".into() }
+        Self {
+            max: 7,
+            name: "plain".into(),
+        }
     }
 }
 
 fn limits(max: u32, name: &str) -> Limits {
-    Limits { max, name: name.into() }
+    Limits {
+        max,
+        name: name.into(),
+    }
 }
 
 #[test]
 fn an_extension_reads_its_own_table_as_a_typed_value() {
     let config = config_from_layers("[extensions.demo]\nmax = 3\nname = \"rooms\"\n").unwrap();
-    assert_eq!(config.extension::<Limits>("demo").unwrap(), limits(3, "rooms"));
+    assert_eq!(
+        config.extension::<Limits>("demo").unwrap(),
+        limits(3, "rooms")
+    );
 }
 
 #[test]
 fn a_missing_table_reads_as_an_empty_one() {
     let config = config_from_layers("[extensions.other]\nmax = 3\n").unwrap();
-    assert_eq!(config.extension::<Limits>("demo").unwrap(), Limits::default());
-    assert_eq!(Config::default().extension::<Limits>("demo").unwrap(), Limits::default());
+    assert_eq!(
+        config.extension::<Limits>("demo").unwrap(),
+        Limits::default()
+    );
+    assert_eq!(
+        Config::default().extension::<Limits>("demo").unwrap(),
+        Limits::default()
+    );
 }
 
 #[test]
@@ -493,7 +520,10 @@ fn a_table_that_does_not_fit_is_an_error_not_a_default() {
         #[allow(dead_code)]
         token: String,
     }
-    let error = Config::default().extension::<Needs>("demo").unwrap_err().to_string();
+    let error = Config::default()
+        .extension::<Needs>("demo")
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("token"), "{error}");
 }
 
@@ -501,12 +531,23 @@ fn a_table_that_does_not_fit_is_an_error_not_a_default() {
 fn extension_tables_layer_per_key_like_every_other_table() {
     let user = deep_merge(
         embedded_base(),
-        toml::from_str("[extensions.demo]\nmax = 3\nname = \"user\"\n[extensions.other]\nmax = 1\n").unwrap(),
+        toml::from_str(
+            "[extensions.demo]\nmax = 3\nname = \"user\"\n[extensions.other]\nmax = 1\n",
+        )
+        .unwrap(),
     );
     let project: toml::Value = toml::from_str("[extensions.demo]\nmax = 5\n").unwrap();
     let config = layered(user, Some((PathBuf::from(".heca/config.toml"), project))).unwrap();
-    assert_eq!(config.extension::<Limits>("demo").unwrap(), limits(5, "user"), "the project's key wins, the user's others stay");
-    assert_eq!(config.extension::<Limits>("other").unwrap().max, 1, "another extension's table is untouched");
+    assert_eq!(
+        config.extension::<Limits>("demo").unwrap(),
+        limits(5, "user"),
+        "the project's key wins, the user's others stay"
+    );
+    assert_eq!(
+        config.extension::<Limits>("other").unwrap().max,
+        1,
+        "another extension's table is untouched"
+    );
 }
 
 #[test]

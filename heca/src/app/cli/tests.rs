@@ -1,7 +1,8 @@
 use super::*;
 
 fn ask(args: &[&str]) -> Option<String> {
-    answer(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>()).map(|reply| reply.unwrap_or_else(|error| error))
+    answer(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>())
+        .map(|reply| reply.unwrap_or_else(|error| error))
 }
 
 /// **The help lists exactly what runs, arguments included.** Both are rendered from the table
@@ -35,17 +36,49 @@ fn no_command_opens_the_window() {
 
 #[test]
 fn session_launches_share_the_checked_cli_declaration() {
-    let mode = |args: &[&str]| launch_mode(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>());
-    assert_eq!(mode(&["--new"]), LaunchMode::New { path: None, name: None });
-    assert_eq!(mode(&["--new", "project A", "--name", "work"]),
-        LaunchMode::New { path: Some("project A".into()), name: Some("work".into()) });
-    assert_eq!(mode(&["--new", "--name", "work", "~/projects/A"]),
-        LaunchMode::New { path: Some("~/projects/A".into()), name: Some("work".into()) });
-    assert_eq!(mode(&["--attach", "heca #3"]), LaunchMode::Session("heca #3".into()));
-    for args in [&["--new", "--name"][..], &["--new", "--name", "A", "--name", "B"], &["--attach"], &["--standalone", "--name", "A"]] {
-        assert!(answer(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>()).is_some_and(|answer| answer.is_err()));
+    let mode =
+        |args: &[&str]| launch_mode(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>());
+    assert_eq!(
+        mode(&["--new"]),
+        LaunchMode::New {
+            path: None,
+            name: None
+        }
+    );
+    assert_eq!(
+        mode(&["--new", "project A", "--name", "work"]),
+        LaunchMode::New {
+            path: Some("project A".into()),
+            name: Some("work".into())
+        }
+    );
+    assert_eq!(
+        mode(&["--new", "--name", "work", "~/projects/A"]),
+        LaunchMode::New {
+            path: Some("~/projects/A".into()),
+            name: Some("work".into())
+        }
+    );
+    assert_eq!(
+        mode(&["--attach", "heca #3"]),
+        LaunchMode::Session("heca #3".into())
+    );
+    for args in [
+        &["--new", "--name"][..],
+        &["--new", "--name", "A", "--name", "B"],
+        &["--attach"],
+        &["--standalone", "--name", "A"],
+    ] {
+        assert!(
+            answer(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>())
+                .is_some_and(|answer| answer.is_err())
+        );
     }
-    assert!(ask(&["--new", "--help"]).unwrap().contains("[--name <name>]"));
+    assert!(
+        ask(&["--new", "--help"])
+            .unwrap()
+            .contains("[--name <name>]")
+    );
 }
 
 /// **A missing argument is a sentence, not silence** — and the same sentence an action gives,
@@ -168,5 +201,8 @@ fn an_unknown_action_says_so_and_says_where_to_look() {
 #[test]
 fn the_help_lists_rpc_too() {
     let text = help();
-    assert!(text.contains("rpc <action>") && text.contains("rpc --events"), "{text}");
+    assert!(
+        text.contains("rpc <action>") && text.contains("rpc --events"),
+        "{text}"
+    );
 }

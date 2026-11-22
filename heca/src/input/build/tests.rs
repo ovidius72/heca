@@ -35,7 +35,10 @@ fn test_build_scroll_to_offset() {
     let args = std::collections::HashMap::from([("rows".to_string(), "42".to_string())]);
     assert_eq!(
         build_action("scroll_to_offset", &args),
-        Some(WmAction::ScrollToOffset { rows: 42, terminal: None })
+        Some(WmAction::ScrollToOffset {
+            rows: 42,
+            terminal: None
+        })
     );
 }
 
@@ -49,7 +52,10 @@ fn a_scroll_names_its_terminal_or_takes_the_keyboards() {
     ]);
     assert_eq!(
         build_action("scroll_to_offset", &named),
-        Some(WmAction::ScrollToOffset { rows: 3, terminal: Some(9) })
+        Some(WmAction::ScrollToOffset {
+            rows: 3,
+            terminal: Some(9)
+        })
     );
     let terminal = std::collections::HashMap::from([("terminal".to_string(), "9".to_string())]);
     assert_eq!(
@@ -70,7 +76,13 @@ fn a_workspace_row_folds_by_its_index_and_never_by_default() {
         build_action("toggle_workspace_collapsed", &args),
         Some(WmAction::ToggleWorkspaceCollapsed { ws_idx: 2 })
     );
-    assert_eq!(build_action("toggle_workspace_collapsed", &std::collections::HashMap::new()), None);
+    assert_eq!(
+        build_action(
+            "toggle_workspace_collapsed",
+            &std::collections::HashMap::new()
+        ),
+        None
+    );
 }
 
 #[test]
@@ -263,10 +275,27 @@ fn test_build_terminal_run_and_kill() {
 
 #[test]
 fn terminal_rename_requires_a_target_and_keeps_the_name_structured() {
-    let args = std::collections::HashMap::from([("terminal".into(), "7".into()), ("name".into(), "Build logs".into())]);
-    assert_eq!(build_action("terminal_rename", &args), Some(WmAction::TerminalRename { terminal: "7".into() }));
-    assert_eq!(build_action("terminal_rename_to", &args), Some(WmAction::TerminalRenameTo { terminal: "7".into(), name: "Build logs".into() }));
-    assert_eq!(build_action("terminal_rename_to", &std::collections::HashMap::new()), None);
+    let args = std::collections::HashMap::from([
+        ("terminal".into(), "7".into()),
+        ("name".into(), "Build logs".into()),
+    ]);
+    assert_eq!(
+        build_action("terminal_rename", &args),
+        Some(WmAction::TerminalRename {
+            terminal: "7".into()
+        })
+    );
+    assert_eq!(
+        build_action("terminal_rename_to", &args),
+        Some(WmAction::TerminalRenameTo {
+            terminal: "7".into(),
+            name: "Build logs".into()
+        })
+    );
+    assert_eq!(
+        build_action("terminal_rename_to", &std::collections::HashMap::new()),
+        None
+    );
 }
 
 #[test]

@@ -1,8 +1,8 @@
 //! Open, serializable widget identities. Availability is decided by the host registry.
 
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt;
-use serde::{Deserialize, Serialize};
 
 /// A widget identifier on the wire. Any identifier is representable; the host reports whether
 /// its implementation is registered. Existing built-in names retain their serialized spelling.
@@ -28,15 +28,21 @@ impl WidgetId {
 }
 
 impl From<&str> for WidgetId {
-    fn from(name: &str) -> Self { Self::new(name) }
+    fn from(name: &str) -> Self {
+        Self::new(name)
+    }
 }
 
 impl From<String> for WidgetId {
-    fn from(name: String) -> Self { Self::new(name) }
+    fn from(name: String) -> Self {
+        Self::new(name)
+    }
 }
 
 impl fmt::Display for WidgetId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.as_str()) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 // Compatibility shortcuts for the existing typed SDK, not a closed vocabulary or runtime

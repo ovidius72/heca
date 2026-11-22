@@ -38,13 +38,13 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal
 use super::{ChromeEvent, ChromeEventBus, RegionId, RegionMap};
 
 pub(super) mod events;
-mod pane_runtime;
 mod pane_presentation;
+mod pane_runtime;
 mod shell;
 mod workspaces;
 
-pub use pane_runtime::PaneRuntimeStore;
 pub use pane_presentation::PanePresentation;
+pub use pane_runtime::PaneRuntimeStore;
 pub use shell::SharedChromeState;
 pub use workspaces::WorkspacesContainerState;
 

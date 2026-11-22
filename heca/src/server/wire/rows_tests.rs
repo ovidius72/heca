@@ -3,12 +3,25 @@ use crate::app::backend_store::{Program, TerminalSpec};
 use heca_core::backend::{PaneBackend, TerminalDamage};
 
 fn cell(text: &str, width: usize, fg: f32) -> TerminalCell {
-    TerminalCell { text: text.into(), fg: [fg, 0.5, 0.25, 1.0], bg: [0.0, 0.0, 0.0, 1.0],
-        bold: fg > 0.5, italic: false, underline: TerminalUnderlineStyle::None, width }
+    TerminalCell {
+        text: text.into(),
+        fg: [fg, 0.5, 0.25, 1.0],
+        bg: [0.0, 0.0, 0.0, 1.0],
+        bold: fg > 0.5,
+        italic: false,
+        underline: TerminalUnderlineStyle::None,
+        width,
+    }
 }
 
 fn line(text: &str) -> TerminalLine {
-    TerminalLine { cells: text.chars().enumerate().map(|(i, ch)| cell(&ch.to_string(), 1, (i % 3) as f32 / 2.0)).collect() }
+    TerminalLine {
+        cells: text
+            .chars()
+            .enumerate()
+            .map(|(i, ch)| cell(&ch.to_string(), 1, (i % 3) as f32 / 2.0))
+            .collect(),
+    }
 }
 
 fn frame(owner: &TerminalOwner, lines: Vec<TerminalLine>) -> Arc<TerminalFrame> {
@@ -17,18 +30,34 @@ fn frame(owner: &TerminalOwner, lines: Vec<TerminalLine>) -> Arc<TerminalFrame> 
     screen.rows = lines.len();
     screen.lines = lines;
     Arc::new(TerminalFrame {
-        id: 1, owner: owner.clone(), title: "shell".into(), display_title: None,
-        spec: TerminalSpec { program: Program::Shell, cwd: None, grid: (20, 3) },
-        screen, damage: TerminalDamage::Full, runtime: Default::default(), mouse_grabbed: false,
+        id: 1,
+        owner: owner.clone(),
+        title: "shell".into(),
+        display_title: None,
+        spec: TerminalSpec {
+            program: Program::Shell,
+            cwd: None,
+            grid: (20, 3),
+        },
+        screen,
+        damage: TerminalDamage::Full,
+        runtime: Default::default(),
+        mouse_grabbed: false,
     })
 }
 
 /// Through JSON, as the socket carries it.
-fn carry(writer: &mut Screens, reader: &mut Screens, frame: Arc<TerminalFrame>) -> (usize, Arc<TerminalFrame>) {
+fn carry(
+    writer: &mut Screens,
+    reader: &mut Screens,
+    frame: Arc<TerminalFrame>,
+) -> (usize, Arc<TerminalFrame>) {
     let packed = writer.pack(frame);
     let rows = packed.rows.len();
     let bytes = serde_json::to_vec(&Outgoing::Terminal(&packed)).unwrap();
-    let Incoming::Terminal(packed) = serde_json::from_slice(&bytes).unwrap() else { panic!("not a terminal") };
+    let Incoming::Terminal(packed) = serde_json::from_slice(&bytes).unwrap() else {
+        panic!("not a terminal")
+    };
     (rows, reader.unpack(*packed).unwrap())
 }
 
@@ -56,8 +85,16 @@ fn only_changed_rows_travel_and_the_reader_gets_the_whole_screen_back() {
 fn wide_and_multi_character_cells_survive_the_trip() {
     let owner = TerminalOwner::Named("t".into());
     let (mut writer, mut reader) = (Screens::default(), Screens::default());
-    let mixed = TerminalLine { cells: vec![cell("a", 1, 0.0), cell("界", 2, 0.0), cell("", 0, 0.0),
-        cell("e\u{301}", 1, 0.0), cell("b", 1, 0.0), cell("c", 1, 1.0)] };
+    let mixed = TerminalLine {
+        cells: vec![
+            cell("a", 1, 0.0),
+            cell("界", 2, 0.0),
+            cell("", 0, 0.0),
+            cell("e\u{301}", 1, 0.0),
+            cell("b", 1, 0.0),
+            cell("c", 1, 1.0),
+        ],
+    };
     let lines = vec![mixed, line("plain")];
     let (_, got) = carry(&mut writer, &mut reader, frame(&owner, lines.clone()));
     assert_eq!(got.screen.lines, lines);
@@ -67,7 +104,11 @@ fn wide_and_multi_character_cells_survive_the_trip() {
 fn a_new_height_sends_every_row_again() {
     let owner = TerminalOwner::Named("t".into());
     let (mut writer, mut reader) = (Screens::default(), Screens::default());
-    carry(&mut writer, &mut reader, frame(&owner, vec![line("a"), line("b")]));
+    carry(
+        &mut writer,
+        &mut reader,
+        frame(&owner, vec![line("a"), line("b")]),
+    );
     let taller = vec![line("a"), line("b"), line("c")];
     let (rows, got) = carry(&mut writer, &mut reader, frame(&owner, taller.clone()));
     assert_eq!(rows, 3);
@@ -76,7 +117,10 @@ fn a_new_height_sends_every_row_again() {
 
 #[test]
 fn terminals_are_remembered_apart_and_forgotten_when_closed() {
-    let (a, b) = (TerminalOwner::Named("a".into()), TerminalOwner::Named("b".into()));
+    let (a, b) = (
+        TerminalOwner::Named("a".into()),
+        TerminalOwner::Named("b".into()),
+    );
     let (mut writer, mut reader) = (Screens::default(), Screens::default());
     carry(&mut writer, &mut reader, frame(&a, vec![line("one")]));
     let (rows, got) = carry(&mut writer, &mut reader, frame(&b, vec![line("two")]));
@@ -85,7 +129,10 @@ fn terminals_are_remembered_apart_and_forgotten_when_closed() {
     writer.forget(&a);
     reader.forget(&a);
     let (rows, got) = carry(&mut writer, &mut reader, frame(&a, vec![line("one")]));
-    assert_eq!(rows, 1, "a forgotten terminal starts again from a whole screen");
+    assert_eq!(
+        rows, 1,
+        "a forgotten terminal starts again from a whole screen"
+    );
     assert_eq!(got.screen.lines, vec![line("one")]);
 }
 
@@ -104,8 +151,15 @@ fn a_busy_screen_is_a_fraction_of_its_old_size() {
     let owner = TerminalOwner::Named("t".into());
     let text: String = "the quick brown fox jumps over the lazy dog ".repeat(5);
     let lines: Vec<_> = (0..50).map(|_| line(&text)).collect();
-    let whole = serde_json::to_vec(&frame(&owner, lines.clone())).unwrap().len();
+    let whole = serde_json::to_vec(&frame(&owner, lines.clone()))
+        .unwrap()
+        .len();
     let packed = Screens::default().pack(frame(&owner, lines));
-    let first = serde_json::to_vec(&Outgoing::Terminal(&packed)).unwrap().len();
-    assert!(first * 5 < whole, "a whole screen packs to {first} bytes from {whole}");
+    let first = serde_json::to_vec(&Outgoing::Terminal(&packed))
+        .unwrap()
+        .len();
+    assert!(
+        first * 5 < whole,
+        "a whole screen packs to {first} bytes from {whole}"
+    );
 }

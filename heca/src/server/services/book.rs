@@ -79,25 +79,36 @@ impl Requests {
 
     /// Take a request, or say why not. Nothing runs here: the loop runs it on its next turn.
     pub(crate) fn submit(&mut self, request: ExternalRequest) -> Result<RequestRef, SubmitError> {
-        let ExternalRequest { sender, session, request_id, line } = request;
+        let ExternalRequest {
+            sender,
+            session,
+            request_id,
+            line,
+        } = request;
         if self.closed {
             return Err(SubmitError::Refused("the server is stopping".into()));
         }
         if !self.has_policy {
             return Err(SubmitError::Refused(format!(
-                "{} declares no action policy, so requests handed in for others are refused", self.service)));
+                "{} declares no action policy, so requests handed in for others are refused",
+                self.service
+            )));
         }
         if line.trim().is_empty() {
             return Err(SubmitError::Refused("the request is empty".into()));
         }
         // A query answers from the catalog and runs nothing, so no policy would ever see it.
         if crate::rpc::is_query(&line) {
-            return Err(SubmitError::Refused("a query is not an action: only actions can be handed in".into()));
+            return Err(SubmitError::Refused(
+                "a query is not an action: only actions can be handed in".into(),
+            ));
         }
         if line.len() > self.max_line {
             return Err(SubmitError::Refused(format!(
                 "the request is {} bytes, over the {}-byte limit (`[settings.connection] max_frame_bytes`)",
-                line.len(), self.max_line)));
+                line.len(),
+                self.max_line
+            )));
         }
         if !self.sessions.contains(&session) {
             return Err(SubmitError::UnknownSession);
@@ -108,11 +119,23 @@ impl Requests {
         if self.open.len() >= self.capacity {
             return Err(SubmitError::QueueFull);
         }
-        let reference = RequestRef { service: self.service.clone(), sender, session, request_id };
+        let reference = RequestRef {
+            service: self.service.clone(),
+            sender,
+            session,
+            request_id,
+        };
         let serial = self.next;
         self.next += 1;
         self.ids.insert(reference.request_id.clone(), serial);
-        self.open.insert(serial, Open { reference: reference.clone(), line, state: State::Queued });
+        self.open.insert(
+            serial,
+            Open {
+                reference: reference.clone(),
+                line,
+                state: State::Queued,
+            },
+        );
         self.queue.push_back(serial);
         Ok(reference)
     }
@@ -121,10 +144,19 @@ impl Requests {
     pub(crate) fn start_queued(&mut self) -> Vec<Queued> {
         let mut started = Vec::new();
         while let Some(serial) = self.queue.pop_front() {
-            let Some(open) = self.open.get_mut(&serial) else { continue };
-            open.state = State::Running { outstanding: 0, issued: false, output: None };
+            let Some(open) = self.open.get_mut(&serial) else {
+                continue;
+            };
+            open.state = State::Running {
+                outstanding: 0,
+                issued: false,
+                output: None,
+            };
             started.push(Queued {
-                handle: Handle { reference: open.reference.clone(), serial },
+                handle: Handle {
+                    reference: open.reference.clone(),
+                    serial,
+                },
                 line: std::mem::take(&mut open.line),
             });
         }
@@ -141,7 +173,9 @@ impl Requests {
 
     /// An action of the request answered with `line`, or will, through a ticket.
     pub(crate) fn answered(&mut self, serial: u64, line: Option<String>) {
-        if let Some(State::Running { output, .. }) = self.state_of(serial) && line.is_some() {
+        if let Some(State::Running { output, .. }) = self.state_of(serial)
+            && line.is_some()
+        {
             *output = line;
         }
     }
@@ -168,7 +202,9 @@ impl Requests {
 
     /// End a request. Ending one that has already ended does nothing.
     pub(crate) fn end(&mut self, serial: u64, outcome: RequestOutcome) {
-        let Some(open) = self.open.remove(&serial) else { return };
+        let Some(open) = self.open.remove(&serial) else {
+            return;
+        };
         self.ids.remove(&open.reference.request_id);
         self.queue.retain(|queued| *queued != serial);
         self.finished.push_back((open.reference, outcome));
@@ -178,15 +214,21 @@ impl Requests {
     /// started as refused, one that did as unknown.
     pub(crate) fn close(&mut self) {
         self.closed = true;
-        let mut open: Vec<(u64, bool)> = self.open.iter()
-            .map(|(serial, open)| (*serial, matches!(open.state, State::Queued))).collect();
+        let mut open: Vec<(u64, bool)> = self
+            .open
+            .iter()
+            .map(|(serial, open)| (*serial, matches!(open.state, State::Queued)))
+            .collect();
         open.sort_unstable();
         for (serial, never_started) in open {
-            self.end(serial, if never_started {
-                RequestOutcome::Refused("server stopped, not executed".into())
-            } else {
-                RequestOutcome::Unknown
-            });
+            self.end(
+                serial,
+                if never_started {
+                    RequestOutcome::Refused("server stopped, not executed".into())
+                } else {
+                    RequestOutcome::Unknown
+                },
+            );
         }
     }
 
@@ -200,7 +242,14 @@ impl Requests {
     }
 
     fn finish_if_complete(&mut self, serial: u64) {
-        let Some(State::Running { outstanding: 0, issued: true, output }) = self.state_of(serial) else { return };
+        let Some(State::Running {
+            outstanding: 0,
+            issued: true,
+            output,
+        }) = self.state_of(serial)
+        else {
+            return;
+        };
         let line = output.take();
         self.end(serial, RequestOutcome::Done(line));
     }

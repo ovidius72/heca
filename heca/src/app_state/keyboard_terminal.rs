@@ -6,8 +6,12 @@ use super::*;
 impl AppState {
     /// A selected pane is not observed while another window, overlay or dock owns input.
     pub(crate) fn input_focused_pane(&self) -> Option<heca_core::layout::PaneId> {
-        effective_pane(self.window_focused, self.layers.top_modal_id(&self.window_root).is_some(),
-            self.keyboard_terminal().and_then(|id| self.client.backends.pane_of(id)))
+        effective_pane(
+            self.window_focused,
+            self.layers.top_modal_id(&self.window_root).is_some(),
+            self.keyboard_terminal()
+                .and_then(|id| self.client.backends.pane_of(id)),
+        )
     }
 
     /// The terminal the keyboard acts on: while selecting or searching, the terminal being selected
@@ -34,9 +38,14 @@ impl AppState {
             }
             _ => {}
         }
-        let with_panes = matches!(crate::app::input::focused_surface(self), crate::app::input::FocusedSurface::Panes);
+        let with_panes = matches!(
+            crate::app::input::focused_surface(self),
+            crate::app::input::FocusedSurface::Panes
+        );
         let focused = || self.client.backends.identity_of(self.focused_pane?);
-        if with_panes { return focused(); }
+        if with_panes {
+            return focused();
+        }
         self.window_keyboard_terminal().or_else(focused)
     }
 
@@ -58,9 +67,16 @@ impl AppState {
     }
 }
 
-fn effective_pane(active_window: bool, blocked: bool,
-    input_pane: Option<heca_core::layout::PaneId>) -> Option<heca_core::layout::PaneId> {
-    if active_window && !blocked { input_pane } else { None }
+fn effective_pane(
+    active_window: bool,
+    blocked: bool,
+    input_pane: Option<heca_core::layout::PaneId>,
+) -> Option<heca_core::layout::PaneId> {
+    if active_window && !blocked {
+        input_pane
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -70,9 +86,16 @@ mod feedback_focus_tests {
 
     #[test]
     fn selection_behind_a_palette_or_inactive_window_is_not_input_focus() {
-        assert_eq!(effective_pane(true, false, Some(PaneId(7))), Some(PaneId(7)));
+        assert_eq!(
+            effective_pane(true, false, Some(PaneId(7))),
+            Some(PaneId(7))
+        );
         assert_eq!(effective_pane(false, false, Some(PaneId(7))), None);
         assert_eq!(effective_pane(true, true, Some(PaneId(7))), None);
-        assert_eq!(effective_pane(true, false, None), None, "a dock or nonterminal control owns input");
+        assert_eq!(
+            effective_pane(true, false, None),
+            None,
+            "a dock or nonterminal control owns input"
+        );
     }
 }

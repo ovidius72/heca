@@ -18,8 +18,13 @@ pub(crate) fn missing_lang() -> Option<String> {
 }
 
 /// [`missing_lang`] given how to read the environment and the system's locale — the testable rule.
-fn lang_for(env: impl Fn(&str) -> Option<String>, system: impl FnOnce() -> String) -> Option<String> {
-    let inherited = ["LC_ALL", "LC_CTYPE", "LANG"].iter().any(|name| env(name).is_some_and(|value| !value.is_empty()));
+fn lang_for(
+    env: impl Fn(&str) -> Option<String>,
+    system: impl FnOnce() -> String,
+) -> Option<String> {
+    let inherited = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .iter()
+        .any(|name| env(name).is_some_and(|value| !value.is_empty()));
     (!inherited).then(system)
 }
 
@@ -27,7 +32,13 @@ fn lang_for(env: impl Fn(&str) -> Option<String>, system: impl FnOnce() -> Strin
 fn system_locale() -> String {
     static LOCALE: OnceLock<String> = OnceLock::new();
     LOCALE
-        .get_or_init(|| utf8_locale(apple_locale().as_deref(), |name| std::path::Path::new("/usr/share/locale").join(name).is_dir()))
+        .get_or_init(|| {
+            utf8_locale(apple_locale().as_deref(), |name| {
+                std::path::Path::new("/usr/share/locale")
+                    .join(name)
+                    .is_dir()
+            })
+        })
         .clone()
 }
 
@@ -37,8 +48,13 @@ fn apple_locale() -> Option<String> {
     if !cfg!(target_os = "macos") {
         return None;
     }
-    let out = std::process::Command::new("defaults").args(["read", "-g", "AppleLocale"]).output().ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+    let out = std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleLocale"])
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
 
 /// **A UTF-8 locale that exists**: the user's region in UTF-8 when the system has it, else
@@ -58,22 +74,36 @@ mod tests {
     use super::*;
 
     fn env<'a>(set: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
-        move |name| set.iter().find(|(key, _)| *key == name).map(|(_, value)| (*value).to_owned())
+        move |name| {
+            set.iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| (*value).to_owned())
+        }
     }
 
     /// **A locale the user already has is kept**, whichever of the three says it.
     #[test]
     fn an_inherited_locale_is_kept() {
         for name in ["LC_ALL", "LC_CTYPE", "LANG"] {
-            assert_eq!(lang_for(env(&[(name, "fr_FR.UTF-8")]), || unreachable!()), None, "{name}");
+            assert_eq!(
+                lang_for(env(&[(name, "fr_FR.UTF-8")]), || unreachable!()),
+                None,
+                "{name}"
+            );
         }
     }
 
     /// **No locale — the Dock's case — gets the system's**, and an empty one counts as none.
     #[test]
     fn no_locale_gets_the_systems() {
-        assert_eq!(lang_for(env(&[]), || "it_IT.UTF-8".into()).as_deref(), Some("it_IT.UTF-8"));
-        assert_eq!(lang_for(env(&[("LANG", "")]), || "it_IT.UTF-8".into()).as_deref(), Some("it_IT.UTF-8"));
+        assert_eq!(
+            lang_for(env(&[]), || "it_IT.UTF-8".into()).as_deref(),
+            Some("it_IT.UTF-8")
+        );
+        assert_eq!(
+            lang_for(env(&[("LANG", "")]), || "it_IT.UTF-8".into()).as_deref(),
+            Some("it_IT.UTF-8")
+        );
     }
 
     /// **The region in UTF-8 when it exists**, its `@…` options dropped; then `en_US`; then C.
@@ -82,7 +112,11 @@ mod tests {
         let mac = |name: &str| ["it_IT.UTF-8", "en_US.UTF-8"].contains(&name);
         assert_eq!(utf8_locale(Some("it_IT"), mac), "it_IT.UTF-8");
         assert_eq!(utf8_locale(Some("it_IT@rg=itzzzz"), mac), "it_IT.UTF-8");
-        assert_eq!(utf8_locale(Some("xx_YY"), mac), "en_US.UTF-8", "a region the system lacks");
+        assert_eq!(
+            utf8_locale(Some("xx_YY"), mac),
+            "en_US.UTF-8",
+            "a region the system lacks"
+        );
         assert_eq!(utf8_locale(None, |_| false), "C.UTF-8", "not macOS");
     }
 }

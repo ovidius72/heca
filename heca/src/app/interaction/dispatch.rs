@@ -239,7 +239,10 @@ pub(crate) fn dispatch_action_ref(
 /// `intent` with its named action's arguments turned into the types the action declared
 /// ([`ActionMeta::typed_args`](crate::actions::ActionMeta::typed_args)). Only the two kinds that
 /// carry a named action change; an action the catalog does not know is left as it is.
-pub(super) fn typed(catalog: &crate::actions::ActionCatalog, intent: InteractionIntent) -> InteractionIntent {
+pub(super) fn typed(
+    catalog: &crate::actions::ActionCatalog,
+    intent: InteractionIntent,
+) -> InteractionIntent {
     let typed_view = |mut action: crate::chrome::Intent| {
         if let Some(meta) = catalog.find(&action.action) {
             action.args = meta.typed_args(std::mem::take(&mut action.args));
@@ -249,7 +252,10 @@ pub(super) fn typed(catalog: &crate::actions::ActionCatalog, intent: Interaction
     match intent {
         InteractionIntent::View(action) => InteractionIntent::View(typed_view(action)),
         InteractionIntent::FocusContainerThenAction { container, action } => {
-            InteractionIntent::FocusContainerThenAction { container, action: typed_view(action) }
+            InteractionIntent::FocusContainerThenAction {
+                container,
+                action: typed_view(action),
+            }
         }
         other => other,
     }

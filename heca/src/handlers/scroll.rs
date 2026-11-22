@@ -19,7 +19,10 @@ fn focused_terminal_page_rows(state: &AppState) -> usize {
         .unwrap_or(crate::app::backend_factory::FALLBACK_TERMINAL_GRID.1)
 }
 
-pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scrollback_page_up(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let page_rows = focused_terminal_page_rows(state) as isize;
     if !matches!(state.input_mode, InputMode::Selection) {
         let _ = enter_selection_mode_for_focused_terminal(state);
@@ -28,7 +31,10 @@ pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) -> cr
     Ok(())
 }
 
-pub fn handle_scrollback_page_down(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scrollback_page_down(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let page_rows = focused_terminal_page_rows(state) as isize;
     if !matches!(state.input_mode, InputMode::Selection) {
         let _ = enter_selection_mode_for_focused_terminal(state);
@@ -37,7 +43,10 @@ pub fn handle_scrollback_page_down(state: &mut AppState, _action: &WmAction) -> 
     Ok(())
 }
 
-pub fn handle_scrollback_line_up(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scrollback_line_up(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::ScrollbackLineUp { amount } = action else {
         return Ok(());
     };
@@ -50,7 +59,10 @@ pub fn handle_scrollback_line_up(state: &mut AppState, action: &WmAction) -> cra
     Ok(())
 }
 
-pub fn handle_scrollback_line_down(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scrollback_line_down(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::ScrollbackLineDown { amount } = action else {
         return Ok(());
     };
@@ -63,7 +75,10 @@ pub fn handle_scrollback_line_down(state: &mut AppState, action: &WmAction) -> c
     Ok(())
 }
 
-pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scrollback_to_top(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if !matches!(state.input_mode, InputMode::Selection) {
         let _ = enter_selection_mode_for_focused_terminal(state);
     }
@@ -89,7 +104,10 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) -> cra
     Ok(())
 }
 
-pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scrollback_to_bottom(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if !matches!(state.input_mode, InputMode::Selection) {
         let _ = enter_selection_mode_for_focused_terminal(state);
     }
@@ -119,7 +137,10 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) -> 
     Ok(())
 }
 
-pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_exit_scrollback(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     // Scroll to live bottom, clear selection, and exit selection mode.
     if let Some(backend) = state.keyboard_backend_mut() {
         backend.scroll_to_bottom();
@@ -156,7 +177,10 @@ fn scroll_where_the_keyboard_is(state: &mut AppState, intent: heca_grid_ui::Widg
     true
 }
 
-pub fn handle_scroll_line_up(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_line_up(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let lines = state.settings.terminal_wheel_scroll_lines as i32;
     if let Some(backend) = state.keyboard_backend_mut() {
         backend.scroll_viewport(lines);
@@ -164,7 +188,10 @@ pub fn handle_scroll_line_up(state: &mut AppState, _action: &WmAction) -> crate:
     Ok(())
 }
 
-pub fn handle_scroll_line_down(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_line_down(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let lines = -(state.settings.terminal_wheel_scroll_lines as i32);
     if let Some(backend) = state.keyboard_backend_mut() {
         backend.scroll_viewport(lines);
@@ -172,22 +199,34 @@ pub fn handle_scroll_line_down(state: &mut AppState, _action: &WmAction) -> crat
     Ok(())
 }
 
-pub fn handle_scroll_page_up(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_page_up(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     page_keyboard_terminal(state, Page::Up);
     Ok(())
 }
 
-pub fn handle_scroll_page_down(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_page_down(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     page_keyboard_terminal(state, Page::Down);
     Ok(())
 }
 
-pub fn handle_scroll_to_top(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_to_top(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     page_keyboard_terminal(state, Page::Top);
     Ok(())
 }
 
-pub fn handle_scroll_to_bottom(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_to_bottom(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     // One terminal named by its id — the chip on its scrollback — glides down to the live bottom;
     // without one, the keyboard's page goes there at once.
     match action {
@@ -231,27 +270,42 @@ pub(crate) fn page_terminal(backend: &mut dyn heca_core::backend::PaneBackend, p
 // The horizontal four have no terminal half — a terminal's history has one axis — so they reach
 // only what holds the keyboard in the window. A key aimed at nothing is silent, not an error.
 
-pub fn handle_scroll_page_left(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_page_left(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollPageLeft);
     Ok(())
 }
 
-pub fn handle_scroll_page_right(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_page_right(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollPageRight);
     Ok(())
 }
 
-pub fn handle_scroll_to_left_edge(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_to_left_edge(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollToLeftEdge);
     Ok(())
 }
 
-pub fn handle_scroll_to_right_edge(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_to_right_edge(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollToRightEdge);
     Ok(())
 }
 
-pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_to_offset(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::ScrollToOffset { rows, terminal } = action else {
         return Ok(());
     };
@@ -285,12 +339,18 @@ pub(crate) fn scroll_backend_to_offset(
 
 /// Pan the horizontal view left/right by a quarter of the viewport, to reach
 /// column overflow / content scrolled past an edge. View-only (no focus change).
-pub fn handle_scroll_view_left(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_view_left(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     scroll_view_by(state, -1.0);
     Ok(())
 }
 
-pub fn handle_scroll_view_right(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_scroll_view_right(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     scroll_view_by(state, 1.0);
     Ok(())
 }
@@ -306,17 +366,26 @@ fn scroll_view_by(state: &mut AppState, sign: f64) {
 /// caret cell (caret-only or the moving focus endpoint of an active selection) →
 /// the owning pane's snapshot hyperlink → the shared open path. Safe no-op when
 /// there is no caret, no owning pane, or no link under it.
-pub fn handle_search_scrollback(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_search_scrollback(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     crate::app::terminal_host::enter_scrollback_search(state);
     Ok(())
 }
 
-pub fn handle_search_next_match(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_search_next_match(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     crate::app::terminal_host::search_step(state, true);
     Ok(())
 }
 
-pub fn handle_search_prev_match(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_search_prev_match(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     crate::app::terminal_host::search_step(state, false);
     Ok(())
 }

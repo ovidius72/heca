@@ -49,7 +49,10 @@ pub enum RpcError {
     MissingArgs(String),
     /// Called with arguments that do not fit what the action declares — one it does not take, a
     /// required one left out, a value of the wrong kind. Each problem is named, in a stable order.
-    WrongArgs { name: String, problems: Vec<String> },
+    WrongArgs {
+        name: String,
+        problems: Vec<String>,
+    },
     /// The action ran, but its owner rejected the requested operation.
     Failed(String),
     /// The line itself could not be read (an open quote, a stray line break). Nothing ran.
@@ -147,7 +150,9 @@ pub(crate) fn is_query(input: &str) -> bool {
 fn query_of(input: &str) -> Option<(&'static str, std::vec::IntoIter<line::Word>)> {
     let mut words = line::tokenize(input).ok()?.into_iter();
     let name = words.next()?.arg.text().to_lowercase();
-    let query = [LIST_ACTIONS, DESCRIBE_ACTION].into_iter().find(|query| *query == name)?;
+    let query = [LIST_ACTIONS, DESCRIBE_ACTION]
+        .into_iter()
+        .find(|query| *query == name)?;
     Some((query, words))
 }
 
@@ -359,7 +364,8 @@ mod tests {
     /// Quoted values reach the call whole.
     #[test]
     fn quoted_values_reach_the_call_whole() {
-        let call = parse_rpc(r#"note "ciao mondo" text="a b" path="C:\my dir\\" empty="" "" n=1"#).unwrap();
+        let call = parse_rpc(r#"note "ciao mondo" text="a b" path="C:\my dir\\" empty="" "" n=1"#)
+            .unwrap();
         assert_eq!(call.action, "note");
         assert_eq!(call.positional, ["ciao mondo", ""]);
         assert_eq!(
@@ -399,8 +405,18 @@ mod tests {
 
     #[test]
     fn a_line_that_cannot_be_read_is_an_error_before_anything_runs() {
-        for line in [r#"note "open"#, "note 'open", r#"note "ends\"#, "note a\nb", "note a\rb", "note a\0b"] {
-            assert!(matches!(parse_rpc(line), Err(RpcError::BadLine(_))), "{line:?}");
+        for line in [
+            r#"note "open"#,
+            "note 'open",
+            r#"note "ends\"#,
+            "note a\nb",
+            "note a\rb",
+            "note a\0b",
+        ] {
+            assert!(
+                matches!(parse_rpc(line), Err(RpcError::BadLine(_))),
+                "{line:?}"
+            );
         }
         assert_eq!(
             parse_rpc(r#"note "open"#).unwrap_err().to_string(),
@@ -414,7 +430,9 @@ mod tests {
         assert!(is_query("  list-actions "));
         assert!(is_query(r#"describe-action "close""#));
         assert!(!is_query("list-actions\n"));
-        let json = introspect(&catalog, r#"describe-action "close""#).unwrap().unwrap();
+        let json = introspect(&catalog, r#"describe-action "close""#)
+            .unwrap()
+            .unwrap();
         assert!(json.contains("\"name\":\"close\""), "{json}");
         // An open quote is no query: `parse_rpc` is the one that says so.
         assert!(introspect(&catalog, r#"describe-action "close"#).is_none());

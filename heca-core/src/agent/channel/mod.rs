@@ -5,7 +5,11 @@ use std::{
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, mpsc, atomic::{AtomicUsize, Ordering}},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    },
 };
 
 use notify::{RecursiveMode, Watcher};
@@ -19,13 +23,21 @@ pub(super) struct Inbox {
 
 impl Inbox {
     pub(super) fn new(capacity: usize) -> Self {
-        Self { reports: Mutex::new(VecDeque::new()), capacity: AtomicUsize::new(capacity) }
+        Self {
+            reports: Mutex::new(VecDeque::new()),
+            capacity: AtomicUsize::new(capacity),
+        }
     }
 
     fn push(&self, report: AgentState) {
-        let mut queue = self.reports.lock().unwrap_or_else(|error| error.into_inner());
+        let mut queue = self
+            .reports
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let capacity = self.capacity.load(Ordering::Relaxed);
-        if capacity == 0 { return }
+        if capacity == 0 {
+            return;
+        }
         while queue.len() >= capacity {
             queue.pop_front();
         }
@@ -33,7 +45,11 @@ impl Inbox {
     }
 
     pub(super) fn drain(&self) -> Vec<AgentState> {
-        self.reports.lock().unwrap_or_else(|error| error.into_inner()).drain(..).collect()
+        self.reports
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .drain(..)
+            .collect()
     }
 }
 
@@ -48,7 +64,9 @@ pub(super) struct ReportReader {
 }
 
 impl ReportReader {
-    pub(super) fn path(&self) -> &Path { &self.path }
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
 
     pub(super) fn create(
         path: PathBuf,
@@ -57,7 +75,15 @@ impl ReportReader {
     ) -> io::Result<Self> {
         fs::write(&path, [])?;
         let file = File::open(&path)?;
-        Ok(Self { launch: None, path, driver, file, pending: Vec::new(), oversized: false, limit })
+        Ok(Self {
+            launch: None,
+            path,
+            driver,
+            file,
+            pending: Vec::new(),
+            oversized: false,
+            limit,
+        })
     }
 
     pub(super) fn with_launch(mut self, launch: crate::backend::ProcessLaunch) -> Self {
@@ -74,13 +100,20 @@ impl ReportReader {
         let mut bytes = vec![0; self.limit.min(4096)];
         loop {
             let read = self.file.read(&mut bytes)?;
-            if read == 0 { break }
+            if read == 0 {
+                break;
+            }
             for &byte in &bytes[..read] {
                 if byte == b'\n' {
                     if !self.oversized
-                        && let Ok(Some(mut report)) = super::registry::read_report(self.driver.as_ref(), AgentInput::SideChannel(&self.pending))
+                        && let Ok(Some(mut report)) = super::registry::read_report(
+                            self.driver.as_ref(),
+                            AgentInput::SideChannel(&self.pending),
+                        )
                     {
-                        if self.launch.is_some() { report.launch.clone_from(&self.launch); }
+                        if self.launch.is_some() {
+                            report.launch.clone_from(&self.launch);
+                        }
                         inbox.push(report);
                     }
                     self.pending.clear();
@@ -104,13 +137,23 @@ pub(super) struct ReportChannel {
 
 impl ReportChannel {
     pub(super) fn configure(
-        &self, drivers: AgentDrivers, reporter: super::reporting::ReportingHelper, capacity: usize,
+        &self,
+        drivers: AgentDrivers,
+        reporter: super::reporting::ReportingHelper,
+        capacity: usize,
     ) -> Result<(), AgentError> {
         self.inbox.capacity.store(capacity, Ordering::Relaxed);
-        let mut queue = self.inbox.reports.lock().unwrap_or_else(|error| error.into_inner());
-        while queue.len() > capacity { queue.pop_front(); }
+        let mut queue = self
+            .inbox
+            .reports
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        while queue.len() > capacity {
+            queue.pop_front();
+        }
         drop(queue);
-        self.stop.send(worker::Message::Configure { drivers, reporter })
+        self.stop
+            .send(worker::Message::Configure { drivers, reporter })
             .map_err(|error| AgentError::Launch(io::Error::other(error.to_string())))
     }
 
@@ -132,13 +175,19 @@ impl ReportChannel {
         fs::write(&ready, [])?;
         let mut watcher = super::watcher::new(move |event| {
             let _ = sender.send(worker::Message::Event(event));
-        }).map_err(|error| AgentError::Launch(io::Error::other(error)))?;
-        watcher.watch(&ready, RecursiveMode::NonRecursive)
+        })
+        .map_err(|error| AgentError::Launch(io::Error::other(error)))?;
+        watcher
+            .watch(&ready, RecursiveMode::NonRecursive)
             .map_err(|error| AgentError::Launch(io::Error::other(error)))?;
         let incoming = inbox.clone();
-        std::thread::Builder::new().name("heca-agent-reports".into()).spawn(move || {
-            worker::run(watcher, receiver, watch_root, drivers, reporter, incoming, wake);
-        })?;
+        std::thread::Builder::new()
+            .name("heca-agent-reports".into())
+            .spawn(move || {
+                worker::run(
+                    watcher, receiver, watch_root, drivers, reporter, incoming, wake,
+                );
+            })?;
         Ok(Self { stop, inbox })
     }
 
@@ -148,7 +197,9 @@ impl ReportChannel {
 }
 
 impl Drop for ReportChannel {
-    fn drop(&mut self) { let _ = self.stop.send(worker::Message::Stop); }
+    fn drop(&mut self) {
+        let _ = self.stop.send(worker::Message::Stop);
+    }
 }
 
 mod worker;

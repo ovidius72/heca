@@ -129,11 +129,9 @@ impl Choice {
         self.base.pointer.hovered
     }
 
-
     fn interactive(&self) -> bool {
         self.base.activatable
     }
-
 }
 
 impl Component for Choice {
@@ -220,7 +218,6 @@ impl Component for Choice {
     fn is_control(&self) -> bool {
         true
     }
-
 
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = self.flash.tick(dt);

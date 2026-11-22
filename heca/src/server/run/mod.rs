@@ -3,9 +3,9 @@
 use super::{
     ServerState, ServerWaker,
     connection::Connection,
+    services::Call,
     session::SessionRuntime,
     sessions::{SessionCommand, SessionInfo, SessionReply, SessionStatus},
-    services::Call,
     wire::{ClientMsg, ServerLink, ServerMsg},
 };
 #[cfg(test)]
@@ -134,7 +134,8 @@ impl ServerLoop {
         wake: &ServerWaker,
     ) {
         let catalog = self.catalog.snapshot();
-        *self.services.borrow_mut() = super::services::ServiceHost::start(config, &identity, wake, &catalog);
+        *self.services.borrow_mut() =
+            super::services::ServiceHost::start(config, &identity, wake, &catalog);
         self._identity = Some(identity);
     }
 
@@ -165,7 +166,11 @@ impl ServerLoop {
     /// complete catalog. Returns what collided while adding them.
     pub(super) fn register_actions(&mut self) -> crate::app::conflicts::Conflicts {
         let mut conflicts = crate::app::conflicts::Conflicts::default();
-        crate::entry::register_queued_actions(&mut self.registry, &mut self.catalog, &mut conflicts);
+        crate::entry::register_queued_actions(
+            &mut self.registry,
+            &mut self.catalog,
+            &mut conflicts,
+        );
         conflicts
     }
 
@@ -191,9 +196,13 @@ impl ServerLoop {
     /// Tell the window that asked why its request was refused, as a notification in its session
     /// (or the most recent one when it has none).
     fn report_refusal(&mut self, client: &Connection, action: &str, reason: String) {
-        let (_, drafts) = crate::notification::collect_notifications(|| super::services::refused(action, reason));
+        let (_, drafts) =
+            crate::notification::collect_notifications(|| super::services::refused(action, reason));
         for draft in drafts {
-            match self.index_for(client.session.get()).or_else(|| self.last_index()) {
+            match self
+                .index_for(client.session.get())
+                .or_else(|| self.last_index())
+            {
                 Some(index) => self.sessions[index].raise(draft),
                 None => self.notices.push(draft),
             }
@@ -218,26 +227,45 @@ impl ServerLoop {
         };
         // A service's action runs where the service is, whoever is attached.
         if let Ok((intent, None)) = &parsed
-            && self.services.borrow().owns(&intent.action) {
+            && self.services.borrow().owns(&intent.action)
+        {
             return self.rpc_service(intent, reply);
         }
-        let owned = parsed.as_ref()
-            .is_ok_and(|(intent, dock)| dock.is_none()
-                && crate::input::resolve_action(&intent.action, &crate::app::interaction::intent_args_as_strings(intent))
-                    .is_some_and(|action| super::sessions::owns(action.kind())));
-        if owned { let _ = reply.send(self.rpc(&line)); return; }
-        if let Some(session) = self.recent_sessions.iter().rev()
+        let owned = parsed.as_ref().is_ok_and(|(intent, dock)| {
+            dock.is_none()
+                && crate::input::resolve_action(
+                    &intent.action,
+                    &crate::app::interaction::intent_args_as_strings(intent),
+                )
+                .is_some_and(|action| super::sessions::owns(action.kind()))
+        });
+        if owned {
+            let _ = reply.send(self.rpc(&line));
+            return;
+        }
+        if let Some(session) = self
+            .recent_sessions
+            .iter()
+            .rev()
             .filter_map(|id| self.index_for(Some(*id)))
             .find(|&index| self.sessions[index].info().windows > 0)
         {
             // Creating an unattached session must not take commands away from a live window.
             self.sessions[session].begin_rpc(line, reply);
-        } else if parsed.as_ref()
-            .is_ok_and(|(intent, _)| crate::actions::builtin_side(&intent.action)
-                != Some(crate::actions::Side::Server))
-            && let Some(client) = self.clients.iter().find(|client| !client.is_closed()
-                && matches!(client.attachment.get(), super::connection::Attachment::Detached)) {
-            let limits = self.config.as_ref().map(|c| c.config.settings.connection).unwrap_or_default();
+        } else if parsed.as_ref().is_ok_and(|(intent, _)| {
+            crate::actions::builtin_side(&intent.action) != Some(crate::actions::Side::Server)
+        }) && let Some(client) = self.clients.iter().find(|client| {
+            !client.is_closed()
+                && matches!(
+                    client.attachment.get(),
+                    super::connection::Attachment::Detached
+                )
+        }) {
+            let limits = self
+                .config
+                .as_ref()
+                .map(|c| c.config.settings.connection)
+                .unwrap_or_default();
             client.begin_rpc(line, reply, limits);
         } else {
             let _ = reply.send(self.rpc(&line));
@@ -275,7 +303,11 @@ impl ServerLoop {
                     .iter()
                     .filter_map(|client| client.rpc_deadline()),
             )
-            .chain(self.store.as_ref().and_then(super::persist::SessionStore::next_wake))
+            .chain(
+                self.store
+                    .as_ref()
+                    .and_then(super::persist::SessionStore::next_wake),
+            )
             .min()
     }
 
@@ -302,7 +334,9 @@ impl ServerLoop {
             }
             match message {
                 ClientMsg::RpcReply { request_id, answer } => client.reply_rpc(request_id, answer),
-                ClientMsg::ServiceResync { service } => self.services.borrow_mut().forget(client.id, &service),
+                ClientMsg::ServiceResync { service } => {
+                    self.services.borrow_mut().forget(client.id, &service)
+                }
                 ClientMsg::Attach => {
                     self.pump_sessions(now);
                     self.attach(client, None);
@@ -317,7 +351,9 @@ impl ServerLoop {
                         if let Some(index) = self.index_for(Some(id)) {
                             self.sessions[index].detach_connection(client.id);
                         }
-                        client.attachment.set(super::connection::Attachment::Detached);
+                        client
+                            .attachment
+                            .set(super::connection::Attachment::Detached);
                         client.projection_pending.set(false);
                         let _ = client.link.send(ServerMsg::SessionDetached { id });
                     }
@@ -336,12 +372,20 @@ impl ServerLoop {
                     self.pump_sessions(now);
                     // Making, listing or renaming sessions belongs to no session: asked as such.
                     let (name, args) = crate::actions::describe(&action);
-                    let verdict = self.services.borrow_mut()
-                        .authorize(&Call::local(Some(client.id)), None, &name, &args, None);
+                    let verdict = self.services.borrow_mut().authorize(
+                        &Call::local(Some(client.id)),
+                        None,
+                        &name,
+                        &args,
+                        None,
+                    );
                     if let Err(reason) = verdict {
                         self.report_refusal(&client, &name, reason);
                         if let Some(request_id) = request_id {
-                            let _ = client.link.send(ServerMsg::Reply { request_id, changes: Vec::new() });
+                            let _ = client.link.send(ServerMsg::Reply {
+                                request_id,
+                                changes: Vec::new(),
+                            });
                         }
                         continue;
                     }
@@ -377,13 +421,17 @@ impl ServerLoop {
                 message => {
                     let Some(index) = self.index_for(client.session.get()) else {
                         // Session-scoped input queued before a logical detach is stale.
-                        if !matches!(client.attachment.get(), super::connection::Attachment::Detached) {
+                        if !matches!(
+                            client.attachment.get(),
+                            super::connection::Attachment::Detached
+                        ) {
                             client.close();
                         }
                         continue;
                     };
                     if self.sessions[index].info().status == SessionStatus::Terminated
-                        && !matches!(message, ClientMsg::RpcReply { .. }) {
+                        && !matches!(message, ClientMsg::RpcReply { .. })
+                    {
                         let _ = client.link.send(ServerMsg::SessionTerminated {
                             session: self.sessions[index].info(),
                         });
@@ -393,14 +441,28 @@ impl ServerLoop {
                 }
             }
         }
-        { let _s = crate::slow_steps::step("server.pump_sessions"); self.pump_sessions(now) };
-        { let _s = crate::slow_steps::step("server.pump_services"); self.pump_services() };
+        {
+            let _s = crate::slow_steps::step("server.pump_sessions");
+            self.pump_sessions(now)
+        };
+        {
+            let _s = crate::slow_steps::step("server.pump_services");
+            self.pump_services()
+        };
         self.announce_state_changes();
-        for client in &self.clients { client.expire_rpc(now); }
+        for client in &self.clients {
+            client.expire_rpc(now);
+        }
         self.clients.retain(|c| !c.is_closed());
-        { let _s = crate::slow_steps::step("server.publish_directory"); self.publish_directory() };
+        {
+            let _s = crate::slow_steps::step("server.publish_directory");
+            self.publish_directory()
+        };
         self.flush_notices();
-        { let _s = crate::slow_steps::step("server.autosave"); self.autosave(now) };
+        {
+            let _s = crate::slow_steps::step("server.autosave");
+            self.autosave(now)
+        };
     }
 
     fn publish_directory(&mut self) {
@@ -411,7 +473,11 @@ impl ServerLoop {
         self.directory = directory;
         for client in &self.clients {
             if client.session.get().is_some()
-                || matches!(client.attachment.get(), super::connection::Attachment::Detached) {
+                || matches!(
+                    client.attachment.get(),
+                    super::connection::Attachment::Detached
+                )
+            {
                 let _ = client.link.send(ServerMsg::Sessions {
                     request_id: 0,
                     result: Ok(SessionReply::List(self.directory.clone())),
@@ -488,10 +554,16 @@ impl ServerLoop {
         let mut host = self.services.borrow_mut();
         host.tell_outcomes();
         if let Some(index) = self.last_index() {
-            for draft in host.take_held() { self.sessions[index].raise(draft); }
+            for draft in host.take_held() {
+                self.sessions[index].raise(draft);
+            }
         }
         let audience: Vec<_> = self.sessions.iter().map(SessionRuntime::audience).collect();
-        let limits = self.config.as_ref().map(|c| c.config.settings.connection).unwrap_or_default();
+        let limits = self
+            .config
+            .as_ref()
+            .map(|c| c.config.settings.connection)
+            .unwrap_or_default();
         host.publish(&audience, limits.max_frame_bytes.get());
     }
 
@@ -500,7 +572,10 @@ impl ServerLoop {
     /// made.
     pub(super) fn sessions_changed(&self) -> crate::entry::service::Sessions {
         let sessions = crate::entry::service::Sessions::new(
-            self.sessions.iter().map(SessionRuntime::service_entry).collect(),
+            self.sessions
+                .iter()
+                .map(SessionRuntime::service_entry)
+                .collect(),
         );
         self.services.borrow_mut().know_sessions(&sessions);
         sessions
@@ -515,12 +590,17 @@ impl ServerLoop {
         session: crate::entry::service::SessionEntry,
     ) {
         let sessions = self.sessions_changed();
-        self.events.emit(&super::StreamEvent::SessionChanged { kind, session: session.clone() });
-        let event = crate::entry::service::ServerEvent::SessionChanged(crate::entry::service::SessionEvent {
+        self.events.emit(&super::StreamEvent::SessionChanged {
             kind,
-            session,
-            sessions,
+            session: session.clone(),
         });
+        let event = crate::entry::service::ServerEvent::SessionChanged(
+            crate::entry::service::SessionEvent {
+                kind,
+                session,
+                sessions,
+            },
+        );
         self.services.borrow_mut().announce(&event);
     }
 
@@ -529,8 +609,11 @@ impl ServerLoop {
     pub(super) fn announce_state_changes(&self) {
         let changes = self.services.borrow_mut().take_state_changes();
         for change in changes {
-            self.events.emit(&super::StreamEvent::StateChanged(change.clone()));
-            self.services.borrow_mut().announce(&crate::entry::service::ServerEvent::StateChanged(change));
+            self.events
+                .emit(&super::StreamEvent::StateChanged(change.clone()));
+            self.services
+                .borrow_mut()
+                .announce(&crate::entry::service::ServerEvent::StateChanged(change));
         }
     }
 
@@ -544,15 +627,21 @@ impl ServerLoop {
 }
 
 #[cfg(test)]
-mod tests;
+mod catalog_tests;
 #[cfg(test)]
 mod feedback_tests;
 #[cfg(test)]
-mod service_tests;
+mod history_tests;
+#[cfg(test)]
+mod identity_tests;
+#[cfg(test)]
+mod policy_tests;
+#[cfg(test)]
+mod restore_tests;
+#[cfg(test)]
+mod resume_tests;
 #[cfg(test)]
 mod saved_state_tests;
-#[cfg(test)]
-mod catalog_tests;
 #[cfg(test)]
 mod service_data_tests;
 #[cfg(test)]
@@ -560,12 +649,6 @@ mod service_key_tests;
 #[cfg(test)]
 mod service_session_tests;
 #[cfg(test)]
-mod policy_tests;
+mod service_tests;
 #[cfg(test)]
-mod identity_tests;
-#[cfg(test)]
-mod restore_tests;
-#[cfg(test)]
-mod resume_tests;
-#[cfg(test)]
-mod history_tests;
+mod tests;

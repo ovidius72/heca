@@ -14,8 +14,14 @@ impl Input {
             // those. This is what the host's "deliver the real character, not the lowercased combo
             // key" fixup existed to paper over.
             GridKey::Char(_) | GridKey::Space => return Handled::No,
-            GridKey::Enter if self.multiline && !crate::event::modifiers().ctrl
-                && !crate::event::modifiers().meta && !crate::event::modifiers().alt => self.insert('\n'),
+            GridKey::Enter
+                if self.multiline
+                    && !crate::event::modifiers().ctrl
+                    && !crate::event::modifiers().meta
+                    && !crate::event::modifiers().alt =>
+            {
+                self.insert('\n')
+            }
             GridKey::ArrowUp if self.multiline => self.move_vertical(true),
             GridKey::ArrowDown if self.multiline => self.move_vertical(false),
             GridKey::Backspace => self.backspace(self.delete_granularity()),
@@ -86,25 +92,39 @@ impl Input {
         }
     }
     pub(super) fn line_start(&self) -> usize {
-        self.chars_vec().iter().take(self.cursor).rposition(|ch| *ch == '\n').map_or(0, |index| index + 1)
+        self.chars_vec()
+            .iter()
+            .take(self.cursor)
+            .rposition(|ch| *ch == '\n')
+            .map_or(0, |index| index + 1)
     }
     pub(super) fn line_end(&self) -> usize {
         let chars = self.chars_vec();
-        chars.iter().skip(self.cursor).position(|ch| *ch == '\n').map_or(chars.len(), |index| self.cursor + index)
+        chars
+            .iter()
+            .skip(self.cursor)
+            .position(|ch| *ch == '\n')
+            .map_or(chars.len(), |index| self.cursor + index)
     }
     fn move_vertical(&mut self, up: bool) {
         let view = self.view.borrow();
         let rows = view.rows();
         let (row, col) = view.position(self.cursor);
-        let row = if up { row.saturating_sub(1) } else { (row + 1).min(rows.len() - 1) };
+        let row = if up {
+            row.saturating_sub(1)
+        } else {
+            (row + 1).min(rows.len() - 1)
+        };
         let next = rows[row].start + col.min(rows[row].len());
         drop(view);
-        if crate::event::modifiers().shift { self.anchor.get_or_insert(self.cursor); }
-        else { self.anchor = None; }
+        if crate::event::modifiers().shift {
+            self.anchor.get_or_insert(self.cursor);
+        } else {
+            self.anchor = None;
+        }
         self.cursor = next;
         self.blink_origin = crate::clock::now();
     }
-
 }
 
 /// How far a caret move travels.
@@ -159,4 +179,3 @@ pub(super) fn next_word_boundary(chars: &[char], cursor: usize) -> usize {
     }
     i
 }
-

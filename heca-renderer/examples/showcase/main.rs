@@ -316,12 +316,11 @@ struct App {
     state: Option<GpuState>,
 }
 
-
+mod app;
 mod described;
+mod gpu;
 mod page;
 mod scene;
-mod gpu;
-mod app;
 use described::*;
 use page::build_ui;
 use scene::build_scene;
@@ -332,7 +331,6 @@ fn main() {
     let mut app = App::default();
     event_loop.run_app(&mut app).expect("run");
 }
-
 
 #[cfg(test)]
 mod sweeps;
