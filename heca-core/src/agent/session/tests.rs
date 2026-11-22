@@ -9,6 +9,7 @@ fn a_disabled_session_has_no_integration_and_enables_in_the_same_connection() {
         channel_capacity: 8,
         launch_timeout: Duration::from_secs(5),
         launcher: std::env::current_exe().unwrap(),
+        launched_status: String::new(),
     };
     let mut session = AgentSession::prepare(options.clone(), None).unwrap();
     let bin = session.bin();
@@ -51,6 +52,7 @@ fn the_wrapper_preserves_literal_user_arguments_for_the_private_launcher() {
             channel_capacity: 8,
             launch_timeout: Duration::from_secs(5),
             launcher,
+            launched_status: String::new(),
         },
         None,
     )

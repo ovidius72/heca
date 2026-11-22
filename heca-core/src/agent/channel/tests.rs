@@ -80,6 +80,7 @@ fn a_coalesced_event_naming_another_child_still_processes_the_launch_queue() {
         crate::agent::reporting::ReportingHelper {
             executable: std::env::current_exe().unwrap(),
             max_report_bytes: 10240,
+            launched_status: String::new(),
         },
         Arc::new(Inbox::new(4)),
         None,

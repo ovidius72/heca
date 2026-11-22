@@ -196,7 +196,10 @@ impl WheelRemainders {
         per_notch: f64,
     ) -> (i32, i32) {
         let (nx, ny) = match delta {
-            MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
+            // **A wheel's click is at least one notch**, however slowly it was turned: macOS reports a
+            // slow click as a tenth of a notch, and summed as tenths it took ten clicks to scroll one
+            // line. Only a trackpad, which counts pixels, moves by less than a notch.
+            MouseScrollDelta::LineDelta(x, y) => (at_least_a_notch(x), at_least_a_notch(y)),
             MouseScrollDelta::PixelDelta(p) => (per_cell(p.x, cell.0), per_cell(p.y, cell.1)),
         };
         let (dx, dy) = (nx * per_notch, ny * per_notch);
@@ -205,6 +208,16 @@ impl WheelRemainders {
         let whole = (x.trunc(), y.trunc());
         *left = (x - whole.0, y - whole.1);
         (whole.0 as i32, whole.1 as i32)
+    }
+}
+
+/// A wheel's turn on one axis, in notches — a click that moved at all is at least a whole one.
+fn at_least_a_notch(notches: f32) -> f64 {
+    let notches = f64::from(notches);
+    match notches.abs() {
+        0.0 => 0.0,
+        size if size < 1.0 => notches.signum(),
+        _ => notches,
     }
 }
 
@@ -372,22 +385,41 @@ mod tests {
         );
     }
 
-    /// **A wheel turned slowly scrolls** (macOS reports a tenth of a notch at a time): with six lines
-    /// a notch, two small turns already make a line. Counted in notches first, it took ten turns
-    /// before anything moved — and then six lines jumped at once.
+    /// **Every click of a wheel scrolls, however slowly it is turned** — macOS reports a slow click
+    /// as a tenth of a notch; each is still a whole notch (`per_notch` lines), as in every terminal.
+    /// A trackpad, which counts pixels, still moves by the part of a cell it travelled.
     #[test]
-    fn a_slow_wheel_moves_a_line_after_a_couple_of_small_turns() {
+    fn every_slow_click_of_a_wheel_scrolls_a_whole_notch() {
         let mut left = WheelRemainders::default();
-        let tenth = || device_delta((0.0, 0.1), None);
+        let slow_click = || device_delta((0.0, 0.1), None);
         assert_eq!(
-            left.lines(TerminalId(1), tenth(), (8.0, 14.0), 6.0),
-            (0, 0),
-            "0.6 of a line: not yet"
+            left.lines(TerminalId(1), slow_click(), (8.0, 14.0), 1.0),
+            (0, -1)
         );
         assert_eq!(
-            left.lines(TerminalId(1), tenth(), (8.0, 14.0), 6.0),
-            (0, -1),
-            "1.2 lines: one moves"
+            left.lines(TerminalId(1), slow_click(), (8.0, 14.0), 1.0),
+            (0, -1)
+        );
+        assert_eq!(
+            left.lines(TerminalId(1), slow_click(), (8.0, 14.0), 3.0),
+            (0, -3),
+            "a notch is `terminal_wheel_scroll_lines` lines"
+        );
+        let fast = device_delta((0.0, 2.5), None);
+        assert_eq!(
+            left.lines(TerminalId(2), fast, (8.0, 14.0), 1.0),
+            (0, -2),
+            "a fast turn keeps its size"
+        );
+        let little_swipe = || device_delta((0.0, 0.0), Some((0.0, 7.0)));
+        assert_eq!(
+            left.lines(TerminalId(3), little_swipe(), (8.0, 14.0), 1.0),
+            (0, 0),
+            "half a cell: not yet"
+        );
+        assert_eq!(
+            left.lines(TerminalId(3), little_swipe(), (8.0, 14.0), 1.0),
+            (0, -1)
         );
     }
 

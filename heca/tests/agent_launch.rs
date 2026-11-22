@@ -200,6 +200,7 @@ fn installer(directory: &std::path::Path, drivers: AgentDrivers) -> Integrations
             reporter: heca_core::agent::reporting::ReportingHelper {
                 executable: std::env::current_exe().unwrap(),
                 max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
+                launched_status: String::new(),
             },
             home: directory.into(),
             directory: directory.join("heca-data"),
@@ -244,6 +245,7 @@ fn start_terminal(
             channel_capacity: 16,
             launch_timeout: Duration::from_secs(10),
             launcher: PathBuf::from(env!("CARGO_BIN_EXE_heca")),
+            launched_status: String::new(),
         }),
         wake_on_output: Some(wake),
         shell_override: Some("/bin/sh".into()),

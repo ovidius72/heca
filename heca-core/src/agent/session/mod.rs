@@ -22,6 +22,8 @@ pub struct AgentOptions {
     pub launch_timeout: Duration,
     /// The host executable, whose shared entry handles `launcher::run_if_requested`.
     pub launcher: PathBuf,
+    /// The status an agent shows the moment it starts (`settings.agents.launched_status`).
+    pub launched_status: String,
 }
 
 pub(crate) struct AgentSession {
@@ -68,6 +70,7 @@ impl AgentSession {
         let reporter = super::reporting::ReportingHelper {
             executable: options.launcher.clone(),
             max_report_bytes: options.max_report_bytes,
+            launched_status: options.launched_status.clone(),
         };
         if options.drivers.iter().next().is_none() {
             self.channel = None;

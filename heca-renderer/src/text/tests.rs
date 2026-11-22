@@ -257,22 +257,42 @@ fn an_emoji_glyph_enters_the_atlas_with_its_own_colours() {
         !entry.own_colours,
         "a letter is tinted by the text's colour"
     );
-    let emoji = glyph_of(&mut fonts, "\u{23fa}");
+    let is_colour =
+        |fonts: &mut cosmic_text::FontSystem, swash: &mut cosmic_text::SwashCache, key| {
+            matches!(
+                swash.get_image(fonts, key).as_ref().map(|img| img.content),
+                Some(cosmic_text::SwashContent::Color)
+            )
+        };
+    // An emoji by default (😀) is drawn by the colour face, in its own colours.
+    let emoji = glyph_of(&mut fonts, "\u{1f600}");
     let Some(entry) = atlas.glyph(&queue, &mut fonts, &mut swash, emoji) else {
         return; // no fallback font for it on this machine
     };
-    let colour = matches!(
-        swash
-            .get_image(&mut fonts, emoji)
-            .as_ref()
-            .map(|img| img.content),
-        Some(cosmic_text::SwashContent::Color)
-    );
+    let colour = is_colour(&mut fonts, &mut swash, emoji);
     // macOS always has its colour emoji font, so there the case is certain, not skipped.
     #[cfg(target_os = "macos")]
-    assert!(colour, "on macOS ⏺ falls back to the colour emoji font");
+    assert!(colour, "on macOS 😀 is drawn by the colour emoji font");
     assert_eq!(
         entry.own_colours, colour,
         "a colour glyph keeps its colours"
     );
+
+    // **A text-by-default emoji (⏺) comes from a text face**, as in every terminal — a round dot
+    // in the text's colour, not the colour face's framed button. Asked for with the emoji selector,
+    // it is the colour one again.
+    let dot = glyph_of(&mut fonts, "\u{23fa}");
+    #[cfg(target_os = "macos")]
+    assert!(
+        !is_colour(&mut fonts, &mut swash, dot),
+        "on macOS ⏺ is drawn from a text face (STIX Two Math has it)"
+    );
+    let _ = dot;
+    let asked = glyph_of(&mut fonts, "\u{23fa}\u{fe0f}");
+    #[cfg(target_os = "macos")]
+    assert!(
+        is_colour(&mut fonts, &mut swash, asked),
+        "⏺ with the emoji selector is the colour emoji"
+    );
+    let _ = asked;
 }

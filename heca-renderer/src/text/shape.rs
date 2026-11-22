@@ -71,7 +71,20 @@ pub(super) fn shape(fonts: &mut FontSystem, text: &str, size: f32, face: &Face<'
             .disable(FeatureTag::CONTEXTUAL_LIGATURES);
         attrs = attrs.font_features(features);
     }
-    buffer.set_text(text, &attrs, Shaping::Advanced, None);
+    // A text-by-default emoji (⏺) the face lacks is shaped in a text face that has it, not handed to
+    // the colour emoji face (`presentation.rs`).
+    match super::presentation::pieces(fonts, text, face.family) {
+        None => buffer.set_text(text, &attrs, Shaping::Advanced, None),
+        Some(pieces) => buffer.set_rich_text(
+            pieces.iter().map(|(piece, family)| match family {
+                Some(family) => (*piece, attrs.clone().family(Family::Name(family))),
+                None => (*piece, attrs.clone()),
+            }),
+            &attrs,
+            Shaping::Advanced,
+            None,
+        ),
+    }
     buffer.shape_until_scroll(fonts, false);
     buffer
 }

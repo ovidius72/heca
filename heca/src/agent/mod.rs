@@ -27,6 +27,7 @@ pub fn integrations(
         reporter: ReportingHelper {
             executable: std::env::current_exe()?,
             max_report_bytes: config.max_report_bytes,
+            launched_status: config.launched_status.clone(),
         },
         home: dirs::home_dir().ok_or_else(missing)?,
         directory: heca_config::state_file::data_path("integrations").ok_or_else(missing)?,
@@ -93,5 +94,6 @@ pub(crate) fn options(config: &heca_config::settings::AgentsConfig) -> Option<Ag
         channel_capacity: config.channel_capacity,
         launch_timeout: std::time::Duration::from_millis(config.launch_timeout_ms),
         launcher,
+        launched_status: config.launched_status.clone(),
     })
 }

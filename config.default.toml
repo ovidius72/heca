@@ -339,6 +339,9 @@ enabled = true
 max_report_bytes = 65536
 channel_capacity = 256
 launch_timeout_ms = 5000
+# The status an agent shows the moment it starts, before its own first report. Empty: nothing until
+# the agent reports (OpenCode and Codex report only once a turn starts).
+launched_status = "waiting_input"
 
 [settings.agents.sounds]
 # Feedback volume and queue size. The shared enable switch is settings.notification_sound.

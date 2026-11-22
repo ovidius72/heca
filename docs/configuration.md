@@ -760,7 +760,10 @@ inject native settings, hook definitions or plugin lists. Explicit install/updat
 only operations that change native configuration, preserving unrelated entries.
 The master `[settings.agents] enabled = false` disables all reporting setup. `max_report_bytes` limits each incoming report;
 `channel_capacity` limits queued reports and transitions, keeping the latest when full.
-`launch_timeout_ms` bounds the wait for per-run setup. Codex keeps its normal hook-trust review;
+`launch_timeout_ms` bounds the wait for per-run setup. `launched_status` (default `"waiting_input"`) is
+the status an agent shows the moment it starts, before its own first report — OpenCode and Codex
+report only once a turn starts, so without it their panes show no agent until then; empty waits for
+the agent. Codex keeps its normal hook-trust review;
 review its installed reporting hooks when prompted. Heca never bypasses that review.
 Native policy can disable user hooks, so installed files alone do not prove that reporting is active.
 See the [Claude hooks](https://code.claude.com/docs/en/hooks),

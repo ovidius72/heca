@@ -7,6 +7,7 @@ fn context(directory: &std::path::Path) -> AgentLaunchContext {
         reporter: heca_core::agent::reporting::ReportingHelper {
             executable: std::env::current_exe().unwrap(),
             max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
+            launched_status: String::new(),
         },
         directory: directory.to_owned(),
         cwd: directory.to_owned(),
@@ -217,6 +218,7 @@ fn installed(
             reporter: heca_core::agent::reporting::ReportingHelper {
                 executable: std::env::current_exe().unwrap(),
                 max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
+                launched_status: String::new(),
             },
             home: directory.to_owned(),
             directory: directory.join("heca-data"),

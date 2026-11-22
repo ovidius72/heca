@@ -16,6 +16,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use crate::FlashHandle;
 use crate::component::{Base, Component};
 use crate::prelude::*;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
@@ -29,6 +30,10 @@ pub struct ScrollFacts {
     pub attention_above: usize,
     /// Rows wanting attention scrolled out of sight below.
     pub attention_below: usize,
+    /// The tone the nearest of those above asks in — what a hint flashes with.
+    pub tone_above: Option<Tone>,
+    /// The tone the nearest of those below asks in.
+    pub tone_below: Option<Tone>,
 }
 
 /// Which way a pinned widget asks its region to reveal the nearest row wanting attention.
@@ -47,12 +52,15 @@ pub struct EdgeHint {
     request: Rc<Cell<Option<RevealEdge>>>,
 }
 
-/// One edge's count: the number (what hides the pill at zero) and the words its label shows,
-/// both written where the region's facts arrive.
+/// One edge's count: the number (what hides the pill at zero), the words its label shows, and the
+/// flash it repeats in the tone of the row it stands for — all written where the region's facts
+/// arrive.
 #[derive(Clone, Copy)]
 struct Count {
     n: Signal<usize>,
     text: Signal<String>,
+    tone: Signal<Option<Tone>>,
+    flash: FlashHandle,
 }
 
 impl Count {
@@ -60,13 +68,22 @@ impl Count {
         Self {
             n: signal(0),
             text: signal(String::new()),
+            tone: signal(None),
+            flash: FlashHandle::new(),
         }
     }
 
-    fn set(&self, n: usize) {
+    fn set(&self, n: usize, tone: Option<Tone>) {
         if self.n.get_untracked() != n {
             self.n.set(n);
             self.text.set(n.to_string());
+        }
+        if self.tone.get_untracked() != tone {
+            self.tone.set(tone);
+            match tone {
+                Some(tone) => self.flash.repeat(tone),
+                None => self.flash.clear(),
+            }
         }
     }
 }
@@ -81,6 +98,7 @@ impl EdgeHint {
                 Button::empty()
                     .size(WidgetSize::Small)
                     .icon(glyph)
+                    .flash(count.flash)
                     .child(Label::new("").with_text_signal(count.text))
                     .on_click(move || {
                         request.set(Some(edge));
@@ -131,10 +149,38 @@ impl Component for EdgeHint {
         }
     }
     fn scroll_facts(&mut self, facts: ScrollFacts) {
-        self.above.set(facts.attention_above);
-        self.below.set(facts.attention_below);
+        self.above.set(facts.attention_above, facts.tone_above);
+        self.below.set(facts.attention_below, facts.tone_below);
     }
     fn take_reveal(&mut self) -> Option<RevealEdge> {
         self.request.take()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **A pill flashes in the tone of the row it stands for**, and stops when nothing on its side
+    /// asks any more.
+    #[test]
+    fn a_pill_repeats_the_tone_of_the_nearest_row_and_stops_with_it() {
+        let mut hint = EdgeHint::new();
+        let asking = |count: &Count| {
+            crate::flash::attention(&{
+                let mut base = Base::new();
+                base.flash = Some(count.flash);
+                base
+            })
+        };
+        hint.scroll_facts(ScrollFacts {
+            attention_below: 2,
+            tone_below: Some(Tone::Warning),
+            ..ScrollFacts::default()
+        });
+        assert_eq!(asking(&hint.below), Some(Tone::Warning));
+        assert_eq!(asking(&hint.above), None, "nothing above: no flash");
+        hint.scroll_facts(ScrollFacts::default());
+        assert_eq!(asking(&hint.below), None, "nothing asks any more: it stops");
     }
 }

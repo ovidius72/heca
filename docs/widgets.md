@@ -2678,7 +2678,8 @@ clickable. Described: a child of `scroll` with `slot: "pinned"` — `build::Scro
 #### EdgeHint
 
 **How many rows wanting attention are out of sight**, on the region's edges — a caret up and the
-count at the top, a caret down and the count at the bottom, hidden when there are none. A row wants attention while it has a **repeating
+count at the top, a caret down and the count at the bottom, hidden when there are none. Each pill
+flashes in the tone of the nearest row it stands for, and stops when nothing on its side asks. A row wants attention while it has a **repeating
 flash** (`.flash(handle)` + `handle.repeat(tone)`, or `repeat_for` until it runs out); a finite
 burst does not count, and nothing else is declared. A click on a pill brings the nearest such row on
 that side into view and picks it, as its letter would (focus, then its own click); `prefix+/` letters the pills like any button.

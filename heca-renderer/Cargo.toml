@@ -15,6 +15,9 @@ heca-core = { path = "../heca-core" }
 heca-grid-ui = { path = "../heca-grid-ui" }
 wgpu = { workspace = true }
 cosmic-text = "0.19"
+# Which characters are emoji by default and which are text (`Emoji_Presentation`), so a text-default
+# one such as ⏺ is drawn from a text face, as every terminal draws it — see `text/presentation.rs`.
+unicode-properties = { version = "0.1", default-features = false, features = ["emoji"] }
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]

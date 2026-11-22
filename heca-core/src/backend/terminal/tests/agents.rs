@@ -15,6 +15,7 @@ fn options(enabled: bool) -> AgentOptions {
         channel_capacity: 8,
         launch_timeout: Duration::from_secs(5),
         launcher: std::env::current_exe().unwrap(),
+        launched_status: String::new(),
     }
 }
 
