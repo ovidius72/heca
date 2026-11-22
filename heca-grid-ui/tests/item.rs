@@ -29,13 +29,7 @@ fn item_activates_on_click_when_interactive() {
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
     item.base().focus(true);
-    heca_grid_ui::dispatch(
-        &mut item,
-        &Event::Key {
-            key: GridKey::Space,
-            pressed: true,
-        },
-    );
+    common::press_key(&mut item, heca_grid_ui::GridKey::Space);
     assert_eq!(hits.get(), 2);
 }
 
@@ -231,18 +225,14 @@ fn row_activates_on_click_and_key_when_interactive() {
 
     click_at(&mut row, outside, PointerButton::Left);
     assert_eq!(clicks.get(), 0, "a click outside the row does nothing");
-    // **A raw key reaches the widget that owns the keyboard.** Unfocused, the row does not take
+    // **A key reaches the widget that owns the keyboard.** Unfocused, the row does not take
     // Enter — which is what stopped it eating keys meant for the list it sits in.
-    let enter = Event::Key {
-        key: GridKey::Enter,
-        pressed: true,
-    };
-    heca_grid_ui::dispatch(&mut row, &enter);
+    common::press_key(&mut row, GridKey::Enter);
     assert_eq!(clicks.get(), 0, "an unfocused row ignores Enter");
     click_at(&mut row, center, PointerButton::Left);
     assert_eq!(clicks.get(), 1, "a click inside the row activates it");
     // …and the click gave it the keyboard, as clicking a control does anywhere else.
-    heca_grid_ui::dispatch(&mut row, &enter);
+    common::press_key(&mut row, GridKey::Enter);
     assert_eq!(clicks.get(), 2, "Enter activates the row that was clicked");
 }
 
@@ -357,12 +347,6 @@ fn rail_cell_activates_on_click_and_enter() {
     // would before sending one.
     cell.base().focus(true);
     click_at(&mut cell, center, PointerButton::Left);
-    heca_grid_ui::dispatch(
-        &mut cell,
-        &Event::Key {
-            key: heca_grid_ui::GridKey::Enter,
-            pressed: true,
-        },
-    );
+    common::press_key(&mut cell, heca_grid_ui::GridKey::Enter);
     assert_eq!(clicks.get(), 2, "click + Enter both activate the cell");
 }

@@ -80,17 +80,7 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
         let Some(path) = focus_path(node) else {
             return Handled::No;
         };
-        // **Enter or Space on a control presses it**, as on a browser's button: the framework
-        // delivers a real click to the control that holds the keyboard, so a widget listens to
-        // `on_click` and nothing else, and no widget has an Enter arm to keep in step with its
-        // click. First, before the key travels: a focused Cancel in a dialog is pressed, not the
-        // dialog's primary action.
-        let pressed = presses(ev) && click_at(node, &path) == Handled::Yes;
-        let handled = if pressed {
-            Handled::Yes
-        } else {
-            deliver_to_path(node, &path, ev)
-        };
+        let handled = deliver_to_path(node, &path, ev);
         // Finish focus changes while a closing modal is still mounted. The event
         // keeps its original target; only the next event uses the restored focus.
         crate::focus::settle(node);
@@ -99,16 +89,19 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
     broadcast(node, ev)
 }
 
-/// Whether `ev` is the keyboard's "press this": Enter or Space going down, or the intent a key
-/// resolved to (`WidgetIntent::Activate`).
-fn presses(ev: &Event) -> bool {
-    matches!(
-        ev,
-        Event::Key {
-            key: crate::event::GridKey::Enter | crate::event::GridKey::Space,
-            pressed: true,
-        } | Event::Widget(crate::event::WidgetIntent::Activate)
-    )
+/// Whether `node` is a control a press can use: it listens to clicks and is not disabled.
+fn is_pressable(node: &dyn Component) -> bool {
+    let base = node.base();
+    node.is_control() && base.activatable && !base.disabled.get_untracked()
+}
+
+/// Press `node`: a real click at its centre, through the same rules a mouse click goes through.
+fn press(node: &mut dyn Component) -> Handled {
+    new_click();
+    let b = node.base().bounds;
+    let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let _ = react(node, &Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b)));
+    Handled::Yes
 }
 
 /// **Use the widget as a click would** — the DOM's `el.click()`: a real [`Event::Click`] at its
@@ -201,6 +194,13 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
+    } else if matches!(ev, Event::Widget(crate::event::WidgetIntent::Activate)) && is_pressable(node) {
+        // **`activate` presses the control that holds the keyboard** — a button, a row — the way a
+        // browser's Enter presses a focused `<button>` and not a `<div>`. The keys are the
+        // config's (`[keys.widgets] activate`), never written here; and only the control the
+        // keyboard is on, never one somewhere inside a focused region, so a dock holding the
+        // keyboard leaves `activate` to its own keys.
+        return press(node);
     } else if matches!(ev, Event::Widget(_)) {
         // **An intent enters the focused region.** It is not a key — it is what a key *resolved to*,
         // a capability named out loud (`ScrollPageDown`, `Dismiss`), so it is addressed to the

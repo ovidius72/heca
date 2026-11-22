@@ -921,11 +921,41 @@ a right-click on a row reach a menu instead of dying on the row.
 `stop_propagation()` keeps the event from the containers around it.
 
 **One click path.** No widget has an action of its own: a `Button`, a `Row`, an `Item` do what
-their `.on_click(|ev| ..)` handlers say, and `.on_press(Intent)` is the one-line form — the click
-dispatches the intent and the `prefix+/` letter carries it. Enter or Space on the control holding
-the keyboard is delivered to it as a real click, and a programmatic press is
-`heca_grid_ui::click(root, path)` (the DOM's `el.click()`), so mouse, keyboard, letter and code
-cannot drift apart.
+their `.on_click(|ev| ..)` handlers say. Mouse, keyboard, letter and code reach those same handlers:
+
+- **the mouse** clicks;
+- **the keyboard** presses through the `activate` action: `[keys.widgets] activate` binds it
+  (Enter and Space as shipped — the keys are config, never code), and `activate` presses the
+  **control** that holds the keyboard, the way a browser's Enter presses a focused `<button>` and
+  not a `<div>`. A container that is not a control — the seat round a dock — leaves `activate`
+  alone, so a dock holding the keyboard gets Enter and Space as its own keys
+  (`activate_selected`, `peek_selected` in its `[[keys.surface]]` entry);
+- **a `prefix+/` letter** picks the widget;
+- **code** presses with `heca_grid_ui::click(root, path)`, the DOM's `el.click()`.
+
+#### `on_press(Intent)` — "pressing this does that action"
+
+The one-line form for a control whose press is a named action:
+
+```rust
+Button::new("Restart").on_press(Intent::new("docker.restart").arg("id", id))
+```
+
+It is a click handler that dispatches the intent **and** the widget's `prefix+/` letter carrying
+the same intent, so a picker can hide the letter when the action would be refused. Write it
+instead of `.on_click(move |ev| ev.dispatch(intent.clone()))` plus a separate `.on_hint(..)`.
+
+- **Where the intent goes:** to the listener of the container that holds the widget
+  (`EventExt::on_dispatch`). heca seats each dock and each layer in one, so the intent arrives
+  seated on that dock or surface and judged as a gesture there — the author passes no mount and no
+  emitter.
+- **The keyboard comes free:** Enter and Space press it through `activate` when it holds the
+  keyboard; nothing to declare.
+- **Its own shortcut, if it needs one,** is a key bound to the action's name in a keys file (an
+  extension ships its defaults with `extension(..).defaults(config, keys)`), never a key in code.
+  An action with no default key is still reachable from the palette, a menu and RPC, and the user
+  can bind it.
+- **A description** writes the same with `.on_press(intent)` on its node (`ViewEvent::Press`).
 
 **Every use of a widget follows one set of rules** — a click of any button, a double or triple
 click (`EventKind::uses_widget`):

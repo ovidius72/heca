@@ -178,13 +178,7 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
     btn.base().focus(false);
-    heca_grid_ui::dispatch(
-        &mut btn,
-        &Event::Key {
-            key: heca_grid_ui::GridKey::Enter,
-            pressed: true,
-        },
-    );
+    common::press_key(&mut btn, heca_grid_ui::GridKey::Enter);
     assert_eq!(clicks.get(), 2, "click + Enter both fire on_click");
 }
 

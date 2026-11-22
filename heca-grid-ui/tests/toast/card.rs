@@ -303,13 +303,7 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
     // A raw key reaches only the widget that owns the keyboard — the assertion below already
     // says "focused", so make it so rather than relying on an unfocused widget taking Enter.
     t.base().focus(false);
-    heca_grid_ui::dispatch(
-        &mut t,
-        &Event::Key {
-            key: GridKey::Enter,
-            pressed: true,
-        },
-    );
+    crate::common::press_key(&mut t, heca_grid_ui::GridKey::Enter);
     assert_eq!(
         clicked.get(),
         1,
