@@ -6,6 +6,7 @@
 //! user's own shell through the same start every other shell goes through. A harness is never
 //! started as a new conversation in place of the one it had — including one heca was never told was
 //! a harness, because agent reporting was off where it ran: it is recognised from what was recorded.
+//! A harness that reported but never named a conversation had none, and starts again as it was.
 
 use heca_core::agent::AgentDrivers;
 
@@ -90,6 +91,18 @@ impl SessionRuntime {
     ) {
         let none = AgentDrivers::new();
         let drivers = self.state.agent_drivers().unwrap_or(&none);
+        // **No conversation yet: start it again as it was.** A harness that reported to heca but
+        // never named a conversation never had one (Codex and OpenCode name theirs only once a turn
+        // starts), so starting it again replaces nothing. One that never reported at all
+        // (`inferred`) may have had one heca could not see, and is still never restarted blind.
+        if !inferred
+            && agent.session_id.is_none()
+            && let Some(original) = recorded.launch.clone()
+        {
+            spec.cwd.clone_from(&original.cwd);
+            spec.program = Program::Recorded(original);
+            return;
+        }
         let resumed = recorded
             .launch
             .as_ref()

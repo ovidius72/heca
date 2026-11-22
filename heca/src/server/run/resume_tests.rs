@@ -129,14 +129,6 @@ fn a_harness_with_a_native_id_is_resumed_by_its_driver() {
 fn a_harness_that_cannot_be_resumed_gets_a_shell_and_a_report_never_a_new_conversation() {
     let cases = [
         (
-            "no native session identity",
-            DRIVERS_ON,
-            None,
-            "demo.resuming",
-            "Demo",
-            "never reported its own session identity",
-        ),
-        (
             "a driver that cannot resume",
             DRIVERS_ON,
             Some("native-1"),
@@ -466,4 +458,18 @@ fn a_harness_that_ran_without_reporting_while_it_is_on_is_told_as_such() {
         !body.contains("settings.agents.programs.claude"),
         "it is already on: {body}"
     );
+}
+
+/// **A harness with no conversation yet starts again as it was** — it reported to heca but never
+/// named a conversation (Codex and OpenCode name theirs only once a turn starts), so there is
+/// nothing to replace: it comes back as launched, with no notice.
+#[test]
+fn a_harness_that_never_had_a_conversation_starts_again_as_it_was() {
+    let (mut server, _, agent, _root) = restarted_with(DRIVERS_ON, None, "demo.resuming");
+    let launches = started_in(&agent);
+    assert!(
+        matches!(launches.as_slice(), [Program::Recorded(launch)] if *launch == harness(&agent)),
+        "started again as launched: {launches:?}"
+    );
+    assert!(notices(&mut server, "Work").is_empty(), "nothing to report");
 }
