@@ -74,18 +74,32 @@ pub(crate) fn notify_exited(name: Option<&str>, pane: PaneId, code: Option<i32>)
         .send();
 }
 
+/// A program heca restored as a pane's own program — see [`ServerState::restored_program`].
+struct Restored {
+    cwd: Option<std::path::PathBuf>,
+    grid: (usize, usize),
+    agent: bool,
+}
+
 impl ServerState {
-    /// **The folder and size of `pane`'s terminal, when its own program was an agent** — one heca
-    /// started itself, resumed from a saved session, rather than a command typed in a shell (which
-    /// returns to that shell on its own).
-    fn ended_harness(&self, pane: PaneId) -> Option<(Option<std::path::PathBuf>, (usize, usize))> {
+    /// **What `pane`'s terminal was brought back as, when heca restored its program** — a command
+    /// typed in a shell (`nvim`) or an agent, started as the pane's own program when a saved session
+    /// came back: its folder, its size, and whether it is an agent. Such a program has no shell under
+    /// it to return to when it ends, unlike the one typed before the restart.
+    fn restored_program(&self, pane: PaneId) -> Option<Restored> {
         let id = self.backends.identity_of(pane)?;
         let spec = self.backends.spec_of(id)?;
         let crate::app::backend_store::Program::Recorded(launch) = &spec.program else {
             return None;
         };
-        self.agent_drivers()?.recognize_launch(launch)?;
-        Some((launch.cwd.clone(), spec.grid))
+        Some(Restored {
+            cwd: launch.cwd.clone(),
+            grid: spec.grid,
+            agent: self
+                .agent_drivers()
+                .and_then(|drivers| drivers.recognize_launch(launch))
+                .is_some(),
+        })
     }
 
     pub(super) fn reconcile_processes(
@@ -97,15 +111,26 @@ impl ServerState {
         let names = known_names(session);
         let exits = sync_runtime(session, &mut self.backends);
         for (pane, code) in &exits {
-            if let Some((cwd, grid)) = self.ended_harness(*pane) {
-                // **An agent heca resumed leaves your shell behind**, as quitting one typed at a
-                // prompt does — not an ended pane and a notice about it.
-                self.terminals()
-                    .replace_with_shell(*pane, cwd, grid, asker.cell);
-            } else if exit_should_close(session, *pane, *code) {
-                closing.push(*pane);
-            } else if !closing.contains(pane) {
-                notify_exited(names.get(pane).map(String::as_str), *pane, *code);
+            // **A program heca restored leaves your shell behind** when it ends — as quitting it
+            // did before the restart, when it ran in that shell — not a dead pane and a notice. An
+            // agent always does (Ctrl+C is how one is left); another program first honours the
+            // pane's close policy.
+            let restored = self.restored_program(*pane);
+            let closes = exit_should_close(session, *pane, *code);
+            match restored {
+                Some(restored) if restored.agent || !closes => {
+                    self.terminals().replace_with_shell(
+                        *pane,
+                        restored.cwd,
+                        restored.grid,
+                        asker.cell,
+                    );
+                }
+                _ if closes => closing.push(*pane),
+                _ if !closing.contains(pane) => {
+                    notify_exited(names.get(pane).map(String::as_str), *pane, *code);
+                }
+                _ => {}
             }
         }
         closing.sort_unstable_by_key(|pane| pane.0);
@@ -250,5 +275,60 @@ mod tests {
             Some(folder.as_path()),
             "in the agent's folder"
         );
+    }
+
+    /// **A program heca restored — `nvim`, typed in a shell before the restart — leaves your shell
+    /// behind** when it ends and the pane stays, as quitting it did before; a pane whose close policy
+    /// says so still closes.
+    #[test]
+    fn an_ended_restored_program_leaves_a_shell_unless_its_pane_closes() {
+        for (close, code) in [(false, 0), (true, 0)] {
+            install_notification_sink(|_| {});
+            let mut window = Windowed::with_shape(&[&[&[1]]]);
+            let pane = window.session.workspaces[0]
+                .panes_mut()
+                .find(|p| p.id == PaneId(1))
+                .unwrap();
+            pane.close_policy = PaneClosePolicy {
+                close_pane: close,
+                ..Default::default()
+            };
+            let mut server = ServerState::for_tests(Default::default());
+            let root = tempfile::tempdir().unwrap();
+            let folder = root.path().to_path_buf();
+            let typed = heca_core::backend::ProcessLaunch {
+                executable: "/bin/zsh".into(),
+                arguments: vec!["-l".into(), "-ic".into(), "nvim".into()],
+                cwd: Some(folder.clone()),
+            };
+            let mut fake = FakeBackend::new(20, 6);
+            fake.queue_exit(code);
+            server
+                .backends
+                .ensure(
+                    PaneId(1),
+                    TerminalSpec {
+                        program: Program::Recorded(typed),
+                        cwd: Some(folder.clone()),
+                        grid: (20, 6),
+                    },
+                    |_| Ok(Box::new(fake)),
+                )
+                .unwrap();
+            let asker = Asker::seen_through(window.l(), None, (10.0, 20.0));
+            let (changes, _) = server.reconcile_processes(&mut window.session, Vec::new(), asker);
+            if close {
+                assert!(
+                    changes.contains(&Change::PaneRemoved { pane: PaneId(1) }),
+                    "its policy closes it"
+                );
+                continue;
+            }
+            assert!(changes.is_empty(), "the pane stays: {changes:?}");
+            let id = server.backends.identity_of(PaneId(1)).expect("a terminal");
+            let spec = server.backends.spec_of(id).expect("its spec");
+            assert_eq!(spec.program, Program::Shell, "your shell, in its place");
+            assert_eq!(spec.cwd.as_deref(), Some(folder.as_path()));
+        }
     }
 }
