@@ -58,9 +58,15 @@ builder!(
 );
 
 impl ScrollBar {
-    pub fn content_extent(self, value: f32) -> Self { self.prop("content_extent", value) }
-    pub fn viewport_extent(self, value: f32) -> Self { self.prop("viewport_extent", value) }
-    pub fn offset(self, value: f32) -> Self { self.prop("offset", value) }
+    pub fn content_extent(self, value: f32) -> Self {
+        self.prop("content_extent", value)
+    }
+    pub fn viewport_extent(self, value: f32) -> Self {
+        self.prop("viewport_extent", value)
+    }
+    pub fn offset(self, value: f32) -> Self {
+        self.prop("offset", value)
+    }
 }
 
 builder!(
@@ -146,12 +152,18 @@ impl BadgeButton {
 
 impl Input {
     /// Keep an empty field's placeholder visible while focused (default false).
-    pub fn placeholder_on_focus(self, show: bool) -> Self { self.prop("placeholder_on_focus", show) }
+    pub fn placeholder_on_focus(self, show: bool) -> Self {
+        self.prop("placeholder_on_focus", show)
+    }
 
     /// Wrap and grow up to the configured line limit, then scroll. Enter inserts a newline.
-    pub fn multiline(self, multiline: bool) -> Self { self.prop("multiline", multiline) }
+    pub fn multiline(self, multiline: bool) -> Self {
+        self.prop("multiline", multiline)
+    }
     /// Override the maximum number of visible lines.
-    pub fn max_lines(self, lines: u32) -> Self { self.prop("max_lines", PropValue::Int(i64::from(lines))) }
+    pub fn max_lines(self, lines: u32) -> Self {
+        self.prop("max_lines", PropValue::Int(i64::from(lines)))
+    }
 
     /// The text shown when the field is empty.
     pub fn placeholder(self, text: impl Into<String>) -> Self {
@@ -262,13 +274,23 @@ impl RailCell {
 
 impl Line {
     /// Starting horizontal share (default zero).
-    pub fn start_x(self, share: f32) -> Self { self.prop("start_x", share) }
+    pub fn start_x(self, share: f32) -> Self {
+        self.prop("start_x", share)
+    }
     /// Starting vertical share (default one half).
-    pub fn start_y(self, share: f32) -> Self { self.prop("start_y", share) }
+    pub fn start_y(self, share: f32) -> Self {
+        self.prop("start_y", share)
+    }
     /// Ending horizontal share (default one).
-    pub fn end_x(self, share: f32) -> Self { self.prop("end_x", share) }
+    pub fn end_x(self, share: f32) -> Self {
+        self.prop("end_x", share)
+    }
     /// Ending vertical share (default one half).
-    pub fn end_y(self, share: f32) -> Self { self.prop("end_y", share) }
+    pub fn end_y(self, share: f32) -> Self {
+        self.prop("end_y", share)
+    }
     /// Arrowheads: none (default), start, end or both.
-    pub fn arrows(self, arrows: impl Into<String>) -> Self { self.prop("arrows", PropValue::Text(arrows.into())) }
+    pub fn arrows(self, arrows: impl Into<String>) -> Self {
+        self.prop("arrows", PropValue::Text(arrows.into()))
+    }
 }

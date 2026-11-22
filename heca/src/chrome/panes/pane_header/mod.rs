@@ -46,7 +46,6 @@ impl HeaderEnv {
     }
 }
 
-
 /// **Read what every pane's header depends on**, once a frame. `None` when the info bar is
 /// disabled: no pane gets one.
 ///
@@ -65,7 +64,9 @@ pub(crate) fn pane_header_inputs(
         return None;
     }
     let active_ws = state.layout().active_workspace_idx();
-    let pane_ids: Vec<_> = state.layout().active_workspace()
+    let pane_ids: Vec<_> = state
+        .layout()
+        .active_workspace()
         .map(|workspace| workspace.content().panes().map(|pane| pane.id).collect())
         .unwrap_or_default();
     let mut inputs = std::collections::HashMap::with_capacity(pane_ids.len());

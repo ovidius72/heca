@@ -20,7 +20,13 @@ pub struct InputStyle {
 }
 impl Default for InputStyle {
     fn default() -> Self {
-        Self { width: 240.0, padding: 10.0, caret_width: 1.5,
-            blink_period: 1.0, glow_radius: 12.0, max_lines: 6 }
+        Self {
+            width: 240.0,
+            padding: 10.0,
+            caret_width: 1.5,
+            blink_period: 1.0,
+            glow_radius: 12.0,
+            max_lines: 6,
+        }
     }
 }

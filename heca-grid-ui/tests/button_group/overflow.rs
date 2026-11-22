@@ -15,9 +15,11 @@ fn a_collapsed_group_keeps_the_parent_gap_clear_beside_a_segmented_title() {
         .align("center")
         .child(
             Tag::new("/a/very/long/path")
-                .segment_text("zsh").segment_shrink(false)
+                .segment_text("zsh")
+                .segment_shrink(false)
                 .segment_text("feature/a-long-branch")
-                .segment_text("+8 ~87").segment_shrink(false),
+                .segment_text("+8 ~87")
+                .segment_shrink(false),
         )
         .child(group);
     for font in [15.0, 24.0, 12.0] {
@@ -27,9 +29,18 @@ fn a_collapsed_group_keeps_the_parent_gap_clear_beside_a_segmented_title() {
             let tag = parent.base().children[0].base().bounds;
             let actions = parent.base().children[1].as_ref();
             let gap = parent.base().style.layout.gap.resolve(parent.base().font);
-            for action in actions.base().children.iter().filter(|c| !c.base().style.layout.hidden) {
-                assert!(action.base().bounds.loc.x - (tag.loc.x + tag.size.w) >= f64::from(gap) - 1.0,
-                    "at {width}px the action {:?} consumes the gap after {:?}", action.base().bounds, tag);
+            for action in actions
+                .base()
+                .children
+                .iter()
+                .filter(|c| !c.base().style.layout.hidden)
+            {
+                assert!(
+                    action.base().bounds.loc.x - (tag.loc.x + tag.size.w) >= f64::from(gap) - 1.0,
+                    "at {width}px the action {:?} consumes the gap after {:?}",
+                    action.base().bounds,
+                    tag
+                );
             }
         }
     }
@@ -289,12 +300,21 @@ fn a_menu_row_presses_the_collapsed_button() {
         .size(WidgetSize::Small)
         .child(Button::new("Split").icon(Glyph::Plus))
         .child(Button::new("Zoom").icon(Glyph::FrameCorners))
-        .child(Button::new("Close").icon(Glyph::Minus).on_click(move |_| count.set(count.get() + 1)));
+        .child(
+            Button::new("Close")
+                .icon(Glyph::Minus)
+                .on_click(move |_| count.set(count.get() + 1)),
+        );
     let mut parent = lay(g, 40.0);
 
     // The ⋮ is found by what it says, never by where it sits.
     fn path_to_tip(node: &dyn Component, words: &str, at: &mut Vec<usize>) -> bool {
-        if node.base().tooltip.as_ref().is_some_and(|t| t.text.get_untracked() == words) {
+        if node
+            .base()
+            .tooltip
+            .as_ref()
+            .is_some_and(|t| t.text.get_untracked() == words)
+        {
             return true;
         }
         for (i, child) in node.base().children.iter().enumerate() {
@@ -307,7 +327,10 @@ fn a_menu_row_presses_the_collapsed_button() {
         false
     }
     let mut trigger = Vec::new();
-    assert!(path_to_tip(&parent, "More actions", &mut trigger), "the ⋮ is shown");
+    assert!(
+        path_to_tip(&parent, "More actions", &mut trigger),
+        "the ⋮ is shown"
+    );
 
     let opened: Rc<RefCell<Option<heca_grid_ui::widgets::ContextMenu>>> = Rc::default();
     let sink = opened.clone();
@@ -320,7 +343,11 @@ fn a_menu_row_presses_the_collapsed_button() {
         .position(|item| item.label_text() == Some("Close"))
         .expect("Close did not fit, so it is in the menu");
     items[close].activate();
-    assert_eq!(closed.get(), 0, "the row only says which; the group presses it on its frame");
+    assert_eq!(
+        closed.get(),
+        0,
+        "the row only says which; the group presses it on its frame"
+    );
     parent.tick(0.0);
     assert_eq!(closed.get(), 1, "the collapsed button's own click ran");
 }

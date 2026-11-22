@@ -31,9 +31,18 @@ fn a_narrow_bar_keeps_full_values_for_the_widgets_tooltips() {
     let roomy = segment_items(&chips, &defs, &facts);
     let tight = segment_items(&chips, &defs, &facts);
 
-    assert_eq!(roomy[0].chip.text, "/a/very/long/path/to/some/project/directory");
-    assert_eq!(tight[0].chip.text, roomy[0].chip.text, "shortening belongs to Label, preserving the tooltip");
-    assert_eq!(tight[1].chip.text, roomy[1].chip.text, "the program name is untouched");
+    assert_eq!(
+        roomy[0].chip.text,
+        "/a/very/long/path/to/some/project/directory"
+    );
+    assert_eq!(
+        tight[0].chip.text, roomy[0].chip.text,
+        "shortening belongs to Label, preserving the tooltip"
+    );
+    assert_eq!(
+        tight[1].chip.text, roomy[1].chip.text,
+        "the program name is untouched"
+    );
     assert_eq!(tight.len(), 2);
 }
 
@@ -53,30 +62,48 @@ fn a_bar_is_built_from_what_the_chips_say() {
 
 #[test]
 fn header_segments_keep_full_hover_values_and_theme_colours_when_squeezed() {
-    use heca_grid_ui::{DrawCommand, Flex, Length, builders::{LayoutExt, Parent}};
+    use heca_grid_ui::{
+        DrawCommand, Flex, Length,
+        builders::{LayoutExt, Parent},
+    };
     let chips = super::super::pane_items::PaneChips::default();
-    let defs: Vec<_> = ["location", "app_name", "git_branch"].iter()
-        .map(|name| chips.get(name).unwrap()).collect();
+    let defs: Vec<_> = ["location", "app_name", "git_branch"]
+        .iter()
+        .map(|name| chips.get(name).unwrap())
+        .collect();
     let mut facts = facts_for("/a/very/long/path/to/the/project/directory");
-    facts.git = Some(GitInfo { branch: Some("feature/a-long-branch-name".into()), ..Default::default() });
+    facts.git = Some(GitInfo {
+        branch: Some("feature/a-long-branch-name".into()),
+        ..Default::default()
+    });
     let tag = build_pane_info_bar(segment_items(&chips, &defs, &facts)).unwrap();
     let mut root = Flex::row().width(Length::FULL).child(tag);
     let theme = GuiTheme::default();
     for width in [280.0, 480.0] {
         let scene = crate::chrome::paint_chrome_root(&mut root, width, 100.0, &theme);
-        assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == facts.app_name)),
-            "the short application name should remain readable");
+        assert!(
+            scene
+                .iter()
+                .any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == facts.app_name)),
+            "the short application name should remain readable"
+        );
         let tag = &root.base().children[0];
         // A segment the bar had to cut offers its whole value on hover (its label does that); one
         // that fits offers nothing.
-        for (index, full) in [(0, "/a/very/long/path/to/the/project/directory"), (2, "feature/a-long-branch-name")] {
+        for (index, full) in [
+            (0, "/a/very/long/path/to/the/project/directory"),
+            (2, "feature/a-long-branch-name"),
+        ] {
             if let Some(tip) = tip_text(tag.base().children[index].as_ref()) {
                 assert_eq!(tip, full, "a cut segment offers its whole value");
             }
         }
         if width == 280.0 {
-            assert_eq!(tip_text(tag.base().children[0].as_ref()).as_deref(),
-                Some("/a/very/long/path/to/the/project/directory"), "squeezed, the path is cut and offers itself");
+            assert_eq!(
+                tip_text(tag.base().children[0].as_ref()).as_deref(),
+                Some("/a/very/long/path/to/the/project/directory"),
+                "squeezed, the path is cut and offers itself"
+            );
         }
         for (index, expected) in [(0, theme.colors.accent), (2, theme.colors.warning)] {
             let segment = tag.base().children[index].base().bounds;
@@ -85,20 +112,33 @@ fn header_segments_keep_full_hover_values_and_theme_colours_when_squeezed() {
         }
         for cmd in scene.iter() {
             if let DrawCommand::Text(text) = cmd {
-                assert!(text.rect.loc.x + text.rect.size.w <= f64::from(width) + 1.0, "header text escaped: {text:?}");
+                assert!(
+                    text.rect.loc.x + text.rect.size.w <= f64::from(width) + 1.0,
+                    "header text escaped: {text:?}"
+                );
             }
         }
     }
-    heca_grid_ui::set_text_by_key(&root, &segment_text_key("location"), "/another/complete/path/that/is/also/long");
+    heca_grid_ui::set_text_by_key(
+        &root,
+        &segment_text_key("location"),
+        "/another/complete/path/that/is/also/long",
+    );
     crate::chrome::paint_chrome_root(&mut root, 280.0, 100.0, &theme);
     let tag = &root.base().children[0];
-    assert_eq!(tip_text(tag.base().children[0].as_ref()).as_deref(), Some("/another/complete/path/that/is/also/long"));
+    assert_eq!(
+        tip_text(tag.base().children[0].as_ref()).as_deref(),
+        Some("/another/complete/path/that/is/also/long")
+    );
 }
 
 /// The tooltip text found on a widget or the first of its descendants that has one.
 fn tip_text(w: &dyn heca_grid_ui::Component) -> Option<String> {
     use heca_grid_ui::reactive::SignalGet;
-    w.base().tooltip.as_ref().map(|t| t.text.get_untracked())
+    w.base()
+        .tooltip
+        .as_ref()
+        .map(|t| t.text.get_untracked())
         .or_else(|| w.base().children.iter().find_map(|c| tip_text(c.as_ref())))
 }
 

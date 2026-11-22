@@ -33,7 +33,11 @@ impl Column {
         let pixels = |pane: &Pane| pane.height_share.map(|share| share * room_before);
         let pinned: f64 = self.panes.iter().filter_map(pixels).sum();
         // What the pinned panes may hold and still leave every other pane its floor.
-        let unpinned = self.panes.iter().filter(|p| p.height_share.is_none()).count();
+        let unpinned = self
+            .panes
+            .iter()
+            .filter(|p| p.height_share.is_none())
+            .count();
         let ceiling = available - floor * (unpinned + 1) as f64;
         let scale = match pinned <= ceiling || pinned <= 0.0 {
             true => 1.0,
@@ -43,7 +47,11 @@ impl Column {
         // fit), re-expressed against the room the column has once the new pane is in it.
         for pane in &mut self.panes {
             if let Some(px) = pixels(pane) {
-                let px = if scale < 1.0 { (px * scale).max(floor) } else { px };
+                let px = if scale < 1.0 {
+                    (px * scale).max(floor)
+                } else {
+                    px
+                };
                 pane.height_share = Some(px / available);
             }
         }

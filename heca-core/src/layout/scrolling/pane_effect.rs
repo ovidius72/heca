@@ -35,7 +35,10 @@ impl ScrollingRef<'_> {
     /// not in a column here.
     pub fn pane_slot(&self, id: PaneId) -> Option<Point> {
         let (col, row) = self.space.pane_indices(id)?;
-        Some(Point::new(self.column_x(col), self.pane_y_in_column(col, row)))
+        Some(Point::new(
+            self.column_x(col),
+            self.pane_y_in_column(col, row),
+        ))
     }
 
     /// Every pane's slot, by identity.
@@ -84,7 +87,10 @@ impl ScrollingSpace {
         }
         if count == 1 {
             let (mut column, effect) = self.take_column(col)?;
-            return column.panes.pop().map(|pane| (pane, SpaceEffect::Column(effect)));
+            return column
+                .panes
+                .pop()
+                .map(|pane| (pane, SpaceEffect::Column(effect)));
         }
         let pane = self.columns[col].remove_pane(row)?;
         Some((pane, SpaceEffect::Pane(PaneEffect::Removed { col, row })))
@@ -122,7 +128,10 @@ impl ScrollingSpace {
         let (pane, taken) = self.take_pane_from(col, row)?;
         let at = after_taking(taken, at);
         let column = self.new_column(new_column, pane);
-        Some(vec![taken, SpaceEffect::Column(self.insert_column(at, column))])
+        Some(vec![
+            taken,
+            SpaceEffect::Column(self.insert_column(at, column)),
+        ])
     }
 
     /// Move the pane at row `row` of column `col` one column along `dir`: to the bottom of the
@@ -192,7 +201,12 @@ impl ScrollView {
     /// move is a removal and an insertion). `space` is the content after the change; `before` is
     /// [`ScrollingRef::positions`] taken before it. Which column and pane to follow is not
     /// decided here: that is the window's own choice ([`follow`](Self::follow)).
-    pub fn react_to(&mut self, space: &ScrollingSpace, effects: &[SpaceEffect], before: &Positions) {
+    pub fn react_to(
+        &mut self,
+        space: &ScrollingSpace,
+        effects: &[SpaceEffect],
+        before: &Positions,
+    ) {
         self.initialize(space);
         match effects {
             [SpaceEffect::Column(effect)] => self.react(space, *effect, before),
@@ -218,7 +232,12 @@ impl ScrollView {
 
     /// Several effects at once: keep the active column on the column it was and the view where it
     /// was, then slide every pane that arrived and every column from where it was.
-    fn react_to_move(&mut self, space: &ScrollingSpace, effects: &[SpaceEffect], before: &Positions) {
+    fn react_to_move(
+        &mut self,
+        space: &ScrollingSpace,
+        effects: &[SpaceEffect],
+        before: &Positions,
+    ) {
         let mut arrived = Vec::new();
         // The active column was taken out, so the next one to arrive at its place takes it over.
         let mut active_gone = false;
@@ -242,7 +261,9 @@ impl ScrollView {
                 _ => {}
             }
         }
-        self.active_column = self.active_column.min(space.columns.len().saturating_sub(1));
+        self.active_column = self
+            .active_column
+            .min(space.columns.len().saturating_sub(1));
         // The scroll is measured from the active column, which may now sit somewhere else.
         self.keep_view_in_place(space, before);
         self.slide_panes_from(space, &pane_ids(space, &arrived), before);
@@ -252,19 +273,18 @@ impl ScrollView {
     /// Slide each of `panes` from its slot in `before` to its slot now — from no further than the
     /// layout's [`move_slide_reach`](crate::layout::types::LayoutOptions::move_slide_reach) of the
     /// area away. A pane that was not in a column before, or has not moved, does not slide.
-    fn slide_panes_from(
-        &mut self,
-        space: &ScrollingSpace,
-        panes: &[PaneId],
-        before: &Positions,
-    ) {
+    fn slide_panes_from(&mut self, space: &ScrollingSpace, panes: &[PaneId], before: &Positions) {
         for &id in panes {
-            let (Some(was), Some(now)) = (before.pane(id), space.through(self).pane_slot(id)) else {
+            let (Some(was), Some(now)) = (before.pane(id), space.through(self).pane_slot(id))
+            else {
                 continue;
             };
             let reach = space.options.move_slide_reach;
             let (max_x, max_y) = (self.area.size.w * reach, self.area.size.h * reach);
-            let from = Point::new((was.x - now.x).clamp(-max_x, max_x), (was.y - now.y).clamp(-max_y, max_y));
+            let from = Point::new(
+                (was.x - now.x).clamp(-max_x, max_x),
+                (was.y - now.y).clamp(-max_y, max_y),
+            );
             if from.x.abs() > 0.5 || from.y.abs() > 0.5 {
                 self.motion.slide_pane(id, from, AnimationConfig::default());
             }

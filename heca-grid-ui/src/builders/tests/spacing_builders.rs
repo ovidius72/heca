@@ -199,9 +199,9 @@ fn any_parent_takes_one_child_or_several() {
 /// it with a zero *height* and a comment apologising for the substitution.
 #[test]
 fn a_share_divides_the_whole_box_by_weight_not_just_the_leftover() {
+    use crate::LayoutEngine;
     use crate::style::Length;
     use crate::widgets::{Flex, Label};
-    use crate::{LayoutEngine};
     use heca_core::layout::Size;
 
     // Unequal content is what tells the two apart: one item holds three lines, the other one.
@@ -251,9 +251,9 @@ fn a_share_divides_the_whole_box_by_weight_not_just_the_leftover() {
 /// grid, so a child could not say where it went and five positional numbers said it for them.
 #[test]
 fn a_child_says_where_it_goes_and_a_span_of_all_follows_the_template() {
+    use crate::LayoutEngine;
     use crate::style::{GridCell, Span};
     use crate::widgets::{Grid, Label};
-    use crate::{LayoutEngine};
     use heca_core::layout::Size;
 
     let mut grid: crate::WidgetModel = crate::WidgetModel::new(

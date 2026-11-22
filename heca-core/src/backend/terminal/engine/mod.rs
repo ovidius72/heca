@@ -342,7 +342,6 @@ impl TerminalEngine {
     pub(super) fn focus_changed(&mut self, focused: bool) {
         self.terminal.focus_changed(focused);
     }
-
 }
 
 mod convert;

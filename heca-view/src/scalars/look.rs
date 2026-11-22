@@ -52,13 +52,13 @@ value_set! {
 impl From<ViewVariant> for ViewBadgeVariant {
     fn from(variant: ViewVariant) -> Self {
         match variant {
-            ViewVariant::Primary => Self::Accent, ViewVariant::Secondary => Self::Neutral,
+            ViewVariant::Primary => Self::Accent,
+            ViewVariant::Secondary => Self::Neutral,
             ViewVariant::Ghost | ViewVariant::Outline | ViewVariant::Link => Self::Outline,
             ViewVariant::Destructive => Self::Danger,
         }
     }
 }
-
 
 value_set! {
     /// How serious a message is — mirrors both grid-ui `ToastSeverity` **and** `AlertVariant`, which

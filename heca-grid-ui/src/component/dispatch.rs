@@ -100,7 +100,10 @@ fn press(node: &mut dyn Component) -> Handled {
     new_click();
     let b = node.base().bounds;
     let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    let _ = react(node, &Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b)));
+    let _ = react(
+        node,
+        &Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b)),
+    );
     Handled::Yes
 }
 
@@ -133,8 +136,9 @@ fn click_at(root: &mut dyn Component, path: &[usize]) -> Handled {
 }
 
 fn node_at<'a>(root: &'a dyn Component, path: &[usize]) -> Option<&'a dyn Component> {
-    path.iter()
-        .try_fold(root, |node, step| node.base().children.get(*step).map(AsRef::as_ref))
+    path.iter().try_fold(root, |node, step| {
+        node.base().children.get(*step).map(AsRef::as_ref)
+    })
 }
 
 /// Events that follow keyboard focus rather than the whole tree.
@@ -194,7 +198,9 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
-    } else if matches!(ev, Event::Widget(crate::event::WidgetIntent::Activate)) && is_pressable(node) {
+    } else if matches!(ev, Event::Widget(crate::event::WidgetIntent::Activate))
+        && is_pressable(node)
+    {
         // **`activate` presses the control that holds the keyboard** — a button, a row — the way a
         // browser's Enter presses a focused `<button>` and not a `<div>`. The keys are the
         // config's (`[keys.widgets] activate`), never written here; and only the control the

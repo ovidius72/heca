@@ -17,7 +17,6 @@ pub trait IdentityExt: Component + Sized {
         self
     }
 
-
     /// Name this subtree as an enclosing **scope** — a panel, a dock, a tab group.
     ///
     /// Stamp it on the wrapper around a region and a press anywhere inside it resolves back to that
@@ -28,7 +27,6 @@ pub trait IdentityExt: Component + Sized {
         self.base_mut().scope_key = Some(id.into());
         self
     }
-
 
     /// **Take new props of type `T`** from whoever owns this widget: `f` runs with each value
     /// [`set_props`](crate::component::Component::set_props) hands over, and with the widget's own
@@ -65,4 +63,11 @@ macro_rules! into_key {
     )*};
 }
 
-into_key!(&str, String, &String, std::borrow::Cow<'_, str>, Box<str>, char);
+into_key!(
+    &str,
+    String,
+    &String,
+    std::borrow::Cow<'_, str>,
+    Box<str>,
+    char
+);

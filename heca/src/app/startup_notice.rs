@@ -19,7 +19,9 @@ mod platform {
 
     pub(super) fn alert(title: &str, message: &str) {
         // An alert needs the main thread; heca reaches here on it, after its event loop ended.
-        let Some(mtm) = MainThreadMarker::new() else { return };
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
         // SAFETY: on the main thread (checked above); the alert is built, shown modally and dropped
         // here, with strings it owns.
         unsafe {
@@ -37,10 +39,21 @@ mod platform {
     use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONWARNING, MB_OK, MessageBoxW};
 
     pub(super) fn alert(title: &str, message: &str) {
-        let wide = |text: &str| text.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let wide = |text: &str| {
+            text.encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<u16>>()
+        };
         let (title, message) = (wide(title), wide(message));
         // SAFETY: both strings are NUL-terminated UTF-16 buffers alive for the call; no owner window.
-        unsafe { MessageBoxW(std::ptr::null_mut(), message.as_ptr(), title.as_ptr(), MB_OK | MB_ICONWARNING) };
+        unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                message.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONWARNING,
+            )
+        };
     }
 }
 

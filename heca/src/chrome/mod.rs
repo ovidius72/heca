@@ -32,8 +32,8 @@ pub(crate) use input::emitter::layer_emitter;
 pub use input::emitter::{ChromeIntentEmitter, fires, picks};
 pub(crate) use input::identity::warn_author;
 pub(crate) use input::names::{
-    COLUMN_PICK_SCOPE, DOCK_PICK_SCOPE, PANE_DRAG_KIND, column_key, pane_control_key, pane_id_of_key,
-    pane_key, row_key, row_of_key, slot_key, slot_of_key,
+    COLUMN_PICK_SCOPE, DOCK_PICK_SCOPE, PANE_DRAG_KIND, column_key, pane_control_key,
+    pane_id_of_key, pane_key, row_key, row_of_key, slot_key, slot_of_key,
 };
 
 // ── panes ──
@@ -73,10 +73,11 @@ pub(crate) use surfaces::notifications::{
 pub use surfaces::overlay::OverlayId;
 pub(crate) use surfaces::overlay::{
     ModalAction, ModalResult, ModalSpec, OverlayHost, collect_form as collect_overlay_form,
-    content_covered, open_modal, resolve as resolve_overlay, top_modal,
-    discard_overlays,
+    content_covered, discard_overlays, open_modal, resolve as resolve_overlay, top_modal,
 };
-pub(crate) use surfaces::palette::{MODE_NOTIFICATION, OpenPalette, open_command_palette, open_session_folder};
+pub(crate) use surfaces::palette::{
+    MODE_NOTIFICATION, OpenPalette, open_command_palette, open_session_folder,
+};
 
 // ── window ──
 pub use window::division::ChromeConfig;
@@ -85,9 +86,7 @@ pub(crate) use window::scene::{
     build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints,
 };
 pub(crate) use window::signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
-pub(crate) use window::theme::{
-    SidebarLook, chrome_colors, chrome_gui_theme, chrome_status,
-};
+pub(crate) use window::theme::{SidebarLook, chrome_colors, chrome_gui_theme, chrome_status};
 pub(crate) use window::window_root::{
     CHROME_KEY, new_window_root, place_surface, remove_surface, seat_chrome, surface_node,
     surface_node_mut, surface_slot,
@@ -104,9 +103,9 @@ use heca_core::layout::types::{Point, Rectangle, Size};
 
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
-use heca_core::runtime::ProcessStatus;
 #[cfg(test)]
 use heca_core::runtime::PaneRuntime;
+use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};

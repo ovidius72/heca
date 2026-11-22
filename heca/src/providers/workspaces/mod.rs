@@ -5,22 +5,22 @@
 //! entirely — and it goes with everything it needs. Nothing here names a side, and nothing outside
 //! here should name a workspace, which is why nothing in it is called `Sidebar*`.
 
+mod actions;
+mod agent_line;
 mod column_group;
 mod dock_view;
+mod keys;
+mod menus;
 mod model;
 mod pane_row;
 mod row_lines;
-mod agent_line;
 mod seams;
-mod workspace_frame;
-mod actions;
-mod keys;
-mod menus;
 mod verbs;
-pub(crate) use keys::*;
-pub(crate) use menus::*;
+mod workspace_frame;
 use actions::*;
 use dock_view::build_body;
+pub(crate) use keys::*;
+pub(crate) use menus::*;
 use verbs::{Activate, Fold, RowVerb, Step};
 
 pub(crate) use model::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceRow, WorkspaceTree};
@@ -34,9 +34,7 @@ mod testing;
 use crate::actions::{ActionCategory, ActionMeta};
 use crate::app::interaction::ActionPolicy;
 use crate::args::{ArgKind, ArgSpec};
-use crate::chrome::{
-    ChromeDragItem, ContainerContribution, Contribution, RegionSet,
-};
+use crate::chrome::{ChromeDragItem, ContainerContribution, Contribution, RegionSet};
 use crate::chrome::{Intent, PropMap, PropValue};
 // The menu-entry vocabulary, shared with the host's own pane menu.
 use crate::chrome::DropdownItem;
@@ -73,9 +71,7 @@ impl WorkspacesContainerProvider {
     /// regions("sidebar.right").append(|| Workspaces::new("workspaces.right"));
     /// ```
     pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            id: name.into(),
-        }
+        Self { id: name.into() }
     }
 }
 
@@ -106,7 +102,6 @@ impl Provider for WorkspacesContainerProvider {
     fn supported_regions(&self) -> RegionSet {
         RegionSet::sidebars()
     }
-
 
     fn title(&self) -> &str {
         "Workspaces"

@@ -5,7 +5,9 @@ use super::*;
 /// A two-column space whose first column holds two panes: `[a][c]` over `[b]`.
 fn stacked() -> Seen {
     let mut space = space_with_columns(2);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(99), "b"), false);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(99), "b"), false);
     space
 }
 
@@ -21,9 +23,18 @@ fn overlaps(a: Rectangle, b: Rectangle) -> bool {
 fn an_open_gap_overlaps_no_pane_and_no_column() {
     let space = stacked();
     let cols = space.r().columns_with_positions();
-    for place in space.r().places().into_iter().filter(|p| matches!(p.kind, PlaceKind::Gap(_))) {
+    for place in space
+        .r()
+        .places()
+        .into_iter()
+        .filter(|p| matches!(p.kind, PlaceKind::Gap(_)))
+    {
         for col in &cols {
-            assert!(!overlaps(place.rect, col.rect), "{place:?} over column {:?}", col.rect);
+            assert!(
+                !overlaps(place.rect, col.rect),
+                "{place:?} over column {:?}",
+                col.rect
+            );
         }
     }
 }
@@ -40,13 +51,18 @@ fn places_exist_for_each_gap_and_for_every_border_of_every_column() {
     }
     for (col, rows) in [(0, 3), (1, 2)] {
         for row in 0..rows {
-            assert!(kinds.contains(&PlaceKind::Row { col, row }), "col {col} row {row}");
+            assert!(
+                kinds.contains(&PlaceKind::Row { col, row }),
+                "col {col} row {row}"
+            );
         }
     }
-    assert!(places
-        .iter()
-        .filter(|p| matches!(p.kind, PlaceKind::Row { .. }))
-        .all(|p| p.rect.size.h == 0.0));
+    assert!(
+        places
+            .iter()
+            .filter(|p| matches!(p.kind, PlaceKind::Row { .. }))
+            .all(|p| p.rect.size.h == 0.0)
+    );
 }
 
 /// **The border between two panes is on their shared edge, whatever the gap.**
@@ -70,21 +86,33 @@ fn a_border_sits_between_its_panes() {
 fn reading_the_places_moves_no_column() {
     let space = stacked();
     let closed = space.r().columns_with_positions();
-    let gap = space.r().places().into_iter().find(|p| p.kind == PlaceKind::Gap(1)).map(|p| p.rect);
+    let gap = space
+        .r()
+        .places()
+        .into_iter()
+        .find(|p| p.kind == PlaceKind::Gap(1))
+        .map(|p| p.rect);
     let opened = space.r().columns_with_positions();
     assert_eq!(opened[0].rect, closed[0].rect);
     assert_eq!(opened[1].rect, closed[1].rect);
     let gaps = space.options.gaps;
     assert_eq!(gap.map(|r| r.size.w), Some(0.0));
-    assert_eq!(gap.map(|r| r.loc.x), Some(closed[1].rect.loc.x - gaps / 2.0));
+    assert_eq!(
+        gap.map(|r| r.loc.x),
+        Some(closed[1].rect.loc.x - gaps / 2.0)
+    );
 }
 
 /// A 2 × 2 strip, `[a][c]` over `[b][d]`: columns 1 and 2, panes (1, 11) and (2, 12).
 fn two_by_two(focus: ColumnFocus) -> Seen {
     let mut space = space_with_columns(2);
     space.options.column_focus = focus;
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(11), "b"), false);
-    space.m().add_pane_to_column(1, None, Pane::new(PaneId(12), "d"), false);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(11), "b"), false);
+    space
+        .m()
+        .add_pane_to_column(1, None, Pane::new(PaneId(12), "d"), false);
     space
 }
 
@@ -96,7 +124,10 @@ fn focused_pane(space: &Seen) -> Option<PaneId> {
 /// `last`** — with b remembered as the last used in the left column.
 #[test]
 fn column_focus_row_lands_level_and_last_lands_on_the_remembered_pane() {
-    for (focus, want) in [(ColumnFocus::Last, PaneId(11)), (ColumnFocus::Row, PaneId(1))] {
+    for (focus, want) in [
+        (ColumnFocus::Last, PaneId(11)),
+        (ColumnFocus::Row, PaneId(1)),
+    ] {
         let mut space = two_by_two(focus);
         space.m().focus_pane_in(0, 1); // b was the last used
         space.view.active_column = 1;
@@ -124,15 +155,27 @@ fn column_focus_row_goes_back_level_and_follows_the_larger_overlap() {
     space.view.active_column = 1;
     space.m().focus_pane_in(1, 0);
     assert!(space.m().focus_left());
-    assert_eq!(focused_pane(&space), Some(PaneId(11)), "most of its span is level with b");
+    assert_eq!(
+        focused_pane(&space),
+        Some(PaneId(11)),
+        "most of its span is level with b"
+    );
 }
 
 fn place(space: &Seen, kind: PlaceKind) -> Place {
-    space.r().places().into_iter().find(|p| p.kind == kind).expect("the place is there")
+    space
+        .r()
+        .places()
+        .into_iter()
+        .find(|p| p.kind == kind)
+        .expect("the place is there")
 }
 
 fn holds(zone: Rectangle, x: f64, y: f64) -> bool {
-    x >= zone.loc.x && x <= zone.loc.x + zone.size.w && y >= zone.loc.y && y <= zone.loc.y + zone.size.h
+    x >= zone.loc.x
+        && x <= zone.loc.x + zone.size.w
+        && y >= zone.loc.y
+        && y <= zone.loc.y + zone.size.h
 }
 
 /// **The empty space beside the strip is the place at that end**: a drop right of the last column
@@ -140,13 +183,29 @@ fn holds(zone: Rectangle, x: f64, y: f64) -> bool {
 #[test]
 fn the_space_after_the_last_column_belongs_to_the_last_gap() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.3)), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.3)), true);
     let end = place(&space, PlaceKind::Gap(1));
     let area = space.r().area();
-    let (right, middle) = (area.loc.x + area.size.w - 1.0, area.loc.y + area.size.h / 2.0);
-    assert!(holds(end.zone, right, middle), "{:?} misses the far right", end.zone);
-    assert!(holds(end.zone, end.rect.loc.x, middle), "and holds its own line");
-    assert_eq!(end.line_share(), 0.0, "the line is at the start of the space it takes");
+    let (right, middle) = (
+        area.loc.x + area.size.w - 1.0,
+        area.loc.y + area.size.h / 2.0,
+    );
+    assert!(
+        holds(end.zone, right, middle),
+        "{:?} misses the far right",
+        end.zone
+    );
+    assert!(
+        holds(end.zone, end.rect.loc.x, middle),
+        "and holds its own line"
+    );
+    assert_eq!(
+        end.line_share(),
+        0.0,
+        "the line is at the start of the space it takes"
+    );
 }
 
 /// The top border reaches up to the area's edge and a quarter into the first pane; the bottom one
@@ -158,11 +217,24 @@ fn the_top_and_bottom_borders_reach_the_area_edge_and_into_the_pane() {
     let first = space.r().columns_with_positions()[0].panes[0].slot;
     let top = place(&space, PlaceKind::Row { col: 0, row: 0 });
     let x = first.loc.x + first.size.w / 2.0;
-    assert!(holds(top.zone, x, area.loc.y), "reaches the top of the area");
-    assert!(holds(top.zone, x, first.loc.y + first.size.h * space.options.drop_edge_reach - 1.0));
-    assert!(!holds(top.zone, x, first.loc.y + first.size.h / 2.0), "not half the pane");
+    assert!(
+        holds(top.zone, x, area.loc.y),
+        "reaches the top of the area"
+    );
+    assert!(holds(
+        top.zone,
+        x,
+        first.loc.y + first.size.h * space.options.drop_edge_reach - 1.0
+    ));
+    assert!(
+        !holds(top.zone, x, first.loc.y + first.size.h / 2.0),
+        "not half the pane"
+    );
     let bottom = place(&space, PlaceKind::Row { col: 0, row: 2 });
-    assert!(holds(bottom.zone, x, area.loc.y + area.size.h), "reaches the bottom of the area");
+    assert!(
+        holds(bottom.zone, x, area.loc.y + area.size.h),
+        "reaches the bottom of the area"
+    );
     let between = place(&space, PlaceKind::Row { col: 0, row: 1 });
     assert_eq!(between.zone, between.rect);
 }
@@ -174,7 +246,16 @@ fn a_place_moves_its_line_and_its_drop_area_together() {
     let space = stacked();
     let end = place(&space, PlaceKind::Gap(2));
     let moved = end.moved_by(Point::new(466.0, 90.0));
-    assert_eq!(moved.rect.loc, Point::new(end.rect.loc.x + 466.0, end.rect.loc.y + 90.0));
-    assert_eq!(moved.zone.loc, Point::new(end.zone.loc.x + 466.0, end.zone.loc.y + 90.0));
-    assert_eq!((moved.rect.size, moved.zone.size), (end.rect.size, end.zone.size));
+    assert_eq!(
+        moved.rect.loc,
+        Point::new(end.rect.loc.x + 466.0, end.rect.loc.y + 90.0)
+    );
+    assert_eq!(
+        moved.zone.loc,
+        Point::new(end.zone.loc.x + 466.0, end.zone.loc.y + 90.0)
+    );
+    assert_eq!(
+        (moved.rect.size, moved.zone.size),
+        (end.rect.size, end.zone.size)
+    );
 }

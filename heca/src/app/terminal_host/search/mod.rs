@@ -23,7 +23,10 @@ pub(crate) fn on_search(state: &mut AppState, terminal: TerminalId, search: Sear
         Search::Editing(false) => leave_search_entry(state, terminal),
         Search::Query(query) => run_search(state, terminal, &query),
         Search::Step { forward } => step(state, terminal, forward),
-        Search::Close => { state.client.cancel_search(terminal); leave_search_entry(state, terminal); },
+        Search::Close => {
+            state.client.cancel_search(terminal);
+            leave_search_entry(state, terminal);
+        }
     }
     state.needs_redraw = true;
 }
@@ -92,7 +95,11 @@ fn run_search(state: &mut AppState, terminal: TerminalId, query: &str) {
     state.client.search(terminal, query.into());
 }
 
-pub(crate) fn receive_matches(state: &mut AppState, terminal: TerminalId, matches: Vec<heca_core::backend::SearchMatch>) {
+pub(crate) fn receive_matches(
+    state: &mut AppState,
+    terminal: TerminalId,
+    matches: Vec<heca_core::backend::SearchMatch>,
+) {
     let caret_row = state.selection.cursor_cell().map(|(_, row, _)| row);
     let current = nearest_at_or_above(&matches, caret_row);
     // Handed over once, and the terminal is the one that keeps it.

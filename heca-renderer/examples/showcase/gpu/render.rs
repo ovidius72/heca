@@ -26,8 +26,10 @@ impl GpuState {
         let mut restore_scroll = None;
         let theme_idx = self.ctl.theme_idx.get_untracked();
         if theme_idx != self.current_theme_idx {
-            restore_scroll = Some((self.ui.scroll_offset_x().get_untracked(),
-                self.ui.scroll_offset().get_untracked()));
+            restore_scroll = Some((
+                self.ui.scroll_offset_x().get_untracked(),
+                self.ui.scroll_offset().get_untracked(),
+            ));
             self.current_theme_idx = theme_idx;
             self.theme = load_grid_theme(THEME_NAMES[theme_idx]);
             // Reset control signals to match the new theme's baked-in values.
@@ -113,7 +115,12 @@ impl GpuState {
             // The root ScrollRegion IS the window; the page inside it lays out at
             // natural size and the region scrolls/clips it (the scroll offset
             // survives relayout; the region re-clamps + re-applies it in `on_layout`).
-            layout_page(&mut self.ui, &self.theme, Size::new(w as f64, h as f64), restore_scroll);
+            layout_page(
+                &mut self.ui,
+                &self.theme,
+                Size::new(w as f64, h as f64),
+                restore_scroll,
+            );
             // The overlay layer lays out at the viewport size, independent of the
             // page scroll — a Dialog taffy-centers on the real window (BUG B).
             self.overlays.base_mut().style.layout.width = Length::Px(w);
@@ -170,7 +177,8 @@ impl GpuState {
         self.text.set_damage(damage);
 
         let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
+            wgpu::CurrentSurfaceTexture::Success(f)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
             _ => {
                 self.surface.configure(&self.device, &self.config);
                 return;
@@ -208,14 +216,22 @@ impl GpuState {
             for run in layer.base_runs() {
                 enqueue_scene(&mut self.grid, &mut self.text, &run.draws, glow_alpha_scale);
                 self.grid.render(&self.queue, scene_view, &mut encoder);
-                self.text.render(&self.queue, scene_view, &mut encoder, None);
+                self.text
+                    .render(&self.queue, scene_view, &mut encoder, None);
                 if let Some(heca_grid_ui::HostWork::Image(at)) = run.then {
-                    self.ui_images.draw(heca_renderer::ui_image::ImageFrame {
-                        device: &self.device, queue: &self.queue, encoder: &mut encoder,
-                        target: scene_view, stencil: at.rounded.map(|_| self.compositor.stencil_view()),
-                        viewport: (self.config.width as f32, self.config.height as f32),
-                        scale, damage,
-                    }, &at);
+                    self.ui_images.draw(
+                        heca_renderer::ui_image::ImageFrame {
+                            device: &self.device,
+                            queue: &self.queue,
+                            encoder: &mut encoder,
+                            target: scene_view,
+                            stencil: at.rounded.map(|_| self.compositor.stencil_view()),
+                            viewport: (self.config.width as f32, self.config.height as f32),
+                            scale,
+                            damage,
+                        },
+                        &at,
+                    );
                 }
             }
         }
@@ -243,7 +259,12 @@ impl GpuState {
     }
 }
 
-fn layout_page(ui: &mut ScrollRegion, theme: &Theme, viewport: Size, restore_scroll: Option<(f32, f32)>) {
+fn layout_page(
+    ui: &mut ScrollRegion,
+    theme: &Theme,
+    viewport: Size,
+    restore_scroll: Option<(f32, f32)>,
+) {
     ui.base_mut().style.layout.width = Length::Px(viewport.w as f32);
     ui.base_mut().style.layout.height = Length::Px(viewport.h as f32);
     LayoutEngine::new().theme(theme).compute(ui, viewport);
@@ -263,10 +284,15 @@ mod tests {
     fn rebuilding_the_theme_preserves_the_readers_scroll_position() {
         let mut theme = Theme::default();
         let ctl = ThemeCtl {
-            glow: signal(theme.colors.glow_size), radius: signal(theme.colors.border_radius),
-            border: signal(theme.colors.border_width), font: signal(theme.font_size),
-            intensity: signal(theme.colors.intensity), overlay_frame: signal(theme.colors.overlay_frame),
-            size: signal(WidgetSize::Normal), zoom: signal(ZOOM_DEFAULT), theme_idx: signal(0),
+            glow: signal(theme.colors.glow_size),
+            radius: signal(theme.colors.border_radius),
+            border: signal(theme.colors.border_width),
+            font: signal(theme.font_size),
+            intensity: signal(theme.colors.intensity),
+            overlay_frame: signal(theme.colors.overlay_frame),
+            size: signal(WidgetSize::Normal),
+            zoom: signal(ZOOM_DEFAULT),
+            theme_idx: signal(0),
         };
         let viewport = Size::new(600.0, 700.0);
         let mut built = build_ui(&theme, ctl);
@@ -276,11 +302,15 @@ mod tests {
             theme.font_size += 1.0;
             let mut replacement = build_ui(&theme, ctl);
             layout_page(&mut replacement.ui, &theme, viewport, Some(position));
-            assert_eq!((replacement.ui.scroll_offset_x().get_untracked(),
-                replacement.ui.scroll_offset().get_untracked()), position,
-                "theme rebuilding must not jump to a preselected catalog example");
+            assert_eq!(
+                (
+                    replacement.ui.scroll_offset_x().get_untracked(),
+                    replacement.ui.scroll_offset().get_untracked()
+                ),
+                position,
+                "theme rebuilding must not jump to a preselected catalog example"
+            );
             built = replacement;
         }
     }
 }
-

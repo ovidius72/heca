@@ -1,13 +1,13 @@
 //! The same action registry, operating on server-owned data without an AppState.
 
-use heca_core::layout::Session;
+use super::{ActionCatalog, ActionRegistry};
 use crate::{
     app::interaction::{Domain, InteractionSource, intent_args_as_strings, policy_allows_facts},
     chrome::{Intent, SharedChromeState},
     rpc::RpcError,
     server::{Asker, Change, ServerState},
 };
-use super::{ActionCatalog, ActionRegistry};
+use heca_core::layout::Session;
 
 /// One piece of a server-side call that the registry cannot run itself: the caller owns what runs it.
 pub(crate) enum ServerStep<'a> {
@@ -78,20 +78,37 @@ impl ActionRegistry {
         intent: &Intent,
     ) -> Result<Vec<Change>, RpcError> {
         let in_session = cx.service_ref;
-        let mut gate = crate::server::services::gate(cx.services, cx.call, move |_| Some(in_session));
+        let mut gate =
+            crate::server::services::gate(cx.services, cx.call, move |_| Some(in_session));
         let ran = &mut cx.ran;
-        self.execute_server_with(cx.catalog, cx.confirm, cx.store.clone(), &mut gate, intent, &mut |step| {
-            let changes = match step {
-                ServerStep::Action(action) if ServerState::runs(action.kind()) && !crate::server::sessions::owns(action.kind()) =>
-                    Ok(cx.state.run(cx.session, cx.asker, &action)),
-                ServerStep::Service(intent) =>
-                    cx.services.borrow_mut().run_step(cx.service_ref, cx.call, cx.config, intent).map(|()| Vec::new()),
-                ServerStep::Expanded => Ok(Vec::new()),
-                ServerStep::Action(action) => Err(RpcError::NotRunnable(crate::actions::describe(&action).0)),
-            };
-            *ran += usize::from(changes.is_ok());
-            changes
-        })
+        self.execute_server_with(
+            cx.catalog,
+            cx.confirm,
+            cx.store.clone(),
+            &mut gate,
+            intent,
+            &mut |step| {
+                let changes = match step {
+                    ServerStep::Action(action)
+                        if ServerState::runs(action.kind())
+                            && !crate::server::sessions::owns(action.kind()) =>
+                    {
+                        Ok(cx.state.run(cx.session, cx.asker, &action))
+                    }
+                    ServerStep::Service(intent) => cx
+                        .services
+                        .borrow_mut()
+                        .run_step(cx.service_ref, cx.call, cx.config, intent)
+                        .map(|()| Vec::new()),
+                    ServerStep::Expanded => Ok(Vec::new()),
+                    ServerStep::Action(action) => {
+                        Err(RpcError::NotRunnable(crate::actions::describe(&action).0))
+                    }
+                };
+                *ran += usize::from(changes.is_ok());
+                changes
+            },
+        )
     }
 
     /// The same validation, the same question of who may ask, and the same dynamic-action
@@ -99,18 +116,40 @@ impl ActionRegistry {
     /// it expands into, is put to `gate` before it runs** — the one place a script, a helper, an
     /// integration's request and a chain are all judged.
     pub(crate) fn execute_server_with(
-        &self, catalog: &ActionCatalog, confirm: &heca_config::confirm::ConfirmConfig,
-        store: SharedChromeState, gate: &mut impl ServerGate, intent: &Intent,
+        &self,
+        catalog: &ActionCatalog,
+        confirm: &heca_config::confirm::ConfirmConfig,
+        store: SharedChromeState,
+        gate: &mut impl ServerGate,
+        intent: &Intent,
         run: &mut impl FnMut(ServerStep<'_>) -> Result<Vec<Change>, RpcError>,
     ) -> Result<Vec<Change>, RpcError> {
-        self.execute_chain(&Resolving { catalog, confirm, store }, gate, intent, None, run)
+        self.execute_chain(
+            &Resolving {
+                catalog,
+                confirm,
+                store,
+            },
+            gate,
+            intent,
+            None,
+            run,
+        )
     }
 
     fn execute_chain(
-        &self, resolving: &Resolving<'_>, gate: &mut impl ServerGate, intent: &Intent, parent: Option<&str>,
+        &self,
+        resolving: &Resolving<'_>,
+        gate: &mut impl ServerGate,
+        intent: &Intent,
+        parent: Option<&str>,
         run: &mut impl FnMut(ServerStep<'_>) -> Result<Vec<Change>, RpcError>,
     ) -> Result<Vec<Change>, RpcError> {
-        let Resolving { catalog, confirm, store } = resolving;
+        let Resolving {
+            catalog,
+            confirm,
+            store,
+        } = resolving;
         let name = &intent.action;
         let action = check_server_intent(catalog, confirm, intent, gate.is_external())?;
         gate.permit(intent, parent)?;
@@ -127,7 +166,8 @@ impl ActionRegistry {
         if self.is_service(name) {
             return run(ServerStep::Service(intent));
         }
-        let emitted = self.execute_server_dynamic(name, store.clone(), intent)
+        let emitted = self
+            .execute_server_dynamic(name, store.clone(), intent)
             .ok_or_else(|| RpcError::NotRunnable(name.clone()))?;
         run(ServerStep::Expanded)?;
         let mut changes = Vec::new();
@@ -143,21 +183,35 @@ impl ActionRegistry {
 /// could answer. A call handed in for someone else (`external`) is refused for any action that
 /// declares a confirmation, whatever the user's `[confirm]` settings say. Returns the built-in it resolves to, if it is one.
 fn check_server_intent(
-    catalog: &ActionCatalog, confirm: &heca_config::confirm::ConfirmConfig, intent: &Intent, external: bool,
+    catalog: &ActionCatalog,
+    confirm: &heca_config::confirm::ConfirmConfig,
+    intent: &Intent,
+    external: bool,
 ) -> Result<Option<crate::input::WmAction>, RpcError> {
     let name = &intent.action;
-    let meta = catalog.find(name).ok_or_else(|| RpcError::UnknownCommand(name.clone()))?;
+    let meta = catalog
+        .find(name)
+        .ok_or_else(|| RpcError::UnknownCommand(name.clone()))?;
     let args = intent_args_as_strings(intent);
     let problems = crate::args::check_args(&meta.args, &args);
     if !problems.is_empty() {
         let problems = problems.iter().map(ToString::to_string).collect();
-        return Err(RpcError::WrongArgs { name: name.clone(), problems });
+        return Err(RpcError::WrongArgs {
+            name: name.clone(),
+            problems,
+        });
     }
     let action = crate::input::resolve_action(name, &args);
     if catalog.is_builtin(name) && action.is_none() {
         return Err(RpcError::MissingArgs(name.clone()));
     }
-    if !policy_allows_facts(Domain::Tiled, InteractionSource::Rpc, meta.policy, action.as_ref(), None) {
+    if !policy_allows_facts(
+        Domain::Tiled,
+        InteractionSource::Rpc,
+        meta.policy,
+        action.as_ref(),
+        None,
+    ) {
         return Err(RpcError::Blocked(name.clone()));
     }
     if let Some(spec) = &meta.confirm {
@@ -167,7 +221,8 @@ fn check_server_intent(
         // an integration.
         if external {
             return Err(RpcError::Denied(format!(
-                "'{name}' asks for a confirmation, which a request handed in by a service cannot give")));
+                "'{name}' asks for a confirmation, which a request handed in by a service cannot give"
+            )));
         }
         if spec.forced || confirm.enabled(&spec.config_name, spec.default_enabled) {
             return Err(RpcError::Blocked(name.clone()));

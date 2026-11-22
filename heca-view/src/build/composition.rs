@@ -7,9 +7,19 @@ builder!(/// Lazily keep a native child until its content key changes.
     Keyed => "keyed");
 impl Parent for Keyed {}
 impl Keyed {
-    pub fn content_key(self, key: impl Into<String>) -> Self { self.prop("content_key", key.into()) }
+    pub fn content_key(self, key: impl Into<String>) -> Self {
+        self.prop("content_key", key.into())
+    }
     pub fn texts(self, values: impl IntoIterator<Item = (String, String)>) -> Self {
-        self.prop("texts", PropValue::Map(values.into_iter().map(|(key, value)| (key, value.into())).collect()))
+        self.prop(
+            "texts",
+            PropValue::Map(
+                values
+                    .into_iter()
+                    .map(|(key, value)| (key, value.into()))
+                    .collect(),
+            ),
+        )
     }
 }
 
@@ -21,11 +31,17 @@ impl Parent for Pane {}
 
 impl Pane {
     /// The kind of border, independent of content and headers.
-    pub fn border_style(self, style: ViewFrameStyle) -> Self { self.prop("border_style", style) }
+    pub fn border_style(self, style: ViewFrameStyle) -> Self {
+        self.prop("border_style", style)
+    }
     /// Blur the content behind the pane by this logical radius.
-    pub fn frosted(self, radius: f32) -> Self { self.prop("frosted", radius) }
+    pub fn frosted(self, radius: f32) -> Self {
+        self.prop("frosted", radius)
+    }
     /// Override the frame color with a theme token or literal.
-    pub fn border_color(self, color: &str) -> Self { self.prop("border_color", PropValue::Color(color.into())) }
+    pub fn border_color(self, color: &str) -> Self {
+        self.prop("border_color", PropValue::Color(color.into()))
+    }
 }
 
 /// Wrap content with the native focus-within outline and keyboard-containment behavior.
@@ -38,11 +54,17 @@ impl FocusScope {
         Self(ViewNode::new("focus_scope").child(child))
     }
     /// Override the focus outline color.
-    pub fn color(self, color: &str) -> Self { self.prop("color", PropValue::Color(color.into())) }
+    pub fn color(self, color: &str) -> Self {
+        self.prop("color", PropValue::Color(color.into()))
+    }
     /// Override the outline radius; ordinary style radius uses the same property.
-    pub fn radius(self, radius: f32) -> Self { self.prop("radius", radius) }
+    pub fn radius(self, radius: f32) -> Self {
+        self.prop("radius", radius)
+    }
     /// Keep keyboard focus on the scope rather than controls inside it.
-    pub fn keeps_keyboard(self, keeps: bool) -> Self { self.prop("keeps_keyboard", keeps) }
+    pub fn keeps_keyboard(self, keeps: bool) -> Self {
+        self.prop("keeps_keyboard", keeps)
+    }
 }
 builder_impls!(FocusScope);
 
@@ -54,13 +76,23 @@ impl Parent for ChromeRegion {}
 
 impl ChromeRegion {
     /// A vertical region, the default orientation.
-    pub fn vertical() -> Self { Self::new() }
+    pub fn vertical() -> Self {
+        Self::new()
+    }
     /// A horizontal region.
-    pub fn horizontal() -> Self { Self::new().prop("orientation", ViewOrientation::Horizontal) }
+    pub fn horizontal() -> Self {
+        Self::new().prop("orientation", ViewOrientation::Horizontal)
+    }
     /// Initial display mode.
-    pub fn mode(self, mode: ViewRegionMode) -> Self { self.prop("mode", mode) }
+    pub fn mode(self, mode: ViewRegionMode) -> Self {
+        self.prop("mode", mode)
+    }
     /// Expanded extent along the collapsing axis.
-    pub fn expanded_size(self, extent: f32) -> Self { self.prop("expanded_size", extent) }
+    pub fn expanded_size(self, extent: f32) -> Self {
+        self.prop("expanded_size", extent)
+    }
     /// Collapsed rail extent along the collapsing axis.
-    pub fn rail_size(self, extent: f32) -> Self { self.prop("rail_size", extent) }
+    pub fn rail_size(self, extent: f32) -> Self {
+        self.prop("rail_size", extent)
+    }
 }

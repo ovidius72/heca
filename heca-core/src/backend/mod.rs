@@ -4,9 +4,9 @@
 //! planned future backends and should be added here when implemented.
 
 pub mod fake;
+mod launch;
 pub mod snapshot;
 pub mod terminal;
-mod launch;
 pub use launch::ProcessLaunch;
 
 pub use fake::FakeBackend;
@@ -46,7 +46,9 @@ pub enum PaneType {
 pub enum BackendAlert {
     Bell,
     /// A command or directly launched program finished. Drained once, not a runtime snapshot.
-    ProcessCompleted { exit_code: i32 },
+    ProcessCompleted {
+        exit_code: i32,
+    },
 }
 
 /// A scrollback-search hit: a run of cells matching the query on one stable row.
@@ -195,7 +197,9 @@ pub const DEFAULT_CELL_SIZE: (f32, f32) = (8.4, 14.0);
 /// The layout engine is agnostic to the backend type.
 pub trait PaneBackend: Send {
     /// Original launch inputs, when this backend owns a process.
-    fn process_launch(&self) -> Option<ProcessLaunch> { None }
+    fn process_launch(&self) -> Option<ProcessLaunch> {
+        None
+    }
     /// What kind of pane this is.
     fn pane_type(&self) -> PaneType;
 
@@ -262,7 +266,9 @@ pub trait PaneBackend: Send {
     fn update(&mut self) -> bool;
 
     /// Nearest pending process-side deadline. Idle backends request no polling timer.
-    fn next_wake(&self) -> Option<std::time::Instant> { None }
+    fn next_wake(&self) -> Option<std::time::Instant> {
+        None
+    }
 
     /// Get a terminal-specific snapshot of the currently visible state.
     ///
@@ -278,7 +284,8 @@ pub trait PaneBackend: Send {
 
     /// Capture a client's viewport without changing any other client's scroll position.
     fn terminal_snapshot_at(&self, offset: usize) -> Option<TerminalSnapshot> {
-        self.terminal_snapshot().filter(|snapshot| snapshot.viewport_offset == offset)
+        self.terminal_snapshot()
+            .filter(|snapshot| snapshot.viewport_offset == offset)
     }
 
     /// **A number that changes whenever [`terminal_snapshot`](Self::terminal_snapshot) would**, so
@@ -334,7 +341,10 @@ pub trait PaneBackend: Send {
     }
 
     /// Apply reporting opt-in and drivers to an existing terminal without restarting its process.
-    fn reload_agent_config(&mut self, _options: Option<crate::agent::AgentOptions>) -> Result<(), crate::agent::AgentError> {
+    fn reload_agent_config(
+        &mut self,
+        _options: Option<crate::agent::AgentOptions>,
+    ) -> Result<(), crate::agent::AgentError> {
         Ok(())
     }
 
@@ -434,9 +444,17 @@ pub trait PaneBackend: Send {
     }
 
     /// Search a bounded page of history, keeping the emulator's one search implementation.
-    fn search_stable_range(&self, query: &str, cols: usize, start: isize, end: isize) -> Vec<SearchMatch> {
-        self.search_scrollback(query, cols).into_iter()
-            .filter(|hit| (start..=end).contains(&hit.stable_row)).collect()
+    fn search_stable_range(
+        &self,
+        query: &str,
+        cols: usize,
+        start: isize,
+        end: isize,
+    ) -> Vec<SearchMatch> {
+        self.search_scrollback(query, cols)
+            .into_iter()
+            .filter(|hit| (start..=end).contains(&hit.stable_row))
+            .collect()
     }
 
     /// Whether the hosted application has enabled terminal mouse reporting.

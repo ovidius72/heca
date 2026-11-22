@@ -7,7 +7,7 @@ use crate::app::terminal_host::TerminalMount;
 use crate::app::terminal_render::layers::{
     blit_retained_terminal_layer, queue_terminal_dynamic_overlays,
 };
-use crate::app::terminal_render::{pane_scissor_rect, rect_to_text_box, TerminalRenderState};
+use crate::app::terminal_render::{TerminalRenderState, pane_scissor_rect, rect_to_text_box};
 use crate::app_state::{AppState, InputMode};
 use heca_core::layout::Rectangle;
 use heca_renderer::primitive::PrimitiveRenderer;

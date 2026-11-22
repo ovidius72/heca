@@ -1,9 +1,9 @@
 use super::*;
 
+mod dock_keys;
 mod docks;
 mod regions;
 mod routes;
-mod dock_keys;
 
 /// **The two sidebar toggles keep their letters when you toggle a sidebar**.
 ///
@@ -161,7 +161,9 @@ pub(super) fn region_body(
     let mut host = super::ChromeHost::new(chrome.events());
     host.register(
         super::RegionId::LeftSidebar,
-        Box::new(crate::providers::WorkspacesContainerProvider::new("workspaces")),
+        Box::new(crate::providers::WorkspacesContainerProvider::new(
+            "workspaces",
+        )),
     );
     let emit: super::ChromeIntentEmitter = ChromeIntentEmitter::of(
         crate::app::interaction::InteractionSource::Keyboard,

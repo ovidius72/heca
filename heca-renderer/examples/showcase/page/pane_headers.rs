@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let theme = cx.theme;
 
-
     Flex::row()
         .gap(12.0)
         .align("start")
@@ -19,7 +18,11 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .border(theme.colors.border, theme.colors.border_width)
                 .child(
                     Tag::new("~/projects/heca")
-                        .leading(Icon::new(Glyph::Folder).size(13.0).color(theme.colors.muted))
+                        .leading(
+                            Icon::new(Glyph::Folder)
+                                .size(13.0)
+                                .color(theme.colors.muted),
+                        )
                         .segment(
                             Flex::row()
                                 .align("center")
@@ -112,6 +115,10 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                                 ),
                         ),
                 )
-                .child(Label::new("running").font_size(12.0).color(theme.colors.muted)),
+                .child(
+                    Label::new("running")
+                        .font_size(12.0)
+                        .color(theme.colors.muted),
+                ),
         )
 }

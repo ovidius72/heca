@@ -23,7 +23,11 @@ fn dropped_files_reach_the_widget_under_the_point_and_its_ancestors() {
             }
         }
     };
-    let side = || Flex::empty().width(Length::Px(100.0)).height(Length::Px(50.0));
+    let side = || {
+        Flex::empty()
+            .width(Length::Px(100.0))
+            .height(Length::Px(50.0))
+    };
     let mut root = Flex::row()
         .on(EventKind::FilesDropped, listener("row"))
         .child(side().on(EventKind::FilesDropped, listener("left")))
@@ -33,7 +37,13 @@ fn dropped_files_reach_the_widget_under_the_point_and_its_ancestors() {
     common::give_keyboard(root.base_mut().children[0].as_mut());
     let paths = vec![PathBuf::from("/tmp/a b.txt")];
     let drop_at = |root: &mut Flex, x: f64| {
-        heca_grid_ui::dispatch(root, &Event::FilesDropped { paths: paths.clone(), pos: Point::new(x, 25.0) })
+        heca_grid_ui::dispatch(
+            root,
+            &Event::FilesDropped {
+                paths: paths.clone(),
+                pos: Point::new(x, 25.0),
+            },
+        )
     };
     assert_eq!(drop_at(&mut root, 150.0), Handled::No, "nobody took it");
     assert_eq!(
@@ -43,5 +53,8 @@ fn dropped_files_reach_the_widget_under_the_point_and_its_ancestors() {
     );
     got.borrow_mut().clear();
     drop_at(&mut root, 500.0);
-    assert!(got.borrow().is_empty(), "outside every widget is nobody's drop");
+    assert!(
+        got.borrow().is_empty(),
+        "outside every widget is nobody's drop"
+    );
 }

@@ -92,7 +92,12 @@ impl Feedback {
         if quiet.contains(&exit_code) {
             return;
         }
-        self.raise(pane, heca_core::runtime::ProcessStatus::of_exit(exit_code).as_str().to_owned());
+        self.raise(
+            pane,
+            heca_core::runtime::ProcessStatus::of_exit(exit_code)
+                .as_str()
+                .to_owned(),
+        );
     }
 
     fn raise(&mut self, pane: PaneId, status: String) {
@@ -140,10 +145,17 @@ impl Feedback {
     }
 
     pub(crate) fn claim_sound(&mut self, pane: PaneId, revision: u64) -> bool {
-        if !self.panes.get(&pane).is_some_and(|feedback|
-            feedback.pending() && feedback.feedback_revision == revision)
-            || self.sounded.get(&pane).is_some_and(|played| *played >= revision)
-        { return false }
+        if !self
+            .panes
+            .get(&pane)
+            .is_some_and(|feedback| feedback.pending() && feedback.feedback_revision == revision)
+            || self
+                .sounded
+                .get(&pane)
+                .is_some_and(|played| *played >= revision)
+        {
+            return false;
+        }
         self.sounded.insert(pane, revision);
         true
     }

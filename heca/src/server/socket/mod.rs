@@ -18,8 +18,8 @@ mod listener;
 pub(crate) mod local;
 mod runtime;
 pub(crate) use connect::{Start, connect};
-pub(crate) use runtime::RuntimeListener;
 use local::UnixStream;
+pub(crate) use runtime::RuntimeListener;
 
 /// The owner-only runtime folder the socket lives in: `$XDG_RUNTIME_DIR/heca/` where the platform
 /// has one (Linux), else a per-user temp folder (macOS and Windows have no runtime dir; their temp dir
@@ -49,8 +49,13 @@ fn request(line: &str) -> std::io::Result<String> {
 
 fn request_to(path: &std::path::Path, line: &str) -> std::io::Result<String> {
     let mut stream = UnixStream::connect(path)?;
-    let limits = heca_config::loader::AppConfig::load().config.settings.connection;
-    let timeout = Some(std::time::Duration::from_millis(limits.request_timeout_ms.get()));
+    let limits = heca_config::loader::AppConfig::load()
+        .config
+        .settings
+        .connection;
+    let timeout = Some(std::time::Duration::from_millis(
+        limits.request_timeout_ms.get(),
+    ));
     stream.set_read_timeout(timeout)?;
     stream.set_write_timeout(timeout)?;
     writeln!(stream, "{line}")?;
@@ -65,8 +70,14 @@ fn request_to(path: &std::path::Path, line: &str) -> std::io::Result<String> {
 /// them, because `rpc` is read before the command table (its arguments are a whole action line,
 /// not a fixed list).
 pub(crate) const RPC_COMMANDS: &[(&str, &str)] = &[
-    ("rpc <action> [name=value …]", "Run an action on the running server — any action `--list-actions` prints."),
-    ("rpc --events", "Print the server's events, one per line, until it stops."),
+    (
+        "rpc <action> [name=value …]",
+        "Run an action on the running server — any action `--list-actions` prints.",
+    ),
+    (
+        "rpc --events",
+        "Print the server's events, one per line, until it stops.",
+    ),
 ];
 
 /// **`heca rpc <line>`** — the script door. `Some(output)` when `args` is an `rpc` invocation (the
@@ -129,7 +140,10 @@ pub(crate) fn kill_server() -> String {
     }
 }
 
-fn run_rpc_cli_with(args: &[String], request: impl FnOnce(&str) -> std::io::Result<String>) -> Option<String> {
+fn run_rpc_cli_with(
+    args: &[String],
+    request: impl FnOnce(&str) -> std::io::Result<String>,
+) -> Option<String> {
     let mut it = args.iter();
     if it.next().map(String::as_str) != Some("rpc") {
         return None;
@@ -139,9 +153,10 @@ fn run_rpc_cli_with(args: &[String], request: impl FnOnce(&str) -> std::io::Resu
         Err(error) => return Some(format!("heca rpc: {error}\n")),
     };
     if line.trim().is_empty() {
-        return Some(
-            format!("usage: heca {}\nRun `heca --list-actions` to see every action.\n", RPC_COMMANDS[0].0),
-        );
+        return Some(format!(
+            "usage: heca {}\nRun `heca --list-actions` to see every action.\n",
+            RPC_COMMANDS[0].0
+        ));
     }
     Some(match request(&line) {
         Ok(answer) => answer,
@@ -175,7 +190,10 @@ mod tests {
     fn an_rpc_line_with_no_server_says_so_rather_than_opening_a_window() {
         // No server is listening in a unit test, so the request fails — but it is still *handled*
         // (Some), with a sentence a script can read, never a silent window launch.
-        let out = run_rpc_cli_with(&argv(&["rpc", "split_horizontal"]), |_| Err(std::io::Error::from(std::io::ErrorKind::NotFound))).expect("rpc is handled");
+        let out = run_rpc_cli_with(&argv(&["rpc", "split_horizontal"]), |_| {
+            Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+        })
+        .expect("rpc is handled");
         assert!(out.contains("could not reach a running heca"), "got: {out}");
     }
 
@@ -192,28 +210,52 @@ mod tests {
 
     #[test]
     fn one_argument_is_sent_as_the_whole_line() {
-        assert_eq!(sent_for(&["rpc", r#"say text="ciao mondo""#]), r#"say text="ciao mondo""#);
+        assert_eq!(
+            sent_for(&["rpc", r#"say text="ciao mondo""#]),
+            r#"say text="ciao mondo""#
+        );
         assert_eq!(sent_for(&["rpc", "focus_pane 42"]), "focus_pane 42");
     }
 
     #[test]
     fn several_arguments_are_one_value_each() {
-        assert_eq!(sent_for(&["rpc", "say", "text=ciao mondo", "C:\\my dir\\"]), "say text=\"ciao mondo\" \"C:\\\\my dir\\\\\"");
-        assert_eq!(sent_for(&["rpc", "place_pane", "5", "0", "1", "pane_idx=0"]), "place_pane 5 0 1 pane_idx=0");
-        assert_eq!(sent_for(&["rpc", "act", "--dock", "docker.right"]), "act --dock docker.right");
+        assert_eq!(
+            sent_for(&["rpc", "say", "text=ciao mondo", "C:\\my dir\\"]),
+            "say text=\"ciao mondo\" \"C:\\\\my dir\\\\\""
+        );
+        assert_eq!(
+            sent_for(&["rpc", "place_pane", "5", "0", "1", "pane_idx=0"]),
+            "place_pane 5 0 1 pane_idx=0"
+        );
+        assert_eq!(
+            sent_for(&["rpc", "act", "--dock", "docker.right"]),
+            "act --dock docker.right"
+        );
     }
 
     #[test]
     fn a_line_break_or_nul_in_an_argument_is_refused_before_sending() {
-        for words in [&["rpc", "say\nx"][..], &["rpc", "say", "a\nb"], &["rpc", "say", "k=a\r"], &["rpc", "say", "\0"]] {
+        for words in [
+            &["rpc", "say\nx"][..],
+            &["rpc", "say", "a\nb"],
+            &["rpc", "say", "k=a\r"],
+            &["rpc", "say", "\0"],
+        ] {
             let out = sent_for(words);
-            assert!(out.starts_with("heca rpc: ") && out.contains("not allowed"), "got: {out}");
+            assert!(
+                out.starts_with("heca rpc: ") && out.contains("not allowed"),
+                "got: {out}"
+            );
         }
     }
 
     #[test]
     fn the_socket_lives_in_a_runtime_folder_named_heca() {
         let path = socket_path().expect("a runtime folder on this platform");
-        assert!(path.ends_with("heca/default.sock"), "got: {}", path.display());
+        assert!(
+            path.ends_with("heca/default.sock"),
+            "got: {}",
+            path.display()
+        );
     }
 }

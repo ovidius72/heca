@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let theme = cx.theme;
 
-
     const PER_ROW: usize = 8;
     // One labelled cell per glyph: the icon over its `Glyph` enum name (via Debug,
     // so no extra method). Fixed-width cells make the rows line up as a grid.

@@ -126,7 +126,9 @@ impl Parent for Resizable {}
 
 impl Resizable {
     /// Replace the default diagonal corner strokes with a glyph. Size and colors follow the theme.
-    pub fn grip(self, glyph: crate::ViewGlyph) -> Self { self.prop("grip", glyph) }
+    pub fn grip(self, glyph: crate::ViewGlyph) -> Self {
+        self.prop("grip", glyph)
+    }
 }
 impl Parent for Card {}
 impl Parent for Scroll {}
@@ -358,20 +360,28 @@ impl Overlay {
 }
 
 impl CardGrid {
-    pub fn selected(self, key: impl Into<String>) -> Self { self.prop("selected", key.into()) }
+    pub fn selected(self, key: impl Into<String>) -> Self {
+        self.prop("selected", key.into())
+    }
 }
 
 impl MessageList {
     /// Bound the viewport to this many text lines, instead of a height from its parent.
-    pub fn visible_lines(self, lines: u32) -> Self { self.prop("visible_lines", PropValue::Int(i64::from(lines))) }
+    pub fn visible_lines(self, lines: u32) -> Self {
+        self.prop("visible_lines", PropValue::Int(i64::from(lines)))
+    }
 
     /// Append a wrapped plain-text entry. Other entries are ordinary children.
-    pub fn message(self, text: impl Into<String>) -> Self { self.prop("message", PropValue::Text(text.into())) }
+    pub fn message(self, text: impl Into<String>) -> Self {
+        self.prop("message", PropValue::Text(text.into()))
+    }
 }
 
 impl Scroll {
     /// Follow appended content only while the reader is at the bottom (default false).
-    pub fn follow_bottom(self, follow: bool) -> Self { self.prop("follow_bottom", follow) }
+    pub fn follow_bottom(self, follow: bool) -> Self {
+        self.prop("follow_bottom", follow)
+    }
 
     /// Which way it scrolls.
     pub fn axes(self, axes: ViewScrollAxes) -> Self {

@@ -17,5 +17,8 @@ fn a_socket_file_nobody_listens_on_is_refused() {
     let path = folder.path().join("stale.sock");
     drop(UnixListener::bind(&path).unwrap());
     let kind = UnixStream::connect(&path).unwrap_err().kind();
-    assert!(matches!(kind, ErrorKind::NotFound | ErrorKind::ConnectionRefused), "{kind:?}");
+    assert!(
+        matches!(kind, ErrorKind::NotFound | ErrorKind::ConnectionRefused),
+        "{kind:?}"
+    );
 }

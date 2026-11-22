@@ -21,10 +21,20 @@ fn background(row: Row) -> Option<(heca_grid_ui::Color, f32)> {
 fn each_variant_paints_its_theme_look_and_plain_paints_none() {
     let theme = Theme::default();
     let label = || Label::new("zsh");
-    assert_eq!(background(Row::new().child(label())), None, "Plain: no background at rest");
+    assert_eq!(
+        background(Row::new().child(label())),
+        None,
+        "Plain: no background at rest"
+    );
     assert_eq!(
         background(Row::new().variant(RowVariant::Tinted).child(label())),
-        Some((theme.colors.foreground.with_alpha_f32(theme.colors.card_background_alpha), theme.colors.control_radius())),
+        Some((
+            theme
+                .colors
+                .foreground
+                .with_alpha_f32(theme.colors.card_background_alpha),
+            theme.colors.control_radius()
+        )),
     );
     assert_eq!(
         background(Row::new().variant(RowVariant::Filled).child(label())),
@@ -35,9 +45,19 @@ fn each_variant_paints_its_theme_look_and_plain_paints_none() {
 #[test]
 fn a_hand_set_background_or_radius_wins_over_the_variant() {
     let theme = Theme::default();
-    let painted = background(Row::new().variant(RowVariant::Tinted).background(theme.colors.danger).child(Label::new("x")));
+    let painted = background(
+        Row::new()
+            .variant(RowVariant::Tinted)
+            .background(theme.colors.danger)
+            .child(Label::new("x")),
+    );
     assert_eq!(painted.map(|(fill, _)| fill), Some(theme.colors.danger));
-    let painted = background(Row::new().variant(RowVariant::Filled).radius(1.0).child(Label::new("x")));
+    let painted = background(
+        Row::new()
+            .variant(RowVariant::Filled)
+            .radius(1.0)
+            .child(Label::new("x")),
+    );
     assert_eq!(painted.map(|(_, radius)| radius), Some(1.0));
 }
 
@@ -49,9 +69,25 @@ fn a_variant_brings_its_air_and_a_later_padding_wins() {
         root.base().children[0].base().bounds.size.w
     };
     let plain = width(Row::new().child(Label::new("zsh")));
-    let tinted = width(Row::new().variant(RowVariant::Tinted).child(Label::new("zsh")));
-    let filled = width(Row::new().variant(RowVariant::Filled).child(Label::new("zsh")));
-    assert!(tinted > filled && filled > plain, "Sm air > Xs air > none: {tinted} {filled} {plain}");
-    let overridden = width(Row::new().variant(RowVariant::Tinted).padding(Spacing::Xs).child(Label::new("zsh")));
+    let tinted = width(
+        Row::new()
+            .variant(RowVariant::Tinted)
+            .child(Label::new("zsh")),
+    );
+    let filled = width(
+        Row::new()
+            .variant(RowVariant::Filled)
+            .child(Label::new("zsh")),
+    );
+    assert!(
+        tinted > filled && filled > plain,
+        "Sm air > Xs air > none: {tinted} {filled} {plain}"
+    );
+    let overridden = width(
+        Row::new()
+            .variant(RowVariant::Tinted)
+            .padding(Spacing::Xs)
+            .child(Label::new("zsh")),
+    );
     assert_eq!(overridden, filled, "a padding set after the variant wins");
 }

@@ -55,7 +55,13 @@ pub(crate) struct WindowInfo {
 /// folder and the window's ordinal). The first window on an instance (ordinal 1) carries no suffix;
 /// every later one gets the numbered form. Both strings come from `[settings.session_text]`, so the
 /// suffix is never hardcoded. `folder` is already shown home-relative by the caller.
-pub(crate) fn window_title(app: &str, folder: &str, ordinal: u64, base: &str, numbered: &str) -> String {
+pub(crate) fn window_title(
+    app: &str,
+    folder: &str,
+    ordinal: u64,
+    base: &str,
+    numbered: &str,
+) -> String {
     let format = if ordinal <= 1 { base } else { numbered };
     format
         .replace("{app}", app)
@@ -125,7 +131,9 @@ pub(crate) fn owns(kind: crate::input::WmActionKind) -> bool {
     use crate::input::WmActionKind as K;
     matches!(
         kind,
-        K::ListSessions | K::KillServer | K::CreateSession
+        K::ListSessions
+            | K::KillServer
+            | K::CreateSession
             | K::RenameSessionTo
             | K::TerminateSession
             | K::RestartSession
@@ -201,8 +209,17 @@ mod tests {
     fn the_first_window_has_no_number_and_later_ones_do() {
         let base = "{app} - {folder}";
         let numbered = "{app} - {folder} - #{number}";
-        assert_eq!(window_title("Heca Pro", "~/projects/heca", 1, base, numbered), "Heca Pro - ~/projects/heca");
-        assert_eq!(window_title("Heca Pro", "~/projects/heca", 2, base, numbered), "Heca Pro - ~/projects/heca - #2");
-        assert_eq!(window_title("heca", "~/projects/heca", 5, base, numbered), "heca - ~/projects/heca - #5");
+        assert_eq!(
+            window_title("Heca Pro", "~/projects/heca", 1, base, numbered),
+            "Heca Pro - ~/projects/heca"
+        );
+        assert_eq!(
+            window_title("Heca Pro", "~/projects/heca", 2, base, numbered),
+            "Heca Pro - ~/projects/heca - #2"
+        );
+        assert_eq!(
+            window_title("heca", "~/projects/heca", 5, base, numbered),
+            "heca - ~/projects/heca - #5"
+        );
     }
 }

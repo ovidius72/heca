@@ -159,7 +159,10 @@ impl Controls {
         // Out of the flow, with every edge left to the container: it lands where a lone child
         // would, which for a row that ends at the right is the right edge, at the top.
         let badge = badge.at_rect(Length::Auto, Length::Auto, Length::Auto, Length::Auto);
-        let layers: [heca_grid_ui::WidgetModel; 2] = [heca_grid_ui::WidgetModel::new(bar), heca_grid_ui::WidgetModel::new(badge)];
+        let layers: [heca_grid_ui::WidgetModel; 2] = [
+            heca_grid_ui::WidgetModel::new(bar),
+            heca_grid_ui::WidgetModel::new(badge),
+        ];
         (controls, layers)
     }
 

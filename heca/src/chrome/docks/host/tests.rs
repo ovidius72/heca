@@ -112,16 +112,14 @@ fn ids(host: &ChromeHost, region: RegionId) -> Vec<String> {
 fn register_seats_in_the_order_registered() {
     let mut h = host();
     // The list is the order things were added in; nothing on the provider reorders it.
-    seat(&mut h, TestProvider::new(
-        "b",
-        RegionSet::sidebars(),
-        RegionId::LeftSidebar,
-    ));
-    seat(&mut h, TestProvider::new(
-        "a",
-        RegionSet::sidebars(),
-        RegionId::LeftSidebar,
-    ));
+    seat(
+        &mut h,
+        TestProvider::new("b", RegionSet::sidebars(), RegionId::LeftSidebar),
+    );
+    seat(
+        &mut h,
+        TestProvider::new("a", RegionSet::sidebars(), RegionId::LeftSidebar),
+    );
     assert_eq!(ids(&h, RegionId::LeftSidebar), ["b", "a"]);
     assert_eq!(h.placement("a"), Some(RegionId::LeftSidebar));
     assert!(h.contributions(RegionId::RightSidebar).is_empty());
@@ -144,11 +142,10 @@ fn move_to_supported_region_succeeds_and_emits() {
             }
         });
 
-    seat(&mut h, TestProvider::new(
-        "ws",
-        RegionSet::sidebars(),
-        RegionId::LeftSidebar,
-    ));
+    seat(
+        &mut h,
+        TestProvider::new("ws", RegionSet::sidebars(), RegionId::LeftSidebar),
+    );
     h.move_container("ws", RegionId::RightSidebar).unwrap();
 
     assert!(h.contributions(RegionId::LeftSidebar).is_empty());
@@ -163,11 +160,14 @@ fn move_to_supported_region_succeeds_and_emits() {
 #[test]
 fn move_to_unsupported_region_is_rejected() {
     let mut h = host();
-    seat(&mut h, TestProvider::new(
-        "ws",
-        RegionSet::of(&[RegionId::LeftSidebar]), // left only
-        RegionId::LeftSidebar,
-    ));
+    seat(
+        &mut h,
+        TestProvider::new(
+            "ws",
+            RegionSet::of(&[RegionId::LeftSidebar]), // left only
+            RegionId::LeftSidebar,
+        ),
+    );
     assert_eq!(
         h.move_container("ws", RegionId::BottomBar),
         Err(MoveError::UnsupportedRegion)
@@ -189,11 +189,10 @@ fn move_unknown_container_errors() {
 fn reorder_moves_before_target() {
     let mut h = host();
     for id in ["a", "b", "c"] {
-        seat(&mut h, TestProvider::new(
-            id,
-            RegionSet::sidebars(),
-            RegionId::LeftSidebar,
-        ));
+        seat(
+            &mut h,
+            TestProvider::new(id, RegionSet::sidebars(), RegionId::LeftSidebar),
+        );
     }
     assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "b", "c"]);
     // Move "c" before "a".
@@ -213,11 +212,10 @@ fn reorder_moves_before_target() {
 fn reorder_moves_after_target() {
     let mut h = host();
     for id in ["a", "b", "c"] {
-        seat(&mut h, TestProvider::new(
-            id,
-            RegionSet::sidebars(),
-            RegionId::LeftSidebar,
-        ));
+        seat(
+            &mut h,
+            TestProvider::new(id, RegionSet::sidebars(), RegionId::LeftSidebar),
+        );
     }
     assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "b", "c"]);
     // Move "a" after "b" → it lands before "c".

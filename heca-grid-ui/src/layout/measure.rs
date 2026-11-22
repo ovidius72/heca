@@ -32,12 +32,22 @@ pub(super) fn measure_content(
                 Dimension::Auto => None,
                 _ => definite(space),
             };
-            let width = known.width.or_else(|| authored(style.size.width, available.width));
-            let height = known.height.or_else(|| authored(style.size.height, available.height));
-            let width = width.or_else(|| height.map(|h| h * *ratio)).unwrap_or_else(|| {
-                definite(available.width).map_or(size.w as f32, |available| (size.w as f32).min(available))
-            });
-            return taffy::Size { width, height: height.unwrap_or(width / *ratio) };
+            let width = known
+                .width
+                .or_else(|| authored(style.size.width, available.width));
+            let height = known
+                .height
+                .or_else(|| authored(style.size.height, available.height));
+            let width = width
+                .or_else(|| height.map(|h| h * *ratio))
+                .unwrap_or_else(|| {
+                    definite(available.width)
+                        .map_or(size.w as f32, |available| (size.w as f32).min(available))
+                });
+            return taffy::Size {
+                width,
+                height: height.unwrap_or(width / *ratio),
+            };
         }
         Measure::Text(text) => text,
     };
@@ -46,8 +56,14 @@ pub(super) fn measure_content(
     let line = ctx.line;
     // One line, uncut — what the label would ask for if nothing constrained it.
     let natural_chars = if ctx.preserve_whitespace {
-        ctx.text.split('\n').map(|line| line.chars().count()).max().unwrap_or(0)
-    } else { ctx.text.chars().count() };
+        ctx.text
+            .split('\n')
+            .map(|line| line.chars().count())
+            .max()
+            .unwrap_or(0)
+    } else {
+        ctx.text.chars().count()
+    };
     let natural = natural_chars as f64 * cell;
     let width = match (known.width, available.width) {
         // The engine already resolved a width: wrap into exactly that.
@@ -84,7 +100,11 @@ pub(super) fn measure_content(
     let lines = if ctx.wrap {
         if ctx.preserve_whitespace {
             crate::font::wrap_preserved(&ctx.text, mono_cells(width, cell), ctx.max_lines).len()
-        } else { wrap_lines(&ctx.text, mono_cells(width, cell), ctx.max_lines).len().max(1) }
+        } else {
+            wrap_lines(&ctx.text, mono_cells(width, cell), ctx.max_lines)
+                .len()
+                .max(1)
+        }
     } else {
         1
     };

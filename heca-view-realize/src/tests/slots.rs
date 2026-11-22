@@ -2,8 +2,8 @@
 
 use heca_view::WidgetId;
 
-use crate::vocab::severity_prop;
 use super::*;
+use crate::vocab::severity_prop;
 
 // ── Named child slots ──
 
@@ -29,7 +29,8 @@ fn dock_frame_routes_its_header_actions_slot_and_defaults_the_rest_to_the_body()
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     // The widget's own shape: children[0] = header row [toggle, CONTROLS], children[1] = body.
     let header_actions = &dock.base().children[0].base().children[1];
     assert_eq!(
@@ -48,23 +49,41 @@ fn dock_frame_routes_its_header_actions_slot_and_defaults_the_rest_to_the_body()
 fn legacy_dock_header_slots_match_the_native_named_area_layout() {
     use heca_grid_ui::{Badge, DockFrame, Item, LayoutEngine, Parent, Size};
 
-    let node = ViewNode::new(WidgetId::DockFrame).text("EXPLORER")
+    let node = ViewNode::new(WidgetId::DockFrame)
+        .text("EXPLORER")
         .prop("frameless", PropValue::Bool(true))
-        .child(ViewNode::new(WidgetId::Badge).text("3")
-            .prop("slot", PropValue::Text("header_actions".into())))
+        .child(
+            ViewNode::new(WidgetId::Badge)
+                .text("3")
+                .prop("slot", PropValue::Text("header_actions".into())),
+        )
         .child(ViewNode::new(WidgetId::Item).text("src"))
         .child(ViewNode::new(WidgetId::Item).text("tests"));
-    let mut described = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
+    let mut described = realize(
+        &node,
+        &Theme::default(),
+        &noop_emitter(),
+        &mut FormBindings::default(),
+    )
+    .expect("valid described test widget");
     let mut native = Parent::child(
-        DockFrame::new("EXPLORER").frameless(true).header_actions(Badge::new("3")),
+        DockFrame::new("EXPLORER")
+            .frameless(true)
+            .header_actions(Badge::new("3")),
         [Item::new("src"), Item::new("tests")],
     );
     for size in [Size::new(180.0, 220.0), Size::new(700.0, 500.0)] {
         LayoutEngine::new().compute(&mut native, size);
         LayoutEngine::new().compute(described.as_mut(), size);
         for name in ["header", "header_actions", "body", "toggle"] {
-            let a = heca_grid_ui::component::area(&native, name).unwrap().base().bounds;
-            let b = heca_grid_ui::component::area(described.as_ref(), name).unwrap().base().bounds;
+            let a = heca_grid_ui::component::area(&native, name)
+                .unwrap()
+                .base()
+                .bounds;
+            let b = heca_grid_ui::component::area(described.as_ref(), name)
+                .unwrap()
+                .base()
+                .bounds;
             assert_eq!(a, b, "wire slot and native composition agree for {name}");
         }
     }
@@ -91,7 +110,8 @@ fn tile_routes_each_part_by_its_slot_and_the_rest_become_lines() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let parts = &w.base().children;
     assert_eq!(parts.len(), 3, "the head and two lines");
     assert_eq!(parts[1].text_summary().as_deref(), Some("line one"));
@@ -116,10 +136,7 @@ fn tile_routes_each_part_by_its_slot_and_the_rest_become_lines() {
 fn item_routes_leading_and_trailing_slots_and_ignores_the_rest() {
     let node = ViewNode::new(WidgetId::Item)
         .text("main.rs")
-        .child(
-            ViewNode::new(WidgetId::StatusDot)
-                .prop("slot", PropValue::Text("leading".into())),
-        )
+        .child(ViewNode::new(WidgetId::StatusDot).prop("slot", PropValue::Text("leading".into())))
         .child(
             ViewNode::new(WidgetId::Badge)
                 .text("M")
@@ -137,7 +154,8 @@ fn item_routes_leading_and_trailing_slots_and_ignores_the_rest() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     // The widget's own shape: [LEADING, LABEL, TRAILING].
     let slots = &item.base().children;
     assert_eq!(
@@ -182,7 +200,8 @@ fn toast_node_realizes_its_props_and_three_intents() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(toast.base().children.len(), 3, "icon, text column, dismiss");
 
     // An unknown severity degrades to the widget's default rather than erroring.
@@ -234,7 +253,8 @@ fn a_described_toast_takes_a_body_and_several_actions() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let column = toast_column(toast.as_ref());
     assert_eq!(
         column[1].text_summary().as_deref(),
@@ -253,7 +273,8 @@ fn a_described_toast_takes_a_body_and_several_actions() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         heca_grid_ui::LayoutEngine::new()
             .base_font(14.0)
             .compute(a.as_mut(), heca_core::layout::Size::new(200.0, 60.0));
@@ -297,7 +318,8 @@ fn a_described_toasts_children_win_over_its_text_props() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let column = toast_column(toast.as_ref());
     assert_eq!(
         column[1].text_summary().as_deref(),
@@ -327,7 +349,8 @@ fn a_described_toasts_unknown_slot_falls_back_to_the_body() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         toast_column(toast.as_ref())[1].text_summary().as_deref(),
         Some("typo"),

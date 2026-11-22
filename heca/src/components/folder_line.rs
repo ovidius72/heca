@@ -136,7 +136,9 @@ impl Component for FolderLine {
         if self.base.children.is_empty() {
             let line = self.line();
             heca_grid_ui::component::wrap_transparently(&mut self.base, &line);
-            self.base.children.push(heca_grid_ui::WidgetModel::new(line));
+            self.base
+                .children
+                .push(heca_grid_ui::WidgetModel::new(line));
         }
         self.show(!self.path.get_untracked().is_empty());
     }
@@ -175,13 +177,17 @@ mod tests {
     }
 
     fn lay_out(root: &mut dyn Component) {
-        LayoutEngine::new().base_font(15.0).compute(root, heca_grid_ui::Size::new(400.0, 200.0));
+        LayoutEngine::new()
+            .base_font(15.0)
+            .compute(root, heca_grid_ui::Size::new(400.0, 200.0));
     }
 
     /// **Metadata is smaller than the name above it** — measured, not assumed.
     #[test]
     fn the_line_is_smaller_than_the_name_it_sits_under() {
-        let mut column = Flex::column().child(Label::new("name")).child(line("~/projects/heca"));
+        let mut column = Flex::column()
+            .child(Label::new("name"))
+            .child(line("~/projects/heca"));
         lay_out(&mut column);
         let name = column.base().children[0].base().font;
         let row = &column.base().children[1].base().children[0];
@@ -197,7 +203,11 @@ mod tests {
         let mut widget = line("~/projects/heca");
         lay_out(&mut widget);
         assert!(widget.shown);
-        assert_eq!(widget.base().children[0].base().children.len(), 2, "a glyph and a path");
+        assert_eq!(
+            widget.base().children[0].base().children.len(),
+            2,
+            "a glyph and a path"
+        );
     }
 
     /// **A cut path offers the whole path on hover, and follows a `cd`**; a path that fits offers
@@ -208,7 +218,9 @@ mod tests {
             let widget = line("~/projects/a/long/folder");
             let path = widget.path_signal();
             let mut root = Flex::column().width(width).child(widget);
-            LayoutEngine::new().base_font(15.0).compute(&mut root, heca_grid_ui::Size::new(f64::from(width), 200.0));
+            LayoutEngine::new()
+                .base_font(15.0)
+                .compute(&mut root, heca_grid_ui::Size::new(f64::from(width), 200.0));
             let label = &root.base().children[0].base().children[0].base().children[1];
             (label.base().tooltip.as_ref().map(|tip| tip.text), path)
         };
@@ -216,8 +228,15 @@ mod tests {
         let tip = tip.expect("cut, the path offers itself whole");
         assert_eq!(tip.get_untracked(), "~/projects/a/long/folder");
         path.set("~/projects/another/folder".into());
-        assert_eq!(tip.get_untracked(), "~/projects/another/folder", "and follows the directory");
-        assert!(path_tip(600.0).0.is_none(), "a path that fits has nothing to add");
+        assert_eq!(
+            tip.get_untracked(),
+            "~/projects/another/folder",
+            "and follows the directory"
+        );
+        assert!(
+            path_tip(600.0).0.is_none(),
+            "a path that fits has nothing to add"
+        );
     }
 
     /// **Nothing to say, nothing shown, and no gap spent on it** — and a path that arrives later
@@ -226,17 +245,27 @@ mod tests {
     fn an_empty_path_hides_the_line_and_its_gap_until_one_arrives() {
         let folder = line("");
         let path = folder.path_signal();
-        let mut column = Flex::column().gap(Spacing::Md).child(Label::new("name")).child(folder);
+        let mut column = Flex::column()
+            .gap(Spacing::Md)
+            .child(Label::new("name"))
+            .child(folder);
         lay_out(&mut column);
         let alone = column.base().bounds.size.h;
         let mut bare = Flex::column().gap(Spacing::Md).child(Label::new("name"));
         lay_out(&mut bare);
-        assert_eq!(alone, bare.base().bounds.size.h, "an empty line takes no room and no gap");
+        assert_eq!(
+            alone,
+            bare.base().bounds.size.h,
+            "an empty line takes no room and no gap"
+        );
 
         path.set("~/x".into());
         column.tick(0.0);
         lay_out(&mut column);
-        assert!(column.base().bounds.size.h > alone, "a directory reported later shows it");
+        assert!(
+            column.base().bounds.size.h > alone,
+            "a directory reported later shows it"
+        );
     }
 
     /// **Every common builder works on it** — here a grid area, the reason it became a widget.
@@ -252,6 +281,9 @@ mod tests {
         lay_out(&mut grid);
         let name = grid.base().children[0].base().bounds;
         let folder = grid.base().children[1].base().bounds;
-        assert!(folder.loc.x >= name.loc.x + name.size.w, "the line sits in its own area, after the name");
+        assert!(
+            folder.loc.x >= name.loc.x + name.size.w,
+            "the line sits in its own area, after the name"
+        );
     }
 }

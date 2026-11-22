@@ -128,10 +128,19 @@ impl ServerIdentity {
     /// The folder that belongs to this server and to `service` (`<extension>.<service>`), made
     /// owner-only if it is not there. The same path on every start.
     pub(crate) fn service_folder(&self, service: &str) -> io::Result<PathBuf> {
-        let claim = self.claim.as_ref().map_err(|why| io::Error::other(why.clone()))?;
+        let claim = self
+            .claim
+            .as_ref()
+            .map_err(|why| io::Error::other(why.clone()))?;
         let mut parts = Path::new(service).components();
-        if !matches!((parts.next(), parts.next()), (Some(Component::Normal(_)), None)) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("'{service}' is not a folder name")));
+        if !matches!(
+            (parts.next(), parts.next()),
+            (Some(Component::Normal(_)), None)
+        ) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("'{service}' is not a folder name"),
+            ));
         }
         let folder = claim.folder.join(service);
         private_folder(&folder)?;
@@ -143,10 +152,19 @@ impl ServerIdentity {
     /// `<extension>.<short>` and `heca` is not an extension's name, so nothing a service is called
     /// can ever be this path. The same path on every start.
     pub(crate) fn own_file(&self, name: &str) -> io::Result<PathBuf> {
-        let claim = self.claim.as_ref().map_err(|why| io::Error::other(why.clone()))?;
+        let claim = self
+            .claim
+            .as_ref()
+            .map_err(|why| io::Error::other(why.clone()))?;
         let mut parts = Path::new(name).components();
-        if !matches!((parts.next(), parts.next()), (Some(Component::Normal(_)), None)) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("'{name}' is not a file name")));
+        if !matches!(
+            (parts.next(), parts.next()),
+            (Some(Component::Normal(_)), None)
+        ) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("'{name}' is not a file name"),
+            ));
         }
         private_folder(&claim.folder)?;
         Ok(claim.folder.join(format!("heca.{name}")))
@@ -172,12 +190,17 @@ fn claim_slot(kind: ServerKind, servers: &Path) -> io::Result<Claim> {
         for n in 1.. {
             let Some(name) = kind.slot(n) else { break };
             if let Some(lock) = try_lock(&servers.join(format!("{name}.lock")))? {
-                return Ok(Claim { folder: servers.join(name), _lock: lock });
+                return Ok(Claim {
+                    folder: servers.join(name),
+                    _lock: lock,
+                });
             }
         }
         if std::time::Instant::now() >= deadline {
-            return Err(io::Error::new(io::ErrorKind::AddrInUse,
-                format!("another server is already running as '{}'", kind.category())));
+            return Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                format!("another server is already running as '{}'", kind.category()),
+            ));
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }

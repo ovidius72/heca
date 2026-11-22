@@ -51,13 +51,27 @@ fn the_shown_workspace_is_followed_and_heard_once_per_change() {
     let s = state();
     let heard: Rc<RefCell<Vec<String>>> = Rc::default();
     let sink = heard.clone();
-    let _sub = s.events().subscribe("workspace.focused", move |event| sink.borrow_mut().push(event.name().to_string()));
-    let key = |n| crate::entry::service::WorkspaceKey::new(crate::entry::service::SessionKey::generate(), heca_core::layout::WorkspaceId(n));
+    let _sub = s.events().subscribe("workspace.focused", move |event| {
+        sink.borrow_mut().push(event.name().to_string())
+    });
+    let key = |n| {
+        crate::entry::service::WorkspaceKey::new(
+            crate::entry::service::SessionKey::generate(),
+            heca_core::layout::WorkspaceId(n),
+        )
+    };
     let first = key(3);
     s.workspaces.set_active_workspace(Some(first));
     s.workspaces.set_active_workspace(Some(first));
-    assert_eq!(heard.borrow().len(), 1, "the same workspace again is no change");
-    assert_eq!(heca_grid_ui::reactive::SignalGet::get_untracked(&s.workspaces.active_workspace()), Some(first));
+    assert_eq!(
+        heard.borrow().len(),
+        1,
+        "the same workspace again is no change"
+    );
+    assert_eq!(
+        heca_grid_ui::reactive::SignalGet::get_untracked(&s.workspaces.active_workspace()),
+        Some(first)
+    );
     s.workspaces.set_active_workspace(Some(key(4)));
     assert_eq!(heard.borrow().len(), 2);
 }

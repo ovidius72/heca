@@ -61,7 +61,9 @@ pub struct Elapsed {
 /// `at` on the library's clock: a moment in the future is now.
 fn on_clock(at: SystemTime) -> std::time::Instant {
     let ago = SystemTime::now().duration_since(at).unwrap_or_default();
-    crate::clock::now().checked_sub(ago).unwrap_or_else(crate::clock::now)
+    crate::clock::now()
+        .checked_sub(ago)
+        .unwrap_or_else(crate::clock::now)
 }
 
 #[heca_grid_ui_macros::props]
@@ -74,7 +76,12 @@ impl Elapsed {
         let mut base = Base::container();
         crate::component::wrap_transparently(&mut base, label.as_ref());
         base.children = vec![label];
-        let elapsed = Self { base, at, text, format: compact };
+        let elapsed = Self {
+            base,
+            at,
+            text,
+            format: compact,
+        };
         elapsed.write();
         elapsed
     }
@@ -145,7 +152,11 @@ impl Component for Elapsed {
             return None;
         }
         let own = until_next_change(self.elapsed()).as_secs_f32();
-        let label = self.base.children.iter().filter_map(|child| child.next_redraw());
+        let label = self
+            .base
+            .children
+            .iter()
+            .filter_map(|child| child.next_redraw());
         Some(label.fold(own, f32::min))
     }
 }
@@ -170,7 +181,10 @@ mod tests {
 
     #[test]
     fn the_next_change_is_the_next_whole_unit_being_shown() {
-        assert_eq!(until_next_change(Duration::from_millis(1_250)), Duration::from_millis(750));
+        assert_eq!(
+            until_next_change(Duration::from_millis(1_250)),
+            Duration::from_millis(750)
+        );
         assert_eq!(until_next_change(secs(90)), secs(30));
         assert_eq!(until_next_change(secs(HOUR + 60)), secs(HOUR - 60));
         assert_eq!(until_next_change(secs(2 * DAY)), secs(DAY));
@@ -203,7 +217,10 @@ mod tests {
     #[test]
     fn a_stored_moment_in_epoch_milliseconds_reads_the_same() {
         let at = SystemTime::now() - secs(3 * HOUR);
-        let millis = at.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
+        let millis = at
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
         let elapsed = Elapsed::since(SystemTime::now(), Label::new("")).at_millis(millis);
         assert_eq!(elapsed.text.get_untracked(), "3h");
     }

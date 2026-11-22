@@ -72,7 +72,11 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .set_active_pane(state.focused_pane);
     // The workspace this window shows, by its lasting key: the session's key and the workspace's id.
     let shown = state.client.session.key.zip(
-        state.session.workspaces.get(state.layout().active_workspace_idx()).map(|ws| ws.id),
+        state
+            .session
+            .workspaces
+            .get(state.layout().active_workspace_idx())
+            .map(|ws| ws.id),
     );
     state.chrome_state.workspaces.set_active_workspace(
         shown.map(|(session, ws)| crate::entry::service::WorkspaceKey::new(session, ws)),
@@ -87,9 +91,18 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_pane_lines(state.pane_lines.shown(&state.appearance.sidebar.pane_lines));
-    state.chrome_state.workspaces.set_agent_statuses(&state.settings.agents.statuses);
-    state.chrome_state.panes.configure_sounds(&state.settings.agents, state.settings.notification_sound);
-    state.chrome_state.panes.set_name_delay(state.settings.pane_name_delay);
+    state
+        .chrome_state
+        .workspaces
+        .set_agent_statuses(&state.settings.agents.statuses);
+    state
+        .chrome_state
+        .panes
+        .configure_sounds(&state.settings.agents, state.settings.notification_sound);
+    state
+        .chrome_state
+        .panes
+        .set_name_delay(state.settings.pane_name_delay);
     // The program catalog is this component's, not the shared context's. Mirrored
     // here like the display flags above, so `prefix+Shift+r` reaches it; guarded on `Rc` identity,
     // which is exactly what a reload replaces.
@@ -105,7 +118,11 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // `pane.exited{code}` BEFORE mirroring `Pane.runtime` into the store.
     crate::app::process_monitor::sync_pane_runtime_from_backends(state);
     let changed = sync_pane_runtime_state(&state.session, &state.chrome_state.panes);
-    state.chrome_state.panes.advance_names(std::time::Instant::now()) || changed
+    state
+        .chrome_state
+        .panes
+        .advance_names(std::time::Instant::now())
+        || changed
 }
 
 /// Push the chrome's value-state (selection + status text) into the retained tree's
@@ -158,8 +175,15 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
     for region in crate::chrome::RegionId::ALL {
         for mounted in state.chrome_host.contributions(region) {
             if mounted.keyboard_navigable() {
-                let cursor = state.chrome_state.container_cursor(mounted.id()).get_untracked();
-                heca_grid_ui::select_key_in_scope(&state.window_root, mounted.id(), cursor.as_deref());
+                let cursor = state
+                    .chrome_state
+                    .container_cursor(mounted.id())
+                    .get_untracked();
+                heca_grid_ui::select_key_in_scope(
+                    &state.window_root,
+                    mounted.id(),
+                    cursor.as_deref(),
+                );
             }
         }
     }

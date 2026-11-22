@@ -5,9 +5,11 @@
 
 use super::restore_tests::{boot, make, restart, session};
 use super::service_tests::{attached, register_actions, rpc, updates};
-use crate::server::wire::service::ServiceUpdateKind;
 use super::*;
-use crate::entry::service::{ActionResult, ProjectCx, Projection, Scope, Service, ServiceCx, ServiceResult};
+use crate::entry::service::{
+    ActionResult, ProjectCx, Projection, Scope, Service, ServiceCx, ServiceResult,
+};
+use crate::server::wire::service::ServiceUpdateKind;
 use std::cell::Cell;
 
 struct Rooms;
@@ -17,13 +19,20 @@ impl Service for Rooms {
     type Snapshot = Vec<String>;
     type Delta = ();
     const SCHEMA_VERSION: u32 = 1;
-    fn receive(&mut self, _: &mut ServiceCx<'_, ()>, _: ()) -> ServiceResult<()> { Ok(()) }
+    fn receive(&mut self, _: &mut ServiceCx<'_, ()>, _: ()) -> ServiceResult<()> {
+        Ok(())
+    }
     /// The window's room order, read from the saved state. Its revision never moves: the service
     /// never says its view changed, so only heca re-showing it after a save can bring a new order.
     fn project(&self, cx: &ProjectCx<'_>) -> Option<Projection<Vec<String>, ()>> {
         Some(match cx.since() {
             Some(_) => Projection::Unchanged,
-            None => Projection::Snapshot { revision: 1, value: cx.saved(Scope::Session, "room-order", "").unwrap_or_default() },
+            None => Projection::Snapshot {
+                revision: 1,
+                value: cx
+                    .saved(Scope::Session, "room-order", "")
+                    .unwrap_or_default(),
+            },
         })
     }
 }
@@ -37,7 +46,10 @@ fn declare() -> Rc<Cell<usize>> {
     let count = heard.clone();
     rooms.on("state.changed", move |_, _, ev| {
         let change = ev.as_state().expect("state.changed carries the entry");
-        assert_eq!(change.key, "demo.room-order", "heca puts the extension's name in front");
+        assert_eq!(
+            change.key, "demo.room-order",
+            "heca puts the extension's name in front"
+        );
         count.set(count.get() + 1);
     });
     rooms.action(demo.action("reorder"), |_, cx, _| {
@@ -48,7 +60,9 @@ fn declare() -> Rc<Cell<usize>> {
     });
     rooms.action(demo.action("order"), |_, cx, _| {
         let order: Option<Vec<String>> = cx.saved(Scope::Session, "room-order", "");
-        ActionResult::Done(Some(order.map_or_else(|| "none".into(), |order| order.join(","))))
+        ActionResult::Done(Some(
+            order.map_or_else(|| "none".into(), |order| order.join(",")),
+        ))
     });
     heard
 }
@@ -57,7 +71,9 @@ fn ask(server: &mut ServerLoop, line: &str) -> String {
     let answer = rpc(server, line);
     for _ in 0..50 {
         server.pump(Instant::now());
-        if let Ok(line) = answer.try_recv() { return line; }
+        if let Ok(line) = answer.try_recv() {
+            return line;
+        }
     }
     panic!("no answer to {line}");
 }
@@ -77,11 +93,22 @@ fn a_session_entry_is_heard_kept_across_a_restart_and_gone_with_the_session() {
 
     let mut server = restart(server, root.path(), "");
     register_actions(&mut server);
-    assert_eq!(ask(&mut server, "demo.order"), "lobby,kitchen", "back after a restart");
+    assert_eq!(
+        ask(&mut server, "demo.order"),
+        "lobby,kitchen",
+        "back after a restart"
+    );
 
     let key = session(&mut server, "Work").service_ref().key;
-    server.execute_session(SessionCommand::Delete { name: "Work".into() }).unwrap();
-    assert!(server.services.borrow().saved_entries(key).is_empty(), "gone with the session");
+    server
+        .execute_session(SessionCommand::Delete {
+            name: "Work".into(),
+        })
+        .unwrap();
+    assert!(
+        server.services.borrow().saved_entries(key).is_empty(),
+        "gone with the session"
+    );
 }
 
 #[test]
@@ -99,6 +126,10 @@ fn a_save_shows_every_window_the_new_value() {
     ask(&mut server, "demo.reorder");
     server.pump(Instant::now());
     let order: serde_json::Value = vec!["lobby", "kitchen"].into();
-    assert!(updates(&window).iter().any(|(_, kind)| *kind == ServiceUpdateKind::Snapshot(order.clone())),
-        "the window is shown the saved order");
+    assert!(
+        updates(&window)
+            .iter()
+            .any(|(_, kind)| *kind == ServiceUpdateKind::Snapshot(order.clone())),
+        "the window is shown the saved order"
+    );
 }

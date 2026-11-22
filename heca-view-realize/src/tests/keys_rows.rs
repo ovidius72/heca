@@ -20,7 +20,8 @@ fn a_described_key_lands_in_the_widgets_own_slot() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(row.base().key.as_deref(), Some("pane:7"));
 }
 
@@ -43,7 +44,8 @@ fn every_kind_carries_a_described_key() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         assert_eq!(
             w.base().key.as_deref(),
             Some("k"),
@@ -63,7 +65,8 @@ fn a_node_with_no_key_declares_none() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(row.base().key, None);
 }
 
@@ -82,7 +85,8 @@ fn a_node_can_keep_itself_out_of_the_picker() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert!(!w.base().hintable);
     assert!(
         realize(
@@ -90,7 +94,8 @@ fn a_node_can_keep_itself_out_of_the_picker() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        ).expect("valid described test widget")
+        )
+        .expect("valid described test widget")
         .base()
         .hintable,
         "the default is pickable — a node says only \"not me\"",
@@ -108,7 +113,8 @@ fn a_node_can_hand_its_keyboard_to_a_part() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(w.base().keyboard_to.as_deref(), Some("body"));
 }
 
@@ -116,9 +122,18 @@ fn a_node_can_hand_its_keyboard_to_a_part() {
 fn described_focus_fallback_uses_the_same_focus_door_as_native_widgets() {
     let emit: IntentEmitter = Rc::new(|_| {});
     let node = ViewNode::new(WidgetId::Input).prop("focus_fallback", PropValue::Bool(true));
-    let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default()).unwrap();
+    let mut widget = realize(
+        &node,
+        &Theme::default(),
+        &emit,
+        &mut FormBindings::default(),
+    )
+    .unwrap();
     heca_grid_ui::settle_focus(widget.as_mut());
-    assert_eq!(heca_grid_ui::keyboard_holder(widget.as_ref()), Some(widget.base().focus_id()));
+    assert_eq!(
+        heca_grid_ui::keyboard_holder(widget.as_ref()),
+        Some(widget.base().focus_id())
+    );
 }
 
 #[test]
@@ -126,20 +141,48 @@ fn described_palette_completion_prefers_suggestions_over_fallbacks() {
     use heca_grid_ui::{Event, WidgetIntent};
     use heca_view::build::{Command, CommandPalette, Style};
 
-    let node = CommandPalette::new().name("folder").query("Pro").default_open(true)
-        .command(Command::new("Create", Intent::new("create"))
-            .completion("Pro").fallback(true))
-        .command(Command::new("Existing", Intent::new("open"))
-            .completion("Projects/HeCa/").path("/Projects/HeCa").detail("Existing folder"))
+    let node = CommandPalette::new()
+        .name("folder")
+        .query("Pro")
+        .default_open(true)
+        .command(
+            Command::new("Create", Intent::new("create"))
+                .completion("Pro")
+                .fallback(true),
+        )
+        .command(
+            Command::new("Existing", Intent::new("open"))
+                .completion("Projects/HeCa/")
+                .path("/Projects/HeCa")
+                .detail("Existing folder"),
+        )
         .into_node();
-    assert_eq!(node.children[1].props.get("path").and_then(PropValue::as_text), Some("/Projects/HeCa"));
-    assert_eq!(node.children[1].props.get("detail").and_then(PropValue::as_text), Some("Existing folder"));
+    assert_eq!(
+        node.children[1]
+            .props
+            .get("path")
+            .and_then(PropValue::as_text),
+        Some("/Projects/HeCa")
+    );
+    assert_eq!(
+        node.children[1]
+            .props
+            .get("detail")
+            .and_then(PropValue::as_text),
+        Some("Existing folder")
+    );
     let (emit, intents) = recording_emitter();
     let mut forms = FormBindings::default();
     let mut palette = realize(&node, &Theme::default(), &emit, &mut forms).unwrap();
     heca_grid_ui::dispatch(palette.as_mut(), &Event::Widget(WidgetIntent::Complete));
-    assert_eq!(forms.collect().get("folder").and_then(PropValue::as_text), Some("Projects/HeCa/"));
-    assert!(intents.borrow().is_empty(), "completion must not run the command");
+    assert_eq!(
+        forms.collect().get("folder").and_then(PropValue::as_text),
+        Some("Projects/HeCa/")
+    );
+    assert!(
+        intents.borrow().is_empty(),
+        "completion must not run the command"
+    );
     heca_grid_ui::dispatch(palette.as_mut(), &Event::Widget(WidgetIntent::Activate));
     assert_eq!(intents.borrow().len(), 1);
     assert_eq!(intents.borrow()[0].action, "open");
@@ -173,7 +216,8 @@ fn a_described_row_is_clickable_and_keyboard_activatable() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     LayoutEngine::new().compute(row.as_mut(), Size::new(400.0, 40.0));
 
     assert_eq!(
@@ -227,14 +271,15 @@ fn a_described_row_is_clickable_and_keyboard_activatable() {
 /// A described row that nothing can activate should not pretend to be a control.
 #[test]
 fn a_described_row_without_a_press_intent_is_inert() {
-    let node = ViewNode::new(WidgetId::Row)
-        .child(ViewNode::new(WidgetId::Label).text("just content"));
+    let node =
+        ViewNode::new(WidgetId::Row).child(ViewNode::new(WidgetId::Label).text("just content"));
     let row = realize(
         &node,
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert!(!row.base().focusable);
     assert!(hints(row.as_ref()).is_empty());
     assert_eq!(row.base().children.len(), 1, "it still holds its content");
@@ -251,7 +296,8 @@ fn deferred_kind_is_empty_not_panic() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(realized.base().children.len(), 0);
     assert!(
         hints(realized.as_ref()).is_empty(),

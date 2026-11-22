@@ -39,7 +39,6 @@ fn hints(root: &dyn Component) -> Vec<Vec<usize>> {
         .collect()
 }
 
-
 /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
 /// buttons (Cancel / Delete), each carrying a `"press"` intent.
 fn confirm_tree() -> ViewNode {
@@ -74,7 +73,6 @@ fn recording_emitter() -> (IntentEmitter, Rc<std::cell::RefCell<Vec<Intent>>>) {
     let out = sink.clone();
     (Rc::new(move |i| sink.borrow_mut().push(i)), out)
 }
-
 
 /// A representative node for `kind` — enough of one that a correct arm produces a *live* widget.
 ///
@@ -206,28 +204,31 @@ fn sample_node(kind: WidgetId) -> ViewNode {
     }
 }
 
-mod overlay;
-mod basics;
 mod appearance;
-mod sdk_reach;
-mod values;
-mod keys_rows;
-mod options;
-mod groups;
-mod grid;
-mod slots;
-mod coverage;
-mod picking;
-mod universal;
-mod spacing_tooltips;
+mod basics;
 mod cards;
-mod forms;
-mod layout;
-mod generated;
 mod composed;
+mod coverage;
+mod forms;
+mod generated;
+mod grid;
+mod groups;
+mod keys_rows;
+mod layout;
+mod options;
+mod overlay;
+mod picking;
+mod sdk_reach;
+mod slots;
+mod spacing_tooltips;
+mod universal;
+mod values;
 
 fn registered_ids() -> Vec<WidgetId> {
-    WidgetRegistry::builtins().expect("valid built-in definitions").definitions()
+    WidgetRegistry::builtins()
+        .expect("valid built-in definitions")
+        .definitions()
         .filter(|definition| !definition.metadata().declaration)
-        .map(|definition| definition.metadata().id.clone()).collect()
+        .map(|definition| definition.metadata().id.clone())
+        .collect()
 }

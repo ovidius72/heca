@@ -4,14 +4,25 @@ use super::*;
 
 impl SessionRuntime {
     pub(super) fn publish_feedback(&mut self) -> Vec<usize> {
-        if !self.state.feedback.take_dirty() { return Vec::new() }
+        if !self.state.feedback.take_dirty() {
+            return Vec::new();
+        }
         let panes = self.state.feedback.snapshot();
-        self.clients.iter().enumerate().filter_map(|(index, client)| {
-            (matches!(client.attachment.get(), Attachment::Attached)
-                && client.link.send(ServerMsg::Feedback {
-                    session_id: self.session.id, panes: panes.clone(),
-                }).is_err()).then_some(index)
-        }).collect()
+        self.clients
+            .iter()
+            .enumerate()
+            .filter_map(|(index, client)| {
+                (matches!(client.attachment.get(), Attachment::Attached)
+                    && client
+                        .link
+                        .send(ServerMsg::Feedback {
+                            session_id: self.session.id,
+                            panes: panes.clone(),
+                        })
+                        .is_err())
+                .then_some(index)
+            })
+            .collect()
     }
 
     /// Tell every attached client what changed — each reacts to it for itself.
@@ -38,8 +49,11 @@ impl SessionRuntime {
     /// window reports its view ([`ClientMsg::ReportView`]) and the rest stay quiet. Recomputed after
     /// a follow request and after a window leaves.
     pub(super) fn refresh_follow(&self) -> Vec<usize> {
-        let followed: std::collections::HashSet<u64> =
-            self.clients.iter().filter_map(|client| client.follows.get()).collect();
+        let followed: std::collections::HashSet<u64> = self
+            .clients
+            .iter()
+            .filter_map(|client| client.follows.get())
+            .collect();
         let mut disconnected = Vec::new();
         for (i, client) in self.clients.iter().enumerate() {
             let active = followed.contains(&client.id);
@@ -54,12 +68,19 @@ impl SessionRuntime {
     }
 
     /// Relay a leader's new view to every window that follows it.
-    pub(super) fn relay_follow_view(&self, leader: u64, view: &heca_core::layout::ViewSnapshot) -> Vec<usize> {
+    pub(super) fn relay_follow_view(
+        &self,
+        leader: u64,
+        view: &heca_core::layout::ViewSnapshot,
+    ) -> Vec<usize> {
         let mut disconnected = Vec::new();
         for (i, client) in self.clients.iter().enumerate() {
             if client.follows.get() == Some(leader)
                 && matches!(client.attachment.get(), Attachment::Attached)
-                && client.link.send(ServerMsg::FollowView(view.clone())).is_err()
+                && client
+                    .link
+                    .send(ServerMsg::FollowView(view.clone()))
+                    .is_err()
             {
                 disconnected.push(i);
             }
@@ -104,11 +125,7 @@ impl SessionRuntime {
             for (i, client) in self.clients.iter().enumerate() {
                 if matches!(client.attachment.get(), Attachment::Attached) {
                     let views = self.state.visible_notifications_for(client.id);
-                    if client
-                        .link
-                        .send(ServerMsg::Notifications(views))
-                        .is_err()
-                    {
+                    if client.link.send(ServerMsg::Notifications(views)).is_err() {
                         disconnected.push(i);
                     }
                 }
@@ -128,7 +145,8 @@ impl SessionRuntime {
         // they happen. Guarded so no one listening costs nothing.
         if !self.events.is_empty() {
             for change in changes {
-                self.events.emit(&super::super::StreamEvent::Change(change.clone()));
+                self.events
+                    .emit(&super::super::StreamEvent::Change(change.clone()));
             }
         }
         if !changes.is_empty() {

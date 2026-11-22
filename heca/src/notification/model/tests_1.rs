@@ -296,8 +296,7 @@ fn notification_draft_sets_all_optional_fields() {
 
 #[test]
 fn notification_draft_build_does_not_make_notification_visible() {
-    let n =
-        NotificationDraft::new("Queued").build(NotificationId::from_raw(12), Instant::now());
+    let n = NotificationDraft::new("Queued").build(NotificationId::from_raw(12), Instant::now());
     assert_eq!(n.placement, NotificationPlacement::Queued);
     assert!(!n.is_visible());
     assert!(n.expires_at().is_none());

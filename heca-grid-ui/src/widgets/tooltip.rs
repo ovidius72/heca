@@ -147,7 +147,10 @@ impl Tip {
 
     /// A tip whose words are a live signal.
     pub fn from_signal(text: Signal<String>) -> Self {
-        let words = Label::new("").with_text_signal(text).wrap(true).preserve_whitespace(true);
+        let words = Label::new("")
+            .with_text_signal(text)
+            .wrap(true)
+            .preserve_whitespace(true);
         Self::holding(text, false, words.into_component())
     }
 
@@ -159,10 +162,22 @@ impl Tip {
     fn holding(text: Signal<String>, widget: bool, content: crate::WidgetModel) -> Self {
         // The bubble hugs what it holds: placed at the start of a row that spans the room it may
         // use, so the panel is its content's size and not the room's.
-        let panel = Flex::column().padding_x(PAD_X).padding_y(PAD_Y).area(BUBBLE).child(content);
+        let panel = Flex::column()
+            .padding_x(PAD_X)
+            .padding_y(PAD_Y)
+            .area(BUBBLE)
+            .child(content);
         let room = Flex::row().align("start").child(panel);
-        Self { text, side: TooltipSide::default(), delay: Delay::Default, automatic: false, widget,
-            bubble: Rc::new(RefCell::new(room)), drawn: Rc::default(), announced: Rc::default() }
+        Self {
+            text,
+            side: TooltipSide::default(),
+            delay: Delay::Default,
+            automatic: false,
+            widget,
+            bubble: Rc::new(RefCell::new(room)),
+            drawn: Rc::default(),
+            announced: Rc::default(),
+        }
     }
 
     /// **The whole text of a label that had to cut it** — what a [`Label`] declares on itself while
@@ -251,30 +266,44 @@ impl<T: IntoTip> IntoTip for Option<T> {
 }
 
 impl IntoTip for &str {
-    fn into_tip(self) -> Tip { Tip::new(self) }
+    fn into_tip(self) -> Tip {
+        Tip::new(self)
+    }
 }
 
 impl IntoTip for String {
-    fn into_tip(self) -> Tip { Tip::new(self) }
+    fn into_tip(self) -> Tip {
+        Tip::new(self)
+    }
 }
 
 impl IntoTip for &String {
-    fn into_tip(self) -> Tip { Tip::new(self.clone()) }
+    fn into_tip(self) -> Tip {
+        Tip::new(self.clone())
+    }
 }
 
 impl IntoTip for Signal<String> {
-    fn into_tip(self) -> Tip { Tip::from_signal(self) }
+    fn into_tip(self) -> Tip {
+        Tip::from_signal(self)
+    }
 }
 
 impl<C: IntoComponent> IntoTip for C {
-    fn into_tip(self) -> Tip { Tip::of(self) }
+    fn into_tip(self) -> Tip {
+        Tip::of(self)
+    }
 }
 
 /// The font a bubble is drawn at: **the surface's, not the control's**. A bubble is a small panel
 /// beside the widget rather than part of it, so an emphasized button must not get emphasized words
 /// floating over it.
 fn surface_font(base: &Base) -> f32 {
-    if base.root_font > 0.0 { base.root_font } else { base.font }
+    if base.root_font > 0.0 {
+        base.root_font
+    } else {
+        base.font
+    }
 }
 
 /// **Is this widget's bubble up?** Hovered, declared, with something to say, and rested past the
@@ -293,7 +322,9 @@ fn shown(base: &Base) -> Option<&Tip> {
 fn place_bubble(base: &Base, tip: &Tip, viewport: Size) -> Option<Rectangle> {
     let font = surface_font(base);
     let mut room = tip.bubble.borrow_mut();
-    crate::LayoutEngine::new().base_font(font).compute(&mut *room, viewport);
+    crate::LayoutEngine::new()
+        .base_font(font)
+        .compute(&mut *room, viewport);
     let laid = crate::component::area(&*room, BUBBLE)?.base().bounds;
     let gap = Space::Step(GAP).resolve(font) as f64;
     let rect = place_beside(base.bounds, laid.size, viewport, gap, tip.side);
@@ -308,15 +339,23 @@ fn place_bubble(base: &Base, tip: &Tip, viewport: Size) -> Option<Rectangle> {
 /// from state it already keeps, so nothing opts in.
 pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
     let base = c.base();
-    let Some(declared) = base.tooltip.as_ref() else { return };
+    let Some(declared) = base.tooltip.as_ref() else {
+        return;
+    };
     let quiet = declared.is_automatic() && cx.hand_tip_above;
     let tip = (base.visible.get_untracked()
         && !quiet
-        && !base.children.iter().any(|child| owns_hover_tip(child.as_ref())))
-        .then(|| shown(base)).flatten();
+        && !base
+            .children
+            .iter()
+            .any(|child| owns_hover_tip(child.as_ref())))
+    .then(|| shown(base))
+    .flatten();
     let rect = tip.and_then(|tip| place_bubble(base, tip, cx.viewport()));
     declared.drawn.set(rect);
-    let (Some(tip), Some(rect)) = (tip, rect) else { return };
+    let (Some(tip), Some(rect)) = (tip, rect) else {
+        return;
+    };
     let (accent, glow, tip_border) = {
         let t = cx.theme();
         let glow = Glow {
@@ -355,9 +394,16 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
 /// A label's own cut-text tooltip does not: a tooltip written by hand around it wins.
 fn owns_hover_tip(c: &dyn Component) -> bool {
     let base = c.base();
-    base.visible.get_untracked() && base.hovered()
-        && (base.tooltip.as_ref().is_some_and(|tip| tip.says_something() && !tip.is_automatic())
-            || base.children.iter().any(|child| owns_hover_tip(child.as_ref())))
+    base.visible.get_untracked()
+        && base.hovered()
+        && (base
+            .tooltip
+            .as_ref()
+            .is_some_and(|tip| tip.says_something() && !tip.is_automatic())
+            || base
+                .children
+                .iter()
+                .any(|child| owns_hover_tip(child.as_ref())))
 }
 
 /// **Seconds until this widget's bubble appears**, or `None` when nothing is pending.
@@ -388,7 +434,9 @@ fn bubble_now(base: &Base) -> Option<Rectangle> {
 /// no event touched the widget, and a host that repaints only what changed would otherwise draw the
 /// bubble cut to whatever else changed, or not at all.
 pub(crate) fn bubble_changed(base: &Base) -> bool {
-    let Some(tip) = base.tooltip.as_ref() else { return false };
+    let Some(tip) = base.tooltip.as_ref() else {
+        return false;
+    };
     let drawn = tip.drawn.get();
     drawn != tip.announced.get() || bubble_now(base) != drawn
 }
@@ -397,10 +445,15 @@ pub(crate) fn bubble_changed(base: &Base) -> bool {
 /// now and where it was last announced, because the bubble draws on the overlay layer well outside
 /// them and a bubble that moved or went must be painted over in its old place.
 pub(crate) fn damage(base: &Base) -> Rectangle {
-    let Some(tip) = base.tooltip.as_ref() else { return base.bounds };
+    let Some(tip) = base.tooltip.as_ref() else {
+        return base.bounds;
+    };
     let (now, drawn) = (bubble_now(base), tip.drawn.get());
     let before = tip.announced.replace(drawn);
-    [now, drawn, before].into_iter().flatten().fold(base.bounds, union)
+    [now, drawn, before]
+        .into_iter()
+        .flatten()
+        .fold(base.bounds, union)
 }
 
 /// **A tooltip on a region that is not a widget you can put a builder on.**

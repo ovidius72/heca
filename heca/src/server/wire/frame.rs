@@ -37,10 +37,15 @@ pub(super) fn read<T: DeserializeOwned>(
     stream.read_exact(&mut header[1..])?;
     let length = u32::from_be_bytes(header) as usize;
     if length == 0 || length > limit.get() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid frame length"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid frame length",
+        ));
     }
     let mut payload = Vec::new();
-    payload.try_reserve_exact(length).map_err(io::Error::other)?;
+    payload
+        .try_reserve_exact(length)
+        .map_err(io::Error::other)?;
     payload.resize(length, 0);
     stream.read_exact(&mut payload)?;
     serde_json::from_slice(&payload)
@@ -53,8 +58,17 @@ pub(super) fn read<T: DeserializeOwned>(
 /// and come out whole on the other side.
 pub(crate) trait Carried: Sized {
     type Memory: Default + Send + 'static;
-    fn write_to(self, memory: &mut Self::Memory, stream: &mut impl Write, limit: NonZeroUsize) -> io::Result<()>;
-    fn read_from(memory: &mut Self::Memory, stream: &mut impl Read, limit: NonZeroUsize) -> io::Result<Option<Self>>;
+    fn write_to(
+        self,
+        memory: &mut Self::Memory,
+        stream: &mut impl Write,
+        limit: NonZeroUsize,
+    ) -> io::Result<()>;
+    fn read_from(
+        memory: &mut Self::Memory,
+        stream: &mut impl Read,
+        limit: NonZeroUsize,
+    ) -> io::Result<Option<Self>>;
 }
 
 /// What a window sends is small: each message is written as it is.
@@ -63,7 +77,11 @@ impl Carried for super::ClientMsg {
     fn write_to(self, _: &mut (), stream: &mut impl Write, limit: NonZeroUsize) -> io::Result<()> {
         write(stream, &self, limit)
     }
-    fn read_from(_: &mut (), stream: &mut impl Read, limit: NonZeroUsize) -> io::Result<Option<Self>> {
+    fn read_from(
+        _: &mut (),
+        stream: &mut impl Read,
+        limit: NonZeroUsize,
+    ) -> io::Result<Option<Self>> {
         read(stream, limit)
     }
 }
@@ -71,23 +89,40 @@ impl Carried for super::ClientMsg {
 /// What the server sends: a terminal travels as the rows that changed ([`super::rows`]).
 impl Carried for super::ServerMsg {
     type Memory = super::rows::Screens;
-    fn write_to(self, screens: &mut Self::Memory, stream: &mut impl Write, limit: NonZeroUsize) -> io::Result<()> {
+    fn write_to(
+        self,
+        screens: &mut Self::Memory,
+        stream: &mut impl Write,
+        limit: NonZeroUsize,
+    ) -> io::Result<()> {
         use super::rows::Outgoing;
         match self {
-            super::ServerMsg::Terminal(frame) => write(stream, &Outgoing::Terminal(&screens.pack(frame)), limit),
+            super::ServerMsg::Terminal(frame) => {
+                write(stream, &Outgoing::Terminal(&screens.pack(frame)), limit)
+            }
             message => {
-                if let super::ServerMsg::TerminalClosed { owner } = &message { screens.forget(owner); }
+                if let super::ServerMsg::TerminalClosed { owner } = &message {
+                    screens.forget(owner);
+                }
                 write(stream, &Outgoing::Message(&message), limit)
             }
         }
     }
-    fn read_from(screens: &mut Self::Memory, stream: &mut impl Read, limit: NonZeroUsize) -> io::Result<Option<Self>> {
+    fn read_from(
+        screens: &mut Self::Memory,
+        stream: &mut impl Read,
+        limit: NonZeroUsize,
+    ) -> io::Result<Option<Self>> {
         use super::rows::Incoming;
         Ok(match read(stream, limit)? {
             None => None,
-            Some(Incoming::Terminal(packed)) => Some(super::ServerMsg::Terminal(screens.unpack(*packed)?)),
+            Some(Incoming::Terminal(packed)) => {
+                Some(super::ServerMsg::Terminal(screens.unpack(*packed)?))
+            }
             Some(Incoming::Message(message)) => {
-                if let super::ServerMsg::TerminalClosed { owner } = &message { screens.forget(owner); }
+                if let super::ServerMsg::TerminalClosed { owner } = &message {
+                    screens.forget(owner);
+                }
                 Some(message)
             }
         })

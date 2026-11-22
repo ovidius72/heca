@@ -10,8 +10,8 @@ use super::input::{Search, TerminalInput};
 use super::search::{SearchBar, SearchSlot};
 use super::shared::Shared;
 use super::viewport::{Controls, IntentSlot};
-use heca_grid_ui::builders::{EventExt, LayoutExt};
 use heca_grid_ui::MenuExt;
+use heca_grid_ui::builders::{EventExt, LayoutExt};
 use heca_grid_ui::component::{Base, Component, GridKey, PaintCx, WidgetIntent};
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::style::Length;
@@ -114,7 +114,10 @@ impl Terminal {
         base.children.extend(layers);
         // **So is its search**: the bar over the picture, drawn by the same walk, hearing the same
         // keyboard. Declared after the controls, so it is on top of them.
-        base.children.push(heca_grid_ui::WidgetModel::new(SearchBar::new(shared.clone())));
+        base.children
+            .push(heca_grid_ui::WidgetModel::new(SearchBar::new(
+                shared.clone(),
+            )));
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
         let me = shared.clone();
@@ -166,7 +169,11 @@ impl Terminal {
         // **Clicking a link with the window's key held opens it.** The framework tells a click from
         // the start of a drag by how far the pointer travelled, so the same key serves both.
         .on(EventKind::Click, move |cx| me.open_link(cx));
-        if named { terminal.context_menu(menu) } else { terminal }
+        if named {
+            terminal.context_menu(menu)
+        } else {
+            terminal
+        }
     }
 }
 
@@ -297,18 +304,16 @@ impl Component for Terminal {
             Event::TextInput(text) => self.shared.emit(TerminalInput::Text(text.clone())),
             // **Dropped files paste their paths**, each quoted for the shell and followed by a
             // space, as other terminals do.
-            Event::FilesDropped { paths, .. } => self.shared.emit(TerminalInput::Paste(super::input::dropped_paths(paths))),
+            Event::FilesDropped { paths, .. } => self
+                .shared
+                .emit(TerminalInput::Paste(super::input::dropped_paths(paths))),
             Event::Key { key, pressed: true } => self.shared.emit(TerminalInput::Key {
                 key: *key,
                 modifiers: heca_grid_ui::event::modifiers(),
             }),
             _ => false,
         };
-        if said {
-            Handled::Yes
-        } else {
-            Handled::No
-        }
+        if said { Handled::Yes } else { Handled::No }
     }
 
     /// The box is known: say the grid's box — the room held in by the configured

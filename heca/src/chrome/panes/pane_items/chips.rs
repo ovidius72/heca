@@ -61,8 +61,13 @@ impl PaneFacts {
         presentation: Option<&crate::chrome::PanePresentation>,
     ) -> Self {
         // The header never shows the `(process)` suffix — that is a sidebar-card affordance.
-        let view =
-            crate::chrome::pane_info_view(programs, fallback_name, custom_name, presentation, false);
+        let view = crate::chrome::pane_info_view(
+            programs,
+            fallback_name,
+            custom_name,
+            presentation,
+            false,
+        );
         let runtime = presentation.map(|pane| pane.runtime());
         Self {
             pane_id,
@@ -267,9 +272,10 @@ fn builtin_chips() -> Vec<PaneChipDef> {
     vec![
         // The working directory, home-relative. The long one, so it is what gives way.
         own("location", Fit::PathLeft, |f| {
-            f.cwd
-                .as_ref()
-                .map(|cwd| PaneChip::new(Glyph::Folder, crate::chrome::home_relative_path(cwd)).tone(heca_grid_ui::Tone::Accent))
+            f.cwd.as_ref().map(|cwd| {
+                PaneChip::new(Glyph::Folder, crate::chrome::home_relative_path(cwd))
+                    .tone(heca_grid_ui::Tone::Accent)
+            })
         }),
         // Always the running program's name, never a rename, so the bar keeps showing what runs.
         own("app_name", Fit::Keep, |f| {
@@ -280,10 +286,9 @@ fn builtin_chips() -> Vec<PaneChipDef> {
             (!f.title.is_empty()).then(|| PaneChip::new(f.icon, f.title.clone()))
         }),
         own("git_branch", Fit::End, |f| {
-            f.git
-                .as_ref()
-                .and_then(|g| g.branch.clone())
-                .map(|branch| PaneChip::new(Glyph::GitBranch, branch).tone(heca_grid_ui::Tone::Warning))
+            f.git.as_ref().and_then(|g| g.branch.clone()).map(|branch| {
+                PaneChip::new(Glyph::GitBranch, branch).tone(heca_grid_ui::Tone::Warning)
+            })
         }),
         // `+A ~M -D`, and nothing at all when the tree is clean.
         own("git_status", Fit::Keep, |f| {
@@ -298,9 +303,15 @@ fn builtin_chips() -> Vec<PaneChipDef> {
             if g.deleted > 0 {
                 parts.push(format!("-{}", g.deleted));
             }
-            (!parts.is_empty()).then(|| PaneChip::new(Glyph::GitCommit, parts.join(" ")).tone(
-                if g.modified > 0 || g.deleted > 0 { heca_grid_ui::Tone::Warning } else { heca_grid_ui::Tone::Success },
-            ))
+            (!parts.is_empty()).then(|| {
+                PaneChip::new(Glyph::GitCommit, parts.join(" ")).tone(
+                    if g.modified > 0 || g.deleted > 0 {
+                        heca_grid_ui::Tone::Warning
+                    } else {
+                        heca_grid_ui::Tone::Success
+                    },
+                )
+            })
         }),
     ]
 }

@@ -17,9 +17,15 @@ impl GpuState {
         }
         let scale_factor = window.scale_factor();
 
-        let gpu = heca_renderer::gpu::WindowGpu::new(window.clone(), "showcase_device", false).await;
+        let gpu =
+            heca_renderer::gpu::WindowGpu::new(window.clone(), "showcase_device", false).await;
         let format = gpu.format();
-        let heca_renderer::gpu::WindowGpu { surface, device, queue, config } = gpu;
+        let heca_renderer::gpu::WindowGpu {
+            surface,
+            device,
+            queue,
+            config,
+        } = gpu;
 
         let ui_images = heca_renderer::ui_image::UiImages::new(&device, format);
         let theme = load_grid_theme("grid_tron");
@@ -105,5 +111,4 @@ impl GpuState {
             keymap: Keymap::with_defaults(),
         }
     }
-
 }

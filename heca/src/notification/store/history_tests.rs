@@ -15,14 +15,21 @@ fn listed(store: &NotificationStore, client: u64, now: Instant) -> Vec<(String, 
 }
 
 /// A store roomy enough that nothing queues, holding `titles` raised one millisecond apart.
-fn raised(limit: usize, titles: &[&str], start: Instant) -> (NotificationStore, Vec<NotificationId>) {
+fn raised(
+    limit: usize,
+    titles: &[&str],
+    start: Instant,
+) -> (NotificationStore, Vec<NotificationId>) {
     let mut store = NotificationStore::with_capacity(limit, 10);
     let ids = titles
         .iter()
         .enumerate()
         .map(|(i, title)| {
             let at = start + Duration::from_millis(i as u64);
-            store.push(NotificationDraft::new(*title), at).unwrap().notification_id()
+            store
+                .push(NotificationDraft::new(*title), at)
+                .unwrap()
+                .notification_id()
         })
         .collect();
     (store, ids)
@@ -34,12 +41,19 @@ fn the_history_keeps_at_most_its_limit_and_lists_the_newest_first() {
     let (mut store, ids) = raised(3, &["one", "two", "three", "four", "five"], start);
     let later = start + Duration::from_secs(1);
     for id in ids {
-        assert!(matches!(store.dismiss(id, later), NotificationDismissResult::Dismissed(_)));
+        assert!(matches!(
+            store.dismiss(id, later),
+            NotificationDismissResult::Dismissed(_)
+        ));
     }
 
     assert_eq!(
         listed(&store, 1, later),
-        [("five".into(), "dismissed"), ("four".into(), "dismissed"), ("three".into(), "dismissed")],
+        [
+            ("five".into(), "dismissed"),
+            ("four".into(), "dismissed"),
+            ("three".into(), "dismissed")
+        ],
         "the two oldest were forgotten, the rest read newest first",
     );
 }
@@ -76,16 +90,33 @@ fn what_is_still_on_screen_is_listed_with_its_actions_and_what_is_gone_is_not() 
     let start = Instant::now();
     let mut store = NotificationStore::with_capacity(10, 10);
     let retry = || NotificationAction::new("Retry", heca_view::Intent::new("restore.retry"));
-    let first = store.push(NotificationDraft::new("first").action(retry()), start).unwrap().notification_id();
-    store.push(NotificationDraft::new("second").action(retry()), start + Duration::from_millis(1)).unwrap();
+    let first = store
+        .push(NotificationDraft::new("first").action(retry()), start)
+        .unwrap()
+        .notification_id();
+    store
+        .push(
+            NotificationDraft::new("second").action(retry()),
+            start + Duration::from_millis(1),
+        )
+        .unwrap();
     store.dismiss(first, start + Duration::from_secs(1));
 
-    let records = store.history_records_for(1, start + Duration::from_secs(2), SystemTime::UNIX_EPOCH + WALL);
-    let [second, first] = records.as_slice() else { panic!("two records, got {records:?}") };
+    let records = store.history_records_for(
+        1,
+        start + Duration::from_secs(2),
+        SystemTime::UNIX_EPOCH + WALL,
+    );
+    let [second, first] = records.as_slice() else {
+        panic!("two records, got {records:?}")
+    };
     assert_eq!(second.standing.word(), "visible");
     assert_eq!(second.view.actions.len(), 1, "it can still be acted on");
     assert_eq!(first.standing.word(), "dismissed");
-    assert!(first.view.actions.is_empty(), "nothing left to act on once it is gone");
+    assert!(
+        first.view.actions.is_empty(),
+        "nothing left to act on once it is gone"
+    );
 }
 
 #[test]
@@ -107,8 +138,15 @@ fn newest_means_raised_last_not_dismissed_last() {
 fn a_queued_notification_was_never_shown_so_it_is_not_in_the_history() {
     let start = Instant::now();
     let mut store = NotificationStore::with_capacity(10, 1);
-    store.push(NotificationDraft::new("on screen"), start).unwrap();
-    store.push(NotificationDraft::new("waiting"), start + Duration::from_millis(1)).unwrap();
+    store
+        .push(NotificationDraft::new("on screen"), start)
+        .unwrap();
+    store
+        .push(
+            NotificationDraft::new("waiting"),
+            start + Duration::from_millis(1),
+        )
+        .unwrap();
 
     assert_eq!(listed(&store, 1, start), [("on screen".into(), "visible")]);
 }
@@ -117,15 +155,24 @@ fn a_queued_notification_was_never_shown_so_it_is_not_in_the_history() {
 fn a_window_reads_only_the_history_meant_for_it() {
     let start = Instant::now();
     let mut store = NotificationStore::with_capacity(10, 10);
-    store.push(NotificationDraft::new("everyone"), start).unwrap();
+    store
+        .push(NotificationDraft::new("everyone"), start)
+        .unwrap();
     store
         .push(
-            NotificationDraft::new("window two").originator().resolve_originator(2),
+            NotificationDraft::new("window two")
+                .originator()
+                .resolve_originator(2),
             start + Duration::from_millis(1),
         )
         .unwrap();
 
-    let titles = |client| listed(&store, client, start).into_iter().map(|(title, _)| title).collect::<Vec<_>>();
+    let titles = |client| {
+        listed(&store, client, start)
+            .into_iter()
+            .map(|(title, _)| title)
+            .collect::<Vec<_>>()
+    };
     assert_eq!(titles(1), ["everyone"]);
     assert_eq!(titles(2), ["window two", "everyone"]);
 }
@@ -154,22 +201,44 @@ fn the_same_dedup_key_raised_again_is_one_entry_that_counts_its_repeats() {
             )
             .unwrap();
     }
-    let records = store.history_records_for(1, start + Duration::from_secs(1), SystemTime::UNIX_EPOCH + WALL);
-    let [record] = records.as_slice() else { panic!("one entry, got {records:?}") };
+    let records = store.history_records_for(
+        1,
+        start + Duration::from_secs(1),
+        SystemTime::UNIX_EPOCH + WALL,
+    );
+    let [record] = records.as_slice() else {
+        panic!("one entry, got {records:?}")
+    };
     assert_eq!(record.repeats, 2);
 
     // Dismissed and raised again, it is the same entry, counted again.
     let id = store.notification_id_for_dedup_key("reload").unwrap();
     store.dismiss(id, start + Duration::from_secs(2));
     store
-        .push(NotificationDraft::new("Config reloaded").dedup_key("reload"), start + Duration::from_secs(3))
+        .push(
+            NotificationDraft::new("Config reloaded").dedup_key("reload"),
+            start + Duration::from_secs(3),
+        )
         .unwrap();
-    let records = store.history_records_for(1, start + Duration::from_secs(4), SystemTime::UNIX_EPOCH + WALL);
+    let records = store.history_records_for(
+        1,
+        start + Duration::from_secs(4),
+        SystemTime::UNIX_EPOCH + WALL,
+    );
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].repeats, 3);
 
     // A different notification starts at one.
-    store.push(NotificationDraft::new("Other"), start + Duration::from_secs(5)).unwrap();
-    let records = store.history_records_for(1, start + Duration::from_secs(6), SystemTime::UNIX_EPOCH + WALL);
+    store
+        .push(
+            NotificationDraft::new("Other"),
+            start + Duration::from_secs(5),
+        )
+        .unwrap();
+    let records = store.history_records_for(
+        1,
+        start + Duration::from_secs(6),
+        SystemTime::UNIX_EPOCH + WALL,
+    );
     assert_eq!(records[0].repeats, 1);
 }

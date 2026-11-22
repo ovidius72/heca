@@ -4,7 +4,9 @@ use super::*;
 fn keyboard_menus_are_centered_on_the_component_that_declares_them() {
     for (width, height) in [(100.0, 40.0), (400.0, 450.0)] {
         let opened = recording_sink();
-        let owner = Row::new().at_rect(300.0, 140.0, width, height).context_menu(menu_named("Rename"));
+        let owner = Row::new()
+            .at_rect(300.0, 140.0, width, height)
+            .context_menu(menu_named("Rename"));
         let mut root = Flex::column().child(owner);
         LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
         root.base().children[0].base().focus(true);
@@ -27,7 +29,9 @@ fn keyboard_menu_uses_its_declaring_ancestor_not_the_small_focused_child() {
         .child(Button::new("Input").at_rect(10.0, 20.0, 60.0, 30.0));
     let mut root = Flex::column().child(owner);
     LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
-    root.base().children[0].base().children[0].base().focus(true);
+    root.base().children[0].base().children[0]
+        .base()
+        .focus(true);
     assert!(heca_grid_ui::open_for_keyboard(&root, None));
     let mut panels = opened.borrow_mut();
     let menu = &mut panels[0];
@@ -42,15 +46,20 @@ fn resolving_a_keyboard_anchor_does_not_build_the_menu() {
     let built = Rc::new(std::cell::Cell::new(0));
     let seen = built.clone();
     let mut root = Flex::column().child(
-        Button::new("Target").at_rect(300.0, 140.0, 400.0, 450.0).context_menu(move |_| {
-            seen.set(seen.get() + 1);
-            menu_named("Rename")
-        }),
+        Button::new("Target")
+            .at_rect(300.0, 140.0, 400.0, 450.0)
+            .context_menu(move |_| {
+                seen.set(seen.get() + 1);
+                menu_named("Rename")
+            }),
     );
     LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
     let target = root.base().children[0].base();
     target.focus(true);
-    assert_eq!(heca_grid_ui::menu::keyboard_anchor(&root, None), Some(MenuAnchor::Center(target.bounds)));
+    assert_eq!(
+        heca_grid_ui::menu::keyboard_anchor(&root, None),
+        Some(MenuAnchor::Center(target.bounds))
+    );
     assert_eq!(built.get(), 0);
 }
 
@@ -60,14 +69,19 @@ fn a_host_menu_without_a_declaration_uses_the_focused_components_bounds() {
     LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
     let target = root.base().children[0].base();
     target.focus(true);
-    assert_eq!(heca_grid_ui::menu::keyboard_anchor(&root, None), Some(MenuAnchor::Center(target.bounds)));
+    assert_eq!(
+        heca_grid_ui::menu::keyboard_anchor(&root, None),
+        Some(MenuAnchor::Center(target.bounds))
+    );
 }
 
 #[test]
 fn a_keyboard_menu_near_the_viewport_edge_stays_visible_after_resizing() {
     let opened = recording_sink();
     let mut root = Flex::column().child(
-        Button::new("Target").at_rect(940.0, 740.0, 40.0, 40.0).context_menu(menu_named("Rename")),
+        Button::new("Target")
+            .at_rect(940.0, 740.0, 40.0, 40.0)
+            .context_menu(menu_named("Rename")),
     );
     LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
     root.base().children[0].base().focus(true);
@@ -84,8 +98,11 @@ fn a_keyboard_menu_near_the_viewport_edge_stays_visible_after_resizing() {
 
 #[test]
 fn a_pointer_reopening_a_keyboard_menu_uses_the_pointer_anchor() {
-    let menu = MenuAnchor::Center(heca_grid_ui::Rectangle::new(Point::new(300.0, 140.0), Size::new(400.0, 450.0)))
-        .open(menu_named("Rename"));
+    let menu = MenuAnchor::Center(heca_grid_ui::Rectangle::new(
+        Point::new(300.0, 140.0),
+        Size::new(400.0, 450.0),
+    ))
+    .open(menu_named("Rename"));
     let at = Point::new(40.0, 60.0);
     let mut reopened = MenuAnchor::At(at).open(menu.clone());
     LayoutEngine::new().compute(&mut reopened, Size::new(1000.0, 800.0));

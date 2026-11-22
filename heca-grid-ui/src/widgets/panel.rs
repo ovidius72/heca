@@ -49,7 +49,9 @@ impl Panel {
         // The header and its rule exist from the start and hide themselves until there is a
         // title, so setting a title never has to splice children in at the front after content
         // has been attached.
-        let mut header = Label::new(String::new()).font_scale(TITLE_SCALE).font_weight(crate::style::FontWeight::Bold);
+        let mut header = Label::new(String::new())
+            .font_scale(TITLE_SCALE)
+            .font_weight(crate::style::FontWeight::Bold);
         let title = header.text_signal();
         header.base_mut().set_hidden(true);
         base.children.push(crate::WidgetModel::new(header));

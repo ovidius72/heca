@@ -28,11 +28,10 @@ use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 use std::time::Instant;
 
-
 mod builders;
 mod editing;
 mod navigation;
-use navigation::{Granularity, word_bounds, prev_word_boundary, next_word_boundary};
+use navigation::{Granularity, next_word_boundary, prev_word_boundary, word_bounds};
 mod component;
 mod content;
 
@@ -96,6 +95,9 @@ pub struct Input {
     on_submit: Option<Box<dyn Fn(Action)>>,
 }
 
-
-impl Default for Input { fn default() -> Self { Self::new() } }
+impl Default for Input {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl LayoutExt for Input {}

@@ -42,7 +42,6 @@ fn the_runtime_holds_the_stack_while_the_pointer_rests_on_it() {
     );
 }
 
-
 #[test]
 fn runtime_applies_the_configured_auto_dismiss_to_a_default_draft() {
     let now = Instant::now();
@@ -59,9 +58,16 @@ fn runtime_applies_the_configured_auto_dismiss_to_a_default_draft() {
 fn runtime_preserves_an_explicit_draft_duration() {
     let now = Instant::now();
     let mut runtime = test_runtime(2500);
-    runtime.push(NotificationDraft::info("Long build")
-        .auto_dismiss(std::time::Duration::from_secs(10)), now).unwrap();
-    assert_eq!(runtime.next_expiry(), Some(now + std::time::Duration::from_secs(10)));
+    runtime
+        .push(
+            NotificationDraft::info("Long build").auto_dismiss(std::time::Duration::from_secs(10)),
+            now,
+        )
+        .unwrap();
+    assert_eq!(
+        runtime.next_expiry(),
+        Some(now + std::time::Duration::from_secs(10))
+    );
 }
 
 #[test]
@@ -71,8 +77,13 @@ fn runtime_preserves_an_explicit_lifecycle_even_when_it_matches_the_fallback() {
         heca_config::settings::NotificationSystemConfig::default().auto_dismiss_ms,
     );
     let mut runtime = test_runtime(9000);
-    runtime.push(NotificationDraft::info("Explicit")
-        .lifecycle(NotificationLifecycle::auto(duration).dismissible(false)), now).unwrap();
+    runtime
+        .push(
+            NotificationDraft::info("Explicit")
+                .lifecycle(NotificationLifecycle::auto(duration).dismissible(false)),
+            now,
+        )
+        .unwrap();
     assert_eq!(runtime.next_expiry(), Some(now + duration));
     assert!(!runtime.visible_views()[0].dismissible);
 }
@@ -82,8 +93,13 @@ fn runtime_uses_the_config_fallback_when_no_duration_is_provided() {
     let config = heca_config::settings::NotificationSystemConfig::default();
     let now = Instant::now();
     let mut runtime = test_runtime(config.auto_dismiss_ms);
-    runtime.push(NotificationDraft::info("Default"), now).unwrap();
-    assert_eq!(runtime.next_expiry(), Some(now + std::time::Duration::from_millis(config.auto_dismiss_ms)));
+    runtime
+        .push(NotificationDraft::info("Default"), now)
+        .unwrap();
+    assert_eq!(
+        runtime.next_expiry(),
+        Some(now + std::time::Duration::from_millis(config.auto_dismiss_ms))
+    );
 }
 
 #[test]
@@ -91,13 +107,35 @@ fn reload_changes_new_default_durations_but_not_explicit_ones() {
     let now = Instant::now();
     let mut runtime = test_runtime(1000);
     runtime.set_auto_dismiss(std::time::Duration::from_secs(9));
-    let explicit = runtime.push(NotificationDraft::info("Explicit")
-        .auto_dismiss(std::time::Duration::from_secs(3)), now).unwrap().notification_id();
-    let configured = runtime.push(NotificationDraft::info("Configured"), now).unwrap().notification_id();
-    assert_eq!(runtime.store.visible().find(|n| n.id == explicit).unwrap().expires_at(),
-        Some(now + std::time::Duration::from_secs(3)));
-    assert_eq!(runtime.store.visible().find(|n| n.id == configured).unwrap().expires_at(),
-        Some(now + std::time::Duration::from_secs(9)));
+    let explicit = runtime
+        .push(
+            NotificationDraft::info("Explicit").auto_dismiss(std::time::Duration::from_secs(3)),
+            now,
+        )
+        .unwrap()
+        .notification_id();
+    let configured = runtime
+        .push(NotificationDraft::info("Configured"), now)
+        .unwrap()
+        .notification_id();
+    assert_eq!(
+        runtime
+            .store
+            .visible()
+            .find(|n| n.id == explicit)
+            .unwrap()
+            .expires_at(),
+        Some(now + std::time::Duration::from_secs(3))
+    );
+    assert_eq!(
+        runtime
+            .store
+            .visible()
+            .find(|n| n.id == configured)
+            .unwrap()
+            .expires_at(),
+        Some(now + std::time::Duration::from_secs(9))
+    );
 }
 
 #[test]

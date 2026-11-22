@@ -11,7 +11,8 @@ pub(crate) mod server;
 /// The `WmAction` parameter carries the full variant (including any embedded
 /// arguments), so the same handler can serve both unit and parameterized
 /// variants that share a discriminant.
-pub type ActionHandler = fn(&mut crate::app_state::AppState, &crate::input::WmAction) -> ActionResult;
+pub type ActionHandler =
+    fn(&mut crate::app_state::AppState, &crate::input::WmAction) -> ActionResult;
 
 /// **What running an action came to**: done, or not done and why — the words a user or a script is
 /// shown. A handler that cannot do what it was asked returns the reason instead of only logging it,
@@ -54,7 +55,9 @@ pub struct ActionRegistry {
 /// action is exactly how a provider is supposed to change things.
 pub type DynHandler = std::rc::Rc<dyn Fn(&mut crate::app_state::AppState, &crate::chrome::Intent)>;
 
-pub(crate) type ServerDynHandler = std::rc::Rc<dyn Fn(crate::chrome::SharedChromeState, &crate::chrome::Intent) -> Vec<crate::chrome::Intent>>;
+pub(crate) type ServerDynHandler = std::rc::Rc<
+    dyn Fn(crate::chrome::SharedChromeState, &crate::chrome::Intent) -> Vec<crate::chrome::Intent>,
+>;
 
 #[derive(Clone)]
 enum DynamicHandler {
@@ -112,7 +115,12 @@ pub(crate) fn register_server_dynamic(
     meta: ActionMeta,
     handler: ServerDynHandler,
 ) -> Result<ActionHandle, DuplicateAction> {
-    register_handler(registry, catalog, meta, Some(DynamicHandler::Server(handler)))
+    register_handler(
+        registry,
+        catalog,
+        meta,
+        Some(DynamicHandler::Server(handler)),
+    )
 }
 
 /// Register an extension service's action: its metadata joins the catalog, and a call is forwarded
@@ -200,7 +208,9 @@ impl ActionRegistry {
         let _ = run_then_follow_up(state, |state| {
             match handler {
                 DynamicHandler::Window(handler) => handler(state, intent),
-                DynamicHandler::Server(_) | DynamicHandler::Service => state.client.invoke(intent.clone()),
+                DynamicHandler::Server(_) | DynamicHandler::Service => {
+                    state.client.invoke(intent.clone())
+                }
             }
             Ok(())
         });
@@ -238,7 +248,11 @@ impl ActionRegistry {
     /// In debug builds, panics if no handler is registered (this is a bug —
     /// every `WmAction` variant must have a handler in `build_registry()`).
     /// In release builds, silently does nothing.
-    pub fn execute(&self, action: &crate::input::WmAction, state: &mut crate::app_state::AppState) -> ActionResult {
+    pub fn execute(
+        &self,
+        action: &crate::input::WmAction,
+        state: &mut crate::app_state::AppState,
+    ) -> ActionResult {
         let disc = action.kind();
         // **Routed by the action's side**: a server action runs on the server when it has been
         // moved there; anything else runs here, as it always has.

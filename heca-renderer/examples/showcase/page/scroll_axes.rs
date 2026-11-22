@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> ScrollRegion {
     let theme = cx.theme;
 
-
     let mut grid = ScrollRegion::new()
         .both()
         .width(240.0)

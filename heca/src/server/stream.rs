@@ -1,42 +1,86 @@
 //! Process requests and plain snapshots, independent of any client's view.
 
+use super::sizing::Grid;
+use super::{
+    ServerState,
+    wire::terminal::{ProcessInput, TerminalFrame},
+};
 use crate::app::backend_store::TerminalOwner;
 use heca_core::backend::TerminalDamage;
-use super::sizing::Grid;
-use super::{ServerState, wire::terminal::{ProcessInput, TerminalFrame}};
 
-pub(super) fn valid_grid(cols: usize, rows: usize, cell: (f32, f32), scale: f32, limit: usize) -> bool {
-    cols > 0 && rows > 0 && cols.checked_mul(rows).is_some_and(|cells| cells <= limit)
-        && [cell.0, cell.1, scale, cell.0 * scale, cell.1 * scale].iter().all(|value| value.is_finite() && *value > 0.0)
+pub(super) fn valid_grid(
+    cols: usize,
+    rows: usize,
+    cell: (f32, f32),
+    scale: f32,
+    limit: usize,
+) -> bool {
+    cols > 0
+        && rows > 0
+        && cols.checked_mul(rows).is_some_and(|cells| cells <= limit)
+        && [cell.0, cell.1, scale, cell.0 * scale, cell.1 * scale]
+            .iter()
+            .all(|value| value.is_finite() && *value > 0.0)
 }
 
 impl ServerState {
     /// Input from the window identified by `client`. Typing and resizing make that window the active
     /// one and drive pane-size arbitration ([`sizing`](super::sizing)); a resize never goes straight
     /// to the process — the `pane_size` setting decides the size among every window showing the pane.
-    pub(super) fn process_input(&mut self, client: u64, owner: &TerminalOwner, input: ProcessInput) {
-        let Some(id) = self.backends.find_owner(owner) else { return };
+    pub(super) fn process_input(
+        &mut self,
+        client: u64,
+        owner: &TerminalOwner,
+        input: ProcessInput,
+    ) {
+        let Some(id) = self.backends.find_owner(owner) else {
+            return;
+        };
         match input {
             ProcessInput::Bytes(bytes) => {
-                if let Some(backend) = self.backends.get_mut_by_id(id) { backend.process_input(&bytes); }
+                if let Some(backend) = self.backends.get_mut_by_id(id) {
+                    backend.process_input(&bytes);
+                }
                 self.after_typing(owner, client);
             }
             ProcessInput::Key(key) => {
-                if let Some(backend) = self.backends.get_mut_by_id(id) { backend.process_key_event(&key); }
+                if let Some(backend) = self.backends.get_mut_by_id(id) {
+                    backend.process_key_event(&key);
+                }
                 self.after_typing(owner, client);
             }
             ProcessInput::Paste(text) => {
-                if let Some(backend) = self.backends.get_mut_by_id(id) { backend.paste(&text); }
+                if let Some(backend) = self.backends.get_mut_by_id(id) {
+                    backend.paste(&text);
+                }
                 self.after_typing(owner, client);
             }
             ProcessInput::Mouse(mouse) => {
-                if let Some(backend) = self.backends.get_mut_by_id(id) { backend.process_mouse_event(&mouse); }
+                if let Some(backend) = self.backends.get_mut_by_id(id) {
+                    backend.process_mouse_event(&mouse);
+                }
             }
             ProcessInput::Focus(focused) => {
-                if let Some(backend) = self.backends.get_mut_by_id(id) { backend.focus_changed(focused); }
+                if let Some(backend) = self.backends.get_mut_by_id(id) {
+                    backend.focus_changed(focused);
+                }
             }
-            ProcessInput::Resize { cols, rows, cell, scale } => {
-                self.sizing.request(owner, client, Grid { cols, rows, cell, scale });
+            ProcessInput::Resize {
+                cols,
+                rows,
+                cell,
+                scale,
+            } => {
+                self.sizing.request(
+                    owner,
+                    client,
+                    Grid {
+                        cols,
+                        rows,
+                        cell,
+                        scale,
+                    },
+                );
                 self.sizing.touch(owner, client);
                 self.apply_pane_size(owner);
             }
@@ -53,10 +97,18 @@ impl ServerState {
     /// Resize the one process to the grid the `pane_size` policy picks among the windows showing it,
     /// but only when that grid actually moved.
     fn apply_pane_size(&mut self, owner: &TerminalOwner) {
-        let Some(grid) = self.sizing.resolve(owner, self.terminal_settings.pane_size) else { return };
-        if !self.sizing.mark_applied(owner, grid) { return; }
-        let Some(id) = self.backends.find_owner(owner) else { return };
-        let Some(backend) = self.backends.get_mut_by_id(id) else { return };
+        let Some(grid) = self.sizing.resolve(owner, self.terminal_settings.pane_size) else {
+            return;
+        };
+        if !self.sizing.mark_applied(owner, grid) {
+            return;
+        }
+        let Some(id) = self.backends.find_owner(owner) else {
+            return;
+        };
+        let Some(backend) = self.backends.get_mut_by_id(id) else {
+            return;
+        };
         backend.set_cell_size(grid.cell.0, grid.cell.1);
         backend.set_scale_factor(grid.scale);
         backend.set_size(grid.cols, grid.rows);
@@ -78,38 +130,58 @@ impl ServerState {
     /// The terminal's [`screen_version`](heca_core::backend::PaneBackend::screen_version): equal
     /// numbers, equal live screens.
     pub(super) fn screen_version(&self, owner: &TerminalOwner) -> Option<u64> {
-        self.backends.get_by_id(self.backends.find_owner(owner)?)?.screen_version()
+        self.backends
+            .get_by_id(self.backends.find_owner(owner)?)?
+            .screen_version()
     }
 
     /// Whether `frame` still says everything about the terminal but its screen — its id, title,
     /// launch spec, runtime facts (`runtime`, else the process's own) and mouse grab — so a frame
     /// whose screen did not change either need not be sent again.
-    pub(super) fn facts_unchanged(&self, owner: &TerminalOwner, frame: &TerminalFrame,
-        runtime: Option<&heca_core::runtime::PaneRuntime>) -> bool {
-        let Some(id) = self.backends.find_owner(owner) else { return false };
-        let Some(backend) = self.backends.get_by_id(id) else { return false };
+    pub(super) fn facts_unchanged(
+        &self,
+        owner: &TerminalOwner,
+        frame: &TerminalFrame,
+        runtime: Option<&heca_core::runtime::PaneRuntime>,
+    ) -> bool {
+        let Some(id) = self.backends.find_owner(owner) else {
+            return false;
+        };
+        let Some(backend) = self.backends.get_by_id(id) else {
+            return false;
+        };
         let same_runtime = match runtime {
             Some(runtime) => frame.runtime == *runtime,
             None => frame.runtime == backend.runtime(),
         };
-        frame.id == id.0 && frame.title == backend.title()
+        frame.id == id.0
+            && frame.title == backend.title()
             && frame.display_title.as_deref() == self.backends.custom_title(id)
             && self.backends.spec_of(id) == Some(&frame.spec)
-            && same_runtime && frame.mouse_grabbed == backend.is_mouse_grabbed()
+            && same_runtime
+            && frame.mouse_grabbed == backend.is_mouse_grabbed()
     }
 
     /// The terminal's screen at `offset` rows above its live bottom, as a frame, and the decoded
     /// images it shows (which travel apart).
-    pub(super) fn viewport(&self, owner: &TerminalOwner, offset: usize) -> Option<(TerminalFrame, Vec<heca_core::backend::TerminalImage>)> {
+    pub(super) fn viewport(
+        &self,
+        owner: &TerminalOwner,
+        offset: usize,
+    ) -> Option<(TerminalFrame, Vec<heca_core::backend::TerminalImage>)> {
         let id = self.backends.find_owner(owner)?;
         let backend = self.backends.get_by_id(id)?;
         let (screen, images) = backend.terminal_snapshot_at(offset)?.into_wire();
         let frame = TerminalFrame {
-            id: id.0, owner: owner.clone(), title: backend.title().into(),
+            id: id.0,
+            owner: owner.clone(),
+            title: backend.title().into(),
             display_title: self.backends.custom_title(id).map(str::to_owned),
             spec: self.backends.spec_of(id)?.clone(),
-            screen, damage: TerminalDamage::Full,
-            runtime: backend.runtime(), mouse_grabbed: backend.is_mouse_grabbed(),
+            screen,
+            damage: TerminalDamage::Full,
+            runtime: backend.runtime(),
+            mouse_grabbed: backend.is_mouse_grabbed(),
         };
         Some((frame, images))
     }

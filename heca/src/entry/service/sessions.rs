@@ -26,8 +26,18 @@ pub struct SessionEntry {
 }
 
 impl SessionEntry {
-    pub(crate) fn new(key: SessionKey, name: String, folder: Option<PathBuf>, state: SessionState) -> Self {
-        Self { key, name, folder, state }
+    pub(crate) fn new(
+        key: SessionKey,
+        name: String,
+        folder: Option<PathBuf>,
+        state: SessionState,
+    ) -> Self {
+        Self {
+            key,
+            name,
+            folder,
+            state,
+        }
     }
 
     /// The session's key — the same for its whole life. See [`SessionKey`].
@@ -88,24 +98,30 @@ impl Sessions {
     /// project.
     pub fn of_project<'a>(&'a self, folder: &Path) -> impl Iterator<Item = &'a SessionEntry> + 'a {
         let wanted = resolved(folder);
-        self.0.iter().filter(move |entry| entry.folder().is_some_and(|f| resolved(f) == wanted))
+        self.0
+            .iter()
+            .filter(move |entry| entry.folder().is_some_and(|f| resolved(f) == wanted))
     }
 
     /// **Every session on the same project as the session with this key**, that session included.
     /// Empty when the session is gone or has no folder.
     pub fn same_project(&self, key: SessionKey) -> impl Iterator<Item = &SessionEntry> + '_ {
         let folder = self.folder_of(key).map(Path::to_path_buf);
-        self.0.iter().filter(move |entry| match (&folder, entry.folder()) {
-            (Some(wanted), Some(theirs)) => resolved(theirs) == resolved(wanted),
-            _ => false,
-        })
+        self.0
+            .iter()
+            .filter(move |entry| match (&folder, entry.folder()) {
+                (Some(wanted), Some(theirs)) => resolved(theirs) == resolved(wanted),
+                _ => false,
+            })
     }
 }
 
 /// A folder as the file system resolves it, or as written when it cannot be resolved (gone, or no
 /// permission) — two such folders then match only when written the same.
 fn resolved(folder: &Path) -> PathBuf {
-    folder.canonicalize().unwrap_or_else(|_| folder.components().collect())
+    folder
+        .canonicalize()
+        .unwrap_or_else(|_| folder.components().collect())
 }
 
 /// What happened to a session, in a [`SessionEvent`].
@@ -198,7 +214,12 @@ mod tests {
     use super::*;
 
     fn entry(name: &str, folder: Option<&Path>, state: SessionState) -> SessionEntry {
-        SessionEntry::new(SessionKey::generate(), name.into(), folder.map(Path::to_path_buf), state)
+        SessionEntry::new(
+            SessionKey::generate(),
+            name.into(),
+            folder.map(Path::to_path_buf),
+            state,
+        )
     }
 
     #[test]
@@ -209,7 +230,11 @@ mod tests {
         let sessions = Sessions::new(vec![a.clone(), b.clone()]);
         assert_eq!(sessions.folder_of(a.key()), Some(dir.path()));
         assert_eq!(sessions.folder_of(b.key()), None);
-        assert_eq!(sessions.same_project(b.key()).count(), 0, "no folder, no project");
+        assert_eq!(
+            sessions.same_project(b.key()).count(),
+            0,
+            "no folder, no project"
+        );
     }
 
     #[test]
@@ -233,10 +258,16 @@ mod tests {
         let d = entry("d", Some(&other), SessionState::Active);
         let sessions = Sessions::new(vec![a.clone(), b.clone(), c.clone(), d]);
 
-        let names: Vec<_> = sessions.same_project(a.key()).map(SessionEntry::name).collect();
+        let names: Vec<_> = sessions
+            .same_project(a.key())
+            .map(SessionEntry::name)
+            .collect();
         assert_eq!(names, ["a", "b", "c"]);
         assert_eq!(sessions.of_project(&link).count(), 3);
-        assert_eq!(sessions.get(c.key()).map(SessionEntry::state), Some(SessionState::Terminated),
-            "a terminated session is listed, with its state");
+        assert_eq!(
+            sessions.get(c.key()).map(SessionEntry::state),
+            Some(SessionState::Terminated),
+            "a terminated session is listed, with its state"
+        );
     }
 }

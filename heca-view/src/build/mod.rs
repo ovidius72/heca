@@ -48,22 +48,22 @@
 
 #[macro_use]
 mod macros;
-mod containers;
 mod composition;
-mod surfaces;
-mod terminal;
+mod containers;
 mod controls;
 mod display;
 mod events;
 mod style;
+mod surfaces;
+mod terminal;
 #[cfg(test)]
 mod tests;
 
-pub use containers::*;
 pub use composition::*;
-pub use surfaces::*;
-pub use terminal::Terminal;
+pub use containers::*;
 pub use controls::*;
 pub use display::*;
 pub use macros::Parent;
 pub use style::Style;
+pub use surfaces::*;
+pub use terminal::Terminal;

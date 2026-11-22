@@ -33,7 +33,11 @@ pub fn write_json(path: &Path, value: &impl Serialize) -> std::io::Result<()> {
 ///
 /// A unique temporary name lets independent state writers use this same operation safely.
 pub fn write_bytes(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    use std::{fs::{self, OpenOptions}, io::Write, sync::atomic::{AtomicU64, Ordering}};
+    use std::{
+        fs::{self, OpenOptions},
+        io::Write,
+        sync::atomic::{AtomicU64, Ordering},
+    };
     static NEXT: AtomicU64 = AtomicU64::new(0);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -46,7 +50,11 @@ pub fn write_bytes(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         options.mode(0o600);
     }
     let (tmp, mut file) = loop {
-        let tmp = path.with_extension(format!("{}.{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let tmp = path.with_extension(format!(
+            "{}.{}.tmp",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         match options.open(&tmp) {
             Ok(file) => break (tmp, file),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -54,12 +62,16 @@ pub fn write_bytes(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         }
     };
     let result = (|| {
-        if let Ok(metadata) = fs::metadata(path) { file.set_permissions(metadata.permissions())?; }
+        if let Ok(metadata) = fs::metadata(path) {
+            file.set_permissions(metadata.permissions())?;
+        }
         file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&tmp, path)
     })();
-    if result.is_err() { let _ = fs::remove_file(tmp); }
+    if result.is_err() {
+        let _ = fs::remove_file(tmp);
+    }
     result
 }
 
@@ -74,11 +86,17 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("owned.json");
         write_bytes(&path, b"first").unwrap();
-        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
         write_bytes(&path, b"second").unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"second");
-        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o640);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
     }
 
     #[test]
@@ -87,12 +105,21 @@ mod tests {
         let path = directory.path().join("shared.json");
         let barrier = std::sync::Barrier::new(2);
         std::thread::scope(|scope| {
-            let writers: Vec<_> = b"ab".iter().copied().map(|byte| {
-                let path = &path;
-                let barrier = &barrier;
-                scope.spawn(move || { barrier.wait(); write_bytes(path, &vec![byte; 131072]) })
-            }).collect();
-            for writer in writers { writer.join().unwrap().unwrap(); }
+            let writers: Vec<_> = b"ab"
+                .iter()
+                .copied()
+                .map(|byte| {
+                    let path = &path;
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        write_bytes(path, &vec![byte; 131072])
+                    })
+                })
+                .collect();
+            for writer in writers {
+                writer.join().unwrap().unwrap();
+            }
         });
         let bytes = std::fs::read(path).unwrap();
         assert!(bytes == vec![b'a'; 131072] || bytes == vec![b'b'; 131072]);

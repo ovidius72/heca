@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 #[test]
 fn scroll_view_pans_and_clamps_to_content_bounds() {
     // Three ~half-viewport columns overflow the 1000px viewport, so the view
@@ -33,11 +32,12 @@ fn scroll_view_pans_and_clamps_to_content_bounds() {
     );
 }
 
-
 #[test]
 fn scroll_view_is_noop_when_all_columns_fit() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
     let before = space.r().view_pos();
     space.m().scroll_view(500.0);
     assert!(
@@ -45,7 +45,6 @@ fn scroll_view_is_noop_when_all_columns_fit() {
         "a single column that fits the viewport does not scroll"
     );
 }
-
 
 #[test]
 fn refocusing_active_column_refits_a_scrolled_view() {
@@ -68,7 +67,6 @@ fn refocusing_active_column_refits_a_scrolled_view() {
         "ensure-visible snaps the view statically"
     );
 }
-
 
 /// **Changing focus does not make the view jump — it animates.** Moving the active column changes
 /// the origin `view_pos` is measured from, so the offset has to shift by exactly that much or the

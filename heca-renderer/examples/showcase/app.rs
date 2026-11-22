@@ -121,9 +121,10 @@ impl ApplicationHandler for App {
                 let scale = state.effective_scale() as f32;
                 let turn = match delta {
                     MouseScrollDelta::LineDelta(x, y) => heca_grid_ui::WheelTurn::Lines(-x, -y),
-                    MouseScrollDelta::PixelDelta(p) => {
-                        heca_grid_ui::WheelTurn::Pixels(-(p.x as f32) / scale, -(p.y as f32) / scale)
-                    }
+                    MouseScrollDelta::PixelDelta(p) => heca_grid_ui::WheelTurn::Pixels(
+                        -(p.x as f32) / scale,
+                        -(p.y as f32) / scale,
+                    ),
                 };
                 let line = state.theme.font_size * heca_grid_ui::font::MONO_LINE_RATIO;
                 let raw = state
@@ -319,4 +320,3 @@ impl ApplicationHandler for App {
         }
     }
 }
-

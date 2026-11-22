@@ -25,7 +25,10 @@ fn said_outside(needles: &[&str], owners: &[&str]) -> Vec<String> {
 /// six callers did.
 #[test]
 fn a_model_intent_is_sent_by_the_emitter() {
-    let found = said_outside(&["fire(", "InteractionIntent::View("], &["chrome/input/emitter.rs"]);
+    let found = said_outside(
+        &["fire(", "InteractionIntent::View("],
+        &["chrome/input/emitter.rs"],
+    );
     assert!(
         found.is_empty(),
         "these wrap a model intent by hand:\n  {}\n\nSend it with `emit.fire_intent(intent)`, or \

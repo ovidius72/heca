@@ -216,7 +216,11 @@ fn a_pane_types_into_what_it_holds_however_deep() {
         .into_iter()
         .map(|(path, _)| path)
         .collect();
-    assert_eq!(lettered, vec![Vec::<usize>::new()], "one letter, the pane's");
+    assert_eq!(
+        lettered,
+        vec![Vec::<usize>::new()],
+        "one letter, the pane's"
+    );
 
     assert!(heca_grid_ui::fire_hint(&mut pane, &[]));
     assert_eq!(*picked.borrow(), vec![heca_core::layout::PaneId(5)]);

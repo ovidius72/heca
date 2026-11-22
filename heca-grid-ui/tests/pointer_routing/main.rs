@@ -100,7 +100,8 @@ type Seen = Rc<RefCell<Vec<String>>>;
 fn two_probes() -> (heca_grid_ui::WidgetModel, Seen, Seen) {
     let (a, seen_a) = Probe::new(100.0, 50.0);
     let (b, seen_b) = Probe::new(100.0, 50.0);
-    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::row().child(a).child(b));
+    let mut root: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::row().child(a).child(b));
     LayoutEngine::new().compute(root.as_mut(), Size::new(200.0, 50.0));
     (root, seen_a, seen_b)
 }

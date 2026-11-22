@@ -22,7 +22,10 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) -> crate::acti
     Ok(())
 }
 
-pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_swap_and_focus_pane(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
         return Ok(());

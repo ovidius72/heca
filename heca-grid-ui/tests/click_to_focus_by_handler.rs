@@ -49,7 +49,9 @@ fn dock(log: &Log) -> heca_grid_ui::WidgetModel {
         });
 
     let log = log.clone();
-    heca_grid_ui::WidgetModel::new(FocusScope::new(body).on_click(move |_| log.borrow_mut().push("container")))
+    heca_grid_ui::WidgetModel::new(
+        FocusScope::new(body).on_click(move |_| log.borrow_mut().push("container")),
+    )
 }
 
 /// Click at `at`, through the same entry point the app uses.
@@ -110,10 +112,11 @@ fn a_right_click_behaves_exactly_as_a_left_click_does() {
                 .height(Length::Px(30.0))
                 .on_right_click(move |_| log.borrow_mut().push("row"))
         });
-    let mut host: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(FocusScope::new(body).on_right_click({
-        let log = log.clone();
-        move |_| log.borrow_mut().push("container")
-    }));
+    let mut host: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(FocusScope::new(body).on_right_click({
+            let log = log.clone();
+            move |_| log.borrow_mut().push("container")
+        }));
 
     click(host.as_mut(), ON_ROW, PointerButton::Right);
 

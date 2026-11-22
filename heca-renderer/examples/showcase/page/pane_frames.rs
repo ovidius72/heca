@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let theme = cx.theme;
 
-
     Flex::row()
         .gap(8.0)
         .align("center")
@@ -22,7 +21,11 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .height(80.0)
                 .background(theme.colors.surface)
                 .border(theme.colors.border, theme.colors.border_width)
-                .child(Label::new("Bordered").font_size(12.0).color(theme.colors.accent)),
+                .child(
+                    Label::new("Bordered")
+                        .font_size(12.0)
+                        .color(theme.colors.accent),
+                ),
         )
         .child(
             // Bracketed: the self-contained corner reticle (driven by
@@ -32,7 +35,11 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .width(100.0)
                 .height(80.0)
                 .background(theme.colors.surface)
-                .child(Label::new("Bracketed").font_size(12.0).color(theme.colors.accent)),
+                .child(
+                    Label::new("Bracketed")
+                        .font_size(12.0)
+                        .color(theme.colors.accent),
+                ),
         )
         .child(
             // Bordered with a per-pane width override: independent of the
@@ -46,7 +53,11 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .height(80.0)
                 .background(theme.colors.surface)
                 .border(theme.colors.accent, 0.0)
-                .child(Label::new("Border 3px").font_size(12.0).color(theme.colors.accent)),
+                .child(
+                    Label::new("Border 3px")
+                        .font_size(12.0)
+                        .color(theme.colors.accent),
+                ),
         )
         .child(
             // Bracketed in its own colour: `.border_color(c)` colours the frame in
@@ -57,6 +68,10 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .width(100.0)
                 .height(80.0)
                 .background(theme.colors.surface)
-                .child(Label::new("Own colour").font_size(12.0).color(theme.colors.danger)),
+                .child(
+                    Label::new("Own colour")
+                        .font_size(12.0)
+                        .color(theme.colors.danger),
+                ),
         )
 }

@@ -7,9 +7,9 @@
 //! Which workspace a window shows, which column is active in it and where it is scrolled are never
 //! read or moved here.
 
+use super::Session;
 use super::scrolling::{ColumnEffect, SpaceEffect};
 use super::types::WorkspaceId;
-use super::Session;
 
 mod add;
 mod moves;
@@ -70,7 +70,10 @@ impl Record {
             .into_iter()
             .filter_map(|(id, effects)| Some((session.index_of(id)?, effects)))
             .collect();
-        Arranged { removed_workspace: self.removed, effects }
+        Arranged {
+            removed_workspace: self.removed,
+            effects,
+        }
     }
 }
 

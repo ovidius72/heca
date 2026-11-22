@@ -12,7 +12,11 @@ use winit::window::Window;
 
 /// **The pointer's position in `window`**, in logical pixels — `None` when the system cannot say.
 pub(crate) fn pointer_in_window(window: &Window, scale_factor: f64) -> Option<(f32, f32)> {
-    let scale = if scale_factor > 0.0 { scale_factor } else { 1.0 };
+    let scale = if scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
     platform::pointer_in_window(window, scale)
 }
 
@@ -36,7 +40,11 @@ mod platform {
             let ns_window = view.window()?;
             let in_window = ns_window.mouseLocationOutsideOfEventStream();
             let in_view = view.convertPoint_fromView(in_window, None);
-            let y = if view.isFlipped() { in_view.y } else { view.bounds().size.height - in_view.y };
+            let y = if view.isFlipped() {
+                in_view.y
+            } else {
+                view.bounds().size.height - in_view.y
+            };
             Some((in_view.x as f32, y as f32))
         }
     }
@@ -58,8 +66,15 @@ mod platform {
         };
         let mut point = POINT { x: 0, y: 0 };
         // SAFETY: `point` is a valid out-parameter and `h.hwnd` is winit's live window.
-        let ok = unsafe { GetCursorPos(&mut point) != 0 && ScreenToClient(h.hwnd.get() as _, &mut point) != 0 };
-        ok.then(|| ((f64::from(point.x) / scale) as f32, (f64::from(point.y) / scale) as f32))
+        let ok = unsafe {
+            GetCursorPos(&mut point) != 0 && ScreenToClient(h.hwnd.get() as _, &mut point) != 0
+        };
+        ok.then(|| {
+            (
+                (f64::from(point.x) / scale) as f32,
+                (f64::from(point.y) / scale) as f32,
+            )
+        })
     }
 }
 
@@ -71,9 +86,10 @@ mod platform {
     /// X11 is asked where the pointer is relative to the window, in physical pixels. Wayland has no
     /// such question, and winit 0.30 delivers it no drop to ask about.
     pub(super) fn pointer_in_window(window: &Window, scale: f64) -> Option<(f32, f32)> {
-        let (RawWindowHandle::Xlib(w), RawDisplayHandle::Xlib(d)) =
-            (window.window_handle().ok()?.as_raw(), window.display_handle().ok()?.as_raw())
-        else {
+        let (RawWindowHandle::Xlib(w), RawDisplayHandle::Xlib(d)) = (
+            window.window_handle().ok()?.as_raw(),
+            window.display_handle().ok()?.as_raw(),
+        ) else {
             return None;
         };
         let display = d.display?.as_ptr().cast::<x11_dl::xlib::Display>();
@@ -84,7 +100,15 @@ mod platform {
         // out-parameter is a valid local.
         let found = unsafe {
             (xlib.XQueryPointer)(
-                display, w.window, &mut root, &mut child, &mut root_x, &mut root_y, &mut x, &mut y, &mut mask,
+                display,
+                w.window,
+                &mut root,
+                &mut child,
+                &mut root_x,
+                &mut root_y,
+                &mut x,
+                &mut y,
+                &mut mask,
             ) != 0
         };
         found.then(|| ((f64::from(x) / scale) as f32, (f64::from(y) / scale) as f32))

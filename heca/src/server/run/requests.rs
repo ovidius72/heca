@@ -17,12 +17,22 @@ impl ServerLoop {
     fn run_request(&mut self, Queued { handle, line }: Queued) {
         // The session is the one the request named, found by its key now: it may be gone since.
         let key = handle.reference.session();
-        let Some(index) = self.sessions.iter().position(|session| session.service_ref().key == key) else {
-            self.services.borrow_mut().request_stopped(&handle, false, "the session no longer exists".into());
+        let Some(index) = self
+            .sessions
+            .iter()
+            .position(|session| session.service_ref().key == key)
+        else {
+            self.services.borrow_mut().request_stopped(
+                &handle,
+                false,
+                "the session no longer exists".into(),
+            );
             return;
         };
         let call = Call::external(handle.clone());
-        let (result, drafts) = crate::notification::collect_notifications(|| self.sessions[index].run_request(&call, &line));
+        let (result, drafts) = crate::notification::collect_notifications(|| {
+            self.sessions[index].run_request(&call, &line)
+        });
         for draft in drafts {
             self.sessions[index].raise(draft);
         }

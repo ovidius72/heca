@@ -26,7 +26,9 @@ impl Motion {
 
     /// How far pane `id` is still to slide; the origin when it is not sliding.
     pub(crate) fn pane_offset(&self, id: PaneId) -> Point {
-        self.panes.get(&id).map_or_else(Point::default, |slide| slide.current())
+        self.panes
+            .get(&id)
+            .map_or_else(Point::default, |slide| slide.current())
     }
 
     /// Slide column `id` from `from_x` to where it is, adding to a slide already under way so a
@@ -70,8 +72,10 @@ impl Motion {
         live_columns: impl Fn(ColumnId) -> bool,
         live_panes: impl Fn(PaneId) -> bool,
     ) {
-        self.columns.retain(|id, slide| live_columns(*id) && !slide.is_done());
-        self.panes.retain(|id, slide| live_panes(*id) && !slide.is_done());
+        self.columns
+            .retain(|id, slide| live_columns(*id) && !slide.is_done());
+        self.panes
+            .retain(|id, slide| live_panes(*id) && !slide.is_done());
     }
 }
 
@@ -89,7 +93,10 @@ mod tests {
         assert!(first > 0.0 && first <= 100.0, "{first}");
         assert!(motion.is_animating());
         motion.slide_column(id, 50.0, AnimationConfig::default());
-        assert!(motion.column_offset(id) > first, "the second slide adds to the first");
+        assert!(
+            motion.column_offset(id) > first,
+            "the second slide adds to the first"
+        );
     }
 
     #[test]
@@ -107,7 +114,10 @@ mod tests {
         motion.slide_pane(PaneId(2), Point::new(5.0, 5.0), AnimationConfig::default());
         motion.advance(|c| c != ColumnId(1), |_| true);
         assert_eq!(motion.column_offset(ColumnId(1)), 0.0, "its column is gone");
-        assert!(motion.pane_offset(PaneId(2)).x > 0.0, "its pane is still here");
+        assert!(
+            motion.pane_offset(PaneId(2)).x > 0.0,
+            "its pane is still here"
+        );
         motion.advance(|_| true, |p| p != PaneId(2));
         assert!(!motion.is_animating());
     }

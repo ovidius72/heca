@@ -71,7 +71,8 @@ impl Tag {
         let label = label.font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
         // A segment cut by a narrow chip offers its whole text on hover: its label does that.
-        base.children.push(crate::WidgetModel::new(segment().child(label)));
+        base.children
+            .push(crate::WidgetModel::new(segment().child(label)));
         Self {
             base,
             color: None,
@@ -130,11 +131,7 @@ impl Tag {
     /// (`set_text_by_key`). A pane header does this: the program it shows changes twice per
     /// command, and rebuilding for it blinks the whole bar out.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn segment_text_keyed(
-        self,
-        label: impl Into<String>,
-        key: Option<&str>,
-    ) -> Self {
+    pub fn segment_text_keyed(self, label: impl Into<String>, key: Option<&str>) -> Self {
         use crate::builders::IdentityExt as _;
         let mut text = Label::new(label);
         if let Some(k) = key {
@@ -152,7 +149,11 @@ impl Tag {
 
     /// Append a configured label and ordinary leading content, with automatic conversion.
     #[heca_grid_ui_macros::host_only("composed label and leading content")]
-    pub fn segment_label_with(self, label: Label, leading: impl crate::builders::IntoComponent) -> Self {
+    pub fn segment_label_with(
+        self,
+        label: Label,
+        leading: impl crate::builders::IntoComponent,
+    ) -> Self {
         self.label_segment(label, Some(leading.into_component()))
     }
 
@@ -212,7 +213,8 @@ impl Component for Tag {
         let chip = self.base.bounds;
         for segment in &mut self.base.children {
             let at = segment.base().bounds;
-            let cut_off = at.loc.x + at.size.w > chip.loc.x + chip.size.w + 0.5 || at.loc.x < chip.loc.x - 0.5;
+            let cut_off = at.loc.x + at.size.w > chip.loc.x + chip.size.w + 0.5
+                || at.loc.x < chip.loc.x - 0.5;
             let automatic = segment.base().tooltip.as_ref().map(Tip::is_automatic);
             match (automatic, cut_off) {
                 (None, true) => {

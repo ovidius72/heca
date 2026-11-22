@@ -1,15 +1,15 @@
 //! The terminal backend's tests, by what they cover, and the helpers they share: starting a real
 //! shell, waiting for it, and reading what it drew.
 
-mod exit;
 #[cfg(unix)]
 mod agents;
-mod folder;
-mod screen;
-mod shells;
+mod exit;
 mod feedback;
+mod folder;
 #[cfg(unix)]
 mod recorded_launch;
+mod screen;
+mod shells;
 
 // What the old single test module had in scope, named for the test files below.
 pub(super) use super::launch::ShellLaunch;

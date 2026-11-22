@@ -95,7 +95,8 @@ fn the_assembled_map_stays_inside_the_window() {
             None,
         );
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(w, h));
-        let drawn = crate::chrome::surfaces::expose::testing::cards_bounds(root.as_ref()).expect("the map has cards");
+        let drawn = crate::chrome::surfaces::expose::testing::cards_bounds(root.as_ref())
+            .expect("the map has cards");
         assert!(
             drawn.loc.x >= 0.0
                 && drawn.loc.y >= 0.0

@@ -81,17 +81,33 @@ mod tests {
 
     #[test]
     fn completion_defaults_to_tab_and_can_be_rebound_or_disabled() {
-        use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
         use heca_config::theme::BindingValue;
+        use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
         let mut config = heca_config::theme::Config::default();
         let none = Modifiers::default();
-        assert_eq!(build_widget_keymap(&config).resolve(GridKey::Tab, none), &[WidgetIntent::Complete]);
-        config.keys.widgets.insert("complete".into(), BindingValue::Many(vec!["Ctrl+e".into()]));
+        assert_eq!(
+            build_widget_keymap(&config).resolve(GridKey::Tab, none),
+            &[WidgetIntent::Complete]
+        );
+        config
+            .keys
+            .widgets
+            .insert("complete".into(), BindingValue::Many(vec!["Ctrl+e".into()]));
         let keymap = build_widget_keymap(&config);
         assert!(keymap.resolve(GridKey::Tab, none).is_empty());
-        assert_eq!(keymap.resolve(GridKey::Char('e'), Modifiers { ctrl: true, ..none }), &[WidgetIntent::Complete]);
-        config.keys.widgets.insert("complete".into(), BindingValue::Many(Vec::new()));
-        assert!(build_widget_keymap(&config).resolve(GridKey::Tab, none).is_empty());
+        assert_eq!(
+            keymap.resolve(GridKey::Char('e'), Modifiers { ctrl: true, ..none }),
+            &[WidgetIntent::Complete]
+        );
+        config
+            .keys
+            .widgets
+            .insert("complete".into(), BindingValue::Many(Vec::new()));
+        assert!(
+            build_widget_keymap(&config)
+                .resolve(GridKey::Tab, none)
+                .is_empty()
+        );
     }
 
     #[test]

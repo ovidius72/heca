@@ -10,8 +10,8 @@ mod chrome;
 mod layout;
 mod navigation;
 mod pane;
-mod system;
 mod session;
+mod system;
 mod workspace;
 
 /// Static descriptor for a window-manager action. The built-in set is [`builtins`];

@@ -2,8 +2,8 @@
 
 use heca_view::WidgetId;
 
-use crate::props::glyph_from_name;
 use super::*;
+use crate::props::glyph_from_name;
 
 /// **A card never has to be named**.
 ///
@@ -43,7 +43,8 @@ fn an_unnamed_card_is_still_reported_by_the_grid() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     // Keys reach the focus owner and nowhere else, so a test that activates says who is
     // holding the keyboard — exactly as a real surface has to.
     grid.base().focus(false);
@@ -88,7 +89,8 @@ fn a_described_grid_walks_its_cards_the_way_it_draws_them() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         grid.base().focus(false);
         for _ in 0..steps {
             heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
@@ -130,7 +132,8 @@ fn a_hint_written_into_any_kind_is_found_by_the_picker() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         if !heca_grid_ui::fire_hint(widget.as_mut(), &[]) {
             unreachable.push(format!(
                 "{kind:?} (no hint declaration on the realized widget)"

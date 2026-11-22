@@ -37,13 +37,11 @@ pub trait TooltipExt: Component + Sized {
         self
     }
 
-
     /// **A tooltip whose words are live** — the same as [`tooltip`](Self::tooltip) given a signal,
     /// which is the form to write; kept so code written against it keeps working.
     fn tooltip_signal(self, text: crate::reactive::Signal<String>) -> Self {
         self.tooltip(text)
     }
-
 
     /// Which side of this widget its tooltip anchors to (default `Top`). Flipped automatically
     /// when there is no room on that side, so this is a preference, not a placement.
@@ -58,7 +56,6 @@ pub trait TooltipExt: Component + Sized {
         self
     }
 
-
     /// Seconds the pointer must rest before this widget's tooltip appears (default `0.5`).
     /// No-op when the widget has declared no tooltip.
     #[heca_grid_ui_macros::prop]
@@ -68,7 +65,6 @@ pub trait TooltipExt: Component + Sized {
         }
         self
     }
-
 
     /// **Show this widget's tooltip after the library's shorter rest**
     /// ([`QUICK_DELAY`](crate::widgets::tooltip::QUICK_DELAY)) instead of the default — for a tip

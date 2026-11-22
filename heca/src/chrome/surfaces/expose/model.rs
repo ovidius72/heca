@@ -278,8 +278,10 @@ mod tests {
         let mut s = session();
         // Content add (viewless), then this window places it where it draws it.
         s.session.workspaces[0].add_floating_pane(Pane::new(PaneId(9), "float"), None);
-        s.ws()
-            .float_in_view(PaneId(9), Rectangle::new(Point::new(40.0, 30.0), Size::new(200.0, 150.0)));
+        s.ws().float_in_view(
+            PaneId(9),
+            Rectangle::new(Point::new(40.0, 30.0), Size::new(200.0, 150.0)),
+        );
         s.scrolled(0, 120.0, 1);
 
         // **Stand on a later column**, so `column_x(active)` is not zero and reading `view_offset`

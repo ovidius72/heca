@@ -17,6 +17,6 @@ fn open_overlay() -> Overlay {
     o
 }
 
+mod input;
 mod layout;
 mod lifecycle;
-mod input;

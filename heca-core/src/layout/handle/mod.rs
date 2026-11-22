@@ -212,7 +212,8 @@ impl LayoutMut<'_> {
     /// its place, or the new last one. With no workspace left it shows nothing until one is made.
     pub fn workspace_removed(&mut self, idx: usize) {
         let session = &*self.session;
-        self.view.forget_all_but(|id| session.index_of(id).is_some());
+        self.view
+            .forget_all_but(|id| session.index_of(id).is_some());
         // The shown workspace is an id: if it still exists, its index shifts by itself and there is
         // nothing to do. Only when the shown workspace is the one that went does the window move —
         // to the workspace now in its place, or the last, or nothing when none are left.

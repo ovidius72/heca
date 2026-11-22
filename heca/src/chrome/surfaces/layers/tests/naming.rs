@@ -145,7 +145,10 @@ fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
         crate::chrome::surface_node(&window, described).is_some(),
         "and its realized tree is a node in the window root, where the one walk finds it",
     );
-    assert_eq!(layer.node.as_ref().map(|n| n.kind.clone()), Some(WidgetId::Label),);
+    assert_eq!(
+        layer.node.as_ref().map(|n| n.kind.clone()),
+        Some(WidgetId::Label),
+    );
 
     // And a native layer has no description to offer — the arms are not interchangeable.
     let native_layer = reg

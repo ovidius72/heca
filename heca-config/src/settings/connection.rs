@@ -1,8 +1,8 @@
 //! Limits for the local client/server transport.
 
-use std::num::{NonZeroU64, NonZeroUsize};
-use serde::{Deserialize, Serialize};
 use super::schema::declare_settings;
+use serde::{Deserialize, Serialize};
+use std::num::{NonZeroU64, NonZeroUsize};
 
 declare_settings! {
     defaults: ["connection"];
@@ -37,14 +37,20 @@ mod tests {
         let expected: ConnectionConfig = file["settings"]["connection"].clone().try_into().unwrap();
         assert_eq!(ConnectionConfig::default(), expected);
         assert_eq!(toml::from_str::<ConnectionConfig>("").unwrap(), expected);
-        assert_eq!(config_from_layers("").unwrap().settings.connection, expected);
+        assert_eq!(
+            config_from_layers("").unwrap().settings.connection,
+            expected
+        );
     }
 
     #[test]
     fn partial_overrides_keep_other_file_defaults() {
         let config = config_from_layers("[settings.connection]\nqueue_capacity = 3").unwrap();
         assert_eq!(config.settings.connection.queue_capacity.get(), 3);
-        assert_eq!(config.settings.connection.max_frame_bytes, ConnectionConfig::default().max_frame_bytes);
+        assert_eq!(
+            config.settings.connection.max_frame_bytes,
+            ConnectionConfig::default().max_frame_bytes
+        );
     }
 
     #[test]

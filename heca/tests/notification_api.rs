@@ -22,13 +22,14 @@ fn external_native_producer_can_optionally_set_the_duration() {
         .send();
     Notification::info("Configured duration").send();
     Notification::warning("Acknowledge this")
-        .auto_dismiss(Duration::from_secs(10)).sticky().send();
+        .auto_dismiss(Duration::from_secs(10))
+        .sticky()
+        .send();
 }
 
 #[test]
 fn external_native_producer_can_attach_a_named_action() {
-    let action = NotificationAction::new("Retry", Intent::new("build.retry"))
-        .dismiss_after(true);
+    let action = NotificationAction::new("Retry", Intent::new("build.retry")).dismiss_after(true);
     assert_eq!(action.intent.action, "build.retry");
     assert!(action.dismiss_after);
     Notification::danger("Build failed").action(action).send();

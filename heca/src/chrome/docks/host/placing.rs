@@ -54,12 +54,16 @@ fn resolve(location: Option<&str>, id: &str, code: RegionId) -> Option<RegionId>
 /// What an entry says, compared between two configs: a dock is touched by a reload only when this
 /// changed.
 fn said(entry: Option<&DockEntry>) -> (Option<&str>, Option<i64>, Option<f32>) {
-    entry.map_or((None, None, None), |e| (e.location.as_deref(), e.order, e.flex))
+    entry.map_or((None, None, None), |e| {
+        (e.location.as_deref(), e.order, e.flex)
+    })
 }
 
 /// The entry written for exactly this dock (`name` + `id`) — what keeps a dock made from the config.
 fn own_entry<'a>(docks: &'a [DockEntry], kind: &str, id: &str) -> Option<&'a DockEntry> {
-    docks.iter().find(|e| e.name == kind && e.id.as_deref() == Some(id))
+    docks
+        .iter()
+        .find(|e| e.name == kind && e.id.as_deref() == Some(id))
 }
 
 impl Declared {
@@ -107,7 +111,9 @@ impl ChromeHost {
                 RegionOp::Retain(keep) => {
                     self.unseat_where(region, &keep);
                     let seated = &self.placement;
-                    self.declared.retain(|d| d.region != region || keep(&d.id) || seated.contains_key(&d.id));
+                    self.declared.retain(|d| {
+                        d.region != region || keep(&d.id) || seated.contains_key(&d.id)
+                    });
                 }
                 RegionOp::Gap(gap) => self.layouts[region].gap = Some(gap),
             }
@@ -146,19 +152,33 @@ impl ChromeHost {
                 (None, Some(_)) => self.unseat_id(&id),
                 (Some(to), Some(at)) => {
                     self.set_placement(&id, placement);
-                    if to != at && let Err(error) = self.move_container(&id, to) {
+                    if to != at
+                        && let Err(error) = self.move_container(&id, to)
+                    {
                         crate::chrome::input::identity::warn_author(format!(
-                            "[heca] [[docks]] could not move '{id}' to '{}': {error}", to.as_str()));
+                            "[heca] [[docks]] could not move '{id}' to '{}': {error}",
+                            to.as_str()
+                        ));
                     }
                 }
                 (Some(to), None) => match self.remake(i) {
                     Some(provider) => {
-                        let (front, recipe) = (self.declared[i].front, self.declared[i].recipe.clone());
-                        self.seat(to, Placed { provider, placement, recipe }, front);
+                        let (front, recipe) =
+                            (self.declared[i].front, self.declared[i].recipe.clone());
+                        self.seat(
+                            to,
+                            Placed {
+                                provider,
+                                placement,
+                                recipe,
+                            },
+                            front,
+                        );
                     }
                     None => crate::chrome::input::identity::warn_author(format!(
                         "[heca] [[docks]] '{id}' was added as a dock, not as a recipe, so it cannot \
-                         be made again — restart heca to bring it back")),
+                         be made again — restart heca to bring it back"
+                    )),
                 },
                 (None, None) => {}
             }
@@ -182,26 +202,41 @@ impl ChromeHost {
     /// **A new dock of `kind` under `id`**, made by a dock of that kind the host knows — from its
     /// recipe, or the seated one — if the kind can make another.
     fn spawn_of(&self, kind: &str, id: &str) -> Option<Box<dyn Provider>> {
-        let from_recipe = self.declared.iter()
+        let from_recipe = self
+            .declared
+            .iter()
             .filter(|d| d.kind == kind)
             .find_map(|d| d.recipe.as_ref().and_then(|recipe| recipe().spawn(id)));
-        from_recipe.or_else(|| self.regions.iter()
-            .flat_map(|r| r.contributions.iter())
-            .filter(|m| m.provider.kind() == kind)
-            .find_map(|m| m.provider.spawn(id)))
+        from_recipe.or_else(|| {
+            self.regions
+                .iter()
+                .flat_map(|r| r.contributions.iter())
+                .filter(|m| m.provider.kind() == kind)
+                .find_map(|m| m.provider.spawn(id))
+        })
     }
 
     /// **Add the docks `[[docks]]` names that nobody added** — one entry with a `name` and an `id`
     /// no dock has, for a kind that can make another. Placed by the entry; where the entry says
     /// nothing, where the code put the other dock of its kind.
     fn add_from_config(&mut self) {
-        let wanted: Vec<(String, String)> = self.docks.iter()
+        let wanted: Vec<(String, String)> = self
+            .docks
+            .iter()
             .filter_map(|e| Some((e.name.clone(), e.id.clone()?)))
-            .filter(|(_, id)| !self.placement.contains_key(id) && !self.declared.iter().any(|d| &d.id == id))
+            .filter(|(_, id)| {
+                !self.placement.contains_key(id) && !self.declared.iter().any(|d| &d.id == id)
+            })
             .collect();
         for (kind, id) in wanted {
-            let Some(provider) = self.spawn_of(&kind, &id) else { continue };
-            let region = self.declared.iter().find(|d| d.kind == kind).map_or(RegionId::LeftSidebar, |d| d.region);
+            let Some(provider) = self.spawn_of(&kind, &id) else {
+                continue;
+            };
+            let region = self
+                .declared
+                .iter()
+                .find(|d| d.kind == kind)
+                .map_or(RegionId::LeftSidebar, |d| d.region);
             self.declare(region, Placed::from(provider), false, true);
         }
     }
@@ -223,14 +258,20 @@ impl ChromeHost {
         placed.placement = declared.placement_with(entry.as_ref());
         self.declared.retain(|d| d.id != id);
         self.declared.push(declared);
-        if let Some(to) = resolve(entry.as_ref().and_then(|e| e.location.as_deref()), &id, region) {
+        if let Some(to) = resolve(
+            entry.as_ref().and_then(|e| e.location.as_deref()),
+            &id,
+            region,
+        ) {
             self.seat(to, placed, front);
         }
     }
 
     /// A seated dock's placement (share and order), replaced — a reload changed its entry.
     fn set_placement(&mut self, id: &str, placement: DockPlacement) {
-        if let Some(mounted) = self.regions.iter_mut()
+        if let Some(mounted) = self
+            .regions
+            .iter_mut()
             .flat_map(|r| r.contributions.iter_mut())
             .find(|m| m.id() == id)
         {
@@ -244,7 +285,11 @@ impl ChromeHost {
         if !known {
             crate::chrome::input::identity::warn_author(format!(
                 "[heca] there is no dock '{id}' to remove — the docks are: {}",
-                self.placement.keys().cloned().collect::<Vec<_>>().join(", "),
+                self.placement
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ));
             return;
         }
@@ -262,7 +307,11 @@ impl ChromeHost {
 
     /// Start every seated dock not started yet (starting is once per dock).
     fn start_seated(&mut self, ctx: &ChromeCtx) {
-        for mounted in self.regions.iter_mut().flat_map(|r| r.contributions.iter_mut()) {
+        for mounted in self
+            .regions
+            .iter_mut()
+            .flat_map(|r| r.contributions.iter_mut())
+        {
             mounted.activate(ctx);
         }
     }

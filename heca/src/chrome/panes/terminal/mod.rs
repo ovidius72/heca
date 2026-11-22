@@ -33,15 +33,15 @@ mod input;
 mod model;
 mod search;
 mod shared;
-mod title;
 #[cfg(test)]
 pub(crate) mod testing;
+mod title;
 mod viewport;
 
 pub use component::Terminal;
+pub(crate) use component::TerminalRef;
 #[cfg(test)]
 pub(crate) use component::nodes_built;
-pub(crate) use component::TerminalRef;
 use input::TerminalCommand;
 pub(crate) use input::{Cell, Grid, Page, Search, TerminalInput};
 pub(crate) use model::TerminalId;
@@ -63,9 +63,12 @@ pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> TerminalRef {
     let id = state.client.backends.id_for(pane_id);
     let proxy = state.event_proxy.clone();
     let p = state.appearance.terminal.effective_terminal_padding();
-    kept(&mut state.terminals, id, (p.top, p.bottom, p.left, p.right), || {
-        seams(proxy, Some(pane_id), id)
-    })
+    kept(
+        &mut state.terminals,
+        id,
+        (p.top, p.bottom, p.left, p.right),
+        || seams(proxy, Some(pane_id), id),
+    )
 }
 
 /// The terminal kept for `id`: made from `seams` the first time, found every time after. The
@@ -164,7 +167,9 @@ fn seams(
                     pane_id: None,
                     terminal: Some(id.0),
                 },
-                TerminalCommand::Rename => WmAction::TerminalRename { terminal: id.0.to_string() },
+                TerminalCommand::Rename => WmAction::TerminalRename {
+                    terminal: id.0.to_string(),
+                },
             };
             let _ = command_proxy.send_event(AppEvent::ChromeIntent {
                 source: InteractionSource::MouseContent,
@@ -212,7 +217,10 @@ pub(crate) fn retain_owned(state: &mut AppState) {
 /// Refresh shared title metadata before layout, without changing a terminal's resource or tree.
 pub(crate) fn sync_titles(state: &AppState) {
     for (id, terminal) in &state.terminals {
-        terminal.show_title(state.client.backends.custom_title(*id), &state.action_catalog);
+        terminal.show_title(
+            state.client.backends.custom_title(*id),
+            &state.action_catalog,
+        );
     }
 }
 
@@ -250,14 +258,20 @@ fn settle<'a>(terminals: impl Iterator<Item = &'a Terminal>, drawn: &Drawn) {
 /// the padding holds it in and how much room is left. Known for every terminal, on screen or not,
 /// so one scrolled out of view keeps its size; where it is drawn comes from the scene that draws
 /// it, at the moment it is drawn.
-pub(crate) fn content_box_of(state: &AppState, id: TerminalId) -> Option<heca_core::layout::Rectangle> {
+pub(crate) fn content_box_of(
+    state: &AppState,
+    id: TerminalId,
+) -> Option<heca_core::layout::Rectangle> {
     state.terminals.get(&id)?.content_box()
 }
 
 /// **The box a terminal's surface spans, relative to where it is drawn** — the whole
 /// box the layout gave it, padding included. The terminal's background fills this and
 /// the grid above is held in by [`content_box_of`]; `None` before the first layout.
-pub(crate) fn full_box_of(state: &AppState, id: TerminalId) -> Option<heca_core::layout::Rectangle> {
+pub(crate) fn full_box_of(
+    state: &AppState,
+    id: TerminalId,
+) -> Option<heca_core::layout::Rectangle> {
     state.terminals.get(&id)?.full_box()
 }
 
@@ -347,7 +361,9 @@ mod kept_tests {
         let mut terminals = std::collections::HashMap::new();
         let id = TerminalId(5);
         let before = nodes_built();
-        let _ = kept(&mut terminals, id, (0.0, 0.0, 0.0, 0.0), || testing::recording().0);
+        let _ = kept(&mut terminals, id, (0.0, 0.0, 0.0, 0.0), || {
+            testing::recording().0
+        });
         assert_eq!(nodes_built() - before, 1, "the terminal is made once");
         let first = nodes_built();
         for _ in 0..50 {
@@ -357,6 +373,10 @@ mod kept_tests {
             assert_eq!(looked_at.node().id(), Some(id), "it is the same terminal");
         }
         // The only nodes built were the ones this test asked for with `node()`.
-        assert_eq!(nodes_built() - first, 50, "looking builds none; only `node()` does");
+        assert_eq!(
+            nodes_built() - first,
+            50,
+            "looking builds none; only `node()` does"
+        );
     }
 }

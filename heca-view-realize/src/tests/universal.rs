@@ -23,8 +23,7 @@ fn every_universal_capability_is_reachable_from_the_sdk() {
     /// capability a described tree cannot use — keep it empty if you can.
     const NOT_IN_SDK: &[(&str, &str)] = &[];
 
-    let dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-grid-ui/src/builders");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-grid-ui/src/builders");
     let sources: Vec<String> = std::fs::read_dir(&dir)
         .expect("the native builders are where they are expected")
         .filter_map(|entry| {
@@ -45,7 +44,11 @@ fn every_universal_capability_is_reachable_from_the_sdk() {
         let Some(name) = native
             .split("\npub trait ")
             .skip(1)
-            .filter_map(|after| after.split(|c: char| !(c.is_alphanumeric() || c == '_')).next())
+            .filter_map(|after| {
+                after
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .next()
+            })
             .find(|name| native.contains(&format!(": Component + Sized> {name} for ")))
         else {
             continue;
@@ -107,7 +110,8 @@ fn hiding_the_ink_and_collapsing_the_box_are_separately_declarable_on_any_kind()
     for kind in registered_ids() {
         let (emit, _fired) = recording_emitter();
         let realized = |node: &ViewNode| {
-            realize(node, &Theme::default(), &emit, &mut FormBindings::default()).expect("valid described test widget")
+            realize(node, &Theme::default(), &emit, &mut FormBindings::default())
+                .expect("valid described test widget")
         };
 
         // `visible: false` — the ink goes, the box stays.
@@ -172,7 +176,8 @@ fn a_described_action_row_carries_its_actions_into_the_overflow_menu() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         group.base().children.len(),
         3,
@@ -220,7 +225,8 @@ fn where_a_letter_sits_is_declarable_on_any_kind() {
             .prop("hint_offset_y", PropValue::Float(4.0))
             .prop("hint_color", PropValue::Color("danger".into()));
         let theme = Theme::default();
-        let widget = realize(&node, &theme, &emit, &mut FormBindings::default()).expect("valid described test widget");
+        let widget = realize(&node, &theme, &emit, &mut FormBindings::default())
+            .expect("valid described test widget");
         let style = widget.base().hint_style;
         if style.placement != heca_grid_ui::widgets::HintPlacement::CenterRight {
             missing.push(format!("{kind:?} (placement ignored)"));

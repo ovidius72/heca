@@ -28,7 +28,10 @@ fn a_timed_toast_paints_a_countdown_bar_only_with_progress() {
                 && r.rect.loc.y + r.rect.size.h < card.loc.y + card.size.h)
         })
     };
-    assert!(bar(&t), "a progress toast draws a hairline inside its lower edge");
+    assert!(
+        bar(&t),
+        "a progress toast draws a hairline inside its lower edge"
+    );
 
     // The span alone is not enough: the library prop is off by default.
     let mut off = Toast::success("Configuration reloaded").countdown(Duration::from_secs(4));
@@ -120,7 +123,11 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
         &Event::pointer_released(centre, PointerButton::Left),
     );
     assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
-    assert_eq!(opened.get(), 0, "the × uses the click: closing a card does not also open it");
+    assert_eq!(
+        opened.get(),
+        0,
+        "the × uses the click: closing a card does not also open it"
+    );
 }
 
 #[test]

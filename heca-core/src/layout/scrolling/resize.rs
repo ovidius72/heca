@@ -54,7 +54,9 @@ impl ScrollingMut<'_> {
     /// **No-op for the first column**, which has nothing to its left to trade with.
     pub fn move_active_column_left_boundary(&mut self, delta: f64) {
         let active = self.view.active_column;
-        let Some(moved) = self.space.left_boundary_transfer(active, delta, self.view.area.size.w)
+        let Some(moved) = self
+            .space
+            .left_boundary_transfer(active, delta, self.view.area.size.w)
         else {
             return;
         };

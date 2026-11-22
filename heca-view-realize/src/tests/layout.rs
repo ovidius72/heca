@@ -27,7 +27,8 @@ fn layout_properties_never_named_in_realize_still_reach_the_widget() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let l = w.base().style.layout;
     assert_eq!(
         l.padding,
@@ -53,7 +54,8 @@ fn a_described_node_takes_its_parts_with_flex() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(w.base().style.layout.flex, Some(3.0));
 }
 
@@ -70,7 +72,8 @@ fn a_described_node_says_its_order() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget")
+        )
+        .expect("valid described test widget")
         .base()
         .style
         .layout
@@ -94,7 +97,8 @@ fn length_accepts_the_spelling_an_author_would_reach_for() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget")
+        )
+        .expect("valid described test widget")
         .base()
         .style
         .layout
@@ -124,7 +128,8 @@ fn a_bad_property_never_takes_the_good_ones_with_it() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let l = w.base().style.layout;
     use heca_grid_ui::style::Space;
     assert_eq!(
@@ -158,7 +163,8 @@ fn merging_preserves_layout_the_widget_set_in_its_constructor() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     use heca_grid_ui::style::Space;
     let l = w.base().style.layout;
     assert_eq!(l.padding, Space::Px(4.0), "the property the node did carry");
@@ -208,7 +214,8 @@ fn a_description_can_place_a_node_at_a_fractional_rect() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let placement = w
         .base()
         .style
@@ -233,7 +240,8 @@ fn a_node_with_no_properties_changes_nothing() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         bare.base().style.layout,
         ScrollRegion::new().base().style.layout

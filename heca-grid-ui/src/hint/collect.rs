@@ -223,7 +223,15 @@ pub fn collect_hints_scoped(
     scope: Option<&str>,
 ) -> Vec<(Vec<usize>, Rectangle)> {
     let mut out = Vec::new();
-    hints_into(root, &mut Vec::new(), None, None, scope, &mut Vec::new(), &mut out);
+    hints_into(
+        root,
+        &mut Vec::new(),
+        None,
+        None,
+        scope,
+        &mut Vec::new(),
+        &mut out,
+    );
     out.into_iter().flatten().collect()
 }
 
@@ -411,7 +419,9 @@ fn hints_into(
     // its own: one question, asked once (see [`unseen`]).
     let mut here = wrapping;
     let mut lettered_here = false;
-    if is_target_of(node, scope) && !unseen(node, clip) && !reached_through_ancestor(node, path, handed)
+    if is_target_of(node, scope)
+        && !unseen(node, clip)
+        && !reached_through_ancestor(node, path, handed)
     {
         let declares = node.base().hint.is_some();
         // **Among layers of one thing, a declaration outranks mere actionability.** Saying what a
@@ -446,7 +456,9 @@ fn hints_into(
     // Judged per node rather than by pruning the subtree: a transparent wrapper can carry bounds
     // its child does not, and pruning on one would silently take every letter beneath it.
     let clip = narrowed(clip, node);
-    let hands = lettered_here.then(|| crate::focus::handed_to(node)).flatten();
+    let hands = lettered_here
+        .then(|| crate::focus::handed_to(node))
+        .flatten();
     if let Some(to) = &hands {
         handed.push(path.iter().chain(to).copied().collect());
     }

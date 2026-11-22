@@ -59,31 +59,51 @@ fn every_widget_property_is_reachable_from_the_sdk() {
     };
 
     let registry = WidgetRegistry::builtins().expect("library definitions");
-    let shared_style = sdk.split("pub trait Style: Sized {").nth(1)
-        .and_then(|style| style.split("\n}\n").next()).unwrap_or("");
-    let text_setter = sdk.split("macro_rules! with_text {").nth(1)
-        .and_then(|body| body.split("\n}\n").next()).unwrap_or("");
+    let shared_style = sdk
+        .split("pub trait Style: Sized {")
+        .nth(1)
+        .and_then(|style| style.split("\n}\n").next())
+        .unwrap_or("");
+    let text_setter = sdk
+        .split("macro_rules! with_text {")
+        .nth(1)
+        .and_then(|body| body.split("\n}\n").next())
+        .unwrap_or("");
     let mut missing = Vec::new();
     for definition in registry.definitions() {
         let metadata = definition.metadata();
         let sdk_name = metadata.sdk_name;
-        assert!(!sdk_name.is_empty(), "{} has no typed SDK identity", metadata.id);
+        assert!(
+            !sdk_name.is_empty(),
+            "{} has no typed SDK identity",
+            metadata.id
+        );
         let block = block_for(sdk_name).unwrap_or_default();
+        // Spacing and line breaks are the formatter's, not the code's: `.prop(\n "x",` is the
+        // same setter as `.prop("x",`.
+        let compact: String = block.split_whitespace().collect();
+        let text_compact: String = text_setter.split_whitespace().collect();
         for prop in &metadata.properties {
-            if NOT_IN_SDK.iter().any(|(widget, property, _)| *widget == sdk_name && *property == prop) {
+            if NOT_IN_SDK
+                .iter()
+                .any(|(widget, property, _)| *widget == sdk_name && *property == prop)
+            {
                 continue;
             }
-            let writes_key = block.contains(&format!(".prop(\"{prop}\""))
-                || block.contains(&format!("props.insert(\"{prop}\""))
+            let writes_key = compact.contains(&format!(".prop(\"{prop}\""))
+                || compact.contains(&format!("props.insert(\"{prop}\""))
                 || shared_style.contains(&format!("fn {prop}("))
-                || (text_setter.contains(&format!("props.insert(\"{prop}\""))
+                || (text_compact.contains(&format!("props.insert(\"{prop}\""))
                     && sdk.split("with_text!(").skip(1).any(|call| {
                         call.split_once(')').is_some_and(|(names, _)| {
                             names.split(',').any(|name| name.trim() == sdk_name)
                         })
                     }));
             if !writes_key {
-                missing.push(format!("{}::{prop} (builder {sdk_name})", metadata.native_name));
+                missing.push(format!(
+                    "{}::{prop} (builder {sdk_name})",
+                    metadata.native_name
+                ));
             }
         }
     }
@@ -97,5 +117,8 @@ fn every_widget_property_is_reachable_from_the_sdk() {
 
     // The actual factory definitions supply the checked inventory, including constructor
     // inputs and state adapters. There is no second per-widget check list or exemption list.
-    assert!(registry.definitions().count() > 30, "the registration inventory must not be empty");
+    assert!(
+        registry.definitions().count() > 30,
+        "the registration inventory must not be empty"
+    );
 }

@@ -36,7 +36,9 @@ impl Service for Probe {
     }
 
     fn project(&self, cx: &ProjectCx<'_>) -> Option<Projection<String, String>> {
-        let value = cx.extension_config::<Limits>().map_or_else(|error| error.to_string(), |limits| limits.max.to_string());
+        let value = cx
+            .extension_config::<Limits>()
+            .map_or_else(|error| error.to_string(), |limits| limits.max.to_string());
         Some(Projection::Snapshot { revision: 0, value })
     }
 }
@@ -56,8 +58,19 @@ struct Starts(Rc<RefCell<Vec<Start>>>);
 impl Starts {
     fn latest(&self, service: &str) -> (PathBuf, Result<Limits, String>) {
         let all = self.0.borrow();
-        let start = all.iter().rev().find(|start| start.service == service).expect("started");
-        (start.dir.clone(), start.limits.as_ref().map(|limits| Limits { max: limits.max }).map_err(Clone::clone))
+        let start = all
+            .iter()
+            .rev()
+            .find(|start| start.service == service)
+            .expect("started");
+        (
+            start.dir.clone(),
+            start
+                .limits
+                .as_ref()
+                .map(|limits| Limits { max: limits.max })
+                .map_err(Clone::clone),
+        )
     }
 
     fn dir(&self, service: &str) -> PathBuf {
@@ -79,26 +92,42 @@ fn declare(extensions: &[(&str, &[&str])]) -> Starts {
         for &short in services {
             let (full, log) = (format!("{name}.{short}"), starts.0.clone());
             let service = extension.service(short, move |cx| {
-                let limits = cx.extension_config::<Limits>().map_err(|error| error.to_string());
-                log.borrow_mut().push(Start { service: full.clone(), dir: cx.data_dir().to_owned(), limits });
+                let limits = cx
+                    .extension_config::<Limits>()
+                    .map_err(|error| error.to_string());
+                log.borrow_mut().push(Start {
+                    service: full.clone(),
+                    dir: cx.data_dir().to_owned(),
+                    limits,
+                });
                 Ok(Probe)
             });
             service.action(extension.action(&format!("{short}_dir")), |_, cx, _| {
                 crate::entry::service::ActionResult::Done(Some(cx.data_dir().display().to_string()))
             });
             service.action(extension.action(&format!("{short}_max")), |_, cx, _| {
-                crate::entry::service::ActionResult::Done(Some(match cx.extension_config::<Limits>() {
-                    Ok(limits) => limits.max.to_string(),
-                    Err(error) => error.to_string(),
-                }))
+                crate::entry::service::ActionResult::Done(Some(
+                    match cx.extension_config::<Limits>() {
+                        Ok(limits) => limits.max.to_string(),
+                        Err(error) => error.to_string(),
+                    },
+                ))
             });
         }
     }
     starts
 }
 
-fn start_under(root: &Path, kind: ServerKind, config: &heca_config::loader::AppConfig) -> ServerLoop {
-    server_as(config, ServerIdentity::claim_in(kind, Some(root.to_owned())), ServerWaker::new(|| {}))
+fn start_under(
+    root: &Path,
+    kind: ServerKind,
+    config: &heca_config::loader::AppConfig,
+) -> ServerLoop {
+    server_as(
+        config,
+        ServerIdentity::claim_in(kind, Some(root.to_owned())),
+        ServerWaker::new(|| {}),
+    )
 }
 
 /// **A service's folder exists before its factory runs, only its owner can use it, and no other
@@ -110,13 +139,23 @@ fn each_service_gets_a_folder_that_exists_is_private_and_is_its_own() {
     let (one, two) = (starts.dir("demo.one"), starts.dir("demo.two"));
     assert!(one.is_dir() && two.is_dir());
     assert_ne!(one, two);
-    assert_eq!(one.parent(), two.parent(), "both are in this server's folder");
+    assert_eq!(
+        one.parent(),
+        two.parent(),
+        "both are in this server's folder"
+    );
     assert!(one.ends_with("default/demo.one"), "{one:?}");
     for folder in [&one, &two, one.parent().unwrap()] {
         crate::server::private_fs::assert_owner_only(folder);
     }
-    assert_eq!(rpc(&mut server, "demo.one_dir").try_recv().unwrap(), one.display().to_string());
-    assert_eq!(rpc(&mut server, "demo.two_dir").try_recv().unwrap(), two.display().to_string());
+    assert_eq!(
+        rpc(&mut server, "demo.one_dir").try_recv().unwrap(),
+        one.display().to_string()
+    );
+    assert_eq!(
+        rpc(&mut server, "demo.two_dir").try_recv().unwrap(),
+        two.display().to_string()
+    );
 }
 
 /// **The folder is the same after the server restarts** — what the service wrote is still there.
@@ -131,7 +170,10 @@ fn a_restarted_server_gives_a_service_its_folder_back() {
     drop(first);
     let _second = start_under(root.path(), ServerKind::Background, &config(""));
     assert_eq!(starts.dir("demo.one"), before);
-    assert_eq!(std::fs::read_to_string(before.join("archive")).unwrap(), "kept");
+    assert_eq!(
+        std::fs::read_to_string(before.join("archive")).unwrap(),
+        "kept"
+    );
 }
 
 /// **Two standalone windows at once never share a folder; a restarted one gets its slot back.**
@@ -143,10 +185,17 @@ fn standalone_servers_at_once_have_folders_of_their_own_and_a_restart_gets_its_s
     let slot_1 = starts.dir("demo.one");
     let _second = start_under(root.path(), ServerKind::Standalone, &config(""));
     let slot_2 = starts.dir("demo.one");
-    assert!(slot_1.ends_with("standalone-1/demo.one") && slot_2.ends_with("standalone-2/demo.one"), "{slot_1:?} {slot_2:?}");
+    assert!(
+        slot_1.ends_with("standalone-1/demo.one") && slot_2.ends_with("standalone-2/demo.one"),
+        "{slot_1:?} {slot_2:?}"
+    );
     drop(first);
     let _restarted = start_under(root.path(), ServerKind::Standalone, &config(""));
-    assert_eq!(starts.dir("demo.one"), slot_1, "the lowest free slot, which is the one that was freed");
+    assert_eq!(
+        starts.dir("demo.one"),
+        slot_1,
+        "the lowest free slot, which is the one that was freed"
+    );
 }
 
 /// **No data folder: each service says why it did not start, and the server runs.**
@@ -158,11 +207,21 @@ fn a_server_with_no_data_folder_reports_each_service_and_still_runs() {
     assert_eq!(starts.count(), 0, "no factory ran");
     let window = attached(&mut server);
     let messages = drain(&window);
-    assert!(messages.iter().any(|message| matches!(message, ServerMsg::Attached { .. })), "the server still serves a window");
+    assert!(
+        messages
+            .iter()
+            .any(|message| matches!(message, ServerMsg::Attached { .. })),
+        "the server still serves a window"
+    );
     for service in ["demo.one", "demo.two"] {
-        assert!(messages.iter().any(|message| matches!(message, ServerMsg::Notifications(views)
+        assert!(
+            messages
+                .iter()
+                .any(|message| matches!(message, ServerMsg::Notifications(views)
             if views.iter().any(|view| view.title.contains(service)
-                && view.body.as_deref().is_some_and(|body| body.contains("no data folder"))))), "{service} is reported");
+                && view.body.as_deref().is_some_and(|body| body.contains("no data folder"))))),
+            "{service} is reported"
+        );
     }
 }
 
@@ -173,7 +232,11 @@ fn an_extension_reads_its_table_as_a_typed_value_and_a_missing_one_is_its_defaul
     let _set = server(&config("[extensions.demo]\nmax = 3"));
     assert_eq!(starts.latest("demo.one").1, Ok(Limits { max: 3 }));
     let _unset = server(&config(""));
-    assert_eq!(starts.latest("demo.one").1, Ok(Limits { max: 7 }), "a missing table is an empty one");
+    assert_eq!(
+        starts.latest("demo.one").1,
+        Ok(Limits { max: 7 }),
+        "a missing table is an empty one"
+    );
 }
 
 /// **A table that does not fit is an explicit error that names the table and what is wrong** — and
@@ -183,7 +246,10 @@ fn a_table_that_does_not_fit_is_an_error_the_user_is_told_about() {
     let starts = declare(&[("demo", &["one"])]);
     let _server = server(&config("[extensions.demo]\nmax = \"lots\""));
     let error = starts.latest("demo.one").1.unwrap_err();
-    assert!(error.contains("[extensions.demo]") && error.contains("lots"), "{error}");
+    assert!(
+        error.contains("[extensions.demo]") && error.contains("lots"),
+        "{error}"
+    );
 
     crate::entry::service::reset();
     let demo = crate::entry::extension("demo");
@@ -193,20 +259,31 @@ fn a_table_that_does_not_fit_is_an_error_the_user_is_told_about() {
     });
     let mut server = server(&config("[extensions.demo]\nmax = \"lots\""));
     let messages = drain(&attached(&mut server));
-    assert!(messages.iter().any(|message| matches!(message, ServerMsg::Notifications(views)
+    assert!(
+        messages
+            .iter()
+            .any(|message| matches!(message, ServerMsg::Notifications(views)
         if views.iter().any(|view| view.title.contains("demo.strict")
-            && view.body.as_deref().is_some_and(|body| body.contains("[extensions.demo]"))))), "the user is told which table");
+            && view.body.as_deref().is_some_and(|body| body.contains("[extensions.demo]"))))),
+        "the user is told which table"
+    );
 }
 
 /// **An extension can read no table but its own.**
 #[test]
 fn an_extension_cannot_read_another_extensions_table() {
     let starts = declare(&[("demo", &["one"]), ("other", &["two"])]);
-    let _both = server(&config("[extensions.demo]\nmax = 3\n[extensions.other]\nmax = 9"));
+    let _both = server(&config(
+        "[extensions.demo]\nmax = 3\n[extensions.other]\nmax = 9",
+    ));
     assert_eq!(starts.latest("demo.one").1, Ok(Limits { max: 3 }));
     assert_eq!(starts.latest("other.two").1, Ok(Limits { max: 9 }));
     let _only_other = server(&config("[extensions.other]\nmax = 9"));
-    assert_eq!(starts.latest("demo.one").1, Ok(Limits { max: 7 }), "demo has no table, and other's is not its own");
+    assert_eq!(
+        starts.latest("demo.one").1,
+        Ok(Limits { max: 7 }),
+        "demo has no table, and other's is not its own"
+    );
 }
 
 /// **Actions and projections read the session's effective configuration** — the table a trusted
@@ -216,15 +293,31 @@ fn actions_and_projections_read_the_sessions_table_not_the_servers() {
     let starts = declare(&[("demo", &["one"])]);
     let mut server = server(&config("[extensions.demo]\nmax = 3"));
     assert_eq!(starts.latest("demo.one").1, Ok(Limits { max: 3 }));
-    assert_eq!(rpc(&mut server, "demo.one_max").try_recv().unwrap(), "3", "no session table: the server's");
+    assert_eq!(
+        rpc(&mut server, "demo.one_max").try_recv().unwrap(),
+        "3",
+        "no session table: the server's"
+    );
     server.sessions[0].set_config(&config("[extensions.demo]\nmax = 5"));
-    assert_eq!(rpc(&mut server, "demo.one_max").try_recv().unwrap(), "5", "an action reads the session's");
+    assert_eq!(
+        rpc(&mut server, "demo.one_max").try_recv().unwrap(),
+        "5",
+        "an action reads the session's"
+    );
     let shown = |server: &mut ServerLoop| {
         let window = attached(server);
-        drain(&window).into_iter().find_map(|message| match message {
-            ServerMsg::Service(update) => Some(update.kind),
-            _ => None,
-        })
+        drain(&window)
+            .into_iter()
+            .find_map(|message| match message {
+                ServerMsg::Service(update) => Some(update.kind),
+                _ => None,
+            })
     };
-    assert_eq!(shown(&mut server), Some(crate::server::wire::service::ServiceUpdateKind::Snapshot("5".into())), "so does a projection");
+    assert_eq!(
+        shown(&mut server),
+        Some(crate::server::wire::service::ServiceUpdateKind::Snapshot(
+            "5".into()
+        )),
+        "so does a projection"
+    );
 }

@@ -4,13 +4,17 @@ mod document;
 mod model;
 mod storage;
 
-use std::{fs::{self, File, OpenOptions}, io, path::{Component, PathBuf}};
+use std::{
+    fs::{self, File, OpenOptions},
+    io,
+    path::{Component, PathBuf},
+};
 
 use heca_core::agent::{AgentDrivers, AgentIntegration, IntegrationContext, IntegrationResource};
 use sha2::{Digest, Sha256};
 
-pub use model::{InstallationIssue, InstallationState, InstallationStatus, IntegrationOperation};
 use model::Receipt;
+pub use model::{InstallationIssue, InstallationState, InstallationStatus, IntegrationOperation};
 
 const RECEIPT_SCHEMA: u32 = 1;
 
@@ -33,18 +37,25 @@ impl Integrations {
 
     /// Use explicit user locations, so tests and callers never need to change process-global state.
     pub fn new(drivers: AgentDrivers, context: IntegrationContext, config: PathBuf) -> Self {
-        Self { drivers, context, config }
+        Self {
+            drivers,
+            context,
+            config,
+        }
     }
 
     /// Check every driver that supplies a persistent integration. This never changes files.
     pub fn list(&self) -> io::Result<Vec<InstallationStatus>> {
-        self.drivers.iter().filter_map(|driver| {
-            match driver.integration(&self.driver_context(driver.id())) {
-                Ok(Some(_)) => Some(self.inspect(driver.id())),
-                Ok(None) => None,
-                Err(error) => Some(Err(io::Error::other(error))),
-            }
-        }).collect()
+        self.drivers
+            .iter()
+            .filter_map(
+                |driver| match driver.integration(&self.driver_context(driver.id())) {
+                    Ok(Some(_)) => Some(self.inspect(driver.id())),
+                    Ok(None) => None,
+                    Err(error) => Some(Err(io::Error::other(error))),
+                },
+            )
+            .collect()
     }
 
     /// Compare the receipt with the actual owned files and native registrations, without repair.
@@ -52,15 +63,19 @@ impl Integrations {
         let (name, bundle) = self.bundle(id)?;
         let receipt = self.receipt(id)?;
         let mut status = InstallationStatus {
-            driver: id.to_owned(), name,
+            driver: id.to_owned(),
+            name,
             bundled_version: bundle.version.clone(),
             installed_version: receipt.as_ref().map(|receipt| receipt.version.clone()),
-            state: InstallationState::NotInstalled, issues: Vec::new(),
+            state: InstallationState::NotInstalled,
+            issues: Vec::new(),
         };
         if storage::read(&self.journal())?.is_some() {
             status.state = InstallationState::Incomplete;
             status.issues.push(InstallationIssue {
-                path: self.journal(), description: "an interrupted installation needs recovery before the next change".into(),
+                path: self.journal(),
+                description: "an interrupted installation needs recovery before the next change"
+                    .into(),
             });
             return Ok(status);
         }
@@ -70,15 +85,22 @@ impl Integrations {
                 let present = match resource {
                     IntegrationResource::File { .. } => files.get(resource.path())?.is_some(),
                     IntegrationResource::TomlBool { .. } => false,
-                    _ => document::matches(&mut files, &model::Owned {
-                        resource: resource.clone(), managed: false, previous: None,
-                        created_keys: Vec::new(), created_file: false,
-                    })?,
+                    _ => document::matches(
+                        &mut files,
+                        &model::Owned {
+                            resource: resource.clone(),
+                            managed: false,
+                            previous: None,
+                            created_keys: Vec::new(),
+                            created_file: false,
+                        },
+                    )?,
                 };
                 if present {
                     status.state = InstallationState::Unmanaged;
                     status.issues.push(InstallationIssue {
-                        path: resource.path().to_owned(), description: "existing content has no Heca ownership receipt".into(),
+                        path: resource.path().to_owned(),
+                        description: "existing content has no Heca ownership receipt".into(),
                     });
                 }
             }
@@ -86,7 +108,9 @@ impl Integrations {
         };
         status.state = if receipt.fingerprint == fingerprint(&bundle)? {
             InstallationState::Installed
-        } else { InstallationState::Outdated };
+        } else {
+            InstallationState::Outdated
+        };
         let mut files = storage::Files::default();
         for owned in &receipt.owned {
             match document::matches(&mut files, owned) {
@@ -110,26 +134,36 @@ impl Integrations {
     ///
     /// Changes are validated together, journalled privately and written atomically per file.
     /// A subsequent change recovers an interrupted batch before doing new work.
-    pub fn apply(&self, id: &str, operation: IntegrationOperation) -> io::Result<InstallationStatus> {
+    pub fn apply(
+        &self,
+        id: &str,
+        operation: IntegrationOperation,
+    ) -> io::Result<InstallationStatus> {
         let _lock = self.lock()?;
         storage::recover(&self.journal())?;
         let (_, bundle) = self.bundle(id)?;
         let previous = self.receipt(id)?;
         if matches!(operation, IntegrationOperation::Update) && previous.is_none() {
-            return Err(io::Error::other("integration is not installed; install it first"));
+            return Err(io::Error::other(
+                "integration is not installed; install it first",
+            ));
         }
         let mut files = storage::Files::default();
         if let Some(previous) = &previous {
             for owned in &previous.owned {
-                if owned.managed && !document::matches(&mut files, owned)?
+                if owned.managed
+                    && !document::matches(&mut files, owned)?
                     && files.get(owned.resource.path())?.is_some()
                 {
                     return Err(io::Error::other(format!(
-                        "owned content changed; inspect it before making changes: {}", owned.resource.path().display(),
+                        "owned content changed; inspect it before making changes: {}",
+                        owned.resource.path().display(),
                     )));
                 }
             }
-            for owned in previous.owned.iter().rev() { document::remove(&mut files, owned)?; }
+            for owned in previous.owned.iter().rev() {
+                document::remove(&mut files, owned)?;
+            }
         }
         let receipt_path = self.receipt_path(id);
         if matches!(operation, IntegrationOperation::Uninstall) {
@@ -137,11 +171,16 @@ impl Integrations {
         } else {
             let mut owned = Vec::new();
             for resource in &bundle.resources {
-                if let Some(entry) = document::add(&mut files, resource)? { owned.push(entry); }
+                if let Some(entry) = document::add(&mut files, resource)? {
+                    owned.push(entry);
+                }
             }
             let receipt = Receipt {
-                schema: RECEIPT_SCHEMA, driver: id.to_owned(), version: bundle.version.clone(),
-                fingerprint: fingerprint(&bundle)?, owned,
+                schema: RECEIPT_SCHEMA,
+                driver: id.to_owned(),
+                version: bundle.version.clone(),
+                fingerprint: fingerprint(&bundle)?,
+                owned,
             };
             files.set(&receipt_path, Some(serde_json::to_vec_pretty(&receipt)?))?;
         }
@@ -150,37 +189,60 @@ impl Integrations {
         if previous.is_none() && matches!(operation, IntegrationOperation::Install)
             || matches!(operation, IntegrationOperation::Uninstall)
         {
-            document::add(&mut files, &IntegrationResource::TomlBool {
-                path: self.config.clone(),
-                keys: ["settings", "agents", "programs", id, "enabled"].map(str::to_owned).into(),
-                value: !matches!(operation, IntegrationOperation::Uninstall),
-            })?;
+            document::add(
+                &mut files,
+                &IntegrationResource::TomlBool {
+                    path: self.config.clone(),
+                    keys: ["settings", "agents", "programs", id, "enabled"]
+                        .map(str::to_owned)
+                        .into(),
+                    value: !matches!(operation, IntegrationOperation::Uninstall),
+                },
+            )?;
         }
         files.commit(&self.journal())?;
         self.inspect(id)
     }
 
     fn bundle(&self, id: &str) -> io::Result<(String, AgentIntegration)> {
-        let driver = self.drivers.driver(id).ok_or_else(|| io::Error::other(format!("unknown agent integration: {id}")))?;
-        let bundle = driver.integration(&self.driver_context(id)).map_err(io::Error::other)?
-            .ok_or_else(|| io::Error::other(format!("driver '{id}' needs no persistent integration")))?;
+        let driver = self
+            .drivers
+            .driver(id)
+            .ok_or_else(|| io::Error::other(format!("unknown agent integration: {id}")))?;
+        let bundle = driver
+            .integration(&self.driver_context(id))
+            .map_err(io::Error::other)?
+            .ok_or_else(|| {
+                io::Error::other(format!("driver '{id}' needs no persistent integration"))
+            })?;
         for resource in &bundle.resources {
             let path = resource.path();
-            if !path.is_absolute() || path.components().any(|part| matches!(part, Component::ParentDir))
-                || path == self.journal() || path == self.context.directory.join("install.lock")
+            if !path.is_absolute()
+                || path
+                    .components()
+                    .any(|part| matches!(part, Component::ParentDir))
+                || path == self.journal()
+                || path == self.context.directory.join("install.lock")
                 || path.starts_with(self.context.directory.join("receipts"))
             {
-                return Err(io::Error::other(format!("invalid integration resource path: {}", path.display())));
+                return Err(io::Error::other(format!(
+                    "invalid integration resource path: {}",
+                    path.display()
+                )));
             }
         }
         Ok((driver.name().to_owned(), bundle))
     }
 
     fn receipt(&self, id: &str) -> io::Result<Option<Receipt>> {
-        let Some(bytes) = storage::read(&self.receipt_path(id))? else { return Ok(None) };
+        let Some(bytes) = storage::read(&self.receipt_path(id))? else {
+            return Ok(None);
+        };
         let receipt: Receipt = serde_json::from_slice(&bytes)?;
         if receipt.schema != RECEIPT_SCHEMA || receipt.driver != id {
-            return Err(io::Error::other("invalid or unsupported integration receipt"));
+            return Err(io::Error::other(
+                "invalid or unsupported integration receipt",
+            ));
         }
         Ok(Some(receipt))
     }
@@ -193,10 +255,15 @@ impl Integrations {
 
     fn receipt_path(&self, id: &str) -> PathBuf {
         let name = encoded_id(id);
-        self.context.directory.join("receipts").join(format!("{name}.json"))
+        self.context
+            .directory
+            .join("receipts")
+            .join(format!("{name}.json"))
     }
 
-    fn journal(&self) -> PathBuf { self.context.directory.join("pending.json") }
+    fn journal(&self) -> PathBuf {
+        self.context.directory.join("pending.json")
+    }
 
     fn lock(&self) -> io::Result<File> {
         fs::create_dir_all(&self.context.directory)?;
@@ -212,7 +279,9 @@ impl Integrations {
             options.mode(0o600);
         }
         let file = options.open(path)?;
-        file.try_lock().map_err(|error| io::Error::other(format!("another integration operation is running: {error}")))?;
+        file.try_lock().map_err(|error| {
+            io::Error::other(format!("another integration operation is running: {error}"))
+        })?;
         Ok(file)
     }
 }

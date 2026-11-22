@@ -21,10 +21,10 @@ use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_PANE, PaneEntry, pane_key, pane_row_items, pane_row_press, row_hint};
 use crate::chrome::panes::pane_items::LineCx;
 use crate::chrome::{ChromeDragItem, PaneFacts, pane_info_view};
-use heca_grid_ui::RowVariant;
 use heca_core::runtime::ProcessStatus;
+use heca_grid_ui::RowVariant;
 use heca_grid_ui::builders::{
-    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, FlashExt,
+    DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent,
 };
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::style::Spacing;
@@ -132,7 +132,9 @@ impl PaneRow<'_> {
             .color(theme.colors.foreground)
             .size(heca_grid_ui::style::WidgetSize::Caption);
         let process_hint_signal = process_hint_label.text_signal();
-        let process_hint = Visibility::new().visible(info.process_hint.is_some()).child(process_hint_label);
+        let process_hint = Visibility::new()
+            .visible(info.process_hint.is_some())
+            .child(process_hint_label);
         let process_hint_visible = process_hint.visible_signal();
         // **What is true of this pane, as a function** — read inside each line's own subscription, so
         // reading it is what makes a line follow the pane. The lines under the name (`cwd`, `git`, and
@@ -154,7 +156,11 @@ impl PaneRow<'_> {
                 )
             })
         };
-        let line_cx = LineCx { theme, facts, agent_statuses: ws_state.agent_statuses };
+        let line_cx = LineCx {
+            theme,
+            facts,
+            agent_statuses: ws_state.agent_statuses,
+        };
         let runtime_signals = seams.panes.signals(pane_id);
         let flash = runtime_signals.flash;
         // **The card's arrangement is the library's `Tile`** — pip, icon, the name with its dimmed
@@ -429,7 +435,12 @@ mod tests {
             &fx,
             PaneId(7),
             heca_core::runtime::PaneRuntime {
-                cwd: Some(dirs::home_dir().expect("a home folder").join("projects").join("heca")),
+                cwd: Some(
+                    dirs::home_dir()
+                        .expect("a home folder")
+                        .join("projects")
+                        .join("heca"),
+                ),
                 ..Default::default()
             },
         );
@@ -466,7 +477,9 @@ mod tests {
 
     /// The card's inner column — the name row plus every metadata line stacked under it.
     fn metadata_column(node: &dyn heca_grid_ui::Component) -> Option<&dyn heca_grid_ui::Component> {
-        if node.base().children.len() == 1 + heca_config::appearance::default_sidebar_pane_lines().len() {
+        if node.base().children.len()
+            == 1 + heca_config::appearance::default_sidebar_pane_lines().len()
+        {
             return Some(node);
         }
         node.base()

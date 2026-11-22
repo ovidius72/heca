@@ -1,15 +1,19 @@
 //! What the frame shows: its header, colour, size and identity.
 
 use super::*;
-use crate::chrome::panes::terminal::content::{compose, give_facts, HEADER_AREA};
+use crate::chrome::panes::terminal::content::{HEADER_AREA, compose, give_facts};
 
 #[test]
 fn the_frame_accepts_ordinary_multiple_children_without_header_roles() {
     use heca_grid_ui::Label;
     let (cb, _) = recording_callbacks();
     let model = model(9);
-    let mut pane = PaneShell { model: &model, cb: &cb,
-        content: [Label::new("First"), Label::new("Second")] }.build();
+    let mut pane = PaneShell {
+        model: &model,
+        cb: &cb,
+        content: [Label::new("First"), Label::new("Second")],
+    }
+    .build();
     size_to(&mut pane, 200.0, 200.0);
     LayoutEngine::new().compute(&mut pane, Size::new(200.0, 200.0));
     let content = heca_grid_ui::area(&pane, PANE_CONTENT_AREA).unwrap();
@@ -65,7 +69,8 @@ fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
         model: &m,
         cb: &cb,
         content: Some(heca_grid_ui::WidgetModel::new(compose(
-            Some(crate::chrome::PaneHeader::showing(|_, _| {})), Flex::column(),
+            Some(crate::chrome::PaneHeader::showing(|_, _| {})),
+            Flex::column(),
         ))),
     }
     .build();
@@ -87,10 +92,13 @@ fn terminal_content_takes_its_facts_but_its_frame_does_not() {
     let mut with = PaneShell {
         model: &m,
         cb: &cb,
-        content: Some(heca_grid_ui::WidgetModel::new(compose(Some(PaneHeader::showing({
-            let seen = seen.clone();
-            move |input, _| seen.borrow_mut().push(input.pane())
-        })), heca_grid_ui::widgets::Flex::column()))),
+        content: Some(heca_grid_ui::WidgetModel::new(compose(
+            Some(PaneHeader::showing({
+                let seen = seen.clone();
+                move |input, _| seen.borrow_mut().push(input.pane())
+            })),
+            heca_grid_ui::widgets::Flex::column(),
+        ))),
     }
     .build();
     assert!(!with.set_props(&PaneHeaderInput::for_test(PaneId(4))));
@@ -303,12 +311,15 @@ fn a_header_that_changes_shape_leaves_what_the_pane_holds_alone() {
     let mut pane = PaneShell {
         model: &m,
         cb: &cb,
-        content: Some(heca_grid_ui::WidgetModel::new(compose(Some(PaneHeader::showing(|input, node| {
-            let shape = format!("chips of {}", input.pane().0);
-            node.show(shape.clone(), move || {
-                Some(heca_grid_ui::WidgetModel::new(Label::new(shape)))
-            });
-        })), crate::chrome::panes::terminal::Terminal::unbound()))),
+        content: Some(heca_grid_ui::WidgetModel::new(compose(
+            Some(PaneHeader::showing(|input, node| {
+                let shape = format!("chips of {}", input.pane().0);
+                node.show(shape.clone(), move || {
+                    Some(heca_grid_ui::WidgetModel::new(Label::new(shape)))
+                });
+            })),
+            crate::chrome::panes::terminal::Terminal::unbound(),
+        ))),
     }
     .build();
     give_facts(&mut pane, &PaneHeaderInput::for_test(PaneId(1)));
