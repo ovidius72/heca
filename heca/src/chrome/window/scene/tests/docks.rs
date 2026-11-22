@@ -40,6 +40,7 @@ fn sidebar_shell_hosts_the_provider_mounted_container() {
         "the workspaces provider is mounted in the left region, so it must contribute a body",
     );
     let shell = super::build_sidebar_shell(
+        crate::chrome::RegionId::LeftSidebar,
         280.0,
         600.0,
         &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
@@ -94,6 +95,7 @@ fn bordered_sidebar_paints_border_color_at_configured_width() {
         &mut super::DragItemRegistry::default(),
     );
     let mut shell = super::build_sidebar_shell(
+        crate::chrome::RegionId::LeftSidebar,
         280.0,
         600.0,
         &shell_look(BorderStyle::Bordered, border_w, theme.colors.background),
@@ -136,6 +138,7 @@ fn the_focused_dock_is_outlined_and_follows_the_store() {
         &mut super::DragItemRegistry::default(),
     );
     let mut shell = super::build_sidebar_shell(
+        crate::chrome::RegionId::LeftSidebar,
         280.0,
         600.0,
         &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
@@ -191,6 +194,7 @@ fn a_mounted_dock_is_not_a_target_of_the_ordinary_picker() {
         &mut super::DragItemRegistry::default(),
     );
     let shell = super::build_sidebar_shell(
+        crate::chrome::RegionId::LeftSidebar,
         280.0,
         600.0,
         &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
@@ -230,6 +234,7 @@ fn a_docks_pick_letter_is_stamped_over_it() {
         &mut super::DragItemRegistry::default(),
     );
     let mut shell = super::build_sidebar_shell(
+        crate::chrome::RegionId::LeftSidebar,
         280.0,
         600.0,
         &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
@@ -301,7 +306,13 @@ fn the_sidebar_border_colour_from_config_reaches_the_frame() {
             &heca_config::theme::Theme::default(),
             theme.colors.background,
         );
-        let mut shell = super::build_sidebar_shell(280.0, 600.0, &look, None);
+        let mut shell = super::build_sidebar_shell(
+            crate::chrome::RegionId::LeftSidebar,
+            280.0,
+            600.0,
+            &look,
+            None,
+        );
         super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme)
             .iter()
             .filter_map(|c| match c {

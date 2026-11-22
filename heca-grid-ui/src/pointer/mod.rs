@@ -122,6 +122,8 @@ pub struct PointerState {
     /// Where in this target the drag currently sits — before it, onto it, or after it — so the
     /// widget can draw the insertion line without measuring anything.
     drag_side: Cell<DropSide>,
+    /// Which way the target's list runs, so the line is drawn on the right edge.
+    drag_flow: Cell<crate::drag::Flow>,
     /// **Where the pointer is, while this widget is the source of a drag.** The one thing the
     /// picture that follows the cursor needs and layout cannot give: the source is still laid out
     /// where it was, and what follows the cursor is drawn somewhere else entirely.
@@ -143,6 +145,7 @@ impl PointerState {
             dragging: Cell::new(false),
             drag_over: Cell::new(false),
             drag_side: Cell::new(DropSide::Onto),
+            drag_flow: Cell::new(crate::drag::Flow::Down),
             drag_pos: Cell::new(Point::new(0.0, 0.0)),
             drag_origin: Cell::new(Point::new(0.0, 0.0)),
         }
@@ -183,6 +186,12 @@ impl PointerState {
     /// [`is_drag_over`](Self::is_drag_over).
     pub fn drag_side(&self) -> DropSide {
         self.drag_side.get()
+    }
+
+    /// Which way this target's list runs — meaningful only while
+    /// [`is_drag_over`](Self::is_drag_over).
+    pub fn drag_flow(&self) -> crate::drag::Flow {
+        self.drag_flow.get()
     }
 
     /// Where the pointer is — meaningful only while [`is_dragging`](Self::is_dragging).

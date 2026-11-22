@@ -117,6 +117,14 @@ pub struct Base {
     /// **Show the small chip under the pointer while it is carried**, instead of a picture of this
     /// widget. See [`DragExt::drag_chip`](crate::builders::DragExt::drag_chip).
     pub drag_chip: bool,
+    /// **Picked up only by its handle.** A press elsewhere in it does not start a drag of it; a
+    /// press on a widget marked [`drag_handle`](Self::drag_handle) inside it does. Set with
+    /// [`DragExt::drag_by_handle`](crate::builders::DragExt::drag_by_handle).
+    pub drag_by_handle: bool,
+    /// **This widget is a handle** — a press on it picks up the nearest enclosing widget that is
+    /// [`drag_by_handle`](Self::drag_by_handle). Set with
+    /// [`DragExt::drag_handle`](crate::builders::DragExt::drag_handle).
+    pub drag_handle: bool,
     /// This widget **accepts drops**, identified the same way — by its [`key`](Self::key).
     /// Universal opt-in via
     /// [`DragExt::drop_target`](crate::builders::DragExt::drop_target); resolved

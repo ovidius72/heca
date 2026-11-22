@@ -67,7 +67,11 @@ impl Component for IndicatorSwatch {
         if self.swap {
             cx.swap_indicator(b);
         } else {
-            cx.drop_indicator(b, heca_grid_ui::drag::DropSide::After);
+            cx.drop_indicator(
+                b,
+                heca_grid_ui::drag::DropSide::After,
+                heca_grid_ui::drag::Flow::Down,
+            );
         }
     }
 }

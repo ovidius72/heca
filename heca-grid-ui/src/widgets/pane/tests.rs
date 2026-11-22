@@ -125,6 +125,17 @@ fn a_panes_frame_colour_reaches_borders_and_brackets() {
         "the brackets are red"
     );
 
+    let kept = frame_colours(
+        Pane::new()
+            .bordered()
+            .border_color(red)
+            .border_color(None::<Color>),
+    );
+    assert!(
+        !kept.is_empty() && kept.iter().all(|c| *c == red),
+        "None leaves the colour as it was"
+    );
+
     let accent = theme.colors.accent.with_alpha(255);
     let unset = frame_colours(Pane::new().bracketed());
     assert!(
