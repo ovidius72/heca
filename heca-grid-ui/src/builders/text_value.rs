@@ -36,23 +36,32 @@ impl TextValue {
     }
 
     /// **Bind it to `target`, both ways where it can be** — an input field: the caller's
-    /// `Signal<String>` becomes the field's own, so what is typed is written into it; a fixed or
-    /// derived text is shown as for [`show_in`](Self::show_in).
-    pub(crate) fn bind(self, target: &mut Signal<String>) {
+    /// `Signal<String>` and the widget's own stay equal, each written when the other changes, so
+    /// what is typed reaches the caller and what the caller writes is shown. The widget keeps its
+    /// own signal: whatever inside it already reads that one (an input's text label) goes on
+    /// reading it. A fixed or derived text is shown as for [`show_in`](Self::show_in).
+    pub(crate) fn bind(self, target: &Signal<String>) {
         match self.0 {
-            Source::Signal(signal) => *target = signal,
+            Source::Signal(outer) => {
+                let inner = *target;
+                follow(inner, move || outer.get());
+                follow(outer, move || inner.get());
+            }
             other => TextValue(other).show_in(*target),
         }
     }
 }
 
-/// Write `read()` into `target` now and whenever a signal it reads changes.
+/// Write `read()` into `target` now and whenever a signal it reads changes. The first write is part
+/// of building the widget and asks for nothing; a later change asks for the frame that shows it.
 fn follow(target: Signal<String>, read: impl Fn() -> String + 'static) {
-    crate::reactive::create_effect(move |_| {
+    crate::reactive::create_effect(move |built: Option<()>| {
         let text = read();
         if target.get_untracked() != text {
             target.set(text);
-            crate::component::request_frame();
+            if built.is_some() {
+                crate::component::request_frame();
+            }
         }
     });
 }

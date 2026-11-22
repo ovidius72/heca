@@ -49,7 +49,7 @@ impl Input {
     pub fn value(mut self, value: impl crate::builders::IntoTextValue) -> Self {
         // A `Signal<String>` becomes the field's own, so what is typed is written into it; a fixed
         // or derived text is shown in it.
-        value.into_text_value().bind(&mut self.text);
+        value.into_text_value().bind(&self.text);
         let text = self.text.get_untracked();
         self.cursor = text.chars().count();
         self.anchor = None;

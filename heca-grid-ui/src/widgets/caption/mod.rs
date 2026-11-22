@@ -51,7 +51,7 @@ impl Caption {
     /// a function reading signals). Blank text collapses automatically.
     #[heca_grid_ui_macros::prop]
     pub fn text(mut self, text: impl crate::builders::IntoTextValue) -> Self {
-        text.into_text_value().bind(&mut self.text);
+        text.into_text_value().bind(&self.text);
         self.row.base_mut().children = parts(self.text);
         self.row.base().mark_needs_layout();
         self

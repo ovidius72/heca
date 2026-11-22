@@ -262,6 +262,8 @@ Inside Selection mode:
 | `y` | Copy selection to clipboard |
 | `p` / `Super+v` / `Ctrl+Shift+v` | Paste the clipboard |
 | `/` | Search the scrollback — type the query (matches highlight live, the caret jumps to the nearest); `Enter` keeps the matches, `Esc` cancels |
+
+Outside Selection mode the same search opens directly with `Super+F` (`Cmd+F` on macOS) or `Ctrl+Shift+F` (`search_scrollback`).
 | `n` / `Shift+n` | Jump to the next / previous search match (after a `/` search) |
 | `Esc` | Exit selection mode (snap to bottom + clear selection) |
 

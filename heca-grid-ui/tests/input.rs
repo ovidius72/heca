@@ -525,3 +525,45 @@ fn input_edit_deletes_char_and_deletes_to_line_start() {
         "EditDeleteToLineStart clears to the start of the line"
     );
 }
+
+/// **A field bound to an outside text shows what is typed, writes it out, and shows what is written
+/// in** — the drawn text, not only the value: the field once wrote the outside signal while its own
+/// label kept showing an empty one.
+#[test]
+fn a_field_bound_to_an_outside_text_draws_and_shares_it_both_ways() {
+    let drawn = |input: &mut Input| -> Vec<String> {
+        LayoutEngine::new().compute(input, Size::new(300.0, 60.0));
+        let theme = Theme::default();
+        let mut scene = heca_grid_ui::Scene::new();
+        {
+            let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(input, &mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|cmd| match cmd {
+                DrawCommand::Text(text) => Some(text.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let query = heca_grid_ui::reactive::signal(String::new());
+    let mut input = Input::new().value(query);
+    give_keyboard(&mut input);
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    type_text(&mut input, "Lib");
+    assert_eq!(
+        query.get_untracked(),
+        "Lib",
+        "what is typed reaches the outside text"
+    );
+    assert!(
+        drawn(&mut input).iter().any(|t| t == "Lib"),
+        "and the field draws it"
+    );
+    query.set("Movies".into());
+    assert!(
+        drawn(&mut input).iter().any(|t| t == "Movies"),
+        "what is written in is drawn"
+    );
+}

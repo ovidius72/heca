@@ -251,6 +251,9 @@ clear_selection      = "prefix+Shift+s"  # Clear selection; exit selection mode
 copy_selection       = "prefix+y"        # Copy selection to clipboard
 # Paste: Super+V (macOS Cmd+V), Ctrl+Shift+V (Linux/Windows), plus a prefix combo.
 paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
+# Search the terminal's scrollback: Super+F (macOS Cmd+F), Ctrl+Shift+F (Linux/Windows) — direct, no
+# mode needed; `/` does the same inside Selection mode.
+search_scrollback    = ["Super+f", "Ctrl+Shift+f"]
 
 # ── Scrollback (host terminal viewport) ──
 # All scrollback navigation lives inside Selection mode (entered via prefix+s):
