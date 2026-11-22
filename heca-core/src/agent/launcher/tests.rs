@@ -87,7 +87,7 @@ fn a_launch_uses_the_commands_current_environment_then_reports_without_terminal_
 /// Codex say nothing until a turn starts; without this their panes showed no agent at all.
 #[test]
 fn a_started_agent_is_reported_before_its_own_first_report() {
-    let started = |launched_status: &str| {
+    let started = |launched_status: &str, arguments: Vec<std::ffi::OsString>| {
         let mut drivers = AgentDrivers::new();
         drivers.register(ExternalDriver::new("demo")).unwrap();
         let (sender, receiver) = mpsc::channel();
@@ -113,7 +113,7 @@ fn a_started_agent_is_reported_before_its_own_first_report() {
             .unwrap();
         let request = LaunchRequest {
             executable: "/opt/tools/demo-agent".into(),
-            arguments: Vec::new(),
+            arguments,
             program: "demo-agent".into(),
             cwd: run.path().into(),
             environment: Default::default(),
@@ -127,7 +127,7 @@ fn a_started_agent_is_reported_before_its_own_first_report() {
         }
         reports
     };
-    let reports = started("waiting_input");
+    let reports = started("waiting_input", Vec::new());
     let first = reports
         .first()
         .expect("reported at launch, with nothing written by the agent");
@@ -138,8 +138,18 @@ fn a_started_agent_is_reported_before_its_own_first_report() {
         Some(super::super::channel::LAUNCHED_EVENT)
     );
     assert!(first.launch.is_some(), "it carries what was launched");
+    assert_eq!(
+        first.session_id, None,
+        "a fresh start is in no conversation yet"
+    );
+    let resumed = started("waiting_input", vec!["--resume".into(), "conv-9".into()]);
+    assert_eq!(
+        resumed.first().and_then(|r| r.session_id.as_deref()),
+        Some("conv-9"),
+        "a resumed program keeps its conversation from launch"
+    );
     assert!(
-        started("").is_empty(),
+        started("", Vec::new()).is_empty(),
         "an empty launched_status reports nothing until the agent does"
     );
 }

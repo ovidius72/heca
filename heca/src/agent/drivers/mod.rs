@@ -114,6 +114,9 @@ impl AgentDriver for Driver {
     fn resume(&self, original: &ProcessLaunch, session_id: &str) -> Option<ProcessLaunch> {
         self.resume?.resumed(original, session_id)
     }
+    fn session_of(&self, launch: &ProcessLaunch) -> Option<String> {
+        self.resume?.session(&launch.arguments)
+    }
     fn read_status(&self, input: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> {
         let bytes = match input {
             AgentInput::Notification(notification) => {

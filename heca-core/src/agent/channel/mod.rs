@@ -108,6 +108,12 @@ impl ReportReader {
             super::AgentStatus::new(status),
         );
         state.event = Some(LAUNCHED_EVENT.to_owned());
+        // A resumed program is already in a conversation: keep it from launch, so it survives
+        // however soon the program is closed — even before it reports anything itself.
+        state.session_id = self
+            .launch
+            .as_ref()
+            .and_then(|launch| self.driver.session_of(launch));
         state.launch.clone_from(&self.launch);
         super::registry::stamp(self.driver.as_ref(), &mut state);
         Some(state)
