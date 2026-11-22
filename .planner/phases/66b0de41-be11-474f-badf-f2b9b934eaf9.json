@@ -329,10 +329,10 @@
       "priority": 6,
       "shortName": "widgets-act-through-ev-dispatc",
       "title": "Widgets act through ev.dispatch(Intent), not hand-sent events: audit and fix every site",
-      "status": "planned",
+      "status": "in-progress",
       "description": "AGREED PLAN (Antonio, 2026-11-18, after the read-only audit — DOM / SwiftUI / Flutter model, one path):\n1. ONE CLICK PATH. Remove `Component::activate()` (heca-grid-ui/src/component/behavior.rs:316) and the private action field + own `on_click(Fn())` of Button, IconButton, BadgeButton, Toast, Choice, RailCell, Item, Row (fields: button/mod.rs:154, icon_button.rs:44, badge_button.rs:39, toast/mod.rs:99, choice.rs:76, rail_cell.rs:43, item.rs:96, row.rs:59), and the Enter/Space arms copied into their capture hooks. Like a browser <button>: Enter/Space on a focused activatable widget makes the framework deliver a real `Click` event to it; programmatic \"press\" (a dialog's primary button, a plugin, code) = deliver a `Click` event to the widget (el.click()). Everything reaches the widget's `.on_click(|ev| ..)` handlers. The ButtonGroup ⋮ overflow row delivers a Click to the collapsed button. Per-widget flags (focusable, one_click_target, focus_barrier) stay correct without each widget's builder setting them by hand (central hook; NOT on every widget with a handler — pane shell / dock FocusScope must not claim the press).\n2. PLUGINS GET EVERY EVENT. A described node binds an Intent to ANY event the native API has, by the same name — click, double_click, right_click, middle_click, pointer_enter, pointer_leave, focus_gained, focus_lost, key, drag…, plus today's press/change/toggle/dismiss/… — via `.on(\"<event>\", Intent)`. ONE table event-name -> EventKind shared by native and described, with a test failing if they drift. Today described supports only press, change, toggle, action, scroll, activate, hint, dismiss, submit, resize, move, enter (heca-view / heca-view-realize). Sugar `.on_press(Intent)` (native, like described) = click dispatches the Intent AND the pick carries the same Intent (Hint::of), so the picker can hide a letter whose action is refused.\n3. ORIGIN. The host intent sink (heca/src/app/startup.rs:192-197) stamps every Intent MouseContent; it must know which surface acted. The host records the origin around each tree's event delivery and maps it with the SAME function the picker uses (pick_source, heca/src/chrome/hint/targets.rs:161-198) — one rule for showing a letter and executing. A dialog button's submit resolves its own overlay from that origin (SubmitOverlay overlay id is #[serde(skip)], input/action.rs:604-611).\n4. THREE MISSING ACTIONS (with args): scroll a given terminal (today scroll_to_bottom / scroll_to_offset act on the focused one), toggle a given workspace's collapse (today only toggle_current_workspace_collapsed), the exposé cursor on a pane (ExposeCursor has no catalog name).\n5. CONVERT THE SITES (step 2 below). Not widgets, out of scope: palette Commands (Fn()), terminal handle commands, closer/dismiss hooks, the sink itself. Watch: focus_pane as a named action is more permissive with an active float than InteractionIntent::FocusPane (route.rs:84-90 vs :166-172) — eye-check.\nDoc drift to fix with it: docs/widgets.md:4125 and AGENTS show fires(intent, emit), code is fires(mount, intent, emit) (heca/src/chrome/input/emitter.rs:138); button_group.rs:17 and docs/widgets.md:3251 say the collapsed row runs activate().\n\nRequested by Antonio 2026-11-18.\n\nTHE ESTABLISHED FORM (docs/widgets.md:3090, :1176; heca-grid-ui/src/event/handlers.rs:47-65): a widget acts with `.on_click(|ev| ev.dispatch(Intent::new(\"name\").arg(..)))` (native) or `.on_press(Intent::new(..))` (described). The Intent (heca-view: a name plus args) goes to the sink the host installs (`install_intent_sink`, heca-grid-ui/src/intent.rs:24) and through the normal action door (permissions, confirmations). `move` only when the closure captures an outside value. The widget knows nothing of heca's actions. `prefix+/` picks are automatic for anything with a click (docs/widgets.md:3130).\n\nSTEP 1 — FIX THE LIBRARY FIRST (found in T374, verified with temporary tests 2026-11-18). Today the established form does not work for buttons:\n- Button and IconButton have their OWN `on_click(impl Fn())` (heca-grid-ui/src/widgets/button/builders.rs:199, icon_button.rs:127), separate from the generic EventExt::on_click(|ev|). With only the event form: Enter / `Component::activate()` / WidgetIntent::Activate send nothing; the ButtonGroup ⋮ overflow row runs the button's own click handle (button_group.rs:187, button/builders.rs:71) and does nothing; IconButton stops being focusable and a single click target. Mouse click and `prefix+/` still work. Goal: ONE click path — a button given `on_click(|ev| ev.dispatch(..))` keeps Enter, the ⋮ row, focus and single-target behaviour.\n- A hint (`prefix+/` pick) can carry only a closure; `intent::dispatch` is pub(crate) (heca-grid-ui/src/intent.rs:29), so a pick cannot be named by an Intent and the host's policy filter (hide the letter when the action is refused — today done by action_tooltip setting hint.intent, heca/src/chrome/panes/pane_header/shortcuts.rs:172-176) cannot work through the established form. Goal: a pick that carries the same Intent as the click, so the picker can ask the policy.\n- Dialog buttons send SubmitOverlay{overlay: Some(id)}: `overlay` is #[serde(skip)] (heca/src/input/action.rs:604-611) and the sink builds overlay: None = front-most modal (heca/src/input/build/chrome.rs:82-85); the sink always stamps MouseContent (heca/src/app/startup.rs:192-196) while the layer emitter stamps Surface(key). Resolved by plan point 3.\n\nSTEP 2 — THE SITES that send events by hand (grep on main 2026-11-18: `emit.fire(` / `proxy.send_event(AppEvent::ChromeIntent`):\n- chrome/window/scene/mod.rs:98, :319 (sidebar toggle)\n- chrome/panes/pane_header/build.rs:226, :239 (header buttons; focus-first for zoom/float — zoom has zoom_column_at_index{ws_idx,col_idx} (actions/builtins/layout.rs:173); float has no pane-targeted form (pane.rs:45); focus_pane{pane_id} exists (navigation.rs:100))\n- chrome/surfaces/overlay/modal.rs (dialog buttons)\n- chrome/panes/pane/mod.rs:111; chrome/panes/terminal/mod.rs:169, :188; chrome/panes/column/mod.rs:43\n- providers/workspaces/pane_row.rs:211, :216; providers/workspaces/workspace_frame.rs:71\n- chrome/surfaces/expose/wiring.rs:42, :59, :65, :75\n- chrome/surfaces/overlay/spec.rs:25, :41\n- chrome/surfaces/palette/mod.rs:273; chrome/surfaces/palette/sessions.rs:120\n- chrome/panes/workspace/seat.rs:79 (drag resize; found by the audit)\n- app/startup.rs:193 (not a widget — the sink itself)\nHeader builtins map to catalog names: add_pane_to_column{ws_idx,col_idx}, move_pane_left/right{pane_id}, close_pane_by_id{pane_id}, zoom_column, float (T374 audit).\n\nFOR EACH SITE: what it sends and whether it can be written as ev.dispatch(Intent). Report the ones that cannot, with the reason, before changing them; fix centrally, never per site. Convert the rest, delete hand-sending code and unused emitter plumbing. Tests per surface: a click (and Enter, and the ⋮ row where relevant) produces the expected Intent at the sink. Update docs/widgets.md if the catalog changes.\n\nHistory: P087(F011)/T374 (closed 2026-11-18 without changes) built and rejected an ActionButton component; patch kept in the orchestrator scratchpad as t374-v1.patch.",
       "descriptionUpdatedAt": "2026-11-18T11:32:51.442Z",
-      "notes": "STATE ON 2026-11-19 (checked by reading the worktree; supersedes the 2026-11-18 checkpoint, which said \"read-only audit, no edits\" — wrong). /Users/antonio/projects/heca-feat-565 (branch feat/t565-dispatch-intents, based on 63750b94, already in main) holds UNCOMMITTED code implementing the AGREED PLAN: 117 files changed (+1461/−974) plus 5 new files (heca-grid-ui/tests/click_path.rs, heca-grid-ui/tests/on_press.rs, heca-view-realize/tests/events_by_name.rs, heca/src/app/interaction/tests/named_counterparts.rs, heca/src/chrome/input/origin.rs).\nDone: point 1 (Component::activate() and the own on_click(Fn()) removed from Button, IconButton, BadgeButton, Toast, Choice, RailCell, Item, Row — Enter/Space/⋮/programmatic press arrive as Click); point 2 (one event-name table heca-grid-ui/src/event/kinds.rs + heca-view/src/scalars/event.rs, with a drift test); point 3 (origin: heca/src/chrome/input/origin.rs, same rule as pick_source); point 4 (actions terminal_scroll, toggle_workspace_collapsed, expose_cursor).\nNot done: point 5 — only 2 of 15 hand-sent sites converted (sidebar toggle in chrome/window/scene/mod.rs, header buttons in chrome/panes/pane_header/build.rs). Still sending by hand: providers/workspaces/workspace_frame.rs:71, pane_row.rs:211/216, chrome/panes/terminal/mod.rs:169/188, chrome/surfaces/expose/wiring.rs:42/59/65/75, chrome/surfaces/overlay/spec.rs:25/41, chrome/surfaces/palette/mod.rs:273, palette/sessions.rs:120. Also undecided: ContextMenu's MenuItem still has its own on_click(Fn()) + activate() (heca-grid-ui/src/widgets/context_menu/item.rs:101,151) — not in the plan's list; bring to Antonio.\nChecks: compiles; every test of heca-grid-ui/heca-view/heca-view-realize/heca passes except heca/tests/handler_follow_up.rs::no_handler_runs_the_follow_up_itself — the new handle_terminal_scroll (heca/src/handlers/scroll.rs) sets needs_redraw itself; the dispatcher does it after every action: delete that line. Nothing verified by eye.\nResume (Antonio, 2026-11-19: keep it, resume after P110(F010)/T567): fix that test; convert the 13 sites or report which cannot and why; decide MenuItem; review against THE SYNTAX and THE EVENTS (project decisions 05a2ed0c, f639e662); eye-check (buttons by Enter, ⋮ row, dialog buttons, sidebar rows, exposé, palette); macOS + Windows checks; PR.",
+      "notes": "Owner: the heca-pro session (heca-pro-dev), working in the heca worktree /Users/antonio/projects/heca-dispatch, branch feat/t565-rest. Merged so far: PR #349 (one click path; a layer's widgets dispatch as that layer), PR #350 (a dock keeps Enter and Space; activate presses only a control). The rest is on feat/t565-rest. Status stays for the owner to start (planner-task-start claims the task for the calling session).",
       "statusLog": [
         {
           "id": "0266373a-03ac-4f36-b518-a929d133a1ff",
@@ -349,23 +349,71 @@
           "toStatus": "planned",
           "title": "in-progress → planned (checkpoint saved)",
           "description": "Reason: Antonio asked to do T469 as well to close P087; T565 waits on a read-only audit + library proposal that needs his decision before code.\nWhat was being done: T565 step 1: read-only audit of the 19+ hand-sent sites and a proposal for the heca-grid-ui fix (one click path for buttons, picks carrying an Intent, dialog buttons naming their dialog). Running in /Users/antonio/projects/heca-feat-565, no edits.\nResume location: /Users/antonio/projects/heca-feat-565 (branch feat/t565-dispatch-intents), clean.\nHow to resume: Bring the audit + library proposal to Antonio; on his decision implement step 1 (library) then step 2 (sites), tests, checks on macOS and Windows, PR."
+        },
+        {
+          "id": "6705655f-167e-472b-b97e-e73e2408dd37",
+          "date": "2026-11-22T16:00:17.959Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from /Users/antonio/projects/heca-feat-565 (branch feat/t565-dispatch-intents), clean.. Bring the audit + library proposal to Antonio; on his decision implement step 1 (library) then step 2 (sites), tests, checks on macOS and Windows, PR."
         }
       ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-001-one-click-path-main-349",
+          "number": 1,
+          "title": "One click path (main #349)",
+          "checked": true
+        },
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-002-a-layer-s-widgets-dispatch-as-that-layer-main-349",
+          "number": 2,
+          "title": "A layer's widgets dispatch as that layer (main #349)",
+          "checked": true
+        },
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-003-a-dock-keeps-enter-and-space-activate-presses-only-a-control-main-350",
+          "number": 3,
+          "title": "A dock keeps Enter and Space; activate presses only a control (main #350)",
+          "checked": true
+        },
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-004-described-nodes-bind-every-native-event-by-name-branch-feat-t565-rest",
+          "number": 4,
+          "title": "Described nodes bind every native event by name (branch feat/t565-rest)",
+          "checked": true
+        },
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-005-the-three-targeted-actions-scroll-to-bottom-scroll-to-offset-terminal-toggle-workspace-collapsed-expose-cursor-to-branch",
+          "number": 5,
+          "title": "The three targeted actions: scroll_to_bottom / scroll_to_offset terminal=, toggle_workspace_collapsed, expose_cursor_to (branch)",
+          "checked": true
+        },
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-006-every-use-event-double-triple-right-middle-click-follows-the-click-s-rules-branch",
+          "number": 6,
+          "title": "Every use event (double, triple, right, middle click) follows the click's rules (branch)",
+          "checked": true
+        },
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-007-typed-action-arguments-actionmeta-typed-args-at-dispatch-intent-and-rpccall-into-intent-branch",
+          "number": 7,
+          "title": "Typed action arguments: ActionMeta::typed_args at dispatch_intent and RpcCall::into_intent (branch)",
+          "checked": true
+        },
+        {
+          "id": "766a9858-6124-4bfb-84f9-bca4a65322ae-check-008-convert-the-hand-sent-sites",
+          "number": 8,
+          "title": "Convert the hand-sent sites",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
-      "pauseSnapshot": {
-        "id": "94dfa08c-8974-4248-8a35-74d5c72023fe",
-        "reason": "Antonio asked to do T469 as well to close P087; T565 waits on a read-only audit + library proposal that needs his decision before code.",
-        "whatWasBeingDone": "T565 step 1: read-only audit of the 19+ hand-sent sites and a proposal for the heca-grid-ui fix (one click path for buttons, picks carrying an Intent, dialog buttons naming their dialog). Running in /Users/antonio/projects/heca-feat-565, no edits.",
-        "resumeLocation": "/Users/antonio/projects/heca-feat-565 (branch feat/t565-dispatch-intents), clean.",
-        "howToResume": "Bring the audit + library proposal to Antonio; on his decision implement step 1 (library) then step 2 (sites), tests, checks on macOS and Windows, PR.",
-        "relatedTaskId": "7d906da8-2cf2-4359-8b85-3519931aa24c",
-        "pausedAt": "2026-11-18T09:47:52.906Z",
-        "pausedBy": ""
-      },
+      "pauseSnapshot": null,
       "pauseHistory": [
         {
           "id": "94dfa08c-8974-4248-8a35-74d5c72023fe",
@@ -381,18 +429,22 @@
       "startedAt": "2026-11-18T09:47:10.077Z",
       "completedAt": "",
       "createdAt": "2026-11-18T07:04:11.623Z",
-      "updatedAt": "2026-11-19T12:19:53.236Z",
+      "updatedAt": "2026-11-22T16:00:17.959Z",
       "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+          "createdAt": "2026-11-22T15:51:08.437Z"
+        },
         {
           "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
           "createdAt": "2026-11-18T09:47:09.957Z"
         }
       ],
-      "activeOwnerSession": ""
+      "activeOwnerSession": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d"
     }
   ],
   "createdAt": "2026-07-30T13:27:19.410Z",
-  "updatedAt": "2026-11-19T12:19:54.994Z",
+  "updatedAt": "2026-11-22T15:25:27.611Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -409,6 +461,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+      "createdAt": "2026-11-22T15:51:08.437Z"
+    },
     {
       "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
       "createdAt": "2026-11-18T17:37:32.489Z"

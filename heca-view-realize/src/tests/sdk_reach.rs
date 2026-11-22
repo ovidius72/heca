@@ -79,6 +79,10 @@ fn every_widget_property_is_reachable_from_the_sdk() {
             metadata.id
         );
         let block = block_for(sdk_name).unwrap_or_default();
+        // Spacing and line breaks are the formatter's, not the code's: `.prop(\n "x",` is the
+        // same setter as `.prop("x",`.
+        let compact: String = block.split_whitespace().collect();
+        let text_compact: String = text_setter.split_whitespace().collect();
         for prop in &metadata.properties {
             if NOT_IN_SDK
                 .iter()
@@ -86,10 +90,10 @@ fn every_widget_property_is_reachable_from_the_sdk() {
             {
                 continue;
             }
-            let writes_key = block.contains(&format!(".prop(\"{prop}\""))
-                || block.contains(&format!("props.insert(\"{prop}\""))
+            let writes_key = compact.contains(&format!(".prop(\"{prop}\""))
+                || compact.contains(&format!("props.insert(\"{prop}\""))
                 || shared_style.contains(&format!("fn {prop}("))
-                || (text_setter.contains(&format!("props.insert(\"{prop}\""))
+                || (text_compact.contains(&format!("props.insert(\"{prop}\""))
                     && sdk.split("with_text!(").skip(1).any(|call| {
                         call.split_once(')').is_some_and(|(names, _)| {
                             names.split(',').any(|name| name.trim() == sdk_name)
