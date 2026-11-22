@@ -37,13 +37,18 @@ fn session_confirmation_starts_on_cancel_and_requires_navigation_to_proceed() {
             &confirm,
         );
         let id = OverlayId(crate::chrome::LayerRegistry::default().reserve_id());
-        let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
-        let emit = {
-            let fired = fired.clone();
-            ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| {
-                fired.borrow_mut().push(intent)
-            })
-        };
+        let emit = ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, _| {});
+        // The answer each button sends by name; built alone, the dialog sits in no layer, so it
+        // reaches the host's sink.
+        let fired: std::rc::Rc<std::cell::RefCell<Vec<String>>> = Default::default();
+        let seen = fired.clone();
+        heca_grid_ui::intent::install_intent_sink(move |intent| {
+            if intent.action == "submit_overlay"
+                && let Some(PropValue::Text(answer)) = intent.args.get("action")
+            {
+                seen.borrow_mut().push(answer.clone());
+            }
+        });
         let theme = heca_grid_ui::Theme::default();
         let root = build_modal_root(
             &spec,
@@ -61,18 +66,16 @@ fn session_confirmation_starts_on_cancel_and_requires_navigation_to_proceed() {
         root.tick(1.0);
         crate::chrome::paint_chrome_root(&mut root, 640.0, 480.0, &theme);
         heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::Activate));
-        assert!(
-            matches!(&fired.borrow()[0],
-            InteractionIntent::ActivateAction(WmAction::SubmitOverlay { action, .. }) if action == "cancel"),
+        assert_eq!(
+            fired.borrow().first().map(String::as_str),
+            Some("cancel"),
             "Enter must select Cancel before any destructive action"
         );
         heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::ItemNext));
         heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::Activate));
-        assert!(matches!(&fired.borrow()[1],
-            InteractionIntent::ActivateAction(WmAction::SubmitOverlay { action, .. }) if action == "confirm"));
         assert_eq!(
-            fired.borrow().len(),
-            2,
+            *fired.borrow(),
+            ["cancel", "confirm"],
             "each activation emits exactly one response"
         );
     }
@@ -208,8 +211,9 @@ fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
 }
 
 /// Every modal action button declares what a `prefix+/` pick does to it, and it is the same
-/// `SubmitOverlay` its click carries — so the picker reaches a dialog's buttons with nothing
-/// registered anywhere.
+/// `submit_overlay` its click sends, by name — so the picker reaches a dialog's buttons with nothing
+/// registered anywhere. Which dialog it answers comes from the layer that sends it (the resolver
+/// reads the source), tested on the layer registry.
 #[test]
 fn each_action_button_declares_the_submit_its_click_would_fire() {
     let spec = ModalSpec::message("Delete pane?", "Gone forever.")
@@ -218,13 +222,12 @@ fn each_action_button_declares_the_submit_its_click_would_fire() {
         .dismissible(false);
     let id = OverlayId(crate::chrome::LayerRegistry::default().reserve_id());
     let shortcuts = crate::chrome::ActionShortcuts::default();
-    let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
-    let emit: ChromeIntentEmitter = {
-        let fired = fired.clone();
-        ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| {
-            fired.borrow_mut().push(intent)
-        })
-    };
+    let emit: ChromeIntentEmitter =
+        ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, _| {});
+    // Built alone, the dialog sits in no layer, so what its buttons send reaches the host's sink.
+    let fired: std::rc::Rc<std::cell::RefCell<Vec<crate::chrome::Intent>>> = Default::default();
+    let seen = fired.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| seen.borrow_mut().push(intent));
     let mut root = build_modal_root(
         &spec,
         id,
@@ -240,13 +243,11 @@ fn each_action_button_declares_the_submit_its_click_would_fire() {
     for (offset, action_id) in [(0, "cancel"), (1, "confirm")] {
         assert!(heca_grid_ui::fire_hint(root.as_mut(), &targets[offset].0));
         let intent = fired.borrow().last().cloned().unwrap();
-        assert!(
-            matches!(
-                &intent,
-                InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action })
-                    if *overlay == Some(id) && action == action_id
-            ),
-            "target {offset} should submit '{action_id}' to this overlay, got {intent:?}",
+        assert_eq!(intent.action, "submit_overlay", "target {offset}");
+        assert_eq!(
+            intent.args.get("action"),
+            Some(&PropValue::Text(action_id.into())),
+            "target {offset} should submit '{action_id}', got {intent:?}",
         );
     }
 

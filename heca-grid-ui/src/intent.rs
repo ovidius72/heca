@@ -37,7 +37,22 @@ thread_local! {
 /// Nested calls restore the outer route, so a widget acting inside another's delivery cannot leak
 /// its route past its own turn.
 pub(crate) fn dispatching_to<T>(route: Option<DispatchHandler>, f: impl FnOnce() -> T) -> T {
-    let outer = ROUTE.with(|c| c.replace(route));
+    // A widget with no listener above it keeps whatever route its delivery already has — the one
+    // a host set for this delivery ([`sending_to`]), never "none".
+    let Some(route) = route else { return f() };
+    let outer = ROUTE.with(|c| c.replace(Some(route)));
+    let out = f();
+    ROUTE.with(|c| *c.borrow_mut() = outer);
+    out
+}
+
+/// **Run `f` as one delivery whose actions go to `route`** unless a nearer container listens
+/// ([`on_dispatch`](crate::builders::EventExt::on_dispatch) still wins). For a host delivering
+/// a gesture it can name the origin of — a `prefix+/` pick is a keyboard gesture wherever its
+/// letter sits — so a widget that sends from inside it is judged as that gesture.
+pub fn sending_to<T>(route: impl Fn(heca_view::Intent) + 'static, f: impl FnOnce() -> T) -> T {
+    let route: DispatchHandler = Rc::new(route);
+    let outer = ROUTE.with(|c| c.replace(Some(route)));
     let out = f();
     ROUTE.with(|c| *c.borrow_mut() = outer);
     out
@@ -172,5 +187,46 @@ mod tests {
         let _ = crate::component::click(&mut root, &path);
         assert_eq!(*routed.borrow(), ["folded"]);
         assert!(host.borrow().is_empty());
+    }
+
+    /// **A host can say where one delivery's actions go** — a pick is a keyboard gesture wherever
+    /// its letter sits — and a nearer listener still answers for its own widgets.
+    #[test]
+    fn a_hosts_route_takes_what_no_nearer_listener_does() {
+        let (host, inner) = routes();
+        let seen = inner.clone();
+        let mut root = Flex::column()
+            .child(Row::new().on_hint(|| send(Intent::new("bare"))))
+            .child(
+                Flex::column()
+                    .on_dispatch(move |intent| seen.borrow_mut().push(intent.action))
+                    .child(Row::new().on_hint(|| send(Intent::new("listened")))),
+            );
+        crate::pointer::fire_mounts(&mut root);
+        let picked = Got::default();
+        for path in [vec![0], vec![1, 0]] {
+            let seen = picked.clone();
+            sending_to(
+                move |intent| seen.borrow_mut().push(intent.action),
+                || {
+                    assert!(crate::hint::fire_hint(&mut root, &path));
+                },
+            );
+        }
+        assert_eq!(
+            *picked.borrow(),
+            ["bare"],
+            "the host's route took the bare widget's action"
+        );
+        assert_eq!(
+            *inner.borrow(),
+            ["listened"],
+            "the nearer listener kept its own"
+        );
+        assert!(host.borrow().is_empty());
+        assert!(
+            ROUTE.with(|c| c.borrow().is_none()),
+            "and the route ends with the delivery"
+        );
     }
 }

@@ -36,6 +36,7 @@ pub(super) fn target_overlay(
 pub(super) fn resolve_overlay_control(
     state: &mut AppState,
     registry: &ActionRegistry,
+    source: InteractionSource,
     action: &WmAction,
 ) {
     let (named, result) = match action {
@@ -43,6 +44,17 @@ pub(super) fn resolve_overlay_control(
         WmAction::CloseOverlay { overlay } => (*overlay, None),
         _ => return,
     };
+    // **Which overlay, when the call did not say**: the one whose widgets sent it. A dialog's
+    // button sends `submit_overlay` by name, and its layer's listener stamps the call with that
+    // layer (`InteractionSource::Surface`), so the button answers its own dialog — not whichever
+    // modal happens to be in front. Only a call from nowhere in particular falls to the front one.
+    let named = named.or_else(|| match source {
+        InteractionSource::Surface(key) => state
+            .layers
+            .layer_of_surface(key)
+            .map(crate::chrome::OverlayId),
+        _ => None,
+    });
     let Some(overlay) = target_overlay(state, named) else {
         return;
     };
@@ -78,7 +90,7 @@ pub(crate) fn dispatch_intent(
     if let InteractionIntent::ActivateAction(action) = &intent
         && action.is_overlay_control()
     {
-        resolve_overlay_control(state, registry, action);
+        resolve_overlay_control(state, registry, source, action);
         return Ok(());
     }
 

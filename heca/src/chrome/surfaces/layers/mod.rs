@@ -470,6 +470,18 @@ impl LayerRegistry {
         surface_key_of(self.name_of(id).as_deref(), id)
     }
 
+    /// **The layer a surface key names** — the reverse of [`surface_key`](Self::surface_key), by
+    /// the same derivation, so what a layer's widgets sent can be traced back to that layer.
+    pub(crate) fn layer_of_surface(
+        &self,
+        key: crate::app::interaction::SurfaceKey,
+    ) -> Option<LayerId> {
+        self.layers
+            .iter()
+            .map(|l| l.id)
+            .find(|id| self.surface_key(*id) == key)
+    }
+
     /// **What the surface seated under `slot` declares about itself**, or `None` when nothing in
     /// this registry owns that slot.
     ///
