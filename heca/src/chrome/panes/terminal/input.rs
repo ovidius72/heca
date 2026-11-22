@@ -11,7 +11,7 @@
 use heca_core::layout::{Rectangle, Size};
 use heca_grid_ui::{GridKey, Modifiers, PointerButton};
 
-use super::viewport::ScrollIntents;
+use super::viewport::ScrollTarget;
 
 /// Where in the grid a pointer landed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,10 +125,6 @@ pub(crate) enum TerminalInput {
         cell: Option<Cell>,
         modifiers: Modifiers,
     },
-    /// **Scroll back to the live bottom** — the scrollback chip was clicked.
-    ScrollToBottom,
-    /// **Scroll to `rows` above the live bottom** — the scrollbar thumb moved.
-    ScrollTo { rows: usize },
     /// **Text the user typed** — or pasted, or an IME composed — while the terminal held the
     /// keyboard, exactly as the platform produced it (case and shifted symbols intact).
     Text(String),
@@ -217,7 +213,8 @@ pub(crate) enum TerminalCommand {
 /// **Everything a terminal's owner says to it, once**: what a click on the scrollback controls
 /// means, and where its input goes. They travel as one group, built in `mod.rs`.
 pub(crate) struct Seams {
-    pub scroll: ScrollIntents,
+    /// Which terminal the scrollback controls scroll.
+    pub scroll: ScrollTarget,
     /// Where a [`TerminalInput`] goes.
     pub input: Box<dyn Fn(TerminalInput)>,
     /// Where a [`TerminalCommand`] about the terminal with this id goes.

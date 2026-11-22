@@ -410,3 +410,30 @@ pub enum EventKind {
     Mount,
     Unmount,
 }
+
+impl EventKind {
+    /// **Whether this event uses the widget it reaches** — a click of any button, or a run of
+    /// them. A disabled widget hears none of these, and one control uses each: the innermost
+    /// control that listens to it, never also the controls around it. Pointer enter and leave,
+    /// focus, keys and drags are not uses: everyone listening hears them.
+    pub fn uses_widget(self) -> bool {
+        matches!(
+            self,
+            EventKind::Click
+                | EventKind::DoubleClick
+                | EventKind::TripleClick
+                | EventKind::RightClick
+                | EventKind::MiddleClick
+        )
+    }
+
+    /// **Whether this use is made with the main button** — what makes a control one keyboard stop
+    /// and one click target. A right or middle click does not: a row listening only to right
+    /// clicks must not take the left press meant for the buttons inside it.
+    pub fn presses_widget(self) -> bool {
+        matches!(
+            self,
+            EventKind::Click | EventKind::DoubleClick | EventKind::TripleClick
+        )
+    }
+}

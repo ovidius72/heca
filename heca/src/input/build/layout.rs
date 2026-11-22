@@ -122,6 +122,9 @@ pub(super) fn build_layout(
         "delete_workspace" => Some(WmAction::DeleteWorkspace {
             ws_idx: get_usize(args, "ws_idx")?,
         }),
+        "toggle_workspace_collapsed" => Some(WmAction::ToggleWorkspaceCollapsed {
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
         "add_column_to_workspace" => Some(WmAction::AddColumnToWorkspace {
             ws_idx: get_usize(args, "ws_idx")?,
         }),

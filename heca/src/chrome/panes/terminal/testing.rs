@@ -55,13 +55,13 @@ pub(crate) fn recording() -> (
     std::rc::Rc<std::cell::RefCell<Vec<super::input::TerminalInput>>>,
 ) {
     use super::input::Seams;
-    use super::viewport::ScrollIntents;
+    use super::viewport::ScrollTarget;
     let said = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let seen = said.clone();
     let seams = Seams {
-        scroll: ScrollIntents {
-            to_bottom: Box::new(|| {}),
-            to_offset: Box::new(|_| {}),
+        scroll: ScrollTarget {
+            pane: None,
+            terminal: super::TerminalId(1),
         },
         input: Box::new(move |i| seen.borrow_mut().push(i)),
         command: Box::new(|_, _| {}),

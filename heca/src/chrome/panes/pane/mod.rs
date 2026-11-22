@@ -102,26 +102,18 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
 
 /// The app's edges, gathered once. A test calls this to get exactly the seams and nothing else
 /// (AGENTS.md § 0b-bis rule 3).
-pub(crate) fn callbacks(state: &crate::app_state::AppState) -> PaneCallbacks {
-    let proxy = state.event_proxy.clone();
+pub(crate) fn callbacks() -> PaneCallbacks {
     PaneCallbacks {
         pick: std::rc::Rc::new(move |pane_id: PaneId| {
-            // The pane asks; the core does. A pick focuses the pane through the same intent path a
-            // click, a keybinding and RPC all use — it never touches the session itself.
-            let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                // **A pick is a keyboard gesture, not a click.** It carries no pointer, so calling
-                // it `MouseContent` mislabels it — and the label is load-bearing: only
-                // keyboard-driven sources can resolve to `Domain::Container`, and
-                // `base_context_is_dormant` reads the source too. Same reasoning the codebase
-                // already applies to RPC: a click lands on something, a pick lands on nothing, so
-                // where the keyboard is *is* its context.
-                //
-                // ⚠️ Not established by tracing: a pick and a real click on a pane emitted the same
-                // source before this line, so a trace cannot tell them apart. The argument is the
-                // gesture's, not the evidence's.
-                source: crate::app::interaction::InteractionSource::Keyboard,
-                intent: crate::app::interaction::InteractionIntent::FocusPane { pane_id },
-            });
+            // The pane asks; the core does. A pick focuses the pane by name, through the same door
+            // a click, a keybinding and RPC use. **A pick is a keyboard gesture, not a click** —
+            // and the host says so for every pick it runs (`chrome::fire_hint` sends what a picked
+            // widget asks for with `pick_source`, which is `Keyboard` for a pane), so the pane
+            // names only its action.
+            heca_grid_ui::intent::send(
+                crate::chrome::Intent::new("focus_pane")
+                    .arg("pane_id", crate::chrome::PropValue::Int(pane_id.0 as i64)),
+            );
         }),
     }
 }

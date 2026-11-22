@@ -8,7 +8,6 @@ pub(crate) struct PaneHeaderCtx {
     pub(crate) pane_id: PaneId,
     pub(crate) ws_idx: usize,
     pub(crate) col_idx: usize,
-    pub(crate) event_proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
 }
 
 /// What a pane header *renders* — the projection inputs shared by the rebuild key
@@ -52,7 +51,7 @@ pub(crate) struct PaneHeaderButton {
     /// emitted `WmAction` may be a button-only variant, so the name is the identity).
     action_name: String,
     /// What the button sends (click) and the KeyHint fires (picker).
-    emit: crate::chrome::panes::pane_items::ButtonEmit,
+    emit: crate::chrome::Intent,
     label: String,
     /// Active-targeted (zoom/float): must focus the owning pane before the action so it
     /// lands on this pane, not whatever is active. Cleared while the pane is floating.
@@ -86,7 +85,12 @@ pub(crate) fn pane_header_buttons(
         .filter_map(|def| {
             let resolved = def.resolve(content.catalog, ids);
             // Floating panes drop the buttons their action's policy refuses there.
-            if content.floating && !resolved.emit.allowed_when_floating(content.catalog) {
+            if content.floating
+                && !crate::chrome::panes::pane_items::allowed_when_floating(
+                    &resolved.emit,
+                    content.catalog,
+                )
+            {
                 return None;
             }
             // An added button's words come from its action's declaration in the catalog.
@@ -208,35 +212,9 @@ pub(crate) fn build_pane_header(
             } else {
                 ButtonVariant::Primary
             };
-            let proxy = ctx.event_proxy.clone();
             let pane_id = ctx.pane_id;
-            let emit = spec.emit.clone();
+            let action = spec.emit.clone();
             let needs_focus = spec.needs_focus;
-            // **One gesture, written once**: the click and the `prefix+/` pick both run this.
-            // Active-targeted actions (zoom/float) act on the focused pane, so it focuses this pane
-            // first — the events are queued and processed in order on the UI thread, so the action
-            // lands on this pane.
-            let fire = move || {
-                use crate::app::interaction::{InteractionIntent, InteractionSource};
-                if needs_focus {
-                    let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                        source: InteractionSource::MouseContent,
-                        intent: InteractionIntent::FocusPane { pane_id },
-                    });
-                }
-                let intent = match &emit {
-                    crate::chrome::panes::pane_items::ButtonEmit::Wm(wm) => {
-                        InteractionIntent::ActivateAction(wm.clone())
-                    }
-                    crate::chrome::panes::pane_items::ButtonEmit::Intent(intent) => {
-                        InteractionIntent::View(intent.clone())
-                    }
-                };
-                let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                    source: InteractionSource::MouseContent,
-                    intent,
-                });
-            };
             // **Its words are carried even while only its icon shows** — they are what it says on
             // hover, and what its row reads in the menu once the pane is too narrow to hold it.
             // Every `Button` constructor takes them, which is what makes a collapsed group
@@ -247,7 +225,18 @@ pub(crate) fn build_pane_header(
                 .icon(spec.glyph)
                 .variant(variant)
                 .active(spec.is_active)
-                .on_click(move |_| fire());
+                // **The button names its action.** An active-targeted one (zoom, float) acts on the
+                // focused pane, so it focuses this pane first — two named acts, delivered in order,
+                // so the action lands on this pane.
+                .on_click(move |ev| {
+                    if needs_focus {
+                        ev.dispatch(
+                            crate::chrome::Intent::new("focus_pane")
+                                .arg("pane_id", crate::chrome::PropValue::Int(pane_id.0 as i64)),
+                        );
+                    }
+                    ev.dispatch(action.clone());
+                });
             // **The button's identity, from its data — the action it runs.**
             //
             // Without it the identity is DERIVED from the button's content, and a derived identity

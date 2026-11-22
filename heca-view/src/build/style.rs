@@ -515,6 +515,20 @@ pub trait Style: Sized {
         self
     }
 
+    /// **Bind `event` to an intent, on any kind** — a right click, the pointer entering, a drop:
+    /// every native event, by the name the native API gives it (`ViewEvent`). The native twin is
+    /// `EventExt::on`; realize reads both through one table, so the names cannot drift.
+    ///
+    /// ```ignore
+    /// view::Label::new("zsh").on(ViewEvent::RightClick, Intent::new("docker.menu"))
+    /// ```
+    fn on(mut self, event: ViewEvent, intent: Intent) -> Self {
+        self.node_mut()
+            .events
+            .insert(event.name().to_string(), intent);
+        self
+    }
+
     // ── Appearance ──
     /// **Override the accent — for this node and everything inside it.**
     ///

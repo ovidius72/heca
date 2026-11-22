@@ -179,7 +179,10 @@ mod tests {
         args.insert("rows".to_string(), "5".to_string());
         assert_eq!(
             action_ref_from_config("scroll_to_offset", &args),
-            ActionRef::Builtin(WmAction::ScrollToOffset { rows: 5 })
+            ActionRef::Builtin(WmAction::ScrollToOffset {
+                rows: 5,
+                terminal: None
+            })
         );
 
         // A parameterized built-in with UNPARSEABLE args does not silently become a dynamic action

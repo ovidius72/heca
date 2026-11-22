@@ -294,3 +294,67 @@ fn test_descriptors_are_populated() {
         );
     }
 }
+
+/// **An action reads its arguments as it declared them**, whoever called it: a number written as
+/// text becomes a number, a word that is not one stays the text it was (so `check_args` still says
+/// what is wrong), an argument the action does not declare is left exactly as it is, and turning
+/// twice changes nothing.
+#[test]
+fn arguments_are_read_as_the_action_declared_them() {
+    use heca_view::{PropMap, PropValue};
+    let spec = |name: &str, kind| crate::args::ArgSpec {
+        name: name.into(),
+        kind,
+        required: false,
+        description: String::new(),
+        values: Vec::new(),
+    };
+    let meta = ActionMeta::new("x.move")
+        .arg(spec("pane_id", ArgKind::Int))
+        .arg(spec("ratio", ArgKind::Float))
+        .arg(spec("open", ArgKind::Bool))
+        .arg(spec("label", ArgKind::Text));
+    let given = PropMap::from([
+        ("pane_id".to_string(), PropValue::Text(" 7".into())),
+        ("ratio".to_string(), PropValue::Text("0.5".into())),
+        ("open".to_string(), PropValue::Text("true".into())),
+        ("label".to_string(), PropValue::Text("42".into())),
+        ("@seat".to_string(), PropValue::Text("rooms".into())),
+        ("extra".to_string(), PropValue::Text("3".into())),
+    ]);
+    let typed = meta.typed_args(given);
+    assert_eq!(typed.get("pane_id"), Some(&PropValue::Int(7)));
+    assert_eq!(typed.get("ratio"), Some(&PropValue::Float(0.5)));
+    assert_eq!(typed.get("open"), Some(&PropValue::Bool(true)));
+    assert_eq!(
+        typed.get("label"),
+        Some(&PropValue::Text("42".into())),
+        "declared text stays text"
+    );
+    assert_eq!(
+        typed.get("@seat"),
+        Some(&PropValue::Text("rooms".into())),
+        "undeclared: untouched"
+    );
+    assert_eq!(
+        typed.get("extra"),
+        Some(&PropValue::Text("3".into())),
+        "undeclared: untouched"
+    );
+    assert_eq!(typed.len(), 6, "nothing is removed");
+    assert_eq!(
+        meta.typed_args(typed.clone()),
+        typed,
+        "turning twice changes nothing"
+    );
+
+    let bad = meta.typed_args(PropMap::from([(
+        "pane_id".to_string(),
+        PropValue::Text("seven".into()),
+    )]));
+    assert_eq!(
+        bad.get("pane_id"),
+        Some(&PropValue::Text("seven".into())),
+        "what does not parse stays"
+    );
+}

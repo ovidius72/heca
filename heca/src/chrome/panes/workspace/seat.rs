@@ -23,7 +23,7 @@ pub(crate) fn seat_workspace(state: &mut AppState) {
         None => {
             let seams = WorkspaceSeams {
                 column: crate::chrome::panes::column::callbacks(state),
-                pane: crate::chrome::panes::pane::callbacks(state),
+                pane: crate::chrome::panes::pane::callbacks(),
                 header_env: info_bar.then(|| crate::chrome::HeaderEnv::of(state)),
                 resize_column: {
                     let emit = resize_emitter(state);

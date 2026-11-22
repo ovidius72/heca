@@ -19,6 +19,10 @@ pub(super) fn build_terminal(
         }),
         "scroll_to_offset" => Some(WmAction::ScrollToOffset {
             rows: get_usize(args, "rows")?,
+            terminal: get_u64(args, "terminal"),
+        }),
+        "scroll_to_bottom" => Some(WmAction::ScrollToBottom {
+            terminal: get_u64(args, "terminal"),
         }),
         // Font zoom (RPC): `step` = in|out|reset. One terminal's zoom names its target the way
         // `terminal_run` does: a `terminal` id, a `pane_id`, or — with neither — the keyboard's.

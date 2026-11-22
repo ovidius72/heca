@@ -464,6 +464,10 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut self.registry,
                 &mut state.action_catalog,
             );
+            let _ = crate::chrome::register_expose_cursor(
+                &mut self.registry,
+                &mut state.action_catalog,
+            );
             crate::project_trust::notify_if_untrusted_in(state.client.session.folder.as_deref());
             // What the pane headers are asked to show, now that every action a button names exists:
             // a name nothing provides, and an added item the user's own list leaves out.

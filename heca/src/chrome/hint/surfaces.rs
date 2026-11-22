@@ -196,8 +196,20 @@ pub(crate) fn fire_hint(state: &mut crate::app_state::AppState, target: &HintTar
     let Some(path) = paths.into_iter().next() else {
         return false;
     };
-    hint_surface_root_mut(state, &target.surface)
-        .is_some_and(|root| heca_grid_ui::fire_hint(root, &path))
+    // **A pick is judged as the gesture it is**: what the picked widget sends goes out with the
+    // source the picker read when it offered the letter (`pick_source`), so offering a letter and
+    // acting on it cannot disagree. A dock or layer listening around the widget still answers for
+    // its own (nearer wins).
+    let emit = crate::chrome::ChromeIntentEmitter::new(
+        &state.event_proxy,
+        super::targets::pick_source(state, target),
+    );
+    hint_surface_root_mut(state, &target.surface).is_some_and(|root| {
+        heca_grid_ui::intent::sending_to(
+            move |intent| emit.fire_intent(intent),
+            || heca_grid_ui::fire_hint(root, &path),
+        )
+    })
 }
 
 /// **Run an action a widget on screen declares**, if any does.

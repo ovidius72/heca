@@ -37,7 +37,7 @@ pub use stack::ToastStack;
 
 use crate::animation::Animation;
 use crate::builders::{EventExt, LayoutExt, Parent};
-use crate::component::{Base, Component, Event, Handled, PaintCx};
+use crate::component::{Base, Component, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
@@ -657,15 +657,9 @@ impl Component for Toast {
         false
     }
 
-    /// The card flashes for a click on the card itself; its action button and × flash themselves.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if let Event::Click(click) = ev
-            && click.target_bounds == Some(self.base.bounds)
-            && self.base.activatable
-        {
-            self.flash.trigger();
-        }
-        Handled::No
+    /// Used: the press flash, shown only when this control is the one that used the event.
+    fn show_press(&mut self) {
+        self.flash.trigger();
     }
 
     fn tick(&mut self, dt: f32) -> bool {

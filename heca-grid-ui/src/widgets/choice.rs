@@ -27,7 +27,7 @@
 //! `Badge::danger`) keeps it.
 
 use crate::builders::{LayoutExt, Parent};
-use crate::component::{Base, Component, Event, Handled, PaintCx};
+use crate::component::{Base, Component, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Align, Direction, Justify, Length};
@@ -210,15 +210,9 @@ impl Component for Choice {
         }
     }
 
-    /// The press shows on the control itself; what it does belongs to its click handlers.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if matches!(ev, Event::Click(_))
-            && self.interactive()
-            && !self.base.disabled.get_untracked()
-        {
-            self.flash.trigger();
-        }
-        Handled::No
+    /// Used: the press flash, shown only when this control is the one that used the event.
+    fn show_press(&mut self) {
+        self.flash.trigger();
     }
 
     fn is_control(&self) -> bool {

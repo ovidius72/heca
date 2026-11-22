@@ -12,7 +12,6 @@ use heca_grid_ui::widgets::Glyph;
 
 use crate::actions::ActionCatalog;
 use crate::chrome::{Intent, PropValue, StartupQueue, warn_author};
-use crate::input::WmAction;
 
 /// **Where a pane is** — the plain data a button needs to say what a click does. Never `AppState`.
 #[derive(Clone, Copy, Debug)]
@@ -22,29 +21,19 @@ pub(crate) struct PaneIds {
     pub(crate) col_idx: usize,
 }
 
-/// **What a click sends.** heca's own buttons send a pane-parameterized [`WmAction`]; an added
-/// button sends its action by name, with the pane it was clicked on as the `pane` argument.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum ButtonEmit {
-    Wm(WmAction),
-    Intent(Intent),
-}
-
-impl ButtonEmit {
-    /// Whether the button stays when its pane is **floating**, decided by the action's own policy
-    /// rather than a list kept here: tiled-only acts (split, zoom, move) hide, pane-local ones stay.
-    pub(crate) fn allowed_when_floating(&self, catalog: &ActionCatalog) -> bool {
-        match self {
-            ButtonEmit::Wm(wm) => crate::app::interaction::action_allowed_when_floating(wm),
-            ButtonEmit::Intent(intent) => catalog.find(&intent.action).is_some_and(|m| {
-                matches!(
-                    m.policy,
-                    crate::app::interaction::ActionPolicy::FocusedPaneLocal
-                        | crate::app::interaction::ActionPolicy::Global
-                )
-            }),
-        }
-    }
+/// **Whether a button stays when its pane is floating**, decided by its action's own policy in the
+/// catalog rather than a list kept here: tiled-only acts (split, zoom, move) hide, pane-local ones
+/// stay. One rule for heca's buttons and for the ones another crate adds, since both name an
+/// action.
+pub(crate) fn allowed_when_floating(action: &Intent, catalog: &ActionCatalog) -> bool {
+    catalog.find(&action.action).is_some_and(|m| {
+        matches!(
+            m.policy,
+            crate::app::interaction::ActionPolicy::FocusedPaneLocal
+                | crate::app::interaction::ActionPolicy::KeyboardTerminal
+                | crate::app::interaction::ActionPolicy::Global
+        )
+    })
 }
 
 /// When a button reads as toggled **on**: the pane's column is zoomed, or the pane is floating.
@@ -56,7 +45,7 @@ enum HeldWhen {
 
 /// What a click sends, worked out for one pane. Reads the catalog because an added button sends only
 /// what its action declares.
-type EmitFn = dyn Fn(&ActionCatalog, PaneIds) -> ButtonEmit;
+type EmitFn = dyn Fn(&ActionCatalog, PaneIds) -> Intent;
 
 /// One button, by name.
 #[derive(Clone)]
@@ -88,7 +77,8 @@ struct Builtin {
     /// The catalog action whose icon it borrows, and the mark to fall back on if that is unknown.
     icon_of: &'static str,
     fallback: Glyph,
-    emit: fn(PaneIds) -> WmAction,
+    /// The action it runs for one pane, by name — what a key, the palette and RPC call too.
+    emit: fn(PaneIds) -> Intent,
     needs_focus: bool,
     held_when: Option<HeldWhen>,
 }
@@ -112,7 +102,7 @@ impl Builtin {
             // Icons come from the action catalog (the single source); the literal is a defensive
             // fallback only, so the bar and the context menu can never drift.
             icon: Rc::new(move |catalog| catalog.icon(icon_of).unwrap_or(fallback)),
-            emit: Rc::new(move |_, ids| ButtonEmit::Wm(emit(ids))),
+            emit: Rc::new(move |_, ids| emit(ids)),
             needs_focus,
             held_when,
             from_extension: false,
@@ -132,7 +122,7 @@ impl super::listing::Named for PaneButtonDef {
 /// A button worked out for one pane — everything the header draws it from.
 pub(crate) struct ResolvedButton {
     pub(crate) glyph: Glyph,
-    pub(crate) emit: ButtonEmit,
+    pub(crate) emit: Intent,
     pub(crate) label: String,
     pub(crate) needs_focus: bool,
 }
@@ -183,7 +173,7 @@ impl PaneButtonDef {
                         .args
                         .insert(PANE_ARG.to_string(), PropValue::Int(ids.pane_id.0 as i64));
                 }
-                ButtonEmit::Intent(intent)
+                intent
             }),
             needs_focus: false,
             held_when: None,
@@ -292,9 +282,10 @@ fn builtin_buttons() -> Vec<PaneButtonDef> {
             label: "New pane",
             icon_of: "add_pane_to_column",
             fallback: Glyph::FolderSimplePlus,
-            emit: |ids| WmAction::AddPaneToColumn {
-                ws_idx: ids.ws_idx,
-                col_idx: ids.col_idx,
+            emit: |ids| {
+                Intent::new("add_pane_to_column")
+                    .arg("ws_idx", PropValue::Int(ids.ws_idx as i64))
+                    .arg("col_idx", PropValue::Int(ids.col_idx as i64))
             },
             needs_focus: false,
             held_when: None,
@@ -305,8 +296,8 @@ fn builtin_buttons() -> Vec<PaneButtonDef> {
             label: "Move left",
             icon_of: "move_pane_left",
             fallback: Glyph::ArrowLineLeft,
-            emit: |ids| WmAction::MovePaneLeft {
-                pane_id: Some(ids.pane_id),
+            emit: |ids| {
+                Intent::new("move_pane_left").arg("pane_id", PropValue::Int(ids.pane_id.0 as i64))
             },
             needs_focus: false,
             held_when: None,
@@ -317,8 +308,8 @@ fn builtin_buttons() -> Vec<PaneButtonDef> {
             label: "Move right",
             icon_of: "move_pane_right",
             fallback: Glyph::ArrowLineRight,
-            emit: |ids| WmAction::MovePaneRight {
-                pane_id: Some(ids.pane_id),
+            emit: |ids| {
+                Intent::new("move_pane_right").arg("pane_id", PropValue::Int(ids.pane_id.0 as i64))
             },
             needs_focus: false,
             held_when: None,
@@ -329,8 +320,8 @@ fn builtin_buttons() -> Vec<PaneButtonDef> {
             label: "Close",
             icon_of: "close",
             fallback: Glyph::FolderSimpleMinus,
-            emit: |ids| WmAction::ClosePaneById {
-                pane_id: ids.pane_id,
+            emit: |ids| {
+                Intent::new("close_pane_by_id").arg("pane_id", PropValue::Int(ids.pane_id.0 as i64))
             },
             needs_focus: false,
             held_when: None,
@@ -341,7 +332,7 @@ fn builtin_buttons() -> Vec<PaneButtonDef> {
             label: "Zoom",
             icon_of: "zoom_column",
             fallback: Glyph::FrameCorners,
-            emit: |_| WmAction::ZoomColumn,
+            emit: |_| Intent::new("zoom_column"),
             needs_focus: true,
             held_when: Some(HeldWhen::Zoomed),
         },
@@ -351,7 +342,7 @@ fn builtin_buttons() -> Vec<PaneButtonDef> {
             label: "Float",
             icon_of: "float",
             fallback: Glyph::Cards,
-            emit: |_| WmAction::Float,
+            emit: |_| Intent::new("float"),
             needs_focus: true,
             held_when: Some(HeldWhen::Floating),
         },
@@ -381,37 +372,62 @@ mod tests {
             .resolve(&catalog, ids())
     }
 
-    /// **heca's own six buttons do exactly what they did as a closed list**: the same action for the
-    /// same pane, the same icon from the catalog, and focus first only for the two that act on the
-    /// focused pane.
+    /// The built-in action a named call runs — through the same translation every caller goes
+    /// through (`resolve_action`), so these tests prove what a click ends up doing.
+    fn runs(intent: &Intent) -> Option<crate::input::WmAction> {
+        crate::input::resolve_action(
+            &intent.action,
+            &crate::app::interaction::intent_args_as_strings(intent),
+        )
+    }
+
+    /// **heca's own six buttons do exactly what they did as a closed list**: named now, and each
+    /// name still runs the same action for the same pane; the same icon from the catalog; and focus
+    /// first only for the two that act on the focused pane.
     #[test]
     fn the_shipped_buttons_map_to_the_actions_they_always_did() {
+        use crate::input::WmAction;
         let close = shipped("close");
         assert_eq!(close.glyph, Glyph::FolderSimpleMinus);
         assert_eq!(
-            close.emit,
-            ButtonEmit::Wm(WmAction::ClosePaneById { pane_id: PaneId(7) })
+            runs(&close.emit),
+            Some(WmAction::ClosePaneById { pane_id: PaneId(7) })
         );
         assert!(!close.needs_focus);
 
         let split = shipped("split");
         assert_eq!(split.glyph, Glyph::FolderSimplePlus);
         assert_eq!(
-            split.emit,
-            ButtonEmit::Wm(WmAction::AddPaneToColumn {
+            runs(&split.emit),
+            Some(WmAction::AddPaneToColumn {
                 ws_idx: 2,
                 col_idx: 3
             })
         );
 
+        let left = shipped("move_left");
+        assert_eq!(
+            runs(&left.emit),
+            Some(WmAction::MovePaneLeft {
+                pane_id: Some(PaneId(7))
+            })
+        );
+        let right = shipped("move_right");
+        assert_eq!(
+            runs(&right.emit),
+            Some(WmAction::MovePaneRight {
+                pane_id: Some(PaneId(7))
+            })
+        );
+
         let zoom = shipped("zoom");
         assert_eq!(zoom.glyph, Glyph::FrameCorners);
-        assert_eq!(zoom.emit, ButtonEmit::Wm(WmAction::ZoomColumn));
+        assert_eq!(runs(&zoom.emit), Some(WmAction::ZoomColumn));
         assert!(zoom.needs_focus, "zoom acts on the focused pane");
 
         let float = shipped("float");
         assert_eq!(float.glyph, Glyph::Cards);
-        assert_eq!(float.emit, ButtonEmit::Wm(WmAction::Float));
+        assert_eq!(runs(&float.emit), Some(WmAction::Float));
         assert!(float.needs_focus);
     }
 
@@ -428,7 +444,7 @@ mod tests {
             ("move_right", false),
         ] {
             assert_eq!(
-                shipped(name).emit.allowed_when_floating(&catalog),
+                allowed_when_floating(&shipped(name).emit, &catalog),
                 kept,
                 "{name}"
             );
@@ -507,9 +523,7 @@ mod tests {
         let def = all.get("demo.show_notes").expect("added");
         let resolved = def.resolve(&catalog, ids());
         assert_eq!(resolved.glyph, Glyph::Plus, "the action's own icon");
-        let ButtonEmit::Intent(intent) = &resolved.emit else {
-            panic!("an added button sends its action by name");
-        };
+        let intent = &resolved.emit;
         assert_eq!(intent.action, "demo.show_notes");
         assert_eq!(intent.args.get(PANE_ARG), Some(&PropValue::Int(7)));
         assert!(!resolved.needs_focus);
@@ -532,9 +546,7 @@ mod tests {
         .expect("registered");
         let all = with_added("demo.plain");
         let resolved = all.get("demo.plain").unwrap().resolve(&catalog, ids());
-        let ButtonEmit::Intent(intent) = resolved.emit else {
-            panic!("an added button sends its action by name");
-        };
+        let intent = resolved.emit;
         assert!(
             intent.args.is_empty(),
             "no `pane` argument declared, none sent"

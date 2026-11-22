@@ -5,7 +5,7 @@ use crate::app::terminal_host::{
     move_focused_terminal_selection,
 };
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::panes::terminal::Page;
+use crate::chrome::panes::terminal::{Page, TerminalId};
 use crate::input::WmAction;
 
 /// How many rows a page of the keyboard's terminal is — the fallback grid's when there is no
@@ -225,9 +225,18 @@ pub fn handle_scroll_to_top(
 
 pub fn handle_scroll_to_bottom(
     state: &mut AppState,
-    _action: &WmAction,
+    action: &WmAction,
 ) -> crate::actions::ActionResult {
-    page_keyboard_terminal(state, Page::Bottom);
+    // One terminal named by its id — the chip on its scrollback — glides down to the live bottom;
+    // without one, the keyboard's page goes there at once.
+    match action {
+        WmAction::ScrollToBottom { terminal: Some(id) } => {
+            if let Some(backend) = state.client.backends.get_mut_by_id(TerminalId(*id)) {
+                backend.scroll_to_bottom_animated();
+            }
+        }
+        _ => page_keyboard_terminal(state, Page::Bottom),
+    }
     Ok(())
 }
 
@@ -297,10 +306,14 @@ pub fn handle_scroll_to_offset(
     state: &mut AppState,
     action: &WmAction,
 ) -> crate::actions::ActionResult {
-    let WmAction::ScrollToOffset { rows } = action else {
+    let WmAction::ScrollToOffset { rows, terminal } = action else {
         return Ok(());
     };
-    if let Some(backend) = state.keyboard_backend_mut() {
+    let backend = match terminal {
+        Some(id) => state.client.backends.get_mut_by_id(TerminalId(*id)),
+        None => state.keyboard_backend_mut(),
+    };
+    if let Some(backend) = backend {
         scroll_backend_to_offset(backend, *rows);
     }
     Ok(())

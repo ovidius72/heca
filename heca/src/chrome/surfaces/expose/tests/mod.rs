@@ -16,15 +16,14 @@ fn built(
     let rows = model(s.l(), |p| p.title.clone(), false);
     let theme = GuiTheme::default();
     let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    // Built alone, the map sits in no layer, so what it sends reaches the host's sink — this one.
     let sink = seen.clone();
-    let emit: crate::chrome::ChromeIntentEmitter = crate::chrome::ChromeIntentEmitter::of(
-        crate::app::interaction::InteractionSource::Keyboard,
-        move |_, intent| sink.borrow_mut().push(format!("{intent:?}")),
-    );
+    heca_grid_ui::intent::install_intent_sink(move |intent| {
+        sink.borrow_mut().push(format!("{intent:?}"))
+    });
     let mut root = map(
         &rows,
         &theme,
-        emit,
         start,
         &LayoutOptions::default(),
         &shipped_keys(),

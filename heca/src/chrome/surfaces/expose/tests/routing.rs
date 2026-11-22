@@ -15,14 +15,17 @@ fn an_activate_reaches_the_grid_and_chooses_the_card_under_the_cursor() {
     // Activate-and-leave, the same three parts the sidebar performs: focus the pane, hand the
     // keyboard back, put the surface away. The middle one is invisible until it is missing.
     assert!(
-        got.contains("FocusPaneThenAction") && got.contains("PaneId(2)"),
+        got.contains("\"focus_pane\"") && got.contains("Int(2)"),
         "it focuses the card the cursor was on: {got:?}",
     );
     assert!(
-        got.contains("UnfocusDock"),
+        got.contains("\"unfocus_dock\""),
         "and hands the keyboard back: {got:?}"
     );
-    assert!(got.contains("CloseOverlay"), "and closes the map: {got:?}");
+    assert!(
+        got.contains("\"close_overlay\""),
+        "and closes the map: {got:?}"
+    );
 }
 
 /// **Dismiss must reach the grid through the overlay** — the same routing chain, for Esc.
@@ -33,7 +36,7 @@ fn a_dismiss_reaches_the_grid_through_the_overlay() {
     heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Dismiss));
     let got = seen.borrow().join(" ");
     assert!(
-        got.contains("CloseOverlay"),
+        got.contains("\"close_overlay\""),
         "Esc must run the close_overlay ACTION, not a bespoke hide; the emitter saw: {got:?}",
     );
 }

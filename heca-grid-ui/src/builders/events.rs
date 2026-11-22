@@ -40,30 +40,7 @@ pub trait EventExt: Component + Sized {
         kind: crate::event::EventKind,
         f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
     ) -> Self {
-        // **Wiring an action is what makes a widget pickable**. Set here, in the one
-        // place every generic listener goes through, rather than repeated in `on_click`,
-        // `on_double_click`, `on_key_down` and `on_key_up` — a rule in four call sites is a rule in
-        // the wrong place.
-        //
-        // Right-click and middle-click are deliberately absent: a right-click opens a context menu
-        // rather than doing the thing, so it should not spend one of the 52 letters.
-        use crate::event::EventKind as K;
-        if matches!(kind, K::Click | K::DoubleClick | K::Key) {
-            self.base_mut().activatable = true;
-        }
-        // **A control with a click is one keyboard stop and one click target** — a button, a row.
-        // Asked of the widget's kind, not of every widget with a handler: the dock wrapper and the
-        // pane shell listen to clicks to focus themselves and must not claim the press.
-        if kind == K::Click && self.is_control() {
-            let whole = self.takes_whole_press();
-            let b = self.base_mut();
-            b.focusable = true;
-            b.one_click_target = whole;
-        }
-        self.base_mut()
-            .handlers
-            .get_or_insert_with(Default::default)
-            .add(kind, f);
+        listen(&mut self, kind, f);
         self
     }
 
@@ -72,7 +49,7 @@ pub trait EventExt: Component + Sized {
     /// container receives what its children fire. The nearest container listening wins. heca uses
     /// it on the wrapper round every dock to address what the dock asks for; widgets never know.
     fn on_dispatch(mut self, f: impl Fn(heca_view::Intent) + 'static) -> Self {
-        self.base_mut().dispatch_handler = Some(std::rc::Rc::new(f));
+        listen_to_dispatch(&mut self, f);
         self
     }
 
@@ -310,3 +287,44 @@ pub trait EventExt: Component + Sized {
 }
 
 impl<T: Component + Sized> EventExt for T {}
+
+/// **Listen to what is dispatched inside any widget** — what [`EventExt::on_dispatch`] does, for a
+/// tree held as `dyn Component` (a layer's root once it is built). One function, like [`listen`].
+pub fn listen_to_dispatch(widget: &mut dyn Component, f: impl Fn(heca_view::Intent) + 'static) {
+    widget.base_mut().dispatch_handler = Some(std::rc::Rc::new(f));
+}
+
+/// **Listen to `kind` on any widget** — what [`EventExt::on`] does, for a widget held as
+/// `dyn Component` (a realized description, a boxed child). One function, so the rules about what
+/// a listener makes of a widget are written once.
+pub fn listen(
+    widget: &mut dyn Component,
+    kind: crate::event::EventKind,
+    f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
+) {
+    // **Wiring an action is what makes a widget pickable**. Set here, in the one
+    // place every generic listener goes through, rather than repeated in `on_click`,
+    // `on_double_click`, `on_key_down` and `on_key_up` — a rule in four call sites is a rule in
+    // the wrong place.
+    //
+    // Right-click and middle-click are deliberately absent: a right-click opens a context menu
+    // rather than doing the thing, so it should not spend one of the 52 letters.
+    use crate::event::EventKind as K;
+    if matches!(kind, K::Click | K::DoubleClick | K::Key) {
+        widget.base_mut().activatable = true;
+    }
+    // **A control with a click is one keyboard stop and one click target** — a button, a row.
+    // Asked of the widget's kind, not of every widget with a handler: the dock wrapper and the
+    // pane shell listen to clicks to focus themselves and must not claim the press.
+    if kind.presses_widget() && widget.is_control() {
+        let whole = widget.takes_whole_press();
+        let b = widget.base_mut();
+        b.focusable = true;
+        b.one_click_target = whole;
+    }
+    widget
+        .base_mut()
+        .handlers
+        .get_or_insert_with(Default::default)
+        .add(kind, f);
+}

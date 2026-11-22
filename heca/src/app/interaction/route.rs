@@ -60,34 +60,24 @@ pub(crate) fn route_in_domain(
     source: InteractionSource,
     intent: InteractionIntent,
 ) -> RouteDecision {
-    // The three carrier intents below are the mouse's own vocabulary — focus this pane, fold this
-    // workspace, start this drag. None of them is meaningful while a floating pane owns the domain
-    // or while something covers the panes, and each has always said so; `blocked_domain` is that
-    // one condition written once instead of three times.
+    // The two carrier intents below are the mouse's own vocabulary — focus this pane, start this
+    // drag. Neither is meaningful while a floating pane owns the domain or while something covers
+    // the panes; `blocked_domain` is that one condition written once. (Folding a workspace is the
+    // named `toggle_workspace_collapsed` now, whose `TiledOnly` policy says the same.)
     let blocked_domain = matches!(domain, Domain::Floating | Domain::Overlay { .. });
     match &intent {
         InteractionIntent::ActivateAction(action) => route_action(layout, domain, source, action),
-        // Defensive: `dispatch_intent` expands this into FocusPane + the action before
-        // routing, so the router should not normally see it. If it does, route by the
-        // inner action's policy (the focus half is always benign).
-        InteractionIntent::FocusPaneThenAction { action, .. } => {
-            route_action(layout, domain, source, action)
-        }
-        // Likewise expanded before routing. Defensively it is a `View` intent: the name resolves to
-        // its real policy when `dispatch_view_intent` looks it up.
+        // Expanded before routing. Defensively it is a `View` intent: the name resolves to its real
+        // policy when `dispatch_view_intent` looks it up.
         InteractionIntent::FocusContainerThenAction { .. } => RouteDecision::Allow(intent),
-        // Pure UI bookkeeping: it changes nothing anyone could be protected from, and the only
-        // time it fires is while a map covers the panes — so refusing it in `Overlay` would refuse
-        // it always.
-        InteractionIntent::ExposeCursor { .. } => RouteDecision::Allow(intent),
         // FocusPane from mouse content/sidebar: only the active floating pane can receive focus in
         // the floating domain, and nothing behind an overlay can.
-        InteractionIntent::FocusPane { .. }
-        | InteractionIntent::ToggleWorkspaceCollapsed { .. }
-        | InteractionIntent::StartSidebarDrag { .. } => match blocked_domain {
-            true => RouteDecision::Block,
-            false => RouteDecision::Allow(intent),
-        },
+        InteractionIntent::FocusPane { .. } | InteractionIntent::StartSidebarDrag { .. } => {
+            match blocked_domain {
+                true => RouteDecision::Block,
+                false => RouteDecision::Allow(intent),
+            }
+        }
         // A View intent is a pass-through here: it carries only an action *name*, so its
         // real focus-domain policy is applied when `dispatch_view_intent` resolves it to a
         // `WmAction` and re-dispatches through `dispatch_action` (which routes it).
