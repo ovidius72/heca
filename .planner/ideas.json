@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 31,
+  "nextIdeaNumber": 32,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -230,6 +230,16 @@
       "promotion": null,
       "createdAt": "2026-11-21T16:10:05.197Z",
       "updatedAt": "2026-11-21T16:10:05.197Z"
+    },
+    {
+      "id": "c201a274-4d61-4f7d-b627-55bd246f263d",
+      "number": 31,
+      "shortId": "JGH75",
+      "title": "Events by name, not a closed enum — an extension's own events (DOM CustomEvent)",
+      "description": "WHY (Antonio, 2026-11-22: \"avere un enum non è un limite? un'estensione che aggiunge un altro evento non ne farà mai parte\"): events are a closed list today, so an extension or plugin can never add an event of its own that the rest of the tree hears.\n\nWhat is closed today (checked 2026-11-22):\n1. heca-grid-ui `EventKind` (heca-grid-ui/src/event/kinds.rs) is a closed enum with no custom variant: a widget written by an extension cannot raise its own event that bubbles like click/scroll; it can only call a function of its own.\n2. A description already carries any name: `ViewNode::on(event: impl Into<String>, intent)` (heca-view/src/node.rs:343). But realize silently skips any name not in the one table (heca-view-realize/src/lib.rs:207, `native_by_name` → `continue`), so a plugin writing `\"rows_reordered\"` gets nothing and is not told.\n3. The SDK's builder takes only the enum (`Style::on(event: ViewEvent, …)`, heca-view/src/build/style.rs:525), so the SDK cannot even write a new name.\n\nDirection (the DOM's CustomEvent):\n- an event has a NAME, not a place in an enum: a widget emits `ev.emit(\"rows_reordered\", data)` and it bubbles like the others;\n- anyone listens with `.on(\"rows_reordered\", |ev| …)`, native or plugin, with no table to update;\n- today's events become reserved library names, written once;\n- an unknown name in a description is reported, never silently skipped;\n- the data the event carries crosses to a plugin as data (as an Intent's args).\n\nConstraints: public API used by heca-pro (compatibility rule, AGENTS.md) — shape to agree with Antonio and heca-pro before code. Relates to THE EVENTS rule in CLAUDE.md (state-change events are already named strings, `cx.on(\"pane.cwd.changed\", …)`): widget events would follow the same naming. Trigger: edge_scroll had to be added by hand to the closed ViewEvent/EventKind table on feat/t567-selection-autoscroll.",
+      "promotion": null,
+      "createdAt": "2026-11-22T19:01:41.980Z",
+      "updatedAt": "2026-11-22T19:01:41.980Z"
     }
   ]
 }
