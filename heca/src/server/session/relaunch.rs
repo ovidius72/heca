@@ -101,14 +101,21 @@ impl SessionRuntime {
                 let name = known
                     .driver(&agent.driver)
                     .map_or(agent.driver.as_str(), |driver| driver.name());
-                let hint = if inferred {
-                    format!(
+                // **Say the cause that is true now.** Reporting switched off is one reason a harness
+                // never said its session; with it on, the harness ran without reporting anyway — an
+                // earlier heca started it directly, or the folder was not trusted.
+                let reporting_on = drivers.driver(&agent.driver).is_some();
+                let hint = match (inferred, reporting_on) {
+                    (false, _) => String::new(),
+                    (true, true) => format!(
+                        " {name} ran without reporting to heca (started by an earlier heca, or in a folder \
+                         that is not trusted), so heca could not record its session. It will next time."
+                    ),
+                    (true, false) => format!(
                         " Agent reporting was not on for {name} where it ran (it needs `enabled = true` under \
                          `[settings.agents.programs.{}]`, in a trusted project), so heca could not record its session.",
                         agent.driver,
-                    )
-                } else {
-                    String::new()
+                    ),
                 };
                 Notification::warning(format!("{name} was not resumed"))
                     .body(format!("{why}. A new conversation was not started; this pane has your shell instead.{hint}"))
