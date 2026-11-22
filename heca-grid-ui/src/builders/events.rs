@@ -329,7 +329,7 @@ pub fn listen(
     // **A control with a click is one keyboard stop and one click target** — a button, a row.
     // Asked of the widget's kind, not of every widget with a handler: the dock wrapper and the
     // pane shell listen to clicks to focus themselves and must not claim the press.
-    if kind == K::Click && widget.is_control() {
+    if kind.presses_widget() && widget.is_control() {
         let whole = widget.takes_whole_press();
         let b = widget.base_mut();
         b.focusable = true;

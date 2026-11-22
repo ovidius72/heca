@@ -6,7 +6,7 @@
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
-use crate::component::{Base, Component, Event, Handled, PaintCx};
+use crate::component::{Base, Component, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
@@ -203,12 +203,9 @@ impl Component for BadgeButton {
         }
     }
 
-    /// The press shows on the control itself; what it does belongs to its click handlers.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if matches!(ev, Event::Click(_)) && self.base.activatable && !self.base.disabled.get_untracked() {
-            self.flash.trigger();
-        }
-        Handled::No
+    /// Used: the press flash, shown only when this control is the one that used the event.
+    fn show_press(&mut self) {
+        self.flash.trigger();
     }
 
     fn is_control(&self) -> bool {
@@ -232,6 +229,7 @@ impl LayoutExt for BadgeButton {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component::{Event, Handled};
     use crate::builders::EventExt;
     use crate::event::PointerButton;
     use crate::reactive::SignalUpdate;

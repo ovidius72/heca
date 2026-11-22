@@ -925,9 +925,23 @@ their `.on_click(|ev| ..)` handlers say, and `.on_press(Intent)` is the one-line
 dispatches the intent and the `prefix+/` letter carries it. Enter or Space on the control holding
 the keyboard is delivered to it as a real click, and a programmatic press is
 `heca_grid_ui::click(root, path)` (the DOM's `el.click()`), so mouse, keyboard, letter and code
-cannot drift apart. **A click is used by one control**: the innermost control under it uses it and
-the controls around it do not (closing a notification does not also open it), while containers
-that are not controls still hear it — a dock focuses itself on any click inside it.
+cannot drift apart.
+
+**Every use of a widget follows one set of rules** — a click of any button, a double or triple
+click (`EventKind::uses_widget`):
+- a disabled widget is not used;
+- **each use is made by one control**: the innermost control that listens to that kind uses it and
+  shows it was pressed (`Component::show_press`); the controls around it that listen to the same
+  kind do not (closing a notification does not also open it, a row does not flash for the button
+  inside it). A control that does not listen to that kind lets it through: a button with only
+  `on_click` leaves a right click to the row around it;
+- the event still rises: containers that are not controls hear it — a dock focuses itself on any
+  click inside it — and `stop_propagation` stops it for everyone;
+- a control becomes one keyboard stop and one click target only for main-button uses (click,
+  double, triple), so a row listening to right clicks never takes the left press of its buttons.
+
+Pointer enter and leave, focus, keys and drags are not uses: everyone listening hears them, and
+keys rise from the focused widget as always.
 
 **`Parent`** (containers):
 

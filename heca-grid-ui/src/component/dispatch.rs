@@ -246,6 +246,10 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
 pub(crate) fn run_pick(node: &mut dyn Component) {
     if let Some(hint) = &node.base().hint {
         crate::intent::dispatching_to(node.base().dispatch_to.clone(), || hint.run());
+        // A picked control shows it was pressed, as a click on it does.
+        if node.is_control() {
+            node.show_press();
+        }
         return;
     }
     if !crate::hint::is_target(node) {
@@ -255,36 +259,41 @@ pub(crate) fn run_pick(node: &mut dyn Component) {
     let b = node.base().bounds;
     let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     let click = Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b));
-    node.base_mut().run_handlers(&click);
-    own_event(node, &click);
+    let _ = react(node, &click);
 }
 
 thread_local! {
-    /// Whether a control already used the click being delivered — see [`react`].
-    static CLICK_TAKEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Which kind of use a control already took in the event being delivered — see [`react`]. A
+    /// kind, not a yes/no: the second click of a pair arrives as a `Click` and then a
+    /// `DoubleClick` in one dispatch, and each is used once.
+    static CLICK_TAKEN: std::cell::Cell<Option<crate::event::EventKind>> = const { std::cell::Cell::new(None) };
 }
 
 /// A new click is about to be delivered: nothing has used it yet.
 pub(crate) fn new_click() {
-    CLICK_TAKEN.with(|c| c.set(false));
+    CLICK_TAKEN.with(|c| c.set(None));
 }
 
 /// **A widget answers an event**: its registered handlers, then its own event code.
 ///
-/// **A click is used by one control.** The innermost control under it — a × in a card, a button
-/// in a row — uses it, and the controls around it do not, so closing a notification does not also
-/// open it. Containers that are not controls still hear it as it bubbles: a dock focuses itself on
-/// any click inside it. Written here once, so no control stops propagation by hand.
+/// **Each use is made by one control.** The innermost control that listens to a click (of any
+/// button, or a run of them — [`EventKind::uses_widget`]) uses it and shows it was pressed; the
+/// controls around it that listen to the same kind do not, so closing a notification does not also
+/// open it. The event still rises: containers that are not controls hear it — a dock focuses
+/// itself on any click inside it — and a control that does not listen to that kind lets it through
+/// to the one that does. Written here once, so no control stops propagation by hand.
 pub(crate) fn react(node: &mut dyn Component, ev: &Event) -> Handled {
-    let control_click = matches!(ev, Event::Click(_))
+    let kind = ev.kind();
+    let used = kind.uses_widget()
         && node.is_control()
-        && node.base().activatable
-        && !node.base().disabled.get_untracked();
-    if control_click && CLICK_TAKEN.with(std::cell::Cell::get) {
-        return Handled::No;
-    }
-    if control_click {
-        CLICK_TAKEN.with(|c| c.set(true));
+        && !node.base().disabled.get_untracked()
+        && node.base().handlers.as_ref().is_some_and(|h| h.has(kind));
+    if used {
+        if CLICK_TAKEN.with(std::cell::Cell::get) == Some(kind) {
+            return Handled::No;
+        }
+        CLICK_TAKEN.with(|c| c.set(Some(kind)));
+        node.show_press();
     }
     if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;

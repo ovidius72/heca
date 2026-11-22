@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::color::Color;
-use crate::component::{Component, Event, Handled, PaintCx};
+use crate::component::{Component, PaintCx};
 use crate::font::MONO_ADVANCE_RATIO;
 use crate::reactive::SignalGet;
 use crate::scene::{Border, Glow};
@@ -442,14 +442,9 @@ impl Component for Button {
         }
     }
 
-    /// The press shows on the button itself; what it does belongs to its click handlers. Enter,
-    /// Space and the activate intent arrive as a click too (the framework turns them into one), so
-    /// there is one path and nothing here to keep in step with it.
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if matches!(ev, Event::Click(_)) && self.base.activatable && !self.base.disabled.get_untracked() {
-            self.flash.trigger();
-        }
-        Handled::No
+    /// Used: the press flash, shown only when this control is the one that used the event.
+    fn show_press(&mut self) {
+        self.flash.trigger();
     }
 
     fn is_control(&self) -> bool {
