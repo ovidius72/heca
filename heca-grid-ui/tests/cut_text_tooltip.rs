@@ -89,6 +89,19 @@ fn a_tooltip_written_on_the_row_wins_over_the_labels_cut_text() {
     );
 }
 
+/// **An empty tooltip on the row does not silence the label's cut text** — a row whose live words
+/// are blank right now (an agent that reported no detail) still lets a cut name show in full.
+#[test]
+fn an_empty_tooltip_on_the_row_leaves_the_labels_cut_text() {
+    let blank = heca_grid_ui::reactive::signal(String::new());
+    let row = Flex::row().tooltip_signal(blank).child(Label::new(LONG));
+    let words = hover_words(Flex::column().child(row), 120.0);
+    assert!(
+        words.iter().any(|w| w == LONG),
+        "the cut label still shows its whole text: {words:?}"
+    );
+}
+
 #[test]
 fn every_tooltip_waits_the_default_the_host_sets_and_a_quick_one_half() {
     set_default_delay(1.2);

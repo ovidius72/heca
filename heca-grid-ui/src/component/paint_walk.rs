@@ -77,10 +77,14 @@ fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
     // done, so it covers its own children and not what is painted after it.
     let outline = cx.scene.outline_mark();
     // A tooltip written by hand on a hovered widget covers the cut-text tooltips of the labels
-    // inside it: they paint (and so decide) before it does.
+    // inside it: they paint (and so decide) before it does. Only one that has something to say —
+    // an empty one (a row whose live words are blank now) must not silence a cut label.
     let base = c.base();
-    let hand_tip_here =
-        base.hovered() && base.tooltip.as_ref().is_some_and(|tip| !tip.is_automatic());
+    let hand_tip_here = base.hovered()
+        && base
+            .tooltip
+            .as_ref()
+            .is_some_and(|tip| tip.says_something() && !tip.is_automatic());
     let above = cx.hand_tip_above;
     cx.hand_tip_above = above || hand_tip_here;
     paint_holding(c, cx);
