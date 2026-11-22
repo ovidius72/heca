@@ -46,13 +46,9 @@ fn moving_focus_between_dock_rows_does_not_keep_asking_for_frames() {
     };
     let frame = |fx: &testing::Fixture, root: &mut heca_grid_ui::widgets::ScrollRegion| {
         heca_grid_ui::frame_served();
+        // The pane rows follow the store's focus themselves; the columns and workspaces are still
+        // written the way the host writes them.
         let active = fx.store.workspaces.active_pane();
-        for (pane, signal) in &fx.signals.pane_active {
-            let v = active == Some(*pane);
-            if heca_grid_ui::reactive::SignalGet::get_untracked(signal) != v {
-                heca_grid_ui::reactive::SignalUpdate::set(signal, v);
-            }
-        }
         for (panes, signal) in fx.signals.col_active.iter().chain(&fx.signals.ws_active) {
             let v = active.is_some_and(|a| panes.contains(&a));
             if heca_grid_ui::reactive::SignalGet::get_untracked(signal) != v {

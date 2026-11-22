@@ -4,7 +4,6 @@ use heca_grid_ui::Color;
 use heca_grid_ui::builders::LayoutExt;
 use heca_grid_ui::reactive::Signal;
 use heca_grid_ui::style::{FontWeight, Length};
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Label};
 
 /// **A pane's name, and it stays inside its box.**
@@ -23,22 +22,14 @@ use heca_grid_ui::widgets::{Ellipsis, Label};
 /// Making the cut `Label`'s own default was tried and reverted the same day: a label that may
 /// shrink to nothing *does*, and a `Card`'s title vanished entirely. Cutting belongs to the kinds
 /// of text that are shown in boxes they do not control — a name is one — not to every label.
-pub(crate) struct PaneName<'a> {
-    /// The name to show.
-    pub(crate) text: &'a str,
-    /// Which colour this surface gives it, or `None` to **inherit** — which is what a name inside
-    /// a selectable row should do, so it follows selection with no second copy built for the other
-    /// state. A surface that genuinely owns the colour still passes one.
-    pub(crate) color: Option<Color>,
-    /// Names are shown bold everywhere they are shown; a caller that wants otherwise says so.
-    pub(crate) weight: FontWeight,
-    /// Size relative to the surrounding text. `1.0` is the surface's own size.
-    pub(crate) font_scale: f32,
-    #[allow(
-        dead_code,
-        reason = "held for symmetry with FolderLine; colours come from the caller"
-    )]
-    pub(crate) theme: &'a GuiTheme,
+///
+/// Written in THE SYNTAX — `PaneName::new(name).weight(..).font_scale(..)` — and bold, inheriting
+/// its colour, unless told otherwise.
+pub(crate) struct PaneName {
+    text: String,
+    color: Option<Color>,
+    weight: FontWeight,
+    font_scale: f32,
 }
 
 /// What [`PaneName::build`] hands back: the label, plus the signal a host binds when the name can
@@ -48,7 +39,42 @@ pub(crate) struct BuiltPaneName {
     pub(crate) text: Signal<String>,
 }
 
-impl PaneName<'_> {
+impl PaneName {
+    /// The name to show: bold, at the surface's own size, in the colour it inherits.
+    pub(crate) fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            color: None,
+            weight: FontWeight::Bold,
+            font_scale: 1.0,
+        }
+    }
+
+    /// Give it a colour of its own. Without one it **inherits** — which is what a name inside a
+    /// selectable row should do, so it follows selection with no second copy built for the other
+    /// state. A surface that genuinely owns the colour still says so.
+    #[allow(
+        dead_code,
+        reason = "every surface today inherits; kept so one that owns its colour can say so"
+    )]
+    pub(crate) fn color(mut self, color: Color) -> Self {
+        self.color = Some(color);
+        self
+    }
+
+    /// Its weight. Names are shown bold everywhere they are shown; a caller that wants otherwise
+    /// says so.
+    pub(crate) fn weight(mut self, weight: FontWeight) -> Self {
+        self.weight = weight;
+        self
+    }
+
+    /// Its size relative to the surrounding text. `1.0` is the surface's own size.
+    pub(crate) fn font_scale(mut self, scale: f32) -> Self {
+        self.font_scale = scale;
+        self
+    }
+
     pub(crate) fn build(self) -> BuiltPaneName {
         // **Cut at the end**: a name's beginning is what tells two panes apart (`server`/`serverb`),
         // so the tail is the half to lose. A path would want the other end — that is `FolderLine`'s
@@ -79,18 +105,12 @@ mod tests {
     use super::*;
     use heca_core::layout::Size;
     use heca_grid_ui::builders::{LayoutExt, Parent};
+    use heca_grid_ui::theme::Theme as GuiTheme;
     use heca_grid_ui::widgets::Flex;
     use heca_grid_ui::{Component, DrawCommand, LayoutEngine, PaintCx, Scene};
 
     fn built(text: &str) -> BuiltPaneName {
-        PaneName {
-            text,
-            color: Some(GuiTheme::default().colors.foreground),
-            weight: FontWeight::Bold,
-            font_scale: 1.0,
-            theme: &GuiTheme::default(),
-        }
-        .build()
+        PaneName::new(text).build()
     }
 
     /// It shows the name it was given, and the name stays bindable.

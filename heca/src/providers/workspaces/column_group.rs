@@ -64,11 +64,9 @@ impl ColumnGroup<'_> {
             .accepts_beside(["column"]);
         for pane in &column.panes {
             col = col.child(
-                PaneRow {
-                    pane,
-                    column_of_pane: Some((ws_idx, column.col_idx)),
-                }
-                .build(seams, reg),
+                PaneRow::new(pane)
+                    .column(Some((ws_idx, column.col_idx)))
+                    .build(seams, reg),
             );
         }
         // Bind the column bar's active signal (lit iff it holds the active pane).

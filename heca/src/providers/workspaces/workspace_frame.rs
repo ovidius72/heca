@@ -128,13 +128,7 @@ impl WorkspaceFrame<'_> {
             cols = cols.child(ColumnGroup { column, ws_idx }.build(seams, reg));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(
-                PaneRow {
-                    pane: float,
-                    column_of_pane: None,
-                }
-                .build(seams, reg),
-            );
+            cols = cols.child(PaneRow::new(float).build(seams, reg));
         }
         // **The dock says all of this about itself** — no wrapper.
         //

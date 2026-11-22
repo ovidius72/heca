@@ -24,13 +24,6 @@ use crate::chrome::*;
 /// rebuild the tree. Rebuilt with the tree on structural change.
 #[derive(Default)]
 pub(crate) struct ChromeSignals {
-    /// Each pane card's `active` signal, keyed by pane id.
-    pub(crate) pane_active: Vec<(PaneId, Signal<bool>)>,
-    /// **"You were just here"** per pane — the mark back-and-forth would return to. Bound like
-    /// [`pane_active`](Self::pane_active) because it changes on *focus*, which deliberately does
-    /// not rebuild the tree (`chrome_signature` excludes it): read as a plain bool at build time it
-    /// would freeze at whatever it was when the sidebar was last rebuilt.
-    pub(crate) pane_previous: Vec<(PaneId, Signal<bool>)>,
     /// Each column [`MarkerGroup`](heca_grid_ui::widgets::MarkerGroup)'s `active` signal + the pane ids it
     /// holds (active iff it contains the active pane).
     pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
@@ -133,20 +126,9 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
     let Some(retained) = state.chrome_tree.as_ref() else {
         return;
     };
+    // A pane row follows focus itself, from the store's signals (`providers/workspaces/pane_row.rs`);
+    // what is left here is handed over by rows that do not yet.
     let active = state.chrome_state.workspaces.active_pane();
-    for (pid, sig) in &retained.signals.pane_active {
-        let v = active == Some(*pid);
-        if sig.get_untracked() != v {
-            sig.set(v);
-        }
-    }
-    // The same sync for the back-and-forth mark, from the field `prefix+i` itself reads.
-    for (pid, sig) in &retained.signals.pane_previous {
-        let v = state.chrome_state.workspaces.is_previous_pane(*pid) && active != Some(*pid);
-        if sig.get_untracked() != v {
-            sig.set(v);
-        }
-    }
     // The workspace back-and-forth would take you to — the frame says *which* workspace, the pane
     // mark inside it says which pane. Two levels of one answer.
     let previous_ws = state.chrome_state.workspaces.previous_ws();
