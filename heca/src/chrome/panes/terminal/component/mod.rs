@@ -7,7 +7,7 @@ use heca_core::layout::Rectangle;
 use heca_grid_ui::{Point, Size};
 
 use super::input::{Search, TerminalInput};
-use super::search::{SearchBar, SearchSlot};
+use super::search::{SearchSlot, search_bar};
 use super::shared::Shared;
 use super::viewport::{Controls, IntentSlot};
 use heca_grid_ui::MenuExt;
@@ -116,9 +116,7 @@ impl Terminal {
         // **So is its search**: the bar over the picture, drawn by the same walk, hearing the same
         // keyboard. Declared after the controls, so it is on top of them.
         base.children
-            .push(heca_grid_ui::WidgetModel::new(SearchBar::new(
-                shared.clone(),
-            )));
+            .push(heca_grid_ui::WidgetModel::new(search_bar(shared.clone())));
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
         let me = shared.clone();

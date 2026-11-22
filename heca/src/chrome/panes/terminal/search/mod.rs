@@ -12,26 +12,30 @@ use std::rc::Rc;
 use heca_core::backend::SearchMatch;
 use heca_core::layout::{Point, Rectangle, Size};
 use heca_grid_ui::SignalData;
-use heca_grid_ui::builders::{EventExt, LayoutExt};
-use heca_grid_ui::component::{Base, Component, PaintCx};
+use heca_grid_ui::builders::{EventExt, FocusExt, LayoutExt, Parent, PresenceExt};
+use heca_grid_ui::component::PaintCx;
 use heca_grid_ui::event::EventKind;
-use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
-use heca_grid_ui::style::{Direction, Length, Spacing};
-use heca_grid_ui::widgets::{Input, Tag};
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
+use heca_grid_ui::style::{Length, Spacing};
+use heca_grid_ui::widgets::{Flex, Input, Tag};
 
 use super::input::{Search, TerminalInput};
 use super::shared::Shared;
 
 /// **What one terminal's search is**, shared by every node placed for it — so a tree rebuilt around
-/// the terminal shows the search it had.
-#[derive(Default)]
+/// the terminal shows the search it had. What the bar shows (open, the query, the counter, where the
+/// keyboard goes) is held as signals the bar is bound to; the matches stay plain data the terminal
+/// paints.
 pub(super) struct SearchSlot {
     /// Whether the bar is shown.
-    open: Cell<bool>,
-    /// The field should take the keyboard on the next tick. A request, consumed once.
-    focus_wanted: Cell<bool>,
-    /// What the field holds: the last edit.
-    query: RefCell<String>,
+    open: Signal<bool>,
+    /// The field should hold the keyboard: set when the search is asked for, cleared when the field
+    /// lets the keyboard go — so asking again while the bar is open but unfocused moves the keyboard.
+    focus: Signal<bool>,
+    /// What the field holds — shared with it both ways.
+    query: Signal<String>,
+    /// The counter's words (`3/12`, `no matches`), empty while there is no query.
+    count: Signal<String>,
     matches: RefCell<Vec<SearchMatch>>,
     current: Cell<Option<usize>>,
     /// The first row on screen, as a stable row, and how many rows are on screen.
@@ -41,31 +45,59 @@ pub(super) struct SearchSlot {
     alpha: Cell<(u8, u8)>,
 }
 
+impl Default for SearchSlot {
+    fn default() -> Self {
+        Self {
+            open: signal(false),
+            focus: signal(false),
+            query: signal(String::new()),
+            count: signal(String::new()),
+            matches: RefCell::default(),
+            current: Cell::default(),
+            top: Cell::default(),
+            rows: Cell::default(),
+            alpha: Cell::default(),
+        }
+    }
+}
+
 impl SearchSlot {
     /// **Show the bar and give the field the keyboard.**
     pub(super) fn open(&self) {
-        self.open.set(true);
-        self.focus_wanted.set(true);
+        if !self.open.get_untracked() {
+            self.open.set(true);
+        }
+        self.focus.set(true);
     }
 
     pub(super) fn is_open(&self) -> bool {
-        self.open.get()
+        self.open.get_untracked()
     }
 
     /// **Dismiss the search**: the bar goes and so do the matches and the query.
     pub(super) fn close(&self) {
         self.open.set(false);
-        self.focus_wanted.set(false);
-        self.query.borrow_mut().clear();
+        self.focus.set(false);
+        self.query.set(String::new());
         self.matches.borrow_mut().clear();
         self.current.set(None);
+        self.recount();
+    }
+
+    /// The counter follows the query, the matches and the current one — written in one place.
+    fn recount(&self) {
+        let words = self.label().unwrap_or_default();
+        if self.count.get_untracked() != words {
+            self.count.set(words);
+        }
     }
 
     /// The field's text changed.
     pub(super) fn set_query(&self, text: &str) {
-        if *self.query.borrow() != text {
-            *self.query.borrow_mut() = text.to_string();
+        if self.query.get_untracked() != text {
+            self.query.set(text.to_string());
         }
+        self.recount();
     }
 
     /// **Show these matches**, with `current` the focused one. Returns whether anything the user can
@@ -76,6 +108,7 @@ impl SearchSlot {
         }
         *self.matches.borrow_mut() = matches;
         self.current.set(current);
+        self.recount();
         true
     }
 
@@ -93,6 +126,7 @@ impl SearchSlot {
             (cur + n - 1) % n
         };
         self.current.set(Some(next));
+        self.recount();
         true
     }
 
@@ -120,7 +154,7 @@ impl SearchSlot {
     /// The match position as it reads — `3/12`, `no matches` — or nothing while the query is empty.
     pub(super) fn label(&self) -> Option<String> {
         count_label(
-            !self.query.borrow().is_empty(),
+            !self.query.with_untracked(String::is_empty),
             self.matches.borrow().len(),
             self.current.get(),
         )
@@ -179,120 +213,43 @@ pub(super) fn count_label(has_query: bool, total: usize, current: Option<usize>)
 }
 
 /// **The search bar**: the query field and the match counter, in a row at the terminal's
-/// bottom-right corner. One per node placed for a terminal; they all show the one [`SearchSlot`].
-pub(super) struct SearchBar {
-    base: Base,
-    shared: Rc<Shared>,
-    /// The field's text, to put back what a rebuilt tree should show.
-    text: Signal<String>,
-    /// The counter's label and whether it is shown.
-    label: Signal<String>,
-    label_shown: Signal<bool>,
+/// bottom-right corner — out of the flow, opposite the scrollback chip, taking no room and moving
+/// nothing. One per node placed for a terminal; all are bound to the one [`SearchSlot`], so they
+/// follow it with nothing copied by hand.
+pub(super) fn search_bar(shared: Rc<Shared>) -> Flex {
+    let search = &shared.search;
+    let (open, focus, query, count) = (search.open, search.focus, search.query, search.count);
+    let (edited, gained, lost) = (shared.clone(), shared.clone(), shared.clone());
+    let field = Input::new()
+        .value(query)
+        .follow_focus(focus)
+        .on_change(move |action| {
+            if let SignalData::String(text) = action.data {
+                edited.search.set_query(&text);
+                edited.emit(TerminalInput::Search(Search::Query(text)));
+            }
+        })
+        .on(EventKind::Focus, move |_| {
+            gained.emit(TerminalInput::Search(Search::Editing(true)));
+        })
+        .on(EventKind::Blur, move |_| {
+            lost.search.focus.set(false);
+            lost.emit(TerminalInput::Search(Search::Editing(false)));
+        });
+    Flex::row()
+        .align("center")
+        .gap(Spacing::Sm)
+        .child(field)
+        .child(
+            Tag::new("")
+                .label(count)
+                .hidden(move || count.with(String::is_empty)),
+        )
+        .hidden(move || !open.get())
+        .at_rect(Length::Auto, Length::Auto, Length::Auto, Length::Auto)
+        .align_self("end")
+        .margin(Spacing::Sm)
 }
-
-impl SearchBar {
-    pub(super) fn new(shared: Rc<Shared>) -> Self {
-        let edited = shared.clone();
-        let gained = shared.clone();
-        let lost = shared.clone();
-        let field = Input::new()
-            .on_change(move |action| {
-                if let SignalData::String(text) = action.data {
-                    edited.search.set_query(&text);
-                    edited.emit(TerminalInput::Search(Search::Query(text)));
-                }
-            })
-            .on(EventKind::Focus, move |_| {
-                gained.emit(TerminalInput::Search(Search::Editing(true)));
-            })
-            .on(EventKind::Blur, move |_| {
-                lost.emit(TerminalInput::Search(Search::Editing(false)));
-            });
-        let text = field.text();
-        let chip = Tag::new("");
-        let label = chip.label_signal();
-        let label_shown = chip.base().visible;
-        label_shown.set(false);
-
-        let mut base = Base::new();
-        base.style.layout.direction = Direction::Row;
-        base.style.layout.align = "center".into();
-        base.style.layout.gap = Spacing::Sm.into();
-        base.children.push(heca_grid_ui::WidgetModel::new(field));
-        base.children.push(heca_grid_ui::WidgetModel::new(chip));
-        base.visible.set(shared.search.is_open());
-        // Out of the flow, every edge left to the terminal, and told to end at the bottom: it
-        // lands in the corner opposite the scrollback chip, taking no room and moving nothing.
-        let bar = Self {
-            base,
-            shared,
-            text,
-            label,
-            label_shown,
-        };
-        bar.at_rect(Length::Auto, Length::Auto, Length::Auto, Length::Auto)
-            .align_self("end")
-            .margin(Spacing::Sm)
-    }
-}
-
-impl Component for SearchBar {
-    fn base(&self) -> &Base {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut Base {
-        &mut self.base
-    }
-
-    fn paint(&self, cx: &mut PaintCx) {
-        if !self.base.visible.get_untracked() {
-            return;
-        }
-        for child in &self.base.children {
-            heca_grid_ui::paint_child(child.as_ref(), cx);
-        }
-    }
-
-    /// Follow the terminal's search: shown while it is open, the counter and the text as it says,
-    /// and the field takes the keyboard when it was asked to.
-    fn tick(&mut self, dt: f32) -> bool {
-        let search = &self.shared.search;
-        let open = search.is_open();
-        if self.base.visible.get_untracked() != open {
-            self.base.visible.set(open);
-            self.base.mark_needs_paint();
-        }
-        if open {
-            if search.focus_wanted.replace(false) {
-                self.base.children[0].base().focus(true);
-                // Asked for by code, so no Focus event announces it: say it here.
-                self.shared
-                    .emit(TerminalInput::Search(Search::Editing(true)));
-            }
-            let query = search.query.borrow().clone();
-            if self.text.get_untracked() != query {
-                self.text.set(query);
-            }
-            let label = search.label();
-            let shown = label.is_some();
-            if self.label_shown.get_untracked() != shown {
-                self.label_shown.set(shown);
-            }
-            if let Some(label) = label
-                && self.label.get_untracked() != label
-            {
-                self.label.set(label);
-            }
-        }
-        let mut animating = false;
-        for child in self.base.children.iter_mut() {
-            animating |= child.tick(dt);
-        }
-        animating
-    }
-}
-
-impl LayoutExt for SearchBar {}
 
 #[cfg(test)]
 mod tests;

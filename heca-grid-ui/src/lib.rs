@@ -71,8 +71,8 @@ pub use animation::{
     smoothstep,
 };
 pub use builders::{
-    BoundChildren, DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MapChildren,
-    MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
+    BoundChildren, DragExt, EventExt, FlashExt, FocusExt, HintExt, IdentityExt, IntoTextValue,
+    LayoutExt, MapChildren, MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
 };
 pub use color::Color;
 pub use component::{
@@ -145,8 +145,9 @@ pub mod prelude {
         Animate, Animation, AnimationFrame, Fade, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     };
     pub use crate::builders::{
-        BoundChildren, DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MapChildren,
-        MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
+        BoundChildren, DragExt, EventExt, FlashExt, FocusExt, HintExt, IdentityExt, IntoTextValue,
+        LayoutExt, MapChildren, MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt,
+        TooltipExt,
     };
     pub use crate::color::Color;
     pub use crate::component::{

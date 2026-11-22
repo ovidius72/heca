@@ -172,7 +172,7 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
             quote!(value.as_whole::<#ty>())
         }
         "String" => quote!(value.as_text().map(::std::string::ToString::to_string)),
-        t if t.contains("Into<String>") => {
+        t if t.contains("Into<String>") || t.contains("IntoTextValue") => {
             quote!(value.as_text().map(::std::string::ToString::to_string))
         }
         t if t.starts_with('&') || t.contains("dyn") || t.contains("implFn") => return None,

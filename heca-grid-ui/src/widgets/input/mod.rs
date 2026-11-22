@@ -52,7 +52,7 @@ mod content;
 /// let input = Input::new().multiline(true).max_lines(6).max_height(180.0)
 ///     .placeholder("Write a message").placeholder_on_focus(true)
 ///     .on_change(|action| { if let SignalData::String(text) = action.data { println!("{text}"); } });
-/// let text = input.text(); // writable signal; set_value also clears the selection
+/// let text = input.text_signal(); // writable signal; set_value also clears the selection
 /// ```
 ///
 /// Plugins and RPC describe the same field. `text` is the value; `change` and `submit` intents

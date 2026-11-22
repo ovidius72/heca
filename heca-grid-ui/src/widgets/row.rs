@@ -117,7 +117,7 @@ pub struct Row {
 #[heca_grid_ui_macros::props]
 impl Row {
     /// A new (horizontal) row. Add content with `.child(...)`; make it
-    /// clickable/selectable with [`on_activate`](Row::on_activate).
+    /// clickable/selectable with [`on_click`](crate::builders::EventExt::on_click).
     pub fn new() -> Self {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Row;

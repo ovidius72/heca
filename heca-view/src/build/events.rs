@@ -28,5 +28,5 @@ with_event!(
 );
 
 with_text!(
-    Caption, Button, Panel, Input, Choice, Item, Toast, Alert, ItemGroup, DockFrame,
+    Caption, Label, Button, Panel, Input, Choice, Item, Toast, Alert, ItemGroup, DockFrame,
 );

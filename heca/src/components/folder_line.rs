@@ -90,7 +90,7 @@ impl FolderLine {
     /// has spoken.
     fn line(&self) -> Flex {
         let label = Label::new("")
-            .with_text_signal(self.path)
+            .text(self.path)
             .color(self.color)
             // **Cut from the FRONT, so the tail survives**: `…/projects/heca` says more than
             // `~/projects/he…`, and a path's last components are the ones that tell two apart.

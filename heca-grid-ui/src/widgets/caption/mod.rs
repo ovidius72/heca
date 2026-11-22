@@ -47,17 +47,12 @@ impl Caption {
     }
 
     /// Set the caption text without replacing its label or rule.
+    /// **What it says** — a fixed text or one that changes (a `Signal<String>`, a `Memo<String>`,
+    /// a function reading signals). Blank text collapses automatically.
     #[heca_grid_ui_macros::prop]
-    pub fn text(self, text: impl Into<String>) -> Self {
-        self.text.set(text.into());
-        self
-    }
-
-    /// Follow an existing live text signal. Blank text collapses automatically.
-    #[heca_grid_ui_macros::host_only("live signals cannot cross as static properties")]
-    pub fn with_text_signal(mut self, text: Signal<String>) -> Self {
-        self.text = text;
-        self.row.base_mut().children = parts(text);
+    pub fn text(mut self, text: impl crate::builders::IntoTextValue) -> Self {
+        text.into_text_value().bind(&mut self.text);
+        self.row.base_mut().children = parts(self.text);
         self.row.base().mark_needs_layout();
         self
     }
@@ -70,7 +65,7 @@ impl Caption {
 
 fn parts(text: Signal<String>) -> Vec<WidgetModel> {
     vec![
-        WidgetModel::new(Label::new("").with_text_signal(text)),
+        WidgetModel::new(Label::new("").text(text)),
         WidgetModel::new(Separator::horizontal().align_self("center").grow(1.0)),
     ]
 }

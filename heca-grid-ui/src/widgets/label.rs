@@ -137,10 +137,17 @@ pub struct Label {
 
 #[heca_grid_ui_macros::props]
 impl Label {
-    /// Bind the text to an existing signal. Default constructors create their own signal.
-    #[heca_grid_ui_macros::host_only("live signals cannot cross as static properties")]
-    pub fn with_text_signal(mut self, text: Signal<String>) -> Self {
-        self.text = text;
+    /// **What it says** — a fixed text, or one that changes: a `Signal<String>` (shared: writing it
+    /// changes the label), a `Memo<String>`, or a function reading signals. One builder for both,
+    /// as [`hidden`](crate::builders::PresenceExt::hidden) takes a `bool` or a live one.
+    ///
+    /// ```ignore
+    /// Label::new("").text(title)                              // follows `title`
+    /// Label::new("").text(move || format!("{} rows", n.get())) // derived
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn text(mut self, text: impl crate::builders::IntoTextValue) -> Self {
+        text.into_text_value().bind(&mut self.text);
         self.remeasure();
         self
     }

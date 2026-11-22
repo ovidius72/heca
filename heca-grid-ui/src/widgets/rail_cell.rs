@@ -45,7 +45,7 @@ pub struct RailCell {
 #[heca_grid_ui_macros::props]
 impl RailCell {
     /// A new cell wrapping `icon`, centered in a square. Make it
-    /// clickable/keyboard-activatable with [`on_activate`](RailCell::on_activate).
+    /// clickable/keyboard-activatable with [`on_click`](crate::builders::EventExt::on_click).
     pub fn new(icon: Icon) -> Self {
         // Its name, taken while the icon is still typed — a rail cell IS its glyph. Same reason as
         // `IconButton::new`: without it the cell has no identity at all, and `Icon` must stay silent

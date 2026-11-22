@@ -3065,8 +3065,9 @@ Place it before any content using ordinary composition.
   `.padding(...)` and the other normal layout builders. Defaults are `Small`, muted text, the theme's
   border colour for the rule, `Xs` gap/horizontal padding and full available width. No pixel sizing
   or caller-computed text width is required. Text truncates at the end when space is tight.
-- **Live text**: `.text_signal() -> Signal<String>` updates a mounted caption;
-  `.with_text_signal(signal)` binds an existing signal. Blank or whitespace-only text removes the
+- **Live text**: `.text(..)` takes a fixed text or one that changes (a `Signal<String>`, a
+  `Memo<String>`, a function reading signals — see "A text that may change");
+  `.text_signal() -> Signal<String>` updates a mounted caption. Blank or whitespace-only text removes the
   entire caption from layout, including its padding, rule and any parent gap. No caller-written
   `Visibility` is needed. An explicit `.hidden(true)` remains respected when text changes.
 - **Theme changes**: size/spacing follow the inherited font; text/rule colours read the current theme.
@@ -3288,14 +3289,14 @@ Stateful adapters, such as [`ScrollBar`](#scrollbar), bind data to native signal
 
 **Preformatted text and shared values.** `.preserve_whitespace(true)` preserves spaces and explicit
 newlines while wrapping (default false); use it for editable text and source excerpts. It is also
-the `preserve_whitespace` Bool property / `build::Label::preserve_whitespace`. Native code can use
-`.with_text_signal(signal)` to share an existing `Signal<String>`; descriptions carry static `text`
-instead. Layout and painting use the same wrapper, including source character indices.
+the `preserve_whitespace` Bool property / `build::Label::preserve_whitespace`. Native code can pass
+a `Signal<String>` to `.text(..)` to share it (see "A text that may change"); descriptions carry
+static `text` instead. Layout and painting use the same wrapper, including source character indices.
 
 ```rust
 use heca_grid_ui::{Label, reactive::signal};
 let value = signal(String::from("two  spaces\nand a newline"));
-let label = Label::new("").with_text_signal(value).wrap(true).preserve_whitespace(true);
+let label = Label::new("").text(value).wrap(true).preserve_whitespace(true);
 ```
 
 ```rust
@@ -5335,6 +5336,34 @@ tree sets them as plain booleans; a changing value is native, because a signal c
 ```rust
 Label::new("No rooms yet").hidden(move || !rooms.with(Vec::is_empty))   // display, derived
 StatusDot::error().visible(failed)                                      // visibility, failed: Signal<bool>
+```
+
+#### A text that may change — `.text(..)`, `.label(..)`, `.value(..)`
+
+The same rule for words: one builder takes a fixed text **or** one that changes, never a second
+`with_*_signal` builder. `Label::text`, `Caption::text`, `Tag::label` and `Input::value` take
+`impl IntoTextValue` — a `&str`, a `String`, a `Signal<String>`, a `Memo<String>` or a function
+reading signals:
+
+```rust
+Label::new("").text(title)                                // title: Signal<String> — followed
+Tag::new("").label(move || format!("{}/{}", at.get(), n.get()))   // derived from other signals
+Input::new().value(query)                                 // query: Signal<String> — shared both ways
+```
+
+A `Signal<String>` given to an `Input` becomes the field's own, so what is typed is written into it;
+given to a label it is followed. A described tree sets them as plain text. The getter that hands
+back a widget's live text is `*_signal()` (`Label::text_signal`, `Input::text_signal`).
+
+#### Where the keyboard goes — `.follow_focus(..)`, `.follow_focus_modal(..)`
+
+`.follow_focus(signal)` on any widget takes the keyboard when the signal turns true and lets it go
+when it turns false — only a change moves focus, so a click elsewhere while it stays true is left
+alone. `.follow_focus_modal(signal)` is the same for a surface over the page, and gives the keyboard
+back to whoever held it when the surface opened. Nobody writes `base_mut().follow_focus(..)`.
+
+```rust
+Input::new().value(query).follow_focus(search_requested)
 ```
 
 Between them there is nothing left for a `Visibility` **kind** to do, which is why there is none.

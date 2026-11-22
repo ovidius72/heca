@@ -257,20 +257,14 @@ fn the_bar_is_not_shown_until_a_search_opens() {
     let (t, mut root, _said) = placed();
     frame(&mut root);
     assert!(
-        !root.base().children[0].base().children[2]
-            .base()
-            .visible
-            .get_untracked(),
+        !root.base().children[0].base().children[2].is_shown(),
         "closed: no bar"
     );
 
     t.find();
     frame(&mut root);
     assert!(
-        root.base().children[0].base().children[2]
-            .base()
-            .visible
-            .get_untracked(),
+        root.base().children[0].base().children[2].is_shown(),
         "open: the bar"
     );
 }
@@ -381,10 +375,7 @@ fn escape_dismisses_the_search() {
     assert!(!t.search_open());
     frame(&mut root);
     assert!(
-        !root.base().children[0].base().children[2]
-            .base()
-            .visible
-            .get_untracked(),
+        !root.base().children[0].base().children[2].is_shown(),
         "the bar went"
     );
 }

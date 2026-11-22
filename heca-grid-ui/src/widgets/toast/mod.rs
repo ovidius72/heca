@@ -7,7 +7,7 @@
 //! state. Lifecycle (when a toast appears, how long it lives, auto-dismiss policy,
 //! deduplication, sound) is the **host application's** job; the widget merely
 //! *renders* one notification and *reports interactions* back via callbacks
-//! (`on_click` from [`EventExt`](crate::builders::EventExt), [`action`](Toast::action),
+//! (`on_click` from [`EventExt`], [`action`](Toast::action),
 //! [`on_dismiss`](Toast::on_dismiss)). The host removes it from its own store.
 //!
 //! Because it is an ordinary in-tree component (not overlay-drawn), it is equally

@@ -46,8 +46,15 @@ impl Input {
 
     /// Set the initial text (caret lands at the end).
     #[heca_grid_ui_macros::prop]
-    pub fn value(mut self, value: impl Into<String>) -> Self {
-        self.set_value(value);
+    pub fn value(mut self, value: impl crate::builders::IntoTextValue) -> Self {
+        // A `Signal<String>` becomes the field's own, so what is typed is written into it; a fixed
+        // or derived text is shown in it.
+        value.into_text_value().bind(&mut self.text);
+        let text = self.text.get_untracked();
+        self.cursor = text.chars().count();
+        self.anchor = None;
+        self.seen_text = text;
+        self.base.mark_needs_layout();
         self
     }
 
@@ -99,7 +106,7 @@ impl Input {
     }
 
     /// The text signal — bind UI to it reactively.
-    pub fn text(&self) -> Signal<String> {
+    pub fn text_signal(&self) -> Signal<String> {
         self.text
     }
 

@@ -185,6 +185,10 @@ impl Badge {
 }
 
 impl Tag {
+    /// What the first segment says.
+    pub fn label(self, label: impl Into<String>) -> Self {
+        self.prop("label", crate::PropValue::Text(label.into()))
+    }
     /// Whether the text segment can shrink inside the available width.
     pub fn segment_shrink(self, shrink: bool) -> Self {
         self.prop("segment_shrink", shrink)

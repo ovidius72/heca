@@ -225,11 +225,7 @@ impl DockFrame {
             }
         };
         let chevron_text = self.chevron;
-        let chevron = move || {
-            Label::new("")
-                .with_text_signal(chevron_text)
-                .area(CHEVRON_AREA)
-        };
+        let chevron = move || Label::new("").text(chevron_text).area(CHEVRON_AREA);
         let mut take = |name: &str| {
             self.part_mut(TOGGLE_AREA)
                 .and_then(|toggle| crate::component::area_slot(toggle.base_mut(), name))

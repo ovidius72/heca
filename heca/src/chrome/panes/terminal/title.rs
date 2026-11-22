@@ -54,8 +54,7 @@ impl Terminal {
     /// let content = terminal.clone().header(true);
     /// ```
     pub fn header(self, visible: bool) -> Grid {
-        let header =
-            visible.then(|| WidgetModel::new(Caption::new("").with_text_signal(self.shared.title)));
+        let header = visible.then(|| WidgetModel::new(Caption::new("").text(self.shared.title)));
         let menu = menu(self.shared.clone());
         super::content::layout(header, self).context_menu(menu)
     }

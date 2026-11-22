@@ -20,7 +20,7 @@ type IntentSink = Box<dyn Fn(heca_view::Intent)>;
 /// The host seats each dock in a wrapper that knows which dock it is and how a gesture there is
 /// judged, and declares this on it. Every widget inside then just names its action — a handler's
 /// [`dispatch`](crate::event::EventCx::dispatch), a row's
-/// [`on_activate`](crate::widgets::Row::on_activate), a letter's
+/// [`on_click`](crate::builders::EventExt::on_click), a letter's
 /// [`on_hint`](crate::builders::HintExt::on_hint) — and the action arrives addressed, with nothing
 /// threaded through the widgets to do it.
 pub type DispatchHandler = Rc<dyn Fn(heca_view::Intent)>;

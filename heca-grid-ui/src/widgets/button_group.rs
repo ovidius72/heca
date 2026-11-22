@@ -16,8 +16,8 @@
 //! readable, with nothing required of the author and no runtime check to forget. It is the same
 //! reason [`Select`](super::Select) types its options to [`Choice`](super::Choice).
 //!
-//! **A collapsed row runs the button's own click**, through [`Component::activate`] — the one entry
-//! every way of pressing a button already goes through. Not a copy of the handler, and not a second
+//! **A collapsed row presses the button itself** — a real click delivered to it on the next frame,
+//! the one path every way of pressing a button goes through. Not a copy of the handler, and not a second
 //! handler on the group: the same one, so the visible button and the menu row cannot drift.
 
 use crate::builders::{EventExt, LayoutExt, StyleExt, TooltipExt};
