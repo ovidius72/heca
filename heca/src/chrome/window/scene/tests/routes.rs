@@ -31,7 +31,11 @@ fn a_named_action_inside_a_dock_goes_out_seated_on_that_dock() {
                 self,
                 |_: &ChromeCtx<'_>, _: &mut BuildCx<'_>| {
                     Flex::column()
-                        .child(Row::new().key("activated").on_press(Intent::new("activated")))
+                        .child(
+                            Row::new()
+                                .key("activated")
+                                .on_press(Intent::new("activated")),
+                        )
                         .child(Row::new().key("picked").on_hint(Intent::new("picked")))
                         .child(
                             Row::new()
@@ -70,7 +74,8 @@ fn a_named_action_inside_a_dock_goes_out_seated_on_that_dock() {
     LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
 
     for name in ["activated", "picked", "clicked"] {
-        let path = heca_grid_ui::path_with_key(region.as_ref(), name).expect("the row is in the dock");
+        let path =
+            heca_grid_ui::path_with_key(region.as_ref(), name).expect("the row is in the dock");
         assert!(
             heca_grid_ui::fire_hint(region.as_mut(), &path),
             "{name} is a target"

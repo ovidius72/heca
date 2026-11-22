@@ -20,9 +20,9 @@ mod store;
 
 pub use frecency::Frecency;
 pub use history::History;
-pub use matcher::{fuzzy, smart_case, Match, MatchCase};
+pub use matcher::{Match, MatchCase, fuzzy, smart_case};
 pub use model::{Ranked, SearchAction, SearchModel};
-pub use store::{Caps, Scope, SearchStore, DEFAULT_HISTORY_CAP, DEFAULT_USAGE_CAP};
+pub use store::{Caps, DEFAULT_HISTORY_CAP, DEFAULT_USAGE_CAP, Scope, SearchStore};
 
 #[cfg(test)]
 mod tests;

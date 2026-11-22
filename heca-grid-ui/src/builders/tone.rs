@@ -49,7 +49,6 @@ pub trait ToneExt: Component + Sized {
         self
     }
 
-
     /// **The colour of the text inside, by meaning** — CSS `color`, inherited.
     ///
     /// ```ignore

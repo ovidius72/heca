@@ -21,7 +21,10 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) -> crate::acti
     Ok(())
 }
 
-pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_pane_take_and_focus(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
         return Ok(());

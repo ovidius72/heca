@@ -13,14 +13,21 @@ pub struct PanePresentation {
 
 impl PanePresentation {
     /// The program name after the configured display delay.
-    pub fn program(&self) -> Option<&str> { self.program.as_deref() }
+    pub fn program(&self) -> Option<&str> {
+        self.program.as_deref()
+    }
 
     /// Raw process, agent and status facts, with no presentation delay.
-    pub fn runtime(&self) -> &PaneRuntime { &self.runtime }
+    pub fn runtime(&self) -> &PaneRuntime {
+        &self.runtime
+    }
 
     #[cfg(test)]
     pub(crate) fn immediate(runtime: PaneRuntime) -> Self {
-        Self { program: runtime.program.clone(), runtime }
+        Self {
+            program: runtime.program.clone(),
+            runtime,
+        }
     }
 }
 
@@ -36,7 +43,11 @@ pub(super) struct ProgramName {
 
 impl ProgramName {
     pub fn observe(&mut self, runtime: &PaneRuntime, delay: Duration, now: Instant) {
-        let source = runtime.program.as_ref().filter(|name| !name.is_empty()).cloned();
+        let source = runtime
+            .program
+            .as_ref()
+            .filter(|name| !name.is_empty())
+            .cloned();
         let running = runtime.status == ProcessStatus::Running;
         let changed = self.source != source;
         let started = running && !self.running;
@@ -45,14 +56,17 @@ impl ProgramName {
         self.returning = !running && (self.returning || finished_visible);
         self.source = source;
         self.running = running;
-        let returns_to_rest = changed && !running && (self.source == self.resting || self.returning);
+        let returns_to_rest =
+            changed && !running && (self.source == self.resting || self.returning);
         if finished_visible && self.resting.is_some() && !delay.is_zero() {
             self.shown = self.resting.clone();
             self.since = None;
             self.returning = false;
         } else if delay.is_zero() || self.shown.is_none() || returns_to_rest {
             self.shown = self.source.clone();
-            if !running && self.resting.is_none() { self.resting = self.source.clone(); }
+            if !running && self.resting.is_none() {
+                self.resting = self.source.clone();
+            }
             self.since = None;
             self.returning = false;
         } else if self.source == self.shown || (completed && !changed) {
@@ -66,9 +80,14 @@ impl ProgramName {
     }
 
     pub fn advance(&mut self, delay: Duration, now: Instant) {
-        if self.since.is_some_and(|since| now.saturating_duration_since(since) >= delay) {
+        if self
+            .since
+            .is_some_and(|since| now.saturating_duration_since(since) >= delay)
+        {
             self.shown = self.source.clone();
-            if !self.running { self.resting = self.source.clone(); }
+            if !self.running {
+                self.resting = self.source.clone();
+            }
             self.since = None;
         }
     }
@@ -83,7 +102,11 @@ mod tests {
     use super::*;
 
     fn runtime(program: &str, status: ProcessStatus) -> PaneRuntime {
-        PaneRuntime { program: Some(program.into()), status, ..Default::default() }
+        PaneRuntime {
+            program: Some(program.into()),
+            status,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -136,7 +159,11 @@ mod tests {
         name.observe(&runtime("vim", ProcessStatus::Running), delay, now + delay);
         assert_eq!(name.shown.as_deref(), Some("zsh"));
         assert_eq!(name.deadline(delay), Some(now + delay + delay));
-        name.observe(&runtime("vim", ProcessStatus::Running), Duration::ZERO, now + delay);
+        name.observe(
+            &runtime("vim", ProcessStatus::Running),
+            Duration::ZERO,
+            now + delay,
+        );
         assert_eq!(name.shown.as_deref(), Some("vim"));
         assert_eq!(name.deadline(delay), None);
     }
@@ -148,9 +175,17 @@ mod tests {
         let mut name = ProgramName::default();
         name.observe(&runtime("zsh", ProcessStatus::Idle), delay, now);
         name.observe(&runtime("editor", ProcessStatus::Running), delay, now);
-        name.observe(&runtime("editor", ProcessStatus::Running), delay, now + Duration::from_secs(1));
+        name.observe(
+            &runtime("editor", ProcessStatus::Running),
+            delay,
+            now + Duration::from_secs(1),
+        );
         assert_eq!(name.deadline(delay), Some(now + delay));
-        name.observe(&runtime("editor", ProcessStatus::Running), Duration::from_secs(1), now + Duration::from_secs(1));
+        name.observe(
+            &runtime("editor", ProcessStatus::Running),
+            Duration::from_secs(1),
+            now + Duration::from_secs(1),
+        );
         assert_eq!(name.shown.as_deref(), Some("editor"));
         assert_eq!(name.deadline(delay), None);
     }
@@ -162,12 +197,24 @@ mod tests {
         let mut name = ProgramName::default();
         name.observe(&runtime("editor", ProcessStatus::Success), delay, now);
         name.observe(&runtime("zsh", ProcessStatus::Success), delay, now);
-        name.observe(&runtime("zsh", ProcessStatus::Success), delay, now + Duration::from_millis(500));
+        name.observe(
+            &runtime("zsh", ProcessStatus::Success),
+            delay,
+            now + Duration::from_millis(500),
+        );
         name.advance(delay, now + delay);
         assert_eq!(name.shown.as_deref(), Some("zsh"));
-        name.observe(&runtime("editor", ProcessStatus::Running), delay, now + delay);
+        name.observe(
+            &runtime("editor", ProcessStatus::Running),
+            delay,
+            now + delay,
+        );
         name.advance(delay, now + delay + delay);
-        name.observe(&runtime("zsh", ProcessStatus::Success), delay, now + delay + delay);
+        name.observe(
+            &runtime("zsh", ProcessStatus::Success),
+            delay,
+            now + delay + delay,
+        );
         assert_eq!(name.shown.as_deref(), Some("zsh"));
         assert_eq!(name.deadline(delay), None);
     }
@@ -180,9 +227,17 @@ mod tests {
         name.observe(&runtime("zsh", ProcessStatus::Idle), delay, now);
         name.observe(&runtime("editor", ProcessStatus::Running), delay, now);
         name.advance(delay, now + delay);
-        name.observe(&runtime("editor", ProcessStatus::Success), delay, now + delay);
+        name.observe(
+            &runtime("editor", ProcessStatus::Success),
+            delay,
+            now + delay,
+        );
         assert_eq!(name.shown.as_deref(), Some("zsh"));
-        name.observe(&runtime("editor", ProcessStatus::Success), delay, now + delay);
+        name.observe(
+            &runtime("editor", ProcessStatus::Success),
+            delay,
+            now + delay,
+        );
         assert_eq!(name.shown.as_deref(), Some("zsh"));
         assert_eq!(name.deadline(delay), None);
 

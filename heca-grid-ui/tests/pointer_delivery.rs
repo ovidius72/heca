@@ -155,7 +155,12 @@ fn a_plain_container_delivers_the_whole_pointer_set() {
 fn a_dialog_delivers_the_whole_pointer_set_to_its_body() {
     let (probe, seen, bounds) = Probe::new();
     let dialog = Dialog::new("Pick one").body(probe).default_open(true);
-    assert_full_set("Dialog", heca_grid_ui::WidgetModel::new(dialog), &seen, &bounds);
+    assert_full_set(
+        "Dialog",
+        heca_grid_ui::WidgetModel::new(dialog),
+        &seen,
+        &bounds,
+    );
 }
 
 /// The layer a host mounts a realized panel into, without a `Dialog` around it.
@@ -163,7 +168,12 @@ fn a_dialog_delivers_the_whole_pointer_set_to_its_body() {
 fn an_overlay_delivers_the_whole_pointer_set_to_its_panel() {
     let (probe, seen, bounds) = Probe::new();
     let overlay = Overlay::new().panel(probe).default_open(true);
-    assert_full_set("Overlay", heca_grid_ui::WidgetModel::new(overlay), &seen, &bounds);
+    assert_full_set(
+        "Overlay",
+        heca_grid_ui::WidgetModel::new(overlay),
+        &seen,
+        &bounds,
+    );
 }
 
 /// A [`FocusScope`] claims `routes_own_subtree` so it can gate **keys** on focus — which puts it
@@ -174,7 +184,12 @@ fn an_overlay_delivers_the_whole_pointer_set_to_its_panel() {
 fn an_unfocused_focus_scope_delivers_the_whole_pointer_set() {
     let (probe, seen, bounds) = Probe::new();
     let scope = FocusScope::new(probe);
-    assert_full_set("FocusScope (unfocused)", heca_grid_ui::WidgetModel::new(scope), &seen, &bounds);
+    assert_full_set(
+        "FocusScope (unfocused)",
+        heca_grid_ui::WidgetModel::new(scope),
+        &seen,
+        &bounds,
+    );
 }
 
 /// And focused, obviously — same wrapper, same duty.
@@ -183,7 +198,12 @@ fn a_focused_focus_scope_delivers_the_whole_pointer_set() {
     let (probe, seen, bounds) = Probe::new();
     let scope = FocusScope::new(probe);
     scope.base().focus(true);
-    assert_full_set("FocusScope (focused)", heca_grid_ui::WidgetModel::new(scope), &seen, &bounds);
+    assert_full_set(
+        "FocusScope (focused)",
+        heca_grid_ui::WidgetModel::new(scope),
+        &seen,
+        &bounds,
+    );
 }
 
 /// A region inside a region: the outer one must not eat what the inner one needs.
@@ -194,7 +214,12 @@ fn a_scroll_region_delivers_the_whole_pointer_set_to_its_children() {
         .width(Length::Px(200.0))
         .height(Length::Px(140.0))
         .child(probe);
-    assert_full_set("ScrollRegion", heca_grid_ui::WidgetModel::new(outer), &seen, &bounds);
+    assert_full_set(
+        "ScrollRegion",
+        heca_grid_ui::WidgetModel::new(outer),
+        &seen,
+        &bounds,
+    );
 }
 
 // ── The behaviour the set exists for ────────────────────────────────────────────────────────

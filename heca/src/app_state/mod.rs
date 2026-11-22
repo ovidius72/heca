@@ -20,10 +20,10 @@ use winit::event_loop::EventLoopProxy;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
+mod client_updates;
 mod input_mode;
 mod keyboard_terminal;
 mod layout_door;
-mod client_updates;
 mod metrics;
 mod mouse_state;
 pub(crate) mod reaction;

@@ -174,5 +174,4 @@ impl CommandPalette {
             }
         });
     }
-
 }

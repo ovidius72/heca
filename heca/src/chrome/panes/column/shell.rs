@@ -58,13 +58,13 @@ pub(crate) fn pane_child(
     cb: &PaneCallbacks,
     content: Option<heca_grid_ui::WidgetModel>,
 ) -> heca_grid_ui::WidgetModel {
-    let shell = PaneShell {
-        model,
-        cb,
-        content,
-    }
-    .build();
-    heca_grid_ui::WidgetModel::new(shell.at_rect(model.x - column.x, model.y - column.y, model.w, model.h))
+    let shell = PaneShell { model, cb, content }.build();
+    heca_grid_ui::WidgetModel::new(shell.at_rect(
+        model.x - column.x,
+        model.y - column.y,
+        model.w,
+        model.h,
+    ))
 }
 
 impl ColumnShell<'_> {

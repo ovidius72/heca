@@ -83,7 +83,11 @@ fn segment_paint_is_confined_to_its_box_and_the_chip_without_clipping_tooltips()
         let tip = tip_text(tag.base().children[1].as_ref());
         match width {
             300.0 => assert_eq!(tip, None, "at full width nothing is cut, so nothing to add"),
-            100.0 => assert_eq!(tip.as_deref(), Some("a long branch name"), "partly shown, it offers its whole text"),
+            100.0 => assert_eq!(
+                tip.as_deref(),
+                Some("a long branch name"),
+                "partly shown, it offers its whole text"
+            ),
             _ => {}
         }
     }
@@ -91,7 +95,10 @@ fn segment_paint_is_confined_to_its_box_and_the_chip_without_clipping_tooltips()
 
 /// The tooltip text found on a widget or the first of its descendants that has one.
 fn tip_text(w: &dyn heca_grid_ui::Component) -> Option<String> {
-    w.base().tooltip.as_ref().map(|t| t.text.get_untracked())
+    w.base()
+        .tooltip
+        .as_ref()
+        .map(|t| t.text.get_untracked())
         .or_else(|| w.base().children.iter().find_map(|c| tip_text(c.as_ref())))
 }
 

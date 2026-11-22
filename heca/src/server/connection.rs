@@ -90,7 +90,9 @@ impl Connection {
     pub(super) fn close(&self) {
         self.closed.set(true);
         for (_, request) in self.pending_rpc.borrow_mut().drain() {
-            let _ = request.reply.send("error: attached client disconnected".into());
+            let _ = request
+                .reply
+                .send("error: attached client disconnected".into());
         }
     }
     pub(super) fn is_closed(&self) -> bool {
@@ -98,8 +100,12 @@ impl Connection {
     }
 
     /// Window RPC belongs to the physical connection, including while it has no session.
-    pub(super) fn begin_rpc(&self, line: String, reply: std::sync::mpsc::Sender<String>,
-        limits: heca_config::settings::ConnectionConfig) {
+    pub(super) fn begin_rpc(
+        &self,
+        line: String,
+        reply: std::sync::mpsc::Sender<String>,
+        limits: heca_config::settings::ConnectionConfig,
+    ) {
         let request_id = self.next_rpc.get();
         let Some(next) = request_id.checked_add(1) else {
             let _ = reply.send("error: no more request identifiers".into());
@@ -110,10 +116,14 @@ impl Connection {
             let _ = reply.send("error: attached client disconnected".into());
             return;
         }
-        self.pending_rpc.borrow_mut().insert(request_id, PendingRpc {
-            reply, deadline: std::time::Instant::now()
-                + std::time::Duration::from_millis(limits.request_timeout_ms.get()),
-        });
+        self.pending_rpc.borrow_mut().insert(
+            request_id,
+            PendingRpc {
+                reply,
+                deadline: std::time::Instant::now()
+                    + std::time::Duration::from_millis(limits.request_timeout_ms.get()),
+            },
+        );
     }
 
     pub(super) fn reply_rpc(&self, request_id: u64, answer: String) {
@@ -123,13 +133,21 @@ impl Connection {
     }
 
     pub(super) fn rpc_deadline(&self) -> Option<std::time::Instant> {
-        self.pending_rpc.borrow().values().map(|request| request.deadline).min()
+        self.pending_rpc
+            .borrow()
+            .values()
+            .map(|request| request.deadline)
+            .min()
     }
 
     pub(super) fn expire_rpc(&self, now: std::time::Instant) {
         self.pending_rpc.borrow_mut().retain(|_, request| {
-            if request.deadline > now { return true; }
-            let _ = request.reply.send("error: attached client timed out".into());
+            if request.deadline > now {
+                return true;
+            }
+            let _ = request
+                .reply
+                .send("error: attached client timed out".into());
             false
         });
     }

@@ -320,13 +320,17 @@ fn build_float(
     )
 }
 
-fn content_of(seams: &WorkspaceSeams, model: &WorkspaceModel, pane: PaneId) -> Option<heca_grid_ui::WidgetModel> {
-    model
-        .panes
-        .get(&pane)
-        .map(|e| heca_grid_ui::WidgetModel::new(crate::chrome::panes::terminal::content::compose(
-            seams.header_env.clone().map(PaneHeader::new), e.content.node(),
-        )))
+fn content_of(
+    seams: &WorkspaceSeams,
+    model: &WorkspaceModel,
+    pane: PaneId,
+) -> Option<heca_grid_ui::WidgetModel> {
+    model.panes.get(&pane).map(|e| {
+        heca_grid_ui::WidgetModel::new(crate::chrome::panes::terminal::content::compose(
+            seams.header_env.clone().map(PaneHeader::new),
+            e.content.node(),
+        ))
+    })
 }
 
 /// A column that is still here: reconcile its panes, then place it and them.

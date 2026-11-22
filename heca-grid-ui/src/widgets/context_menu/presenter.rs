@@ -1,5 +1,5 @@
-use super::{Menu, MenuAnchor};
 use super::{ANCHOR_INSET, KEYCAP_FONT_SCALE, KEYCAP_INSET, MAX_W, MIN_W, PAD, SHORTCUT_GAP};
+use super::{Menu, MenuAnchor};
 use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{

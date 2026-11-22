@@ -7,8 +7,12 @@ mod request;
 pub use client::run_if_requested;
 pub(super) use request::{is_request, prepare};
 
-use std::{collections::BTreeMap, io, path::{Path, PathBuf}};
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::BTreeMap,
+    io,
+    path::{Path, PathBuf},
+};
 
 use super::AgentSetup;
 
@@ -18,8 +22,12 @@ const REQUEST_SUFFIX: &str = ".request.json";
 const RESPONSE: &str = "response.json";
 
 fn request_path(directory: &Path) -> io::Result<PathBuf> {
-    let root = directory.parent().ok_or_else(|| io::Error::other("missing launch root"))?;
-    let name = directory.file_name().ok_or_else(|| io::Error::other("missing launch directory"))?;
+    let root = directory
+        .parent()
+        .ok_or_else(|| io::Error::other("missing launch root"))?;
+    let name = directory
+        .file_name()
+        .ok_or_else(|| io::Error::other("missing launch directory"))?;
     let mut name = name.to_os_string();
     name.push(REQUEST_SUFFIX);
     Ok(root.join(name))

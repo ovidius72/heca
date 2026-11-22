@@ -28,7 +28,11 @@ fn saved(id: u64, name: &str) -> SavedSession {
 }
 
 fn file(sessions: Vec<SavedSession>) -> Saved {
-    Saved { next_session: 9, recent: sessions.iter().map(|s| s.id).collect(), sessions }
+    Saved {
+        next_session: 9,
+        recent: sessions.iter().map(|s| s.id).collect(),
+        sessions,
+    }
 }
 
 fn terminal(owner: TerminalOwner) -> RecordedTerminal {
@@ -37,7 +41,11 @@ fn terminal(owner: TerminalOwner) -> RecordedTerminal {
         running: true,
         launch: None,
         owner,
-        spec: TerminalSpec { program: Program::Shell, cwd: None, grid: (80, 24) },
+        spec: TerminalSpec {
+            program: Program::Shell,
+            cwd: None,
+            grid: (80, 24),
+        },
         agent: None,
     }
 }
@@ -49,18 +57,41 @@ fn what_is_written_is_read_back_with_everything_the_server_keeps() {
     assert!(left_out.is_empty());
     let (back, problems) = Saved::decode(&text).unwrap();
     assert!(problems.is_empty(), "{problems:?}");
-    assert_eq!((back.next_session, back.recent), (9, vec![SessionId(1), SessionId(2)]));
-    let keys: Vec<_> = back.sessions.iter().map(|s| (s.id, s.key, s.name.clone(), s.folder.clone())).collect();
+    assert_eq!(
+        (back.next_session, back.recent),
+        (9, vec![SessionId(1), SessionId(2)])
+    );
+    let keys: Vec<_> = back
+        .sessions
+        .iter()
+        .map(|s| (s.id, s.key, s.name.clone(), s.folder.clone()))
+        .collect();
     assert_eq!(keys, [one, two].map(|s| (s.id, s.key, s.name, s.folder)));
     assert_eq!(back.sessions[0].content, saved(1, "one").content);
 }
 
 #[test]
 fn a_file_that_is_not_json_or_is_another_version_is_refused_whole_with_the_reason() {
-    assert!(Saved::decode("{ not json").unwrap_err().contains("not readable"));
-    let newer = format!(r#"{{"version": {}, "next_session": 1, "sessions": []}}"#, VERSION + 1);
-    assert!(Saved::decode(&newer).unwrap_err().contains(&format!("version {}", VERSION + 1)));
-    assert!(Saved::decode(r#"{"version": 1}"#).unwrap_err().contains("not readable"), "no sessions list at all");
+    assert!(
+        Saved::decode("{ not json")
+            .unwrap_err()
+            .contains("not readable")
+    );
+    let newer = format!(
+        r#"{{"version": {}, "next_session": 1, "sessions": []}}"#,
+        VERSION + 1
+    );
+    assert!(
+        Saved::decode(&newer)
+            .unwrap_err()
+            .contains(&format!("version {}", VERSION + 1))
+    );
+    assert!(
+        Saved::decode(r#"{"version": 1}"#)
+            .unwrap_err()
+            .contains("not readable"),
+        "no sessions list at all"
+    );
 }
 
 #[test]
@@ -76,11 +107,33 @@ fn a_session_that_cannot_be_rebuilt_is_left_out_and_the_others_are_kept() {
     let same_number = saved(1, "same number");
     let same_name = saved(6, "good");
     let good = saved(1, "good");
-    let (text, _) = file(vec![good, relative, empty, twice, nameless, same_number, same_name]).encode();
+    let (text, _) = file(vec![
+        good,
+        relative,
+        empty,
+        twice,
+        nameless,
+        same_number,
+        same_name,
+    ])
+    .encode();
     let (back, problems) = Saved::decode(&text).unwrap();
-    assert_eq!(back.sessions.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["good"]);
+    assert_eq!(
+        back.sessions
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>(),
+        ["good"]
+    );
     assert_eq!(problems.len(), 6, "{problems:?}");
-    for (problem, word) in problems.iter().zip(["absolute", "no workspace", "twice", "name", "repeats", "repeats"]) {
+    for (problem, word) in problems.iter().zip([
+        "absolute",
+        "no workspace",
+        "twice",
+        "name",
+        "repeats",
+        "repeats",
+    ]) {
         assert!(problem.contains(word), "{problem} should say {word}");
     }
 }
@@ -92,7 +145,10 @@ fn an_unreadable_entry_is_reported_by_its_place_and_the_rest_still_come_back() {
     value["sessions"][0] = serde_json::json!({"id": "not a number"});
     let (back, problems) = Saved::decode(&value.to_string()).unwrap();
     assert_eq!(back.sessions.len(), 1);
-    assert!(problems[0].starts_with("session 1 is not readable"), "{problems:?}");
+    assert!(
+        problems[0].starts_with("session 1 is not readable"),
+        "{problems:?}"
+    );
 }
 
 #[test]
@@ -106,8 +162,18 @@ fn terminals_of_panes_the_content_no_longer_has_are_dropped_and_named_ones_kept(
     ];
     let (text, _) = file(vec![session]).encode();
     let (back, _) = Saved::decode(&text).unwrap();
-    let owners: Vec<_> = back.sessions[0].terminals.iter().map(|t| t.owner.clone()).collect();
-    assert_eq!(owners, [TerminalOwner::Pane(pane), TerminalOwner::Named("demo.logs".into())]);
+    let owners: Vec<_> = back.sessions[0]
+        .terminals
+        .iter()
+        .map(|t| t.owner.clone())
+        .collect();
+    assert_eq!(
+        owners,
+        [
+            TerminalOwner::Pane(pane),
+            TerminalOwner::Named("demo.logs".into())
+        ]
+    );
 }
 
 /// A folder that is not text has no JSON form: that one session is left out of the file, said once,
@@ -117,14 +183,21 @@ fn terminals_of_panes_the_content_no_longer_has_are_dropped_and_named_ones_kept(
 fn a_session_with_no_json_form_does_not_stop_the_others_being_written() {
     use std::os::unix::ffi::OsStringExt;
     let mut odd = saved(2, "odd");
-    odd.folder = Some(std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![b'/', 0xff])));
+    odd.folder = Some(std::path::PathBuf::from(std::ffi::OsString::from_vec(
+        vec![b'/', 0xff],
+    )));
     let (text, left_out) = file(vec![saved(1, "fine"), odd]).encode();
-    assert_eq!(left_out.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [SessionId(2)]);
+    assert_eq!(
+        left_out.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        [SessionId(2)]
+    );
     assert_eq!(Saved::decode(&text).unwrap().0.sessions.len(), 1);
 }
 
 fn settings(text: &str) -> heca_config::settings::SettingsConfig {
-    heca_config::loader::config_from_layers(text).unwrap().settings
+    heca_config::loader::config_from_layers(text)
+        .unwrap()
+        .settings
 }
 
 fn store(root: &Path, text: &str) -> Option<SessionStore> {
@@ -142,10 +215,17 @@ fn a_write_is_due_a_delay_after_the_first_change_and_only_then() {
     assert_eq!(store.next_wake(), None);
     store.arm(start);
     store.arm(start + Duration::from_millis(900));
-    assert_eq!(store.next_wake(), Some(start + Duration::from_secs(1)), "a later word does not move the time");
+    assert_eq!(
+        store.next_wake(),
+        Some(start + Duration::from_secs(1)),
+        "a later word does not move the time"
+    );
     assert!(!store.take_due(start + Duration::from_millis(999)));
     assert!(store.take_due(start + Duration::from_secs(1)));
-    assert!(!store.take_due(start + Duration::from_secs(2)), "taking it disarms it");
+    assert!(
+        !store.take_due(start + Duration::from_secs(2)),
+        "taking it disarms it"
+    );
 }
 
 #[test]
@@ -165,7 +245,11 @@ fn a_file_the_user_deleted_is_written_again_even_when_nothing_changed() {
 fn a_server_with_no_folder_of_its_own_keeps_nothing_and_does_not_stop() {
     let held = tempfile::tempdir().unwrap();
     let first = ServerIdentity::claim_in(ServerKind::Background, Some(held.path().join("servers")));
-    let second = ServerIdentity::claim_in(ServerKind::Background, Some(held.path().join("servers")));
+    let second =
+        ServerIdentity::claim_in(ServerKind::Background, Some(held.path().join("servers")));
     assert!(SessionStore::open(&first, &settings("")).is_some());
-    assert!(SessionStore::open(&second, &settings("")).is_none(), "the folder is the first server's");
+    assert!(
+        SessionStore::open(&second, &settings("")).is_none(),
+        "the folder is the first server's"
+    );
 }

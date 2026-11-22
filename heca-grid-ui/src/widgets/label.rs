@@ -365,11 +365,14 @@ impl Label {
         let text = self.shown_text();
         let cells = mono_cells(self.base.bounds.size.w, self.cell());
         if self.wrap.get_untracked() {
-            return (if self.preserve_whitespace { crate::font::wrap_preserved(&text, cells, self.max_lines.get_untracked()) }
-                else { wrap_indexed(&text, cells, self.max_lines.get_untracked()) })
-                .into_iter()
-                .map(|line| line.into_iter().map(|(c, i)| (c, Some(i))).collect())
-                .collect();
+            return (if self.preserve_whitespace {
+                crate::font::wrap_preserved(&text, cells, self.max_lines.get_untracked())
+            } else {
+                wrap_indexed(&text, cells, self.max_lines.get_untracked())
+            })
+            .into_iter()
+            .map(|line| line.into_iter().map(|(c, i)| (c, Some(i))).collect())
+            .collect();
         }
         let whole = |chars: &[char]| -> Vec<(char, Option<usize>)> {
             chars
@@ -642,9 +645,15 @@ impl Component for Label {
     /// A tooltip written by hand on the label is left alone, and one written by hand on a widget
     /// holding it wins (the paint walk keeps this one quiet under it).
     fn on_layout(&mut self) {
-        let automatic = self.base.tooltip.as_ref().map(crate::widgets::tooltip::Tip::is_automatic);
+        let automatic = self
+            .base
+            .tooltip
+            .as_ref()
+            .map(crate::widgets::tooltip::Tip::is_automatic);
         match (automatic, self.is_cut()) {
-            (None, true) => self.base.tooltip = Some(crate::widgets::tooltip::Tip::cut_text(self.text)),
+            (None, true) => {
+                self.base.tooltip = Some(crate::widgets::tooltip::Tip::cut_text(self.text))
+            }
             (Some(true), false) => self.base.tooltip = None,
             _ => {}
         }
@@ -683,13 +692,15 @@ impl Component for Label {
     /// [`wrap`](Label::wrap)); every other case is sized by `remeasure` above.
     fn measure_text(&self) -> Option<crate::layout::TextMeasure> {
         let wrap = self.wrap.get_untracked();
-        (wrap || self.truncate != Ellipsis::None || self.preserve_whitespace).then(|| crate::layout::TextMeasure {
-            text: self.shown_text(),
-            cell: self.cell() as f32,
-            line: self.line_h() as f32,
-            wrap,
-            preserve_whitespace: self.preserve_whitespace,
-            max_lines: self.max_lines.get_untracked(),
+        (wrap || self.truncate != Ellipsis::None || self.preserve_whitespace).then(|| {
+            crate::layout::TextMeasure {
+                text: self.shown_text(),
+                cell: self.cell() as f32,
+                line: self.line_h() as f32,
+                wrap,
+                preserve_whitespace: self.preserve_whitespace,
+                max_lines: self.max_lines.get_untracked(),
+            }
         })
     }
 

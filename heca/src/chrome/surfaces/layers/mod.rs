@@ -91,7 +91,11 @@ pub(crate) struct LayerRegistry {
     pointer_seen: Vec<u64>,
     /// Where an action a surface's widget dispatches goes — set once at startup
     /// ([`connect`](Self::connect)); `None` in a headless test, where nothing listens.
-    emitter: Option<std::rc::Rc<dyn Fn(crate::app::interaction::SurfaceKey) -> crate::chrome::ChromeIntentEmitter>>,
+    emitter: Option<
+        std::rc::Rc<
+            dyn Fn(crate::app::interaction::SurfaceKey) -> crate::chrome::ChromeIntentEmitter,
+        >,
+    >,
 }
 
 impl LayerRegistry {

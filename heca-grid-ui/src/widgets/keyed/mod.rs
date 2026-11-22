@@ -75,7 +75,8 @@ impl Keyed {
         if self.state.key.borrow().as_deref() == Some(key.as_str()) {
             return false;
         }
-        *self.state.pending.borrow_mut() = build().map(crate::builders::IntoComponent::into_component);
+        *self.state.pending.borrow_mut() =
+            build().map(crate::builders::IntoComponent::into_component);
         *self.state.key.borrow_mut() = Some(key);
         // The words belong to the tree just built, so they are written onto it too.
         self.state.texts_dirty.set(true);

@@ -215,7 +215,9 @@ impl WindowView {
     pub(super) fn update_scale(&mut self, scale: f64) {
         self.scale = scale;
         self.blank.scale = scale;
-        for view in self.scrolls.values_mut() { view.scale = scale; }
+        for view in self.scrolls.values_mut() {
+            view.scale = scale;
+        }
     }
 
     /// What this window sees of workspace `ws`.
@@ -248,7 +250,10 @@ impl WindowView {
                 active_float: view.active_float,
             }
         });
-        ViewSnapshot { active_workspace: self.active_workspace, scroll }
+        ViewSnapshot {
+            active_workspace: self.active_workspace,
+            scroll,
+        }
     }
 
     /// Mirror `snapshot`: look where it looks, keeping this window's own size and scale. Any switch

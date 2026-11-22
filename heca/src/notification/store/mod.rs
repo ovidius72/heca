@@ -1,6 +1,9 @@
 use super::*;
-use std::{collections::{HashMap, VecDeque}, time::Instant};
 use heca_view::Intent;
+use std::{
+    collections::{HashMap, VecDeque},
+    time::Instant,
+};
 
 mod transitions;
 
@@ -128,7 +131,10 @@ impl NotificationStore {
     ///
     /// `history_limit` is a runtime retention policy, not persisted state.
     pub fn new(history_limit: usize) -> Self {
-        Self::with_capacity(history_limit, heca_config::settings::NotificationSystemConfig::default().max_visible)
+        Self::with_capacity(
+            history_limit,
+            heca_config::settings::NotificationSystemConfig::default().max_visible,
+        )
     }
 
     /// The same, with an explicit number of simultaneous cards
@@ -363,7 +369,9 @@ impl NotificationStore {
             .chain(self.visible())
             .filter(|notification| notification.audience.allows(client))
             .collect();
-        retained.sort_by_key(|notification| std::cmp::Reverse((notification.created_at, notification.id)));
+        retained.sort_by_key(|notification| {
+            std::cmp::Reverse((notification.created_at, notification.id))
+        });
         retained
             .into_iter()
             .filter_map(|notification| notification_record(notification, now, wall))
@@ -398,7 +406,6 @@ impl NotificationStore {
     ) -> NotificationDismissResult {
         self.archive(notification_id, now, false)
     }
-
 }
 
 #[cfg(test)]

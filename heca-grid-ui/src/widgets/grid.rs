@@ -208,8 +208,8 @@ mod tests {
     /// child can be built before the parent that places it.
     #[test]
     fn a_child_names_its_own_area_and_is_placed_at_layout() {
+        use crate::LayoutEngine;
         use crate::widgets::Label;
-        use crate::{LayoutEngine};
         use heca_core::layout::Size;
 
         let mut grid: crate::WidgetModel = crate::WidgetModel::new(

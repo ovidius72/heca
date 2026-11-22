@@ -8,7 +8,11 @@ use heca_grid_ui::widgets::{Grid, Surface};
 use heca_grid_ui::{LayoutEngine, Size};
 
 /// `content` alone in a box of `w` × `h`, laid out.
-pub(crate) fn laid_out_in(content: heca_grid_ui::WidgetModel, w: f64, h: f64) -> heca_grid_ui::WidgetModel {
+pub(crate) fn laid_out_in(
+    content: heca_grid_ui::WidgetModel,
+    w: f64,
+    h: f64,
+) -> heca_grid_ui::WidgetModel {
     let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Grid::new()
             .template_row("1fr")

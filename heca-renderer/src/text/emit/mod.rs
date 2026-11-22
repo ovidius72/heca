@@ -6,9 +6,9 @@ mod runs;
 
 use heca_grid_ui::scene::TextAlign;
 
-use super::{TextBox, TextGlow};
 use super::TextRenderer;
 use super::pipeline::{DrawRange, TextVertex};
+use super::{TextBox, TextGlow};
 use crate::clip::{combine_clip, intersect};
 
 /// **One glyph's quad**: its four corners over `rect` (logical px), leaning by `slant` — the top
@@ -190,7 +190,10 @@ impl TextRenderer {
     /// the shared atlas. A label's layout (its placed glyphs) is cached so static
     /// text isn't re-shaped; the glyphs themselves are cached in the atlas, so *new*
     /// text only rasterizes glyphs it hasn't seen — no per-label texture.
-    pub(super) fn build_labels(&mut self, queue: &wgpu::Queue) -> (Vec<TextVertex>, Vec<u32>, Vec<DrawRange>) {
+    pub(super) fn build_labels(
+        &mut self,
+        queue: &wgpu::Queue,
+    ) -> (Vec<TextVertex>, Vec<u32>, Vec<DrawRange>) {
         let commands = std::mem::take(&mut self.commands);
         if commands.is_empty() {
             return (Vec::new(), Vec::new(), Vec::new());

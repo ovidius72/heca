@@ -43,7 +43,9 @@ impl std::str::FromStr for ResizeTarget {
 /// ```
 ///
 /// Omit it and nothing changes — [`Auto`](Self::Auto) is what every existing binding gets.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum ResizeEdge {
     /// The edge the target already owned: for a pane, the one below it — or above, when it is last
     /// and has nothing below. The default, so an unchanged binding behaves exactly as before.
@@ -153,7 +155,9 @@ impl std::str::FromStr for SpawnKind {
 
 /// **Shown, hidden, or the other of the two** — what `set_region_visible` does to a region.
 /// Omitted, it toggles.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum RegionVisibility {
     Show,
     Hide,

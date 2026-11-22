@@ -17,7 +17,8 @@ fn container_kind_attaches_children() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         realized.base().children.len(),
         2,
@@ -32,7 +33,8 @@ fn container_kind_attaches_children() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(card.base().children.len(), 2, "card = title + 1 content");
 }
 
@@ -45,7 +47,8 @@ fn change_binding_declares_no_hint_but_press_does() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     // Lettered because it holds the keyboard — a pick gives it the keyboard — but the change
     // binding is not what a pick does.
     assert_eq!(
@@ -66,7 +69,8 @@ fn change_binding_declares_no_hint_but_press_does() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         hints(item.as_ref()),
         vec![Vec::<usize>::new()],
@@ -92,7 +96,8 @@ fn named_value_widgets_are_collected() {
         )
         // Unnamed → not collected.
         .child(ViewNode::new(WidgetId::Input).text("ignored"));
-    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms).expect("valid described test widget");
+    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms)
+        .expect("valid described test widget");
 
     let data = forms.collect();
     assert_eq!(data.len(), 2, "only the two named widgets are collected");
@@ -116,7 +121,8 @@ fn named_select_is_collected_as_its_chosen_value() {
         .child(option("low", "Low"))
         .child(option("medium", "Medium"))
         .child(option("high", "High"));
-    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms).expect("valid described test widget");
+    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms)
+        .expect("valid described test widget");
 
     assert_eq!(
         forms.collect().get("priority").and_then(PropValue::as_text),
@@ -161,7 +167,8 @@ fn rich_modal_body_marshals_every_named_field() {
                         .text("US"),
                 ),
         );
-    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms).expect("valid described test widget");
+    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms)
+        .expect("valid described test widget");
 
     let data = forms.collect();
     assert_eq!(data.len(), 4, "every named field is collected");
@@ -181,7 +188,8 @@ fn named_input_exposes_live_text_signal() {
     let node = ViewNode::new(WidgetId::Input)
         .text("term")
         .prop("name", PropValue::Text("name".into()));
-    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms).expect("valid described test widget");
+    let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms)
+        .expect("valid described test widget");
 
     let sig = forms
         .text_signal("name")

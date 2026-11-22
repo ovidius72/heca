@@ -43,7 +43,9 @@ pub struct DockEntry {
 
 /// **The entry for one dock**: the one naming its id wins over the one for its kind.
 pub fn entry_for<'a>(docks: &'a [DockEntry], kind: &str, id: &str) -> Option<&'a DockEntry> {
-    docks.iter().find(|e| e.name == kind && e.id.as_deref() == Some(id))
+    docks
+        .iter()
+        .find(|e| e.name == kind && e.id.as_deref() == Some(id))
         .or_else(|| docks.iter().find(|e| e.name == kind && e.id.is_none()))
 }
 
@@ -52,14 +54,35 @@ mod tests {
     use super::*;
 
     fn entry(name: &str, id: Option<&str>, location: &str) -> DockEntry {
-        DockEntry { name: name.into(), id: id.map(Into::into), location: Some(location.into()), order: None, flex: None }
+        DockEntry {
+            name: name.into(),
+            id: id.map(Into::into),
+            location: Some(location.into()),
+            order: None,
+            flex: None,
+        }
     }
 
     #[test]
     fn an_entry_for_the_id_wins_over_the_one_for_the_kind() {
-        let docks = [entry("workspaces", None, "sidebar.left"), entry("workspaces", Some("aaa"), "sidebar.right")];
-        assert_eq!(entry_for(&docks, "workspaces", "aaa").unwrap().location.as_deref(), Some("sidebar.right"));
-        assert_eq!(entry_for(&docks, "workspaces", "bbb").unwrap().location.as_deref(), Some("sidebar.left"));
+        let docks = [
+            entry("workspaces", None, "sidebar.left"),
+            entry("workspaces", Some("aaa"), "sidebar.right"),
+        ];
+        assert_eq!(
+            entry_for(&docks, "workspaces", "aaa")
+                .unwrap()
+                .location
+                .as_deref(),
+            Some("sidebar.right")
+        );
+        assert_eq!(
+            entry_for(&docks, "workspaces", "bbb")
+                .unwrap()
+                .location
+                .as_deref(),
+            Some("sidebar.left")
+        );
         assert!(entry_for(&docks, "notes", "notes").is_none());
     }
 
@@ -68,7 +91,9 @@ mod tests {
         let text = "[[docks]]\nname = \"workspaces\"\nlocation = \"sidebar.left\"\norder = 1\n\n\
                     [[docks]]\nname = \"workspaces\"\nid = \"aaa\"\norder = -1\n";
         #[derive(Deserialize)]
-        struct File { docks: Vec<DockEntry> }
+        struct File {
+            docks: Vec<DockEntry>,
+        }
         let file: File = toml::from_str(text).unwrap();
         assert_eq!(file.docks.len(), 2);
         assert_eq!(file.docks[0].order, Some(1));

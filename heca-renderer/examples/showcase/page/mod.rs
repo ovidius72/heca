@@ -1,42 +1,42 @@
 //! Assemble the catalog and its shared controls. Each demo lives beside this module.
 use super::*;
-mod connections_and_text;
-mod images;
-mod select;
+mod border_controls;
 mod button;
-mod composed_buttons;
-mod choices;
-mod toggle;
-mod checkbox;
-mod label;
+mod button_overflow;
 mod caption;
-mod tabs;
+mod checkbox;
+mod choices;
+mod chrome;
+mod composed_buttons;
+mod connections_and_text;
+mod dialog;
+mod effect_controls;
+mod font_controls;
 mod grid;
 mod grid_areas;
-mod panel;
-mod separator;
-mod statusdot_badge;
-mod tag;
-mod toast;
-mod effect_controls;
-mod border_controls;
-mod font_controls;
-mod size_controls;
-mod items;
 mod icon;
-mod keyboard_icons;
-mod icon_glow;
-mod button_overflow;
 mod icon_buttons;
-mod tooltips;
-mod tooltip_options;
-mod dialog;
+mod icon_glow;
+mod images;
+mod items;
+mod keyboard_icons;
+mod label;
 mod pane_frames;
 mod pane_headers;
-mod scrollregion;
+mod panel;
 mod scroll_axes;
 mod scrollbars;
-mod chrome;
+mod scrollregion;
+mod select;
+mod separator;
+mod size_controls;
+mod statusdot_badge;
+mod tabs;
+mod tag;
+mod toast;
+mod toggle;
+mod tooltip_options;
+mod tooltips;
 
 struct DemoCx<'a> {
     theme: &'a Theme,
@@ -314,17 +314,20 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // scrollable body has something to overflow. Note what the caller does NOT
         // have to say: the body fills the panel width and takes the leftover height
         // on its own, so the title and the action row stay put while it scrolls.
-        .width(560.0).height(420.0)
+        .width(560.0)
+        .height(420.0)
         .body(
             ScrollRegion::new()
                 .child(Label::new("This action cannot be undone."))
                 .child(
-                    Flex::column().gap(Spacing::Xs)
+                    Flex::column()
+                        .gap(Spacing::Xs)
                         .child(caption("Confirm name"))
                         .child(Input::new().value("pane-1").on_change(report)),
                 )
                 .child(
-                    Flex::column().gap(Spacing::Xs)
+                    Flex::column()
+                        .gap(Spacing::Xs)
                         .child(caption("Archive target"))
                         .child(
                             Select::new(["SCRATCHPAD", "WORKSPACE 01", "TRASH"])
@@ -622,8 +625,15 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     let ui = ScrollRegion::new()
         .child(images::build(theme).padding("lg"))
         .child(connections_and_text::build(theme).padding("lg"))
-        .child(Flex::column().width("100%")
-            .child(ScrollRegion::new().horizontal().align("start").width("100%").child(page)));
+        .child(
+            Flex::column().width("100%").child(
+                ScrollRegion::new()
+                    .horizontal()
+                    .align("start")
+                    .width("100%")
+                    .child(page),
+            ),
+        );
 
     // The overlay layer: viewport-anchored widgets composited ABOVE the scrolled
     // page — a Dialog taffy-centers on the real window (BUG B), the palette/menu

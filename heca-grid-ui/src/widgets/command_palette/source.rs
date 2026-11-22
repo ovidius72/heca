@@ -6,8 +6,13 @@ impl CommandPalette {
     /// Replace the query with the selected suggestion, keeping the palette open.
     pub fn complete_selected(&mut self) -> Handled {
         self.sync_query();
-        let Some(text) = self.results().get(self.selected)
-            .and_then(|row| self.commands[row.index].completion.clone()) else { return Handled::No; };
+        let Some(text) = self
+            .results()
+            .get(self.selected)
+            .and_then(|row| self.commands[row.index].completion.clone())
+        else {
+            return Handled::No;
+        };
         self.query.set(text);
         self.on_query_changed();
         self.base.mark_needs_layout();
@@ -55,30 +60,49 @@ mod tests {
     #[test]
     fn marks_follow_whichever_text_matched() {
         let build = |describe: bool| {
-            let p = CommandPalette::new()
-                .mode_with_commands('#', "session", [
+            let p = CommandPalette::new().mode_with_commands(
+                '#',
+                "session",
+                [
                     Command::new("billing", || {}).description("~/work/billing"),
                     Command::new("api", || {}).description("~/work/billing"),
-                ]);
-            let p = if describe { p.match_description_in("session") } else { p };
+                ],
+            );
+            let p = if describe {
+                p.match_description_in("session")
+            } else {
+                p
+            };
             p.query("bill").default_open(true)
         };
         let marks = |p: &CommandPalette, row: usize| {
             (
                 p.title_marks[row].get_untracked(),
-                p.desc_marks[row].map(|m| m.get_untracked()).unwrap_or_default(),
+                p.desc_marks[row]
+                    .map(|m| m.get_untracked())
+                    .unwrap_or_default(),
             )
         };
 
         let p = build(true);
         let (title, description) = marks(&p, 0);
-        assert!(!title.is_empty() && !description.is_empty(), "matched on both: both marked");
+        assert!(
+            !title.is_empty() && !description.is_empty(),
+            "matched on both: both marked"
+        );
         let (title, description) = marks(&p, 1);
         assert!(title.is_empty(), "`api` has no `bill`");
-        assert_eq!(description, [7, 8, 9, 10], "the folder's own characters, not the title's");
+        assert_eq!(
+            description,
+            [7, 8, 9, 10],
+            "the folder's own characters, not the title's"
+        );
 
         let p = build(false);
-        assert!(marks(&p, 0).1.is_empty(), "a mode that did not opt in marks no description");
+        assert!(
+            marks(&p, 0).1.is_empty(),
+            "a mode that did not opt in marks no description"
+        );
         assert_eq!(p.results().len(), 1, "and finds only by title");
     }
 
@@ -108,26 +132,45 @@ mod tests {
         use crate::{GridKey, Keymap, Modifiers};
         let chosen = Rc::new(RefCell::new(false));
         let result = chosen.clone();
-        let mut palette = CommandPalette::new().source(move |_| {
-            let result = result.clone();
-            vec![Command::new("Create folder: project", move || *result.borrow_mut() = true)
-                .completion("project/")]
-        }).default_open(true);
+        let mut palette = CommandPalette::new()
+            .source(move |_| {
+                let result = result.clone();
+                vec![
+                    Command::new("Create folder: project", move || {
+                        *result.borrow_mut() = true
+                    })
+                    .completion("project/"),
+                ]
+            })
+            .default_open(true);
         crate::dispatch(&mut palette, &Event::TextInput("pro".into()));
-        assert_eq!(Keymap::with_defaults().dispatch(GridKey::Tab, Modifiers::default(),
-            |event| crate::dispatch(&mut palette, event)), Handled::Yes);
+        assert_eq!(
+            Keymap::with_defaults().dispatch(GridKey::Tab, Modifiers::default(), |event| {
+                crate::dispatch(&mut palette, event)
+            }),
+            Handled::Yes
+        );
         assert_eq!(palette.query_text(), "project/");
         assert!(palette.is_open());
         assert!(!*chosen.borrow());
-        assert_eq!(palette.results().len(), 1, "the trailing slash must not hide the creation row");
+        assert_eq!(
+            palette.results().len(),
+            1,
+            "the trailing slash must not hide the creation row"
+        );
         crate::dispatch(&mut palette, &Event::Widget(WidgetIntent::Activate));
         assert!(*chosen.borrow());
     }
 
     #[test]
     fn completion_does_not_intercept_an_ordinary_palettes_focus_traversal() {
-        let mut palette = CommandPalette::new().command(Command::new("Run", || {})).default_open(true);
-        assert_eq!(crate::dispatch(&mut palette, &Event::Widget(WidgetIntent::Complete)), Handled::No);
+        let mut palette = CommandPalette::new()
+            .command(Command::new("Run", || {}))
+            .default_open(true);
+        assert_eq!(
+            crate::dispatch(&mut palette, &Event::Widget(WidgetIntent::Complete)),
+            Handled::No
+        );
         assert!(palette.is_open());
     }
 

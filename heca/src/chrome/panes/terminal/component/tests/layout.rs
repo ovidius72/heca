@@ -26,7 +26,12 @@ fn a_terminal_learns_the_size_of_the_box_it_is_given() {
 #[test]
 fn below_a_header_a_terminal_gets_what_the_header_leaves() {
     let t = Terminal::unbound();
-    let _root = header_above(heca_grid_ui::WidgetModel::new(t.clone()), 33.0, 308.0, 720.0);
+    let _root = header_above(
+        heca_grid_ui::WidgetModel::new(t.clone()),
+        33.0,
+        308.0,
+        720.0,
+    );
 
     let size = room(&t).expect("laid out");
     assert_eq!((size.w, size.h), (308.0, 687.0));
@@ -106,7 +111,12 @@ fn without_padding_both_boxes_are_the_pane() {
 fn a_terminal_paints_one_surface_at_its_own_box() {
     let t = Terminal::unbound();
     t.attach(TerminalId(7));
-    let root = header_above(heca_grid_ui::WidgetModel::new(t.clone()), 33.0, 308.0, 720.0);
+    let root = header_above(
+        heca_grid_ui::WidgetModel::new(t.clone()),
+        33.0,
+        308.0,
+        720.0,
+    );
 
     let theme = Theme::default();
     let mut scene = Scene::new();
@@ -136,7 +146,11 @@ fn a_terminal_paints_one_surface_at_its_own_box() {
 /// nothing.
 #[test]
 fn a_terminal_with_no_process_paints_nothing() {
-    let root = laid_out_in(heca_grid_ui::WidgetModel::new(Terminal::unbound()), 100.0, 100.0);
+    let root = laid_out_in(
+        heca_grid_ui::WidgetModel::new(Terminal::unbound()),
+        100.0,
+        100.0,
+    );
     let theme = Theme::default();
     let mut scene = Scene::new();
     heca_grid_ui::paint_child(root.as_ref(), &mut PaintCx::new(&mut scene, &theme));

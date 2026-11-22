@@ -11,7 +11,8 @@ impl Input {
             .elapsed()
             .as_secs_f32()
             .rem_euclid(self.base.input_style.blink_period.max(f32::MIN_POSITIVE));
-        self.base.input_style.blink_period <= 0.0 || phase < self.base.input_style.blink_period / 2.0
+        self.base.input_style.blink_period <= 0.0
+            || phase < self.base.input_style.blink_period / 2.0
     }
 
     pub(super) fn chars_vec(&self) -> Vec<char> {
@@ -50,7 +51,9 @@ impl Input {
     }
 
     pub(super) fn insert_text(&mut self, text: &str) {
-        if text.is_empty() { return; }
+        if text.is_empty() {
+            return;
+        }
         let mut chars = self.chars_vec();
         self.drain_selection(&mut chars);
         let at = self.cursor.min(chars.len());
@@ -118,5 +121,4 @@ impl Input {
         chars.drain(self.cursor..end.min(chars.len()));
         self.commit(chars.into_iter().collect());
     }
-
 }

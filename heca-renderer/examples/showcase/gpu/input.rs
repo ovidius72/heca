@@ -158,5 +158,4 @@ impl GpuState {
             self.enter_zoom_mode();
         }
     }
-
 }

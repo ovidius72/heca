@@ -20,7 +20,9 @@ pub struct IntegrationContext {
 impl IntegrationContext {
     /// A program-specific environment override, or a path relative to the supplied home.
     pub fn location(&self, variable: &str, relative: &str) -> PathBuf {
-        self.environment.get(variable).filter(|value| !value.is_empty())
+        self.environment
+            .get(variable)
+            .filter(|value| !value.is_empty())
             .map_or_else(|| self.home.join(relative), PathBuf::from)
     }
 }
@@ -86,8 +88,11 @@ impl IntegrationResource {
     /// The document or standalone file this resource belongs to.
     pub fn path(&self) -> &std::path::Path {
         match self {
-            Self::File { path, .. } | Self::JsonArrayEntry { path, .. } | Self::TomlArrayEntry { path, .. }
-                | Self::TomlBool { path, .. } | Self::TomlEntry { path, .. } => path,
+            Self::File { path, .. }
+            | Self::JsonArrayEntry { path, .. }
+            | Self::TomlArrayEntry { path, .. }
+            | Self::TomlBool { path, .. }
+            | Self::TomlEntry { path, .. } => path,
         }
     }
 }

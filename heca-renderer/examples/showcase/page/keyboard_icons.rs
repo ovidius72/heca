@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let theme = cx.theme;
 
-
     const PER_ROW: usize = 7;
     let cell = |glyph: NfGlyph| {
         Flex::column()

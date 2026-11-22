@@ -8,8 +8,8 @@ use crate::chrome::Intent;
 use crate::server::services::{Brought, Home, Hosted, Requests, Running, StartArgs};
 
 use super::{
-    ActionCx, ActionRequest, ActionResult, Effects, Permit, ServerEvent, Service, ServiceCx, ServiceInbox, ServiceResult,
-    StartCx,
+    ActionCx, ActionRequest, ActionResult, Effects, Permit, ServerEvent, Service, ServiceCx,
+    ServiceInbox, ServiceResult, StartCx,
 };
 
 /// A service's action handler: handed the service itself.
@@ -53,7 +53,11 @@ impl<S: Service> Declaration for Declared<S> {
     }
 
     fn action_metas(&self) -> Vec<ActionMeta> {
-        self.actions.borrow().iter().map(|(meta, _)| meta.clone()).collect()
+        self.actions
+            .borrow()
+            .iter()
+            .map(|(meta, _)| meta.clone())
+            .collect()
     }
 
     fn start(&self, args: &StartArgs<'_>) -> ServiceResult<Box<dyn Hosted>> {
@@ -67,14 +71,37 @@ impl<S: Service> Declaration for Declared<S> {
             data_dir: &data_dir,
             catalog: args.catalog,
         })?;
-        let actions = self.actions.borrow().iter()
+        let actions = self
+            .actions
+            .borrow()
+            .iter()
             .map(|(meta, run)| (meta.name.clone(), run.clone()))
             .collect();
         let policies = self.policies.borrow().clone();
         let listeners = self.listeners.borrow().clone();
-        let requests = Requests::new(&self.name, args.request_capacity, args.max_line, !policies.is_empty());
-        let home = Home { name: self.name.clone(), extension: self.extension.clone(), data_dir };
-        Ok(Box::new(Running::new(home, service, inbox, messages,
-            Brought { actions, policies, listeners, effects: Effects::new(requests), capacity: args.capacity })))
+        let requests = Requests::new(
+            &self.name,
+            args.request_capacity,
+            args.max_line,
+            !policies.is_empty(),
+        );
+        let home = Home {
+            name: self.name.clone(),
+            extension: self.extension.clone(),
+            data_dir,
+        };
+        Ok(Box::new(Running::new(
+            home,
+            service,
+            inbox,
+            messages,
+            Brought {
+                actions,
+                policies,
+                listeners,
+                effects: Effects::new(requests),
+                capacity: args.capacity,
+            },
+        )))
     }
 }

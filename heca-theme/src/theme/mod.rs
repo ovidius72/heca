@@ -8,17 +8,17 @@ use crate::color::Color;
 use serde::{Deserialize, Serialize};
 
 mod defaults;
-mod effects;
-mod interaction;
-mod input;
 mod dialog;
+mod effects;
 mod flash;
+mod input;
+mod interaction;
 
-pub use effects::{FrameStyle, GlowLevel, Intensity, Shadow};
-pub use interaction::InteractionAlphas;
-pub use input::InputStyle;
 pub use dialog::DialogStyle;
+pub use effects::{FrameStyle, GlowLevel, Intensity, Shadow};
 pub use flash::FlashStyle;
+pub use input::InputStyle;
+pub use interaction::InteractionAlphas;
 
 use defaults::*;
 

@@ -197,10 +197,13 @@ pub(crate) fn settle(root: &mut dyn Component) {
         let inside = holder.clone().filter(|h| h.starts_with(&s.path));
         // A field following the same signal has already let go during gather. Its
         // modal still owned that keyboard and must return it to the opener.
-        let held_inside = inside.is_some() || seen.iter().any(|child| {
-            child.released && child.held_when_released
-                && child.path.len() > s.path.len() && child.path.starts_with(&s.path)
-        });
+        let held_inside = inside.is_some()
+            || seen.iter().any(|child| {
+                child.released
+                    && child.held_when_released
+                    && child.path.len() > s.path.len()
+                    && child.path.starts_with(&s.path)
+            });
         if let Some(h) = inside {
             if !modal && h != s.path {
                 let inner = at(root, &h).base().focus_id();
@@ -229,7 +232,9 @@ pub(crate) fn settle(root: &mut dyn Component) {
         arrive(root, &path);
         holder = Some(path);
     }
-    if holder.is_none() && let Some(path) = super::fallback::target(root) {
+    if holder.is_none()
+        && let Some(path) = super::fallback::target(root)
+    {
         arrive(root, &path);
     }
 }

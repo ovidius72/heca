@@ -61,7 +61,9 @@ impl<T: IntoComponent> IntoChildren for Vec<T> {
 
 impl<T: IntoComponent> IntoChildren for Option<T> {
     fn into_children(self) -> Vec<crate::WidgetModel> {
-        self.into_iter().map(IntoComponent::into_component).collect()
+        self.into_iter()
+            .map(IntoComponent::into_component)
+            .collect()
     }
 }
 
@@ -144,6 +146,9 @@ mod tests {
         assert!(absent.base().children.is_empty());
         let present = Flex::column().child(Some(Label::new("Optional")));
         assert_eq!(present.base().children.len(), 1);
-        assert_eq!(present.base().children[0].text_summary().as_deref(), Some("Optional"));
+        assert_eq!(
+            present.base().children[0].text_summary().as_deref(),
+            Some("Optional")
+        );
     }
 }

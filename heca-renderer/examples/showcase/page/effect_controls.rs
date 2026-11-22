@@ -6,11 +6,14 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
     let intensity_idx = cx.intensity_idx;
     let overlay_frame_idx = cx.overlay_frame_idx;
 
-
     Flex::row()
         .gap(16.0)
         .align("center")
-        .child(Label::new("INTENSITY").color(theme.colors.muted).font_scale(0.85))
+        .child(
+            Label::new("INTENSITY")
+                .color(theme.colors.muted)
+                .font_scale(0.85),
+        )
         .child(
             Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"])
                 .selected(intensity_idx)
@@ -23,15 +26,18 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // The frame every OVERLAY panel draws (this Select's own dropdown
         // included, so the change is visible the moment you reopen it).
         // Mirrors `[appearance] overlay_border_style` in the real app.
-        .child(Label::new("OVERLAY FRAME").color(theme.colors.muted).font_scale(0.85))
+        .child(
+            Label::new("OVERLAY FRAME")
+                .color(theme.colors.muted)
+                .font_scale(0.85),
+        )
         .child(
             Select::new(["BRACKETED", "BORDERED", "NONE"])
                 .selected(overlay_frame_idx)
                 .on_change(move |a| {
                     if let SignalData::Usize(i) = a.data {
-                        ctl.overlay_frame.set(
-                            OVERLAY_FRAME_OPTS[i.min(OVERLAY_FRAME_OPTS.len() - 1)],
-                        );
+                        ctl.overlay_frame
+                            .set(OVERLAY_FRAME_OPTS[i.min(OVERLAY_FRAME_OPTS.len() - 1)]);
                     }
                 }),
         )

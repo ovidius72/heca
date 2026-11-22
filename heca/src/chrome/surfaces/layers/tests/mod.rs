@@ -74,6 +74,6 @@ fn fading_root_open() -> Overlay {
 
 mod appearing;
 mod coverage;
+mod dispatching;
 mod naming;
 mod order;
-mod dispatching;

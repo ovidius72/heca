@@ -399,8 +399,14 @@ fn replacing_a_subtree_keeps_the_keyboard_in_the_same_region() {
     let mut root = Flex::column().child(window());
     focus_scope(&mut root, "b");
     replace_child(&mut root, 0, window().into());
-    assert_eq!(page_scope(&root).as_deref(), Some("b"), "the new dock b holds it");
-    assert!(contains_keyboard(root.base().children[0].base().children[1].as_ref()));
+    assert_eq!(
+        page_scope(&root).as_deref(),
+        Some("b"),
+        "the new dock b holds it"
+    );
+    assert!(contains_keyboard(
+        root.base().children[0].base().children[1].as_ref()
+    ));
 
     // A region that keeps the keyboard holds it itself after the rebuild, as before it.
     let keeper = || {
@@ -411,7 +417,11 @@ fn replacing_a_subtree_keeps_the_keyboard_in_the_same_region() {
     let mut root = Flex::column().child(keeper());
     focus_scope(&mut root, "b");
     replace_child(&mut root, 0, keeper().into());
-    assert_eq!(holder(&root), Some(vec![0, 1]), "the dock itself, not its control");
+    assert_eq!(
+        holder(&root),
+        Some(vec![0, 1]),
+        "the dock itself, not its control"
+    );
 }
 
 /// A keyboard outside the replaced subtree, or on nothing, is left alone.

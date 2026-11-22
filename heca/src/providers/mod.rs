@@ -551,10 +551,13 @@ mod tests {
         }
         /// A body built from **nothing but the shared context** — one label, no model, no catalog.
         fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
-            Contribution::Container(crate::chrome::ContainerContribution::new(self,
+            Contribution::Container(crate::chrome::ContainerContribution::new(
+                self,
                 |ctx: &ChromeCtx<'_>, _bx: &mut crate::chrome::BuildCx<'_>| {
                     // The theme is there for anyone; nothing else is needed to render a number.
-                    let _theme = ctx.theme().expect("a render pass carries the frame's theme");
+                    let _theme = ctx
+                        .theme()
+                        .expect("a render pass carries the frame's theme");
                     heca_grid_ui::widgets::Label::new("42")
                 },
             ))

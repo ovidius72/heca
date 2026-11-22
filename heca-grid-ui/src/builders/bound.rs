@@ -67,7 +67,10 @@ impl BoundChildren {
             shown = items;
             Some(changed)
         };
-        Self { dirty, place: Box::new(place) }
+        Self {
+            dirty,
+            place: Box::new(place),
+        }
     }
 }
 
@@ -79,7 +82,12 @@ impl IntoChildren for BoundChildren {
     }
 
     fn attach(self, base: &mut Base) {
-        base.bound.push(Bound { start: base.children.len(), len: 0, dirty: self.dirty, place: self.place });
+        base.bound.push(Bound {
+            start: base.children.len(),
+            len: 0,
+            dirty: self.dirty,
+            place: self.place,
+        });
     }
 }
 
@@ -150,7 +158,11 @@ mod tests {
     }
 
     fn keys(root: &Flex) -> Vec<String> {
-        root.base().children.iter().map(|c| c.base().key.clone().unwrap_or_default()).collect()
+        root.base()
+            .children
+            .iter()
+            .map(|c| c.base().key.clone().unwrap_or_default())
+            .collect()
     }
 
     fn mark_all(root: &mut Flex) {
@@ -182,8 +194,15 @@ mod tests {
 
         source.set(items(&["c", "a", "d"]));
         frame(&mut root);
-        assert_eq!(keys(&root), ["c", "a", "d"], "b removed, d added, c moved first");
-        assert!(kept(&root, 0) && kept(&root, 1), "c and a are the same widgets, moved");
+        assert_eq!(
+            keys(&root),
+            ["c", "a", "d"],
+            "b removed, d added, c moved first"
+        );
+        assert!(
+            kept(&root, 0) && kept(&root, 1),
+            "c and a are the same widgets, moved"
+        );
         assert!(!kept(&root, 2), "d is new");
     }
 
@@ -228,7 +247,10 @@ mod tests {
         frame(&mut root);
         assert!(!crate::component::needs_layout(&root));
         source.set(items(&["a", "b"]));
-        assert!(crate::component::needs_layout(&root), "a changed value asks for a layout pass");
+        assert!(
+            crate::component::needs_layout(&root),
+            "a changed value asks for a layout pass"
+        );
         frame(&mut root);
         assert_eq!(keys(&root), ["a", "b"]);
     }

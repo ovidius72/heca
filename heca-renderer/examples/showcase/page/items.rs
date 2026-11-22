@@ -3,7 +3,6 @@ use super::*;
 pub(super) fn build(cx: &DemoCx<'_>) -> Pane {
     let theme = cx.theme;
 
-
     let selected = signal(0usize);
     let states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
     let select = move |i: usize, item: Item| -> Item {

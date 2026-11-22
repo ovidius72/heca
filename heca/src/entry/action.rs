@@ -127,8 +127,14 @@ pub(crate) fn register_queued_actions(
     conflicts: &mut Conflicts,
 ) {
     let mut seen = std::collections::HashSet::new();
-    let queued: Vec<(ActionMeta, Rc<Run>)> =
-        QUEUE.with(|q| q.close(|items| items.iter().map(|d| (d.meta.clone(), d.run.clone())).collect()));
+    let queued: Vec<(ActionMeta, Rc<Run>)> = QUEUE.with(|q| {
+        q.close(|items| {
+            items
+                .iter()
+                .map(|d| (d.meta.clone(), d.run.clone()))
+                .collect()
+        })
+    });
     for (meta, run) in queued {
         let id = meta.name.clone();
         // The registry lets a second registration replace the first (a dock remounting is meant
@@ -168,7 +174,10 @@ pub(crate) fn register_queued_actions(
                 shadows_builtin,
             };
             if !seen.insert(id.clone()) || catalog.find(&id).is_some() {
-                conflicts.action(refused("the action declared first", catalog.is_builtin(&id)));
+                conflicts.action(refused(
+                    "the action declared first",
+                    catalog.is_builtin(&id),
+                ));
             } else if register_service_dynamic(registry, catalog, meta).is_err() {
                 conflicts.action(refused("the built-in", true));
             }
@@ -262,7 +271,9 @@ mod tests {
         reset();
         let demo = demo();
         demo.action("start").label("First").run(|_, _| Handled::Yes);
-        demo.action("start").label("Second").run(|_, _| Handled::Yes);
+        demo.action("start")
+            .label("Second")
+            .run(|_, _| Handled::Yes);
         let (_, catalog, conflicts) = registered();
         assert_eq!(
             catalog.find("demo.start").expect("registered").label,

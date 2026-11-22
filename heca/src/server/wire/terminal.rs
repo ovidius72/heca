@@ -1,7 +1,10 @@
 //! Plain process input and terminal state. Scrolling and selection stay in each client.
 
-use heca_core::{backend::{BackendKeyEvent, BackendMouseEvent, TerminalDamage, WireSnapshot}, runtime::PaneRuntime};
 use crate::app::backend_store::TerminalOwner;
+use heca_core::{
+    backend::{BackendKeyEvent, BackendMouseEvent, TerminalDamage, WireSnapshot},
+    runtime::PaneRuntime,
+};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) enum ProcessInput {
@@ -10,7 +13,12 @@ pub(crate) enum ProcessInput {
     Mouse(BackendMouseEvent),
     Paste(String),
     Focus(bool),
-    Resize { cols: usize, rows: usize, cell: (f32, f32), scale: f32 },
+    Resize {
+        cols: usize,
+        rows: usize,
+        cell: (f32, f32),
+        scale: f32,
+    },
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

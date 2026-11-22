@@ -220,7 +220,10 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) -> crate::acti
 /// Enter the "move active column → workspace" letter pick: assign a letter to each
 /// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
 /// column into that workspace. Says so when there is no other workspace.
-pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_move_column_to_workspace_pick(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let ws_idx = state.layout().active_workspace_idx();
     let col_idx = state
         .layout()
@@ -240,7 +243,10 @@ pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAc
 
 /// Enter the "move active pane → workspace" letter pick (see
 /// [`handle_move_column_to_workspace_pick`]). Does nothing without a focused pane.
-pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_move_pane_to_workspace_pick(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let Some(pane_id) = state.focused_pane else {
         return Ok(());
     };
@@ -255,7 +261,10 @@ pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmActi
     Ok(())
 }
 
-pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_move_pane_to_column_pick(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let Some(pane_id) = state.focused_pane else {
         return Ok(());
     };

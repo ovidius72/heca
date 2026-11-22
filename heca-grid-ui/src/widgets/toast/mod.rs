@@ -336,7 +336,9 @@ impl Toast {
     /// **The lifetime the countdown bar depletes over.** Set by the host from its auto-dismiss
     /// duration; unset means no timer, so no bar. Data, not a live clock — the host owns the timer
     /// and the bar animates locally over this span, pausing while the stack is held still.
-    #[heca_grid_ui_macros::host_only("a lifetime span the host supplies, not a value static data carries")]
+    #[heca_grid_ui_macros::host_only(
+        "a lifetime span the host supplies, not a value static data carries"
+    )]
     pub fn countdown(mut self, lifetime: Duration) -> Self {
         self.countdown_secs = Some(lifetime.as_secs_f32().max(0.0));
         self
@@ -369,7 +371,6 @@ impl Toast {
             .map(|p| p.get_untracked())
             .unwrap_or(false)
     }
-
 
     /// Set the callback fired when the × is clicked. The host removes the toast.
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
@@ -516,7 +517,6 @@ impl Toast {
             empty_slot()
         };
     }
-
 }
 
 impl Component for Toast {
@@ -614,7 +614,13 @@ impl Component for Toast {
                 let y = b.loc.y + b.size.h - m - h;
                 let r = PROGRESS_HEIGHT / 2.0;
                 let bar = |cx: &mut PaintCx, w: f64, c: crate::color::Color| {
-                    cx.rect(Rectangle::new(Point::new(x, y), Size::new(w, h)), c, None, r, None);
+                    cx.rect(
+                        Rectangle::new(Point::new(x, y), Size::new(w, h)),
+                        c,
+                        None,
+                        r,
+                        None,
+                    );
                 };
                 bar(cx, full, muted);
                 if frac > 0.0 {
@@ -707,11 +713,16 @@ mod countdown_tests {
         assert_eq!(off.countdown_fraction(), None, "off by default");
 
         // Progress on + a lifetime: full at the start, draining as time passes.
-        let mut t = Toast::info("x").progress(true).countdown(Duration::from_secs(4));
+        let mut t = Toast::info("x")
+            .progress(true)
+            .countdown(Duration::from_secs(4));
         assert_eq!(t.countdown_fraction(), Some(1.0));
         t.tick(2.0);
         let half = t.countdown_fraction().expect("a bar");
-        assert!((half - 0.5).abs() < 0.05, "about half after half its life: {half}");
+        assert!(
+            (half - 0.5).abs() < 0.05,
+            "about half after half its life: {half}"
+        );
         t.tick(2.0);
         assert_eq!(t.countdown_fraction(), Some(0.0), "empty at the end");
 
@@ -734,6 +745,9 @@ mod countdown_tests {
         assert_eq!(t.countdown_fraction().unwrap(), before, "frozen while held");
         paused.set(false);
         t.tick(1.0); // resumes
-        assert!(t.countdown_fraction().unwrap() < before, "resumes draining after release");
+        assert!(
+            t.countdown_fraction().unwrap() < before,
+            "resumes draining after release"
+        );
     }
 }

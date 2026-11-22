@@ -60,16 +60,40 @@ fn public_builder_preserves_optional_durations_through_send_and_acceptance() {
     let configured = Duration::from_millis(2500);
     for (notification, expected) in [
         (Notification::info("Configured"), Some(configured)),
-        (Notification::info("Explicit").auto_dismiss(explicit).body("Done").dedup_key("build"), Some(explicit)),
-        (Notification::warning("Sticky").auto_dismiss(explicit).sticky(), None),
-        (Notification::info("Timed again").sticky().auto_dismiss(explicit), Some(explicit)),
-        (Notification::info("Immediate").auto_dismiss(Duration::ZERO), Some(Duration::ZERO)),
+        (
+            Notification::info("Explicit")
+                .auto_dismiss(explicit)
+                .body("Done")
+                .dedup_key("build"),
+            Some(explicit),
+        ),
+        (
+            Notification::warning("Sticky")
+                .auto_dismiss(explicit)
+                .sticky(),
+            None,
+        ),
+        (
+            Notification::info("Timed again")
+                .sticky()
+                .auto_dismiss(explicit),
+            Some(explicit),
+        ),
+        (
+            Notification::info("Immediate").auto_dismiss(Duration::ZERO),
+            Some(Duration::ZERO),
+        ),
     ] {
         let runtime = Rc::new(RefCell::new(test_runtime(2500)));
         let sink = runtime.clone();
-        install_notification_sink(move |draft| { sink.borrow_mut().push(draft, now).unwrap(); });
+        install_notification_sink(move |draft| {
+            sink.borrow_mut().push(draft, now).unwrap();
+        });
         notification.send();
-        assert_eq!(runtime.borrow().next_expiry(), expected.map(|duration| now + duration));
+        assert_eq!(
+            runtime.borrow().next_expiry(),
+            expected.map(|duration| now + duration)
+        );
     }
 }
 
@@ -123,7 +147,10 @@ fn retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh() {
     let v = runtime.visible_views();
     assert_eq!(v.len(), 1, "a fresh success card is visible");
     assert_eq!(v[0].title, "Configuration reloaded");
-    assert_eq!(v[0].severity, crate::notification::NotificationSeverity::Success);
+    assert_eq!(
+        v[0].severity,
+        crate::notification::NotificationSeverity::Success
+    );
     assert_eq!(
         runtime.next_expiry(),
         Some(now + std::time::Duration::from_millis(4000)),

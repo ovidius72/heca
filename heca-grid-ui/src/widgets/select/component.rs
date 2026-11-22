@@ -4,15 +4,13 @@
 
 use super::*;
 use crate::action::SignalData;
-use crate::component::{
-    shift_subtree, Component, Event, GridKey, Handled, PaintCx, WidgetIntent,
-};
+use crate::component::{Component, Event, GridKey, Handled, PaintCx, WidgetIntent, shift_subtree};
 use crate::font::MONO_LINE_RATIO;
 use crate::scene::{Border, Glow};
 use crate::style::Length;
 use crate::widgets::choice::{self, choice_at};
 use crate::widgets::overlay::{
-    paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome, PanelElevation,
+    AnchorSide, PanelChrome, PanelElevation, paint_panel_chrome, place_anchored_on,
 };
 use heca_core::layout::{Point, Rectangle};
 

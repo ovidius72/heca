@@ -10,8 +10,20 @@ fn embedded_settings() -> toml::Value {
 
 pub(super) fn embedded_window_defaults() -> (u32, u32) {
     let settings = embedded_settings();
-    (settings.get("window_width").unwrap().clone().try_into().unwrap(),
-     settings.get("window_height").unwrap().clone().try_into().unwrap())
+    (
+        settings
+            .get("window_width")
+            .unwrap()
+            .clone()
+            .try_into()
+            .unwrap(),
+        settings
+            .get("window_height")
+            .unwrap()
+            .clone()
+            .try_into()
+            .unwrap(),
+    )
 }
 
 #[test]
@@ -24,9 +36,16 @@ fn constructors_and_empty_files_use_the_embedded_settings() {
     assert_eq!(config_from_layers("[settings]").unwrap().settings, expected);
 
     let notifications: NotificationSystemConfig = embedded_settings()
-        .get("notification_system").unwrap().clone().try_into().unwrap();
+        .get("notification_system")
+        .unwrap()
+        .clone()
+        .try_into()
+        .unwrap();
     assert_eq!(NotificationSystemConfig::default(), notifications);
-    assert_eq!(toml::from_str::<NotificationSystemConfig>("").unwrap(), notifications);
+    assert_eq!(
+        toml::from_str::<NotificationSystemConfig>("").unwrap(),
+        notifications
+    );
 }
 
 #[test]
@@ -42,10 +61,17 @@ fn each_missing_setting_keeps_its_embedded_default() {
     let notifications = original.get("notification_system").unwrap();
     for name in notifications.as_table().unwrap().keys() {
         let mut partial = original.clone();
-        partial.get_mut("notification_system").unwrap()
-            .as_table_mut().unwrap().remove(name);
+        partial
+            .get_mut("notification_system")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .remove(name);
         let actual: SettingsConfig = partial.try_into().unwrap();
-        assert_eq!(actual, expected, "missing settings.notification_system.{name}");
+        assert_eq!(
+            actual, expected,
+            "missing settings.notification_system.{name}"
+        );
     }
 }
 
@@ -79,16 +105,20 @@ fn aliases_and_nested_overrides_keep_the_other_defaults() {
         },
         ..SettingsConfig::default()
     };
-    let direct: SettingsConfig = toml::from_str(
-        "terminal-wheel-scroll-lines = 7\n[notification-system]\nmax_visible = 2",
-    ).unwrap();
+    let direct: SettingsConfig =
+        toml::from_str("terminal-wheel-scroll-lines = 7\n[notification-system]\nmax_visible = 2")
+            .unwrap();
     assert_eq!(direct, expected);
 }
 
 #[test]
 fn invalid_explicit_settings_remain_errors() {
-    for value in ["window_width = 'wide'", "window_height = -1", "mouse = 'yes'",
-                  "[notification_system]\nmax_visible = 'many'"] {
+    for value in [
+        "window_width = 'wide'",
+        "window_height = -1",
+        "mouse = 'yes'",
+        "[notification_system]\nmax_visible = 'many'",
+    ] {
         assert!(toml::from_str::<SettingsConfig>(value).is_err(), "{value}");
         let layered = if value.starts_with('[') {
             value.replacen("[notification_system]", "[settings.notification_system]", 1)
@@ -108,8 +138,15 @@ fn session_resume_switches_default_on_and_are_independent() {
         for harnesses in [false, true] {
             let config = config_from_layers(&format!(
                 "[settings]\nresume_programs={programs}\nresume_harness={harnesses}"
-            )).unwrap();
-            assert_eq!((config.settings.resume_programs, config.settings.resume_harness), (programs, harnesses));
+            ))
+            .unwrap();
+            assert_eq!(
+                (
+                    config.settings.resume_programs,
+                    config.settings.resume_harness
+                ),
+                (programs, harnesses)
+            );
         }
     }
 }
@@ -119,7 +156,8 @@ fn saving_sessions_is_on_by_default_and_can_be_turned_off_or_slowed() {
     let defaults = SettingsConfig::default();
     assert!(defaults.save_sessions);
     assert_eq!(defaults.session_save_delay_ms, 1000);
-    let config = config_from_layers("[settings]\nsave_sessions=false\nsession_save_delay_ms=0").unwrap();
+    let config =
+        config_from_layers("[settings]\nsave_sessions=false\nsession_save_delay_ms=0").unwrap();
     assert!(!config.settings.save_sessions);
     assert_eq!(config.settings.session_save_delay_ms, 0);
     assert!(config_from_layers("[settings]\nsession_save_delay_ms=-1").is_err());
@@ -130,7 +168,8 @@ fn pane_feedback_timeout_accepts_zero_or_milliseconds_but_not_invalid_values() {
     assert_eq!(SettingsConfig::default().notification_flash, 8000);
     assert!(SettingsConfig::default().notification_sound);
     for milliseconds in [0, 1500, 30000] {
-        let config = config_from_layers(&format!("[settings]\nnotification_flash={milliseconds}")).unwrap();
+        let config =
+            config_from_layers(&format!("[settings]\nnotification_flash={milliseconds}")).unwrap();
         assert_eq!(config.settings.notification_flash, milliseconds);
     }
     for value in ["-1", "'forever'", "'8000'", "1.5", "true", "false"] {
@@ -143,7 +182,8 @@ fn feedback_sound_is_a_generic_setting_independent_of_agent_reporting() {
     for enabled in [true, false] {
         let config = config_from_layers(&format!(
             "[settings]\nnotification_sound={enabled}\n[settings.agents]\nenabled=false"
-        )).unwrap();
+        ))
+        .unwrap();
         assert_eq!(config.settings.notification_sound, enabled);
         assert!(!config.settings.agents.enabled);
     }

@@ -38,11 +38,18 @@ pub(crate) enum LaunchMode {
     Attached,
     Standalone,
     Session(String),
-    New { path: Option<String>, name: Option<String> },
+    New {
+        path: Option<String>,
+        name: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy)]
-enum LaunchKind { Standalone, Session, New }
+enum LaunchKind {
+    Standalone,
+    Session,
+    New,
+}
 
 /// One thing heca can be asked from the command line.
 struct Command {
@@ -90,7 +97,9 @@ const JSON_SHORT: &str = "-j";
 
 impl Command {
     fn prefix_len(&self, words: &[&str]) -> Option<usize> {
-        if words.first().is_some_and(|word| self.short == Some(word)) { return Some(1) }
+        if words.first().is_some_and(|word| self.short == Some(word)) {
+            return Some(1);
+        }
         let path: Vec<_> = self.name.split_whitespace().collect();
         words.starts_with(&path).then_some(path.len())
     }
@@ -119,8 +128,14 @@ pub(crate) fn run_if_requested(args: &[String]) -> bool {
         return true;
     }
     match answer(args) {
-        Some(Ok(text)) => { print!("{text}"); true }
-        Some(Err(error)) => { eprint!("{error}"); std::process::exit(1) }
+        Some(Ok(text)) => {
+            print!("{text}");
+            true
+        }
+        Some(Err(error)) => {
+            eprint!("{error}");
+            std::process::exit(1)
+        }
         None => false,
     }
 }
@@ -146,57 +161,124 @@ fn answer(args: &[String]) -> Option<Answer> {
 }
 
 fn parse(args: &[String]) -> Option<Result<(&'static Command, Invocation), Answer>> {
-    if args.is_empty() { return None; }
-    let words: Vec<_> = args.iter().map(String::as_str)
-        .filter(|word| *word != JSON_FLAG && *word != JSON_SHORT).collect();
-    let Some((cmd, consumed)) = COMMANDS.iter()
-        .find_map(|cmd| cmd.prefix_len(&words).map(|len| (cmd, len))) else {
+    if args.is_empty() {
+        return None;
+    }
+    let words: Vec<_> = args
+        .iter()
+        .map(String::as_str)
+        .filter(|word| *word != JSON_FLAG && *word != JSON_SHORT)
+        .collect();
+    let Some((cmd, consumed)) = COMMANDS
+        .iter()
+        .find_map(|cmd| cmd.prefix_len(&words).map(|len| (cmd, len)))
+    else {
         let unknown = words.first().copied().unwrap_or(JSON_FLAG);
-        let hint = nearest_command(unknown).map(|name| format!(" — did you mean '{name}'?")).unwrap_or_default();
-        return Some(Err(Err(format!("unknown command '{unknown}'{hint}\n\nRun `heca --help` for the list.\n"))));
+        let hint = nearest_command(unknown)
+            .map(|name| format!(" — did you mean '{name}'?"))
+            .unwrap_or_default();
+        return Some(Err(Err(format!(
+            "unknown command '{unknown}'{hint}\n\nRun `heca --help` for the list.\n"
+        ))));
     };
     let positional = &words[consumed..];
-    if positional.iter().any(|arg| *arg == "--help" || *arg == "-h") {
+    if positional
+        .iter()
+        .any(|arg| *arg == "--help" || *arg == "-h")
+    {
         return Some(Err(Ok(format!("{}\n{}\n", usage_of(cmd), cmd.about))));
     }
     let mut supplied = HashMap::new();
     let mut values = Vec::new();
     let mut it = positional.iter().copied();
     while let Some(word) = it.next() {
-        if !is_flag(word) { values.push(word); continue; }
-        let Some(option) = cmd.options.iter().find(|option| word.strip_prefix("--") == Some(option.name)) else {
-            return Some(Err(Err(format!("{}: unknown option '{word}'\n\n{}\n", cmd.name, usage_of(cmd)))));
+        if !is_flag(word) {
+            values.push(word);
+            continue;
+        }
+        let Some(option) = cmd
+            .options
+            .iter()
+            .find(|option| word.strip_prefix("--") == Some(option.name))
+        else {
+            return Some(Err(Err(format!(
+                "{}: unknown option '{word}'\n\n{}\n",
+                cmd.name,
+                usage_of(cmd)
+            ))));
         };
         let Some(value) = it.next().filter(|value| !is_flag(value)) else {
             return Some(Err(Err(format!("{}: {word} needs a value\n", cmd.name))));
         };
-        if supplied.insert(option.name.to_owned(), value.to_owned()).is_some() {
-            return Some(Err(Err(format!("{}: {word} was supplied twice\n", cmd.name))));
+        if supplied
+            .insert(option.name.to_owned(), value.to_owned())
+            .is_some()
+        {
+            return Some(Err(Err(format!(
+                "{}: {word} was supplied twice\n",
+                cmd.name
+            ))));
         }
     }
     if values.len() > cmd.args.len() {
-        return Some(Err(Err(format!("{} takes {} argument(s), got {}\n\n{}\n",
-            cmd.name, cmd.args.len(), values.len(), usage_of(cmd)))));
+        return Some(Err(Err(format!(
+            "{} takes {} argument(s), got {}\n\n{}\n",
+            cmd.name,
+            cmd.args.len(),
+            values.len(),
+            usage_of(cmd)
+        ))));
     }
-    supplied.extend(cmd.args.iter().zip(values).map(|(spec, value)| (spec.name.to_owned(), value.to_owned())));
-    let specs: Vec<ArgSpec> = cmd.args.iter().chain(cmd.options).map(ArgSpec::from_descriptor).collect();
+    supplied.extend(
+        cmd.args
+            .iter()
+            .zip(values)
+            .map(|(spec, value)| (spec.name.to_owned(), value.to_owned())),
+    );
+    let specs: Vec<ArgSpec> = cmd
+        .args
+        .iter()
+        .chain(cmd.options)
+        .map(ArgSpec::from_descriptor)
+        .collect();
     let problems = check_args(&specs, &supplied);
     if !problems.is_empty() {
-        let listed = problems.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
-        return Some(Err(Err(format!("{}: {listed}\n\n{}\n", cmd.name, usage_of(cmd)))));
+        let listed = problems
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Some(Err(Err(format!(
+            "{}: {listed}\n\n{}\n",
+            cmd.name,
+            usage_of(cmd)
+        ))));
     }
     let json = args.iter().any(|arg| arg == JSON_FLAG || arg == JSON_SHORT);
-    if json && !cmd.json { return Some(Err(Err(format!("{} does not support --json\n", cmd.name)))); }
-    Some(Ok((cmd, Invocation { args: supplied, json })))
+    if json && !cmd.json {
+        return Some(Err(Err(format!("{} does not support --json\n", cmd.name))));
+    }
+    Some(Ok((
+        cmd,
+        Invocation {
+            args: supplied,
+            json,
+        },
+    )))
 }
 
 pub(crate) fn launch_mode(args: &[String]) -> LaunchMode {
-    let Some(Ok((command, invocation))) = parse(args) else { return LaunchMode::Attached; };
+    let Some(Ok((command, invocation))) = parse(args) else {
+        return LaunchMode::Attached;
+    };
     match command.launch {
         Some(LaunchKind::Standalone) => LaunchMode::Standalone,
-        Some(LaunchKind::Session) => LaunchMode::Session(invocation.get("name").unwrap_or_default().to_owned()),
+        Some(LaunchKind::Session) => {
+            LaunchMode::Session(invocation.get("name").unwrap_or_default().to_owned())
+        }
         Some(LaunchKind::New) => LaunchMode::New {
-            path: invocation.get("path").map(str::to_owned), name: invocation.get("name").map(str::to_owned),
+            path: invocation.get("path").map(str::to_owned),
+            name: invocation.get("name").map(str::to_owned),
         },
         None => LaunchMode::Attached,
     }
@@ -230,7 +312,9 @@ fn usage_of(cmd: &Command) -> String {
     if cmd.json {
         usage.push_str(" [--json]");
     }
-    for option in cmd.options { usage.push_str(&format!(" [--{} <{}>]", option.name, option.name)); }
+    for option in cmd.options {
+        usage.push_str(&format!(" [--{} <{}>]", option.name, option.name));
+    }
     usage
 }
 

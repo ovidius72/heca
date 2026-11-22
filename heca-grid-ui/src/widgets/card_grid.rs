@@ -145,7 +145,11 @@ impl CardGrid {
     /// this widget's. `cards` must be in the same left-to-right order the layout draws them, or the
     /// cursor and the picture disagree.
     #[heca_grid_ui_macros::host_only("a row of composed columns, not a scalar")]
-    pub fn row(mut self, columns: Vec<Vec<GridCell>>, layout: impl crate::builders::IntoComponent) -> Self {
+    pub fn row(
+        mut self,
+        columns: Vec<Vec<GridCell>>,
+        layout: impl crate::builders::IntoComponent,
+    ) -> Self {
         self.rows.push(
             columns
                 .iter()

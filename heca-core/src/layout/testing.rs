@@ -118,11 +118,19 @@ impl Windowed {
             for panes in *columns {
                 let mut ids = panes.iter();
                 let Some(first) = ids.next() else { continue };
-                window.m().add_pane(super::Pane::new(super::PaneId(*first), "p"), None, true);
-                let col = window.l().workspace(idx).map_or(0, |ws| ws.scrolling.columns.len() - 1);
+                window
+                    .m()
+                    .add_pane(super::Pane::new(super::PaneId(*first), "p"), None, true);
+                let col = window
+                    .l()
+                    .workspace(idx)
+                    .map_or(0, |ws| ws.scrolling.columns.len() - 1);
                 for id in ids {
                     let pane = super::Pane::new(super::PaneId(*id), "p");
-                    window.ws().scroll_mut().add_pane_to_column(col, None, pane, false);
+                    window
+                        .ws()
+                        .scroll_mut()
+                        .add_pane_to_column(col, None, pane, false);
                 }
             }
         }

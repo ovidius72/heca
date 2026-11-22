@@ -46,7 +46,11 @@ fn a_components_action_is_scoped_and_focuses_first() {
         owner("docker.right", "Containers", false),
     )]);
 
-    let rows = entries(&catalog, &owners, &crate::chrome::ActionShortcuts::default());
+    let rows = entries(
+        &catalog,
+        &owners,
+        &crate::chrome::ActionShortcuts::default(),
+    );
     let entry = find(&rows, "docker.restart");
     assert_eq!(entry.label, "Containers › Restart Container");
     assert_eq!(entry.description, "Restart Container — what it does.");
@@ -85,8 +89,14 @@ fn session_with_panes() -> heca_core::layout::testing::Windowed {
 
 fn mirrored_panes(session: &heca_core::layout::Session) -> crate::chrome::PaneRuntimeStore {
     let state = crate::chrome::SharedChromeState::new(280.0, 260.0);
-    for pane in session.workspaces.iter().flat_map(|workspace| workspace.panes()) {
-        state.panes.set_runtime(pane.id, &pane.runtime, pane.custom_name.as_deref());
+    for pane in session
+        .workspaces
+        .iter()
+        .flat_map(|workspace| workspace.panes())
+    {
+        state
+            .panes
+            .set_runtime(pane.id, &pane.runtime, pane.custom_name.as_deref());
     }
     state.panes
 }
@@ -134,11 +144,17 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
     });
     for named in [false, true] {
         let ran = Rc::new(RefCell::new(String::new()));
-        let (palette, rows) = modes::populate(CommandPalette::new(), &declared, &sources, |row| {
-            let ran = ran.clone();
-            let id = row.id.clone();
-            Command::new(row.label.clone(), move || *ran.borrow_mut() = id.clone())
-        }, |_| Box::new(|| {}));
+        let (palette, rows) = modes::populate(
+            CommandPalette::new(),
+            &declared,
+            &sources,
+            |row| {
+                let ran = ran.clone();
+                let id = row.id.clone();
+                Command::new(row.label.clone(), move || *ran.borrow_mut() = id.clone())
+            },
+            |_| Box::new(|| {}),
+        );
         assert!(rows.iter().any(|row| row.id == "custom:ws:0"));
         assert_eq!(rows.len(), palette.label_signals().len());
         let mut palette = if named {
@@ -155,16 +171,21 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
 fn rpc_keeps_the_mode_and_query_on_the_existing_palette_action() {
     let catalog = ActionCatalog::with_builtins();
     for scope in ["command", "pane", "workspace", "session", "unknown"] {
-        let (intent, dock) = crate::rpc::parse_rpc(&format!(
-            "command_palette mode={scope} query=nvim",
-        ))
-        .expect("the RPC line parses")
-        .into_intent(&catalog)
-        .expect("the existing catalog names both optional arguments");
-        let args = intent.args.iter().map(|(key, value)| {
-            let PropValue::Text(value) = value else { panic!("RPC argument is not text") };
-            (key.clone(), value.clone())
-        }).collect();
+        let (intent, dock) =
+            crate::rpc::parse_rpc(&format!("command_palette mode={scope} query=nvim",))
+                .expect("the RPC line parses")
+                .into_intent(&catalog)
+                .expect("the existing catalog names both optional arguments");
+        let args = intent
+            .args
+            .iter()
+            .map(|(key, value)| {
+                let PropValue::Text(value) = value else {
+                    panic!("RPC argument is not text")
+                };
+                (key.clone(), value.clone())
+            })
+            .collect();
         assert_eq!(dock, None);
         assert_eq!(
             crate::input::resolve_action(&intent.action, &args),
@@ -297,7 +318,11 @@ fn only_a_named_workspace_carries_a_rank_id() {
         unnamed.rank_id, None,
         "no durable identity: 'Workspace 2' is the index, and the index is reused",
     );
-    match unnamed.intent.clone().expect("a workspace row runs something") {
+    match unnamed
+        .intent
+        .clone()
+        .expect("a workspace row runs something")
+    {
         InteractionIntent::ActivateAction(WmAction::FocusWorkspace { ws_idx }) => {
             assert_eq!(ws_idx, 1);
         }
@@ -401,7 +426,11 @@ fn the_focused_components_actions_come_first_and_the_rest_stay_listed() {
         ),
     ]);
 
-    let rows = entries(&catalog, &owners, &crate::chrome::ActionShortcuts::default());
+    let rows = entries(
+        &catalog,
+        &owners,
+        &crate::chrome::ActionShortcuts::default(),
+    );
     assert_eq!(rows[0].id, "ws.delete", "the focused component leads");
     assert!(
         rows.iter().any(|e| e.id == "docker.restart"),

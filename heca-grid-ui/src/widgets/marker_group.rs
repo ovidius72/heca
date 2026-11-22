@@ -130,7 +130,9 @@ impl MarkerGroup {
     /// Is `pos` within the left grip gutter (the group's own grab/target surface)?
     fn in_grip(&self, pos: Point) -> bool {
         let b = self.base.bounds;
-        self.marker && b.contains(pos) && (pos.x - b.loc.x) <= f64::from(self.gutter.resolve(self.base.font))
+        self.marker
+            && b.contains(pos)
+            && (pos.x - b.loc.x) <= f64::from(self.gutter.resolve(self.base.font))
     }
 }
 
@@ -169,7 +171,9 @@ impl Component for MarkerGroup {
     fn taffy_style(&self) -> taffy::Style {
         use taffy::prelude::length;
         let mut s = self.base.style.layout.to_taffy(self.base.font);
-        if self.marker { s.padding.left = length(self.gutter.resolve(self.base.font)); }
+        if self.marker {
+            s.padding.left = length(self.gutter.resolve(self.base.font));
+        }
         s
     }
 
@@ -302,13 +306,19 @@ mod tests {
     fn reserves_left_grip_gutter() {
         let g = MarkerGroup::new();
         let s = g.taffy_style();
-        assert_eq!(s.padding.left, taffy::prelude::length(g.gutter.resolve(g.base.font)));
+        assert_eq!(
+            s.padding.left,
+            taffy::prelude::length(g.gutter.resolve(g.base.font))
+        );
     }
 
     #[test]
     fn a_hidden_marker_reserves_no_gutter_and_owns_no_grip() {
         let g = MarkerGroup::new().marker(false);
-        assert_eq!(g.taffy_style().padding.left, taffy::prelude::length(0.0_f32));
+        assert_eq!(
+            g.taffy_style().padding.left,
+            taffy::prelude::length(0.0_f32)
+        );
         assert!(!g.in_grip(Point::new(5.0, 20.0)));
     }
 
@@ -319,7 +329,10 @@ mod tests {
         for font in [20.0, 40.0] {
             group.base.font = font;
             let gap = f64::from(font * Spacing::Xs.scale());
-            assert_eq!(group.taffy_style().padding.left, taffy::prelude::length(gap as f32));
+            assert_eq!(
+                group.taffy_style().padding.left,
+                taffy::prelude::length(gap as f32)
+            );
             assert!(group.in_grip(Point::new(gap / 2.0, 20.0)));
             assert!(!group.in_grip(Point::new(gap + 1.0, 20.0)));
         }

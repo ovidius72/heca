@@ -124,8 +124,15 @@ pub(crate) fn home_relative_path(path: &std::path::Path) -> String {
     if let Some(home) = dirs::home_dir()
         && let Ok(rest) = path.strip_prefix(&home)
     {
-        let parts: Vec<_> = rest.components().map(|c| c.as_os_str().to_string_lossy()).collect();
-        return if parts.is_empty() { "~".to_string() } else { format!("~/{}", parts.join("/")) };
+        let parts: Vec<_> = rest
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect();
+        return if parts.is_empty() {
+            "~".to_string()
+        } else {
+            format!("~/{}", parts.join("/"))
+        };
     }
     path.display().to_string()
 }

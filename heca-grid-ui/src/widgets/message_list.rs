@@ -1,8 +1,8 @@
 //! A growing list of composed entries. ScrollRegion owns the viewport and following the bottom.
 
-use std::{cell::RefCell, rc::Rc};
+use crate::builders::IntoComponent;
 use crate::{Base, Component, Label, LayoutExt, PaintCx, ScrollRegion};
-use crate::builders::{IntoComponent};
+use std::{cell::RefCell, rc::Rc};
 
 /// A producer for a mounted message list. Retain it before moving the list into a tree.
 #[derive(Clone)]
@@ -57,9 +57,17 @@ impl MessageList {
     pub fn new() -> Self {
         let mut base = Base::container();
         base.style.layout.gap = "sm".into();
-        base.children.push(crate::WidgetModel::new(ScrollRegion::new().follow_bottom(true)
-            .width("100%").height("100%")));
-        Self { base, feed: MessageFeed(Rc::default()), visible_lines: None }
+        base.children.push(crate::WidgetModel::new(
+            ScrollRegion::new()
+                .follow_bottom(true)
+                .width("100%")
+                .height("100%"),
+        ));
+        Self {
+            base,
+            feed: MessageFeed(Rc::default()),
+            visible_lines: None,
+        }
     }
     /// Append a wrapped text entry (also the `message` property for a described list).
     #[heca_grid_ui_macros::prop]
@@ -76,20 +84,36 @@ impl MessageList {
     /// Bound the viewport to this many text lines (at least one), instead of its parent height.
     /// Unset by default. This limits the viewport, not the size or number of entries.
     #[heca_grid_ui_macros::prop]
-    pub fn visible_lines(mut self, lines: usize) -> Self { self.visible_lines = Some(lines.max(1)); self }
+    pub fn visible_lines(mut self, lines: usize) -> Self {
+        self.visible_lines = Some(lines.max(1));
+        self
+    }
 
     /// A cloneable producer; appending schedules a frame and keeps existing entry widgets alive.
-    pub fn feed(&self) -> MessageFeed { self.feed.clone() }
+    pub fn feed(&self) -> MessageFeed {
+        self.feed.clone()
+    }
 }
 
-impl Default for MessageList { fn default() -> Self { Self::new() } }
+impl Default for MessageList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Component for MessageList {
-    fn base(&self) -> &Base { &self.base }
-    fn base_mut(&mut self) -> &mut Base { &mut self.base }
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
     fn taffy_style(&self) -> taffy::Style {
         let mut layout = self.base.style.layout;
-        if let Some(lines) = self.visible_lines && layout.height == crate::Length::Auto {
-            layout.height = crate::Length::Px(self.base.font * crate::font::MONO_LINE_RATIO * lines as f32);
+        if let Some(lines) = self.visible_lines
+            && layout.height == crate::Length::Auto
+        {
+            layout.height =
+                crate::Length::Px(self.base.font * crate::font::MONO_LINE_RATIO * lines as f32);
         }
         layout.to_taffy(self.base.font)
     }
@@ -100,12 +124,16 @@ impl Component for MessageList {
     fn tick(&mut self, dt: f32) -> bool {
         self.append_pending();
         let mut moving = self.base.tick_presence(dt);
-        for child in &mut self.base.children { moving |= child.tick(dt); }
+        for child in &mut self.base.children {
+            moving |= child.tick(dt);
+        }
         moving
     }
     fn paint(&self, cx: &mut PaintCx) {
         cx.paint_base(&self.base);
-        for child in &self.base.children { crate::component::paint_child(child.as_ref(), cx); }
+        for child in &self.base.children {
+            crate::component::paint_child(child.as_ref(), cx);
+        }
     }
 }
 impl MessageList {

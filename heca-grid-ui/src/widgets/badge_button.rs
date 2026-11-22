@@ -85,7 +85,6 @@ impl BadgeButton {
         self
     }
 
-
     /// The reactive label signal, so hosts can update the text live.
     pub fn label_signal(&self) -> Signal<String> {
         self.label
@@ -205,7 +204,10 @@ impl Component for BadgeButton {
 
     /// The press shows on the control itself; what it does belongs to its click handlers.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if matches!(ev, Event::Click(_)) && self.base.activatable && !self.base.disabled.get_untracked() {
+        if matches!(ev, Event::Click(_))
+            && self.base.activatable
+            && !self.base.disabled.get_untracked()
+        {
             self.flash.trigger();
         }
         Handled::No
@@ -214,7 +216,6 @@ impl Component for BadgeButton {
     fn is_control(&self) -> bool {
         true
     }
-
 
     fn tick(&mut self, dt: f32) -> bool {
         let next = self.label.get_untracked();
@@ -257,7 +258,8 @@ mod tests {
         assert_eq!(hit.get(), 0, "the press alone has not clicked anything yet");
         // The click bubbles on to whatever holds the button, as a mouse click does; what matters
         // is that the button's own handler heard it.
-        let _ = crate::component::dispatch(&mut b, &Event::pointer_released(pos, PointerButton::Left));
+        let _ =
+            crate::component::dispatch(&mut b, &Event::pointer_released(pos, PointerButton::Left));
         assert_eq!(hit.get(), 1);
     }
 

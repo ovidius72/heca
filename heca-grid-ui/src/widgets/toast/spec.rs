@@ -136,7 +136,9 @@ impl ToastSpec {
     /// **Set the lifetime this toast auto-dismisses over** — the span a
     /// [`progress`](crate::widgets::Toast::progress) bar depletes across. Leave it unset for a
     /// toast with no timer (the card then shows no bar even with `progress` on).
-    #[heca_grid_ui_macros::host_only("a lifetime span the host supplies, not a value static data carries")]
+    #[heca_grid_ui_macros::host_only(
+        "a lifetime span the host supplies, not a value static data carries"
+    )]
     pub fn countdown(mut self, lifetime: Duration) -> Self {
         self.countdown = Some(lifetime);
         self

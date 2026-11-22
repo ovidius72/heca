@@ -37,7 +37,9 @@ impl NotificationView {
     /// The action whose `intent.action` name is `key` — the same name
     /// `ToastStack::on_action(id, key)` reports back.
     pub fn action(&self, key: &str) -> Option<&NotificationAction> {
-        self.actions.iter().find(|action| action.intent.action == key)
+        self.actions
+            .iter()
+            .find(|action| action.intent.action == key)
     }
 }
 

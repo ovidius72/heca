@@ -26,7 +26,10 @@ fn set_region_visibility(
     state.chrome_tree = None;
 }
 
-pub fn handle_sidebar_left(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_sidebar_left(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     set_region_visibility(
         state,
         crate::chrome::RegionId::LeftSidebar,
@@ -35,7 +38,10 @@ pub fn handle_sidebar_left(state: &mut AppState, _action: &WmAction) -> crate::a
     Ok(())
 }
 
-pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_sidebar_right(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     set_region_visibility(
         state,
         crate::chrome::RegionId::RightSidebar,
@@ -123,7 +129,9 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) -> crate::acti
             // Only a container the host actually has: focus is a promise that something is there to
             // receive the keys. Say so rather than letting the call vanish — a typo in an RPC call
             // or a binding's `dock` argument is otherwise indistinguishable from success.
-            return Err(format!("no container mounted under id or component '{dock}'"));
+            return Err(format!(
+                "no container mounted under id or component '{dock}'"
+            ));
         };
         // **Idempotent on purpose** — a click inside the dock, an RPC call and the command palette
         // all mean "focus it", and none of them mean "and release it if it already is". The release
@@ -186,7 +194,10 @@ pub fn handle_toggle_dock(state: &mut AppState, action: &WmAction) -> crate::act
 ///
 /// A no-op when no dock is focused, so `Esc` in the focus layer and an RPC call are both safe to
 /// repeat.
-pub fn handle_unfocus_dock(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_unfocus_dock(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let Some(dock) = crate::app::tree_focus::focused_dock(state) else {
         return Ok(());
     };
@@ -196,7 +207,10 @@ pub fn handle_unfocus_dock(state: &mut AppState, _action: &WmAction) -> crate::a
 
 /// Move a mounted container to another chrome region (validated against the
 /// container's `supported_regions`).
-pub fn handle_move_container_to_region(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_move_container_to_region(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::MoveContainerToRegion {
         container_id,
         region,
@@ -204,13 +218,18 @@ pub fn handle_move_container_to_region(state: &mut AppState, action: &WmAction) 
     else {
         return Ok(());
     };
-    state.chrome_host.move_container(container_id, *region)
+    state
+        .chrome_host
+        .move_container(container_id, *region)
         .map_err(|e| format!("cannot move container '{container_id}': {e}"))
 }
 
 /// Reorder a mounted container within its region, before `before_id` (or to the
 /// end when `None`).
-pub fn handle_reorder_container_before(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_reorder_container_before(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::ReorderContainerBefore {
         container_id,
         before_id,
@@ -225,7 +244,10 @@ pub fn handle_reorder_container_before(state: &mut AppState, action: &WmAction) 
 }
 
 /// Reorder a mounted container within its region, immediately after `after_id`.
-pub fn handle_reorder_container_after(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_reorder_container_after(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::ReorderContainerAfter {
         container_id,
         after_id,
@@ -233,12 +255,17 @@ pub fn handle_reorder_container_after(state: &mut AppState, action: &WmAction) -
     else {
         return Ok(());
     };
-    state.chrome_host.reorder_after(container_id, after_id)
+    state
+        .chrome_host
+        .reorder_after(container_id, after_id)
         .map_err(|e| format!("cannot reorder container '{container_id}' after '{after_id}': {e}"))
 }
 
 /// Show / hide / toggle a chrome region — the runtime side of `[settings] show_*`.
-pub fn handle_set_region_visible(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_set_region_visible(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::SetRegionVisible { region, visible } = *action else {
         return Ok(());
     };
@@ -246,14 +273,19 @@ pub fn handle_set_region_visible(state: &mut AppState, action: &WmAction) -> cra
     Ok(())
 }
 
-pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_layer_visibility(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let (name, show) = match action {
         WmAction::ShowLayer { name, .. } => (name, Some(true)),
         WmAction::HideLayer { name, .. } => (name, Some(false)),
         WmAction::ToggleLayer { name, .. } => (name, None),
         _ => return Ok(()),
     };
-    let Some(name) = name.as_deref() else { return Ok(()) };
+    let Some(name) = name.as_deref() else {
+        return Ok(());
+    };
     // **Rebuild before showing.** A layer's content is structural — panes open, workspaces come and
     // go — and a signal replaces a prop, never a child. So shape follows a re-registration, and the
     // moment a layer is asked for is the moment its shape must be current. Without this the exposé

@@ -352,7 +352,10 @@ impl WorkspaceMut<'_> {
         }
         let prev = col_idx - 1;
         scroll.activate_column(prev);
-        let last = scroll.columns.get(prev).map(|c| c.panes.len().saturating_sub(1));
+        let last = scroll
+            .columns
+            .get(prev)
+            .map(|c| c.panes.len().saturating_sub(1));
         if let Some(last) = last {
             scroll.focus_pane_in(prev, last);
         }

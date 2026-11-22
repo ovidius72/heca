@@ -10,14 +10,19 @@ pub enum Audio {
 }
 
 impl Audio {
-    pub fn load(path: impl Into<PathBuf>) -> Self { Self::File(path.into()) }
-    pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Self { Self::Bytes(Arc::from(bytes.as_ref())) }
+    pub fn load(path: impl Into<PathBuf>) -> Self {
+        Self::File(path.into())
+    }
+    pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Self {
+        Self::Bytes(Arc::from(bytes.as_ref()))
+    }
 
     pub(crate) fn decode(&self) -> Result<Box<dyn rodio::Source + Send>, String> {
         match self {
             Self::File(path) => {
                 let file = File::open(path).map_err(|error| error.to_string())?;
-                rodio::Decoder::try_from(file).map(|source| Box::new(source) as Box<dyn rodio::Source + Send>)
+                rodio::Decoder::try_from(file)
+                    .map(|source| Box::new(source) as Box<dyn rodio::Source + Send>)
                     .map_err(|error| error.to_string())
             }
             Self::Bytes(bytes) => rodio::Decoder::try_from(Cursor::new(bytes.clone()))

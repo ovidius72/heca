@@ -228,7 +228,7 @@ pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         RawPointerKind::Recheck => {
             let _ = retarget_hover(root, raw);
             Handled::No
-        },
+        }
         RawPointerKind::Pressed => route_press(root, raw),
         RawPointerKind::Released => route_release(root, raw),
         RawPointerKind::Wheel => route_wheel(root, raw),

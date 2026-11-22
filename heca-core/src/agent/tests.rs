@@ -9,22 +9,45 @@ pub(crate) struct ExternalDriver {
 
 impl ExternalDriver {
     pub(crate) fn new(id: &str) -> Self {
-        Self { id: id.into(), programs: vec!["demo-agent".into()], report_driver: id.into(), icon: None }
+        Self {
+            id: id.into(),
+            programs: vec!["demo-agent".into()],
+            report_driver: id.into(),
+            icon: None,
+        }
     }
 }
 
 impl AgentDriver for ExternalDriver {
-    fn id(&self) -> &str { &self.id }
-    fn name(&self) -> &str { "Demo" }
-    fn icon(&self) -> Option<AgentIcon> { self.icon.clone() }
-    fn programs(&self) -> &[String] { &self.programs }
+    fn id(&self) -> &str {
+        &self.id
+    }
+    fn name(&self) -> &str {
+        "Demo"
+    }
+    fn icon(&self) -> Option<AgentIcon> {
+        self.icon.clone()
+    }
+    fn programs(&self) -> &[String] {
+        &self.programs
+    }
 
     fn prepare(&self, context: &AgentLaunchContext) -> Result<AgentSetup, AgentError> {
-        let mut environment: std::collections::BTreeMap<String, String> = context.environment.get("DEMO_CONFIG")
-            .map(|value| ("DEMO_CONFIG".into(), value.clone())).into_iter().collect();
-        environment.insert("DEMO_LAUNCHER".into(), context.reporter.executable.display().to_string());
+        let mut environment: std::collections::BTreeMap<String, String> = context
+            .environment
+            .get("DEMO_CONFIG")
+            .map(|value| ("DEMO_CONFIG".into(), value.clone()))
+            .into_iter()
+            .collect();
+        environment.insert(
+            "DEMO_LAUNCHER".into(),
+            context.reporter.executable.display().to_string(),
+        );
         Ok(AgentSetup {
-            arguments: vec!["--status-file".into(), context.directory.join("status").display().to_string()],
+            arguments: vec![
+                "--status-file".into(),
+                context.directory.join("status").display().to_string(),
+            ],
             environment,
         })
     }
@@ -32,11 +55,18 @@ impl AgentDriver for ExternalDriver {
     fn read_status(&self, input: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> {
         let payload = match input {
             AgentInput::Notification(notification) => notification.payload.as_str(),
-            AgentInput::SideChannel(bytes) => std::str::from_utf8(bytes)
-                .map_err(|error| AgentError::Report(error.to_string()))?,
+            AgentInput::SideChannel(bytes) => {
+                std::str::from_utf8(bytes).map_err(|error| AgentError::Report(error.to_string()))?
+            }
         };
-        let Some(status) = payload.strip_prefix("demo:") else { return Ok(None) };
-        Ok(Some(AgentState::new(&self.report_driver, self.name(), AgentStatus::new(status))))
+        let Some(status) = payload.strip_prefix("demo:") else {
+            return Ok(None);
+        };
+        Ok(Some(AgentState::new(
+            &self.report_driver,
+            self.name(),
+            AgentStatus::new(status),
+        )))
     }
 }
 
@@ -44,10 +74,22 @@ impl AgentDriver for ExternalDriver {
 fn external_driver_recognizes_paths_and_reports_an_open_status() {
     let mut drivers = AgentDrivers::new();
     drivers.register(ExternalDriver::new("demo")).unwrap();
-    let notification = TerminalNotification { code: 9, payload: "demo:reviewing".into() };
+    let notification = TerminalNotification {
+        code: 9,
+        payload: "demo:reviewing".into(),
+    };
     assert_eq!(
-        drivers.read_status("/custom/bin/demo-agent", AgentInput::Notification(&notification)).unwrap(),
-        Some(AgentState::new("demo", "Demo", AgentStatus::new("reviewing"))),
+        drivers
+            .read_status(
+                "/custom/bin/demo-agent",
+                AgentInput::Notification(&notification)
+            )
+            .unwrap(),
+        Some(AgentState::new(
+            "demo",
+            "Demo",
+            AgentStatus::new("reviewing")
+        )),
     );
 }
 
@@ -55,16 +97,32 @@ fn external_driver_recognizes_paths_and_reports_an_open_status() {
 fn unrelated_program_cannot_set_agent_status() {
     let mut drivers = AgentDrivers::new();
     drivers.register(ExternalDriver::new("demo")).unwrap();
-    let notification = TerminalNotification { code: 9, payload: "demo:working".into() };
-    assert_eq!(drivers.read_status("editor", AgentInput::Notification(&notification)).unwrap(), None);
+    let notification = TerminalNotification {
+        code: 9,
+        payload: "demo:working".into(),
+    };
+    assert_eq!(
+        drivers
+            .read_status("editor", AgentInput::Notification(&notification))
+            .unwrap(),
+        None
+    );
 }
 
 #[test]
 fn ordinary_notification_is_not_guessed_to_be_an_agent_status() {
     let mut drivers = AgentDrivers::new();
     drivers.register(ExternalDriver::new("demo")).unwrap();
-    let notification = TerminalNotification { code: 9, payload: "Download complete".into() };
-    assert_eq!(drivers.read_status("demo-agent", AgentInput::Notification(&notification)).unwrap(), None);
+    let notification = TerminalNotification {
+        code: 9,
+        payload: "Download complete".into(),
+    };
+    assert_eq!(
+        drivers
+            .read_status("demo-agent", AgentInput::Notification(&notification))
+            .unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -73,16 +131,30 @@ fn driver_cannot_claim_another_drivers_identity() {
     let mut driver = ExternalDriver::new("demo");
     driver.report_driver = "another".into();
     drivers.register(driver).unwrap();
-    let notification = TerminalNotification { code: 9, payload: "demo:working".into() };
-    assert!(drivers.read_status("demo-agent", AgentInput::Notification(&notification)).is_err());
+    let notification = TerminalNotification {
+        code: 9,
+        payload: "demo:working".into(),
+    };
+    assert!(
+        drivers
+            .read_status("demo-agent", AgentInput::Notification(&notification))
+            .is_err()
+    );
 }
 
 #[test]
 fn empty_report_status_is_rejected() {
     let mut drivers = AgentDrivers::new();
     drivers.register(ExternalDriver::new("demo")).unwrap();
-    let notification = TerminalNotification { code: 9, payload: "demo:".into() };
-    assert!(drivers.read_status("demo-agent", AgentInput::Notification(&notification)).is_err());
+    let notification = TerminalNotification {
+        code: 9,
+        payload: "demo:".into(),
+    };
+    assert!(
+        drivers
+            .read_status("demo-agent", AgentInput::Notification(&notification))
+            .is_err()
+    );
 }
 
 #[test]
@@ -100,8 +172,14 @@ fn a_registered_icon_follows_both_report_channels_without_entering_native_report
     driver.icon = Some(icon.clone());
     let mut drivers = AgentDrivers::new();
     drivers.register(driver).unwrap();
-    let notification = TerminalNotification { code: 9, payload: "demo:reviewing".into() };
-    for input in [AgentInput::Notification(&notification), AgentInput::SideChannel(b"demo:reviewing")] {
+    let notification = TerminalNotification {
+        code: 9,
+        payload: "demo:reviewing".into(),
+    };
+    for input in [
+        AgentInput::Notification(&notification),
+        AgentInput::SideChannel(b"demo:reviewing"),
+    ] {
         let report = drivers.read_status("demo-agent", input).unwrap().unwrap();
         assert_eq!(report.icon, Some(icon.clone()));
     }
@@ -113,11 +191,20 @@ fn a_registered_icon_follows_both_report_channels_without_entering_native_report
 fn optional_presentation_fields_preserve_old_reports_and_round_trip_assets() {
     let old = r#"{"driver":"demo","name":"Demo","status":"working","task":null,"detail":null,"turn_id":null}"#;
     let mut report: AgentState = serde_json::from_str(old).unwrap();
-    assert_eq!(report, AgentState::new("demo", "Demo", AgentStatus::new("working")));
-    for icon in [AgentIcon::file("/package/icons/logo.png"), AgentIcon::svg("<svg/>")] {
+    assert_eq!(
+        report,
+        AgentState::new("demo", "Demo", AgentStatus::new("working"))
+    );
+    for icon in [
+        AgentIcon::file("/package/icons/logo.png"),
+        AgentIcon::svg("<svg/>"),
+    ] {
         report.icon = Some(icon);
         let bytes = serde_json::to_vec(&report).unwrap();
-        assert_eq!(serde_json::from_slice::<AgentState>(&bytes).unwrap(), report);
+        assert_eq!(
+            serde_json::from_slice::<AgentState>(&bytes).unwrap(),
+            report
+        );
     }
 }
 

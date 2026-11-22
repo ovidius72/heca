@@ -31,7 +31,10 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
     }
 
     let cases: Vec<(&str, Vec<String>)> = vec![
-        ("FocusScope", probe_in(|p| heca_grid_ui::WidgetModel::new(FocusScope::new(p)))),
+        (
+            "FocusScope",
+            probe_in(|p| heca_grid_ui::WidgetModel::new(FocusScope::new(p))),
+        ),
         (
             "DockFrame",
             probe_in(|p| heca_grid_ui::WidgetModel::new(DockFrame::new("DOCK").child(p))),
@@ -48,7 +51,9 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
         ),
         (
             "Dialog",
-            probe_in(|p| heca_grid_ui::WidgetModel::new(Dialog::new("T").body(p).default_open(true))),
+            probe_in(|p| {
+                heca_grid_ui::WidgetModel::new(Dialog::new("T").body(p).default_open(true))
+            }),
         ),
     ];
     for (name, seen) in cases {

@@ -183,7 +183,12 @@ pub(crate) struct WheelRemainders(HashMap<TerminalId, (f64, f64)>);
 impl WheelRemainders {
     /// **The whole notches `(x, y)` this turn completes**, keeping the rest for the next. A wheel's
     /// lines are notches already; a trackpad's pixels are counted in cells (`cell` = width, height).
-    fn notches(&mut self, terminal: TerminalId, delta: MouseScrollDelta, cell: (f64, f64)) -> (i32, i32) {
+    fn notches(
+        &mut self,
+        terminal: TerminalId,
+        delta: MouseScrollDelta,
+        cell: (f64, f64),
+    ) -> (i32, i32) {
         let (dx, dy) = match delta {
             MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
             MouseScrollDelta::PixelDelta(p) => (per_cell(p.x, cell.0), per_cell(p.y, cell.1)),
@@ -209,7 +214,9 @@ fn notches_of(state: &mut AppState, terminal: TerminalId, delta: MouseScrollDelt
         .get_by_id(terminal)
         .map(|b| b.cell_size())
         .unwrap_or(state.terminal_cell_size);
-    state.terminal_wheel.notches(terminal, delta, (f64::from(cell.0), f64::from(cell.1)))
+    state
+        .terminal_wheel
+        .notches(terminal, delta, (f64::from(cell.0), f64::from(cell.1)))
 }
 
 /// Lines per notch — `terminal_wheel_scroll_lines`, for the history and the program alike.
@@ -224,10 +231,21 @@ fn wheel_reports((x, y): (i32, i32), lines: i32) -> Vec<BackendMouseButton> {
     let mut reports = Vec::new();
     let mut push = |notches: i32, positive: BackendMouseButton, negative: BackendMouseButton| {
         let button = if notches > 0 { positive } else { negative };
-        reports.extend(std::iter::repeat_n(button, (notches.unsigned_abs() as usize) * lines.max(0) as usize));
+        reports.extend(std::iter::repeat_n(
+            button,
+            (notches.unsigned_abs() as usize) * lines.max(0) as usize,
+        ));
     };
-    push(y, BackendMouseButton::WheelUp(1), BackendMouseButton::WheelDown(1));
-    push(x, BackendMouseButton::WheelRight(1), BackendMouseButton::WheelLeft(1));
+    push(
+        y,
+        BackendMouseButton::WheelUp(1),
+        BackendMouseButton::WheelDown(1),
+    );
+    push(
+        x,
+        BackendMouseButton::WheelRight(1),
+        BackendMouseButton::WheelLeft(1),
+    );
     reports
 }
 
@@ -273,7 +291,14 @@ mod tests {
         ));
         // And the pixels, not the lines, decide the unit: 14 px is one 14-px cell.
         let mut left = WheelRemainders::default();
-        assert_eq!(left.notches(TerminalId(1), device_delta((0.0, 0.7), Some((0.0, 14.0))), (8.0, 14.0)), (0, -1));
+        assert_eq!(
+            left.notches(
+                TerminalId(1),
+                device_delta((0.0, 0.7), Some((0.0, 14.0))),
+                (8.0, 14.0)
+            ),
+            (0, -1)
+        );
     }
 
     /// **A slow trackpad gesture adds up**: turns smaller than a cell scroll nothing until they make
@@ -283,12 +308,32 @@ mod tests {
         let mut left = WheelRemainders::default();
         let (a, b) = (TerminalId(1), TerminalId(2));
         let turn = |px: f32| device_delta((0.0, 0.0), Some((0.0, px)));
-        assert_eq!(left.notches(a, turn(5.0), (8.0, 14.0)), (0, 0), "under a cell: nothing yet");
-        assert_eq!(left.notches(b, turn(5.0), (8.0, 14.0)), (0, 0), "another terminal starts from zero");
+        assert_eq!(
+            left.notches(a, turn(5.0), (8.0, 14.0)),
+            (0, 0),
+            "under a cell: nothing yet"
+        );
+        assert_eq!(
+            left.notches(b, turn(5.0), (8.0, 14.0)),
+            (0, 0),
+            "another terminal starts from zero"
+        );
         assert_eq!(left.notches(a, turn(5.0), (8.0, 14.0)), (0, 0));
-        assert_eq!(left.notches(a, turn(5.0), (8.0, 14.0)), (0, -1), "15 px make one 14-px cell");
-        assert_eq!(left.notches(a, turn(13.0), (8.0, 14.0)), (0, -1), "the 1 px left over counts");
-        assert_eq!(left.notches(a, device_delta((0.0, 2.0), None), (8.0, 14.0)), (0, -2), "a wheel's notches are whole");
+        assert_eq!(
+            left.notches(a, turn(5.0), (8.0, 14.0)),
+            (0, -1),
+            "15 px make one 14-px cell"
+        );
+        assert_eq!(
+            left.notches(a, turn(13.0), (8.0, 14.0)),
+            (0, -1),
+            "the 1 px left over counts"
+        );
+        assert_eq!(
+            left.notches(a, device_delta((0.0, 2.0), None), (8.0, 14.0)),
+            (0, -2),
+            "a wheel's notches are whole"
+        );
     }
 
     /// **A program hears as many lines per notch as the history scrolls**: notches × the setting,
@@ -297,7 +342,11 @@ mod tests {
     #[test]
     fn a_program_is_sent_one_report_per_line_of_every_notch() {
         use BackendMouseButton::{WheelDown, WheelLeft, WheelRight, WheelUp};
-        assert_eq!(wheel_reports((0, 2), 3), vec![WheelUp(1); 6], "two notches of three lines");
+        assert_eq!(
+            wheel_reports((0, 2), 3),
+            vec![WheelUp(1); 6],
+            "two notches of three lines"
+        );
         assert_eq!(wheel_reports((0, -1), 6), vec![WheelDown(1); 6]);
         assert_eq!(wheel_reports((1, 0), 2), vec![WheelRight(1); 2]);
         assert_eq!(wheel_reports((-1, 1), 1), vec![WheelUp(1), WheelLeft(1)]);

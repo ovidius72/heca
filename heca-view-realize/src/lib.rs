@@ -143,11 +143,22 @@ pub fn realize(
 /// The node's `tooltip_side`, `tooltip_delay` and `tooltip_quick`, onto the tip it declared —
 /// words or a widget alike. Nothing to do on a node that declared no tooltip.
 pub(crate) fn apply_tip_options(realized: &mut dyn Component, node: &ViewNode) {
-    let Some(tip) = realized.base_mut().tooltip.as_mut() else { return };
-    if let Some(side) = node.props.get("tooltip_side").and_then(PropValue::as_text).and_then(tooltip_side) {
+    let Some(tip) = realized.base_mut().tooltip.as_mut() else {
+        return;
+    };
+    if let Some(side) = node
+        .props
+        .get("tooltip_side")
+        .and_then(PropValue::as_text)
+        .and_then(tooltip_side)
+    {
         tip.side = side;
     }
-    if let Some(delay) = node.props.get("tooltip_delay").and_then(PropValue::as_float) {
+    if let Some(delay) = node
+        .props
+        .get("tooltip_delay")
+        .and_then(PropValue::as_float)
+    {
         tip.set_delay(delay as f32);
     }
     if node.props.get("tooltip_quick").and_then(PropValue::as_bool) == Some(true) {
@@ -382,7 +393,9 @@ pub(crate) fn apply_common_props(
 
 mod intents;
 mod registry;
-pub use registry::{RealizeCx, RealizeError, RealizeErrorKind, WidgetDefinition, WidgetMetadata, WidgetRegistry};
+pub use registry::{
+    RealizeCx, RealizeError, RealizeErrorKind, WidgetDefinition, WidgetMetadata, WidgetRegistry,
+};
 mod props;
 mod style;
 mod vocab;

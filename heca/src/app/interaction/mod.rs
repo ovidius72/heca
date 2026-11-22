@@ -46,10 +46,10 @@ mod types;
 mod view_intent;
 
 pub(crate) use dispatch::*;
+pub(crate) use domain::Domain;
 pub(crate) use focus::*;
 pub use policy::ActionPolicy;
 pub(crate) use policy::{action_allowed_when_floating, action_policy};
+pub(crate) use route::policy_allows_facts;
 pub(crate) use types::*;
 pub(crate) use view_intent::*;
-pub(crate) use domain::Domain;
-pub(crate) use route::policy_allows_facts;

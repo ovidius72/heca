@@ -25,11 +25,25 @@ mod tests {
             .child(ViewNode::new("label").text("Still here"));
         let emit: IntentEmitter = Rc::new(|_| {});
         for _ in 0..2 {
-            let root = realize(&node, &Theme::default(), &emit, &mut FormBindings::default())
-                .expect("native defaults preserve usable content");
-            assert_eq!(root.base().children[0].text_summary().as_deref(), Some("Still here"));
+            let root = realize(
+                &node,
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            )
+            .expect("native defaults preserve usable content");
+            assert_eq!(
+                root.base().children[0].text_summary().as_deref(),
+                Some("Still here")
+            );
         }
         let diagnostics = crate::chrome::input::identity::said();
-        assert_eq!(diagnostics.iter().filter(|message| message.contains("invalid 'axes' on 'scroll'")).count(), 1);
+        assert_eq!(
+            diagnostics
+                .iter()
+                .filter(|message| message.contains("invalid 'axes' on 'scroll'"))
+                .count(),
+            1
+        );
     }
 }

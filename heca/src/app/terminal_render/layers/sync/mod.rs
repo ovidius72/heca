@@ -4,7 +4,7 @@ use super::damage::{
     graphics_signature, image_row_ranges, retained_damage_to_apply, terminal_damage_copy_bands,
 };
 use crate::app::terminal_host::TerminalMount;
-use crate::app::terminal_render::{rect_to_text_box, TerminalRenderState};
+use crate::app::terminal_render::{TerminalRenderState, rect_to_text_box};
 use crate::app_state::AppState;
 use crate::chrome::panes::terminal::TerminalId;
 use heca_core::backend::TerminalDamage;

@@ -64,11 +64,7 @@ pub struct AgentState {
 
 impl AgentState {
     /// A report with no task, detail or turn identity.
-    pub fn new(
-        driver: impl Into<String>,
-        name: impl Into<String>,
-        status: AgentStatus,
-    ) -> Self {
+    pub fn new(driver: impl Into<String>, name: impl Into<String>, status: AgentStatus) -> Self {
         Self {
             launch: None,
             driver: driver.into(),
@@ -98,9 +94,15 @@ impl AgentState {
             && self.session_id.as_ref().is_some_and(|id| !id.is_empty())
             && self.session_id == previous.session_id
         {
-            if self.model.is_none() { self.model.clone_from(&previous.model); }
-            if self.session_title.is_none() { self.session_title.clone_from(&previous.session_title); }
-            if self.launch.is_none() { self.launch.clone_from(&previous.launch); }
+            if self.model.is_none() {
+                self.model.clone_from(&previous.model);
+            }
+            if self.session_title.is_none() {
+                self.session_title.clone_from(&previous.session_title);
+            }
+            if self.launch.is_none() {
+                self.launch.clone_from(&previous.launch);
+            }
         }
         self
     }

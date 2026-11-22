@@ -1,8 +1,6 @@
 use super::*;
 
 pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
-
-
     Flex::row()
         .gap(12.0)
         .align("center")

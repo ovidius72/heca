@@ -14,7 +14,8 @@ fn realizes_nested_structure() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(root.base().children.len(), 2, "column: label + row");
     let row = &root.base().children[1];
     assert_eq!(row.base().children.len(), 2, "row: two buttons");
@@ -31,7 +32,8 @@ fn actionable_nodes_declare_the_hint_their_click_would_fire() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let found = hints(root.as_ref());
     assert_eq!(
         found.len(),
@@ -61,7 +63,8 @@ fn a_declared_hint_wins_over_the_press() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert!(heca_grid_ui::fire_hint(row.as_mut(), &[]));
     assert_eq!(
         fired
@@ -100,7 +103,8 @@ fn button_children_are_realized_as_its_content() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let column = &button.base().children;
     assert_eq!(column.len(), 1, "the button holds its composed subtree");
     let column = &column[0].base().children;
@@ -132,7 +136,8 @@ fn childless_button_node_uses_the_scalar_sugar() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         button.base().children.len(),
         2,

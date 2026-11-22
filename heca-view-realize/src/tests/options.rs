@@ -28,7 +28,8 @@ fn select_node_realizes_its_choice_children_as_options() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let options = &select.base().children;
     assert_eq!(options.len(), 2, "one option per Choice child");
     assert_eq!(
@@ -66,7 +67,8 @@ fn the_change_intent_carries_the_chosen_options_value_not_its_index() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     LayoutEngine::new().compute(select.as_mut(), Size::new(400.0, 300.0));
 
     // Open the dropdown, then click the second option where it actually is (its real bounds).
@@ -120,7 +122,8 @@ fn tabs_node_realizes_choice_children_and_reports_the_chosen_value() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
     assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
@@ -151,7 +154,8 @@ fn childless_choice_node_desugars_its_text_to_a_label_child() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         choice.base().children.len(),
         1,
@@ -172,7 +176,8 @@ fn a_non_choice_child_of_a_select_is_reported() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid options survive malformed content");
+    )
+    .expect("valid options survive malformed content");
     let options = &select.base().children;
     assert_eq!(options.len(), 2);
     assert_eq!(options[0].text_summary().as_deref(), Some("LOW"));

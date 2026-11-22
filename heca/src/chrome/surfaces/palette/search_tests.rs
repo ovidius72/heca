@@ -2,10 +2,16 @@
 //! way `standard_palette` builds it from the one list of modes.
 
 use super::*;
-use crate::notification::{NotificationDraft, NotificationRecord, NotificationSource, NotificationStore};
+use crate::notification::{
+    NotificationDraft, NotificationRecord, NotificationSource, NotificationStore,
+};
 use crate::server::sessions::{SessionInfo, SessionStatus};
 use heca_grid_ui::{Event, LayoutEngine, Size, WidgetIntent};
-use std::{cell::RefCell, rc::Rc, time::{Duration, Instant, SystemTime}};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    time::{Duration, Instant, SystemTime},
+};
 
 type Log<T> = Rc<RefCell<Vec<T>>>;
 
@@ -86,7 +92,11 @@ fn session(id: u64, name: &str, folder: &str) -> SessionInfo {
 
 fn session_rows(sessions: &[SessionInfo]) -> Vec<PaletteEntry> {
     let current = session(99, "current", "/elsewhere");
-    sessions::entries(sessions, &current, &heca_config::settings::SessionText::default())
+    sessions::entries(
+        sessions,
+        &current,
+        &heca_config::settings::SessionText::default(),
+    )
 }
 
 /// Notifications as the server would list them: each `(title, body)` raised a millisecond apart.
@@ -96,48 +106,79 @@ fn history(raised: &[(&str, &str)]) -> Vec<NotificationRecord> {
     for (i, (title, body)) in raised.iter().enumerate() {
         store
             .push(
-                NotificationDraft::new(*title).body(*body).source(NotificationSource::app("test")),
+                NotificationDraft::new(*title)
+                    .body(*body)
+                    .source(NotificationSource::app("test")),
                 start + Duration::from_millis(i as u64),
             )
             .unwrap();
     }
-    store.history_records_for(1, start + Duration::from_secs(1), SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000))
+    store.history_records_for(
+        1,
+        start + Duration::from_secs(1),
+        SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000),
+    )
 }
 
 #[test]
 fn a_notification_is_found_by_a_word_only_its_body_has() {
-    let rows = notifications::entries(&history(&[("Restore failed", "the folder moved away"), ("Saved", "ok")]), 1_000_000);
+    let rows = notifications::entries(
+        &history(&[("Restore failed", "the folder moved away"), ("Saved", "ok")]),
+        1_000_000,
+    );
     let (mut palette, chosen, _) = open(&[], &rows, false);
     type_into(&mut palette, "!moved");
     choose(&mut palette);
-    assert_eq!(*chosen.borrow(), ["notification:1"], "the title has no `moved`; the body does");
+    assert_eq!(
+        *chosen.borrow(),
+        ["notification:1"],
+        "the title has no `moved`; the body does"
+    );
 }
 
 #[test]
 fn a_title_match_ranks_above_a_body_only_match() {
     // `disk` is the title of the older notification and only the body of the newer one.
     let rows = notifications::entries(
-        &history(&[("Disk full", "clear some space"), ("Backup", "the disk is almost full")]),
+        &history(&[
+            ("Disk full", "clear some space"),
+            ("Backup", "the disk is almost full"),
+        ]),
         1_000_000,
     );
     let (mut palette, chosen, _) = open(&[], &rows, false);
     type_into(&mut palette, "!disk");
     choose(&mut palette);
-    assert_eq!(*chosen.borrow(), ["notification:1"], "newest first would pick the body match (2); the title match leads");
+    assert_eq!(
+        *chosen.borrow(),
+        ["notification:1"],
+        "newest first would pick the body match (2); the title match leads"
+    );
 }
 
 #[test]
 fn a_session_is_found_by_its_folder_and_a_name_match_leads() {
-    let rows = session_rows(&[session(1, "api", "/work/billing"), session(2, "billing", "/work/other")]);
+    let rows = session_rows(&[
+        session(1, "api", "/work/billing"),
+        session(2, "billing", "/work/other"),
+    ]);
     let (mut palette, chosen, _) = open(&rows, &[], false);
     type_into(&mut palette, "#work/bil");
     choose(&mut palette);
-    assert_eq!(*chosen.borrow(), ["session:1"], "found by a folder the name does not contain");
+    assert_eq!(
+        *chosen.borrow(),
+        ["session:1"],
+        "found by a folder the name does not contain"
+    );
 
     let (mut palette, chosen, _) = open(&rows, &[], false);
     type_into(&mut palette, "#billing");
     choose(&mut palette);
-    assert_eq!(*chosen.borrow(), ["session:2"], "the name match leads the folder match");
+    assert_eq!(
+        *chosen.borrow(),
+        ["session:2"],
+        "the name match leads the folder match"
+    );
 }
 
 #[test]
@@ -147,25 +188,43 @@ fn an_action_is_not_found_by_its_description() {
     type_into(&mut palette, "newest first");
     choose(&mut palette);
     assert!(
-        chosen.borrow().iter().all(|id| id != "notification_history"),
+        chosen
+            .borrow()
+            .iter()
+            .all(|id| id != "notification_history"),
         "the command mode matches names only: {:?}",
         chosen.borrow()
     );
     let (mut palette, chosen, _) = open(&[], &[], false);
     type_into(&mut palette, "notification hist");
     choose(&mut palette);
-    assert_eq!(*chosen.borrow(), ["notification_history"], "by its name it is found");
+    assert_eq!(
+        *chosen.borrow(),
+        ["notification_history"],
+        "by its name it is found"
+    );
 }
 
 #[test]
 fn typing_the_sigil_asks_the_server_for_a_fresh_history_every_time_it_is_entered() {
     let (mut palette, _, fired) = open(&[], &[], false);
     let palette = &mut palette;
-    assert!(fired.borrow().is_empty(), "the command list is not the notifications mode");
+    assert!(
+        fired.borrow().is_empty(),
+        "the command list is not the notifications mode"
+    );
     type_into(palette, "!");
-    assert_eq!(*fired.borrow(), [WmAction::NotificationHistory], "typing `!` asks");
+    assert_eq!(
+        *fired.borrow(),
+        [WmAction::NotificationHistory],
+        "typing `!` asks"
+    );
     type_into(palette, "x");
-    assert_eq!(fired.borrow().len(), 1, "typing inside the mode does not ask again");
+    assert_eq!(
+        fired.borrow().len(),
+        1,
+        "typing inside the mode does not ask again"
+    );
     heca_grid_ui::dispatch(palette, &Event::Widget(WidgetIntent::EditDeleteToLineStart));
     LayoutEngine::new().compute(palette, Size::new(1200.0, 800.0));
     type_into(palette, "!");

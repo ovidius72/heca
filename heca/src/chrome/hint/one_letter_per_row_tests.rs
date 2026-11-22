@@ -79,8 +79,14 @@ fn pick_in_two_docks(lower_dock_scrolled: f32) {
 
     // Two docks in one sidebar — a fixture: the app itself starts with one.
     let mut host = ChromeHost::new(chrome.events());
-    host.register(crate::chrome::RegionId::LeftSidebar, Box::new(WorkspacesContainerProvider::new("workspaces")));
-    host.register(crate::chrome::RegionId::LeftSidebar, Box::new(WorkspacesContainerProvider::new("workspaces.left2")));
+    host.register(
+        crate::chrome::RegionId::LeftSidebar,
+        Box::new(WorkspacesContainerProvider::new("workspaces")),
+    );
+    host.register(
+        crate::chrome::RegionId::LeftSidebar,
+        Box::new(WorkspacesContainerProvider::new("workspaces.left2")),
+    );
 
     let theme = crate::chrome::GuiTheme::default();
     let emit = ChromeIntentEmitter::of(

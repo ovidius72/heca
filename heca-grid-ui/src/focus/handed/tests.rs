@@ -41,7 +41,11 @@ fn frame(header: impl Component + 'static, inside: impl Component + 'static) -> 
         .template_area(["header", "content"])
         .child([
             crate::WidgetModel::new(Flex::row().area("header").child(header)),
-            crate::WidgetModel::new(Flex::column().area("content").child(Flex::row().child(inside))),
+            crate::WidgetModel::new(
+                Flex::column()
+                    .area("content")
+                    .child(Flex::row().child(inside)),
+            ),
         ])
 }
 
@@ -88,7 +92,10 @@ fn nested_content_owns_its_keyboard_destination_not_its_enclosing_frame() {
 
 #[test]
 fn a_delegation_to_the_widgets_own_area_does_not_recurse() {
-    let mut root = Flex::column().area("body").keyboard_to("body").child(Control::new());
+    let mut root = Flex::column()
+        .area("body")
+        .keyboard_to("body")
+        .child(Control::new());
     focus_on_press(&mut root, &[]);
     assert_eq!(holder_path(&root), Some(vec![0]));
 }
@@ -97,8 +104,12 @@ fn a_delegation_to_the_widgets_own_area_does_not_recurse() {
 fn a_nested_missing_or_hidden_destination_does_not_focus_its_header_instead() {
     for content in [
         frame(Control::new(), Control::new()).keyboard_to("missing"),
-        frame(Control::new(), Control::new()).keyboard_to("content").hidden(true),
-        frame(Control::new(), Control::new()).keyboard_to("content").disabled(true),
+        frame(Control::new(), Control::new())
+            .keyboard_to("content")
+            .hidden(true),
+        frame(Control::new(), Control::new())
+            .keyboard_to("content")
+            .disabled(true),
     ] {
         let mut root = frame(Flex::row(), content).keyboard_to("content");
         focus_on_press(&mut root, &[]);

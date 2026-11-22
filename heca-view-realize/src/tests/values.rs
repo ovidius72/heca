@@ -3,8 +3,8 @@
 use heca_grid_ui::{NfGlyph, ScrollRegion};
 use heca_view::WidgetId;
 
-use crate::style::with_props;
 use super::*;
+use crate::style::with_props;
 
 /// The mirrored glyph list cannot fall behind the real one.
 ///
@@ -73,7 +73,8 @@ fn a_mirrored_glyph_reaches_the_icon() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         let mut scene = heca_grid_ui::Scene::new();
         let theme = Theme::default();
         {
@@ -101,7 +102,8 @@ fn a_mirrored_glyph_reaches_the_icon() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         let mut scene = heca_grid_ui::Scene::new();
         let theme = Theme::default();
         {
@@ -135,7 +137,8 @@ fn every_fixed_value_set_reaches_its_widget() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget")
+        )
+        .expect("valid described test widget")
     };
     let theme = Theme::default();
     let painted = |node: &ViewNode| {
@@ -270,7 +273,8 @@ fn a_token_nested_in_an_object_resolves_against_the_theme() {
                 ("width".into(), PropValue::Float(1.0)),
             ])),
         );
-        realize(&node, theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget")
+        realize(&node, theme, &noop_emitter(), &mut FormBindings::default())
+            .expect("valid described test widget")
             .base()
             .style
             .visual
@@ -315,7 +319,8 @@ fn a_bad_member_of_an_object_does_not_discard_the_rest() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         w.base().style.visual.radius,
         5.0,
@@ -339,7 +344,8 @@ fn a_bad_colour_does_not_discard_its_neighbours() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         w.base().style.visual.radius,
         7.0,

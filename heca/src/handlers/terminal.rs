@@ -11,7 +11,10 @@ use crate::input::WmAction;
 /// A terminal or pane the action names is zoomed. Naming neither means the terminal the keyboard
 /// acts on ([`AppState::keyboard_terminal`]): one placed in a dock or an overlay that holds it is
 /// asked first and answers itself (it says so back with its id, which lands here again).
-pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_pane_terminal_font_zoom(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::PaneTerminalFontZoom {
         pane_id,
         terminal,

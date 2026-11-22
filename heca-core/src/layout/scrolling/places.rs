@@ -30,8 +30,13 @@ impl Place {
     /// The same place moved by `by` — its line and its drop area together, so the two can never
     /// end up in different places.
     pub fn moved_by(self, by: Point) -> Self {
-        let shift = |r: Rectangle| Rectangle::new(Point::new(r.loc.x + by.x, r.loc.y + by.y), r.size);
-        Self { kind: self.kind, rect: shift(self.rect), zone: shift(self.zone) }
+        let shift =
+            |r: Rectangle| Rectangle::new(Point::new(r.loc.x + by.x, r.loc.y + by.y), r.size);
+        Self {
+            kind: self.kind,
+            rect: shift(self.rect),
+            zone: shift(self.zone),
+        }
     }
 
     /// Whether the line stands up (between columns) rather than lies down (between panes).
@@ -55,7 +60,11 @@ impl Place {
 
 /// A place whose drop area is the line itself.
 fn on_line(kind: PlaceKind, rect: Rectangle) -> Place {
-    Place { kind, rect, zone: rect }
+    Place {
+        kind,
+        rect,
+        zone: rect,
+    }
 }
 
 /// The smallest box holding `a` and `b`.
@@ -88,13 +97,21 @@ impl ScrollingRef<'_> {
                 0 => spanning(line, upright(left.min(line.loc.x))),
                 _ => line,
             };
-            out.push(Place { kind: PlaceKind::Gap(i), rect: line, zone });
+            out.push(Place {
+                kind: PlaceKind::Gap(i),
+                rect: line,
+                zone,
+            });
         }
         if let Some(last) = columns.last() {
             let line = upright(last.rect.loc.x + last.rect.size.w + gaps / 2.0);
             // …and the gap after the last, the empty space to its right.
             let zone = spanning(line, upright(right.max(line.loc.x)));
-            out.push(Place { kind: PlaceKind::Gap(columns.len()), rect: line, zone });
+            out.push(Place {
+                kind: PlaceKind::Gap(columns.len()),
+                rect: line,
+                zone,
+            });
         }
         // The borders: a line along the top of each column, between each two stacked panes (in the
         // middle of whatever gap there is, or exactly on the shared edge when there is none) and
@@ -111,14 +128,23 @@ impl ScrollingRef<'_> {
             let top_line = line(first.slot.loc.y);
             let into_first = first.slot.size.h * self.space.options.drop_edge_reach;
             out.push(Place {
-                kind: PlaceKind::Row { col: col.idx, row: 0 },
+                kind: PlaceKind::Row {
+                    col: col.idx,
+                    row: 0,
+                },
                 rect: top_line,
-                zone: spanning(line(area.loc.y.min(top_line.loc.y)), line(top_line.loc.y + into_first)),
+                zone: spanning(
+                    line(area.loc.y.min(top_line.loc.y)),
+                    line(top_line.loc.y + into_first),
+                ),
             });
             for (row, pair) in col.panes.windows(2).enumerate() {
                 let (above, below) = (pair[0].slot, pair[1].slot);
                 out.push(on_line(
-                    PlaceKind::Row { col: col.idx, row: row + 1 },
+                    PlaceKind::Row {
+                        col: col.idx,
+                        row: row + 1,
+                    },
                     line((above.loc.y + above.size.h + below.loc.y) / 2.0),
                 ));
             }
@@ -126,9 +152,15 @@ impl ScrollingRef<'_> {
             let into_last = last.slot.size.h * self.space.options.drop_edge_reach;
             let area_bottom = area.loc.y + area.size.h;
             out.push(Place {
-                kind: PlaceKind::Row { col: col.idx, row: col.panes.len() },
+                kind: PlaceKind::Row {
+                    col: col.idx,
+                    row: col.panes.len(),
+                },
                 rect: bottom_line,
-                zone: spanning(line(bottom_line.loc.y - into_last), line(area_bottom.max(bottom_line.loc.y))),
+                zone: spanning(
+                    line(bottom_line.loc.y - into_last),
+                    line(area_bottom.max(bottom_line.loc.y)),
+                ),
             });
         }
         out

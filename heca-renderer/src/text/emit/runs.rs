@@ -3,11 +3,11 @@
 
 use super::{Emitted, Ink, glyph_quad};
 use crate::text::TextBox;
-use crate::text::shape;
 use crate::text::TextRenderer;
 use crate::text::layout::{LabelKey, RunGlyph, RunLayout};
 use crate::text::pipeline::TextVertex;
 use crate::text::queue::TextCommand;
+use crate::text::shape;
 
 impl TextRenderer {
     /// Emit one terminal row-run: shape the whole run text together (so OpenType

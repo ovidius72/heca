@@ -272,11 +272,17 @@ mod tests {
         let words = heca_config::settings::SessionText {
             confirm_terminate: "Stop {name}, keep the session".into(),
             confirm_delete: "Remove {name}, keep project files".into(),
-            terminate: "Stop".into(), delete: "Remove".into(), cancel: "Keep".into(),
+            terminate: "Stop".into(),
+            delete: "Remove".into(),
+            cancel: "Keep".into(),
             ..Default::default()
         };
         for (owner, message, verb) in [
-            ("terminate_session", words.confirm_terminate.as_str(), "Stop"),
+            (
+                "terminate_session",
+                words.confirm_terminate.as_str(),
+                "Stop",
+            ),
             ("delete_session", words.confirm_delete.as_str(), "Remove"),
         ] {
             let spec = ConfirmSpec::for_session(owner, &words).unwrap();

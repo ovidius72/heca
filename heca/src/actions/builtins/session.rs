@@ -13,12 +13,22 @@ const TARGET: &[ArgDescriptor] = &[ArgDescriptor::optional(
 )];
 
 pub(super) const ACTIONS: &[ActionDescriptor] = &[
-    ActionDescriptor { name: "list_sessions", side: Side::Server, label: "Sessions",
+    ActionDescriptor {
+        name: "list_sessions",
+        side: Side::Server,
+        label: "Sessions",
         description: "List sessions as JSON over RPC, or open the session palette in a window.",
-        icon: Some(Glyph::Cards), args: &[] },
-    ActionDescriptor { name: "kill_server", side: Side::Server, label: "Kill Server",
+        icon: Some(Glyph::Cards),
+        args: &[],
+    },
+    ActionDescriptor {
+        name: "kill_server",
+        side: Side::Server,
+        label: "Kill Server",
         description: "Stop the server, and with it every session, pane and terminal. `heca --kill-server` runs this.",
-        icon: None, args: &[] },
+        icon: None,
+        args: &[],
+    },
     ActionDescriptor {
         name: "create_session",
         side: Side::Server,

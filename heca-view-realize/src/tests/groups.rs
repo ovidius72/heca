@@ -24,7 +24,8 @@ fn item_group_node_realizes_its_header_and_rows() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     // The group applies its expanded state during layout (`remeasure`), like the native widget.
     LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
     assert_eq!(
@@ -67,7 +68,8 @@ fn the_toggle_intent_carries_the_new_expanded_state() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
 
     // Click the header (it starts expanded) → it collapses.
@@ -109,7 +111,8 @@ fn marker_group_node_realizes_its_rows_and_flags() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(markers.base().children.len(), 2, "the two realized rows");
     assert!(
         hints(markers.as_ref()).is_empty(),

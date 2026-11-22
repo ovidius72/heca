@@ -11,12 +11,11 @@
 //! - an **overlay**, `demo.detail`, opened with `toggle_layer name=demo.detail` from any of them.
 
 use heca::{
-    ActionCategory, ChromeCtx, ContainerContribution, Contribution, Provider, RegionSet,
-    regions,
+    ActionCategory, ChromeCtx, ContainerContribution, Contribution, Provider, RegionSet, regions,
 };
+use heca_grid_ui::Handled;
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::widgets::{Flex, Glyph, Label, Overlay};
-use heca_grid_ui::Handled;
 
 /// A dock with a list of notes. `id` is its name in this placement; a second `Notes::new("..")` is a
 /// second placement of the same dock.
@@ -43,7 +42,6 @@ impl Provider for Notes {
         RegionSet::sidebars()
     }
 
-
     fn title(&self) -> &str {
         "Notes"
     }
@@ -54,7 +52,12 @@ impl Provider for Notes {
             Flex::column()
                 .child(Label::new("No notes yet"))
                 // The same terminal every time this dock is built: `demo.shell`.
-                .child(demo.terminal("shell").title("Scratch shell").header(true).grow(1.0))
+                .child(
+                    demo.terminal("shell")
+                        .title("Scratch shell")
+                        .header(true)
+                        .grow(1.0),
+                )
         }))
     }
 }

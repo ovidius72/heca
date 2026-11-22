@@ -46,6 +46,9 @@ impl<M> ServiceInbox<M> {
 
 impl<M> Clone for ServiceInbox<M> {
     fn clone(&self) -> Self {
-        Self { sender: self.sender.clone(), wake: self.wake.clone() }
+        Self {
+            sender: self.sender.clone(),
+            wake: self.wake.clone(),
+        }
     }
 }

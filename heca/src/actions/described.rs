@@ -19,8 +19,14 @@ pub(crate) fn describe(action: &WmAction) -> (String, PropMap) {
     };
     let name = super::builtin_name(action.kind()).map_or(variant, str::to_owned);
     let args = match fields {
-        Some(Value::Object(fields)) => fields.into_iter().filter_map(|(key, value)| Some((key, prop(value)?))).collect(),
-        Some(other) => prop(other).map(|value| ("value".to_owned(), value)).into_iter().collect(),
+        Some(Value::Object(fields)) => fields
+            .into_iter()
+            .filter_map(|(key, value)| Some((key, prop(value)?)))
+            .collect(),
+        Some(other) => prop(other)
+            .map(|value| ("value".to_owned(), value))
+            .into_iter()
+            .collect(),
         None => PropMap::new(),
     };
     (name, args)
@@ -30,10 +36,18 @@ fn prop(value: Value) -> Option<PropValue> {
     Some(match value {
         Value::Null => return None,
         Value::Bool(flag) => PropValue::Bool(flag),
-        Value::Number(number) => number.as_i64().map_or_else(|| PropValue::Float(number.as_f64().unwrap_or_default()), PropValue::Int),
+        Value::Number(number) => number.as_i64().map_or_else(
+            || PropValue::Float(number.as_f64().unwrap_or_default()),
+            PropValue::Int,
+        ),
         Value::String(text) => PropValue::Text(text),
         Value::Array(items) => PropValue::List(items.into_iter().filter_map(prop).collect()),
-        Value::Object(fields) => PropValue::Map(fields.into_iter().filter_map(|(key, value)| Some((key, prop(value)?))).collect()),
+        Value::Object(fields) => PropValue::Map(
+            fields
+                .into_iter()
+                .filter_map(|(key, value)| Some((key, prop(value)?)))
+                .collect(),
+        ),
     })
 }
 
@@ -50,8 +64,19 @@ mod tests {
 
     #[test]
     fn a_parameterized_action_carries_its_fields_as_arguments() {
-        let (name, args) = describe(&WmAction::FocusPane { pane_id: heca_core::layout::PaneId(7) });
-        assert_eq!(name, crate::actions::builtin_name(WmAction::FocusPane { pane_id: heca_core::layout::PaneId(7) }.kind()).unwrap());
+        let (name, args) = describe(&WmAction::FocusPane {
+            pane_id: heca_core::layout::PaneId(7),
+        });
+        assert_eq!(
+            name,
+            crate::actions::builtin_name(
+                WmAction::FocusPane {
+                    pane_id: heca_core::layout::PaneId(7)
+                }
+                .kind()
+            )
+            .unwrap()
+        );
         assert_eq!(args.get("pane_id"), Some(&PropValue::Int(7)));
     }
 }

@@ -119,7 +119,11 @@ fn an_earlier_request_for_the_keyboard_does_not_win_over_a_later_one() {
         terminal.bind(recording().0);
         terminal.show(&scrolled(0));
     }
-    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(current.clone()), 300.0, 200.0);
+    let mut root = laid_out_in(
+        heca_grid_ui::WidgetModel::new(current.clone()),
+        300.0,
+        200.0,
+    );
     let _ = painted(root.as_ref());
     current.place(Some(root.base().bounds));
 
@@ -127,9 +131,16 @@ fn an_earlier_request_for_the_keyboard_does_not_win_over_a_later_one() {
     current.take_keyboard(root.as_mut());
     assert_eq!(heca_grid_ui::keyboard_holder(root.as_ref()), current.node());
 
-    let mut elsewhere = laid_out_in(heca_grid_ui::WidgetModel::new(earlier.clone()), 300.0, 200.0);
+    let mut elsewhere = laid_out_in(
+        heca_grid_ui::WidgetModel::new(earlier.clone()),
+        300.0,
+        200.0,
+    );
     let _ = painted(elsewhere.as_ref());
     heca_grid_ui::settle_focus(elsewhere.as_mut());
-    assert_eq!(heca_grid_ui::keyboard_holder(elsewhere.as_ref()), None,
-        "drawn again, the terminal asked first does not take the keyboard");
+    assert_eq!(
+        heca_grid_ui::keyboard_holder(elsewhere.as_ref()),
+        None,
+        "drawn again, the terminal asked first does not take the keyboard"
+    );
 }

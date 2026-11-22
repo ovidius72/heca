@@ -52,7 +52,9 @@ pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
 }
 
 pub(crate) fn discard_overlays(state: &mut AppState) {
-    for overlay in state.overlays.discard() { state.layers.remove(&mut state.window_root, overlay.0); }
+    for overlay in state.overlays.discard() {
+        state.layers.remove(&mut state.window_root, overlay.0);
+    }
     state.session_dialog = None;
 }
 

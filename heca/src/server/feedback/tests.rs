@@ -151,16 +151,32 @@ fn shell_editor_and_other_program_completions_use_the_same_feedback_store() {
         backend.queue_alert(BackendAlert::ProcessCompleted { exit_code: 0 });
         backend.queue_alert(BackendAlert::ProcessCompleted { exit_code: 1 });
         backend.queue_alert(BackendAlert::ProcessCompleted { exit_code: 1 });
-        state.backends.ensure(PaneId(7), TerminalSpec {
-            program: Program::Command(program.into()), cwd: None, grid: (20, 6),
-        }, |_| Ok(Box::new(backend))).unwrap();
+        state
+            .backends
+            .ensure(
+                PaneId(7),
+                TerminalSpec {
+                    program: Program::Command(program.into()),
+                    cwd: None,
+                    grid: (20, 6),
+                },
+                |_| Ok(Box::new(backend)),
+            )
+            .unwrap();
         state.poll_backends();
         let projection = state.feedback.snapshot();
-        assert_eq!(projection[0].feedback_revision, 3, "{program}: every completion is a new event");
+        assert_eq!(
+            projection[0].feedback_revision, 3,
+            "{program}: every completion is a new event"
+        );
         assert_eq!(projection[0].status, "error");
         assert!(projection[0].pending());
         state.poll_backends();
-        assert_eq!(state.feedback.snapshot(), projection, "polling does not replay {program}");
+        assert_eq!(
+            state.feedback.snapshot(),
+            projection,
+            "polling does not replay {program}"
+        );
         state.feedback.acknowledge(PaneId(7), 3);
         assert!(!state.feedback.snapshot()[0].pending());
     }
@@ -187,17 +203,32 @@ fn one_client_can_claim_a_pending_revisions_sound_but_never_replay_seen_or_old_f
 /// every other ending still flashes.
 #[test]
 fn an_ending_listed_as_quiet_asks_for_no_attention() {
-    let quiet = heca_config::loader::config_from_layers("").unwrap().settings.notification_quiet_exit_codes;
+    let quiet = heca_config::loader::config_from_layers("")
+        .unwrap()
+        .settings
+        .notification_quiet_exit_codes;
     assert_eq!(quiet, vec![130], "the shipped default");
     let mut feedback = Feedback::default();
     let pane = PaneId(7);
     feedback.completed(pane, 130, &quiet);
-    assert!(feedback.snapshot().is_empty(), "no flash and no sound for an interrupted command");
+    assert!(
+        feedback.snapshot().is_empty(),
+        "no flash and no sound for an interrupted command"
+    );
     feedback.completed(pane, 1, &quiet);
-    assert_eq!(feedback.snapshot()[0].status, "error", "a real failure still flashes");
+    assert_eq!(
+        feedback.snapshot()[0].status,
+        "error",
+        "a real failure still flashes"
+    );
 
-    let user = heca_config::loader::config_from_layers("[settings]\nnotification_quiet_exit_codes = []\n").unwrap();
+    let user =
+        heca_config::loader::config_from_layers("[settings]\nnotification_quiet_exit_codes = []\n")
+            .unwrap();
     let mut feedback = Feedback::default();
     feedback.completed(pane, 130, &user.settings.notification_quiet_exit_codes);
-    assert!(feedback.snapshot()[0].pending(), "an empty list flashes for every ending");
+    assert!(
+        feedback.snapshot()[0].pending(),
+        "an empty list flashes for every ending"
+    );
 }

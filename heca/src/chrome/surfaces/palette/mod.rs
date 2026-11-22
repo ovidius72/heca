@@ -33,17 +33,17 @@ mod actions;
 mod model;
 mod modes;
 mod notifications;
-mod targets;
 mod sessions;
+mod targets;
 mod windows;
-pub(crate) use sessions::open_session_folder;
 pub(crate) use modes::MODE_NOTIFICATION;
+pub(crate) use sessions::open_session_folder;
 
+use crate::chrome::{ActionShortcuts, home_relative_path, pane_info_view};
 use actions::{entries, group_of};
 pub(crate) use model::OpenPalette;
 use model::{OwnerInfo, PaletteEntry};
 use targets::{pane_entries, workspace_entries};
-use crate::chrome::{ActionShortcuts, home_relative_path, pane_info_view};
 
 /// Which component owns each declared action right now, and where it would land.
 ///
@@ -92,15 +92,24 @@ pub(crate) fn open_command_palette(
     // An answer is held by the client until the palette it was asked for is built, and read here
     // once: a palette built from it already has what it asked for, any other palette's notifications
     // mode starts empty and fills when the request it makes on entering comes back.
-    let answered = custom.is_none().then(|| state.client.notification_history.take()).flatten();
+    let answered = custom
+        .is_none()
+        .then(|| state.client.notification_history.take())
+        .flatten();
     // A palette already up, entered the mode itself (typed `!`) and asked: the answer **replaces**
     // it, with whatever was typed meanwhile.
     let replaced = answered.as_ref().and_then(|_| {
-        state.open_palette.take().filter(|up| up.open.get_untracked())
+        state
+            .open_palette
+            .take()
+            .filter(|up| up.open.get_untracked())
     });
     // What was typed is carried over only if it was typed in the notifications mode; a palette that
     // was in some other mode when the answer came (the key was pressed over it) opens in the mode.
-    let sigil = modes::MODES.iter().find(|mode| mode.scope == modes::MODE_NOTIFICATION).map(|mode| mode.sigil);
+    let sigil = modes::MODES
+        .iter()
+        .find(|mode| mode.scope == modes::MODE_NOTIFICATION)
+        .map(|mode| mode.sigil);
     let carried = replaced
         .as_ref()
         .map(|up| up.query.get_untracked())
@@ -118,12 +127,14 @@ pub(crate) fn open_command_palette(
         Some(typed) => palette.query(typed),
         None => palette.query_in(mode, query.unwrap_or_default()),
     };
-    let palette = palette.default_open(true)
-        .panel_size(match state.settings.command_palette_size {
-            heca_config::settings::PaletteSize::Small => heca_grid_ui::WidgetSize::Small,
-            heca_config::settings::PaletteSize::Normal => heca_grid_ui::WidgetSize::Normal,
-            heca_config::settings::PaletteSize::Large => heca_grid_ui::WidgetSize::Large,
-        });
+    let palette =
+        palette
+            .default_open(true)
+            .panel_size(match state.settings.command_palette_size {
+                heca_config::settings::PaletteSize::Small => heca_grid_ui::WidgetSize::Small,
+                heca_config::settings::PaletteSize::Normal => heca_grid_ui::WidgetSize::Normal,
+                heca_config::settings::PaletteSize::Large => heca_grid_ui::WidgetSize::Large,
+            });
 
     // **A pane row follows its pane.** The chrome store already mirrors each pane's `program` and
     // `custom_name` as signals, and the row's title is a signal too, so this is one effect per pane
@@ -161,7 +172,11 @@ pub(crate) fn open_command_palette(
     // popped from it rather than from three separate callbacks. `resolve` is double-resolve safe, so
     // the close that follows a chosen command is a no-op after the `SubmitOverlay` already popped it.
     let open = palette.open_signal();
-    state.open_palette = Some(OpenPalette { id, query: palette.query_signal(), open });
+    state.open_palette = Some(OpenPalette {
+        id,
+        query: palette.query_signal(),
+        open,
+    });
     let close = id.closer(&emit);
     create_effect(move |_| {
         if !open.get() {
@@ -206,15 +221,24 @@ fn standard_palette(
     let owners = owners(state);
     let palette = CommandPalette::new()
         .placeholder("Type a command…")
-        .search(search_model(state, modes::MODE_COMMAND, state.settings.search_case));
-    let session_rows = sessions::entries(&state.client.sessions, &state.client.session, &state.settings.session_text);
+        .search(search_model(
+            state,
+            modes::MODE_COMMAND,
+            state.settings.search_case,
+        ));
+    let session_rows = sessions::entries(
+        &state.client.sessions,
+        &state.client.session,
+        &state.settings.session_text,
+    );
     let follow_rows = windows::entries(
         &state.windows,
         state.client.client_id,
         state.client.following(),
         &state.settings.session_text.stop_following,
     );
-    let notification_rows = notifications::entries(answered.as_deref().unwrap_or_default(), unix_now());
+    let notification_rows =
+        notifications::entries(answered.as_deref().unwrap_or_default(), unix_now());
     let sources = modes::RowSources {
         sessions: &session_rows,
         follow: &follow_rows,
@@ -230,9 +254,19 @@ fn standard_palette(
         last_visited: state.last_visited_ws_idx,
     };
     let enter = entering(emit, answered.is_some());
-    modes::populate(palette, modes::MODES, &sources, |row| {
-        row_command(row, group_of(row, &owners), id.submitter(row.id.clone(), emit))
-    }, enter)
+    modes::populate(
+        palette,
+        modes::MODES,
+        &sources,
+        |row| {
+            row_command(
+                row,
+                group_of(row, &owners),
+                id.submitter(row.id.clone(), emit),
+            )
+        },
+        enter,
+    )
 }
 
 /// What the palette shows for one row, whichever mode it is in — the one place a [`PaletteEntry`]
@@ -243,8 +277,12 @@ fn row_command(row: &PaletteEntry, group: u16, on_run: impl Fn() + 'static) -> C
         .current(row.current)
         .preselect(row.preselect)
         .description(row.description.clone());
-    if row.description_path { command = command.path(row.description.clone()); }
-    if let Some(detail) = &row.detail { command = command.detail(detail.clone()); }
+    if row.description_path {
+        command = command.path(row.description.clone());
+    }
+    if let Some(detail) = &row.detail {
+        command = command.detail(detail.clone());
+    }
     // Rank against the stable choice identity, not the row's presentation id.
     if let Some(rank_id) = &row.rank_id {
         command = command.id(rank_id.clone());
@@ -284,17 +322,20 @@ fn unix_now() -> u64 {
         .map_or(0, |elapsed| elapsed.as_secs())
 }
 
-fn search_model(state: &AppState, scope: &str, case: heca_config::settings::SearchCase) -> heca_grid_ui::search::SearchModel {
+fn search_model(
+    state: &AppState,
+    scope: &str,
+    case: heca_config::settings::SearchCase,
+) -> heca_grid_ui::search::SearchModel {
     use heca_grid_ui::search::MatchCase;
-    heca_grid_ui::search::SearchModel::new(scope, state.search_store.clone())
-        .case(match case {
-            heca_config::settings::SearchCase::Smart => MatchCase::Smart,
-            heca_config::settings::SearchCase::Sensitive => MatchCase::Sensitive,
-            heca_config::settings::SearchCase::Insensitive => MatchCase::Insensitive,
-        })
+    heca_grid_ui::search::SearchModel::new(scope, state.search_store.clone()).case(match case {
+        heca_config::settings::SearchCase::Smart => MatchCase::Smart,
+        heca_config::settings::SearchCase::Sensitive => MatchCase::Sensitive,
+        heca_config::settings::SearchCase::Insensitive => MatchCase::Insensitive,
+    })
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod search_tests;
+#[cfg(test)]
+mod tests;

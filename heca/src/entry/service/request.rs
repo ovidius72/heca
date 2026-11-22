@@ -50,7 +50,10 @@ pub enum Requester<'a> {
     Local { window: Option<u64> },
     /// A request a service handed in for `sender` with [`ServiceCx::submit`](super::ServiceCx::submit).
     /// `service` is the one that handed it in.
-    External { service: &'a str, sender: &'a Sender },
+    External {
+        service: &'a str,
+        sender: &'a Sender,
+    },
 }
 
 /// What a policy is asked: one action about to run, and who wants it.

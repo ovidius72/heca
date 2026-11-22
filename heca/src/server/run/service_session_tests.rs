@@ -4,8 +4,8 @@
 use super::service_tests::{config, register_actions, rpc};
 use super::*;
 use crate::entry::service::{
-    ActionResult, ProjectCx, Projection, ServerEvent, Service, ServiceCx, ServiceResult, SessionChange, SessionKey,
-    SessionState,
+    ActionResult, ProjectCx, Projection, ServerEvent, Service, ServiceCx, ServiceResult,
+    SessionChange, SessionKey, SessionState,
 };
 use crate::server::identity::{ServerIdentity, ServerKind};
 use heca_core::layout::LayoutOptions;
@@ -44,8 +44,14 @@ fn declare() -> Rc<RefCell<Heard>> {
     let rooms = demo.service("rooms", |_| Ok(Quiet));
     let log = heard.clone();
     rooms.on("session.changed", move |_, _, ev| {
-        let ev = ev.as_session().expect("session.changed carries a session event");
-        log.borrow_mut().events.push((ev.kind(), ev.session().name().to_owned(), ev.sessions().iter().count()));
+        let ev = ev
+            .as_session()
+            .expect("session.changed carries a session event");
+        log.borrow_mut().events.push((
+            ev.kind(),
+            ev.session().name().to_owned(),
+            ev.sessions().iter().count(),
+        ));
     });
     let log = heard.clone();
     rooms.on("*", move |_, _, ev: &ServerEvent| {
@@ -55,8 +61,15 @@ fn declare() -> Rc<RefCell<Heard>> {
     let log = heard.clone();
     rooms.action(demo.action("where"), move |_, cx, _| {
         let mine: SessionKey = cx.session_key();
-        let folder = cx.sessions().folder_of(mine).map(std::path::Path::to_path_buf);
-        let names = cx.sessions().same_project(mine).map(|s| s.name().to_owned()).collect();
+        let folder = cx
+            .sessions()
+            .folder_of(mine)
+            .map(std::path::Path::to_path_buf);
+        let names = cx
+            .sessions()
+            .same_project(mine)
+            .map(|s| s.name().to_owned())
+            .collect();
         log.borrow_mut().read = Some((folder, names));
         ActionResult::Done(None)
     });
@@ -64,15 +77,28 @@ fn declare() -> Rc<RefCell<Heard>> {
 }
 
 fn one_session() -> ServerLoop {
-    let mut server = ServerLoop::from_config(&config(""), ServerIdentity::for_tests(ServerKind::Background), ServerWaker::new(|| {}))
-        .unwrap()
-        .with_session(ServerState::for_tests(Default::default()), Session::new(SessionId(1), LayoutOptions::default()));
+    let mut server = ServerLoop::from_config(
+        &config(""),
+        ServerIdentity::for_tests(ServerKind::Background),
+        ServerWaker::new(|| {}),
+    )
+    .unwrap()
+    .with_session(
+        ServerState::for_tests(Default::default()),
+        Session::new(SessionId(1), LayoutOptions::default()),
+    );
     register_actions(&mut server);
     server
 }
 
 fn create(server: &mut ServerLoop, folder: &std::path::Path, name: &str) {
-    server.execute_session(SessionCommand::Create { folder: folder.into(), name: Some(name.into()), label: None }).unwrap();
+    server
+        .execute_session(SessionCommand::Create {
+            folder: folder.into(),
+            name: Some(name.into()),
+            label: None,
+        })
+        .unwrap();
 }
 
 /// **Every change is heard once, with what happened, the session and the list after it** — and a
@@ -83,21 +109,38 @@ fn a_listener_hears_every_session_change_with_its_kind() {
     let mut server = one_session();
     let dir = tempfile::tempdir().unwrap();
     create(&mut server, dir.path(), "a");
-    server.execute_session(SessionCommand::Rename { name: "a".into(), new_name: "b".into() }).unwrap();
-    server.execute_session(SessionCommand::Terminate { name: "b".into() }).unwrap();
-    server.execute_session(SessionCommand::Terminate { name: "b".into() }).unwrap();
-    server.execute_session(SessionCommand::Restart { name: "b".into() }).unwrap();
-    server.execute_session(SessionCommand::Delete { name: "b".into() }).unwrap();
+    server
+        .execute_session(SessionCommand::Rename {
+            name: "a".into(),
+            new_name: "b".into(),
+        })
+        .unwrap();
+    server
+        .execute_session(SessionCommand::Terminate { name: "b".into() })
+        .unwrap();
+    server
+        .execute_session(SessionCommand::Terminate { name: "b".into() })
+        .unwrap();
+    server
+        .execute_session(SessionCommand::Restart { name: "b".into() })
+        .unwrap();
+    server
+        .execute_session(SessionCommand::Delete { name: "b".into() })
+        .unwrap();
     server.execute_session(SessionCommand::List).unwrap();
 
     let heard = heard.borrow();
-    assert_eq!(heard.events, [
-        (SessionChange::Created, "a".into(), 2),
-        (SessionChange::Renamed, "b".into(), 2),
-        (SessionChange::Terminated, "b".into(), 2),
-        (SessionChange::Restarted, "b".into(), 2),
-        (SessionChange::Deleted, "b".into(), 1),
-    ], "terminating a stopped session and listing change nothing, so they say nothing");
+    assert_eq!(
+        heard.events,
+        [
+            (SessionChange::Created, "a".into(), 2),
+            (SessionChange::Renamed, "b".into(), 2),
+            (SessionChange::Terminated, "b".into(), 2),
+            (SessionChange::Restarted, "b".into(), 2),
+            (SessionChange::Deleted, "b".into(), 1),
+        ],
+        "terminating a stopped session and listing change nothing, so they say nothing"
+    );
     assert_eq!(heard.every, 5);
 }
 
@@ -114,8 +157,11 @@ fn an_action_reads_its_sessions_project() {
     rpc(&mut server, "demo.where").try_recv().unwrap();
 
     let read = heard.borrow().read.clone().expect("the action ran");
-    assert_eq!(read.0.as_deref(), Some(dir.path().canonicalize().unwrap().as_path()),
-        "the most recent session, feature-b, is on the project folder");
+    assert_eq!(
+        read.0.as_deref(),
+        Some(dir.path().canonicalize().unwrap().as_path()),
+        "the most recent session, feature-b, is on the project folder"
+    );
     assert_eq!(read.1, ["feature-a", "feature-b"]);
 }
 
@@ -128,9 +174,12 @@ fn the_scripts_stream_carries_session_changed() {
     server.events.subscribe(sender);
     let dir = tempfile::tempdir().unwrap();
     create(&mut server, dir.path(), "a");
-    server.execute_session(SessionCommand::Terminate { name: "a".into() }).unwrap();
+    server
+        .execute_session(SessionCommand::Terminate { name: "a".into() })
+        .unwrap();
 
-    let events: Vec<serde_json::Value> = lines.try_iter()
+    let events: Vec<serde_json::Value> = lines
+        .try_iter()
         .map(|line| serde_json::from_str(&line).unwrap())
         .filter(|event: &serde_json::Value| event.get("SessionChanged").is_some())
         .collect();
@@ -138,5 +187,8 @@ fn the_scripts_stream_carries_session_changed() {
     assert_eq!(events[0]["SessionChanged"]["kind"], "created");
     assert_eq!(events[1]["SessionChanged"]["kind"], "terminated");
     assert_eq!(events[1]["SessionChanged"]["session"]["name"], "a");
-    assert_eq!(events[1]["SessionChanged"]["session"]["state"], serde_json::json!(SessionState::Terminated));
+    assert_eq!(
+        events[1]["SessionChanged"]["session"]["state"],
+        serde_json::json!(SessionState::Terminated)
+    );
 }

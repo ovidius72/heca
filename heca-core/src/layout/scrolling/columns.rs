@@ -154,7 +154,10 @@ impl ScrollingMut<'_> {
         };
         let before = self.reader().positions();
         let height = self.view.area.size.h;
-        let Some(effects) = self.space.move_pane_along(col, row, dir, new_column_id, height) else {
+        let Some(effects) = self
+            .space
+            .move_pane_along(col, row, dir, new_column_id, height)
+        else {
             return false;
         };
         self.show_pane_landed(&effects, &before)

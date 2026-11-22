@@ -28,7 +28,8 @@ fn a_described_tree_spaces_itself_from_the_theme() {
         &Theme::default(),
         &emit,
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let layout = &w.base().style.layout;
     use heca_grid_ui::style::Space;
     assert_eq!(
@@ -60,7 +61,8 @@ fn the_retired_spacing_names_still_reach_the_setting_that_replaced_them() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     let l = w.base().style.layout;
     assert_eq!(
         l.gap,
@@ -83,7 +85,8 @@ fn one_described_name_reads_a_number_and_a_step() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget")
+        )
+        .expect("valid described test widget")
         .base()
         .style
         .layout
@@ -114,7 +117,8 @@ fn a_described_node_publishes_an_accent_to_its_subtree() {
         .prop("accent", PropValue::Color("danger".into()))
         .child(ViewNode::new(WidgetId::Button).text("Delete"));
 
-    let w = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default()).expect("valid described test widget");
+    let w = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default())
+        .expect("valid described test widget");
     assert_eq!(
         w.base().style.visual.accent,
         Some(theme.colors.danger),
@@ -155,7 +159,8 @@ fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         match &widget.base().tooltip {
             None => missing.push(format!("{kind:?} (no tooltip on the realized widget)")),
             Some(tip) => {
@@ -165,7 +170,10 @@ fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
                 // An integer delay is the same number of seconds as a float one to whoever
                 // wrote it, and JSON does not keep them apart.
                 if (tip.delay() - 2.0).abs() > f32::EPSILON {
-                    missing.push(format!("{kind:?} (declared delay ignored: {})", tip.delay()));
+                    missing.push(format!(
+                        "{kind:?} (declared delay ignored: {})",
+                        tip.delay()
+                    ));
                 }
             }
         }
@@ -185,16 +193,24 @@ fn a_child_in_the_tooltip_slot_is_what_any_kind_shows_on_hover() {
     let mut wrong: Vec<String> = Vec::new();
     for kind in registered_ids() {
         let (emit, _fired) = recording_emitter();
-        let realized = |node: &ViewNode| realize(node, &Theme::default(), &emit, &mut FormBindings::default())
-            .expect("valid described test widget");
+        let realized = |node: &ViewNode| {
+            realize(node, &Theme::default(), &emit, &mut FormBindings::default())
+                .expect("valid described test widget")
+        };
         let plain = realized(&sample_node(kind.clone()));
         let node = sample_node(kind.clone())
             .prop("tooltip_side", PropValue::Text("bottom".into()))
-            .child(ViewNode::new("tag").text("claude").prop("slot", PropValue::Text("tooltip".into())));
+            .child(
+                ViewNode::new("tag")
+                    .text("claude")
+                    .prop("slot", PropValue::Text("tooltip".into())),
+            );
         let widget = realized(&node);
         match &widget.base().tooltip {
             None => wrong.push(format!("{kind:?} (no tooltip)")),
-            Some(tip) if tip.side != heca_grid_ui::TooltipSide::Bottom => wrong.push(format!("{kind:?} (side ignored)")),
+            Some(tip) if tip.side != heca_grid_ui::TooltipSide::Bottom => {
+                wrong.push(format!("{kind:?} (side ignored)"))
+            }
             Some(_) => {}
         }
         if widget.base().children.len() != plain.base().children.len() {
@@ -221,7 +237,8 @@ fn a_quick_tooltip_declared_on_any_kind_takes_the_librarys_quick_delay() {
             &Theme::default(),
             &emit,
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         match &widget.base().tooltip {
             Some(tip)
                 if (tip.delay() - heca_grid_ui::widgets::tooltip::QUICK_DELAY).abs()

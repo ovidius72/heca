@@ -84,14 +84,22 @@ fn completion_pulses_except_in_the_pane_holding_actual_input_focus() {
         event.status = status.into();
         let mut background = FeedbackView::default();
         background.receive(vec![event.clone()]);
-        assert_eq!(background.project(Some(PaneId(8))),
-            vec![Effect::Pulse(PaneId(7), status.into())]);
+        assert_eq!(
+            background.project(Some(PaneId(8))),
+            vec![Effect::Pulse(PaneId(7), status.into())]
+        );
         let mut inactive_window = FeedbackView::default();
         inactive_window.receive(vec![event.clone()]);
-        assert_eq!(inactive_window.project(None), vec![Effect::Pulse(PaneId(7), status.into())]);
+        assert_eq!(
+            inactive_window.project(None),
+            vec![Effect::Pulse(PaneId(7), status.into())]
+        );
         let mut focused = FeedbackView::default();
         focused.receive(vec![event]);
-        assert_eq!(focused.project(Some(PaneId(7))), vec![Effect::Acknowledge(PaneId(7), 42)]);
+        assert_eq!(
+            focused.project(Some(PaneId(7))),
+            vec![Effect::Acknowledge(PaneId(7), 42)]
+        );
     }
 }
 
@@ -101,14 +109,23 @@ fn a_granted_sound_plays_once_and_never_after_focus_or_shared_acknowledgement() 
     client.receive(vec![pending(42, 41)]);
     client.project(None);
     client.grant_sound(PaneId(7), 42);
-    assert_eq!(client.project(None), vec![Effect::Sound(PaneId(7), 42, "waiting_permission".into())]);
+    assert_eq!(
+        client.project(None),
+        vec![Effect::Sound(PaneId(7), 42, "waiting_permission".into())]
+    );
     client.grant_sound(PaneId(7), 42);
     assert!(client.project(None).is_empty());
     client.receive(vec![pending(43, 42)]);
     client.project(Some(PaneId(7)));
     client.grant_sound(PaneId(7), 43);
-    assert!(client.project(None).is_empty(), "already acknowledged locally");
+    assert!(
+        client.project(None).is_empty(),
+        "already acknowledged locally"
+    );
     client.receive(vec![pending(44, 44)]);
     client.grant_sound(PaneId(7), 44);
-    assert!(client.project(None).is_empty(), "shared acknowledgement wins");
+    assert!(
+        client.project(None).is_empty(),
+        "shared acknowledgement wins"
+    );
 }

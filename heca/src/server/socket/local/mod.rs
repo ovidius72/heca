@@ -21,7 +21,9 @@ pub(crate) use unix::{UnixListener, UnixStream, detach, identity, is_socket, res
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use windows::{UnixListener, UnixStream, detach, identity, is_socket, restrict_to_owner};
+pub(crate) use windows::{
+    UnixListener, UnixStream, detach, identity, is_socket, restrict_to_owner,
+};
 
 /// Names a file for as long as it exists; two paths that give the same one are the same file.
 pub(crate) type FileIdentity = (u64, u64);
@@ -30,7 +32,9 @@ pub(crate) type FileIdentity = (u64, u64);
 mod tests {
     use super::*;
 
-    fn folder() -> tempfile::TempDir { tempfile::tempdir().unwrap() }
+    fn folder() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
+    }
 
     #[test]
     fn a_socket_file_is_a_socket_and_a_plain_file_is_not() {
@@ -64,13 +68,24 @@ mod tests {
         let _listener = UnixListener::bind(&socket).unwrap();
         restrict_to_owner(&socket).unwrap();
         #[cfg(unix)]
-        assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&socket).unwrap().permissions()) & 0o777, 0o600);
+        assert_eq!(
+            std::os::unix::fs::PermissionsExt::mode(
+                &std::fs::metadata(&socket).unwrap().permissions()
+            ) & 0o777,
+            0o600
+        );
     }
 
     #[test]
     fn a_detached_command_still_runs_and_reports_its_exit() {
-        let exit_3 = if cfg!(windows) { ("cmd", ["/C", "exit 3"]) } else { ("/bin/sh", ["-c", "exit 3"]) };
-        let status = detach(std::process::Command::new(exit_3.0).args(exit_3.1)).status().unwrap();
+        let exit_3 = if cfg!(windows) {
+            ("cmd", ["/C", "exit 3"])
+        } else {
+            ("/bin/sh", ["-c", "exit 3"])
+        };
+        let status = detach(std::process::Command::new(exit_3.0).args(exit_3.1))
+            .status()
+            .unwrap();
         assert_eq!(status.code(), Some(3));
     }
 }

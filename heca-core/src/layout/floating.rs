@@ -5,8 +5,8 @@
 //! `floating_panes` and choosing the default size for itself.
 
 use super::column::Pane;
-use super::types::*;
 use super::scrolling::SpaceEffect;
+use super::types::*;
 use super::workspace::{FloatOrigin, FloatingPane, Workspace};
 
 impl Workspace {
@@ -75,7 +75,10 @@ impl Workspace {
             Some((col, row)) => (col, Some(row)),
             None => {
                 let end = self.scrolling.columns.len();
-                (float.origin.map_or(end, |origin| origin.position.min(end)), None)
+                (
+                    float.origin.map_or(end, |origin| origin.position.min(end)),
+                    None,
+                )
             }
         };
         self.place_pane(float.pane, col, row, new_column_id, working_height)
@@ -129,7 +132,10 @@ mod tests {
             .into_iter()
             .find(|p| p.pane.id == PaneId(2))
             .unwrap();
-        assert_eq!((placement.rect.loc, placement.rect.size), (rect.loc, rect.size));
+        assert_eq!(
+            (placement.rect.loc, placement.rect.size),
+            (rect.loc, rect.size)
+        );
         assert!(placement.active);
         assert_eq!(ws.focus_domain(), FocusDomain::Floating);
         assert_eq!(ws.reader().active_pane().map(|p| p.id), Some(PaneId(2)));
@@ -179,8 +185,10 @@ mod tests {
         let mut s = session();
         let mut ws = s.ws();
         // Stack panes 4 and 5 under pane 1 in column 0 (rows 1 and 2).
-        ws.scroll_mut().add_pane_to_column(0, None, Pane::new(PaneId(4), ""), false);
-        ws.scroll_mut().add_pane_to_column(0, None, Pane::new(PaneId(5), ""), false);
+        ws.scroll_mut()
+            .add_pane_to_column(0, None, Pane::new(PaneId(4), ""), false);
+        ws.scroll_mut()
+            .add_pane_to_column(0, None, Pane::new(PaneId(5), ""), false);
         let before = ws.scrolling.pane_indices(PaneId(4)).unwrap();
         ws.float_tiled_pane(PaneId(4));
         assert!(ws.unfloat_pane(PaneId(4), ColumnId(99), HEIGHT).is_some());

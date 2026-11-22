@@ -56,7 +56,10 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
 /// [`paint_child`] once the parent's cut is in place: the hue the widget publishes, then the paint.
 fn paint_inherited(c: &dyn Component, cx: &mut PaintCx) {
     let visual = &c.base().style.visual;
-    let tone = c.base().content_tone.map_or(visual.content_tone, |tone| tone.get());
+    let tone = c
+        .base()
+        .content_tone
+        .map_or(visual.content_tone, |tone| tone.get());
     let content = tone.map(|tone| tone.resolve(cx.theme()));
     match (visual.accent, content) {
         (Some(hue), Some(text)) => cx.with_accent(hue, |cx| {
@@ -76,7 +79,8 @@ fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
     // A tooltip written by hand on a hovered widget covers the cut-text tooltips of the labels
     // inside it: they paint (and so decide) before it does.
     let base = c.base();
-    let hand_tip_here = base.hovered() && base.tooltip.as_ref().is_some_and(|tip| !tip.is_automatic());
+    let hand_tip_here =
+        base.hovered() && base.tooltip.as_ref().is_some_and(|tip| !tip.is_automatic());
     let above = cx.hand_tip_above;
     cx.hand_tip_above = above || hand_tip_here;
     paint_holding(c, cx);

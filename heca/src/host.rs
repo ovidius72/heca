@@ -130,7 +130,9 @@ impl<'a> StateView<'a> {
     ///
     /// The same key an action gets from [`ActionCx::workspace`](crate::ActionCx::workspace), so a
     /// room stored by one is found by the other. `workspace.focused` is raised when it changes.
-    pub fn active_workspace(&self) -> heca_grid_ui::reactive::Signal<Option<crate::entry::service::WorkspaceKey>> {
+    pub fn active_workspace(
+        &self,
+    ) -> heca_grid_ui::reactive::Signal<Option<crate::entry::service::WorkspaceKey>> {
         self.state.workspaces.active_workspace()
     }
 
