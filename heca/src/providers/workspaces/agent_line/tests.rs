@@ -101,13 +101,12 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
                 .any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == label)),
             "{state}: the label is not written out"
         );
-        for expected in [glyph.primary_char().unwrap().to_string()] {
-            assert!(
-                scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
-                if text.text == expected && text.color == color)),
-                "wrong icon/tone for {state}: {expected}"
-            );
-        }
+        let expected = glyph.primary_char().unwrap().to_string();
+        assert!(
+            scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
+            if text.text == expected && text.color == color)),
+            "wrong icon/tone for {state}: {expected}"
+        );
     }
     statuses.update(|statuses| {
         Rc::make_mut(statuses).insert(
