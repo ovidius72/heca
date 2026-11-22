@@ -71,7 +71,7 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
         (
             "waiting_input",
             "Waiting…",
-            Glyph::ChatCircleDots,
+            Glyph::Hourglass,
             theme.colors.warning,
         ),
         (

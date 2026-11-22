@@ -425,7 +425,7 @@ icon = "lightning"
 tone = "accent"
 [settings.agents.statuses.waiting_input]
 label = "Waiting…"
-icon = "chat_circle_dots"
+icon = "hourglass"
 tone = "warning"
 sound = { source = "asset:attention" }
 [settings.agents.statuses.waiting_permission]
