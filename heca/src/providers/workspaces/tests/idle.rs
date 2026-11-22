@@ -44,17 +44,9 @@ fn moving_focus_between_dock_rows_does_not_keep_asking_for_frames() {
         }
         .build(&seams, &mut reg)
     };
-    let frame = |fx: &testing::Fixture, root: &mut heca_grid_ui::widgets::ScrollRegion| {
+    let frame = |root: &mut heca_grid_ui::widgets::ScrollRegion| {
         heca_grid_ui::frame_served();
-        // The pane rows follow the store's focus themselves; the columns and workspaces are still
-        // written the way the host writes them.
-        let active = fx.store.workspaces.active_pane();
-        for (panes, signal) in fx.signals.col_active.iter().chain(&fx.signals.ws_active) {
-            let v = active.is_some_and(|a| panes.contains(&a));
-            if heca_grid_ui::reactive::SignalGet::get_untracked(signal) != v {
-                heca_grid_ui::reactive::SignalUpdate::set(signal, v);
-            }
-        }
+        // Rows, columns and workspace frames follow the store's focus themselves.
         let animating = root.tick(0.016);
         heca_grid_ui::LayoutEngine::new().compute(root, heca_grid_ui::Size::new(300.0, 600.0));
         let theme = heca_grid_ui::Theme::default();
@@ -67,11 +59,11 @@ fn moving_focus_between_dock_rows_does_not_keep_asking_for_frames() {
         )
     };
     for _ in 0..5 {
-        frame(&fx, &mut root);
+        frame(&mut root);
     }
     for pane in [2, 3, 1, 3] {
         fx.store.workspaces.set_active_pane(Some(PaneId(pane)));
-        let trace: Vec<_> = (0..8).map(|_| frame(&fx, &mut root)).collect();
+        let trace: Vec<_> = (0..8).map(|_| frame(&mut root)).collect();
         eprintln!("focus {pane}: {trace:?}");
         for (i, (asked, animating, wake)) in trace.iter().enumerate().skip(4) {
             assert_eq!(

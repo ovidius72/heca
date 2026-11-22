@@ -24,16 +24,6 @@ use crate::chrome::*;
 /// rebuild the tree. Rebuilt with the tree on structural change.
 #[derive(Default)]
 pub(crate) struct ChromeSignals {
-    /// Each column [`MarkerGroup`](heca_grid_ui::widgets::MarkerGroup)'s `active` signal + the pane ids it
-    /// holds (active iff it contains the active pane).
-    pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
-    /// Each workspace [`DockFrame`](heca_grid_ui::widgets::DockFrame)'s `active` signal + the pane ids it holds (active
-    /// iff it contains the active pane). Drives the active-workspace accent wash in
-    /// place, mirroring [`col_active`](ChromeSignals::col_active).
-    pub(crate) ws_active: Vec<(Vec<PaneId>, Signal<bool>)>,
-    /// **The workspace `prefix+Shift+i` would return to**, by index. Bound like
-    /// [`ws_active`](Self::ws_active) because it changes on focus, which does not rebuild the tree.
-    pub(crate) ws_previous: Vec<(usize, Signal<bool>)>,
     /// The status-bar label's text signal.
     pub(crate) status: Option<Signal<String>>,
 }
@@ -126,30 +116,8 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
     let Some(retained) = state.chrome_tree.as_ref() else {
         return;
     };
-    // A pane row follows focus itself, from the store's signals (`providers/workspaces/pane_row.rs`);
-    // what is left here is handed over by rows that do not yet.
-    let active = state.chrome_state.workspaces.active_pane();
-    // The workspace back-and-forth would take you to — the frame says *which* workspace, the pane
-    // mark inside it says which pane. Two levels of one answer.
-    let previous_ws = state.chrome_state.workspaces.previous_ws();
-    for (idx, sig) in &retained.signals.ws_previous {
-        let v = Some(*idx) == previous_ws;
-        if sig.get_untracked() != v {
-            sig.set(v);
-        }
-    }
-    for (pids, sig) in &retained.signals.col_active {
-        let v = active.is_some_and(|a| pids.contains(&a));
-        if sig.get_untracked() != v {
-            sig.set(v);
-        }
-    }
-    for (pids, sig) in &retained.signals.ws_active {
-        let v = active.is_some_and(|a| pids.contains(&a));
-        if sig.get_untracked() != v {
-            sig.set(v);
-        }
-    }
+    // Rows, columns and workspace frames follow focus themselves, from the store's signals
+    // (`providers/workspaces`): nothing about selection is written here any more.
     // **Each keyboard-navigable dock's cursor lights its row, by key.** A row declares only its
     // `.key(..)` — heca's and an extension's alike — and the dock's cursor (`container_cursor`)
     // reaches it here, distinct from `active` above, so the sidebar shows both the real focus and
