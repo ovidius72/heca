@@ -93,7 +93,9 @@ pub(crate) fn workspace_entries(
             description_path: false,
             detail: None,
             shortcuts: Vec::new(),
-            intent: Some(InteractionIntent::ActivateAction(WmAction::FocusWorkspace { ws_idx })),
+            intent: Some(InteractionIntent::ActivateAction(
+                WmAction::FocusWorkspace { ws_idx },
+            )),
         })
         .collect()
 }

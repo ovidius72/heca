@@ -4,23 +4,37 @@ use super::*;
 fn a_signal_driven_animated_surface_can_open_and_close_repeatedly() {
     let theme = crate::Theme::default();
     let viewport = Size::new(800.0, 600.0);
-    let mut overlay = Overlay::new().animation(Animation::ZoomFade)
+    let mut overlay = Overlay::new()
+        .animation(Animation::ZoomFade)
         .panel(Flex::column().child(Label::new("Repeatable surface")));
     let handle = overlay.handle();
     for cycle in 0..3 {
         handle.show();
-        for _ in 0..60 { overlay.tick(1.0 / 60.0); }
+        for _ in 0..60 {
+            overlay.tick(1.0 / 60.0);
+        }
         crate::LayoutEngine::new().compute(&mut overlay, viewport);
         let mut scene = Scene::new();
         overlay.paint(&mut PaintCx::new(&mut scene, &theme).with_viewport(viewport));
-        assert!(!scene.is_empty(), "opening cycle {cycle} must paint the surface");
-        assert!(overlay.is_shown(), "opening cycle {cycle} must participate in input routing");
+        assert!(
+            !scene.is_empty(),
+            "opening cycle {cycle} must paint the surface"
+        );
+        assert!(
+            overlay.is_shown(),
+            "opening cycle {cycle} must participate in input routing"
+        );
 
         handle.close();
-        for _ in 0..60 { overlay.tick(1.0 / 60.0); }
+        for _ in 0..60 {
+            overlay.tick(1.0 / 60.0);
+        }
         let mut scene = Scene::new();
         overlay.paint(&mut PaintCx::new(&mut scene, &theme).with_viewport(viewport));
-        assert!(scene.is_empty(), "closing cycle {cycle} must finish its exit");
+        assert!(
+            scene.is_empty(),
+            "closing cycle {cycle} must finish its exit"
+        );
         assert!(!overlay.is_shown());
     }
 }

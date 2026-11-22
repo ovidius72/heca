@@ -4,18 +4,33 @@ use super::*;
 
 impl<'a> PaintCx<'a> {
     /// Place a decoded image. The shared image service owns decoding, pixel density and caching.
-    pub fn image(&mut self, rect: Rectangle, image: std::sync::Arc<crate::image::ImageData>, fit: crate::image::ImageFit, color: Color) {
-        if self.culled(rect) { return }
+    pub fn image(
+        &mut self,
+        rect: Rectangle,
+        image: std::sync::Arc<crate::image::ImageData>,
+        fit: crate::image::ImageFit,
+        color: Color,
+    ) {
+        if self.culled(rect) {
+            return;
+        }
         self.emit(DrawCommand::Host(HostCmd {
-            draw: HostDraw::Image { image, fit, color }, rect: self.placed(rect), alpha: 1.0,
-            echo: self.echo, rounded: self.rounded,
+            draw: HostDraw::Image { image, fit, color },
+            rect: self.placed(rect),
+            alpha: 1.0,
+            echo: self.echo,
+            rounded: self.rounded,
         }));
     }
 
     /// Draw a segment with the active translation, scale, opacity and clip.
     pub fn line(&mut self, mut line: crate::scene::LineCmd) {
-        line.start = self.placed(Rectangle::new(line.start, Size::new(0.0, 0.0))).loc;
-        line.end = self.placed(Rectangle::new(line.end, Size::new(0.0, 0.0))).loc;
+        line.start = self
+            .placed(Rectangle::new(line.start, Size::new(0.0, 0.0)))
+            .loc;
+        line.end = self
+            .placed(Rectangle::new(line.end, Size::new(0.0, 0.0)))
+            .loc;
         self.emit(DrawCommand::Line(line));
     }
 

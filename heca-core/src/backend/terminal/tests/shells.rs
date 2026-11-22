@@ -149,9 +149,7 @@ fn terminal_backend_zsh_integration_detects_nvim_as_running_program() {
     while Instant::now() < stable_until {
         let _ = backend.update();
         let runtime = backend.runtime();
-        if runtime.program.as_deref() != Some("nvim")
-            || runtime.status != ProcessStatus::Running
-        {
+        if runtime.program.as_deref() != Some("nvim") || runtime.status != ProcessStatus::Running {
             reverted = true;
             break;
         }
@@ -193,7 +191,10 @@ fn terminal_backend_command_spawn_runs_and_stays_open_for_policy() {
         "command backend should capture the exit code"
     );
     assert_eq!(backend.runtime().status, ProcessStatus::Error);
-    assert_eq!(backend.take_alerts(), vec![crate::backend::BackendAlert::ProcessCompleted { exit_code: 7 }]);
+    assert_eq!(
+        backend.take_alerts(),
+        vec![crate::backend::BackendAlert::ProcessCompleted { exit_code: 7 }]
+    );
     let _ = backend.update();
     assert!(backend.take_alerts().is_empty());
     assert!(
@@ -219,7 +220,9 @@ fn a_heca_zsh_reads_the_users_folder_and_still_loads_heca_hooks() {
         return;
     }
     let root = tempfile::tempdir().unwrap();
-    let assets = super::super::launch::ShellIntegrationAssets::write_to(&root.path().join("runtime")).unwrap();
+    let assets =
+        super::super::launch::ShellIntegrationAssets::write_to(&root.path().join("runtime"))
+            .unwrap();
     let home = root.path().join("home");
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(home.join(".zshrc"), "USER_RC=read\n").unwrap();
@@ -234,10 +237,25 @@ fn a_heca_zsh_reads_the_users_folder_and_still_loads_heca_hooks() {
         .output()
         .expect("zsh runs");
     let out = String::from_utf8_lossy(&output.stdout);
-    let line = out.lines().find(|l| l.starts_with("zdotdir=")).unwrap_or_else(|| panic!("no report in {out:?}"));
-    assert!(line.contains("zdotdir=unset"), "ZDOTDIR is the user's again (none): {line}");
-    assert!(line.contains("rc=read"), "zsh read the user's .zshrc itself: {line}");
-    assert!(line.contains("hooks=heca__attach"), "heca's hooks wait for the first prompt: {line}");
+    let line = out
+        .lines()
+        .find(|l| l.starts_with("zdotdir="))
+        .unwrap_or_else(|| panic!("no report in {out:?}"));
+    assert!(
+        line.contains("zdotdir=unset"),
+        "ZDOTDIR is the user's again (none): {line}"
+    );
+    assert!(
+        line.contains("rc=read"),
+        "zsh read the user's .zshrc itself: {line}"
+    );
+    assert!(
+        line.contains("hooks=heca__attach"),
+        "heca's hooks wait for the first prompt: {line}"
+    );
     let heca_folder = assets.zsh_zdotdir.to_string_lossy().into_owned();
-    assert!(!line.contains(&heca_folder), "nothing points into heca's folder any more: {line}");
+    assert!(
+        !line.contains(&heca_folder),
+        "nothing points into heca's folder any more: {line}"
+    );
 }

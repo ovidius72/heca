@@ -3,7 +3,6 @@ use crate::builders::Parent;
 
 #[heca_grid_ui_macros::props]
 impl Input {
-
     /// A new empty input.
     pub fn new() -> Self {
         let mut base = Base::container();
@@ -11,13 +10,29 @@ impl Input {
         let text = signal(String::new());
         let view = std::rc::Rc::new(std::cell::RefCell::new(content::View::new(text)));
         let content = content::Content::new(view.clone());
-        let region = crate::ScrollRegion::new().horizontal().padding_y("none").child(content);
+        let region = crate::ScrollRegion::new()
+            .horizontal()
+            .padding_y("none")
+            .child(content);
         view.borrow_mut().offset_x = region.scroll_offset_x();
         view.borrow_mut().offset_y = region.scroll_offset();
         base.children.push(crate::WidgetModel::new(region));
-        Self { base, text, placeholder: String::new(), placeholder_on_focus: false, seen_text: String::new(), cursor: 0, anchor: None,
-            blink_origin: crate::clock::now(), last_caret: std::cell::Cell::new(false),
-            multiline: false, max_lines: None, view, on_change: None, on_submit: None }
+        Self {
+            base,
+            text,
+            placeholder: String::new(),
+            placeholder_on_focus: false,
+            seen_text: String::new(),
+            cursor: 0,
+            anchor: None,
+            blink_origin: crate::clock::now(),
+            last_caret: std::cell::Cell::new(false),
+            multiline: false,
+            max_lines: None,
+            view,
+            on_change: None,
+            on_submit: None,
+        }
     }
 
     /// Explicit font size — overrides the inherited theme font.
@@ -62,7 +77,10 @@ impl Input {
 
     /// Keep an empty field's placeholder visible while focused (default false).
     #[heca_grid_ui_macros::prop]
-    pub fn placeholder_on_focus(mut self, show: bool) -> Self { self.placeholder_on_focus = show; self }
+    pub fn placeholder_on_focus(mut self, show: bool) -> Self {
+        self.placeholder_on_focus = show;
+        self
+    }
 
     /// Set the change handler. Receives `Action::value("input-change",
     /// SignalData::String(new_text))` after every edit.
@@ -110,21 +128,29 @@ impl Input {
         })
     }
 
-
     /// Enable a growing, wrapping multi-line field (default false). Enter inserts a newline.
     #[heca_grid_ui_macros::prop]
     pub fn multiline(mut self, multiline: bool) -> Self {
         self.multiline = multiline;
         self.base.children.clear();
-        let region = if multiline { crate::ScrollRegion::new() } else { crate::ScrollRegion::new().horizontal() };
+        let region = if multiline {
+            crate::ScrollRegion::new()
+        } else {
+            crate::ScrollRegion::new().horizontal()
+        };
         let region = region.padding_y("none");
         self.view.borrow_mut().offset_x = region.scroll_offset_x();
         self.view.borrow_mut().offset_y = region.scroll_offset();
-        self.base.children.push(crate::WidgetModel::new(region.child(content::Content::new(self.view.clone()))));
+        self.base.children.push(crate::WidgetModel::new(
+            region.child(content::Content::new(self.view.clone())),
+        ));
         self
     }
 
     /// Override the theme's maximum visible lines. At least one; extra content scrolls.
     #[heca_grid_ui_macros::prop]
-    pub fn max_lines(mut self, lines: usize) -> Self { self.max_lines = Some(lines.max(1)); self }
+    pub fn max_lines(mut self, lines: usize) -> Self {
+        self.max_lines = Some(lines.max(1));
+        self
+    }
 }

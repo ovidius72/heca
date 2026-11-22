@@ -8,9 +8,9 @@
 //! returns. It is reached only through that seam — nothing in `chrome` calls it.
 
 use super::seams::{DockRegistries, DockSeams};
+use super::{MENU_CONTAINER, WorkspaceTree, container_items, workspace_frame::WorkspaceFrame};
 use crate::chrome::{BuildCx, WidgetModel};
 use crate::providers::ChromeCtx;
-use super::{MENU_CONTAINER, WorkspaceTree, container_items, workspace_frame::WorkspaceFrame};
 use heca_grid_ui::builders::{LayoutExt, MenuExt, Parent};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::Spacing;

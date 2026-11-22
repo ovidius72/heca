@@ -65,24 +65,27 @@ mod inbox;
 mod request;
 pub mod saved;
 mod session_key;
-mod workspace_key;
 mod sessions;
 #[cfg(test)]
 mod tests;
+mod workspace_key;
 
 pub use client::ServiceState;
 pub use config::ExtensionConfigError;
-pub use cx::{ActionCx, ProjectCx, ServiceCx, StartCx};
 pub(crate) use cx::Effects;
+pub use cx::{ActionCx, ProjectCx, ServiceCx, StartCx};
 pub(crate) use declared::{ActionFn, Declaration, ListenFn, PolicyFn};
 pub use inbox::{ServiceInbox, ServiceSendError};
 pub use request::{
-    ActionRequest, ExternalRequest, Permit, RequestOutcome, RequestRef, Requester, Sender, SubmitError,
+    ActionRequest, ExternalRequest, Permit, RequestOutcome, RequestRef, Requester, Sender,
+    SubmitError,
 };
 pub use saved::{SavedError, Scope, StateEvent};
 pub use session_key::SessionKey;
+pub use sessions::{
+    ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
+};
 pub use workspace_key::WorkspaceKey;
-pub use sessions::{ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions};
 
 use declared::Declared;
 
@@ -103,7 +106,11 @@ pub trait Service: 'static {
     const SCHEMA_VERSION: u32;
 
     /// One message from the inbox. Call [`ServiceCx::republish`] when what windows see changed.
-    fn receive(&mut self, cx: &mut ServiceCx<'_, Self::Message>, message: Self::Message) -> ServiceResult<()>;
+    fn receive(
+        &mut self,
+        cx: &mut ServiceCx<'_, Self::Message>,
+        message: Self::Message,
+    ) -> ServiceResult<()>;
 
     /// What one window is shown — committed data only.
     ///
@@ -124,7 +131,13 @@ pub trait Service: 'static {
     /// once per request, on the server's turn after it ended; a request still open when the server
     /// stops is ended first, as [`RequestOutcome::Refused`] if it never started and
     /// [`RequestOutcome::Unknown`] if it did. The default does nothing.
-    fn request_done(&mut self, _cx: &mut ServiceCx<'_, Self::Message>, _request: &RequestRef, _outcome: RequestOutcome) {}
+    fn request_done(
+        &mut self,
+        _cx: &mut ServiceCx<'_, Self::Message>,
+        _request: &RequestRef,
+        _outcome: RequestOutcome,
+    ) {
+    }
 }
 
 /// What a window is shown, from [`Service::project`].
@@ -187,7 +200,9 @@ impl super::Extension {
             return ServiceRegistration { declared: None };
         };
         if SERVICES.with(|q| q.peek(|all| all.iter().any(|d| d.name() == name))) {
-            warn_author(format!("[heca] service '{name}' was already declared, so this one is refused"));
+            warn_author(format!(
+                "[heca] service '{name}' was already declared, so this one is refused"
+            ));
             return ServiceRegistration { declared: None };
         }
         let declared = Rc::new(Declared::<S> {
@@ -206,7 +221,9 @@ impl super::Extension {
             ));
             return ServiceRegistration { declared: None };
         }
-        ServiceRegistration { declared: Some(declared) }
+        ServiceRegistration {
+            declared: Some(declared),
+        }
     }
 }
 
@@ -225,7 +242,9 @@ impl<S: Service> ServiceRegistration<S> {
         meta: ActionMeta,
         run: impl Fn(&mut S, &mut ActionCx<'_, S::Message>, &Intent) -> ActionResult + 'static,
     ) {
-        let Some(declared) = &self.declared else { return };
+        let Some(declared) = &self.declared else {
+            return;
+        };
         if !super::action::belongs_to_an_extension(&meta) {
             return;
         }
@@ -266,7 +285,9 @@ impl<S: Service> ServiceRegistration<S> {
         &self,
         policy: impl Fn(&mut S, &mut ServiceCx<'_, S::Message>, &ActionRequest<'_>) -> Permit + 'static,
     ) {
-        let Some(declared) = &self.declared else { return };
+        let Some(declared) = &self.declared else {
+            return;
+        };
         if SERVICES.with(StartupQueue::is_closed) {
             warn_author(format!(
                 "[heca] an action policy of service '{}' was added after the app started, so it does nothing — add it \
@@ -301,7 +322,9 @@ impl<S: Service> ServiceRegistration<S> {
         event: &str,
         listen: impl Fn(&mut S, &mut ServiceCx<'_, S::Message>, &ServerEvent) + 'static,
     ) {
-        let Some(declared) = &self.declared else { return };
+        let Some(declared) = &self.declared else {
+            return;
+        };
         if event != "*" && !ServerEvent::NAMES.contains(&event) {
             warn_author(format!(
                 "[heca] service '{}' listens for '{event}', which is not an event — the events are {}, or \"*\"",
@@ -318,7 +341,10 @@ impl<S: Service> ServiceRegistration<S> {
             ));
             return;
         }
-        declared.listeners.borrow_mut().push((event.to_owned(), Rc::new(listen)));
+        declared
+            .listeners
+            .borrow_mut()
+            .push((event.to_owned(), Rc::new(listen)));
     }
 
     /// **What this service shows a window, as a value components read.** `initial` is what a

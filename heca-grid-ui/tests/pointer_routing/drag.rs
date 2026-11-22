@@ -15,7 +15,8 @@ fn gated() -> (heca_grid_ui::WidgetModel, Seen) {
     probe.base.draggable = true;
     probe.base.key = Some("item".into());
     probe.base.drag_gate = Some(Rc::new(|m: Modifiers| m.meta));
-    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(Flex::row().child(probe));
+    let mut root: heca_grid_ui::WidgetModel =
+        heca_grid_ui::WidgetModel::new(Flex::row().child(probe));
     LayoutEngine::new().compute(root.as_mut(), Size::new(100.0, 50.0));
     (root, seen)
 }

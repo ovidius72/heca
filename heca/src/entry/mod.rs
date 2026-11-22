@@ -33,23 +33,25 @@
 //! Every door queues its declarations and the host takes them once, as it starts. A call after
 //! that is said out loud and dropped, never ignored quietly.
 
-pub(crate) mod app_name;
 mod action;
+pub(crate) mod app_name;
 mod extension;
 mod layer;
 pub(crate) mod service;
 pub(crate) mod widgets;
 pub use widgets::register_widget;
 
+pub use crate::actions::ActionCatalogSnapshot;
 pub(crate) use action::register_queued_actions;
-pub use extension::{Extension, extension};
 pub(crate) use extension::qualified_name;
+pub use extension::{Extension, extension};
 pub(crate) use layer::{AddedLayers, rebuild as rebuild_added_layer, register_queued_layers};
 pub use layer::{LayerBuilder, LayerCx};
-pub use crate::actions::ActionCatalogSnapshot;
 pub use service::{
-    ActionCx, ActionRequest, ActionResult, ExtensionConfigError, ExternalRequest, Permit, ProjectCx, Projection,
-    RequestOutcome, RequestRef, Requester, Sender, Service, ServiceCx, ServiceInbox, ServiceRegistration,
-    ServiceResult, ServiceSendError, ServiceState, ServiceTicket, SessionKey, StartCx, Stop, SubmitError, Update, WorkspaceKey, Scope, SavedError, StateEvent,
-    ServerEvent, SessionChange, SessionEntry, SessionEvent, SessionState, Sessions,
+    ActionCx, ActionRequest, ActionResult, ExtensionConfigError, ExternalRequest, Permit,
+    ProjectCx, Projection, RequestOutcome, RequestRef, Requester, SavedError, Scope, Sender,
+    ServerEvent, Service, ServiceCx, ServiceInbox, ServiceRegistration, ServiceResult,
+    ServiceSendError, ServiceState, ServiceTicket, SessionChange, SessionEntry, SessionEvent,
+    SessionKey, SessionState, Sessions, StartCx, StateEvent, Stop, SubmitError, Update,
+    WorkspaceKey,
 };

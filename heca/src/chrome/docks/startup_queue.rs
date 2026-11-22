@@ -114,7 +114,11 @@ mod tests {
         let _ = queue.add("service");
         assert_eq!(queue.close(<[_]>::len), 1);
         assert_eq!(queue.add("late"), Err("late"));
-        assert_eq!(queue.close(|items| items.to_vec()), ["service"], "a second host reads it too");
+        assert_eq!(
+            queue.close(|items| items.to_vec()),
+            ["service"],
+            "a second host reads it too"
+        );
     }
 
     /// A new host accepts again and keeps what was declared before it started.

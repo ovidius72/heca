@@ -5,7 +5,10 @@ use crate::app::terminal_host::selection::SelectionOwner;
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 
-pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_follow_link(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let candidates = crate::app::terminal_host::collect_link_hints(state);
     begin_pick(state, InputMode::FollowLink { candidates });
     Ok(())
@@ -69,11 +72,16 @@ pub fn handle_open_link(_state: &mut AppState, action: &WmAction) -> crate::acti
         open_url_in_os(url);
         Ok(())
     } else {
-        Err(format!("refusing to open a link with a disallowed scheme: {url}"))
+        Err(format!(
+            "refusing to open a link with a disallowed scheme: {url}"
+        ))
     }
 }
 
-pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_open_link_at_caret(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let Some((owner, stable_row, col)) = state.selection.cursor_cell() else {
         return Ok(());
     };

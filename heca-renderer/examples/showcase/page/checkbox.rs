@@ -1,7 +1,6 @@
 use super::*;
 
 pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
-
     let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
     Flex::row()
         .gap(24.0)

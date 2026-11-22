@@ -27,7 +27,9 @@ pub struct Visibility {
 }
 
 impl Default for Visibility {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Visibility {
@@ -41,7 +43,11 @@ impl Visibility {
         let mut base = Base::container();
         base.transparent = true;
         let visible = signal(true);
-        Self { base, visible, seen: true }
+        Self {
+            base,
+            visible,
+            seen: true,
+        }
     }
 
     /// **Whether the child shows** (default `true`). Hidden means gone from the layout, not only
@@ -105,7 +111,12 @@ impl Component for Visibility {
         if !self.base.visible.get_untracked() {
             return;
         }
-        for child in self.base.children.iter().filter(|child| !child.base().style.layout.hidden) {
+        for child in self
+            .base
+            .children
+            .iter()
+            .filter(|child| !child.base().style.layout.hidden)
+        {
             crate::component::paint_child(child.as_ref(), cx);
         }
     }

@@ -22,14 +22,25 @@ fn notification_store_allows_history_to_be_disabled() {
 fn a_windowed_notification_reaches_only_its_window() {
     let now = Instant::now();
     let mut store = NotificationStore::new(100);
-    store.push(NotificationDraft::new("session-wide"), now).unwrap();
     store
-        .push(NotificationDraft::new("for window 2").originator().resolve_originator(2), now)
+        .push(NotificationDraft::new("session-wide"), now)
+        .unwrap();
+    store
+        .push(
+            NotificationDraft::new("for window 2")
+                .originator()
+                .resolve_originator(2),
+            now,
+        )
         .unwrap();
 
-    let titles = |views: Vec<NotificationView>| views.into_iter().map(|v| v.title).collect::<Vec<_>>();
+    let titles =
+        |views: Vec<NotificationView>| views.into_iter().map(|v| v.title).collect::<Vec<_>>();
     // Window 1 sees only the session-wide one; window 2 sees both.
-    assert_eq!(titles(store.visible_views_for(1)), vec!["session-wide".to_string()]);
+    assert_eq!(
+        titles(store.visible_views_for(1)),
+        vec!["session-wide".to_string()]
+    );
     assert_eq!(
         titles(store.visible_views_for(2)),
         vec!["session-wide".to_string(), "for window 2".to_string()],
@@ -127,11 +138,10 @@ fn promoting_a_pending_entry_fills_only_the_released_slot() {
         .notification_id();
 
     let released_id = store.visible[1].take().expect("second slot is visible");
-    store.notifications.get_mut(&released_id).unwrap().placement =
-        NotificationPlacement::History {
-            cause: NotificationArchiveCause::Dismissed,
-            archived_at: now,
-        };
+    store.notifications.get_mut(&released_id).unwrap().placement = NotificationPlacement::History {
+        cause: NotificationArchiveCause::Dismissed,
+        archived_at: now,
+    };
     store.history.push_back(released_id);
 
     let (_, update) = store.transition_at(now, |store, now| ((), store.promote_pending(now)));

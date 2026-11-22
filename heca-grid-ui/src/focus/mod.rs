@@ -12,11 +12,11 @@
 //! `Base.focused`, so widgets can render a focus ring reactively.
 
 mod door;
+mod fallback;
 mod handed;
 mod identity;
 mod scope;
 mod settle;
-mod fallback;
 
 pub(crate) use door::FocusDoor;
 pub(crate) use handed::handed_to;

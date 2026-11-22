@@ -106,7 +106,10 @@ fn the_shown_workspace_is_never_stale_because_it_is_an_id() {
     // The id still resolves to the same workspace, now at index 1 — no fix-up ran.
     let idx = session.through(&view).active_workspace_idx();
     assert_eq!(idx, 1, "its index shifted down on its own");
-    assert_eq!(session.workspaces[idx].id, shown, "still the same workspace");
+    assert_eq!(
+        session.workspaces[idx].id, shown,
+        "still the same workspace"
+    );
 }
 
 /// **Two windows on one session move independently**: the content is
@@ -122,8 +125,16 @@ fn two_windows_on_one_session_keep_their_own_focus_and_scroll() {
             .add_pane(Pane::new(PaneId(id), ""), None, true);
     }
     let first = session.workspaces[0].id;
-    assert_eq!(a.scroll(first).active_column, 3, "A added four columns and is on the last");
-    assert_eq!(b.scroll(first).active_column, 0, "B has not looked: its view is the blank one");
+    assert_eq!(
+        a.scroll(first).active_column,
+        3,
+        "A added four columns and is on the last"
+    );
+    assert_eq!(
+        b.scroll(first).active_column,
+        0,
+        "B has not looked: its view is the blank one"
+    );
 
     // A moves left by one; B moves right by one. Neither sees the other move.
     session.through_mut(&mut a).focus_left();
@@ -132,7 +143,16 @@ fn two_windows_on_one_session_keep_their_own_focus_and_scroll() {
     assert_eq!(b.scroll(first).active_column, 1);
 
     // B reads the content A built.
-    assert_eq!(session.through(&b).workspace(0).unwrap().scrolling.columns.len(), 4);
+    assert_eq!(
+        session
+            .through(&b)
+            .workspace(0)
+            .unwrap()
+            .scrolling
+            .columns
+            .len(),
+        4
+    );
 }
 
 /// A window's size is its own: resizing one leaves the other laid out in its old size.
@@ -182,13 +202,30 @@ fn a_window_reads_its_own_focus_through_the_layout() {
 fn a_new_window_on_existing_content_keeps_its_pane_in_place_when_clicked() {
     let mut source = Windowed::with_shape(&[&[&[1]]]);
     let mut view = WindowView::new(source.l().viewport(), 1.0);
-    let before = source.session.through(&view).active_workspace().unwrap()
-        .scroll().panes_with_positions();
-    source.session.through_mut(&mut view).active_workspace_mut().unwrap()
+    let before = source
+        .session
+        .through(&view)
+        .active_workspace()
+        .unwrap()
+        .scroll()
+        .panes_with_positions();
+    source
+        .session
+        .through_mut(&mut view)
+        .active_workspace_mut()
+        .unwrap()
         .activate_pane(PaneId(1));
-    let after = source.session.through(&view).active_workspace().unwrap()
-        .scroll().panes_with_positions();
-    assert_eq!(before, after, "first paint and refocus must use the same configured gaps");
+    let after = source
+        .session
+        .through(&view)
+        .active_workspace()
+        .unwrap()
+        .scroll()
+        .panes_with_positions();
+    assert_eq!(
+        before, after,
+        "first paint and refocus must use the same configured gaps"
+    );
 }
 
 #[test]
@@ -197,22 +234,48 @@ fn attached_views_fit_every_workspace_using_its_configured_layout_policy() {
     let source = Windowed::with_shape(&[&[&[1]], &[&[2]]]);
     let size = Size::new(1000.0, 800.0);
     for gaps in [0.0, 8.0, 24.0] {
-        for center in [CenterFocusedColumn::Never, CenterFocusedColumn::OnOverflow, CenterFocusedColumn::Always] {
+        for center in [
+            CenterFocusedColumn::Never,
+            CenterFocusedColumn::OnOverflow,
+            CenterFocusedColumn::Always,
+        ] {
             for single in [false, true] {
-                let options = LayoutOptions { gaps, center_focused_column: center,
-                    always_center_single_column: single, ..Default::default() };
+                let options = LayoutOptions {
+                    gaps,
+                    center_focused_column: center,
+                    always_center_single_column: single,
+                    ..Default::default()
+                };
                 let mut session = source.session.content().rebuild(SessionId(2), options);
                 let mut view = WindowView::new(size, 1.0);
                 for (workspace, pane) in [(0, PaneId(1)), (1, PaneId(2))] {
-                    let before = session.through(&view).workspace(workspace).unwrap()
-                        .scroll().panes_with_positions();
+                    let before = session
+                        .through(&view)
+                        .workspace(workspace)
+                        .unwrap()
+                        .scroll()
+                        .panes_with_positions();
                     let rect = before[0].1;
-                    assert!(rect.loc.x >= gaps, "initial border needs its configured margin");
+                    assert!(
+                        rect.loc.x >= gaps,
+                        "initial border needs its configured margin"
+                    );
                     assert!(rect.loc.x + rect.size.w <= size.w - gaps);
-                    session.through_mut(&mut view).workspace_mut(workspace).unwrap().activate_pane(pane);
-                    let after = session.through(&view).workspace(workspace).unwrap()
-                        .scroll().panes_with_positions();
-                    assert_eq!(before, after, "gaps={gaps}, center={center:?}, single={single}");
+                    session
+                        .through_mut(&mut view)
+                        .workspace_mut(workspace)
+                        .unwrap()
+                        .activate_pane(pane);
+                    let after = session
+                        .through(&view)
+                        .workspace(workspace)
+                        .unwrap()
+                        .scroll()
+                        .panes_with_positions();
+                    assert_eq!(
+                        before, after,
+                        "gaps={gaps}, center={center:?}, single={single}"
+                    );
                 }
             }
         }
@@ -223,11 +286,29 @@ fn attached_views_fit_every_workspace_using_its_configured_layout_policy() {
 fn attaching_a_new_view_does_not_change_an_existing_windows_scroll() {
     let mut source = Windowed::with_shape(&[&[&[1], &[2], &[3]]]);
     source.scrolled(0, -100.0, 1);
-    let before = source.l().active_workspace().unwrap().scroll().panes_with_positions();
+    let before = source
+        .l()
+        .active_workspace()
+        .unwrap()
+        .scroll()
+        .panes_with_positions();
     let mut other = WindowView::new(source.l().viewport(), 1.0);
-    source.session.through_mut(&mut other).active_workspace_mut().unwrap().activate_pane(PaneId(1));
+    source
+        .session
+        .through_mut(&mut other)
+        .active_workspace_mut()
+        .unwrap()
+        .activate_pane(PaneId(1));
     source.ws().scroll_mut().advance_animations();
-    assert_eq!(source.l().active_workspace().unwrap().scroll().panes_with_positions(), before);
+    assert_eq!(
+        source
+            .l()
+            .active_workspace()
+            .unwrap()
+            .scroll()
+            .panes_with_positions(),
+        before
+    );
 }
 
 /// **Resizing the window carries its floating panes along** — they keep their share of the window.
@@ -254,7 +335,11 @@ fn resizing_the_window_rescales_the_floating_panes() {
         .find(|p| p.pane.id == PaneId(2))
         .expect("the float")
         .rect;
-    assert_eq!(drawn.size, Size::new(1280.0, 800.0), "twice the window, twice the float");
+    assert_eq!(
+        drawn.size,
+        Size::new(1280.0, 800.0),
+        "twice the window, twice the float"
+    );
     assert_eq!(drawn.loc, Point::new(200.0, 160.0));
 }
 
@@ -264,15 +349,30 @@ fn a_pane_from_another_workspace_slides_in_from_where_it_was_drawn() {
     let mut w = Windowed::with_shape(&[&[&[1], &[2]], &[&[3]]]);
     w.show(1);
     let before = w.l().before();
-    let moved = w.session.move_pane_to_workspace(PaneId(2), 1, 0, true, 800.0).expect("it moves");
+    let moved = w
+        .session
+        .move_pane_to_workspace(PaneId(2), 1, 0, true, 800.0)
+        .expect("it moves");
     for (ws, effects) in &moved.arranged.effects {
         w.m().show_change(*ws, effects, &before);
     }
-    let drawn = w.ws().scroll().panes_with_positions().into_iter().find(|(id, _)| *id == PaneId(2));
+    let drawn = w
+        .ws()
+        .scroll()
+        .panes_with_positions()
+        .into_iter()
+        .find(|(id, _)| *id == PaneId(2));
     let slot = w.ws().scroll().pane_slot(PaneId(2)).expect("in a column");
     let view = w.ws().scroll().view_pos();
     let area = w.ws().scroll().area();
-    let offset = drawn.map(|(_, rect)| rect.loc.y - area.loc.y - slot.y).expect("drawn");
-    let sideways = drawn.map(|(_, rect)| rect.loc.x + view - area.loc.x - slot.x).expect("drawn");
-    assert!(offset.abs() > 1.0 || sideways.abs() > 1.0, "it slides in: {sideways}, {offset}");
+    let offset = drawn
+        .map(|(_, rect)| rect.loc.y - area.loc.y - slot.y)
+        .expect("drawn");
+    let sideways = drawn
+        .map(|(_, rect)| rect.loc.x + view - area.loc.x - slot.x)
+        .expect("drawn");
+    assert!(
+        offset.abs() > 1.0 || sideways.abs() > 1.0,
+        "it slides in: {sideways}, {offset}"
+    );
 }

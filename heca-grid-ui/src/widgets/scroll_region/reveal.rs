@@ -126,18 +126,26 @@ impl ScrollRegion {
     /// [`reveal_align`](Self::reveal_align) decides *where* it lands: minimally in view, or centred.
     pub(super) fn follow_revealed(&mut self) {
         let requests = crate::component::reveal_requests_in(&self.base.children);
-        let next: Vec<_> = requests.iter().map(|(id, rect)| (
-            *id, rect.loc.x + self.applied_offset_x, rect.loc.y + self.applied_offset,
-        )).collect();
+        let next: Vec<_> = requests
+            .iter()
+            .map(|(id, rect)| {
+                (
+                    *id,
+                    rect.loc.x + self.applied_offset_x,
+                    rect.loc.y + self.applied_offset,
+                )
+            })
+            .collect();
         let changed = next.first().is_some_and(|request| {
             let previous = self.last_revealed.iter().find(|old| old.0 == request.0);
             let resized = self.last_reveal_viewport != Some(self.base.bounds.size);
-            (previous != Some(request) || resized)
-                && (!self.reveal_paused || previous.is_none())
+            (previous != Some(request) || resized) && (!self.reveal_paused || previous.is_none())
         });
         self.last_revealed = next;
         self.last_reveal_viewport = Some(self.base.bounds.size);
-        let Some((_, rect)) = requests.first().copied() else { return };
+        let Some((_, rect)) = requests.first().copied() else {
+            return;
+        };
         // Natural = what layout produced, before this region's shift was baked in.
         let natural = (
             rect.loc.x + self.applied_offset_x,

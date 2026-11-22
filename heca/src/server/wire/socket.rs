@@ -16,12 +16,18 @@ pub(crate) type SocketServer = SocketPeer<ServerMsg, ClientMsg>;
 
 type Failure = Arc<Mutex<Option<(io::ErrorKind, String)>>>;
 
-enum WriteRequest<T> { Message(T), Flush(mpsc::SyncSender<()>) }
+enum WriteRequest<T> {
+    Message(T),
+    Flush(mpsc::SyncSender<()>),
+}
 
 impl<T: queue::Message> queue::Message for WriteRequest<T> {
     const WHEN_FULL: queue::WhenFull = T::WHEN_FULL;
     fn is_boundary(&self) -> bool {
-        match self { Self::Message(message) => message.is_boundary(), Self::Flush(_) => true }
+        match self {
+            Self::Message(message) => message.is_boundary(),
+            Self::Flush(_) => true,
+        }
     }
     fn replaces(&self, older: &Self) -> bool {
         match (self, older) {
@@ -46,7 +52,11 @@ where
     Outgoing: Carried + queue::Message + Send + 'static,
     Incoming: Carried + queue::Message + Send + 'static,
 {
-    pub(crate) fn new(stream: UnixStream, limits: TransportLimits, wake: ServerWaker) -> io::Result<Self> {
+    pub(crate) fn new(
+        stream: UnixStream,
+        limits: TransportLimits,
+        wake: ServerWaker,
+    ) -> io::Result<Self> {
         let (outgoing, outbound) = queue::channel::<WriteRequest<Outgoing>>(limits.queue_capacity);
         let (inbound, incoming) = queue::channel(limits.queue_capacity);
         let failure: Failure = Arc::default();
@@ -59,13 +69,18 @@ where
             .spawn(move || {
                 let result = (|| {
                     let mut memory = Incoming::Memory::default();
-                    while let Some(message) = Incoming::read_from(&mut memory, &mut reader, limits.max_frame_bytes)? {
+                    while let Some(message) =
+                        Incoming::read_from(&mut memory, &mut reader, limits.max_frame_bytes)?
+                    {
                         // Wait for room: while this thread waits it does not read, and the peer's
                         // writes wait in the socket — nothing it sent is lost.
                         inbound.send_wait(message)?;
                         read_wake.wake();
                     }
-                    Err(io::Error::new(io::ErrorKind::BrokenPipe, "peer disconnected"))
+                    Err(io::Error::new(
+                        io::ErrorKind::BrokenPipe,
+                        "peer disconnected",
+                    ))
                 })();
                 finish(result, &reader, &read_failure);
                 read_wake.wake();
@@ -78,8 +93,14 @@ where
                     let mut memory = Outgoing::Memory::default();
                     while let Some(message) = outbound.recv()? {
                         match message {
-                            WriteRequest::Message(message) => message.write_to(&mut memory, &mut writer, limits.max_frame_bytes)?,
-                            WriteRequest::Flush(done) => { let _ = done.send(()); }
+                            WriteRequest::Message(message) => message.write_to(
+                                &mut memory,
+                                &mut writer,
+                                limits.max_frame_bytes,
+                            )?,
+                            WriteRequest::Flush(done) => {
+                                let _ = done.send(());
+                            }
                         }
                     }
                     Ok(())
@@ -107,17 +128,29 @@ where
 
     fn send_message(&self, message: Outgoing) -> io::Result<()> {
         self.connection_status()?;
-        self.outgoing.as_ref().expect("sender lives until drop")
+        self.outgoing
+            .as_ref()
+            .expect("sender lives until drop")
             .send(WriteRequest::Message(message))
     }
 
     fn flush_messages(&self) -> io::Result<()> {
         self.connection_status()?;
         let (done, written) = mpsc::sync_channel(1);
-        self.outgoing.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "connection closed"))?
+        self.outgoing
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "connection closed"))?
             .send(WriteRequest::Flush(done))?;
-        written.recv_timeout(self.flush_timeout).map_err(|error| io::Error::new(
-            if matches!(error, mpsc::RecvTimeoutError::Timeout) { io::ErrorKind::TimedOut } else { io::ErrorKind::BrokenPipe }, error))
+        written.recv_timeout(self.flush_timeout).map_err(|error| {
+            io::Error::new(
+                if matches!(error, mpsc::RecvTimeoutError::Timeout) {
+                    io::ErrorKind::TimedOut
+                } else {
+                    io::ErrorKind::BrokenPipe
+                },
+                error,
+            )
+        })
     }
 
     fn poll_message(&self) -> io::Result<Option<Incoming>> {
@@ -164,14 +197,24 @@ impl<Outgoing, Incoming> Drop for SocketPeer<Outgoing, Incoming> {
 }
 
 impl ClientLink for SocketClient {
-    fn send(&self, message: ClientMsg) -> io::Result<()> { self.send_message(message) }
-    fn flush(&self) -> io::Result<()> { self.flush_messages() }
-    fn poll(&self) -> io::Result<Option<ServerMsg>> { self.poll_message() }
+    fn send(&self, message: ClientMsg) -> io::Result<()> {
+        self.send_message(message)
+    }
+    fn flush(&self) -> io::Result<()> {
+        self.flush_messages()
+    }
+    fn poll(&self) -> io::Result<Option<ServerMsg>> {
+        self.poll_message()
+    }
 }
 
 impl ServerLink for SocketServer {
-    fn send(&self, message: ServerMsg) -> io::Result<()> { self.send_message(message) }
-    fn poll(&self) -> io::Result<Option<ClientMsg>> { self.poll_message() }
+    fn send(&self, message: ServerMsg) -> io::Result<()> {
+        self.send_message(message)
+    }
+    fn poll(&self) -> io::Result<Option<ClientMsg>> {
+        self.poll_message()
+    }
 }
 
 #[cfg(test)]

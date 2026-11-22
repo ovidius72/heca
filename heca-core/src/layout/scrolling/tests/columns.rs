@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// **A pane leaves its column and gets one of its own, immediately to the right**
 /// — right of the current one, not the end of the strip, so you keep your place.
 /// **A new column's width is the layout's to say.** It used to be chosen by each caller: most
@@ -20,7 +19,6 @@ fn a_new_column_takes_the_layouts_default_width() {
     assert_eq!(column.width, ColumnWidth::Proportion(0.7));
 }
 
-
 #[test]
 fn reorder_column_moves_and_activates() {
     let mut space = space_with_columns(4); // [1,2,3,4]
@@ -32,11 +30,13 @@ fn reorder_column_moves_and_activates() {
     );
 }
 
-
 #[test]
 fn reorder_column_clamps_and_no_ops() {
     let mut space = space_with_columns(3); // [1,2,3]
-    assert!(space.m().reorder_column(0, 99), "dst clamps to the last index");
+    assert!(
+        space.m().reorder_column(0, 99),
+        "dst clamps to the last index"
+    );
     assert_eq!(column_ids(&space), vec![2, 3, 1]);
     assert!(!space.m().reorder_column(1, 1), "same index is a no-op");
     assert!(
@@ -44,7 +44,6 @@ fn reorder_column_clamps_and_no_ops() {
         "out-of-range source is a no-op"
     );
 }
-
 
 #[test]
 fn swap_columns_exchanges_positions() {
@@ -55,11 +54,12 @@ fn swap_columns_exchanges_positions() {
     assert!(!space.m().swap_columns(0, 9), "out-of-range is a no-op");
 }
 
-
 #[test]
 fn toggle_active_column_zoom_restores_previous_width() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
 
     assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.5));
     assert!(!space.columns[0].is_zoomed());
@@ -77,7 +77,6 @@ fn toggle_active_column_zoom_restores_previous_width() {
     assert!(!space.columns[0].is_zoomed());
 }
 
-
 #[test]
 fn resize_column_persists_through_recompute_and_add() {
     let mut space = space_with_columns(2); // [1,2] each Proportion(0.5)
@@ -88,18 +87,20 @@ fn resize_column_persists_through_recompute_and_add() {
     // `col.width` — the resize must NOT be recomputed away (the niri landmine).
     assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
     assert_eq!(
-        space.r().column_width(0), w0,
+        space.r().column_width(0),
+        w0,
         "recompute preserves the manual resize"
     );
     // Adding a column must not reflow column 0 (independent proportions).
-    space.m().add_column(None, test_column(3, ColumnWidth::Proportion(0.5)), true);
+    space
+        .m()
+        .add_column(None, test_column(3, ColumnWidth::Proportion(0.5)), true);
     assert_eq!(
         space.columns[0].width,
         ColumnWidth::Proportion(0.7),
         "resize survives add"
     );
 }
-
 
 #[test]
 fn resize_column_clamps_and_ignores_out_of_range() {
@@ -121,27 +122,36 @@ fn resize_column_clamps_and_ignores_out_of_range() {
     assert_eq!(space.columns.len(), 2);
 }
 
-
 #[test]
 fn a_column_is_zoomed_by_index_without_becoming_active() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
-    space.m().add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
+    space
+        .m()
+        .add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
 
     assert!(space.m().toggle_column_zoom(1));
     assert!(space.columns[1].is_zoomed());
     assert!(!space.columns[0].is_zoomed());
-    assert_eq!(space.view.active_column, 0, "zooming does not move the active column");
+    assert_eq!(
+        space.view.active_column, 0,
+        "zooming does not move the active column"
+    );
 
     assert!(!space.m().toggle_column_zoom(9), "no such column");
 }
 
-
 #[test]
 fn columns_can_be_zoomed_independently() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
-    space.m().add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
+    space
+        .m()
+        .add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
 
     assert!(space.m().toggle_active_column_zoom());
     assert!(space.columns[0].is_zoomed());
@@ -170,7 +180,6 @@ fn columns_can_be_zoomed_independently() {
     assert_eq!(space.columns[1].width, ColumnWidth::Proportion(0.6));
 }
 
-
 /// **Both of a column's edges can be moved, and moving one is a transfer, not a shove.**
 ///
 /// A column's left edge is the right edge of the column before it, so moving it takes width
@@ -181,7 +190,11 @@ fn columns_can_be_zoomed_independently() {
 fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
     let mut space = space_with_columns(3);
     space.m().activate_column(1);
-    let widths = |s: &Seen| -> Vec<f64> { (0..s.columns.len()).map(|i| s.r().column_width(i)).collect() };
+    let widths = |s: &Seen| -> Vec<f64> {
+        (0..s.columns.len())
+            .map(|i| s.r().column_width(i))
+            .collect()
+    };
 
     let before = widths(&space);
     space.m().resize_active_column(0.1);
@@ -236,13 +249,22 @@ fn a_move_slides_in_the_window_that_made_it_and_not_in_another() {
             .collect()
     };
     let settled = space.r();
-    assert!(rest(&settled).iter().all(|d| d.abs() < 0.01), "nothing has moved yet");
+    assert!(
+        rest(&settled).iter().all(|d| d.abs() < 0.01),
+        "nothing has moved yet"
+    );
     assert!(space.m().swap_columns(0, 2));
-    assert!(rest(&space.r()).iter().any(|d| d.abs() > 0.01), "this window shows the move easing");
+    assert!(
+        rest(&space.r()).iter().any(|d| d.abs() > 0.01),
+        "this window shows the move easing"
+    );
 
     let other = ScrollView::new(Rectangle::from_size(Size::new(1000.0, 800.0)), 1.0);
     let elsewhere = space.space.through(&other);
-    assert!(rest(&elsewhere).iter().all(|d| d.abs() < 0.01), "another window shows none");
+    assert!(
+        rest(&elsewhere).iter().all(|d| d.abs() < 0.01),
+        "another window shows none"
+    );
 }
 
 /// **The content changes with no view at all**: these run on a bare `ScrollingSpace`, which has
@@ -251,21 +273,41 @@ fn a_move_slides_in_the_window_that_made_it_and_not_in_another() {
 fn the_content_changes_and_says_what_it_did_with_no_view() {
     let mut space = ScrollingSpace::new(LayoutOptions::default());
     let column = |id| test_column(id, ColumnWidth::Proportion(0.5));
-    assert_eq!(space.insert_column(0, column(1)), ColumnEffect::Inserted { idx: 0 });
-    assert_eq!(space.insert_column(9, column(2)), ColumnEffect::Inserted { idx: 1 }, "past the end is the end");
+    assert_eq!(
+        space.insert_column(0, column(1)),
+        ColumnEffect::Inserted { idx: 0 }
+    );
+    assert_eq!(
+        space.insert_column(9, column(2)),
+        ColumnEffect::Inserted { idx: 1 },
+        "past the end is the end"
+    );
     space.insert_column(2, column(3));
-    assert_eq!(space.move_column(0, 9), Some(ColumnEffect::Moved { from: 0, to: 2 }));
+    assert_eq!(
+        space.move_column(0, 9),
+        Some(ColumnEffect::Moved { from: 0, to: 2 })
+    );
     assert_eq!(column_ids(&space), [2, 3, 1]);
     assert_eq!(space.move_column(1, 1), None);
-    assert_eq!(space.swap_columns(0, 2), Some(ColumnEffect::Swapped { a: 0, b: 2 }));
+    assert_eq!(
+        space.swap_columns(0, 2),
+        Some(ColumnEffect::Swapped { a: 0, b: 2 })
+    );
     assert_eq!(column_ids(&space), [1, 3, 2]);
     assert_eq!(space.swap_columns(0, 0), None);
-    assert_eq!(space.set_column_width(1, ColumnWidth::Fixed(300.0)), Some(ColumnEffect::Resized { idx: 1 }));
+    assert_eq!(
+        space.set_column_width(1, ColumnWidth::Fixed(300.0)),
+        Some(ColumnEffect::Resized { idx: 1 })
+    );
     assert_eq!(space.columns[1].width, ColumnWidth::Fixed(300.0));
     assert_eq!(space.zoom_column(1), Some(ColumnEffect::Zoomed { idx: 1 }));
     assert!(space.columns[1].is_zoomed());
     space.zoom_column(1);
-    assert_eq!(space.columns[1].width, ColumnWidth::Fixed(300.0), "zoom restores the width");
+    assert_eq!(
+        space.columns[1].width,
+        ColumnWidth::Fixed(300.0),
+        "zoom restores the width"
+    );
     space.zoom_column(1);
     space.set_column_width(1, ColumnWidth::Fixed(200.0));
     assert!(!space.columns[1].is_zoomed(), "a resize clears the zoom");
@@ -288,7 +330,11 @@ fn positions_are_the_columns_x_by_identity_and_the_scroll() {
 /// What a window shows after a change, to compare two ways of getting there.
 fn shown(space: &Seen) -> (usize, f64, Vec<f64>) {
     let r = space.r();
-    let xs = r.columns_with_positions().iter().map(|c| c.rect.loc.x).collect();
+    let xs = r
+        .columns_with_positions()
+        .iter()
+        .map(|c| c.rect.loc.x)
+        .collect();
     (r.active_column_idx(), r.view_pos(), xs)
 }
 
@@ -299,11 +345,34 @@ fn reacting_to_an_effect_alone_equals_the_combined_operation() {
     type Op = fn(&mut Seen) -> bool;
     type Content = fn(&mut ScrollingSpace) -> Option<ColumnEffect>;
     let cases: [(&str, Op, Content); 5] = [
-        ("move", |s| s.m().reorder_column(0, 2), |c| c.move_column(0, 2)),
-        ("swap", |s| s.m().swap_columns(0, 2), |c| c.swap_columns(0, 2)),
-        ("zoom", |s| s.m().toggle_column_zoom(1), |c| c.zoom_column(1)),
-        ("resize", |s| { s.m().resize_column(1, 0.2); true }, |c| c.set_column_width(1, ColumnWidth::Proportion(0.7))),
-        ("remove", |s| s.m().remove_column(1).is_some(), |c| c.take_column(1).map(|(_, e)| e)),
+        (
+            "move",
+            |s| s.m().reorder_column(0, 2),
+            |c| c.move_column(0, 2),
+        ),
+        (
+            "swap",
+            |s| s.m().swap_columns(0, 2),
+            |c| c.swap_columns(0, 2),
+        ),
+        (
+            "zoom",
+            |s| s.m().toggle_column_zoom(1),
+            |c| c.zoom_column(1),
+        ),
+        (
+            "resize",
+            |s| {
+                s.m().resize_column(1, 0.2);
+                true
+            },
+            |c| c.set_column_width(1, ColumnWidth::Proportion(0.7)),
+        ),
+        (
+            "remove",
+            |s| s.m().remove_column(1).is_some(),
+            |c| c.take_column(1).map(|(_, e)| e),
+        ),
     ];
     for (name, combined, content) in cases {
         let mut whole = space_with_columns(3);
@@ -312,7 +381,11 @@ fn reacting_to_an_effect_alone_equals_the_combined_operation() {
         let before = apart.r().positions();
         let effect = content(&mut apart.space).expect("an effect");
         apart.view.react(&apart.space, effect, &before);
-        assert_eq!(shown(&whole), shown(&apart), "{name}: the window ends up in the same place");
+        assert_eq!(
+            shown(&whole),
+            shown(&apart),
+            "{name}: the window ends up in the same place"
+        );
     }
 }
 
@@ -330,8 +403,16 @@ fn a_second_window_reacts_to_the_same_effect_on_its_own() {
     b.space = a.space.clone();
     a.view.react(&a.space, effect, &before_a);
     b.view.react(&b.space, effect, &before_b);
-    assert_eq!(a.r().active_column_idx(), 0, "the window that was on the removed column falls back");
-    assert_eq!(b.r().active_column_idx(), 1, "the window further along keeps its own column");
+    assert_eq!(
+        a.r().active_column_idx(),
+        0,
+        "the window that was on the removed column falls back"
+    );
+    assert_eq!(
+        b.r().active_column_idx(),
+        1,
+        "the window further along keeps its own column"
+    );
 }
 
 /// Three half-width columns overflow the 1000px window, with column 1 active and scrolled.
@@ -350,7 +431,9 @@ fn left_edge(space: &Seen, idx: usize) -> f64 {
 #[test]
 fn a_column_inserted_before_the_active_one_shifts_its_index() {
     let mut space = scrolled();
-    space.m().add_column(Some(0), test_column(9, ColumnWidth::Proportion(0.5)), false);
+    space
+        .m()
+        .add_column(Some(0), test_column(9, ColumnWidth::Proportion(0.5)), false);
     assert_eq!(space.r().active_column_idx(), 2);
 }
 
@@ -361,7 +444,12 @@ fn a_moved_column_stays_active_and_the_window_stays_over_the_same_strip() {
     let was = space.r().view_pos();
     space.m().reorder_column(1, 2);
     assert_eq!(space.r().active_column_idx(), 2);
-    assert!((space.r().view_pos() - was).abs() < 0.5, "{} vs {}", space.r().view_pos(), was);
+    assert!(
+        (space.r().view_pos() - was).abs() < 0.5,
+        "{} vs {}",
+        space.r().view_pos(),
+        was
+    );
 }
 
 /// Dragging a column's edge keeps its left edge where it was on screen.
@@ -380,7 +468,10 @@ fn a_zoomed_column_is_brought_into_the_window() {
     assert!(space.m().toggle_active_column_zoom());
     let width = space.r().column_width(3);
     let left = -space.view.offset.target();
-    assert!(left >= -0.5 && left + width <= 1000.0 + 0.5, "left {left}, width {width}");
+    assert!(
+        left >= -0.5 && left + width <= 1000.0 + 0.5,
+        "left {left}, width {width}"
+    );
 }
 
 /// Where the active column ends up on screen once the view has settled: its left edge, and its

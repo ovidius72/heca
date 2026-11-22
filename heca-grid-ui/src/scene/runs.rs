@@ -39,7 +39,13 @@ impl Scene {
                     });
                     let work = match draw.clone() {
                         HostDraw::Image { image, fit, color } => HostWork::Image(ImageAt {
-                            image, fit, color, rect: *rect, alpha: *alpha, clip, rounded: *rounded,
+                            image,
+                            fit,
+                            color,
+                            rect: *rect,
+                            alpha: *alpha,
+                            clip,
+                            rounded: *rounded,
                         }),
                         HostDraw::Surface { id } => HostWork::Surface(SurfaceAt {
                             id,

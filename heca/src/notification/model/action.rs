@@ -136,7 +136,9 @@ impl NotificationAction {
     /// Run this button's closure, if it has one here. `false` when there is none — a button made
     /// with [`run`](Self::run) in a window, whose closure did not travel to the server.
     pub(crate) fn run_closure(&self) -> bool {
-        let Some(RunAction(closure)) = &self.run else { return false };
+        let Some(RunAction(closure)) = &self.run else {
+            return false;
+        };
         closure();
         true
     }

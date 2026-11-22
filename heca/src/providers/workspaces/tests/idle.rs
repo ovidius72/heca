@@ -167,7 +167,11 @@ fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
     // Time moves only when the test moves it, so every pulse is seen on any machine, however busy.
     heca_grid_ui::clock::hold();
     let started = heca_grid_ui::clock::now();
-    fx.store.panes.signals(PaneId(2)).flash.repeat_for(Tone::Warning, Duration::from_millis(1000));
+    fx.store
+        .panes
+        .signals(PaneId(2))
+        .flash
+        .repeat_for(Tone::Warning, Duration::from_millis(1000));
     let (mut pulses, mut lit_before, mut last_lit) = (0, false, Duration::ZERO);
     loop {
         heca_grid_ui::frame_served();
@@ -175,8 +179,10 @@ fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
         heca_grid_ui::LayoutEngine::new().compute(&mut root, heca_grid_ui::Size::new(300.0, 600.0));
         let mut scene = heca_grid_ui::Scene::new();
         heca_grid_ui::paint_child(&root, &mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
-        let lit = scene.iter().any(|cmd| matches!(cmd, heca_grid_ui::DrawCommand::Rect(rect)
-            if rect.border.is_some_and(|b| b.color.with_alpha(255) == warning && b.color.a > 0)));
+        let lit = scene.iter().any(|cmd| {
+            matches!(cmd, heca_grid_ui::DrawCommand::Rect(rect)
+            if rect.border.is_some_and(|b| b.color.with_alpha(255) == warning && b.color.a > 0))
+        });
         if lit && !lit_before {
             pulses += 1;
         }
@@ -185,7 +191,9 @@ fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
             last_lit = elapsed;
         }
         lit_before = lit;
-        let Some(delay) = root.next_redraw() else { break };
+        let Some(delay) = root.next_redraw() else {
+            break;
+        };
         // The frame the widget asked for, and no later: what a real loop does, without sleeping.
         heca_grid_ui::clock::advance(Duration::from_secs_f32(delay.max(0.001)));
         if elapsed > Duration::from_secs(3) {
@@ -193,6 +201,12 @@ fn a_visible_rows_flash_pulses_for_its_whole_time_on_an_idle_window() {
         }
     }
     heca_grid_ui::clock::release();
-    assert!(pulses >= 3, "a 1 s repeat of 0.3 s cycles pulses at least three times, drew {pulses}");
-    assert!(last_lit >= Duration::from_millis(600), "still lit near the end of its time, last at {last_lit:?}");
+    assert!(
+        pulses >= 3,
+        "a 1 s repeat of 0.3 s cycles pulses at least three times, drew {pulses}"
+    );
+    assert!(
+        last_lit >= Duration::from_millis(600),
+        "still lit near the end of its time, last at {last_lit:?}"
+    );
 }

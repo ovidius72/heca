@@ -225,18 +225,30 @@ impl DockFrame {
             }
         };
         let chevron_text = self.chevron;
-        let chevron = move || Label::new("").with_text_signal(chevron_text).area(CHEVRON_AREA);
-        let mut take = |name: &str| self.part_mut(TOGGLE_AREA)
-            .and_then(|toggle| crate::component::area_slot(toggle.base_mut(), name))
-            .map(|slot| std::mem::replace(slot, crate::WidgetModel::new(Flex::empty())));
+        let chevron = move || {
+            Label::new("")
+                .with_text_signal(chevron_text)
+                .area(CHEVRON_AREA)
+        };
+        let mut take = |name: &str| {
+            self.part_mut(TOGGLE_AREA)
+                .and_then(|toggle| crate::component::area_slot(toggle.base_mut(), name))
+                .map(|slot| std::mem::replace(slot, crate::WidgetModel::new(Flex::empty())))
+        };
         let custom = take(CUSTOM_AREA);
         let kept_leading = take(LEADING_AREA);
         let leading_part = self.leading.take().or(kept_leading);
         let (toggle, corner): (crate::WidgetModel, _) = match (custom, self.variant) {
             (Some(content), _) => (
-                crate::WidgetModel::new(crate::widgets::Row::new().on_click(move |_| fold()).gap(LEADING_GAP)
-                    .padding_y(crate::widgets::item::ROW_PAD_Y)
-                    .child(leading_part).child(content).child(chevron())),
+                crate::WidgetModel::new(
+                    crate::widgets::Row::new()
+                        .on_click(move |_| fold())
+                        .gap(LEADING_GAP)
+                        .padding_y(crate::widgets::item::ROW_PAD_Y)
+                        .child(leading_part)
+                        .child(content)
+                        .child(chevron()),
+                ),
                 crate::widgets::HintPlacement::TopRight,
             ),
             (None, DockFrameVariant::Dock) => {
@@ -244,14 +256,27 @@ impl DockFrame {
                 if self.grip {
                     leading = leading.child(Label::new(self.grip_glyph.clone()));
                 }
-                (crate::WidgetModel::new(Item::new(self.title.clone())
-                    .leading(leading.child(chevron()).child(leading_part)).on_click(move |_| fold())),
-                    crate::widgets::HintPlacement::TopLeft)
+                (
+                    crate::WidgetModel::new(
+                        Item::new(self.title.clone())
+                            .leading(leading.child(chevron()).child(leading_part))
+                            .on_click(move |_| fold()),
+                    ),
+                    crate::widgets::HintPlacement::TopLeft,
+                )
             }
             (None, DockFrameVariant::Section) => {
-                let item = Item::new(self.title.clone()).trailing(chevron()).on_click(move |_| fold());
-                let item = match leading_part { Some(part) => item.leading(part), None => item };
-                (crate::WidgetModel::new(item), crate::widgets::HintPlacement::TopRight)
+                let item = Item::new(self.title.clone())
+                    .trailing(chevron())
+                    .on_click(move |_| fold());
+                let item = match leading_part {
+                    Some(part) => item.leading(part),
+                    None => item,
+                };
+                (
+                    crate::WidgetModel::new(item),
+                    crate::widgets::HintPlacement::TopRight,
+                )
             }
         };
         let mut toggle = toggle;
@@ -288,7 +313,11 @@ impl DockFrame {
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading(mut self, c: impl crate::builders::IntoComponent) -> Self {
         self.leading = Some(crate::WidgetModel::new(
-            Flex::row().align("center").area(LEADING_AREA).child(c.into_component())));
+            Flex::row()
+                .align("center")
+                .area(LEADING_AREA)
+                .child(c.into_component()),
+        ));
         self.build_toggle();
         self
     }
@@ -307,7 +336,13 @@ impl DockFrame {
         // The holder keeps its area through every rebuild, so the content is wrapped once.
         // It starts where a row's content starts, as a Dock's own title row (an `Item`) does.
         let holder = Flex::row()
-            .child(Flex::row().grow(1.0).padding_left(crate::widgets::item::ROW_INSET).area(CUSTOM_AREA).child(content))
+            .child(
+                Flex::row()
+                    .grow(1.0)
+                    .padding_left(crate::widgets::item::ROW_INSET)
+                    .area(CUSTOM_AREA)
+                    .child(content),
+            )
             .area(TOGGLE_AREA);
         if let Some(slot) = self.part_mut(TOGGLE_AREA) {
             *slot = crate::WidgetModel::new(holder);
@@ -382,10 +417,14 @@ impl DockFrame {
     pub fn header_actions(mut self, c: impl crate::builders::IntoComponent) -> Self {
         // They end where a row's content ends, so a count in the title row lines up with the
         // badges at the end of the rows under it — whoever gives them adds no spacer.
-        let fresh = crate::WidgetModel::new(Flex::row().align("center").justify("end")
-            .padding_right(crate::widgets::item::ROW_INSET)
-            .area(HEADER_ACTIONS_AREA)
-            .child(c.into_component()));
+        let fresh = crate::WidgetModel::new(
+            Flex::row()
+                .align("center")
+                .justify("end")
+                .padding_right(crate::widgets::item::ROW_INSET)
+                .area(HEADER_ACTIONS_AREA)
+                .child(c.into_component()),
+        );
         if let Some(slot) = self.part_mut(HEADER_ACTIONS_AREA) {
             *slot = fresh;
         }
@@ -544,7 +583,10 @@ impl DockFrame {
     /// Only this frame's template owns its parts; a component in the header may own the same names.
     fn part_mut(&mut self, name: &str) -> Option<&mut crate::WidgetModel> {
         if matches!(name, TOGGLE_AREA | HEADER_ACTIONS_AREA) {
-            self.base.child_in_area(HEADER_AREA)?.base_mut().child_in_area(name)
+            self.base
+                .child_in_area(HEADER_AREA)?
+                .base_mut()
+                .child_in_area(name)
         } else {
             self.base.child_in_area(name)
         }
@@ -637,12 +679,22 @@ impl Component for DockFrame {
         // Apply it only to these draws: text, badges and the navigation outline stay crisp.
         cx.with_opacity(cx.theme().colors.active_wash_alpha, |cx| {
             if self.previous.get_untracked() && !self.active.get_untracked() {
-                cx.rect(b, cx.theme().colors.effective_workspace_previous_background(),
-                    None, radius, None);
+                cx.rect(
+                    b,
+                    cx.theme().colors.effective_workspace_previous_background(),
+                    None,
+                    radius,
+                    None,
+                );
             }
             if self.active.get_untracked() {
-                cx.rect(b, cx.theme().colors.effective_workspace_active_background(),
-                    None, radius, None);
+                cx.rect(
+                    b,
+                    cx.theme().colors.effective_workspace_active_background(),
+                    None,
+                    radius,
+                    None,
+                );
             }
         });
 

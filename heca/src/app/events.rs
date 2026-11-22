@@ -87,7 +87,10 @@ pub(crate) fn handle_window_event(
         // hidden is drawn in one frame when it shows again.
         WindowEvent::Occluded(occluded) => {
             state.window_occluded = occluded;
-            if !occluded { state.mark_full_redraw(); state.window.request_redraw(); }
+            if !occluded {
+                state.mark_full_redraw();
+                state.window.request_redraw();
+            }
         }
         // Not drawn while hidden. Nothing asks for a frame while hidden (`about_to_wait`), so this is
         // a request that was already on its way: keep what it wanted for when the window shows.
@@ -112,10 +115,19 @@ pub(crate) fn handle_window_event(
             match crate::app::drop_point::pointer_in_window(&state.window, state.scale_factor) {
                 Some((x, y)) => {
                     let pos = Point::new(f64::from(x), f64::from(y));
-                    crate::chrome::deliver(state, &heca_grid_ui::Event::FilesDropped { paths: vec![path], pos });
+                    crate::chrome::deliver(
+                        state,
+                        &heca_grid_ui::Event::FilesDropped {
+                            paths: vec![path],
+                            pos,
+                        },
+                    );
                     state.mark_full_redraw();
                 }
-                None => eprintln!("[heca] a file was dropped, but the system did not say where: {}", path.display()),
+                None => eprintln!(
+                    "[heca] a file was dropped, but the system did not say where: {}",
+                    path.display()
+                ),
             }
         }
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -417,7 +429,11 @@ fn layer_holds_keyboard(state: &AppState) -> bool {
 /// this same loop broadcasts. Attaching them here is the second source of truth that let a drop
 /// disagree with its own outline.
 fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
-    let scale = if state.scale_factor > 0.0 { state.scale_factor as f32 } else { 1.0 };
+    let scale = if state.scale_factor > 0.0 {
+        state.scale_factor as f32
+    } else {
+        1.0
+    };
     let turn = match delta {
         MouseScrollDelta::LineDelta(x, y) => heca_grid_ui::WheelTurn::Lines(-x, -y),
         MouseScrollDelta::PixelDelta(p) => {

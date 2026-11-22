@@ -10,7 +10,11 @@ use heca_config::loader::AppConfig;
 impl ServerLoop {
     /// Open this server's file, unless its sessions are not kept. Before the identity moves into
     /// the services, which is why it is not folded into [`restore_sessions`](Self::restore_sessions).
-    pub(in crate::server) fn open_store(&mut self, identity: &crate::server::identity::ServerIdentity, config: &AppConfig) {
+    pub(in crate::server) fn open_store(
+        &mut self,
+        identity: &crate::server::identity::ServerIdentity,
+        config: &AppConfig,
+    ) {
         self.store = SessionStore::open(identity, &config.config.settings);
     }
 
@@ -18,9 +22,18 @@ impl ServerLoop {
     /// whether it was running. A session that was running is started the way Restart starts one; a
     /// stopped one stays stopped until Restart. What could not be rebuilt is reported once.
     pub(in crate::server) fn restore_sessions(&mut self, config: &AppConfig) {
-        let Some(store) = self.store.as_mut() else { return };
-        let crate::server::persist::Loaded { saved, mut problems } = store.load();
-        let Saved { next_session, recent, sessions } = saved;
+        let Some(store) = self.store.as_mut() else {
+            return;
+        };
+        let crate::server::persist::Loaded {
+            saved,
+            mut problems,
+        } = store.load();
+        let Saved {
+            next_session,
+            recent,
+            sessions,
+        } = saved;
         self.next_session = self.next_session.max(next_session);
         let mut restored = Vec::new();
         for session in sessions {
@@ -34,8 +47,13 @@ impl ServerLoop {
             self.next_session = self.next_session.max(highest.saturating_add(1));
         }
         // Use order, oldest first: what the file remembered, then any session it did not mention.
-        let unmentioned: Vec<_> = restored.iter().copied().filter(|id| !recent.contains(id)).collect();
-        self.recent_sessions = unmentioned.into_iter()
+        let unmentioned: Vec<_> = restored
+            .iter()
+            .copied()
+            .filter(|id| !recent.contains(id))
+            .collect();
+        self.recent_sessions = unmentioned
+            .into_iter()
             .chain(recent.into_iter().filter(|id| restored.contains(id)))
             .fold(Vec::new(), |mut order, id| {
                 order.retain(|seen| *seen != id);
@@ -57,7 +75,10 @@ impl ServerLoop {
 
     /// One saved session, rebuilt and, if it was running, started again.
     fn restore(&mut self, saved: SavedSession, config: &AppConfig) -> Result<(), String> {
-        let wake = self.wake.clone().ok_or("the server has no way to wake itself")?;
+        let wake = self
+            .wake
+            .clone()
+            .ok_or("the server has no way to wake itself")?;
         let running = saved.status == SessionStatus::Active;
         let name = saved.name.clone();
         // The project's own settings apply when its folder is there; the user's when it is gone.
@@ -67,7 +88,8 @@ impl ServerLoop {
         };
         let launch = self.machine.launch;
         let (runtime, drafts) = crate::notification::collect_notifications(|| {
-            let mut runtime = SessionRuntime::restored(&project, wake, launch, saved).map_err(|error| error.to_string())?;
+            let mut runtime = SessionRuntime::restored(&project, wake, launch, saved)
+                .map_err(|error| error.to_string())?;
             if running && let Err(why) = runtime.restart() {
                 Notification::warning(format!("Session '{name}' was not started again"))
                     .body(why)
@@ -116,7 +138,9 @@ impl ServerLoop {
     /// says something may have changed, which makes a write due after the configured delay; the turn
     /// the delay ends on writes. A server nobody touches has no turns and so writes nothing.
     pub(super) fn autosave(&mut self, now: Instant) {
-        let Some(store) = self.store.as_mut() else { return };
+        let Some(store) = self.store.as_mut() else {
+            return;
+        };
         if store.take_due(now) {
             self.save_now();
         } else {

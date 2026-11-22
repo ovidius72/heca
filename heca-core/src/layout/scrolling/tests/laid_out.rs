@@ -2,13 +2,14 @@
 
 use super::*;
 
-
 /// **A column's box is exactly the panes it holds**, and the two views agree because they are
 /// one walk.
 #[test]
 fn a_column_spans_the_panes_inside_it_and_agrees_with_them() {
     let mut space = space_with_columns(2);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
 
     let cols = space.r().columns_with_positions();
     assert_eq!(cols.len(), 2, "two columns, the first holding two panes");
@@ -42,7 +43,6 @@ fn a_column_spans_the_panes_inside_it_and_agrees_with_them() {
     );
 }
 
-
 /// **A pane dragged out of its column does not stretch the column it is leaving.**
 ///
 /// Flow and transform are separate answers: the column's box is the slots its panes occupy, and
@@ -52,7 +52,11 @@ fn a_displaced_pane_moves_where_it_is_drawn_and_not_where_it_belongs() {
     let mut space = space_with_columns(1);
     let before = space.r().columns_with_positions()[0].rect;
 
-    space.view.motion.slide_pane(PaneId(1), Point::new(400.0, 90.0), AnimationConfig::default());
+    space.view.motion.slide_pane(
+        PaneId(1),
+        Point::new(400.0, 90.0),
+        AnimationConfig::default(),
+    );
     let after = &space.r().columns_with_positions()[0];
     let pane = after.panes[0];
 

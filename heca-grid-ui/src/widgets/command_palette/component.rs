@@ -10,7 +10,9 @@ impl Component for CommandPalette {
         &mut self.base
     }
 
-    fn focusable(&self) -> bool { self.is_open() }
+    fn focusable(&self) -> bool {
+        self.is_open()
+    }
 
     fn overlay_active(&self) -> bool {
         self.is_open()
@@ -54,7 +56,10 @@ impl Component for CommandPalette {
         self.sync_query();
         self.sync_wrap();
         let viewport = self.base.viewport;
-        if viewport.w > 0.0 && viewport.h > 0.0 && viewport.w.is_finite() && viewport.h.is_finite() { self.viewport.set(viewport); }
+        if viewport.w > 0.0 && viewport.h > 0.0 && viewport.w.is_finite() && viewport.h.is_finite()
+        {
+            self.viewport.set(viewport);
+        }
         // The palette **fills the viewport**, like every other layer root, so `on_layout` can read
         // its own size and learn the viewport from the layout pass rather than waiting for a paint.
         self.base.style.layout.direction = Direction::Column;
@@ -68,7 +73,12 @@ impl Component for CommandPalette {
         }
         let query_width = (self.panel_w() - 2.0 * PAD).max(0.0) as f32;
         let query_height = (self.line_h() + 2.0 * self.query_padding()) as f32;
-        let query = self.base.children.last_mut().expect("query child").base_mut();
+        let query = self
+            .base
+            .children
+            .last_mut()
+            .expect("query child")
+            .base_mut();
         query.style.layout.width = Length::Px(query_width);
         query.style.layout.height = Length::Px(query_height);
     }
@@ -106,7 +116,11 @@ impl Component for CommandPalette {
         let (_, target, _) = self.layout(&self.results());
         let query = self.base.children.last_mut().expect("query child").as_mut();
         let current = query.base().bounds;
-        crate::component::shift_subtree(query, target.loc.x - current.loc.x, target.loc.y - current.loc.y);
+        crate::component::shift_subtree(
+            query,
+            target.loc.x - current.loc.x,
+            target.loc.y - current.loc.y,
+        );
     }
 
     /// The palette paints its panel on the overlay layer, not at its layout `bounds`.
@@ -130,39 +144,66 @@ impl Component for CommandPalette {
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if !self.is_open() { return Handled::No; }
+        if !self.is_open() {
+            return Handled::No;
+        }
         self.sync_query();
         match ev {
-            Event::Widget(WidgetIntent::Dismiss) => { self.dismiss(); Handled::Yes }
-            Event::Widget(WidgetIntent::Activate) => { self.run_selected(); Handled::Yes }
-            Event::Widget(WidgetIntent::MenuDown) => { self.select_next(); Handled::Yes }
-            Event::Widget(WidgetIntent::MenuUp) => { self.select_prev(); Handled::Yes }
+            Event::Widget(WidgetIntent::Dismiss) => {
+                self.dismiss();
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::Activate) => {
+                self.run_selected();
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::MenuDown) => {
+                self.select_next();
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::MenuUp) => {
+                self.select_prev();
+                Handled::Yes
+            }
             Event::Widget(WidgetIntent::Complete) => self.complete_selected(),
-            Event::Widget(intent @ (WidgetIntent::MenuHistoryUp | WidgetIntent::MenuHistoryDown)) => {
+            Event::Widget(
+                intent @ (WidgetIntent::MenuHistoryUp | WidgetIntent::MenuHistoryDown),
+            ) => {
                 let (sigil, scope, query) = self.active();
                 let recalled = self.search.with_scope(scope).handle(*intent, &query);
-                if let SearchAction::SetQuery(text) = recalled && text != query {
+                if let SearchAction::SetQuery(text) = recalled
+                    && text != query
+                {
                     self.query.set(Self::with_sigil(sigil, &text));
                     self.on_query_replaced();
                     self.base.mark_needs_layout();
                 }
                 Handled::Yes
             }
-            Event::PointerDownOutside(_) => { self.dismiss(); Handled::No }
+            Event::PointerDownOutside(_) => {
+                self.dismiss();
+                Handled::No
+            }
             _ => Handled::No,
         }
     }
 
     // The query consumes its own presses and edits. Only unhandled row input bubbles here.
     fn on_event(&mut self, ev: &Event) -> Handled {
-        if !self.is_open() { return Handled::No; }
+        if !self.is_open() {
+            return Handled::No;
+        }
         match ev {
             Event::PointerMove(p) => {
                 let results = self.results();
                 let (panel, _, list_top) = self.layout(&results);
-                let selected = self.row_rects(&results, panel, list_top).into_iter()
+                let selected = self
+                    .row_rects(&results, panel, list_top)
+                    .into_iter()
                     .find_map(|(index, row)| row.contains(p.pos).then_some(index));
-                if let Some(selected) = selected && selected != self.selected {
+                if let Some(selected) = selected
+                    && selected != self.selected
+                {
                     self.selected = selected;
                     self.sync_wrap();
                 }
@@ -172,7 +213,11 @@ impl Component for CommandPalette {
                 let results = self.results();
                 let (panel, _, list_top) = self.layout(&results);
                 for (index, row) in self.row_rects(&results, panel, list_top) {
-                    if row.contains(p.pos) { self.selected = index; self.run_selected(); break; }
+                    if row.contains(p.pos) {
+                        self.selected = index;
+                        self.run_selected();
+                        break;
+                    }
                 }
                 Handled::Yes
             }

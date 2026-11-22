@@ -74,7 +74,9 @@ pub(super) struct Frame {
 /// date, read the values the phases share, and reset the renderers' per-frame buffers. `None` when
 /// nothing asked for a frame.
 pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
-    if !state.client.projection_ready() { return None; }
+    if !state.client.projection_ready() {
+        return None;
+    }
     // Mount whatever a widget asked to open since the last frame: a declared context menu is a
     // layer, and this is the one moment the host has `&mut AppState` and has not yet drawn.
     crate::chrome::drain_pending_menus(state);
@@ -130,7 +132,8 @@ impl Frame {
     /// draw into (lost, outdated): the frame is skipped.
     pub(super) fn open(state: &mut AppState, v: FrameValues) -> Option<Self> {
         let surface_texture = match state.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Success(t)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Lost => {
                 state
                     .surface

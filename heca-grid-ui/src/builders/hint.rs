@@ -58,7 +58,6 @@ pub trait HintExt: Component + Sized {
         self
     }
 
-
     /// **What a pick does to this widget, when that differs from acting on it.**
     ///
     /// Being pickable is **not** what this turns on — anything actionable already wears a letter,
@@ -100,7 +99,6 @@ pub trait HintExt: Component + Sized {
         self
     }
 
-
     /// **Which pickers letter this target.** Unset — the default — means the ordinary one, which
     /// is `prefix+/` in heca and letters everything actionable.
     ///
@@ -128,7 +126,6 @@ pub trait HintExt: Component + Sized {
         self
     }
 
-
     /// **Where this widget's hint letter sits over it** (default
     /// [`TopCenter`](crate::widgets::HintPlacement::TopCenter)).
     ///
@@ -151,7 +148,6 @@ pub trait HintExt: Component + Sized {
         self
     }
 
-
     /// The keycap's font size in logical px. Unset = derived from the widget's resolved font, which
     /// is what keeps a letter proportional to the thing it captions.
     #[heca_grid_ui_macros::prop]
@@ -159,7 +155,6 @@ pub trait HintExt: Component + Sized {
         self.base_mut().hint_style.size = Some(px);
         self
     }
-
 
     /// The keycap's colour, glow included. Unset = the theme's `accent`, so a letter follows a
     /// theme change with nothing rewritten.
@@ -171,7 +166,6 @@ pub trait HintExt: Component + Sized {
         self.base_mut().hint_style.color = Some(color);
         self
     }
-
 
     /// **What this widget's keycap MEANS** — the theme picks the colour.
     ///
@@ -185,7 +179,6 @@ pub trait HintExt: Component + Sized {
         self.base_mut().hint_style.tone = Some(tone);
         self
     }
-
 
     /// A vertical nudge applied **after** placement — positive moves the cap down. What drops a
     /// [`TopRight`](crate::widgets::HintPlacement::TopRight) cap onto a dock's header line.

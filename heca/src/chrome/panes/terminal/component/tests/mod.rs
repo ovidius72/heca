@@ -64,10 +64,7 @@ fn chip(scene: &Scene) -> Option<Rectangle> {
 }
 
 /// A clicked terminal with an owner listening, ready to be typed into.
-fn focused_terminal() -> (
-    heca_grid_ui::WidgetModel,
-    Rc<RefCell<Vec<TerminalInput>>>,
-) {
+fn focused_terminal() -> (heca_grid_ui::WidgetModel, Rc<RefCell<Vec<TerminalInput>>>) {
     let (seams, said) = recording();
     let t = Terminal::unbound();
     t.bind(seams);

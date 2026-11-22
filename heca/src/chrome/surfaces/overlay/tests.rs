@@ -24,33 +24,57 @@ fn message_spec_wraps_body_in_a_label() {
 
 #[test]
 fn session_confirmation_starts_on_cancel_and_requires_navigation_to_proceed() {
-    use heca_grid_ui::{Event, Flex, Length, WidgetIntent, builders::{LayoutExt, Parent}};
+    use heca_grid_ui::{
+        Event, Flex, Length, WidgetIntent,
+        builders::{LayoutExt, Parent},
+    };
     for owner in ["terminate_session", "delete_session"] {
         let words = heca_config::settings::SessionText::default();
         let confirm = crate::actions::ConfirmSpec::for_session(owner, &words).unwrap();
-        let spec = crate::handlers::confirmation_modal_spec(owner.into(),
-            confirm.message.replace("{name}", "Project A"), &confirm);
+        let spec = crate::handlers::confirmation_modal_spec(
+            owner.into(),
+            confirm.message.replace("{name}", "Project A"),
+            &confirm,
+        );
         let id = OverlayId(crate::chrome::LayerRegistry::default().reserve_id());
         let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
         let emit = {
             let fired = fired.clone();
-            ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| fired.borrow_mut().push(intent))
+            ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| {
+                fired.borrow_mut().push(intent)
+            })
         };
         let theme = heca_grid_ui::Theme::default();
-        let root = build_modal_root(&spec, id, &theme, &emit,
-            &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default()).unwrap();
-        let mut root = Flex::column().width(Length::FULL).height(Length::FULL).child(root);
+        let root = build_modal_root(
+            &spec,
+            id,
+            &theme,
+            &emit,
+            &crate::chrome::ActionShortcuts::default(),
+            &mut FormBindings::default(),
+        )
+        .unwrap();
+        let mut root = Flex::column()
+            .width(Length::FULL)
+            .height(Length::FULL)
+            .child(root);
         root.tick(1.0);
         crate::chrome::paint_chrome_root(&mut root, 640.0, 480.0, &theme);
         heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::Activate));
-        assert!(matches!(&fired.borrow()[0],
+        assert!(
+            matches!(&fired.borrow()[0],
             InteractionIntent::ActivateAction(WmAction::SubmitOverlay { action, .. }) if action == "cancel"),
-            "Enter must select Cancel before any destructive action");
+            "Enter must select Cancel before any destructive action"
+        );
         heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::ItemNext));
         heca_grid_ui::dispatch(&mut root, &Event::Widget(WidgetIntent::Activate));
         assert!(matches!(&fired.borrow()[1],
             InteractionIntent::ActivateAction(WmAction::SubmitOverlay { action, .. }) if action == "confirm"));
-        assert_eq!(fired.borrow().len(), 2, "each activation emits exactly one response");
+        assert_eq!(
+            fired.borrow().len(),
+            2,
+            "each activation emits exactly one response"
+        );
     }
 }
 
@@ -60,32 +84,69 @@ fn session_unavailable_dialog_swallows_dismiss_and_keeps_all_choices() {
     let words = heca_config::settings::SessionText::default();
     let theme = heca_grid_ui::Theme::default();
     use crate::handlers::SessionChoice;
-    for reason in [SessionChoice::Detached, SessionChoice::Terminated, SessionChoice::Deleted, SessionChoice::ServerLost] {
-        let spec = crate::handlers::session_choice_spec(&words, reason, "Choose session", "Create session");
+    for reason in [
+        SessionChoice::Detached,
+        SessionChoice::Terminated,
+        SessionChoice::Deleted,
+        SessionChoice::ServerLost,
+    ] {
+        let spec = crate::handlers::session_choice_spec(
+            &words,
+            reason,
+            "Choose session",
+            "Create session",
+        );
         let choices = spec.actions.len();
-        let mut root = build_modal_root(&spec,
-            OverlayId(crate::chrome::LayerRegistry::default().reserve_id()), &theme,
-            &noop_emit(), &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default()).unwrap();
-        assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(WidgetIntent::Dismiss)), Handled::Yes);
-        assert!(root.overlay_active() && root.focusable(), "the dialog must remain open for input");
-        assert!(root.overlay_occludes(Point::new(0.0, 0.0)), "the dialog must still block content");
+        let mut root = build_modal_root(
+            &spec,
+            OverlayId(crate::chrome::LayerRegistry::default().reserve_id()),
+            &theme,
+            &noop_emit(),
+            &crate::chrome::ActionShortcuts::default(),
+            &mut FormBindings::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(WidgetIntent::Dismiss)),
+            Handled::Yes
+        );
+        assert!(
+            root.overlay_active() && root.focusable(),
+            "the dialog must remain open for input"
+        );
+        assert!(
+            root.overlay_occludes(Point::new(0.0, 0.0)),
+            "the dialog must still block content"
+        );
         assert_eq!(heca_grid_ui::collect_hints(root.as_ref()).len(), choices);
     }
 }
 
 #[test]
 fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
-    use heca_grid_ui::{DrawCommand, Flex, Length, builders::{LayoutExt, Parent}};
+    use heca_grid_ui::{
+        DrawCommand, Flex, Length,
+        builders::{LayoutExt, Parent},
+    };
     let message = "Trust /Users/example/projects/really-long-worktree/target/p102/harness-icons-preview/.heca/config.toml? It can bind keys to commands, so only trust a project you know.";
     let theme = heca_grid_ui::Theme::default();
     for width in [360.0, 640.0, 2000.0] {
         let spec = ModalSpec::message("Trust project settings", message)
             .action(ModalAction::new("cancel", "Cancel"))
             .action(ModalAction::new("trust", "Trust"));
-        let root = build_modal_root(&spec,
-            OverlayId(crate::chrome::LayerRegistry::default().reserve_id()), &theme,
-            &noop_emit(), &crate::chrome::ActionShortcuts::default(), &mut FormBindings::default()).expect("valid modal fixture");
-        let mut root = Flex::column().width(Length::FULL).height(Length::FULL).child(root);
+        let root = build_modal_root(
+            &spec,
+            OverlayId(crate::chrome::LayerRegistry::default().reserve_id()),
+            &theme,
+            &noop_emit(),
+            &crate::chrome::ActionShortcuts::default(),
+            &mut FormBindings::default(),
+        )
+        .expect("valid modal fixture");
+        let mut root = Flex::column()
+            .width(Length::FULL)
+            .height(Length::FULL)
+            .child(root);
         // Advance the normal arrival before inspecting what the dialog actually paints.
         root.tick(1.0);
         let scene = crate::chrome::paint_chrome_root(&mut root, width, 480.0, &theme);
@@ -95,19 +156,47 @@ fn a_long_confirmation_message_wraps_and_preserves_the_complete_warning() {
         let layout = heca_grid_ui::area(dialog.as_ref(), "dialog-layout").expect("dialog layout");
         for child in &layout.base().children {
             let bounds = child.base().bounds;
-            assert!(bounds.loc.y + bounds.size.h <= panel.base().bounds.loc.y + panel.base().bounds.size.h + 1.0,
-                "dialog child escapes panel at {width}px: panel {:?}; child {:?}", panel.base().bounds, bounds);
+            assert!(
+                bounds.loc.y + bounds.size.h
+                    <= panel.base().bounds.loc.y + panel.base().bounds.size.h + 1.0,
+                "dialog child escapes panel at {width}px: panel {:?}; child {:?}",
+                panel.base().bounds,
+                bounds
+            );
         }
-        assert!(panel.base().bounds.size.w <= f64::from(theme.font_size * theme.colors.dialog.max_width_em) + 1.0);
-        let body = heca_grid_ui::area(dialog.as_ref(), "dialog-body").expect("dialog body").base().bounds;
-        let lines: Vec<_> = scene.iter().filter_map(|cmd| match cmd {
-            DrawCommand::Text(text) if text.rect.loc.y >= body.loc.y
-                && text.rect.loc.y < body.loc.y + body.size.h => Some(text),
-            _ => None,
-        }).collect();
-        assert!(lines.len() > 1, "a long warning was still one truncated line at {width}px; body {body:?}; lines {lines:?}");
-        let compact = |text: &str| text.chars().filter(|c| !c.is_whitespace()).collect::<String>();
-        let painted = lines.iter().map(|line| compact(&line.text)).collect::<String>();
+        assert!(
+            panel.base().bounds.size.w
+                <= f64::from(theme.font_size * theme.colors.dialog.max_width_em) + 1.0
+        );
+        let body = heca_grid_ui::area(dialog.as_ref(), "dialog-body")
+            .expect("dialog body")
+            .base()
+            .bounds;
+        let lines: Vec<_> = scene
+            .iter()
+            .filter_map(|cmd| match cmd {
+                DrawCommand::Text(text)
+                    if text.rect.loc.y >= body.loc.y
+                        && text.rect.loc.y < body.loc.y + body.size.h =>
+                {
+                    Some(text)
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(
+            lines.len() > 1,
+            "a long warning was still one truncated line at {width}px; body {body:?}; lines {lines:?}"
+        );
+        let compact = |text: &str| {
+            text.chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>()
+        };
+        let painted = lines
+            .iter()
+            .map(|line| compact(&line.text))
+            .collect::<String>();
         assert_eq!(painted, compact(message), "part of the warning was lost");
         for line in lines {
             // Taffy rounds the label box; painted line metrics retain fractional pixels.
@@ -143,7 +232,8 @@ fn each_action_button_declares_the_submit_its_click_would_fire() {
         &emit,
         &shortcuts,
         &mut FormBindings::default(),
-    ).expect("valid modal fixture");
+    )
+    .expect("valid modal fixture");
 
     let targets = heca_grid_ui::collect_hints(root.as_ref());
     assert_eq!(targets.len(), 2, "two actions → two pick targets");
@@ -197,7 +287,8 @@ fn a_modal_button_is_one_pick_target_not_two() {
         &emit,
         &shortcuts,
         &mut FormBindings::default(),
-    ).expect("valid modal fixture");
+    )
+    .expect("valid modal fixture");
 
     let targets = heca_grid_ui::collect_hints(root.as_ref());
     assert_eq!(

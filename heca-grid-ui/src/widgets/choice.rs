@@ -129,11 +129,9 @@ impl Choice {
         self.base.pointer.hovered
     }
 
-
     fn interactive(&self) -> bool {
         self.base.activatable
     }
-
 }
 
 impl Component for Choice {
@@ -214,7 +212,10 @@ impl Component for Choice {
 
     /// The press shows on the control itself; what it does belongs to its click handlers.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if matches!(ev, Event::Click(_)) && self.interactive() && !self.base.disabled.get_untracked() {
+        if matches!(ev, Event::Click(_))
+            && self.interactive()
+            && !self.base.disabled.get_untracked()
+        {
             self.flash.trigger();
         }
         Handled::No
@@ -223,7 +224,6 @@ impl Component for Choice {
     fn is_control(&self) -> bool {
         true
     }
-
 
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = self.flash.tick(dt);

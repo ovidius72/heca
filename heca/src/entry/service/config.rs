@@ -25,7 +25,11 @@ impl ExtensionConfigError {
 
 impl std::fmt::Display for ExtensionConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[extensions.{}] is not valid: {}", self.extension, self.message)
+        write!(
+            f,
+            "[extensions.{}] is not valid: {}",
+            self.extension, self.message
+        )
     }
 }
 
@@ -33,10 +37,21 @@ impl std::error::Error for ExtensionConfigError {}
 
 /// `extension`'s table in `config`, as `T`. Always the extension the service was declared under, so
 /// one extension can never read another's.
-pub(super) fn read<T: DeserializeOwned>(config: &AppConfig, extension: &str) -> Result<T, ExtensionConfigError> {
-    config.config.extension(extension).map_err(|error| ExtensionConfigError {
-        extension: extension.to_owned(),
-        // The deserializer puts the key on a line of its own; one line reads better in a notification.
-        message: error.to_string().lines().map(str::trim).collect::<Vec<_>>().join(" "),
-    })
+pub(super) fn read<T: DeserializeOwned>(
+    config: &AppConfig,
+    extension: &str,
+) -> Result<T, ExtensionConfigError> {
+    config
+        .config
+        .extension(extension)
+        .map_err(|error| ExtensionConfigError {
+            extension: extension.to_owned(),
+            // The deserializer puts the key on a line of its own; one line reads better in a notification.
+            message: error
+                .to_string()
+                .lines()
+                .map(str::trim)
+                .collect::<Vec<_>>()
+                .join(" "),
+        })
 }

@@ -415,7 +415,10 @@ mod tests {
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
         let mut outer = Surface::new().key("col:1").drop_target();
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        outer.base_mut().children.push(crate::WidgetModel::new(inner));
+        outer
+            .base_mut()
+            .children
+            .push(crate::WidgetModel::new(inner));
 
         assert_eq!(
             resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.key),
@@ -437,7 +440,10 @@ mod tests {
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
         let mut outer = Surface::new().key("col:1").drop_target();
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        outer.base_mut().children.push(crate::WidgetModel::new(inner));
+        outer
+            .base_mut()
+            .children
+            .push(crate::WidgetModel::new(inner));
 
         let accept = |key: &str| key != "pane:2";
         assert_eq!(
@@ -565,7 +571,10 @@ mod tests {
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         let mut inner = Surface::new().key("pane:2").accepts(["pane"]);
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
-        outer.base_mut().children.push(crate::WidgetModel::new(inner));
+        outer
+            .base_mut()
+            .children
+            .push(crate::WidgetModel::new(inner));
 
         // Dragging a column over the pane card lands on the column that contains it.
         assert_eq!(
@@ -603,7 +612,9 @@ mod tests {
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 80.0));
         let mut a = Surface::new().key("row:a").draggable();
         a.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
-        a.base_mut().children.push(crate::WidgetModel::new(Label::new("A")));
+        a.base_mut()
+            .children
+            .push(crate::WidgetModel::new(Label::new("A")));
         let mut b = Surface::new().key("row:b").drop_target();
         b.base_mut().bounds = Rectangle::new(Point::new(0.0, 40.0), Size::new(100.0, 40.0));
         root.base_mut().children.push(crate::WidgetModel::new(a));

@@ -1,8 +1,8 @@
 //! Putting a menu on screen as a layer: one a widget declared, or one the host builds from
 //! entries, with the rows other components contribute merged in.
 
-use heca_grid_ui::widgets::{ContextMenu, Menu, MenuAnchor};
 use heca_grid_ui::Point;
+use heca_grid_ui::widgets::{ContextMenu, Menu, MenuAnchor};
 
 use super::{menu_from_items, plugin_providers_for, target_from_subject};
 use crate::app::interaction::InteractionSource;
@@ -135,8 +135,7 @@ fn merge_contributions(
     // Going through the one conversion means a contributed row runs **its own intent**, dispatched
     // by name through the central gate — the same policy and destructive-confirm a keypress gets —
     // exactly as a row the declarer wrote does.
-    let contributed =
-        menu_from_items("", "", "", items, &state.action_catalog, emit);
+    let contributed = menu_from_items("", "", "", items, &state.action_catalog, emit);
     let mut menu = menu;
     for row in contributed.into_items() {
         menu = menu.child(row);
@@ -158,17 +157,18 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
     // two drift: they already had, one with quick-pick keycaps and one without, which is how the
     // same menu came to have two shapes on screen.
-    let items =
-        menu_from_items("", "", "", spec.items, &state.action_catalog, &emit);
-    let menu = spec.anchor.open(ContextMenu::new("dropdown")
-        .child(items)
-        .on_dismiss(id.closer(&emit))
-        // **A chosen entry takes the layer down too, not just a dismissal.** An entry dispatches
-        // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
-        // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
-        // panel hid itself while the layer stayed registered: still modal, still holding the
-        // keyboard, so every keybinding was dead until `Escape`.
-        .after_select(id.closer(&emit)));
+    let items = menu_from_items("", "", "", spec.items, &state.action_catalog, &emit);
+    let menu = spec.anchor.open(
+        ContextMenu::new("dropdown")
+            .child(items)
+            .on_dismiss(id.closer(&emit))
+            // **A chosen entry takes the layer down too, not just a dismissal.** An entry dispatches
+            // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
+            // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
+            // panel hid itself while the layer stayed registered: still modal, still holding the
+            // keyboard, so every keybinding was dead until `Escape`.
+            .after_select(id.closer(&emit)),
+    );
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
     // its panel is small: *a modal is an overlay with coverage*. Its own entries

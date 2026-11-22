@@ -144,14 +144,10 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32) -> String 
     // repository has no branch chip), and the icon, since a glyph is not text.
     // Which chips have data at all — the shape. `max_width` is passed as unbounded because
     // truncation changes a chip's *words*, never whether it exists, and the words are not here.
-    let present: Vec<_> = segment_items(
-        content.chips,
-        content.segments,
-        content.facts,
-    )
-    .into_iter()
-    .map(|item| (item.name, item.chip.icon, item.chip.tone))
-    .collect();
+    let present: Vec<_> = segment_items(content.chips, content.segments, content.facts)
+        .into_iter()
+        .map(|item| (item.name, item.chip.icon, item.chip.tone))
+        .collect();
     let chip_names: Vec<&str> = content.segments.iter().map(|d| d.name.as_str()).collect();
     format!(
         "{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{:?}",
@@ -291,13 +287,11 @@ pub(crate) fn build_pane_header(
     // stated backstop. That clip is gone (the bar is a child of its pane now), so the guess had
     // nothing catching it. The row divides the space instead: the group keeps its buttons at their
     // own size and gives them up when it must, and the title chip ellipses itself in what is left.
-    let bar = build_pane_info_bar(
-        segment_items(
-            content.chips,
-            content.segments,
-            content.facts,
-        ),
-    );
+    let bar = build_pane_info_bar(segment_items(
+        content.chips,
+        content.segments,
+        content.facts,
+    ));
 
     // **The bar carries no size of its own.** It fills the width and the height it is given and
     // centres its content in them — it is a child of the pane, so the pane's layout owns its box.

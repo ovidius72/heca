@@ -93,7 +93,9 @@ fn a_changed_word_is_written_without_a_rebuild() {
     let signal = text.borrow().expect("built");
     assert_eq!(signal.get_untracked(), "one");
 
-    let rebuilt = keyed.show("a", || -> Option<Label> { unreachable!("the key did not change") });
+    let rebuilt = keyed.show("a", || -> Option<Label> {
+        unreachable!("the key did not change")
+    });
     keyed.texts(vec![("word".into(), "two".into())]);
     lay_out(&mut root);
 

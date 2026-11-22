@@ -2,23 +2,25 @@
 
 use super::*;
 
-
 #[test]
 fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
     // Single-pane column → no-op (the lone pane fills the column).
     space.m().resize_pane_height(0, 0, 30.0);
     assert_eq!(space.columns[0].panes[0].height_share, None);
     // Stack a second pane, then the resize takes effect.
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), true);
     space.m().resize_pane_height(0, 0, 30.0);
     assert!(space.columns[0].panes[0].height_share.is_some());
     // Out-of-range column / pane index → no panic.
     space.m().resize_pane_height(9, 0, 30.0);
     space.m().resize_pane_height(0, 9, 30.0);
 }
-
 
 /// **A boundary moves space between its own two panes, and nothing else**.
 ///
@@ -29,9 +31,15 @@ fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
 #[test]
 fn a_boundary_drag_leaves_the_pane_beyond_it_untouched() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
     let before: Vec<f64> = space.r().pane_heights(0);
     assert_eq!(before.len(), 3, "three stacked panes");
@@ -63,15 +71,20 @@ fn a_boundary_drag_leaves_the_pane_beyond_it_untouched() {
     );
 }
 
-
 /// The far side stops at its floor rather than the drag reaching past it for more space — which
 /// is what let one boundary eat a pane two positions away.
 #[test]
 fn a_boundary_drag_stops_when_its_neighbour_hits_the_floor() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
     let third = space.r().pane_heights(0)[2];
 
     // Far more than the neighbour can give, repeatedly.
@@ -92,7 +105,6 @@ fn a_boundary_drag_stops_when_its_neighbour_hits_the_floor() {
     );
 }
 
-
 /// **The divider goes the way the key says, whichever pane is active**.
 ///
 /// `j` is directional; "grow the active pane" is not. They disagree for the last pane, which
@@ -104,9 +116,15 @@ fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
     // Each seat in a three-pane column, and the boundary each one owns.
     for (active, boundary) in [(0usize, 0usize), (1, 1), (2, 1)] {
         let mut space = test_scrolling_space();
-        space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-        space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-        space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+        space
+            .m()
+            .add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space
+            .m()
+            .add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space
+            .m()
+            .add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
         let before: Vec<f64> = space.r().pane_heights(0);
         let (h, gaps) = (space.view.area.size.h, space.options.gaps);
@@ -136,7 +154,6 @@ fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
     }
 }
 
-
 /// The size verbs keep meaning size. `pane_height_increase` says "increase", so it grows the
 /// active pane whichever edge has to move — the opposite reading to the directional one above,
 /// and both are correct for the words they are spelled with.
@@ -144,9 +161,15 @@ fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
 fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
     for active in [0usize, 1, 2] {
         let mut space = test_scrolling_space();
-        space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-        space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-        space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+        space
+            .m()
+            .add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space
+            .m()
+            .add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space
+            .m()
+            .add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
         let before: Vec<f64> = space.r().pane_heights(0);
         let (h, gaps) = (space.view.area.size.h, space.options.gaps);
@@ -161,7 +184,6 @@ fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
         );
     }
 }
-
 
 /// **Splitting a column a third time gives the new pane a real pane's worth of room.**
 ///
@@ -182,11 +204,17 @@ fn a_pane_added_to_a_column_that_was_dragged_full_still_gets_room() {
     };
     let area = Rectangle::from_size(Size::new(1000.0, 800.0));
     let mut space = Seen::new(area, 1.0, opts);
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
     // Drag the divider well off centre, so the two of them fill the column between them.
     space.m().resize_pane_height(0, 0, 120.0);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
 
     let panes = space.r().panes_with_positions();
     assert_eq!(panes.len(), 3, "three panes in the column");
@@ -206,7 +234,6 @@ fn a_pane_added_to_a_column_that_was_dragged_full_still_gets_room() {
     );
 }
 
-
 /// **Both of a pane's edges can be moved.** The counterpart of the column test above: plain
 /// `j`/`k` move the boundary below the active pane, `edge = "top"` the one above it.
 #[test]
@@ -217,9 +244,15 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
     };
     let area = Rectangle::from_size(Size::new(1000.0, 800.0));
     let mut space = Seen::new(area, 1.0, opts);
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
     let heights = |s: &Seen| -> Vec<f64> {
         s.r()
             .panes_with_positions()
@@ -228,7 +261,11 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
             .collect()
     };
 
-    assert_eq!(space.r().active_pane_row(0), Some(2), "the last added pane is active");
+    assert_eq!(
+        space.r().active_pane_row(0),
+        Some(2),
+        "the last added pane is active"
+    );
     space.m().focus_pane_in(0, 1);
 
     let before = heights(&space);
@@ -269,9 +306,15 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
 #[test]
 fn a_swap_carries_the_window_focus_with_the_pane() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(7), "p7".to_string()), false);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(8), "p8".to_string()), false);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(7), "p7".to_string()), false);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(8), "p8".to_string()), false);
 
     // Focus pane 1 (row 0), then swap it to the bottom (row 2).
     space.m().focus_pane_in(0, 0);
@@ -280,16 +323,23 @@ fn a_swap_carries_the_window_focus_with_the_pane() {
 
     // Focus is still on pane 1, now at row 2 — it travelled with the pane, not the row.
     assert_eq!(space.r().active_pane_row(0), Some(2));
-    assert_eq!(space.r().active_pane().map(|p| p.id), Some(PaneId(1)), "focus followed the pane");
+    assert_eq!(
+        space.r().active_pane().map(|p| p.id),
+        Some(PaneId(1)),
+        "focus followed the pane"
+    );
 }
-
 
 /// A pane's top is the gaps and the panes above it — worked out from the column, never stored.
 #[test]
 fn a_pane_starts_below_the_panes_above_it() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
     let gaps = space.options.gaps;
     let heights = space.r().pane_heights(0);
     assert_eq!(space.r().pane_y_in_column(0, 0), gaps);
@@ -300,7 +350,11 @@ fn a_pane_starts_below_the_panes_above_it() {
 fn bottoms(space: &Seen) -> (f64, f64) {
     let r = space.r();
     let columns = r.columns_with_positions();
-    let lowest = columns[0].panes.iter().map(|p| p.slot.loc.y + p.slot.size.h).fold(0.0, f64::max);
+    let lowest = columns[0]
+        .panes
+        .iter()
+        .map(|p| p.slot.loc.y + p.slot.size.h)
+        .fold(0.0, f64::max);
     (lowest, r.area().loc.y + r.area().size.h)
 }
 
@@ -309,7 +363,11 @@ fn drawn_at(space: &Seen, panes: &[PaneId]) -> Vec<(i64, i64)> {
     let drawn = space.r().panes_with_positions();
     let at = |id: &PaneId| drawn.iter().find(|(p, _)| p == id).map(|(_, r)| r.loc);
     let round = |v: f64| (v * 100.0).round() as i64;
-    panes.iter().filter_map(at).map(|loc| (round(loc.x), round(loc.y))).collect()
+    panes
+        .iter()
+        .filter_map(at)
+        .map(|loc| (round(loc.x), round(loc.y)))
+        .collect()
 }
 
 /// **Every pane stays on screen** after heights are dragged and panes are swapped or moved: the
@@ -317,29 +375,51 @@ fn drawn_at(space: &Seen, panes: &[PaneId]) -> Vec<(i64, i64)> {
 #[test]
 fn panes_stay_on_screen_after_a_resize_and_a_swap() {
     let mut space = test_scrolling_space();
-    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
     for id in 2..=4 {
-        space.m().add_pane_to_column(0, None, Pane::new(PaneId(id), format!("p{id}")), true);
+        space
+            .m()
+            .add_pane_to_column(0, None, Pane::new(PaneId(id), format!("p{id}")), true);
     }
     let (h, gaps) = (space.r().area().size.h, space.options.gaps);
     let room = h - gaps * 5.0;
     for step in 0..12 {
-        space.m().resize_pane_height(0, step % 3, if step % 2 == 0 { 70.0 } else { -45.0 });
+        space
+            .m()
+            .resize_pane_height(0, step % 3, if step % 2 == 0 { 70.0 } else { -45.0 });
         let total: f64 = space.r().pane_heights(0).iter().sum();
-        assert!((total - room).abs() < 0.5, "step {step}: heights {total} vs room {room}");
+        assert!(
+            (total - room).abs() < 0.5,
+            "step {step}: heights {total} vs room {room}"
+        );
         let (lowest, bottom) = bottoms(&space);
-        assert!(lowest <= bottom - gaps + 0.5, "step {step}: lowest pane ends at {lowest} of {bottom}");
+        assert!(
+            lowest <= bottom - gaps + 0.5,
+            "step {step}: lowest pane ends at {lowest} of {bottom}"
+        );
         let before = space.r().positions();
         let n = space.columns[0].panes.len();
         let (a, b) = (step % n, (step + 1) % n);
         let swapped = [space.columns[0].panes[a].id, space.columns[0].panes[b].id];
         let was = drawn_at(&space, &swapped);
-        let effect = space.space.swap_panes_in_column(0, a, b).expect("rows a and b are there");
+        let effect = space
+            .space
+            .swap_panes_in_column(0, a, b)
+            .expect("rows a and b are there");
         space.m().show(&[SpaceEffect::Pane(effect)], &before);
         let total: f64 = space.r().pane_heights(0).iter().sum();
-        assert!((total - room).abs() < 0.5, "after a swap at step {step}: {total} vs {room}");
+        assert!(
+            (total - room).abs() < 0.5,
+            "after a swap at step {step}: {total} vs {room}"
+        );
         // Each swapped pane starts its slide where it was drawn, even mid-way through an earlier
         // slide, so a swap never throws a pane off screen.
-        assert_eq!(drawn_at(&space, &swapped), was, "step {step}: a swapped pane jumped");
+        assert_eq!(
+            drawn_at(&space, &swapped),
+            was,
+            "step {step}: a swapped pane jumped"
+        );
     }
 }

@@ -25,7 +25,9 @@ pub(super) fn entries(
             detail: None,
             icon: None,
             shortcuts: Vec::new(),
-            intent: Some(InteractionIntent::ActivateAction(WmAction::Follow { target: None })),
+            intent: Some(InteractionIntent::ActivateAction(WmAction::Follow {
+                target: None,
+            })),
         });
     }
     rows.extend(
@@ -59,8 +61,16 @@ mod tests {
 
     fn directory() -> Vec<WindowInfo> {
         vec![
-            WindowInfo { id: 1, ordinal: 1, title: "~/projects/heca".into() },
-            WindowInfo { id: 2, ordinal: 2, title: "~/projects/heca #2".into() },
+            WindowInfo {
+                id: 1,
+                ordinal: 1,
+                title: "~/projects/heca".into(),
+            },
+            WindowInfo {
+                id: 2,
+                ordinal: 2,
+                title: "~/projects/heca #2".into(),
+            },
         ]
     }
 
@@ -73,7 +83,9 @@ mod tests {
         assert!(!rows[0].current);
         assert!(matches!(
             &rows[0].intent,
-            Some(InteractionIntent::ActivateAction(WmAction::Follow { target: Some(2) }))
+            Some(InteractionIntent::ActivateAction(WmAction::Follow {
+                target: Some(2)
+            }))
         ));
     }
 
@@ -85,8 +97,13 @@ mod tests {
         assert_eq!(rows[0].label, "Stop following");
         assert!(matches!(
             &rows[0].intent,
-            Some(InteractionIntent::ActivateAction(WmAction::Follow { target: None }))
+            Some(InteractionIntent::ActivateAction(WmAction::Follow {
+                target: None
+            }))
         ));
-        assert!(rows[1].current, "the followed window reads as the current choice");
+        assert!(
+            rows[1].current,
+            "the followed window reads as the current choice"
+        );
     }
 }

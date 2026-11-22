@@ -1,6 +1,6 @@
 //! New fields need no helper registration; serde still owns input validation.
 
-use super::{defaults, schema::declare_settings, SettingsConfig};
+use super::{SettingsConfig, defaults, schema::declare_settings};
 use serde::{Deserialize, Serialize};
 
 declare_settings! {
@@ -23,13 +23,17 @@ fn a_new_optional_type_needs_only_its_field_declaration() {
     assert_eq!(empty.terminal_mouse, file_defaults.terminal_mouse);
     assert_eq!(empty.new_items, None);
 
-    let explicit: ExtendedSettings = toml::from_str(
-        "window_width = 0\nterminal-mouse = false\nnew_items = ['first', 'second']",
-    ).unwrap();
+    let explicit: ExtendedSettings =
+        toml::from_str("window_width = 0\nterminal-mouse = false\nnew_items = ['first', 'second']")
+            .unwrap();
     assert_eq!(explicit.window_width, 0);
     assert!(!explicit.terminal_mouse);
-    assert_eq!(explicit.new_items, Some(vec!["first".into(), "second".into()]));
-    let round_trip: ExtendedSettings = toml::from_str(&toml::to_string(&explicit).unwrap()).unwrap();
+    assert_eq!(
+        explicit.new_items,
+        Some(vec!["first".into(), "second".into()])
+    );
+    let round_trip: ExtendedSettings =
+        toml::from_str(&toml::to_string(&explicit).unwrap()).unwrap();
     assert_eq!(round_trip, explicit);
 }
 
@@ -45,7 +49,10 @@ fn explicit_null_clears_an_optional_file_default() {
     }
 
     let empty: OptionalDefault = serde_json::from_str("{}").unwrap();
-    assert_eq!(empty.window_width, Some(SettingsConfig::default().window_width));
+    assert_eq!(
+        empty.window_width,
+        Some(SettingsConfig::default().window_width)
+    );
     let cleared: OptionalDefault = serde_json::from_str(r#"{"window_width":null}"#).unwrap();
     assert_eq!(cleared.window_width, None);
 }
@@ -53,20 +60,27 @@ fn explicit_null_clears_an_optional_file_default() {
 #[test]
 fn json_round_trip_and_validation_keep_the_existing_contract() {
     let expected = SettingsConfig::default();
-    let actual: SettingsConfig = serde_json::from_value(serde_json::to_value(&expected).unwrap()).unwrap();
+    let actual: SettingsConfig =
+        serde_json::from_value(serde_json::to_value(&expected).unwrap()).unwrap();
     assert_eq!(actual, expected);
-    assert_eq!(serde_json::from_str::<SettingsConfig>("{}").unwrap(), expected);
+    assert_eq!(
+        serde_json::from_str::<SettingsConfig>("{}").unwrap(),
+        expected
+    );
     for input in [
         r#"{"window_width":null}"#,
         r#"{"notification_system":null}"#,
         r#"{"notification_system":{"max_visible":null}}"#,
         r#"{"terminal_mouse":true,"terminal-mouse":false}"#,
     ] {
-        assert!(serde_json::from_str::<SettingsConfig>(input).is_err(), "{input}");
+        assert!(
+            serde_json::from_str::<SettingsConfig>(input).is_err(),
+            "{input}"
+        );
     }
-    assert!(toml::from_str::<SettingsConfig>(
-        "terminal_mouse = true\nterminal-mouse = false",
-    ).is_err());
+    assert!(
+        toml::from_str::<SettingsConfig>("terminal_mouse = true\nterminal-mouse = false",).is_err()
+    );
 }
 
 #[test]

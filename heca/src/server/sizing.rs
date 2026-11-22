@@ -38,7 +38,10 @@ pub(crate) struct PaneSizing {
 impl PaneSizing {
     /// A window reported the grid it shows this terminal at.
     pub(crate) fn request(&mut self, owner: &TerminalOwner, client: u64, grid: Grid) {
-        self.requested.entry(owner.clone()).or_default().insert(client, grid);
+        self.requested
+            .entry(owner.clone())
+            .or_default()
+            .insert(client, grid);
     }
 
     /// A window typed into (or resized) this terminal: it becomes the active one.
@@ -78,7 +81,11 @@ impl PaneSizing {
     /// `min`, `max` and "the active one" all come out the same for a single entry.
     pub(crate) fn resolve(&self, owner: &TerminalOwner, policy: PaneSize) -> Option<Grid> {
         let grids = self.requested.get(owner)?;
-        let active = self.active.get(owner).and_then(|client| grids.get(client)).copied();
+        let active = self
+            .active
+            .get(owner)
+            .and_then(|client| grids.get(client))
+            .copied();
         match policy {
             // The window last typed in. Fall back to any showing window until one has typed, so a
             // freshly shown pane still gets a size.
@@ -103,7 +110,12 @@ impl PaneSizing {
             (pick(cols, grid.cols), pick(rows, grid.rows))
         });
         let base = active.unwrap_or(first);
-        Some(Grid { cols, rows, cell: base.cell, scale: base.scale })
+        Some(Grid {
+            cols,
+            rows,
+            cell: base.cell,
+            scale: base.scale,
+        })
     }
 
     /// Record the grid just applied to the process and say whether it changed — so the caller
@@ -123,7 +135,12 @@ mod tests {
     }
 
     fn grid(cols: usize, rows: usize) -> Grid {
-        Grid { cols, rows, cell: (8.0, 16.0), scale: 1.0 }
+        Grid {
+            cols,
+            rows,
+            cell: (8.0, 16.0),
+            scale: 1.0,
+        }
     }
 
     #[test]
@@ -131,7 +148,11 @@ mod tests {
         let mut sizing = PaneSizing::default();
         sizing.request(&owner(), 1, grid(80, 24));
         for policy in [PaneSize::Smallest, PaneSize::Latest, PaneSize::Largest] {
-            assert_eq!(sizing.resolve(&owner(), policy), Some(grid(80, 24)), "{policy:?}");
+            assert_eq!(
+                sizing.resolve(&owner(), policy),
+                Some(grid(80, 24)),
+                "{policy:?}"
+            );
         }
     }
 
@@ -147,9 +168,15 @@ mod tests {
         sizing.request(&owner(), 1, grid(80, 24));
         sizing.request(&owner(), 2, grid(120, 40));
         sizing.touch(&owner(), 1);
-        assert_eq!(sizing.resolve(&owner(), PaneSize::Latest), Some(grid(80, 24)));
+        assert_eq!(
+            sizing.resolve(&owner(), PaneSize::Latest),
+            Some(grid(80, 24))
+        );
         sizing.touch(&owner(), 2);
-        assert_eq!(sizing.resolve(&owner(), PaneSize::Latest), Some(grid(120, 40)));
+        assert_eq!(
+            sizing.resolve(&owner(), PaneSize::Latest),
+            Some(grid(120, 40))
+        );
     }
 
     #[test]
@@ -157,8 +184,18 @@ mod tests {
         let mut sizing = PaneSizing::default();
         sizing.request(&owner(), 1, grid(80, 40));
         sizing.request(&owner(), 2, grid(120, 24));
-        assert_eq!(sizing.resolve(&owner(), PaneSize::Smallest).map(|g| (g.cols, g.rows)), Some((80, 24)));
-        assert_eq!(sizing.resolve(&owner(), PaneSize::Largest).map(|g| (g.cols, g.rows)), Some((120, 40)));
+        assert_eq!(
+            sizing
+                .resolve(&owner(), PaneSize::Smallest)
+                .map(|g| (g.cols, g.rows)),
+            Some((80, 24))
+        );
+        assert_eq!(
+            sizing
+                .resolve(&owner(), PaneSize::Largest)
+                .map(|g| (g.cols, g.rows)),
+            Some((120, 40))
+        );
     }
 
     #[test]
@@ -170,15 +207,30 @@ mod tests {
         let affected = sizing.forget_client(2);
         assert_eq!(affected, vec![owner()]);
         // Only window 1 is left: its size wins under latest, even though it never typed.
-        assert_eq!(sizing.resolve(&owner(), PaneSize::Latest), Some(grid(80, 24)));
-        assert_eq!(sizing.resolve(&owner(), PaneSize::Largest), Some(grid(80, 24)));
+        assert_eq!(
+            sizing.resolve(&owner(), PaneSize::Latest),
+            Some(grid(80, 24))
+        );
+        assert_eq!(
+            sizing.resolve(&owner(), PaneSize::Largest),
+            Some(grid(80, 24))
+        );
     }
 
     #[test]
     fn apply_is_marked_only_on_a_real_change() {
         let mut sizing = PaneSizing::default();
-        assert!(sizing.mark_applied(&owner(), grid(80, 24)), "first apply is a change");
-        assert!(!sizing.mark_applied(&owner(), grid(80, 24)), "same grid is not");
-        assert!(sizing.mark_applied(&owner(), grid(100, 24)), "a new grid is");
+        assert!(
+            sizing.mark_applied(&owner(), grid(80, 24)),
+            "first apply is a change"
+        );
+        assert!(
+            !sizing.mark_applied(&owner(), grid(80, 24)),
+            "same grid is not"
+        );
+        assert!(
+            sizing.mark_applied(&owner(), grid(100, 24)),
+            "a new grid is"
+        );
     }
 }

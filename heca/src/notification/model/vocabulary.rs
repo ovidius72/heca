@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use heca_grid_ui::widgets::ToastSeverity;
+use serde::{Deserialize, Serialize};
 
 /// **Who sees a notification** when several windows share one session.
 ///
@@ -156,7 +156,10 @@ impl NotificationSource {
     /// Whether heca itself raised it (`App`, `Config`), as opposed to a pane, a provider, a plugin or
     /// a command — the sources a user may want named, because they are not heca.
     pub fn is_heca(&self) -> bool {
-        matches!(self.kind, NotificationSourceKind::App | NotificationSourceKind::Config)
+        matches!(
+            self.kind,
+            NotificationSourceKind::App | NotificationSourceKind::Config
+        )
     }
 
     /// The opaque identifier within the kind, if any.

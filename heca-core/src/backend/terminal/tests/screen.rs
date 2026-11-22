@@ -41,18 +41,28 @@ fn geometry_changes_commit_to_the_pty_together_on_update() {
     backend.last_pty_resize = Instant::now() - super::super::size::PTY_RESIZE_MIN_INTERVAL;
     let previous = backend.last_pty_resize;
     backend.set_cell_size(10.0, 20.0);
-    assert_eq!(backend.last_pty_resize, previous, "cell metrics must not publish the old grid");
+    assert_eq!(
+        backend.last_pty_resize, previous,
+        "cell metrics must not publish the old grid"
+    );
     backend.set_scale_factor(2.0);
     backend.set_size(37, 40);
     assert_eq!(backend.pending_pty_size, Some((37, 40)));
     let screen = backend.terminal_snapshot().unwrap();
-    assert_eq!((screen.cols, screen.rows), (37, 40), "the model still reflows immediately");
+    assert_eq!(
+        (screen.cols, screen.rows),
+        (37, 40),
+        "the model still reflows immediately"
+    );
     backend.update();
     assert!(backend.last_pty_resize > previous);
     assert!(backend.pending_pty_size.is_none());
     let committed = backend.last_pty_resize;
     backend.update();
-    assert_eq!(backend.last_pty_resize, committed, "an unchanged update sends no second resize");
+    assert_eq!(
+        backend.last_pty_resize, committed,
+        "an unchanged update sends no second resize"
+    );
 }
 
 #[test]

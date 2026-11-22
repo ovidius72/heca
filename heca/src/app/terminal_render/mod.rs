@@ -9,7 +9,7 @@ mod layers;
 mod look;
 
 pub(crate) use draw::{
-    draw_surface, hyperlink_decor_from, terminal_font_families_from, TerminalTarget,
+    TerminalTarget, draw_surface, hyperlink_decor_from, terminal_font_families_from,
 };
 pub(crate) use layers::sync_retained_terminal_layers;
 pub(crate) use look::pane_scissor_rect;

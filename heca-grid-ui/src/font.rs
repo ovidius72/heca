@@ -134,12 +134,20 @@ pub fn wrap_lines(text: &str, cells: usize, max_lines: Option<usize>) -> Vec<Str
 /// Wrap without discarding whitespace. Each output character retains its original char index.
 /// Explicit newlines start a new row, including an empty last row after a trailing newline.
 /// This is the shared layout/paint answer for editable or preformatted text.
-pub fn wrap_preserved(text: &str, cells: usize, max_lines: Option<usize>) -> Vec<Vec<(char, usize)>> {
+pub fn wrap_preserved(
+    text: &str,
+    cells: usize,
+    max_lines: Option<usize>,
+) -> Vec<Vec<(char, usize)>> {
     let chars: Vec<char> = text.chars().collect();
     let cells = cells.max(1);
-    let mut lines: Vec<Vec<(char, usize)>> = preserved_ranges(text, cells).into_iter()
-        .map(|range| range.map(|index| (chars[index], index)).collect()).collect();
-    if let Some(max) = max_lines.map(|n| n.max(1)) && lines.len() > max {
+    let mut lines: Vec<Vec<(char, usize)>> = preserved_ranges(text, cells)
+        .into_iter()
+        .map(|range| range.map(|index| (chars[index], index)).collect())
+        .collect();
+    if let Some(max) = max_lines.map(|n| n.max(1))
+        && lines.len() > max
+    {
         lines.truncate(max);
         if let Some(last) = lines.last_mut() {
             last.truncate(cells.saturating_sub(1));
@@ -156,11 +164,17 @@ pub(crate) fn preserved_ranges(text: &str, cells: usize) -> Vec<std::ops::Range<
     let mut rows: Vec<std::ops::Range<usize>> = std::iter::once(0..0).collect();
     for (index, ch) in text.chars().enumerate() {
         if ch == '\n' {
-            if let Some(row) = rows.last_mut() { row.end = index; }
+            if let Some(row) = rows.last_mut() {
+                row.end = index;
+            }
             rows.push(index + 1..index + 1);
         } else {
-            if rows.last().is_some_and(|row| row.len() >= cells) { rows.push(index..index); }
-            if let Some(row) = rows.last_mut() { row.end = index + 1; }
+            if rows.last().is_some_and(|row| row.len() >= cells) {
+                rows.push(index..index);
+            }
+            if let Some(row) = rows.last_mut() {
+                row.end = index + 1;
+            }
         }
     }
     rows

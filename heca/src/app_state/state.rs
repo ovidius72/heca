@@ -3,12 +3,21 @@
 use super::*;
 
 #[derive(Clone, Copy)]
-pub(crate) enum ReloadReason { Explicit, Session }
+pub(crate) enum ReloadReason {
+    Explicit,
+    Session,
+}
 
 impl ReloadReason {
     /// A session switch keeps presentation state when its effective config and theme are equal.
-    pub(crate) fn requires_apply(self, current: &heca_config::loader::AppConfig, next: &heca_config::loader::AppConfig) -> bool {
-        matches!(self, Self::Explicit) || current.config != next.config || current.theme != next.theme
+    pub(crate) fn requires_apply(
+        self,
+        current: &heca_config::loader::AppConfig,
+        next: &heca_config::loader::AppConfig,
+    ) -> bool {
+        matches!(self, Self::Explicit)
+            || current.config != next.config
+            || current.theme != next.theme
     }
 }
 

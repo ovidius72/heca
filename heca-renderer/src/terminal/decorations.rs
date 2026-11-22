@@ -478,7 +478,7 @@ fn draw_half_ellipse(
 
 #[cfg(test)]
 mod tests {
-    use super::{block_fill, BlockFill};
+    use super::{BlockFill, block_fill};
 
     fn fill(ch: char) -> BlockFill {
         block_fill(ch).expect("expected a block element")

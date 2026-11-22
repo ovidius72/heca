@@ -3,12 +3,12 @@
 //! when the pane's program has really ended.
 
 // Named only in the docs below.
-#[cfg(doc)]
-use crate::backend::PaneBackend;
 use super::TerminalBackend;
 use super::osc::OscEvent;
 use super::process;
 use super::pty::PtyRead;
+#[cfg(doc)]
+use crate::backend::PaneBackend;
 use crate::runtime::ProcessStatus;
 use std::io;
 use std::time::Instant;
@@ -16,27 +16,50 @@ use std::time::Instant;
 const POST_COMMAND_FG_REFRESHES: u8 = 2;
 
 impl TerminalBackend {
-    pub(super) fn configure_agents(&mut self, options: Option<crate::agent::AgentOptions>) -> Result<(), crate::agent::AgentError> {
+    pub(super) fn configure_agents(
+        &mut self,
+        options: Option<crate::agent::AgentOptions>,
+    ) -> Result<(), crate::agent::AgentError> {
         if let Some(options) = options {
             let limit = options.max_report_bytes;
             if let Some(session) = &mut self.agent_session {
                 session.configure(options)?;
             } else {
-                self.agent_session = Some(crate::agent::AgentSession::prepare(options, self.agent_wake.clone())?);
+                self.agent_session = Some(crate::agent::AgentSession::prepare(
+                    options,
+                    self.agent_wake.clone(),
+                )?);
             }
             self.osc.set_notification_limit(limit);
         } else if let Some(session) = &mut self.agent_session {
             session.disable()?;
         }
         let state = self.agent_session.as_ref().and_then(|session| {
-            if self.exited || self.runtime.status != ProcessStatus::Running { return None }
+            if self.exited || self.runtime.status != ProcessStatus::Running {
+                return None;
+            }
             let program = self.runtime.program.as_deref()?;
-            let replay = self.last_agent_notification.as_ref().and_then(|notification| {
-                session.drivers().read_status(program, crate::agent::AgentInput::Notification(notification)).ok().flatten()
-            });
-            replay.or_else(|| self.runtime.agent.clone().filter(|agent| {
-                session.drivers().recognize(program).is_some_and(|driver| driver.id() == agent.driver)
-            }))
+            let replay = self
+                .last_agent_notification
+                .as_ref()
+                .and_then(|notification| {
+                    session
+                        .drivers()
+                        .read_status(
+                            program,
+                            crate::agent::AgentInput::Notification(notification),
+                        )
+                        .ok()
+                        .flatten()
+                });
+            replay.or_else(|| {
+                self.runtime.agent.clone().filter(|agent| {
+                    session
+                        .drivers()
+                        .recognize(program)
+                        .is_some_and(|driver| driver.id() == agent.driver)
+                })
+            })
         });
         self.set_agent(state);
         Ok(())
@@ -44,8 +67,12 @@ impl TerminalBackend {
 
     fn set_agent(&mut self, state: Option<crate::agent::AgentState>) {
         let state = state.map(|report| report.retain_session(self.runtime.agent.as_ref()));
-        if self.runtime.agent == state { return }
-        if let Some(session) = &mut self.agent_session { session.record(state.clone()); }
+        if self.runtime.agent == state {
+            return;
+        }
+        if let Some(session) = &mut self.agent_session {
+            session.record(state.clone());
+        }
         self.runtime.agent = state;
     }
 
@@ -116,7 +143,8 @@ impl TerminalBackend {
             }
             OscEvent::CommandFinished(code) => {
                 if std::mem::take(&mut self.command_active) {
-                    self.pending_alerts.push(crate::backend::BackendAlert::ProcessCompleted { exit_code: code });
+                    self.pending_alerts
+                        .push(crate::backend::BackendAlert::ProcessCompleted { exit_code: code });
                 }
                 self.command_launch = None;
                 self.last_agent_notification = None;
@@ -132,7 +160,10 @@ impl TerminalBackend {
                 false
             }
             OscEvent::LaunchCommand(command) => {
-                self.command_launch = self.pty.command_launch(&command, self.runtime.cwd.as_deref()).ok();
+                self.command_launch = self
+                    .pty
+                    .command_launch(&command, self.runtime.cwd.as_deref())
+                    .ok();
                 false
             }
             OscEvent::Notification(notification) => {
@@ -145,7 +176,9 @@ impl TerminalBackend {
                 {
                     self.set_agent(Some(report));
                 }
-                if self.agent_session.is_some() { self.last_agent_notification = Some(notification); }
+                if self.agent_session.is_some() {
+                    self.last_agent_notification = Some(notification);
+                }
                 // Unrelated and malformed notifications cannot alter process status.
                 false
             }
@@ -195,11 +228,18 @@ impl TerminalBackend {
                 }
             }
         }
-        let reports = self.agent_session.as_ref().map(|session| session.drain()).unwrap_or_default();
+        let reports = self
+            .agent_session
+            .as_ref()
+            .map(|session| session.drain())
+            .unwrap_or_default();
         for report in reports {
             if let Some(session) = &self.agent_session
                 && self.runtime.status == ProcessStatus::Running
-                && self.runtime.program.as_deref()
+                && self
+                    .runtime
+                    .program
+                    .as_deref()
                     .and_then(|program| session.drivers().recognize(program))
                     .is_some_and(|driver| driver.id() == report.driver)
             {
@@ -252,7 +292,8 @@ impl TerminalBackend {
             && let Some(code) = self.ended_unannounced.take()
         {
             if !self.semantic_status_active {
-                self.pending_alerts.push(crate::backend::BackendAlert::ProcessCompleted { exit_code: code });
+                self.pending_alerts
+                    .push(crate::backend::BackendAlert::ProcessCompleted { exit_code: code });
             }
             self.command_active = false;
             self.runtime.status = ProcessStatus::of_exit(code);

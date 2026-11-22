@@ -181,7 +181,9 @@ impl ScrollingMut<'_> {
         let columns = &self.space.columns;
         let gaps = self.space.options.gaps;
         let active = self.view.active_column;
-        let total_w: f64 = (0..self.space.columns.len()).map(|i| self.reader().column_width(i)).sum();
+        let total_w: f64 = (0..self.space.columns.len())
+            .map(|i| self.reader().column_width(i))
+            .sum();
         let content_w = total_w + gaps * columns.len().max(1) as f64;
         let before_w: f64 = (0..active).map(|i| self.reader().column_width(i)).sum();
         // Left extent: reveal all columns before the active one.
@@ -203,7 +205,9 @@ impl ScrollingMut<'_> {
     pub fn update_working_area(&mut self, working_area: Rectangle) {
         self.view.area = working_area;
         if !self.space.columns.is_empty() && self.view.offset.is_static() {
-            let offset = self.reader().compute_view_offset_for_column(self.view.active_column, None);
+            let offset = self
+                .reader()
+                .compute_view_offset_for_column(self.view.active_column, None);
             self.view.offset = ViewOffset::Static(offset);
         }
     }
@@ -221,7 +225,12 @@ impl ScrollingMut<'_> {
         let space = &*self.space;
         self.view.motion.advance(
             |id| space.columns.iter().any(|c| c.id == id),
-            |id| space.columns.iter().any(|c| c.panes.iter().any(|p| p.id == id)),
+            |id| {
+                space
+                    .columns
+                    .iter()
+                    .any(|c| c.panes.iter().any(|p| p.id == id))
+            },
         );
     }
 }
@@ -233,7 +242,9 @@ impl ScrollView {
             return;
         }
         if !space.columns.is_empty() {
-            let offset = space.through(self).compute_view_offset_for_column(self.active_column, None);
+            let offset = space
+                .through(self)
+                .compute_view_offset_for_column(self.active_column, None);
             self.offset = ViewOffset::Static(offset);
         }
         self.initial = false;
@@ -284,7 +295,9 @@ impl ScrollView {
     /// Fit the active column on screen, statically. Nothing happens while the view is easing.
     fn ensure_active_column_visible(&mut self, space: &ScrollingSpace) {
         if !space.columns.is_empty() && self.offset.is_static() {
-            let offset = space.through(self).compute_view_offset_for_column(self.active_column, None);
+            let offset = space
+                .through(self)
+                .compute_view_offset_for_column(self.active_column, None);
             self.offset = ViewOffset::Static(offset);
         }
     }

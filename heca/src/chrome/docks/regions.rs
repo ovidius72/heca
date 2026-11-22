@@ -160,7 +160,10 @@ impl RegionHandle {
             ));
             return self;
         };
-        QUEUE.with(|q| q.borrow_mut().extend(ops.into_iter().map(|op| (region, op))));
+        QUEUE.with(|q| {
+            q.borrow_mut()
+                .extend(ops.into_iter().map(|op| (region, op)))
+        });
         self
     }
 }
@@ -358,7 +361,10 @@ where
     fn into_docks(self) -> Vec<Placed> {
         let first = self();
         let recipe: Recipe = std::rc::Rc::new(move || self().provider);
-        vec![Placed { recipe: Some(recipe), ..first }]
+        vec![Placed {
+            recipe: Some(recipe),
+            ..first
+        }]
     }
 }
 

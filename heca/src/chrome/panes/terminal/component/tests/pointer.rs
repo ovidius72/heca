@@ -24,8 +24,10 @@ fn the_wheel_says_which_cell_it_turned_over() {
         Handled::Yes
     );
     let said = pointer_input(&said);
-    let [TerminalInput::Wheel { x, y, cell, .. }, TerminalInput::Wheel { pixels, .. }] =
-        said.as_slice()
+    let [
+        TerminalInput::Wheel { x, y, cell, .. },
+        TerminalInput::Wheel { pixels, .. },
+    ] = said.as_slice()
     else {
         panic!("two wheel messages, got {said:?}");
     };
@@ -38,7 +40,11 @@ fn the_wheel_says_which_cell_it_turned_over() {
 /// A terminal nobody has bound lets the wheel carry on outward, rather than swallowing it.
 #[test]
 fn an_unbound_terminal_leaves_the_wheel_alone() {
-    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(Terminal::unbound()), 300.0, 200.0);
+    let mut root = laid_out_in(
+        heca_grid_ui::WidgetModel::new(Terminal::unbound()),
+        300.0,
+        200.0,
+    );
     let ev = Event::wheel(heca_grid_ui::Point::new(5.0, 5.0), 0.0, 1.0);
     assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &ev), Handled::No);
 }

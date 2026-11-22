@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 mod project;
 mod sources;
 
-pub use project::{ProjectFile, project_config_path, read_project, read_project_in, read_project_with};
+pub use project::{
+    ProjectFile, project_config_path, read_project, read_project_in, read_project_with,
+};
 pub use sources::{ConfigSource, ConfigSources, config_sources};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -183,7 +185,10 @@ impl Config {
     /// A table that does not fit `T` is an error that says why — never a default. A missing table
     /// reads as an empty one, so a type whose fields all have a `#[serde(default)]` is the
     /// extension's defaults.
-    pub fn extension<T: serde::de::DeserializeOwned>(&self, name: &str) -> Result<T, toml::de::Error> {
+    pub fn extension<T: serde::de::DeserializeOwned>(
+        &self,
+        name: &str,
+    ) -> Result<T, toml::de::Error> {
         match self.extensions.get(name) {
             Some(table) => table.clone().try_into(),
             None => toml::Table::new().try_into(),
@@ -348,7 +353,11 @@ pub(super) fn config_file_paths() -> [Option<PathBuf>; 2] {
 /// Settings writers use this same search order instead of inventing another config location.
 pub fn user_config_path() -> Option<PathBuf> {
     let paths = config_file_paths();
-    paths.iter().flatten().find(|path| path.exists()).cloned()
+    paths
+        .iter()
+        .flatten()
+        .find(|path| path.exists())
+        .cloned()
         .or_else(|| paths.into_iter().flatten().next())
 }
 

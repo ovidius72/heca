@@ -38,7 +38,11 @@ pub(crate) const CHROME_KEY: &str = "heca.chrome";
 /// in the new tree ([`heca_grid_ui::replace_child`]), so no dock and no action has to put it back.
 pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
     let chrome = heca_grid_ui::WidgetModel::new(chrome.key(CHROME_KEY));
-    let seated = root.base().children.iter().position(|c| c.base().key.as_deref() == Some(CHROME_KEY));
+    let seated = root
+        .base()
+        .children
+        .iter()
+        .position(|c| c.base().key.as_deref() == Some(CHROME_KEY));
     match seated {
         Some(at) => heca_grid_ui::replace_child(root, at, chrome),
         None => {
@@ -73,7 +77,10 @@ pub(crate) fn surface_node(root: &Flex, id: LayerId) -> Option<&dyn Component> {
 
 /// The same, mutably — for a caller that must drive the surface (open it, tick it, fire a pick in
 /// it) rather than only read it.
-pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut heca_grid_ui::WidgetModel> {
+pub(crate) fn surface_node_mut(
+    root: &mut Flex,
+    id: LayerId,
+) -> Option<&mut heca_grid_ui::WidgetModel> {
     let key = surface_slot(id);
     root.base_mut()
         .children
@@ -84,7 +91,12 @@ pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut heca
 /// **Take a surface out of the window root.** The counterpart of [`place_surface`]; an unknown key
 /// is a no-op, so removing twice is safe.
 pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
-    while let Some(index) = root.base().children.iter().position(|c| c.base().surface_slot.as_deref() == Some(key)) {
+    while let Some(index) = root
+        .base()
+        .children
+        .iter()
+        .position(|c| c.base().surface_slot.as_deref() == Some(key))
+    {
         let _ = heca_grid_ui::unmount_child(root, index);
     }
 }
@@ -141,7 +153,11 @@ mod tests {
 
     /// A chrome with one dock that keeps the keyboard, as heca builds a navigable dock.
     fn chrome() -> Flex {
-        Flex::row().child(FocusScope::new(Button::new("row")).scope_key("rooms").keeps_keyboard(true))
+        Flex::row().child(
+            FocusScope::new(Button::new("row"))
+                .scope_key("rooms")
+                .keeps_keyboard(true),
+        )
     }
 
     /// The bug this guards: a workspace switch from a dock's own keys rebuilt the chrome, the new

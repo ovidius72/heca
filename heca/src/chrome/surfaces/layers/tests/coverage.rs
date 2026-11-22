@@ -166,7 +166,11 @@ fn a_layer_seated_as_a_surface_still_fills_the_window() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        declaring(heca_grid_ui::WidgetModel::new(fading_root_open()), true, true),
+        declaring(
+            heca_grid_ui::WidgetModel::new(fading_root_open()),
+            true,
+            true,
+        ),
         &mut window,
     );
     reg.show(&mut window, id);

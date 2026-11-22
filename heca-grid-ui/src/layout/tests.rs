@@ -339,9 +339,9 @@ fn nodes_follow_the_components_that_come_and_go() {
     compute(&mut root);
     assert!(live(&root) < all, "a row left with its label");
 
-    root.base_mut()
-        .children
-        .push(crate::WidgetModel::new(Flex::row().child(Label::new("again"))));
+    root.base_mut().children.push(crate::WidgetModel::new(
+        Flex::row().child(Label::new("again")),
+    ));
     let updated = compute(&mut root);
     assert_eq!(live(&root), all, "and a new one joined");
     assert!(updated > 0);
@@ -435,7 +435,9 @@ fn a_hidden_grid_takes_no_room_and_its_neighbours_close_up() {
         root.base().children[1].base().bounds.loc.y
     };
     let grid = Grid::new().height(50.0).hidden(true);
-    let frame = DockFrame::new("room").child(Flex::row().height(50.0)).hidden(true);
+    let frame = DockFrame::new("room")
+        .child(Flex::row().height(50.0))
+        .hidden(true);
     assert_eq!(column(grid.into_component()), without, "Grid");
     assert_eq!(column(frame.into_component()), without, "DockFrame");
 }

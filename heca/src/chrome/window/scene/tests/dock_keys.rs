@@ -30,8 +30,17 @@ fn enter_and_space_in_the_focused_workspaces_dock_are_left_to_the_dock() {
         .focus(false);
     let keymap = crate::app::registry::build_widget_keymap(&heca_config::theme::Config::default());
     for key in [GridKey::Enter, GridKey::Space] {
-        let press = KeyPress { key, text: None, mods: Modifiers::default() };
-        let handled = keymap.deliver_press(&press, |ev| heca_grid_ui::dispatch(region.as_mut(), ev));
-        assert_eq!(handled, Handled::No, "{key:?} is left to the dock's own keys");
+        let press = KeyPress {
+            key,
+            text: None,
+            mods: Modifiers::default(),
+        };
+        let handled =
+            keymap.deliver_press(&press, |ev| heca_grid_ui::dispatch(region.as_mut(), ev));
+        assert_eq!(
+            handled,
+            Handled::No,
+            "{key:?} is left to the dock's own keys"
+        );
     }
 }

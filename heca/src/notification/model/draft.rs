@@ -125,7 +125,10 @@ impl NotificationDraft {
     }
 
     /// Apply the host's default only when the producer left the lifetime unspecified.
-    pub(in crate::notification) fn with_default_auto_dismiss(mut self, duration: std::time::Duration) -> Self {
+    pub(in crate::notification) fn with_default_auto_dismiss(
+        mut self,
+        duration: std::time::Duration,
+    ) -> Self {
         if !self.explicit_lifetime {
             self.lifecycle = self.lifecycle.with_auto_duration(duration);
         }

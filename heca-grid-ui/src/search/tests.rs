@@ -251,7 +251,12 @@ fn a_text_match_outranks_a_secondary_only_match() {
         (None, "none", None),
     ];
     for _ in 0..50 {
-        model.store().borrow_mut().scope_mut("s").frecency.record("folder");
+        model
+            .store()
+            .borrow_mut()
+            .scope_mut("s")
+            .frecency
+            .record("folder");
     }
     let ranked = model.rank_with_secondary(&items, "bill", |i| (i.0, i.1, i.2));
     assert_eq!(
@@ -261,7 +266,11 @@ fn a_text_match_outranks_a_secondary_only_match() {
     );
     assert!(!ranked[0].hits.is_empty());
     assert!(ranked[1].hits.is_empty(), "it did not match on its text");
-    assert_eq!(ranked[1].secondary_hits, [7, 8, 9, 10], "it matched on its secondary text");
+    assert_eq!(
+        ranked[1].secondary_hits,
+        [7, 8, 9, 10],
+        "it matched on its secondary text"
+    );
 
     // Without a secondary text, `rank` is unchanged: the folder is not looked at.
     let plain = model.rank(&items, "bill", |i| (i.0, i.1));

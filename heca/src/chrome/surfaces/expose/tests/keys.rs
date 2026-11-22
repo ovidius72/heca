@@ -21,8 +21,11 @@ fn the_shipped_delete_letters_reach_the_cards() {
     );
     let shortcuts =
         crate::chrome::ActionShortcuts::from_index(&index, crate::shortcut::KeyStyle::default());
-    let name = crate::chrome::surfaces::layers::layer_name(crate::chrome::surfaces::layers::HOST_OWNER, SURFACE)
-        .expect("a valid layer name");
+    let name = crate::chrome::surfaces::layers::layer_name(
+        crate::chrome::surfaces::layers::HOST_OWNER,
+        SURFACE,
+    )
+    .expect("a valid layer name");
     let found = ExposeDeleteKeys {
         pane: shortcuts.in_surface(&name, "delete_pane").to_vec(),
         column: shortcuts.in_surface(&name, "delete_column").to_vec(),
@@ -41,8 +44,11 @@ fn the_shipped_delete_letters_reach_the_cards() {
 #[test]
 fn the_shipped_defaults_bind_the_maps_delete_keys() {
     let keys = heca_config::theme::KeysConfig::default();
-    let name = crate::chrome::surfaces::layers::layer_name(crate::chrome::surfaces::layers::HOST_OWNER, SURFACE)
-        .expect("a valid layer name");
+    let name = crate::chrome::surfaces::layers::layer_name(
+        crate::chrome::surfaces::layers::HOST_OWNER,
+        SURFACE,
+    )
+    .expect("a valid layer name");
     let entry = keys
         .surfaces()
         .find(|e| e.name == name)

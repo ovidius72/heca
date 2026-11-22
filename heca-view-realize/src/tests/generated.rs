@@ -3,9 +3,9 @@
 use heca_grid_ui::{Input, ScrollRegion};
 use heca_view::WidgetId;
 
+use super::*;
 use crate::props::text_of;
 use crate::style::with_props;
-use super::*;
 
 // ── The generated surface, end to end ─────────────────────────────────
 // The two capabilities that started this phase: both existed in the widgets, and neither
@@ -71,7 +71,8 @@ fn the_generated_surface_ignores_what_it_cannot_use() {
         &Theme::default(),
         &noop_emitter(),
         &mut FormBindings::default(),
-    ).expect("valid described test widget");
+    )
+    .expect("valid described test widget");
     assert_eq!(
         w.base().style.layout.gap,
         heca_grid_ui::style::Space::Px(6.0),
@@ -97,7 +98,8 @@ fn a_realized_input_paints_the_placeholder_it_was_given() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         LayoutEngine::new().compute(widget.as_mut(), Size::new(240.0, 40.0));
         let theme = Theme::default();
         let mut scene = Scene::new();
@@ -146,7 +148,8 @@ fn a_realized_two_axis_region_is_the_native_one() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget")
+        )
+        .expect("valid described test widget")
     };
 
     let paint = |mut widget: heca_grid_ui::WidgetModel| {
@@ -168,12 +171,15 @@ fn a_realized_two_axis_region_is_the_native_one() {
         if let Some(axes) = axes {
             node = node.prop("axes", PropValue::Text(axes.into()));
         }
-        paint(realize(
-            &node,
-            &Theme::default(),
-            &noop_emitter(),
-            &mut FormBindings::default(),
-        ).expect("valid described test widget"))
+        paint(
+            realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut FormBindings::default(),
+            )
+            .expect("valid described test widget"),
+        )
     };
 
     let native = |axes: ScrollAxes| {
@@ -234,7 +240,8 @@ fn a_realized_two_axis_region_consumes_a_horizontal_wheel() {
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
-        ).expect("valid described test widget");
+        )
+        .expect("valid described test widget");
         LayoutEngine::new().compute(region.as_mut(), Size::new(120.0, 80.0));
         // The wheel is hover-gated (`Event::Scroll` carries no position), so hover it first.
         heca_grid_ui::dispatch(

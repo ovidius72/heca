@@ -56,10 +56,10 @@ mod geometry;
 mod metrics;
 mod modes;
 mod paint;
-mod search;
-mod source;
 #[cfg(test)]
 mod pointer_tests;
+mod search;
+mod source;
 
 pub use command::Command;
 use metrics::*;
@@ -141,7 +141,8 @@ impl CommandPalette {
         base.lock = true;
         let query_changed = signal(false);
         let placeholder = String::from("Type a command…");
-        let query_field = Self::query_field(open, query_changed, String::new(), placeholder.clone());
+        let query_field =
+            Self::query_field(open, query_changed, String::new(), placeholder.clone());
         let query = query_field.text();
         base.children.push(crate::WidgetModel::new(query_field));
         Self {
@@ -173,8 +174,16 @@ impl CommandPalette {
     }
 
     /// Build the one query control; all editing stays in Input.
-    fn query_field(open: Signal<bool>, changed: Signal<bool>, text: String, placeholder: String) -> Input {
-        let mut field = Input::new().value(text).placeholder(placeholder).placeholder_on_focus(true)
+    fn query_field(
+        open: Signal<bool>,
+        changed: Signal<bool>,
+        text: String,
+        placeholder: String,
+    ) -> Input {
+        let mut field = Input::new()
+            .value(text)
+            .placeholder(placeholder)
+            .placeholder_on_focus(true)
             .on_change(move |_| changed.set(true));
         field.base_mut().follow_focus(open);
         field
@@ -214,7 +223,11 @@ impl CommandPalette {
             // Cut by default, reflowed while selected — `sync_wrap` flips it. Because the height is
             // measured, the reflow moves every row below it.
             let d = Label::new(desc.clone())
-                .truncate(if c.description_path { Ellipsis::Start } else { Ellipsis::End })
+                .truncate(if c.description_path {
+                    Ellipsis::Start
+                } else {
+                    Ellipsis::End
+                })
                 .wrap(false);
             if !c.description_path {
                 *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
@@ -223,9 +236,15 @@ impl CommandPalette {
             column = column.child(d);
         }
         if let Some(detail) = &c.detail {
-            column = column.child(Label::new(detail.clone()).truncate(Ellipsis::End).wrap(false));
+            column = column.child(
+                Label::new(detail.clone())
+                    .truncate(Ellipsis::End)
+                    .wrap(false),
+            );
         }
-        self.base.children.insert(self.commands.len(), crate::WidgetModel::new(column));
+        self.base
+            .children
+            .insert(self.commands.len(), crate::WidgetModel::new(column));
         self.commands.push(c);
     }
     /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
@@ -245,9 +264,18 @@ impl CommandPalette {
     #[heca_grid_ui_macros::prop]
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
         self.placeholder = text.into();
-        let field = Self::query_field(self.open, self.query_changed, self.query_text(), self.placeholder.clone());
+        let field = Self::query_field(
+            self.open,
+            self.query_changed,
+            self.query_text(),
+            self.placeholder.clone(),
+        );
         self.query = field.text();
-        *self.base.children.last_mut().expect("palette owns a query child") = crate::WidgetModel::new(field);
+        *self
+            .base
+            .children
+            .last_mut()
+            .expect("palette owns a query child") = crate::WidgetModel::new(field);
         self
     }
 
@@ -300,7 +328,9 @@ impl CommandPalette {
     }
 
     /// Live query, also used by a host's named form reader.
-    pub fn query_signal(&self) -> Signal<String> { self.query }
+    pub fn query_signal(&self) -> Signal<String> {
+        self.query
+    }
 
     /// Update the query as an edit, retaining the input and resetting its selection/history cursor.
     /// History recall uses its own native path, so recalling does not restart history browsing.
@@ -308,19 +338,25 @@ impl CommandPalette {
         let query = self.query;
         let changed = self.query_changed;
         move |text| {
-            if query.get_untracked() != text { query.set(text); changed.set(true); }
+            if query.get_untracked() != text {
+                query.set(text);
+                changed.set(true);
+            }
         }
     }
 
     /// Observe user cancellation. Accepting a command closes without a dismissal callback.
     #[heca_grid_ui_macros::host_only("an intent callback in a description")]
     pub fn on_dismiss(mut self, callback: impl Fn() + 'static) -> Self {
-        self.on_dismiss = Some(Box::new(callback)); self
+        self.on_dismiss = Some(Box::new(callback));
+        self
     }
 
     fn dismiss(&mut self) {
         self.close();
-        if let Some(callback) = &self.on_dismiss { callback(); }
+        if let Some(callback) = &self.on_dismiss {
+            callback();
+        }
     }
 
     /// Each row's title signal, in the order the commands were added — for a host whose rows track
@@ -348,6 +384,5 @@ impl Default for CommandPalette {
         Self::new()
     }
 }
-
 
 impl LayoutExt for CommandPalette {}

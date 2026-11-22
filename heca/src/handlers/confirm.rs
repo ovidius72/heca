@@ -14,8 +14,12 @@ use crate::input::WmAction;
 fn open_confirm(state: &mut AppState, spec: crate::actions::ConfirmSpec, resolved: WmAction) {
     let title = confirm_title(state, &resolved);
     let body = match &resolved {
-        WmAction::TerminateSession { session: Some(name) }
-        | WmAction::DeleteSession { session: Some(name) } => spec.message.replace("{name}", name),
+        WmAction::TerminateSession {
+            session: Some(name),
+        }
+        | WmAction::DeleteSession {
+            session: Some(name),
+        } => spec.message.replace("{name}", name),
         _ => spec.message.clone(),
     };
     raise_confirm(state, title, body, spec, Pending::Wm(resolved));
@@ -112,13 +116,17 @@ fn run_outcome(
     };
     match outcome {
         // A failure was already said by `execute`; a dialog has nobody else to tell.
-        Some(Outcome::Proceed) => { let _ = registry.execute(resolved, state); }
-        Some(Outcome::Dispatch(action)) => { let _ = crate::app::interaction::dispatch_action(
-            state,
-            registry,
-            crate::app::interaction::InteractionSource::Keyboard,
-            action,
-        ); }
+        Some(Outcome::Proceed) => {
+            let _ = registry.execute(resolved, state);
+        }
+        Some(Outcome::Dispatch(action)) => {
+            let _ = crate::app::interaction::dispatch_action(
+                state,
+                registry,
+                crate::app::interaction::InteractionSource::Keyboard,
+                action,
+            );
+        }
         Some(Outcome::Callback(cb)) => cb(state, registry),
         Some(Outcome::Cancel) | None => {}
     }
@@ -213,8 +221,10 @@ fn confirm_owner_name(action: &WmAction) -> Option<&'static str> {
 
 fn configured_confirm_spec(state: &AppState, owner: &str) -> Option<crate::actions::ConfirmSpec> {
     let declared = state.action_catalog.confirm_spec(owner)?;
-    Some(crate::actions::ConfirmSpec::for_session(owner, &state.settings.session_text)
-        .unwrap_or_else(|| declared.clone()))
+    Some(
+        crate::actions::ConfirmSpec::for_session(owner, &state.settings.session_text)
+            .unwrap_or_else(|| declared.clone()),
+    )
 }
 
 /// Resolve a selection once, before a prompt can outlive the selection that opened it.
@@ -272,7 +282,8 @@ fn confirm_title(state: &AppState, action: &WmAction) -> String {
         WmAction::TerminateSession { .. } | WmAction::DeleteSession { .. } => {
             confirm_owner_name(action)
                 .and_then(|owner| state.action_catalog.label(owner))
-                .unwrap_or_default().to_owned()
+                .unwrap_or_default()
+                .to_owned()
         }
         _ => "Confirm?".to_string(),
     }
@@ -312,11 +323,15 @@ fn run_destructive_now(state: &mut AppState, action: &WmAction) {
 /// it; otherwise the raw action runs now ([`run_destructive_now`]). The central dispatch gate
 /// ([`maybe_confirm_destructive`]) shares this same spec-driven path for directly-dispatched actions.
 pub(crate) fn request_destructive(state: &mut AppState, raw_action: WmAction) {
-    let spec = confirm_owner_name(&raw_action)
-        .and_then(|name| configured_confirm_spec(state, name));
+    let spec =
+        confirm_owner_name(&raw_action).and_then(|name| configured_confirm_spec(state, name));
     match spec {
         Some(spec) if confirm_enabled(state, &spec.config_name, spec.default_enabled) => {
-            if let Some(resolved) = confirmation_target(&raw_action, focused_pane_id(state), &state.client.session.name) {
+            if let Some(resolved) = confirmation_target(
+                &raw_action,
+                focused_pane_id(state),
+                &state.client.session.name,
+            ) {
                 open_confirm(state, spec, resolved);
             }
         }
@@ -343,7 +358,9 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
     let Some(name) = confirm_owner_name(action) else {
         return false;
     };
-    let Some(resolved) = confirmation_target(action, focused_pane_id(state), &state.client.session.name) else {
+    let Some(resolved) =
+        confirmation_target(action, focused_pane_id(state), &state.client.session.name)
+    else {
         return false;
     };
     // `name` is the owner ACTION name; its meta's confirm spec carries the toggle key.
@@ -499,7 +516,10 @@ mod gate_coverage_tests {
 
     #[test]
     fn session_confirmation_captures_the_current_target_and_preserves_an_explicit_target() {
-        for action in [WmAction::TerminateSession { session: None }, WmAction::DeleteSession { session: None }] {
+        for action in [
+            WmAction::TerminateSession { session: None },
+            WmAction::DeleteSession { session: None },
+        ] {
             let captured = confirmation_target(&action, None, "Project A").unwrap();
             let unchanged = confirmation_target(&captured, None, "Project B").unwrap();
             match unchanged {

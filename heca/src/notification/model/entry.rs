@@ -1,6 +1,9 @@
 use super::*;
 use serde::{Deserialize, Serialize};
-use std::{sync::atomic::{AtomicU64, Ordering}, time::Instant};
+use std::{
+    sync::atomic::{AtomicU64, Ordering},
+    time::Instant,
+};
 
 /// A session-monotonic, never-reused notification identity.
 ///

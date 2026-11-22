@@ -69,7 +69,12 @@ impl WindowGpu {
             color_space: wgpu::SurfaceColorSpace::Auto,
         };
         surface.configure(&device, &config);
-        Self { surface, device, queue, config }
+        Self {
+            surface,
+            device,
+            queue,
+            config,
+        }
     }
 
     /// The colour format every renderer draws in: the swap chain's.
@@ -110,7 +115,10 @@ pub(crate) fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
             return None;
         }
     };
-    Some(pollster::block_on(adapter.request_device(&Default::default())).expect("a rendering device"))
+    Some(
+        pollster::block_on(adapter.request_device(&Default::default()))
+            .expect("a rendering device"),
+    )
 }
 
 /// `let (device, queue) = headless_device_or_skip!();` -- ends the calling test early, with the
@@ -136,7 +144,10 @@ mod tests {
     fn a_transparent_window_prefers_a_blending_mode_and_an_opaque_one_prefers_opaque() {
         let offered = [Opaque, PostMultiplied];
         assert_eq!(alpha_mode(&offered, true), PostMultiplied);
-        assert_eq!(alpha_mode(&[Opaque, PreMultiplied, PostMultiplied], true), PreMultiplied);
+        assert_eq!(
+            alpha_mode(&[Opaque, PreMultiplied, PostMultiplied], true),
+            PreMultiplied
+        );
         assert_eq!(alpha_mode(&offered, false), Opaque);
         // Nothing preferred is offered: the surface's first mode, and `Auto` when it offers none.
         assert_eq!(alpha_mode(&[Inherit], true), Inherit);

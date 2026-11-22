@@ -26,7 +26,11 @@ pub(crate) fn segment_items(
         let Some(chip) = chips.chip(def, facts) else {
             continue;
         };
-        items.push(HeaderSegment { name: def.name.clone(), chip, fit: def.fit });
+        items.push(HeaderSegment {
+            name: def.name.clone(),
+            chip,
+            fit: def.fit,
+        });
     }
 
     items
@@ -34,9 +38,7 @@ pub(crate) fn segment_items(
 
 /// Build the pane info bar's segmented [`Tag`] from what the chips said (`segment_items`). `None`
 /// when nothing was produced. Used by the terminal pane shell.
-pub(crate) fn build_pane_info_bar(
-    items: Vec<HeaderSegment>,
-) -> Option<Tag> {
+pub(crate) fn build_pane_info_bar(items: Vec<HeaderSegment>) -> Option<Tag> {
     if items.is_empty() {
         return None;
     }
@@ -45,13 +47,16 @@ pub(crate) fn build_pane_info_bar(
     for HeaderSegment { name, chip, fit } in items {
         // No explicit size → the icon inherits the bar's base font, so glyph and
         // label stay balanced when the bar font changes.
-        use heca_grid_ui::{ToneExt, builders::IdentityExt};
         use heca_grid_ui::widgets::{Ellipsis, Label};
+        use heca_grid_ui::{ToneExt, builders::IdentityExt};
         let mut leading = Icon::new(chip.icon);
-        let mut label = Label::new(chip.text).key(segment_text_key(&name)).truncate(match fit {
-            crate::chrome::panes::pane_items::Fit::PathLeft => Ellipsis::Start,
-            crate::chrome::panes::pane_items::Fit::Keep | crate::chrome::panes::pane_items::Fit::End => Ellipsis::End,
-        });
+        let mut label = Label::new(chip.text)
+            .key(segment_text_key(&name))
+            .truncate(match fit {
+                crate::chrome::panes::pane_items::Fit::PathLeft => Ellipsis::Start,
+                crate::chrome::panes::pane_items::Fit::Keep
+                | crate::chrome::panes::pane_items::Fit::End => Ellipsis::End,
+            });
         if let Some(tone) = chip.tone {
             leading = leading.content_tone(tone);
             label = label.content_tone(tone);
@@ -59,10 +64,13 @@ pub(crate) fn build_pane_info_bar(
         // **Each chip is named by what it is**, so its words can be rewritten without the bar
         // being rebuilt. The first chip is the tag's own label; the rest are
         // child labels. Both answer `set_text`.
-        tag = Some(match tag.take() {
-            None => Tag::from_label(label).leading(leading),
-            Some(existing) => existing.segment_label_with(label, leading),
-        }.segment_shrink(fit != crate::chrome::panes::pane_items::Fit::Keep));
+        tag = Some(
+            match tag.take() {
+                None => Tag::from_label(label).leading(leading),
+                Some(existing) => existing.segment_label_with(label, leading),
+            }
+            .segment_shrink(fit != crate::chrome::panes::pane_items::Fit::Keep),
+        );
     }
     tag
 }

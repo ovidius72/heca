@@ -96,7 +96,11 @@ mod tests {
             .frosted(frosted)
             .panel(Flex::row())
             .default_open(true);
-        place_surface(&mut root, "surface:1", heca_grid_ui::WidgetModel::new(surface));
+        place_surface(
+            &mut root,
+            "surface:1",
+            heca_grid_ui::WidgetModel::new(surface),
+        );
         let scene = paint_chrome_root(&mut root, 1000.0, 800.0, &theme);
         backdrops(&scene)
     }

@@ -330,8 +330,12 @@ impl Layout {
         }
         taffy::Style {
             display: Display::Flex,
-            aspect_ratio: self.aspect_ratio.filter(|r| r.is_finite() && *r > 0.0)
-                .filter(|_| matches!(self.width, Length::Auto) || matches!(self.height, Length::Auto)),
+            aspect_ratio: self
+                .aspect_ratio
+                .filter(|r| r.is_finite() && *r > 0.0)
+                .filter(|_| {
+                    matches!(self.width, Length::Auto) || matches!(self.height, Length::Auto)
+                }),
             flex_direction: match self.direction {
                 Direction::Row => FlexDirection::Row,
                 Direction::Column => FlexDirection::Column,
@@ -399,25 +403,34 @@ impl Layout {
                         height: axis(p.height, self.height),
                     },
                     None => {
-                        let constrained = |value: Length, min: Option<Length>, max: Option<Length>| {
-                            let value = value.to_taffy(font_px);
-                            if self.aspect_ratio.is_none() { return value }
-                            match value {
-                                Dimension::Length(mut value) => {
-                                    if let Some(Dimension::Length(max)) = max.map(|v| v.to_taffy(font_px)) {
-                                        value = value.min(max);
-                                    }
-                                    if let Some(Dimension::Length(min)) = min.map(|v| v.to_taffy(font_px)) {
-                                        value = value.max(min);
-                                    }
-                                    Dimension::Length(value)
+                        let constrained =
+                            |value: Length, min: Option<Length>, max: Option<Length>| {
+                                let value = value.to_taffy(font_px);
+                                if self.aspect_ratio.is_none() {
+                                    return value;
                                 }
-                                other => other,
-                            }
-                        };
-                        Size { width: constrained(self.width, self.min_width, self.max_width),
-                               height: constrained(self.height, self.min_height, self.max_height) }
-                    },
+                                match value {
+                                    Dimension::Length(mut value) => {
+                                        if let Some(Dimension::Length(max)) =
+                                            max.map(|v| v.to_taffy(font_px))
+                                        {
+                                            value = value.min(max);
+                                        }
+                                        if let Some(Dimension::Length(min)) =
+                                            min.map(|v| v.to_taffy(font_px))
+                                        {
+                                            value = value.max(min);
+                                        }
+                                        Dimension::Length(value)
+                                    }
+                                    other => other,
+                                }
+                            };
+                        Size {
+                            width: constrained(self.width, self.min_width, self.max_width),
+                            height: constrained(self.height, self.min_height, self.max_height),
+                        }
+                    }
                 }
             },
             // Out of the flow when placed: an absolutely positioned child takes no space from its

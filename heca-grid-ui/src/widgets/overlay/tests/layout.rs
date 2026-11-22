@@ -3,16 +3,27 @@ use super::*;
 #[test]
 fn sibling_surfaces_do_not_displace_a_centered_overlay() {
     for viewport in [Size::new(420.0, 400.0), Size::new(900.0, 700.0)] {
-        let mut root = Flex::column().width(viewport.w as f32).height(viewport.h as f32)
+        let mut root = Flex::column()
+            .width(viewport.w as f32)
+            .height(viewport.h as f32)
             .child(Label::new("Unrelated content"))
             .child(Overlay::new().panel(Label::new("Closed sibling")))
-            .child(Overlay::new().panel(Label::new("Centered surface"))
-                .panel_size(Length::Px(200.0), Length::Px(100.0)).default_open(true));
+            .child(
+                Overlay::new()
+                    .panel(Label::new("Centered surface"))
+                    .panel_size(Length::Px(200.0), Length::Px(100.0))
+                    .default_open(true),
+            );
         crate::LayoutEngine::new().compute(&mut root, viewport);
         let panel = root.base().children[2].base().children[0].base().bounds;
-        assert_eq!(Point::new(panel.loc.x + panel.size.w / 2.0,
-            panel.loc.y + panel.size.h / 2.0), Point::new(viewport.w / 2.0, viewport.h / 2.0),
-            "a sibling must not move a viewport-centered surface");
+        assert_eq!(
+            Point::new(
+                panel.loc.x + panel.size.w / 2.0,
+                panel.loc.y + panel.size.h / 2.0
+            ),
+            Point::new(viewport.w / 2.0, viewport.h / 2.0),
+            "a sibling must not move a viewport-centered surface"
+        );
     }
 }
 

@@ -52,7 +52,10 @@ fn workspace_with_pane(pane_id: u64) -> Shown {
 fn workspace_with_floating_pane(pane_id: u64) -> Shown {
     let mut ws = workspace_with_pane(99); // one tiled pane
     let rect = Rectangle::new(Point::new(50.0, 50.0), Size::new(400.0, 300.0));
-    ws.add_floating_pane(Pane::new(PaneId(pane_id), format!("float{}", pane_id)), None);
+    ws.add_floating_pane(
+        Pane::new(PaneId(pane_id), format!("float{}", pane_id)),
+        None,
+    );
     ws.m().float_in_view(PaneId(pane_id), rect);
     ws
 }
@@ -237,8 +240,10 @@ fn update_working_area_scales_floating_pane_proportionally() {
     let fh = wa.size.h * 0.95;
     let fx = wa.loc.x + (wa.size.w - fw) / 2.0;
     let fy = wa.loc.y + (wa.size.h - fh) / 2.0;
-    ws.m()
-        .float_in_view(PaneId(42), Rectangle::new(Point::new(fx, fy), Size::new(fw, fh)));
+    ws.m().float_in_view(
+        PaneId(42),
+        Rectangle::new(Point::new(fx, fy), Size::new(fw, fh)),
+    );
 
     // Grow the working area to 1600x1200 (2x each axis).
     let new_wa = Rectangle::new(Point::new(0.0, 0.0), Size::new(1600.0, 1200.0));
@@ -246,13 +251,29 @@ fn update_working_area_scales_floating_pane_proportionally() {
 
     let r = float_rect(&mut ws, 42);
     // Size doubles (coverage preserved at 95%).
-    assert!((r.size.w - fw * 2.0).abs() < 0.01, "width should scale 2x: got {}", r.size.w);
-    assert!((r.size.h - fh * 2.0).abs() < 0.01, "height should scale 2x: got {}", r.size.h);
+    assert!(
+        (r.size.w - fw * 2.0).abs() < 0.01,
+        "width should scale 2x: got {}",
+        r.size.w
+    );
+    assert!(
+        (r.size.h - fh * 2.0).abs() < 0.01,
+        "height should scale 2x: got {}",
+        r.size.h
+    );
     // Position stays centered (relative position preserved).
     let expected_x = new_wa.loc.x + (new_wa.size.w - r.size.w) / 2.0;
     let expected_y = new_wa.loc.y + (new_wa.size.h - r.size.h) / 2.0;
-    assert!((r.loc.x - expected_x).abs() < 0.01, "x should stay centered: got {}", r.loc.x);
-    assert!((r.loc.y - expected_y).abs() < 0.01, "y should stay centered: got {}", r.loc.y);
+    assert!(
+        (r.loc.x - expected_x).abs() < 0.01,
+        "x should stay centered: got {}",
+        r.loc.x
+    );
+    assert!(
+        (r.loc.y - expected_y).abs() < 0.01,
+        "y should stay centered: got {}",
+        r.loc.y
+    );
 }
 
 #[test]
@@ -262,7 +283,11 @@ fn update_working_area_noop_when_size_unchanged() {
     // Same size → no rescale (guards against drift from repeated no-op updates).
     let area = ws.view.area;
     ws.m().update_working_area(area);
-    assert_eq!(float_rect(&mut ws, 42), before, "rect must not drift on no-op");
+    assert_eq!(
+        float_rect(&mut ws, 42),
+        before,
+        "rect must not drift on no-op"
+    );
 }
 
 /// **A workspace's pane list holds every pane** — the columns' in order, then the floating ones —

@@ -58,7 +58,13 @@ pub struct TextMeasure {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(super) enum Measure { Text(TextMeasure), Intrinsic { size: heca_core::layout::Size, ratio: f32 } }
+pub(super) enum Measure {
+    Text(TextMeasure),
+    Intrinsic {
+        size: heca_core::layout::Size,
+        ratio: f32,
+    },
+}
 
 /// **What a tree remembers of its last layout**, kept on its root
 /// ([`Base::layout_cache`](crate::component::Base::layout_cache)): the taffy tree, which tree it is (so a

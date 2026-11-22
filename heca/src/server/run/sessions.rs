@@ -52,7 +52,10 @@ impl ServerLoop {
                 let i = self.named(&name)?;
                 if self.sessions[i].info().status == SessionStatus::Active {
                     self.sessions[i].terminate();
-                    self.announce_session(SessionChange::Terminated, self.sessions[i].service_entry());
+                    self.announce_session(
+                        SessionChange::Terminated,
+                        self.sessions[i].service_entry(),
+                    );
                 }
                 Ok(SessionReply::Updated(self.sessions[i].info()))
             }
@@ -76,13 +79,17 @@ impl ServerLoop {
                         let _ = client.link.send(ServerMsg::SessionDeleted { id });
                         self.sessions[i].detach_connection(client.id);
                         client.session.set(None);
-                        client.attachment.set(super::super::connection::Attachment::Detached);
+                        client
+                            .attachment
+                            .set(super::super::connection::Attachment::Detached);
                         client.projection_pending.set(false);
                     }
                 }
                 self.sessions[i].shutdown();
                 // Its saved entries go with it.
-                self.services.borrow().forget_saved_entries(self.sessions[i].service_ref().key);
+                self.services
+                    .borrow()
+                    .forget_saved_entries(self.sessions[i].service_ref().key);
                 self.sessions.remove(i);
                 self.announce_session(SessionChange::Deleted, gone);
                 if self.last_session == Some(id) {
@@ -128,7 +135,10 @@ impl ServerLoop {
         std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
         let folder = folder.canonicalize().map_err(|e| e.to_string())?;
         // Naming and runtime construction use one load of the destination's settings.
-        let project = self.config.as_ref().map(|_| (self.machine.project_config)(&folder));
+        let project = self
+            .config
+            .as_ref()
+            .map(|_| (self.machine.project_config)(&folder));
         let settings = project
             .as_ref()
             .map(|c| c.config.settings.clone())
@@ -152,8 +162,9 @@ impl ServerLoop {
             SessionInfo::unnamed(id.0, &settings.session_name_format, Some(folder.clone()));
         identity.name = id.1;
         identity.label = label;
-        let (runtime, drafts) =
-            crate::notification::collect_notifications(|| self.make_session(identity.clone(), project.as_ref()));
+        let (runtime, drafts) = crate::notification::collect_notifications(|| {
+            self.make_session(identity.clone(), project.as_ref())
+        });
         let mut runtime = runtime?;
         for draft in drafts {
             runtime.raise(draft);
@@ -164,7 +175,11 @@ impl ServerLoop {
         Ok(identity)
     }
 
-    fn make_session(&self, identity: SessionInfo, config: Option<&heca_config::loader::AppConfig>) -> Result<SessionRuntime, String> {
+    fn make_session(
+        &self,
+        identity: SessionInfo,
+        config: Option<&heca_config::loader::AppConfig>,
+    ) -> Result<SessionRuntime, String> {
         if let (Some(config), Some(wake)) = (config, &self.wake) {
             return SessionRuntime::from_config(
                 config,

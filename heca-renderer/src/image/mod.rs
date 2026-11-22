@@ -152,7 +152,10 @@ impl ImageRenderer {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("image_pipeline_layout"),
-            bind_group_layouts: &[Some(&uniform_bind_group_layout), Some(&texture_bind_group_layout)],
+            bind_group_layouts: &[
+                Some(&uniform_bind_group_layout),
+                Some(&texture_bind_group_layout),
+            ],
             immediate_size: 0,
         });
 
@@ -287,7 +290,10 @@ impl ImageRenderer {
         queue: &wgpu::Queue,
         image: &TerminalImage,
     ) -> (wgpu::Texture, wgpu::BindGroup) {
-        let rgba = image.frames.first().map_or(&[][..], |frame| frame.rgba.as_ref());
+        let rgba = image
+            .frames
+            .first()
+            .map_or(&[][..], |frame| frame.rgba.as_ref());
         let texture = texture::upload(device, queue, image.width, image.height, rgba);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

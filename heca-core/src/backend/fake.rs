@@ -1,10 +1,9 @@
 //! Fake backend for testing layout performance without PTY overhead.
 
 use super::{
-    BackendKeyEvent, BackendMouseEvent, BackendRenderData, DEFAULT_CELL_SIZE, PaneBackend, PaneType,
-    TerminalCell,
-    TerminalCursor, TerminalCursorShape, TerminalDamage, TerminalLine, TerminalSnapshot,
-    TerminalUnderlineStyle,
+    BackendKeyEvent, BackendMouseEvent, BackendRenderData, DEFAULT_CELL_SIZE, PaneBackend,
+    PaneType, TerminalCell, TerminalCursor, TerminalCursorShape, TerminalDamage, TerminalLine,
+    TerminalSnapshot, TerminalUnderlineStyle,
 };
 use crate::runtime::PaneRuntime;
 
@@ -118,7 +117,13 @@ impl PaneBackend for FakeBackend {
     fn screen_version(&self) -> Option<u64> {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        (self.cols, self.rows, self.cell_w.to_bits(), self.cell_h.to_bits()).hash(&mut hasher);
+        (
+            self.cols,
+            self.rows,
+            self.cell_w.to_bits(),
+            self.cell_h.to_bits(),
+        )
+            .hash(&mut hasher);
         Some(hasher.finish())
     }
 

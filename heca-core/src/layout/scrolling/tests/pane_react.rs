@@ -6,7 +6,9 @@ use super::*;
 /// Columns 1 to 4, the first also holding pane 9, and a second window looking at column 3.
 fn two_windows() -> (Seen, ScrollView) {
     let mut first = space_with_columns(4);
-    first.m().add_pane_to_column(0, None, Pane::new(PaneId(9), ""), false);
+    first
+        .m()
+        .add_pane_to_column(0, None, Pane::new(PaneId(9), ""), false);
     first.m().activate_column(0);
     let mut second = ScrollView::new(Rectangle::from_size(Size::new(1000.0, 800.0)), 1.0);
     first.space.through_mut(&mut second).activate_column(2);
@@ -31,7 +33,10 @@ fn a_window_that_did_not_move_a_pane_stays_on_its_column() {
     ];
     second.react_to(&first.space, &effects, &seen_by_second);
 
-    assert_eq!(active_column_id(&first.space, &first.view), Some(ColumnId(2)));
+    assert_eq!(
+        active_column_id(&first.space, &first.view),
+        Some(ColumnId(2))
+    );
     assert_eq!(active_column_id(&first.space, &second), Some(ColumnId(3)));
 }
 
@@ -43,7 +48,10 @@ fn a_window_keeps_its_column_when_a_move_removes_one_before_it() {
     space.space.columns[0].panes.truncate(1);
     let before = space.space.through(&second).positions();
 
-    let effects = space.space.move_pane_between(0, 0, 1, 800.0).expect("it moves");
+    let effects = space
+        .space
+        .move_pane_between(0, 0, 1, 800.0)
+        .expect("it moves");
     second.react_to(&space.space, &effects, &before);
 
     assert_eq!(active_column_id(&space.space, &second), Some(ColumnId(3)));
@@ -56,7 +64,10 @@ fn a_window_keeps_its_column_when_a_move_adds_one_before_it() {
     let (mut space, mut second) = two_windows();
     let before = space.space.through(&second).positions();
 
-    let effects = space.space.extract_pane(0, 1, ColumnId(50), 1).expect("it moves");
+    let effects = space
+        .space
+        .extract_pane(0, 1, ColumnId(50), 1)
+        .expect("it moves");
     second.react_to(&space.space, &effects, &before);
 
     assert_eq!(active_column_id(&space.space, &second), Some(ColumnId(3)));
@@ -67,15 +78,25 @@ fn a_window_keeps_its_column_when_a_move_adds_one_before_it() {
 fn a_moved_pane_starts_where_each_window_drew_it() {
     let (mut space, mut second) = two_windows();
     let drawn = |space: &ScrollingSpace, view: &ScrollView| {
-        space.through(view).panes_with_positions().into_iter().find(|(id, _)| *id == PaneId(9))
+        space
+            .through(view)
+            .panes_with_positions()
+            .into_iter()
+            .find(|(id, _)| *id == PaneId(9))
     };
     let was = drawn(&space.space, &second);
     let before = space.space.through(&second).positions();
 
-    let effects = space.space.move_pane_between(0, 1, 1, 800.0).expect("it moves");
+    let effects = space
+        .space
+        .move_pane_between(0, 1, 1, 800.0)
+        .expect("it moves");
     second.react_to(&space.space, &effects, &before);
 
-    assert_eq!(drawn(&space.space, &second).map(|(_, r)| r.loc), was.map(|(_, r)| r.loc));
+    assert_eq!(
+        drawn(&space.space, &second).map(|(_, r)| r.loc),
+        was.map(|(_, r)| r.loc)
+    );
 }
 
 /// Following is the window's choice, made after it has shown the change.
@@ -86,7 +107,11 @@ fn a_window_follows_the_column_it_chooses() {
     assert_eq!(active_column_id(&space.space, &second), Some(ColumnId(1)));
 
     second.follow(&space.space, 9);
-    assert_eq!(active_column_id(&space.space, &second), Some(ColumnId(1)), "no column 9");
+    assert_eq!(
+        active_column_id(&space.space, &second),
+        Some(ColumnId(1)),
+        "no column 9"
+    );
 }
 
 /// A space laid out beside a sidebar: its area does not start at the window's left edge.
@@ -98,7 +123,9 @@ fn beside_a_sidebar() -> Seen {
 /// Where a lone column's view rests: at the left edge, as when it was the first column made.
 fn resting_view_of_one_column() -> f64 {
     let mut fresh = beside_a_sidebar();
-    fresh.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    fresh
+        .m()
+        .add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
     fresh.r().target_view_pos()
 }
 
@@ -110,7 +137,9 @@ fn the_column_left_after_a_move_rests_at_the_left_edge() {
     for left in [true, false] {
         let mut space = beside_a_sidebar();
         for id in 1..=2 {
-            space.m().add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
+            space
+                .m()
+                .add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
         }
         // Still easing from the focus change when the key is pressed, as in the app.
         space.m().activate_column(if left { 1 } else { 0 });
@@ -121,7 +150,10 @@ fn the_column_left_after_a_move_rests_at_the_left_edge() {
         assert!(moved);
         assert_eq!(space.columns.len(), 1);
         let target = space.r().target_view_pos();
-        assert!((target - rest).abs() < 0.5, "moved left: {left}; view rests at {target}, not {rest}");
+        assert!(
+            (target - rest).abs() < 0.5,
+            "moved left: {left}; view rests at {target}, not {rest}"
+        );
     }
 }
 
@@ -131,9 +163,13 @@ fn the_column_left_after_a_move_rests_at_the_left_edge() {
 fn following_a_pane_into_a_column_on_screen_does_not_scroll() {
     let mut space = beside_a_sidebar();
     for id in 1..=2 {
-        space.m().add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
+        space
+            .m()
+            .add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
     }
-    space.m().add_pane_to_column(1, None, Pane::new(PaneId(9), ""), true);
+    space
+        .m()
+        .add_pane_to_column(1, None, Pane::new(PaneId(9), ""), true);
     space.view.offset = ViewOffset::Static(space.view.offset.target());
     let rest = space.r().target_view_pos();
 
@@ -141,7 +177,10 @@ fn following_a_pane_into_a_column_on_screen_does_not_scroll() {
 
     assert_eq!(space.r().active_column_idx(), 0);
     let target = space.r().target_view_pos();
-    assert!((target - rest).abs() < 0.5, "the view moved from {rest} to {target}");
+    assert!(
+        (target - rest).abs() < 0.5,
+        "the view moved from {rest} to {target}"
+    );
 }
 
 /// Two columns that both fit, the right one active: closing it leaves the left one where it was.
@@ -149,7 +188,9 @@ fn following_a_pane_into_a_column_on_screen_does_not_scroll() {
 fn closing_the_active_column_leaves_the_others_where_they_were() {
     let mut space = beside_a_sidebar();
     for id in 1..=2 {
-        space.m().add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
+        space
+            .m()
+            .add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
     }
     space.view.offset = ViewOffset::Static(space.view.offset.target());
     let rest = space.r().target_view_pos();
@@ -157,7 +198,10 @@ fn closing_the_active_column_leaves_the_others_where_they_were() {
     assert!(space.m().remove_column(1).is_some());
 
     let target = space.r().target_view_pos();
-    assert!((target - rest).abs() < 0.5, "the view moved from {rest} to {target}");
+    assert!(
+        (target - rest).abs() < 0.5,
+        "the view moved from {rest} to {target}"
+    );
 }
 
 /// A column that leaves and another that arrives in its place — two workspaces trading columns —
@@ -176,7 +220,10 @@ fn a_window_stays_on_its_column_when_another_takes_its_place() {
     space.m().show(&replaced, &before);
 
     assert_eq!(space.r().active_column_idx(), 1);
-    assert_eq!(active_column_id(&space.space, &space.view), Some(ColumnId(50)));
+    assert_eq!(
+        active_column_id(&space.space, &space.view),
+        Some(ColumnId(50))
+    );
 }
 
 /// A pane that lands far from where it was slides in from no further than the layout's reach.
@@ -187,13 +234,29 @@ fn a_moved_pane_slides_from_no_further_than_the_reach() {
     space.space.options.move_slide_reach = 0.1;
     let before = space.r().positions();
 
-    let effects = space.space.move_pane_between(3, 0, 0, 800.0).expect("it moves");
+    let effects = space
+        .space
+        .move_pane_between(3, 0, 0, 800.0)
+        .expect("it moves");
     space.m().show(&effects, &before);
 
-    let slot = space.r().pane_slot(PaneId(4)).map(|p| p.x).expect("in a column");
-    let drawn = space.r().panes_with_positions().into_iter().find(|(id, _)| *id == PaneId(4));
+    let slot = space
+        .r()
+        .pane_slot(PaneId(4))
+        .map(|p| p.x)
+        .expect("in a column");
+    let drawn = space
+        .r()
+        .panes_with_positions()
+        .into_iter()
+        .find(|(id, _)| *id == PaneId(4));
     let view = space.r().view_pos();
-    let offset = drawn.map(|(_, rect)| rect.loc.x + view - space.view.area.loc.x - slot).expect("drawn");
+    let offset = drawn
+        .map(|(_, rect)| rect.loc.x + view - space.view.area.loc.x - slot)
+        .expect("drawn");
     assert!(offset.abs() > 1.0, "it slides");
-    assert!(offset.abs() <= 1000.0 * 0.1 + 0.5, "from {offset}, past the reach");
+    assert!(
+        offset.abs() <= 1000.0 * 0.1 + 0.5,
+        "from {offset}, past the reach"
+    );
 }

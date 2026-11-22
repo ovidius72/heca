@@ -23,8 +23,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::builders::IntoComponent;
+use heca_grid_ui::theme::Theme as GuiTheme;
 
 use crate::app_state::AppState;
 use crate::chrome::{ChromeIntentEmitter, StartupQueue, WidgetModel};
@@ -152,7 +152,8 @@ mod tests {
         let demo = super::super::extension("demo");
         demo.layer("planner")
             .view(|_| heca_grid_ui::Label::new("Only built when shown"));
-        demo.layer("a.b").view(|_| heca_grid_ui::Label::new("Refused"));
+        demo.layer("a.b")
+            .view(|_| heca_grid_ui::Label::new("Refused"));
         let names: Vec<String> =
             QUEUE.with(|q| q.peek(|items| items.iter().map(|(n, _)| n.clone()).collect()));
         assert_eq!(names, ["demo.planner"]);
@@ -160,28 +161,47 @@ mod tests {
 
     #[test]
     fn a_plain_component_factory_builds_fresh_content_without_author_storage_conversions() {
-        use std::cell::Cell;
         use heca_grid_ui::builders::Parent;
         use heca_grid_ui::{Flex, Label};
+        use std::cell::Cell;
 
         super::super::extension::reset();
         QUEUE.with(StartupQueue::reset);
         let calls = Rc::new(Cell::new(0));
         let count = calls.clone();
-        super::super::extension("plain_layer").layer("content").view(move |_| {
-            count.set(count.get() + 1);
-            Flex::column().child(Label::new(format!("Build {}", count.get())))
-        });
-        assert_eq!(calls.get(), 0, "startup declares the builder rather than running it");
+        super::super::extension("plain_layer")
+            .layer("content")
+            .view(move |_| {
+                count.set(count.get() + 1);
+                Flex::column().child(Label::new(format!("Build {}", count.get())))
+            });
+        assert_eq!(
+            calls.get(),
+            0,
+            "startup declares the builder rather than running it"
+        );
         let build = QUEUE.with(|queue| queue.peek(|items| items[0].1.clone()));
         let theme = GuiTheme::default();
-        let emit = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let emit = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
         let store = crate::chrome::SharedChromeState::new(240.0, 240.0);
-        let cx = LayerCx { theme: &theme, emit: &emit, state: StateView::over(&store) };
+        let cx = LayerCx {
+            theme: &theme,
+            emit: &emit,
+            state: StateView::over(&store),
+        };
         let first = build(&cx);
         let second = build(&cx);
-        assert_eq!(first.base().children[0].text_summary().as_deref(), Some("Build 1"));
-        assert_eq!(second.base().children[0].text_summary().as_deref(), Some("Build 2"));
+        assert_eq!(
+            first.base().children[0].text_summary().as_deref(),
+            Some("Build 1")
+        );
+        assert_eq!(
+            second.base().children[0].text_summary().as_deref(),
+            Some("Build 2")
+        );
         assert_eq!(calls.get(), 2);
     }
 }

@@ -1,7 +1,7 @@
 //! Read-only command output and project trust operations.
 
-use crate::actions::ActionCatalog;
 use super::Invocation;
+use crate::actions::ActionCatalog;
 
 /// `--trust` / `--untrust`: remember (or forget) the project file in the folder's project, as it
 /// stands now. The trust list is `heca_config::trust`; nothing here knows how it is kept.

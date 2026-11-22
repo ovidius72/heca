@@ -3,29 +3,31 @@
 use crate::color::Color;
 use serde::{Deserialize, Serialize};
 
-mod defaults;
 mod agents;
 mod connection;
+#[cfg(test)]
+mod default_tests;
+mod defaults;
 mod enums;
 mod notifications;
 mod schema;
+#[cfg(test)]
+mod schema_tests;
 mod services;
 mod sessions;
 #[cfg(test)]
-mod schema_tests;
-#[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod default_tests;
 
 use schema::declare_settings;
 
-pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, PaneSize, SearchCase};
+pub use agents::{
+    AgentProgramConfig, AgentSoundsConfig, AgentStatusConfig, AgentStatuses, AgentsConfig,
+};
 pub use connection::ConnectionConfig;
+pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, PaneSize, SearchCase};
+pub use notifications::{NotificationSystem, NotificationSystemConfig};
 pub use services::ServicesConfig;
 pub use sessions::SessionText;
-pub use notifications::{NotificationSystem, NotificationSystemConfig};
-pub use agents::{AgentProgramConfig, AgentSoundsConfig, AgentStatusConfig, AgentStatuses, AgentsConfig};
 
 declare_settings! {
     defaults: [];

@@ -50,8 +50,13 @@ pub enum SavedError {
 impl std::fmt::Display for SavedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoSession => f.write_str("this call is in no session: name one with Scope::SessionOf"),
-            Self::TooLarge { bytes, limit } => write!(f, "the value is {bytes} bytes; the limit is {limit} ([settings.services] saved_entry_max_bytes)"),
+            Self::NoSession => {
+                f.write_str("this call is in no session: name one with Scope::SessionOf")
+            }
+            Self::TooLarge { bytes, limit } => write!(
+                f,
+                "the value is {bytes} bytes; the limit is {limit} ([settings.services] saved_entry_max_bytes)"
+            ),
             Self::Encode(why) => write!(f, "the value could not be written as JSON: {why}"),
         }
     }

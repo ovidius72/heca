@@ -16,7 +16,9 @@ pub struct SoundLibrary {
 }
 
 impl SoundLibrary {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn sound(mut self, name: impl Into<String>, source: Audio) -> Self {
         self.sounds.insert(name.into(), source);
@@ -31,7 +33,10 @@ impl SoundLibrary {
     pub(crate) fn resolve(&self, source: &SoundSource) -> Result<Audio, String> {
         match source {
             SoundSource::File(path) => Ok(Audio::load(path)),
-            SoundSource::Asset(name) => self.sounds.get(name).cloned()
+            SoundSource::Asset(name) => self
+                .sounds
+                .get(name)
+                .cloned()
                 .ok_or_else(|| format!("unknown sound asset '{name}'")),
         }
     }

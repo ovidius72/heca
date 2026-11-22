@@ -327,7 +327,6 @@ pub struct ScrollRegion {
 /// caused the move instead of copying a description of it.
 type ScrollListener = Box<dyn for<'a> Fn(ScrollInfo<'a>)>;
 
-
 mod builders;
 mod component;
 mod geometry;
@@ -335,7 +334,11 @@ mod motion;
 mod reveal;
 mod scroll;
 
-impl Default for ScrollRegion { fn default() -> Self { Self::new() } }
+impl Default for ScrollRegion {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl LayoutExt for ScrollRegion {}
 impl StyleExt for ScrollRegion {}
 impl Parent for ScrollRegion {}

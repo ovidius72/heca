@@ -62,23 +62,33 @@ fn code_lines(src: &str) -> Vec<(usize, String)> {
 /// The name of the function whose body holds line `line_no` (1-based) of `src`: the nearest
 /// `fn name(` above it.
 fn enclosing_fn(src: &str, line_no: usize) -> Option<String> {
-    src.lines().take(line_no).collect::<Vec<_>>().iter().rev().find_map(|l| {
-        let t = l.trim_start();
-        let at = t.find("fn ")?;
-        let head = &t[..at];
-        if !head.is_empty() && !head.ends_with(' ') {
-            return None;
-        }
-        let name: String = t[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        (!name.is_empty() && t[at + 3 + name.len()..].starts_with(['(', '<'])).then_some(name)
-    })
+    src.lines()
+        .take(line_no)
+        .collect::<Vec<_>>()
+        .iter()
+        .rev()
+        .find_map(|l| {
+            let t = l.trim_start();
+            let at = t.find("fn ")?;
+            let head = &t[..at];
+            if !head.is_empty() && !head.ends_with(' ') {
+                return None;
+            }
+            let name: String = t[at + 3..]
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            (!name.is_empty() && t[at + 3 + name.len()..].starts_with(['(', '<'])).then_some(name)
+        })
 }
 
 /// The registry's own module — the folder holding `struct LayerRegistry` — where the doors are
 /// defined and tested.
 fn registry_module() -> String {
     let (file, _) = common::source_defining("pub(crate) struct LayerRegistry");
-    file.rsplit_once('/').map(|(dir, _)| format!("{dir}/")).unwrap_or(file)
+    file.rsplit_once('/')
+        .map(|(dir, _)| format!("{dir}/"))
+        .unwrap_or(file)
 }
 
 /// Every registration outside the registry's own module, as (file, line, enclosing function).
@@ -110,8 +120,17 @@ fn registrations() -> Vec<(String, usize, Option<String>)> {
 fn a_new_surface_is_placed_in_the_tree_not_registered() {
     let offenders: Vec<String> = registrations()
         .into_iter()
-        .filter(|(_, _, func)| !func.as_deref().is_some_and(|f| KNOWN_REGISTRY_SURFACES.contains(&f)))
-        .map(|(file, line, func)| format!("heca/src/{file}:{line} (in {})", func.as_deref().unwrap_or("?")))
+        .filter(|(_, _, func)| {
+            !func
+                .as_deref()
+                .is_some_and(|f| KNOWN_REGISTRY_SURFACES.contains(&f))
+        })
+        .map(|(file, line, func)| {
+            format!(
+                "heca/src/{file}:{line} (in {})",
+                func.as_deref().unwrap_or("?")
+            )
+        })
         .collect();
     assert!(
         offenders.is_empty(),
@@ -133,7 +152,11 @@ fn the_known_surface_list_is_exactly_what_still_registers() {
     let stale: Vec<&str> = KNOWN_REGISTRY_SURFACES
         .iter()
         .copied()
-        .filter(|known| !found.iter().any(|(_, _, func)| func.as_deref() == Some(*known)))
+        .filter(|known| {
+            !found
+                .iter()
+                .any(|(_, _, func)| func.as_deref() == Some(*known))
+        })
         .collect();
     assert!(
         stale.is_empty(),

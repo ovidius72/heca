@@ -54,7 +54,11 @@ const BUILDERS: &[&str] = &[
 fn ui_sources() -> Vec<(String, String)> {
     all_sources()
         .into_iter()
-        .filter(|(label, _)| UI_DIRS.iter().any(|dir| label.starts_with(&format!("{dir}/"))))
+        .filter(|(label, _)| {
+            UI_DIRS
+                .iter()
+                .any(|dir| label.starts_with(&format!("{dir}/")))
+        })
         .collect()
 }
 
@@ -142,9 +146,7 @@ fn named_numbers() -> Vec<String> {
             };
             let numeric =
                 ty.trim_start().starts_with("f32 =") || ty.trim_start().starts_with("f64 =");
-            if numeric
-                && !NOT_A_LOOK.iter().any(|(n, _)| *n == name.trim())
-            {
+            if numeric && !NOT_A_LOOK.iter().any(|(n, _)| *n == name.trim()) {
                 out.push(format!("heca/src/{file}:{}  {}", i + 1, t));
             }
         }

@@ -76,12 +76,15 @@ impl Session {
     /// Where a tiled pane is: its workspace, column and row. `None` for a pane that is not in a
     /// column (floating, or not here at all).
     pub fn pane_location(&self, pane: PaneId) -> Option<(usize, usize, usize)> {
-        self.workspaces.iter().enumerate().find_map(|(ws, workspace)| {
-            workspace
-                .scrolling
-                .pane_indices(pane)
-                .map(|(col, row)| (ws, col, row))
-        })
+        self.workspaces
+            .iter()
+            .enumerate()
+            .find_map(|(ws, workspace)| {
+                workspace
+                    .scrolling
+                    .pane_indices(pane)
+                    .map(|(col, row)| (ws, col, row))
+            })
     }
 
     /// Use these options from now on: for the workspaces there are, which each keep their own copy
@@ -95,7 +98,9 @@ impl Session {
 
     /// The workspace holding `pane`, tiled or floating.
     pub fn workspace_holding(&self, pane: PaneId) -> Option<usize> {
-        self.workspaces.iter().position(|ws| ws.find_pane(pane).is_some())
+        self.workspaces
+            .iter()
+            .position(|ws| ws.find_pane(pane).is_some())
     }
 
     /// Create a new workspace and append it.

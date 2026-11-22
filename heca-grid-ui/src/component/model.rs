@@ -1,7 +1,7 @@
 //! An owned component tree with private allocation and ordinary builder placement.
 
-use std::ops::{Deref, DerefMut};
 use super::Component;
+use std::ops::{Deref, DerefMut};
 
 /// An owned widget tree whose concrete type is chosen at runtime.
 ///
@@ -20,27 +20,39 @@ pub struct WidgetModel {
 impl WidgetModel {
     /// Own a concrete component. Ordinary child/factory builders do this conversion for callers.
     pub fn new(component: impl Component + 'static) -> Self {
-        Self { inner: Box::new(component) }
+        Self {
+            inner: Box::new(component),
+        }
     }
 }
 
 impl<C: Component + 'static> From<C> for WidgetModel {
-    fn from(component: C) -> Self { Self::new(component) }
+    fn from(component: C) -> Self {
+        Self::new(component)
+    }
 }
 
 impl Deref for WidgetModel {
     type Target = dyn Component;
-    fn deref(&self) -> &Self::Target { self.inner.as_ref() }
+    fn deref(&self) -> &Self::Target {
+        self.inner.as_ref()
+    }
 }
 
 impl DerefMut for WidgetModel {
-    fn deref_mut(&mut self) -> &mut Self::Target { self.inner.as_mut() }
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner.as_mut()
+    }
 }
 
 impl AsRef<dyn Component> for WidgetModel {
-    fn as_ref(&self) -> &(dyn Component + 'static) { self.inner.as_ref() }
+    fn as_ref(&self) -> &(dyn Component + 'static) {
+        self.inner.as_ref()
+    }
 }
 
 impl AsMut<dyn Component> for WidgetModel {
-    fn as_mut(&mut self) -> &mut (dyn Component + 'static) { self.inner.as_mut() }
+    fn as_mut(&mut self) -> &mut (dyn Component + 'static) {
+        self.inner.as_mut()
+    }
 }

@@ -50,7 +50,10 @@ impl RenameTarget {
         use crate::input::WmAction;
         match self {
             RenameTarget::Pane(pane_id) => WmAction::RenameTarget { pane_id, name },
-            RenameTarget::Terminal(terminal) => WmAction::TerminalRenameTo { terminal: terminal.to_string(), name },
+            RenameTarget::Terminal(terminal) => WmAction::TerminalRenameTo {
+                terminal: terminal.to_string(),
+                name,
+            },
             RenameTarget::Column { ws_idx, col_idx } => WmAction::RenameColumnTo {
                 ws_idx,
                 col_idx,

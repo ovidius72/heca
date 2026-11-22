@@ -2,7 +2,7 @@
 //! held them.
 
 use super::*;
-use crate::chrome::panes::terminal::{settle, Drawn};
+use crate::chrome::panes::terminal::{Drawn, settle};
 
 /// What the flush does with a scene: note every terminal surface it reaches.
 fn flush(scene: &Scene, drawn: &mut Drawn) {
@@ -22,7 +22,12 @@ fn a_terminal_is_placed_where_the_scene_that_held_it_drew_it() {
     let pane = Terminal::unbound();
     pane.attach(TerminalId(1));
 
-    let root = header_above(heca_grid_ui::WidgetModel::new(docked.clone()), 33.0, 308.0, 720.0);
+    let root = header_above(
+        heca_grid_ui::WidgetModel::new(docked.clone()),
+        33.0,
+        308.0,
+        720.0,
+    );
     let chrome = painted(root.as_ref());
     let mut drawn = Drawn::default();
     flush(&chrome, &mut drawn);

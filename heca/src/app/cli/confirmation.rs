@@ -1,7 +1,7 @@
 //! Text rendering of action-owned confirmations, enforced by the CLI dispatcher.
 
-use std::io::{self, BufRead, Write};
 use crate::actions::{ConfirmSpec, Outcome};
+use std::io::{self, BufRead, Write};
 
 pub(super) type Prepare = fn(&super::Invocation) -> Result<Option<Confirmation>, String>;
 
@@ -11,15 +11,32 @@ pub(super) struct Confirmation {
 }
 
 pub(super) fn ask(confirmation: Option<Confirmation>) -> Result<bool, String> {
-    let Some(confirmation) = confirmation else { return Ok(true); };
-    ask_with(&confirmation, &mut io::stdin().lock(), &mut io::stderr().lock())
-        .map_err(|error| format!("{error}\n"))
+    let Some(confirmation) = confirmation else {
+        return Ok(true);
+    };
+    ask_with(
+        &confirmation,
+        &mut io::stdin().lock(),
+        &mut io::stderr().lock(),
+    )
+    .map_err(|error| format!("{error}\n"))
 }
 
-fn ask_with(confirmation: &Confirmation, input: &mut impl BufRead, output: &mut impl Write) -> io::Result<bool> {
-    if !confirmation.spec.buttons.iter().any(|button| matches!(button.outcome, Outcome::Proceed)
-        && !button.label.trim().is_empty()) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "confirmation has no affirmative response"));
+fn ask_with(
+    confirmation: &Confirmation,
+    input: &mut impl BufRead,
+    output: &mut impl Write,
+) -> io::Result<bool> {
+    if !confirmation
+        .spec
+        .buttons
+        .iter()
+        .any(|button| matches!(button.outcome, Outcome::Proceed) && !button.label.trim().is_empty())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "confirmation has no affirmative response",
+        ));
     }
     writeln!(output, "{}", confirmation.spec.message)?;
     write!(output, "{}", confirmation.prompt)?;
@@ -35,16 +52,33 @@ mod tests {
 
     fn prompt() -> Confirmation {
         let words = heca_config::settings::SessionText {
-            terminate: "Stop".into(), confirm_terminate: "Stop Project A, retain its session".into(),
-            confirm_prompt: "Proceed? [y/N]: ".into(), ..Default::default()
+            terminate: "Stop".into(),
+            confirm_terminate: "Stop Project A, retain its session".into(),
+            confirm_prompt: "Proceed? [y/N]: ".into(),
+            ..Default::default()
         };
-        Confirmation { spec: ConfirmSpec::for_session("terminate_session", &words).unwrap(), prompt: words.confirm_prompt }
+        Confirmation {
+            spec: ConfirmSpec::for_session("terminate_session", &words).unwrap(),
+            prompt: words.confirm_prompt,
+        }
     }
 
     #[test]
     fn only_y_confirms_regardless_of_the_action_label() {
-        for answer in ["", "\n", "n\n", "N\n", "cancel\n", "yes\n", "Stop\n", "Terminate\n"] {
-            assert!(!ask_with(&prompt(), &mut answer.as_bytes(), &mut Vec::new()).unwrap(), "{answer:?}");
+        for answer in [
+            "",
+            "\n",
+            "n\n",
+            "N\n",
+            "cancel\n",
+            "yes\n",
+            "Stop\n",
+            "Terminate\n",
+        ] {
+            assert!(
+                !ask_with(&prompt(), &mut answer.as_bytes(), &mut Vec::new()).unwrap(),
+                "{answer:?}"
+            );
         }
         for answer in ["y\n", "  Y  \n", "y"] {
             let mut output = Vec::new();
@@ -58,8 +92,12 @@ mod tests {
     fn broken_input_or_output_cannot_confirm() {
         struct Broken;
         impl Write for Broken {
-            fn write(&mut self, _: &[u8]) -> io::Result<usize> { Err(io::ErrorKind::BrokenPipe.into()) }
-            fn flush(&mut self) -> io::Result<()> { Err(io::ErrorKind::BrokenPipe.into()) }
+            fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+                Err(io::ErrorKind::BrokenPipe.into())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::ErrorKind::BrokenPipe.into())
+            }
         }
         assert!(ask_with(&prompt(), &mut "y\n".as_bytes(), &mut Broken).is_err());
         let invalid_utf8 = [0xff, b'\n'];

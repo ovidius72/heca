@@ -47,7 +47,12 @@ pub(crate) fn slot_of(node: &ViewNode) -> Option<&str> {
 /// A child named a slot its parent doesn't have (or none, where the parent has no default). Debug-log
 /// it and move on: `realize` is total for untrusted input, so a plugin's typo costs it a misplaced
 /// child, never a panic.
-pub(crate) fn warn_unknown_slot(parent: &ViewNode, child: &ViewNode, slot: Option<&str>, known: &[&str]) {
+pub(crate) fn warn_unknown_slot(
+    parent: &ViewNode,
+    child: &ViewNode,
+    slot: Option<&str>,
+    known: &[&str],
+) {
     #[cfg(debug_assertions)]
     eprintln!(
         "[heca] realize: {:?} child of a {:?} has slot {:?} — known slots: {:?}",

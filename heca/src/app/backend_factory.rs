@@ -95,12 +95,25 @@ pub(crate) fn launch(
     let (cols, rows) = spec.grid;
     let mut backend = match &spec.program {
         Program::Recorded(process) => {
-            let mut options = terminal_backend_options(&settings.terminal.theme,
-                settings.wake_on_output.clone(), false, settings.terminal.scrollback, settings.terminal.scroll_animations);
+            let mut options = terminal_backend_options(
+                &settings.terminal.theme,
+                settings.wake_on_output.clone(),
+                false,
+                settings.terminal.scrollback,
+                settings.terminal.scroll_animations,
+            );
             options.cwd = process.cwd.clone();
             options.agents = settings.terminal.agents.clone();
-            TerminalBackend::with_process(cols, rows, settings.cell_size.0, settings.cell_size.1, process, options)
-                .map(|backend| Box::new(backend) as Box<dyn PaneBackend>).map_err(|error| SpawnError(error.to_string()))?
+            TerminalBackend::with_process(
+                cols,
+                rows,
+                settings.cell_size.0,
+                settings.cell_size.1,
+                process,
+                options,
+            )
+            .map(|backend| Box::new(backend) as Box<dyn PaneBackend>)
+            .map_err(|error| SpawnError(error.to_string()))?
         }
         Program::Shell => {
             let mut options = terminal_backend_options(

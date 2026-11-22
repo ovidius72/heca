@@ -42,7 +42,10 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
-    { let _s = crate::slow_steps::step("frame.sync_chrome_signals"); crate::chrome::sync_chrome_signals(state) };
+    {
+        let _s = crate::slow_steps::step("frame.sync_chrome_signals");
+        crate::chrome::sync_chrome_signals(state)
+    };
     // **Flush signal-driven structure before this frame is laid out.**
     //
     // Wrappers like `Visibility` apply their `hidden` flip in `tick`, so a row revealed by a
@@ -57,7 +60,10 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
     state.window_root.tick(0.0);
     let (w, h) = (v.w, v.h);
     let theme = crate::chrome::chrome_gui_theme(state);
-    let mut scene = { let _s = crate::slow_steps::step("frame.layout_and_paint_chrome"); crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &theme) };
+    let mut scene = {
+        let _s = crate::slow_steps::step("frame.layout_and_paint_chrome");
+        crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &theme)
+    };
     // **A drag draws itself.** The insertion line, the swap outline and the picture of the
     // thing under the pointer are painted by the widgets the drag passes through, inside
     // `paint_child` — so nothing opts in, and a plugin's own row gets the same feedback.

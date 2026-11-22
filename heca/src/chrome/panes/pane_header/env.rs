@@ -103,14 +103,10 @@ fn show_pane_header(
     // **The words travel beside the tree, not inside its identity**: they are written onto the tree
     // by the key of the chip that shows each, so a command changing the program it shows moves the
     // words and nothing else.
-    let words: Vec<_> = segment_items(
-        content.chips,
-        content.segments,
-        content.facts,
-    )
-    .into_iter()
-    .map(|item| (segment_text_key(&item.name), item.chip.text))
-    .collect();
+    let words: Vec<_> = segment_items(content.chips, content.segments, content.facts)
+        .into_iter()
+        .map(|item| (segment_text_key(&item.name), item.chip.text))
+        .collect();
     header.texts(words);
     header.show(key, || {
         let ctx = PaneHeaderCtx {

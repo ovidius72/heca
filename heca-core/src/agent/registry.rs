@@ -46,7 +46,9 @@ impl AgentDrivers {
 
     /// Recognize a foreground program through the registered implementations.
     pub fn recognize(&self, program: &str) -> Option<&Arc<dyn AgentDriver>> {
-        self.drivers.iter().find(|driver| driver.recognizes(program))
+        self.drivers
+            .iter()
+            .find(|driver| driver.recognizes(program))
     }
 
     /// Decode input only through the recognized program's implementation.
@@ -66,18 +68,27 @@ impl AgentDrivers {
 }
 
 /// One validation and presentation path for terminal notifications and private-file reports.
-pub(super) fn read_report(driver: &dyn AgentDriver, input: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> {
-    let Some(mut report) = driver.read_status(input)? else { return Ok(None) };
+pub(super) fn read_report(
+    driver: &dyn AgentDriver,
+    input: AgentInput<'_>,
+) -> Result<Option<AgentState>, AgentError> {
+    let Some(mut report) = driver.read_status(input)? else {
+        return Ok(None);
+    };
     if report.driver != driver.id() || report.status.as_str().is_empty() {
         return Err(AgentError::Report(driver.id().to_owned()));
     }
     report.name = driver.name().to_owned();
-    if let Some(icon) = driver.icon() { report.icon = Some(icon); }
+    if let Some(icon) = driver.icon() {
+        report.icon = Some(icon);
+    }
     Ok(Some(report))
 }
 
 impl fmt::Debug for AgentDrivers {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.drivers.iter().map(|driver| driver.id())).finish()
+        f.debug_list()
+            .entries(self.drivers.iter().map(|driver| driver.id()))
+            .finish()
     }
 }

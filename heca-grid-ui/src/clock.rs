@@ -62,6 +62,9 @@ mod tests {
         advance(Duration::from_millis(100));
         assert_eq!(now() - start, Duration::from_millis(100));
         release();
-        assert!(now() >= Instant::now() - Duration::from_secs(1), "released: the system's clock again");
+        assert!(
+            now() >= Instant::now() - Duration::from_secs(1),
+            "released: the system's clock again"
+        );
     }
 }

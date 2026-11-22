@@ -114,12 +114,21 @@ fn a_panes_frame_colour_reaches_borders_and_brackets() {
     };
 
     let bordered = frame_colours(Pane::new().bordered().border_color(red));
-    assert!(!bordered.is_empty() && bordered.iter().all(|c| *c == red), "the line is red");
+    assert!(
+        !bordered.is_empty() && bordered.iter().all(|c| *c == red),
+        "the line is red"
+    );
 
     let bracketed = frame_colours(Pane::new().bracketed().border_color(red));
-    assert!(!bracketed.is_empty() && bracketed.iter().all(|c| *c == red), "the brackets are red");
+    assert!(
+        !bracketed.is_empty() && bracketed.iter().all(|c| *c == red),
+        "the brackets are red"
+    );
 
     let accent = theme.colors.accent.with_alpha(255);
     let unset = frame_colours(Pane::new().bracketed());
-    assert!(unset.iter().all(|c| *c == accent), "unset, brackets keep the accent");
+    assert!(
+        unset.iter().all(|c| *c == accent),
+        "unset, brackets keep the accent"
+    );
 }

@@ -76,7 +76,10 @@ fn enter_pane_rename(state: &mut AppState, pane_id: PaneId) {
 /// that drew it can see. Renaming the row under the cursor is that component's own verb now
 /// (`workspaces.rename_selected`, bound to `r`), so this key keeps one meaning wherever the
 /// keyboard is.
-pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_rename_pane(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     if let Some(pane_id) = focused_pane_id(state) {
         enter_pane_rename(state, pane_id);
     }
@@ -85,7 +88,10 @@ pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) -> crate::ac
 
 /// Enter rename mode for a specific pane by id — the context-menu / RPC entry point
 /// (`RenamePaneById`), which carries its target explicitly rather than using the focused pane.
-pub fn handle_rename_pane_by_id(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_rename_pane_by_id(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::RenamePaneById { pane_id } = action else {
         return Ok(());
     };
@@ -94,13 +100,27 @@ pub fn handle_rename_pane_by_id(state: &mut AppState, action: &WmAction) -> crat
 }
 
 /// A pane-owned terminal uses the pane's existing name, not a second competing label.
-pub fn handle_terminal_rename(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
-    let WmAction::TerminalRename { terminal } = action else { return Ok(()); };
-    let Some(id) = state.client.backends.resolve_reference(terminal) else { return Ok(()); };
+pub fn handle_terminal_rename(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
+    let WmAction::TerminalRename { terminal } = action else {
+        return Ok(());
+    };
+    let Some(id) = state.client.backends.resolve_reference(terminal) else {
+        return Ok(());
+    };
     match state.client.backends.owner_of(id).cloned() {
-        Some(crate::app::backend_store::TerminalOwner::Pane(pane)) => enter_pane_rename(state, pane),
+        Some(crate::app::backend_store::TerminalOwner::Pane(pane)) => {
+            enter_pane_rename(state, pane)
+        }
         Some(crate::app::backend_store::TerminalOwner::Named(_)) => {
-            let current = state.client.backends.custom_title(id).unwrap_or_default().to_owned();
+            let current = state
+                .client
+                .backends
+                .custom_title(id)
+                .unwrap_or_default()
+                .to_owned();
             open_rename_dialog(state, RenameTarget::Terminal(id.0), current);
         }
         None => {}
@@ -132,7 +152,10 @@ fn enter_column_rename(state: &mut AppState, ws_idx: usize, col_idx: usize) {
     );
 }
 
-pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_rename_column(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     let ws_idx = state.layout().active_workspace_idx();
     let Some(col_idx) = state
         .layout()
@@ -147,7 +170,10 @@ pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) -> crate::
 
 /// Enter rename mode for a specific column by index — the context-menu / RPC entry point
 /// (`RenameColumnByIdx`), which carries its target explicitly rather than using the active one.
-pub fn handle_rename_column_by_idx(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_rename_column_by_idx(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::RenameColumnByIdx { ws_idx, col_idx } = action else {
         return Ok(());
     };
@@ -177,14 +203,20 @@ fn enter_workspace_rename(state: &mut AppState, ws_idx: usize) {
 
 /// Rename the **active** workspace — the counterpart of [`handle_rename_pane`], and unbent for the
 /// same reason: the cursor's row belongs to `workspaces.rename_selected` (`r`).
-pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_rename_workspace(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
     enter_workspace_rename(state, state.layout().active_workspace_idx());
     Ok(())
 }
 
 /// Enter rename mode for a specific workspace by index — the context-menu / RPC entry point
 /// (`RenameWorkspaceByIdx`), which carries its target explicitly rather than using the active one.
-pub fn handle_rename_workspace_by_idx(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+pub fn handle_rename_workspace_by_idx(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
     let WmAction::RenameWorkspaceByIdx { ws_idx } = action else {
         return Ok(());
     };

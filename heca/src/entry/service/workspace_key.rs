@@ -26,7 +26,10 @@ pub struct WorkspaceKey {
 impl WorkspaceKey {
     /// The key of workspace `workspace` in session `session`.
     pub(crate) fn new(session: SessionKey, workspace: heca_core::layout::WorkspaceId) -> Self {
-        Self { session, workspace: workspace.0 }
+        Self {
+            session,
+            workspace: workspace.0,
+        }
     }
 
     /// The session this workspace belongs to.
@@ -59,8 +62,9 @@ impl<'de> Deserialize<'de> for WorkspaceKey {
         let text = String::deserialize(deserializer)?;
         let bad = || de::Error::custom("a workspace key is <session key>.<number>");
         let (session, workspace) = text.split_once('.').ok_or_else(bad)?;
-        let session: SessionKey = serde_json::from_value(serde_json::Value::String(session.to_owned()))
-            .map_err(|_| bad())?;
+        let session: SessionKey =
+            serde_json::from_value(serde_json::Value::String(session.to_owned()))
+                .map_err(|_| bad())?;
         let workspace = workspace.parse().map_err(|_| bad())?;
         Ok(Self { session, workspace })
     }
