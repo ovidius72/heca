@@ -306,34 +306,70 @@ fn drop_at(
     None
 }
 
-/// Find the **topmost, deepest** drag source whose bounds contain `point` — the
-/// thing a press at `point` would start dragging. `None` if none is hit.
+/// Find the drag source a press at `point` would pick up — the same answer the gesture gives
+/// ([`source_on`]), so the grab cursor never promises a drag a press would not start. `None` if
+/// nothing there can be picked up.
 pub fn source_at(root: &dyn Component, point: Point) -> Option<String> {
-    let mut path = Vec::new();
-    source_at_path(root, root, point, &mut path)
+    source_on(root, &path_at(root, point)).map(|(_, id)| id)
 }
 
-/// The recursive half of [`source_at`] — see [`drop_at`] for why the path is carried.
-fn source_at_path(
-    root: &dyn Component,
-    node: &dyn Component,
-    point: Point,
-    path: &mut Vec<usize>,
-) -> Option<String> {
-    if skip(node) {
-        return None;
-    }
-    for (i, child) in node.base().children.iter().enumerate().rev() {
-        path.push(i);
-        if let Some(id) = source_at_path(root, child.as_ref(), point, path) {
-            return Some(id);
+/// The path to the topmost, deepest shown widget under `point`.
+fn path_at(root: &dyn Component, point: Point) -> Vec<usize> {
+    let mut path = Vec::new();
+    let mut node = root;
+    'down: loop {
+        for (i, child) in node.base().children.iter().enumerate().rev() {
+            if !skip(child.as_ref()) && child.base().bounds.contains(point) {
+                path.push(i);
+                node = child.as_ref();
+                continue 'down;
+            }
         }
-        path.pop();
+        return path;
     }
-    if node.may_start_drag() && node.base().bounds.contains(point) {
-        return drag_identity(root, node, path);
+}
+
+/// **What a press on the widget at `press` picks up**, and its path — the one rule, for the gesture
+/// and for the cursor.
+///
+/// Of the widgets from the root down to the pressed one: one picked up by its rule
+/// ([`draggable_when`](crate::builders::DragExt::draggable_when)) wins, because holding the key is a
+/// deliberate request; otherwise the innermost that may start. A widget picked up only by its
+/// handle ([`drag_by_handle`](crate::builders::DragExt::drag_by_handle)) may start only when the
+/// press went through a handle of its own — one with no nearer handle-only widget in between.
+pub(crate) fn source_on(root: &dyn Component, press: &[usize]) -> Option<(Vec<usize>, String)> {
+    let mut chain: Vec<(Vec<usize>, &dyn Component)> = vec![(Vec::new(), root)];
+    let mut node = root;
+    for i in press {
+        let Some(child) = node.base().children.get(*i) else {
+            break;
+        };
+        node = child.as_ref();
+        let mut here = chain.last().map(|(p, _)| p.clone()).unwrap_or_default();
+        here.push(*i);
+        chain.push((here, node));
     }
-    None
+    let startable = |at: usize| {
+        let n = chain[at].1;
+        if !n.may_start_drag() {
+            return false;
+        }
+        if !n.base().drag_by_handle {
+            return true;
+        }
+        chain[at + 1..]
+            .iter()
+            .take_while(|(_, below)| !below.base().drag_by_handle)
+            .any(|(_, below)| below.base().drag_handle)
+    };
+    let gated = |at: usize| chain[at].1.base().drag_gate.is_some();
+    let at = (0..chain.len())
+        .rev()
+        .find(|&at| gated(at) && startable(at))
+        .or_else(|| (0..chain.len()).rev().find(|&at| startable(at)))?;
+    let (path, node) = (&chain[at].0, chain[at].1);
+    let id = drag_identity(root, node, path)?;
+    Some((path.clone(), id))
 }
 
 /// **What a dragged widget is called** — the name it declared, and a derived one when it declared
@@ -346,10 +382,16 @@ fn source_at_path(
 /// nothing answers with the identity derived from its content
 /// ([`identity_of`](crate::nav::identity_of)) — which is what keeps `.draggable()` working on its
 /// own, with no name for an author to invent and no internal rule to learn first.
-fn drag_identity(root: &dyn Component, node: &dyn Component, path: &[usize]) -> Option<String> {
+pub(crate) fn drag_identity(
+    root: &dyn Component,
+    node: &dyn Component,
+    path: &[usize],
+) -> Option<String> {
+    // The name it gave itself — a row's `key`, or the `scope_key` a dock or panel names itself
+    // with — and only when it gave none, the identity derived from its content.
     node.base()
-        .key
-        .clone()
+        .identity()
+        .map(str::to_owned)
         .or_else(|| crate::nav::identity_of(root, path))
 }
 
@@ -557,6 +599,73 @@ mod tests {
         assert!(reorderable.is_drop_target());
         assert!(reorderable.accepts_drag(Some("room")));
         assert!(!reorderable.accepts_drag(Some("pane")));
+    }
+
+    /// **What a press picks up**: a frame dragged by its handle starts only from the handle; a
+    /// handle in a frame that is not draggable never reaches past it; a source picked up by its
+    /// key wins over the rows inside it while the key is held.
+    #[test]
+    fn a_press_picks_up_by_handle_and_by_key() {
+        let frame = |draggable: bool| {
+            let mut frame = Flex::column()
+                .key("room:a")
+                .drag_by_handle()
+                .draggable_as(draggable.then_some("room"));
+            frame
+                .base_mut()
+                .children
+                .push(crate::WidgetModel::new(Surface::new().drag_handle()));
+            frame
+                .base_mut()
+                .children
+                .push(crate::WidgetModel::new(Surface::new()));
+            frame
+        };
+        let mut seat = Flex::column()
+            .key("dock")
+            .draggable_as("dock")
+            .draggable_when(|m| m.meta);
+        seat.base_mut()
+            .children
+            .push(crate::WidgetModel::new(frame(true)));
+        let at = |root: &Flex, press: &[usize]| source_on(root, press).map(|(_, id)| id);
+
+        assert_eq!(
+            at(&seat, &[0, 0]),
+            Some("room:a".into()),
+            "the grip picks up the room"
+        );
+        assert_eq!(
+            at(&seat, &[0, 1]),
+            None,
+            "the room's body does not, and the dock waits for its key"
+        );
+
+        let mut seat_plain = Flex::column()
+            .key("dock")
+            .draggable_as("dock")
+            .draggable_when(|m| m.meta);
+        seat_plain
+            .base_mut()
+            .children
+            .push(crate::WidgetModel::new(frame(false)));
+        assert_eq!(
+            at(&seat_plain, &[0, 0]),
+            None,
+            "a grip on a frame that is not draggable never picks up what holds it",
+        );
+
+        crate::event::remember_modifiers(crate::event::Modifiers {
+            meta: true,
+            ..Default::default()
+        });
+        let held = at(&seat, &[0, 0]);
+        crate::event::remember_modifiers(crate::event::Modifiers::default());
+        assert_eq!(
+            held,
+            Some("dock".into()),
+            "the move key held: the dock, not the room"
+        );
     }
 
     /// **The line turns with the list.** In a row it stands on the edge the drop lands on; in a

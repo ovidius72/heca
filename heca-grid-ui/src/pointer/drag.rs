@@ -176,23 +176,7 @@ pub(super) fn update_drag_over(
 
 /// The innermost drag source at or above the pressed widget, and its path.
 pub(super) fn drag_source_on(root: &dyn Component, press: &[usize]) -> Option<(Path, String)> {
-    let mut node = root;
-    let mut best: Option<(Path, String)> = None;
-    let mut here = Path::new();
-    if let Some(id) = startable_identity(root, &here) {
-        best = Some((here.clone(), id));
-    }
-    for i in press {
-        let Some(child) = node.base().children.get(*i) else {
-            break;
-        };
-        node = child.as_ref();
-        here.push(*i);
-        if let Some(id) = startable_identity(root, &here) {
-            best = Some((here.clone(), id));
-        }
-    }
-    best
+    crate::drag::resolve::source_on(root, press)
 }
 
 /// **Is a drag in flight anywhere in this tree?**
@@ -225,7 +209,6 @@ pub(super) fn drag_over_path(root: &dyn Component) -> Option<Path> {
     find(root, &|c| c.base().pointer.drag_over.get())
 }
 
-/// The path to the drop target registered under `id`.
 /// The dragged identity of the widget at `path`, when it is a drag source at all — the same
 /// answer [`drag::source_at`](crate::drag::source_at) gives, so the gesture and the resolution
 /// cannot disagree about what is being carried.
@@ -234,21 +217,11 @@ pub(super) fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<Stri
     if !node.is_drag_source() {
         return None;
     }
-    node.base()
-        .key
-        .clone()
-        .or_else(|| crate::nav::identity_of(root, path))
+    crate::drag::resolve::drag_identity(root, node, path)
 }
 
 /// [`drag_identity`], but only for a widget whose pick-up rule holds right now — what a *new* drag
 /// asks. One in flight uses [`drag_identity`], which is never refused.
-fn startable_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
-    node_at(root, path)
-        .may_start_drag()
-        .then(|| drag_identity(root, path))
-        .flatten()
-}
-
 pub(super) fn clear_drag_over(root: &dyn Component) {
     walk(root, &|c| c.base().pointer.drag_over.set(false));
 }

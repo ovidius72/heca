@@ -17,6 +17,7 @@ pub use docks::contribution::{
     BuildCx, ContainerContribution, ContainerId, ContextMenuContribution, Contribution, RegionSet,
     WidgetModel,
 };
+pub(crate) use docks::drop::dock_drop_action;
 pub(crate) use docks::focus::{dock_candidates, navigable_dock, placement_for, region_on_screen};
 pub use docks::host::ChromeHost;
 pub use docks::regions::{PlaceDock, RegionMap, regions, shown_from_settings};
@@ -32,8 +33,8 @@ pub(crate) use input::emitter::layer_emitter;
 pub use input::emitter::{ChromeIntentEmitter, fires, picks};
 pub(crate) use input::identity::warn_author;
 pub(crate) use input::names::{
-    COLUMN_PICK_SCOPE, DOCK_PICK_SCOPE, PANE_DRAG_KIND, column_key, pane_control_key,
-    pane_id_of_key, pane_key, row_key, row_of_key, slot_key, slot_of_key,
+    COLUMN_PICK_SCOPE, DOCK_DRAG_KIND, DOCK_PICK_SCOPE, PANE_DRAG_KIND, column_key,
+    pane_control_key, pane_id_of_key, pane_key, row_key, row_of_key, slot_key, slot_of_key,
 };
 
 // ── panes ──

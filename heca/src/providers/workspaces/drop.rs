@@ -22,8 +22,10 @@ pub(crate) fn drop_action(
     match source {
         ChromeDragItem::Pane(pane_id) => pane_drop(state, pane_id, target, side, swap),
         ChromeDragItem::Column { ws, col } => column_drop(ws, col, target, side, swap),
-        // A workspace is a drop target only — nothing picks one up.
-        ChromeDragItem::Workspace { .. } => None,
+        // A workspace is a drop target only — nothing picks one up — and docks are the host's.
+        ChromeDragItem::Workspace { .. }
+        | ChromeDragItem::Dock(_)
+        | ChromeDragItem::DockGap { .. } => None,
     }
 }
 
@@ -66,7 +68,9 @@ fn pane_drop(
             state.session.workspaces.get(ws)?;
             (ws, heca_core::layout::END, None)
         }
-        ChromeDragItem::Column { .. } => return None,
+        ChromeDragItem::Column { .. }
+        | ChromeDragItem::Dock(_)
+        | ChromeDragItem::DockGap { .. } => return None,
     };
     Some(WmAction::PlacePane {
         pane_id,
@@ -117,8 +121,8 @@ fn column_drop(
             dst_idx: heca_core::layout::END,
             focus: true,
         }),
-        // The source-aware filter never yields a pane target for a column drag.
-        ChromeDragItem::Pane(_) => None,
+        // The source-aware filter never yields a pane or dock target for a column drag.
+        ChromeDragItem::Pane(_) | ChromeDragItem::Dock(_) | ChromeDragItem::DockGap { .. } => None,
     }
 }
 

@@ -16,7 +16,7 @@
 //!   caller never has to search for it again by name — two seatings of one container give their
 //!   rows the same name.
 
-mod resolve;
+pub(crate) mod resolve;
 pub(crate) mod sink;
 
 pub use resolve::{

@@ -21,6 +21,11 @@ pub(crate) enum ChromeDragItem {
     /// A workspace frame (drop target only — drop a column here to move it
     /// into that workspace).
     Workspace { ws: usize },
+    /// A mounted dock, by its container id — the seat the host puts round it (drag source when it
+    /// is movable, and a place to land beside).
+    Dock(String),
+    /// The space between two docks in a region: a dock dropped there lands after `after`.
+    DockGap { after: String },
 }
 
 /// What each of this component's row names means, recorded as the tree is built and read back when

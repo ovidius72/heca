@@ -1355,7 +1355,7 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 ### 2.6 Drag-and-Drop — any widget, by its name (see §3)
 - **One framework**, in `heca-grid-ui/src/drag/`: a widget declares `.draggable_as(kind)` / `.accepts(kinds)` / `.accepts_beside(kinds)` on its `key`, and the framework runs the gesture and draws the feedback. **Do not build a parallel one.**
 - Every drop that changes something is an **action** (P2), so the same move is reachable from a key and RPC.
-- **Status:** shipped for rows (panes, columns, workspaces, heca-pro rooms). The dock grip (T325) and region / inter-dock gaps as drop targets (T326) are what is left — tracked in the planner under F004.
+- **Status:** shipped (P079): rows (panes, columns, workspaces, heca-pro rooms), and whole docks — carried by the window's move key, landing beside another dock, in the gap between two, or in an empty sidebar. A `DockFrame`'s grip is its handle.
 
 ### 2.7 Status-driven item composition — neutral primitives + a recipe
 - The rich pane row (program name · git status+icon · exit code · running/idle/stopped style) is **composed**, not a monolith: `Grid` + `Label` + `StatusDot` + `Badge`/`Tag` + `Icon`.
@@ -1393,7 +1393,7 @@ The full API is in [`widgets.md` → Drag and drop](widgets.md#drag-and-drop); t
 
 ### Two altitudes
 - **Item-level** (rows inside a dock — panes, columns, workspaces, rooms): shipped.
-- **Dock-level** (move a `DockFrame` within a region or between regions): the actions exist and work from a key and RPC — `chrome.container.move_to_region` (and `move_left_sidebar` / `move_right_sidebar`), `chrome.container.reorder_before`, `chrome.container.reorder_after`. Wiring the `DockFrame` grip as a drag source (T325) and regions / gaps as drop targets (T326) is what is left; both drops send those actions.
+- **Dock-level** (move a dock within a region or between regions): shipped. The seat the host puts round every dock is carried by the window's move key (the one that carries a pane) and lands beside another dock; the space between two docks lands after the one above; an empty sidebar takes it. The host turns the drop into `chrome.container.reorder_before` / `reorder_after` (which move a container to wherever its target is) or `chrome.container.move_to_region` (`chrome/docks/drop.rs`) — the actions a key and RPC send. heca's docks have no title bar, so they are not moved by a grip: a `DockFrame`'s grip is the handle of **that frame** when the frame is draggable (heca-pro's rooms), and does nothing when it is not (heca's workspace rows, until workspace reorder, P030).
 
 ---
 
@@ -1402,7 +1402,7 @@ The full API is in [`widgets.md` → Drag and drop](widgets.md#drag-and-drop); t
 
 ## 16. Drag and drop — the shipped framework
 
-> **Planner:** **P079(F004)** (gridui-08) — rows shipped, dock moves are actions (T333); dock grip T325 and region drops T326 left
+> **Planner:** **P079(F004)** (gridui-08) — done: rows and docks drag; dock moves are actions
 
 ## 4. Shared state strategy (the flexible, plugin-ready pattern)
 
@@ -1574,10 +1574,10 @@ are the one exception — see the note at the top of Part II.)
 
 Found by auditing this file against the planner on 2026-07-26. Both now exist:
 
-- **Dragging a container between regions** → **P079(F004)** (gridui-08). The moves are actions
-  that work from a key and RPC (T333); the `DockFrame` grip is not a drag source yet (T325) and
-  `ChromeRegion` / the gaps between docks take no drop yet (T326). No plugin escape hatch is needed:
-  a drag kind is a word the component chooses.
+- **Dragging a container between regions** → **P079(F004)** (gridui-08), done. A dock is carried by
+  the window's move key and lands beside another, between two, or in an empty sidebar; the drop is
+  a `chrome.container.*` action. No plugin escape hatch is needed: a drag kind is a word the
+  component chooses.
 - **Binding and listing contributed actions** → **F003/P018** (plugin-10). `ActionMeta` already
   carries `default_binding` and `describe_all()` already returns everything a palette needs.
   Nothing reads either, so a registered action can never be triggered by a key.

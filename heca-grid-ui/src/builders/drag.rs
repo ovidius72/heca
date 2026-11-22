@@ -57,12 +57,39 @@ pub trait DragExt: Component + Sized {
         self
     }
 
+    /// **Pick it up only by its handle** — a widget inside it marked
+    /// [`drag_handle`](Self::drag_handle). A press anywhere else in it starts no drag of it, so its
+    /// content keeps its own clicks and selection. [`DockFrame`](crate::widgets::DockFrame) does
+    /// this with its grip.
+    ///
+    /// ```ignore
+    /// Flex::row().key("card:1").draggable_as("card").drag_by_handle()
+    ///     .child(Label::new("≡").drag_handle())
+    ///     .child(content)
+    /// ```
+    fn drag_by_handle(mut self) -> Self {
+        self.base_mut().drag_by_handle = true;
+        self
+    }
+
+    /// **This widget is a handle**: a press on it picks up the nearest enclosing widget that is
+    /// [`drag_by_handle`](Self::drag_by_handle). One that is not draggable leaves the handle doing
+    /// nothing — it never reaches past to pick up something further out.
+    fn drag_handle(mut self) -> Self {
+        self.base_mut().drag_handle = true;
+        self
+    }
+
     /// **Make it draggable only while `rule` holds** for what is held down when the press moves
     /// far enough to start a drag — `draggable_when(|m| m.meta)` is "Cmd+drag". Without the rule
     /// the press stays whatever the widget's content makes of it (a terminal's selection).
     ///
     /// The rule is asked when a drag would start, never again: a drag in flight does not end
     /// because the key came up.
+    ///
+    /// **Holding the key is a deliberate request**, so a source picked up by its rule wins over
+    /// anything inside it that would start on any press — Cmd+drag on a row inside a dock carries
+    /// the dock, not the row.
     fn draggable_when(mut self, rule: impl Fn(crate::event::Modifiers) -> bool + 'static) -> Self {
         self.base_mut().drag_gate = Some(std::rc::Rc::new(rule));
         self

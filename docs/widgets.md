@@ -2262,7 +2262,8 @@ A generic container for sidebars/panels with three **border styles**
 - **`Bordered`** (default) — a clean continuous border. Width comes from
   `theme.border_width` (read at paint, so the global border control governs it)
   **unless** an explicit `.border_width(w)` override is set on the pane; color
-  from `.border_color(c)`, else an explicit `.border(color, _)`, else `theme.border`.
+  from `.border_color(c)` (takes an `Option` too — `None` leaves it as it was), else an explicit
+  `.border(color, _)`, else `theme.border`.
 - **`Bracketed`** — the self-contained corner-bracket reticle (`PaintCx::bracket_frame`):
   bright rounded corners over a dimmed continuous line, sharing the theme corner radius, in
   `theme.accent` unless the pane sets `.border_color(c)`. It does **not** also draw `style.border`.
@@ -5423,19 +5424,15 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   (`keyboard_navigable`), heca lights the one whose `.key(..)` the cursor is on and darkens the
   rest (`heca_grid_ui::select_key_in_scope`, by key, inside that dock only).
 
-> **The drag-handle grip is drawn but wired to nothing.** If you see it on a workspace header in
-> heca and nothing drags, that is why. **Two different features claim it, and they are not the same
-> thing:**
+> **The grip is the frame's handle.** A frame made draggable (`.draggable_as(..)`) is picked up by
+> its grip and nowhere else, so the title row still folds on a click and the body keeps its own
+> presses (`DragExt::drag_by_handle` / `drag_handle`, which any widget can use the same way). A frame
+> that is not draggable leaves the grip doing nothing — it never reaches past the frame to pick up
+> what holds it. A whole **dock** is moved by the host, not by a frame: the seat heca puts round every
+> dock is dragged with the window's move key, the same key that drags a pane.
 >
-> - the frame as a **container** — drag the whole dock into another chrome region. The actions for
->   this already exist (`chrome.container.move_to_region` and friends); only the mouse surface is
->   missing.
-> - the frame as a **row inside** a container — reorder it in the list. heca mounts one frameless
->   `DockFrame` per workspace row, so this is the drag the grip actually sits beside. This one still
->   needs its own action and drop logic.
->
-> Both are tracked in the planner, and the grip is left in place deliberately as a placeholder for
-> them.
+> In heca the grip shows on each workspace row, whose frame is not draggable: workspace
+> drag-to-reorder is its own phase (P030), and until then that grip does nothing.
 
 **Native:**
 
@@ -8395,11 +8392,18 @@ Row::new()
 |---|---|
 | `.draggable()` | It can be picked up, as whatever it is; every target takes it. A widget with no identity has nothing to say about what was picked up. |
 | `.draggable_as(kind)` | It can be picked up, and is a `kind` — a word its component chose (`"pane"`, `"column"`). Takes an `Option`: `None` leaves it as it was. |
-| `.draggable_when(rule)` | Only while `rule` holds for the modifiers when the drag would start (`\|m\| m.meta` is Cmd+drag). Asked once; a drag in flight never ends because a key came up. |
+| `.draggable_when(rule)` | Only while `rule` holds for the modifiers when the drag would start (`\|m\| m.meta` is Cmd+drag). Asked once; a drag in flight never ends because a key came up. **Holding the key wins**: a source picked up by its rule beats the rows inside it, so Cmd+drag on a row inside a dock carries the dock. |
+| `.drag_by_handle()` | Picked up only by its handle — a widget inside it marked `.drag_handle()`. A press anywhere else in it starts no drag of it, so its content keeps its clicks. `DockFrame` does this with its grip. |
+| `.drag_handle()` | This widget is a handle: a press on it picks up the nearest enclosing `drag_by_handle` widget. One that is not draggable leaves the handle doing nothing — it never reaches further out. |
 | `.drag_chip()` | Carry the small title chip under the pointer instead of a picture of the widget. |
 | `.drop_target()` | It takes drops, of anything. |
 | `.accepts(kinds)` | It takes these kinds, and has a real middle: before, **onto**, after. Takes an `Option`: `None` leaves it as it was. |
 | `.accepts_beside(kinds)` | It takes these kinds **beside** itself only — a sibling in an ordered list: two halves, no middle. Takes an `Option` too. |
+
+**Which widget a press picks up** is one rule, used by the gesture and by the grab cursor alike
+(`drag::source_at`): of the widgets from the root down to the pressed one, a source picked up by its
+key wins; otherwise the innermost that may start, where a handle-only source may start only through
+a handle of its own.
 
 A target refuses what it does not accept *before* anything is drawn on it, so a line never appears
 over something that would then do nothing. What is being carried is never a target for itself or
@@ -8433,6 +8437,16 @@ where it sits and carries a picture of itself under the pointer, as the browser 
 is (a terminal's surface included), in the top layer, at the theme's `drag_image_alpha`, shrunk by
 `drag_image_scale` toward the point that was grabbed. All colours derive from the theme's `accent`.
 A widget that draws its own feedback says so with `Component::paints_own_drag_feedback`.
+
+**Moving a dock (heca).** The seat heca puts round every dock is `draggable_as("dock")` with the
+window's move key (`settings.interactive_move_modifier`, the key that carries a pane) and
+`accepts_beside(["dock"])`; the space between two docks and an empty sidebar take a dock too. A drop
+becomes `chrome.container.reorder_before` / `reorder_after` (beside a dock, in any region — the host
+moves it there) or `chrome.container.move_to_region` (an empty sidebar): the same actions a key and
+RPC send. A dock that is not `movable` is not carried, but is still somewhere to land.
+
+**Seen working anywhere.** The showcase's *Drag anywhere* panel is a row of tabs and a column of
+items in one card — not a sidebar — with the same picture, line and swap frame.
 
 **For a host.** `heca_grid_ui::dragging(root)` says whether a drag is in flight (the cursor, hover
 suppression and anything that must not reach the program in a pane ask it). `drag::resolve_at` /

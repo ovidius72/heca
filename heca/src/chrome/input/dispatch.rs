@@ -172,6 +172,20 @@ fn drag_item_named(state: &crate::app_state::AppState, name: &str) -> Option<Chr
 pub(crate) fn drain_pending_drops(state: &mut crate::app_state::AppState) {
     let queued: Vec<_> = state.pending_drops.borrow_mut().drain(..).collect();
     for dropped in queued {
+        // **A dock** — carried by its seat — means a `chrome.container.*` action, the host's own.
+        if let Some(ChromeDragItem::Dock(dock)) = drag_item_named(state, &dropped.source) {
+            let target = drag_item_named(state, &dropped.target);
+            if let Some(action) =
+                crate::chrome::dock_drop_action(&dock, target, &dropped.target, dropped.side)
+            {
+                crate::mouse::dispatch_drop(
+                    state,
+                    crate::app::interaction::InteractionSource::MouseLeftSidebar,
+                    action,
+                );
+            }
+            continue;
+        }
         // **A place** — a gap for a new column, or a row of a column — is named by the workspace
         // that seats it, and a pane carried to it is put there.
         if let Some(action) = place_drop(

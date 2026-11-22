@@ -179,7 +179,9 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
         // A colour arrives as text and parses through `Color`'s own `FromStr` (`#rgb`, `#rrggbb`,
         // `#rrggbbaa`). A THEME TOKEN NAME never reaches here: the host resolves it to hex first,
         // where it has the theme — the library stays free of any notion of a token.
-        "Color" => quote!(
+        // A colour, or a builder that also takes an optional one: static data always brings a
+        // colour, which is the `Some` half.
+        "Color" | "implInto<Option<Color>>" => quote!(
             value
                 .as_text()
                 .and_then(|s| s.parse::<::heca_theme::Color>().ok())
