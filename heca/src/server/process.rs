@@ -100,9 +100,8 @@ impl ServerState {
             if let Some((cwd, grid)) = self.ended_harness(*pane) {
                 // **An agent heca resumed leaves your shell behind**, as quitting one typed at a
                 // prompt does — not an ended pane and a notice about it.
-                let mut terminals = self.terminals();
-                terminals.end([*pane]);
-                terminals.start_shell(*pane, cwd, grid, asker.cell);
+                self.terminals()
+                    .replace_with_shell(*pane, cwd, grid, asker.cell);
             } else if exit_should_close(session, *pane, *code) {
                 closing.push(*pane);
             } else if !closing.contains(pane) {
@@ -220,6 +219,7 @@ mod tests {
                 |_| Ok(Box::new(fake)),
             )
             .unwrap();
+        let before = server.backends.identity_of(PaneId(1));
         let asker = Asker::seen_through(window.l(), None, (10.0, 20.0));
         let (changes, exits) = server.reconcile_processes(&mut window.session, Vec::new(), asker);
         assert_eq!(exits.len(), 1);
@@ -238,6 +238,11 @@ mod tests {
             .backends
             .identity_of(PaneId(1))
             .expect("the pane has a terminal");
+        assert_eq!(
+            Some(id),
+            before,
+            "the same terminal: windows keep typing into the id they have"
+        );
         let spec = server.backends.spec_of(id).expect("its spec");
         assert_eq!(spec.program, Program::Shell, "your shell, in its place");
         assert_eq!(

@@ -154,6 +154,16 @@ impl BackendStore {
         Ok(Ensured::Spawned(id))
     }
 
+    /// **End `owner`'s process and keep its terminal id**, so the next [`ensure`](Self::ensure)
+    /// starts the new process *as the same terminal*: every window keeps sending its keys to, and
+    /// drawing, the id it already has. A process replaced under a new id left a window typing into
+    /// one that was gone.
+    pub(crate) fn end_process_keep_id(&mut self, owner: impl Into<TerminalOwner>) {
+        if let Some(id) = self.by_owner.get(&owner.into()).copied() {
+            self.processes.remove(&id);
+        }
+    }
+
     /// The id issued to `pane`'s terminal, whether or not a process runs behind it yet.
     pub(crate) fn identity_of(&self, pane: PaneId) -> Option<TerminalId> {
         self.by_owner.get(&TerminalOwner::Pane(pane)).copied()
