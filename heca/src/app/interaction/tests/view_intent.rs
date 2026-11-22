@@ -75,3 +75,36 @@ fn a_unit_builtin_still_resolves_by_name_with_no_args() {
         Some(WmAction::ReloadConfig)
     );
 }
+
+/// **Whatever door a named action is called through, it reads its arguments as declared** — here a
+/// palette call to a dock's action, which carries its value as text, and a plain view intent. An
+/// action the catalog does not know is left as it was.
+#[test]
+fn a_window_dispatch_hands_the_action_its_declared_types() {
+    use crate::chrome::PropValue;
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let to_dock = InteractionIntent::FocusContainerThenAction {
+        container: "workspaces".into(),
+        action: ViewIntent::new("scroll_to_offset").arg("rows", PropValue::Text("4".into())),
+    };
+    let InteractionIntent::FocusContainerThenAction { action, .. } =
+        super::super::dispatch::typed(&catalog, to_dock)
+    else {
+        panic!("the intent keeps its kind");
+    };
+    assert_eq!(action.args.get("rows"), Some(&PropValue::Int(4)));
+
+    let view = InteractionIntent::View(
+        ViewIntent::new("toggle_workspace_collapsed").arg("ws_idx", PropValue::Text("1".into())),
+    );
+    let InteractionIntent::View(action) = super::super::dispatch::typed(&catalog, view) else {
+        panic!("the intent keeps its kind");
+    };
+    assert_eq!(action.args.get("ws_idx"), Some(&PropValue::Int(1)));
+
+    let unknown = InteractionIntent::View(ViewIntent::new("no.such").arg("n", PropValue::Text("1".into())));
+    let InteractionIntent::View(action) = super::super::dispatch::typed(&catalog, unknown) else {
+        panic!("the intent keeps its kind");
+    };
+    assert_eq!(action.args.get("n"), Some(&PropValue::Text("1".into())));
+}

@@ -129,6 +129,33 @@ pub struct ActionMeta {
 }
 
 impl ActionMeta {
+    /// **The arguments as this action declared them.** A script line or a config binding carries
+    /// every value as text, code carries real numbers; this turns a text value into the number or
+    /// boolean the argument is declared as, so an action reads one type whoever called it.
+    ///
+    /// Only what parses is turned: a value that does not stays the text it was, so the action (and
+    /// `check_args`) still says what is wrong with it. An argument the action does not declare —
+    /// the seat a dock stamps, an extra one a plugin passes — is left exactly as it is. Running it
+    /// twice gives the same result.
+    pub fn typed_args(&self, args: heca_view::PropMap) -> heca_view::PropMap {
+        use crate::args::ArgKind;
+        use heca_view::PropValue;
+        args.into_iter()
+            .map(|(name, value)| {
+                let declared = self.args.iter().find(|spec| spec.name == name).map(|spec| spec.kind);
+                let typed = match (declared, &value) {
+                    (Some(ArgKind::Int), PropValue::Text(text)) => text.trim().parse().ok().map(PropValue::Int),
+                    (Some(ArgKind::Float), PropValue::Text(text)) => {
+                        text.trim().parse().ok().map(PropValue::Float)
+                    }
+                    (Some(ArgKind::Bool), PropValue::Text(text)) => text.trim().parse().ok().map(PropValue::Bool),
+                    _ => None,
+                };
+                (name, typed.unwrap_or(value))
+            })
+            .collect()
+    }
+
     /// An action called `name` — the id a key binding, a menu, RPC and `Intent.action` all use.
     ///
     /// Everything else has a default, so an author says only what is true of theirs: a label, an

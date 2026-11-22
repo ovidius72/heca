@@ -7967,7 +7967,10 @@ let handle = register_dynamic(
         }],
     },
     // The handler receives the Intent, so args arrive as DATA (never a closure across a plugin
-    // boundary). `&mut AppState` is the sanctioned write path: a provider may not mutate state
+    // boundary) — and **as the type declared**: an `ArgKind::Int` arrives as `PropValue::Int`,
+    // `Float` as `Float`, `Bool` as `Bool`, whether the call came from code, a script line, a
+    // config binding or the palette (`ActionMeta::typed_args`). Read one type; a value that does
+    // not parse arrives as the text it was, and undeclared arguments are left as they came. `&mut AppState` is the sanctioned write path: a provider may not mutate state
     // from its build/observe path, but running an action is exactly how it is meant to.
     Some(Rc::new(|state, intent| {
         let Some(PropValue::Text(container)) = intent.args.get("container") else {

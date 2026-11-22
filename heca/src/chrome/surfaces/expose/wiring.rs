@@ -263,9 +263,9 @@ pub(crate) fn register_cursor_action(
             confirm: None,
         },
         Some(std::rc::Rc::new(|state, intent| {
+            // Declared `Int`, so it arrives as one from every door (`ActionMeta::typed_args`).
             let pane = match intent.args.get("pane_id") {
                 Some(heca_view::PropValue::Int(id)) => u64::try_from(*id).ok(),
-                Some(heca_view::PropValue::Text(id)) => id.parse().ok(),
                 _ => None,
             };
             if let Some(pane) = pane {

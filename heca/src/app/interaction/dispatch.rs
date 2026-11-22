@@ -66,6 +66,10 @@ pub(crate) fn dispatch_intent(
     source: InteractionSource,
     intent: InteractionIntent,
 ) -> crate::actions::ActionResult {
+    // **Every named action reads its arguments as it declared them**, whatever door the call came
+    // through — a config binding and the palette carry text, code carries numbers. Once, here,
+    // where every window dispatch passes, so no door can forget it.
+    let intent = typed(&state.action_catalog, intent);
     // Overlay control (§2.7.2): `SubmitOverlay`/`CloseOverlay` are resolved here — not via the
     // `ActionRegistry` — because resolving an overlay runs its completion, which needs the
     // registry to dispatch a follow-up action (a handler gets no registry). Intercepted before
@@ -229,5 +233,24 @@ pub(crate) fn dispatch_action_ref(
             source,
             InteractionIntent::View(intent.clone()),
         ),
+    }
+}
+
+/// `intent` with its named action's arguments turned into the types the action declared
+/// ([`ActionMeta::typed_args`](crate::actions::ActionMeta::typed_args)). Only the two kinds that
+/// carry a named action change; an action the catalog does not know is left as it is.
+pub(super) fn typed(catalog: &crate::actions::ActionCatalog, intent: InteractionIntent) -> InteractionIntent {
+    let typed_view = |mut action: crate::chrome::Intent| {
+        if let Some(meta) = catalog.find(&action.action) {
+            action.args = meta.typed_args(std::mem::take(&mut action.args));
+        }
+        action
+    };
+    match intent {
+        InteractionIntent::View(action) => InteractionIntent::View(typed_view(action)),
+        InteractionIntent::FocusContainerThenAction { container, action } => {
+            InteractionIntent::FocusContainerThenAction { container, action: typed_view(action) }
+        }
+        other => other,
     }
 }

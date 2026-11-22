@@ -221,12 +221,14 @@ impl RpcCall {
             });
         }
         let names = meta.args.iter().map(|a| a.name.clone());
-        let intent = crate::chrome::Intent::new(&self.action).args(
+        let mut intent = crate::chrome::Intent::new(&self.action).args(
             names
                 .zip(self.positional)
                 .chain(self.named)
                 .map(|(key, value)| (key, crate::chrome::PropValue::Text(value))),
         );
+        // A script writes every value as text; the action reads it as the type it declared.
+        intent.args = meta.typed_args(intent.args);
         Ok((intent, self.dock))
     }
 }
@@ -237,16 +239,29 @@ mod tests {
     use crate::actions::ActionCatalog;
     use crate::chrome::PropValue;
 
+    /// A script writes numbers as text; the action gets the number it declared.
+    #[test]
+    fn a_scripts_number_arrives_as_a_number() {
+        let (intent, _) = intent_of("scroll_to_offset 5").unwrap();
+        assert_eq!(intent.args.get("rows"), Some(&PropValue::Int(5)));
+        let (intent, _) = intent_of("toggle_workspace_collapsed ws_idx=2").unwrap();
+        assert_eq!(intent.args.get("ws_idx"), Some(&PropValue::Int(2)));
+    }
+
     fn intent_of(line: &str) -> Result<(crate::chrome::Intent, Option<String>), RpcError> {
         parse_rpc(line)?.into_intent(&ActionCatalog::with_builtins())
     }
 
+    /// The value given for `key`, written out — a number arrives as one (`typed_args`), a word as
+    /// text.
     fn arg(intent: &crate::chrome::Intent, key: &str) -> Option<String> {
-        intent
-            .args
-            .get(key)
-            .and_then(PropValue::as_text)
-            .map(str::to_string)
+        intent.args.get(key).map(|value| match value {
+            PropValue::Int(n) => n.to_string(),
+            PropValue::Float(n) => n.to_string(),
+            PropValue::Bool(b) => b.to_string(),
+            PropValue::Text(text) => text.clone(),
+            other => format!("{other:?}"),
+        })
     }
 
     #[test]
