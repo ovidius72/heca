@@ -97,11 +97,25 @@ fn receive(
 /// answer is near the end, and a log can be very long.
 const TRANSCRIPT_TAIL: u64 = 256 * 1024;
 
-/// **The model of the last answer in the conversation log at `path`** — `message.model` of the last
-/// `assistant` line. A harness whose hooks name the model only at start (Claude Code) still writes
-/// it on every answer, so a model changed mid-session (`/model`) shows at the next event. Read in the
-/// hook's own process, never on heca's loop.
-fn last_model(path: &std::path::Path) -> Option<String> {
+/// How long an end-of-turn hook waits for the turn's answer to reach the conversation log, and how
+/// often it looks again: the harness writes the answer at about the moment it runs the hook.
+const ANSWER_WAIT: std::time::Duration = std::time::Duration::from_millis(500);
+const ANSWER_POLL: std::time::Duration = std::time::Duration::from_millis(25);
+
+/// What the end of a conversation log says about the model.
+struct LogTail {
+    /// `message.model` of the last answer.
+    model: Option<String>,
+    /// Whether a prompt the user typed comes after that answer — its answer is not written yet.
+    awaiting_answer: bool,
+}
+
+/// **The end of the conversation log at `path`**: the model of the last answer (`message.model` of
+/// the last `assistant` line), and whether a typed prompt follows it. A harness whose hooks name the
+/// model only at start (Claude Code) still writes it on every answer, so a model changed
+/// mid-session (`/model`) shows at the next event. Read in the hook's own process, never on heca's
+/// loop.
+fn log_tail(path: &std::path::Path) -> Option<LogTail> {
     use std::io::{Seek, SeekFrom};
     let mut file = std::fs::File::open(path).ok()?;
     let length = file.metadata().ok()?.len();
@@ -109,18 +123,51 @@ fn last_model(path: &std::path::Path) -> Option<String> {
         .ok()?;
     let mut tail = String::new();
     file.take(TRANSCRIPT_TAIL).read_to_string(&mut tail).ok()?;
-    tail.lines().rev().find_map(|line| {
-        let entry: Value = serde_json::from_str(line).ok()?;
-        (entry.get("type")? == "assistant")
-            .then(|| {
-                entry
-                    .get("message")?
-                    .get("model")?
-                    .as_str()
-                    .map(str::to_owned)
-            })
-            .flatten()
-    })
+    let mut awaiting_answer = false;
+    for line in tail.lines().rev() {
+        let Ok(entry) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        match entry.get("type").and_then(Value::as_str) {
+            Some("assistant") => {
+                let model = entry
+                    .get("message")
+                    .and_then(|message| message.get("model"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                return Some(LogTail {
+                    model,
+                    awaiting_answer,
+                });
+            }
+            // A typed prompt: plain text, not a tool's result or a command's echo (`<...>`).
+            Some("user") => {
+                let typed = entry
+                    .get("message")
+                    .and_then(|message| message.get("content"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|text| !text.starts_with('<'));
+                awaiting_answer |= typed;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// **The model of the last answer in the log at `path`.** At the end of a turn (`turn_ended`) the
+/// harness may run the hook a moment before it writes the turn's answer, so while a typed prompt
+/// still follows the last answer it looks again, for at most [`ANSWER_WAIT`] — never otherwise, so
+/// no other hook is slowed.
+fn last_model(path: &std::path::Path, turn_ended: bool) -> Option<String> {
+    let deadline = std::time::Instant::now() + ANSWER_WAIT;
+    loop {
+        let tail = log_tail(path)?;
+        if !(turn_ended && tail.awaiting_answer) || std::time::Instant::now() >= deadline {
+            return tail.model;
+        }
+        std::thread::sleep(ANSWER_POLL);
+    }
 }
 
 fn forward(
@@ -130,11 +177,21 @@ fn forward(
 ) -> io::Result<()> {
     // The model the harness is answering with now, from its own conversation log, when the hook
     // does not name it.
+    // A hook about a model switch names the new one (`to_model`, Claude Code's PostModelSwitch).
+    if let Some(model) = native
+        .get("to_model")
+        .filter(|model| model.is_string())
+        .cloned()
+    {
+        native.insert("model".into(), model);
+    }
+    // A hook that ends a turn says so (`stop_hook_active`, Claude Code's Stop and SubagentStop).
+    let turn_ended = native.contains_key("stop_hook_active");
     if !native.get("model").is_some_and(Value::is_string)
         && let Some(model) = native
             .get("transcript_path")
             .and_then(Value::as_str)
-            .and_then(|path| last_model(std::path::Path::new(path)))
+            .and_then(|path| last_model(std::path::Path::new(path), turn_ended))
     {
         native.insert("model".into(), Value::String(model));
     }

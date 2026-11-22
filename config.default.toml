@@ -368,6 +368,8 @@ PostCompact = "working"
 SubagentStart = "subagent_running"
 SubagentStop = "working"
 Stop = "finished"
+# `/model`: the model it answers with from now on (`to_model`), shown at once. Typed at the prompt.
+PostModelSwitch = "waiting_input"
 
 [settings.agents.programs.codex]
 enabled = false

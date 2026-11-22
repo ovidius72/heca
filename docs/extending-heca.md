@@ -289,7 +289,9 @@ with `icon = "/path/to/logo.svg"` under that program's configuration; this works
 driver. The row shows the program's icon and the model it answers with, or its configured name when
 it reports none. A driver keeps the model current by naming it on its events; for a hook that does
 not, heca reads it from the conversation log the hook names (`transcript_path`, the model of the last
-answer), so Claude Code's model follows `/model` at the next event. Under it, the reported session title, as `[appearance.sidebar] agent_session_line` says
+answer — at the end of a turn it waits a moment for that answer to be written), and a model-switch
+hook names the new one (`to_model`, Claude Code's `PostModelSwitch`, installed with the integration),
+so Claude Code's row follows `/model` at once. Under it, the reported session title, as `[appearance.sidebar] agent_session_line` says
 (by default only a title the program reported that is not the pane's name already). It never
 invents a title. Omitted model/title metadata is retained
 only when the driver and an explicit, nonempty session identity match; a different session clears

@@ -229,3 +229,68 @@ fn a_hook_without_the_model_reads_the_last_answers_model_from_the_log() {
         "{text}"
     );
 }
+
+/// **A model switch names the new model** (`to_model`, Claude Code's `PostModelSwitch`), which the
+/// row shows at once.
+#[test]
+fn a_model_switch_reports_the_new_model() {
+    let root = tempfile::tempdir().unwrap();
+    let mut reports = reports(root.path());
+    reports.events.insert(
+        "PostModelSwitch".into(),
+        AgentState::new("example", "Example", AgentStatus::new("waiting_input")),
+    );
+    let native = json!({"session_id":"s", "from_model":"model-old", "to_model":"model-new"});
+    receive(
+        Cursor::new(native.to_string()),
+        "example",
+        "PostModelSwitch",
+        &reports,
+        &root.path().join("sessions"),
+    )
+    .unwrap();
+    let bytes = fs::read(reports.endpoint.as_ref().unwrap()).unwrap();
+    let report: AgentState = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(report.model.as_deref(), Some("model-new"));
+}
+
+/// **At the end of a turn the answer may reach the log a moment after the hook runs**: while a typed
+/// prompt follows the last answer, the end-of-turn hook looks again and reports the new answer's
+/// model; any other hook does not wait.
+#[test]
+fn the_end_of_a_turn_waits_for_its_answer_to_reach_the_log() {
+    use std::io::Write as _;
+    let root = tempfile::tempdir().unwrap();
+    let log = root.path().join("transcript.jsonl");
+    fs::write(
+        &log,
+        format!(
+            "{}\n{}\n",
+            json!({"type":"assistant","message":{"model":"model-old"}}),
+            json!({"type":"user","message":{"content":"ciao"}}),
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        last_model(&log, false).as_deref(),
+        Some("model-old"),
+        "no wait outside a turn's end"
+    );
+    let late = log.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut file = fs::OpenOptions::new().append(true).open(late).unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({"type":"assistant","message":{"model":"model-new"}})
+        )
+        .unwrap();
+    });
+    assert_eq!(
+        last_model(&log, true).as_deref(),
+        Some("model-new"),
+        "the turn's own answer"
+    );
+    writer.join().unwrap();
+}
