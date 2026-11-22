@@ -315,23 +315,13 @@ pub(super) struct ChromeFrame<'a> {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sidebar_toggle_button(
     glyph: Glyph,
-    action: crate::input::WmAction,
     action_name: &str,
     shortcuts: &ActionShortcuts,
     catalog: &crate::actions::ActionCatalog,
-    emit: ChromeIntentEmitter,
     color: Color,
 ) -> IconButton {
-    use crate::app::interaction::InteractionIntent;
     // Label from the action descriptor (catalog-owned), never re-spelled here.
     let label = catalog.label(action_name).unwrap_or(action_name);
-    // One gesture: a click and a `prefix+/` pick both fire the button's action.
-    let fire = {
-        let emit = emit.clone();
-        let action = action.clone();
-        move || emit.fire(InteractionIntent::ActivateAction(action.clone()))
-    };
-    let hint = fire.clone();
     // Just pick the size variant — the widget derives icon px + padding from the
     // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
     // `IconButton` scales its padding). No caller-side size math.
@@ -345,11 +335,9 @@ pub(super) fn sidebar_toggle_button(
     let button = IconButton::new(Icon::new(glyph).color(color))
         .key(action_name)
         .size(WidgetSize::Small)
-        .on_click(move |_| fire())
-        // Declares its own pick — `on_hint` is on `HintExt`, so every widget has it. A
-        // `KeyHint` wrapper here used to be a second pick target on top of the button's own
-        // actionability (AGENTS § 5a).
-        .on_hint(hint);
+        // One gesture, named: a click and a `prefix+/` pick both run the action, and the chrome
+        // root's listener sends it as a gesture in the chrome — the button carries no emitter.
+        .on_press(crate::chrome::Intent::new(action_name));
     action_tooltip(button, action_name, label, shortcuts)
 }
 
@@ -637,11 +625,9 @@ pub(crate) fn build_chrome_root(
         };
         sidebar_toggle_button(
             glyph,
-            crate::input::WmAction::SidebarLeft,
             "sidebar_left",
             &state.action_shortcuts,
             &state.action_catalog,
-            emit_intent.clone(),
             theme.colors.muted,
         )
     });
@@ -653,11 +639,9 @@ pub(crate) fn build_chrome_root(
         };
         sidebar_toggle_button(
             glyph,
-            crate::input::WmAction::SidebarRight,
             "sidebar_right",
             &state.action_shortcuts,
             &state.action_catalog,
-            emit_intent.clone(),
             theme.colors.muted,
         )
     });
@@ -688,6 +672,13 @@ pub(crate) fn build_chrome_root(
     // never keyed loses its cursor position and its hint letters on the next rebuild, and nothing
     // fails when it does. Said once per distinct finding, in debug builds only.
     crate::chrome::input::identity::report_ambiguous_widgets("chrome", &root);
+    // **What a widget in the chrome names goes out as a chrome gesture** — through this tree's own
+    // emitter, the source `pick_source` reads for the chrome. A dock seated inside listens for
+    // itself (nearer wins) and adds its seat.
+    let root = {
+        let emit = emit_intent.clone();
+        root.on_dispatch(move |intent| emit.fire_intent(intent))
+    };
     let source = emit_intent.source();
     (root, signals, drag_items, source)
 }
