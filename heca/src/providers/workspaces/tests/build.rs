@@ -76,8 +76,7 @@ fn build_produces_the_real_workspace_tree_and_registers_host_ids() {
     // has none: it declares nothing and does nothing on its own, only carrying a pick-letter
     // signal stamped when it is a *destination* for a move/swap.
     assert_eq!(heca_grid_ui::collect_hints(body.as_ref()).len(), 3);
-    // The active pane's card bound its `active` signal for per-frame updates.
-    assert_eq!(signals.pane_active.len(), 1);
+    // The pane card follows focus from the store itself, so it hands the host no signal.
 }
 
 /// **Every letter the picker offers can be found again after a rebuild**.
