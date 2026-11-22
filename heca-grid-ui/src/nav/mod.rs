@@ -41,7 +41,7 @@ mod identity;
 
 pub use ambiguity::{Ambiguity, ambiguous_identities};
 pub use collect::{collect_keys, key_at};
-pub use identity::{child_name, identity_of, node_with_key, node_with_key_mut};
+pub use identity::{child_name, identity_of, node_with_key, node_with_key_mut, path_with_key};
 
 /// Should this subtree be enumerated? Hidden widgets have stale bounds and never receive input, so
 /// they're skipped — the same rule paint, event routing, drag and hint resolution use.

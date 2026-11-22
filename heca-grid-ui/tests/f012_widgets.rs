@@ -127,7 +127,7 @@ fn nested_trees_share_space_and_leave_controls_in_the_dispatch_tree() {
         .branch(Label::new("one"))
         .branch(
             TreeLayout::new(Label::new("two"))
-                .branch(Button::new("leaf").on_click(move || clicked.set(true))),
+                .branch(Button::new("leaf").on_click(move |_| clicked.set(true))),
         )
         .width(500.0);
     layout(&mut tree, &Theme::default());

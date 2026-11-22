@@ -89,6 +89,13 @@ pub(crate) struct LayerRegistry {
     /// **The visible layers the pointer was last checked against**, so a change can be noticed —
     /// see [`visible_set_changed`](Self::visible_set_changed).
     pointer_seen: Vec<u64>,
+    /// Where an action a surface's widget dispatches goes — set once at startup
+    /// ([`connect`](Self::connect)); `None` in a headless test, where nothing listens.
+    emitter: Option<
+        std::rc::Rc<
+            dyn Fn(crate::app::interaction::SurfaceKey) -> crate::chrome::ChromeIntentEmitter,
+        >,
+    >,
 }
 
 impl LayerRegistry {
@@ -103,8 +110,53 @@ impl LayerRegistry {
     ) -> LayerId {
         let id = self.reserve_id();
         self.push_layer(id, parent, kind, None);
-        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
+        self.seat(window, id, root);
         id
+    }
+
+    /// Say where the actions a surface's widgets dispatch go. Called once, at startup.
+    pub(crate) fn connect(
+        &mut self,
+        events: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    ) {
+        self.emit_through(move |surface| crate::chrome::layer_emitter(&events, surface));
+    }
+
+    /// The emitter each seated surface's actions go out through, made from its surface key.
+    /// [`connect`](Self::connect) is the app's; a test hands one that records.
+    pub(crate) fn emit_through(
+        &mut self,
+        emitter: impl Fn(crate::app::interaction::SurfaceKey) -> crate::chrome::ChromeIntentEmitter
+        + 'static,
+    ) {
+        self.emitter = Some(std::rc::Rc::new(emitter));
+    }
+
+    /// **Seat a layer's tree in the window** — the one way a registered layer reaches the screen.
+    ///
+    /// It takes the name the surface declared on itself (when the layer has none yet), and it
+    /// **listens to what its widgets dispatch** (`on_dispatch`): an `ev.dispatch` or `.on_press`
+    /// inside goes out as this surface's gesture — the same source the picker reads for it
+    /// (`pick_source`), so showing a letter and acting on it cannot disagree. No surface author
+    /// carries an emitter for that.
+    fn seat(
+        &mut self,
+        window: &mut heca_grid_ui::widgets::Flex,
+        id: LayerId,
+        root: heca_grid_ui::WidgetModel,
+    ) {
+        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
+        self.name_from_surface(window, id);
+        let Some(emitter) = &self.emitter else {
+            return;
+        };
+        let emit = emitter(self.surface_key(id));
+        if let Some(node) = crate::chrome::surface_node_mut(window, id) {
+            // Written on the seat the host put round the tree, beside `surface_slot` — a boxed tree
+            // has no builder left to call.
+            node.base_mut().dispatch_handler =
+                Some(std::rc::Rc::new(move |intent| emit.fire_intent(intent)));
+        }
     }
 
     /// The one place a `DynamicLayer` is constructed. Every registration path — anonymous, named,
@@ -166,7 +218,7 @@ impl LayerRegistry {
             }
             None => {
                 self.push_layer(id, parent, kind, None);
-                crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), realized);
+                self.seat(window, id, realized);
             }
         }
         // **The description is kept whichever way it was registered** — it is what a theme reload
@@ -230,31 +282,34 @@ impl LayerRegistry {
             self.layers.remove(at);
         }
         self.push_layer(id, parent, kind, None);
-        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
+        // Named before it is seated, so what its widgets dispatch is addressed by this name.
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.name = Some(name);
-            if let Some((visible, doomed, presence)) = carried {
-                l.visible = visible;
-                l.doomed = doomed;
-                // **The gesture carries on across a rebuild.** The replacement is a fresh tree,
-                // which starts closed and at rest — so without this a rebuild looked like a first
-                // appearance and played the arrival again: `prefix+j` behind the exposé changed
-                // the focus, the map rebuilt, and it zoomed open on every keystroke. Handing over
-                // the whole `Presence` carries the animation *in flight* as well as the fact that
-                // it is open, so a rebuild mid-arrival continues rather than restarting or
-                // snapping.
-                if let (Some(carried), Some(fresh)) = (
-                    presence,
-                    crate::chrome::surface_node_mut(window, id).and_then(|n| n.presence_mut()),
-                ) {
-                    *fresh = carried;
-                }
-                if visible {
-                    // The same call the stack makes to raise it, and it replays nothing: the
-                    // carried presence already says the surface is up, or that it is leaving.
-                    if let Some(node) = crate::chrome::surface_node_mut(window, id) {
-                        node.show();
-                    }
+        }
+        self.seat(window, id, root);
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id)
+            && let Some((visible, doomed, presence)) = carried
+        {
+            l.visible = visible;
+            l.doomed = doomed;
+            // **The gesture carries on across a rebuild.** The replacement is a fresh tree,
+            // which starts closed and at rest — so without this a rebuild looked like a first
+            // appearance and played the arrival again: `prefix+j` behind the exposé changed
+            // the focus, the map rebuilt, and it zoomed open on every keystroke. Handing over
+            // the whole `Presence` carries the animation *in flight* as well as the fact that
+            // it is open, so a rebuild mid-arrival continues rather than restarting or
+            // snapping.
+            if let (Some(carried), Some(fresh)) = (
+                presence,
+                crate::chrome::surface_node_mut(window, id).and_then(|n| n.presence_mut()),
+            ) {
+                *fresh = carried;
+            }
+            if visible {
+                // The same call the stack makes to raise it, and it replays nothing: the
+                // carried presence already says the surface is up, or that it is leaving.
+                if let Some(node) = crate::chrome::surface_node_mut(window, id) {
+                    node.show();
                 }
             }
         }
@@ -556,16 +611,15 @@ impl LayerRegistry {
             name: None,
             node: None,
         });
-        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
         // **A surface that named itself is addressable by that name**, read off the node it was
-        // just placed in — the same way `lock` and `captures_keyboard` are, and for the same
-        // reason: a name passed here as well would be a second answer that can disagree.
+        // just placed in (`seat`) — the same way `lock` and `captures_keyboard` are, and for the
+        // same reason: a name passed here as well would be a second answer that can disagree.
         //
         // This is what made `show_layer` reach only surfaces the host had registered by hand under
         // a name typed in a second place. A `Dialog::new("..").key("confirm.close")` declared a
         // name that nothing read, so the third of the three doors — point at it — was never
         // connected to anything.
-        self.name_from_surface(window, id);
+        self.seat(window, id, root);
         // **The surface says whether it takes the keyboard**, so this reads the tree it was just
         // placed in rather than being told a second time.
         if captures_keyboard(window, id) {

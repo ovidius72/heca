@@ -1,5 +1,6 @@
 //! Built-in registration definitions: one factory/metadata entry per supported widget.
 
+use heca_grid_ui::builders::EventExt;
 use heca_grid_ui::builders::IdentityExt;
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
 use heca_grid_ui::{

@@ -151,7 +151,6 @@ pub struct Button {
     progress: f32,
     /// Press flash effect (brightens on press, fades out).
     flash: Flash,
-    on_click: Option<std::rc::Rc<dyn Fn()>>,
     /// **Held on** — a toggled *status*, not a transient hover. See [`active`](Self::active).
     active: bool,
     /// Showing only its icon. See [`icon_only`](Self::icon_only).

@@ -85,6 +85,15 @@ impl<T: Into<Hint>> IntoHint for Option<T> {
     }
 }
 
+/// A named action is a hint that says what it is and posts it — through the route of the
+/// container it sits in, like any other dispatch.
+impl From<heca_view::Intent> for Hint {
+    fn from(intent: heca_view::Intent) -> Self {
+        let run = intent.clone();
+        Self::of(intent, move || crate::intent::dispatch(run.clone()))
+    }
+}
+
 /// A bare closure is a hint with nothing to say about itself — what every native call site wrote
 /// before there was anything to ask, and what one still writes when the act has no name.
 impl<F: Fn() + 'static> From<F> for Hint {

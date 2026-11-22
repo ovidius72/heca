@@ -18,6 +18,7 @@ use crate::component::Component;
 ///
 /// It takes `&mut` because handlers are `FnMut`, so delivering anything needs the tree mutably.
 pub fn fire_hint(root: &mut dyn Component, path: &[usize]) -> bool {
+    crate::component::new_click();
     let mut node: &dyn Component = root;
     for step in path {
         match node.base().children.get(*step) {

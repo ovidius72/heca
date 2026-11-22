@@ -372,5 +372,5 @@ impl FocusManager {
 /// Deliver a focus/blur event to one widget: its handlers, then the widget itself.
 fn fire(c: &mut dyn Component, ev: &Event) {
     let _ = c.base_mut().run_handlers(ev);
-    let _ = c.on_event(ev);
+    let _ = crate::component::own_event(c, ev);
 }

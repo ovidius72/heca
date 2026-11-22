@@ -36,7 +36,7 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{LayoutExt, Parent, PlaceExt, StyleExt};
+use crate::builders::{EventExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -242,7 +242,7 @@ impl DockFrame {
             (Some(content), _) => (
                 crate::WidgetModel::new(
                     crate::widgets::Row::new()
-                        .on_activate(fold)
+                        .on_click(move |_| fold())
                         .gap(LEADING_GAP)
                         .padding_y(crate::widgets::item::ROW_PAD_Y)
                         .child(leading_part)
@@ -260,7 +260,7 @@ impl DockFrame {
                     crate::WidgetModel::new(
                         Item::new(self.title.clone())
                             .leading(leading.child(chevron()).child(leading_part))
-                            .on_activate(fold),
+                            .on_click(move |_| fold()),
                     ),
                     crate::widgets::HintPlacement::TopLeft,
                 )
@@ -268,7 +268,7 @@ impl DockFrame {
             (None, DockFrameVariant::Section) => {
                 let item = Item::new(self.title.clone())
                     .trailing(chevron())
-                    .on_activate(fold);
+                    .on_click(move |_| fold());
                 let item = match leading_part {
                     Some(part) => item.leading(part),
                     None => item,

@@ -161,7 +161,7 @@ pub fn picks(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> heca_gr
 /// Stamp the seating onto an intent — **which element this is**, so the same container seated twice
 /// has two rows that each answer for themselves. One definition, so a click and a pick of the same
 /// row cannot be addressed differently.
-fn seated(mount: &str, intent: Intent) -> Intent {
+pub(crate) fn seated(mount: &str, intent: Intent) -> Intent {
     intent.arg(
         crate::providers::SEAT_ARG,
         heca_view::PropValue::Text(mount.to_string()),

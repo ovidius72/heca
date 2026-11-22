@@ -33,7 +33,6 @@ impl Button {
             show_border: true,
             progress: 0.0,
             flash: Flash::new(),
-            on_click: None,
             active: false,
             icon_only: false,
             dangerous: false,
@@ -63,16 +62,6 @@ impl Button {
             .children
             .insert(0, crate::WidgetModel::new(Icon::new(glyph)));
         self
-    }
-
-    /// **The button's own click, shareable.**
-    ///
-    /// A container that has to present this button as something else — a
-    /// [`ButtonGroup`](crate::widgets::ButtonGroup) turning it into a menu row when there is no room for it —
-    /// runs *this*, so the two are not two paths over one action. It is a shared handle rather than
-    /// an owned box for exactly that reason.
-    pub fn click_handler(&self) -> Option<std::rc::Rc<dyn Fn()>> {
-        self.on_click.clone()
     }
 
     /// **What this button's icon is**, or `None` when it has only words.
@@ -194,14 +183,6 @@ impl Button {
     #[heca_grid_ui_macros::prop]
     pub fn bordered(mut self, enabled: bool) -> Self {
         self.show_border = enabled;
-        self
-    }
-
-    /// Set the click callback.
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_click = Some(std::rc::Rc::new(f));
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self
     }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::builders::EventExt;
 use crate::component::{Component, Event, Handled, dispatch};
 use crate::event::WidgetIntent;
 use crate::reactive::SignalUpdate;
@@ -18,7 +19,7 @@ use std::rc::Rc;
 fn a_focused_button_answers_the_activate_key() {
     let fired = Rc::new(Cell::new(0));
     let count = fired.clone();
-    let mut b = Button::new("Cancel").on_click(move || count.set(count.get() + 1));
+    let mut b = Button::new("Cancel").on_click(move |_| count.set(count.get() + 1));
     b.base().focus(false);
 
     assert_eq!(
@@ -33,7 +34,7 @@ fn a_focused_button_answers_the_activate_key() {
 fn a_disabled_button_ignores_the_activate_key() {
     let fired = Rc::new(Cell::new(0));
     let count = fired.clone();
-    let mut b = Button::new("Cancel").on_click(move || count.set(count.get() + 1));
+    let mut b = Button::new("Cancel").on_click(move |_| count.set(count.get() + 1));
     b.base().focus(false);
     b.base_mut().disabled.set(true);
 

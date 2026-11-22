@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
     let click = |label: &str| {
         let name = label.to_string();
-        move || println!("[showcase] {name} clicked")
+        move |_: &mut heca_grid_ui::event::EventCx<'_>| println!("[showcase] {name} clicked")
     };
     Flex::row()
         .gap(14.0)

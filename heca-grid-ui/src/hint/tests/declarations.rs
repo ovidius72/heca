@@ -1,4 +1,4 @@
-use crate::builders::HintExt as _;
+use crate::builders::{EventExt as _, HintExt as _};
 use crate::component::Component;
 use crate::hint::*;
 use crate::reactive::SignalUpdate;
@@ -341,7 +341,7 @@ fn a_button_inside_a_declaring_container_still_gets_its_own_letter() {
     // …and it holds two things of its own, one of which is an ordinary button.
     let mut label = Surface::new();
     label.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 40.0));
-    let mut button = Button::new("Close").on_click(|| {});
+    let mut button = Button::new("Close").on_click(|_| {});
     button.base_mut().bounds = Rectangle::new(Point::new(0.0, 50.0), Size::new(40.0, 40.0));
     region
         .base_mut()
@@ -375,7 +375,7 @@ fn a_wrapper_and_the_one_thing_it_holds_share_a_letter() {
 
     let log = Rc::new(RefCell::new(Vec::new()));
     let seen = log.clone();
-    let mut card = Button::new("Card").on_click(|| {});
+    let mut card = Button::new("Card").on_click(|_| {});
     card.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(80.0, 40.0));
     let mut wrapper = KeyHint::new(card).on_hint(move || seen.borrow_mut().push("wrapper"));
     wrapper.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(80.0, 40.0));

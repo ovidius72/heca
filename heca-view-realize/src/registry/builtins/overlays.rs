@@ -105,11 +105,11 @@ pub(super) fn toast(
             && let Some(carrier) = intent_carrier(node, ViewEvent::Action)
         {
             let emit = emit.clone();
-            toast = toast.action(Button::new(label).on_click(move || emit(carrier.clone())));
+            toast = toast.action(Button::new(label).on_click(move |_| emit(carrier.clone())));
         }
         if let Some(carrier) = intent_carrier(node, ViewEvent::Press) {
             let emit = emit.clone();
-            toast = toast.on_click(move || emit(carrier.clone()));
+            toast = toast.on_click(move |_| emit(carrier.clone()));
         }
         if let Some(carrier) = intent_carrier(node, ViewEvent::Dismiss) {
             let emit = emit.clone();

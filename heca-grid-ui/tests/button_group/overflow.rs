@@ -285,3 +285,69 @@ fn a_button_the_room_brings_back_paints_nothing_until_it_has_a_box() {
         "a widget with no box yet drew in the window corner: {corner:?}"
     );
 }
+
+/// **A collapsed button's menu row presses the button itself** — the same click the mouse and
+/// Enter deliver, so a button that did not fit does exactly what it does on screen.
+#[test]
+fn a_menu_row_presses_the_collapsed_button() {
+    use heca_grid_ui::reactive::SignalGet;
+    use std::cell::{Cell, RefCell};
+    use std::rc::Rc;
+
+    let closed = Rc::new(Cell::new(0));
+    let count = closed.clone();
+    let g = ButtonGroup::new()
+        .size(WidgetSize::Small)
+        .child(Button::new("Split").icon(Glyph::Plus))
+        .child(Button::new("Zoom").icon(Glyph::FrameCorners))
+        .child(
+            Button::new("Close")
+                .icon(Glyph::Minus)
+                .on_click(move |_| count.set(count.get() + 1)),
+        );
+    let mut parent = lay(g, 40.0);
+
+    // The ⋮ is found by what it says, never by where it sits.
+    fn path_to_tip(node: &dyn Component, words: &str, at: &mut Vec<usize>) -> bool {
+        if node
+            .base()
+            .tooltip
+            .as_ref()
+            .is_some_and(|t| t.text.get_untracked() == words)
+        {
+            return true;
+        }
+        for (i, child) in node.base().children.iter().enumerate() {
+            at.push(i);
+            if path_to_tip(child.as_ref(), words, at) {
+                return true;
+            }
+            at.pop();
+        }
+        false
+    }
+    let mut trigger = Vec::new();
+    assert!(
+        path_to_tip(&parent, "More actions", &mut trigger),
+        "the ⋮ is shown"
+    );
+
+    let opened: Rc<RefCell<Option<heca_grid_ui::widgets::ContextMenu>>> = Rc::default();
+    let sink = opened.clone();
+    heca_grid_ui::install_menu_sink(move |menu, _, _| *sink.borrow_mut() = Some(menu));
+    let _ = heca_grid_ui::click(&mut parent, &trigger);
+    let menu = opened.borrow_mut().take().expect("the ⋮ opened its menu");
+    let items = menu.menu().clone().into_items();
+    let close = items
+        .iter()
+        .position(|item| item.label_text() == Some("Close"))
+        .expect("Close did not fit, so it is in the menu");
+    items[close].activate();
+    assert_eq!(
+        closed.get(),
+        0,
+        "the row only says which; the group presses it on its frame"
+    );
+    parent.tick(0.0);
+    assert_eq!(closed.get(), 1, "the collapsed button's own click ran");
+}

@@ -11,7 +11,7 @@ use std::rc::{Rc, Weak};
 use super::input::Seams;
 use heca_config::appearance::ScrollbarVisibility;
 use heca_config::theme::ModifierKey;
-use heca_grid_ui::builders::LayoutExt;
+use heca_grid_ui::builders::{EventExt, LayoutExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::Length;
 use heca_grid_ui::widgets::{BadgeButton, ScrollBar};
@@ -123,7 +123,7 @@ impl Controls {
     /// container's own top-right corner — a layout, not a measurement.
     pub(super) fn build(intents: &IntentSlot) -> (Self, [heca_grid_ui::WidgetModel; 2]) {
         let to_bottom = intents.clone();
-        let mut badge = BadgeButton::accent("0 lines above").on_click(move || {
+        let mut badge = BadgeButton::accent("0 lines above").on_click(move |_| {
             if let Some(i) = to_bottom.borrow().as_ref() {
                 (i.scroll.to_bottom)();
             }

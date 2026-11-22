@@ -1069,8 +1069,13 @@ itself. One line, no id, no registry, **no wrapper**:
 ```rust
 let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
 let hint = crate::chrome::fires(row_hint(pane_key(pane_id)), emit); // the pick
-Row::new().on_activate(fire).on_hint(hint)
+Row::new().on_click(move |_| fire()).on_hint(hint)
 ```
+
+Inside a seated dock it is shorter still: name the action, and heca addresses it to the dock
+(`EventExt::on_dispatch` on the wrapper round every dock) —
+`Row::new().on_press(pane_row_press(pane_id)).on_hint(row_hint(pane_key(pane_id)))`. The
+`Intent` goes out exactly as `fires` / `picks` would send it; a plugin writes the same line.
 
 ⛔ **Do not wrap it in `KeyHint` to do this.** A wrapper round a widget that is already
 actionable is a **second pick target**: the wrapper declares, the widget inside is
@@ -1425,7 +1430,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 | --- | --- |
 | Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / theme wiring). |
 | Can a widget constructor take a `ViewNode` — `Button::new(ViewNode)`? | **NO — impossible.** `ViewNode` lives in `heca-view`, which `heca-grid-ui` does not depend on; the library cannot see it. |
-| Then move `ViewNode` down into the library? | **NO.** `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native chrome depends on both — `.on_activate(move \|\| …)`, `row.state().set(true)`, `label.text_signal().set(…)` — which update **in place, with no rebuild**. Routing all native UI through `ViewNode` turns every state change into a full rebuild and fights the reactive chrome store. **The library keeps its builder API.** |
+| Then move `ViewNode` down into the library? | **NO.** `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native chrome depends on both — `.on_click(move \|_\| …)`, `row.state().set(true)`, `label.text_signal().set(…)` — which update **in place, with no rebuild**. Routing all native UI through `ViewNode` turns every state change into a full rebuild and fights the reactive chrome store. **The library keeps its builder API.** |
 | Is `realize` the only `ViewNode`→widget path? | **YES.** One bridge (`heca-view-realize`). |
 | Do widgets hold children, or hand-draw content? | **CHILDREN.** Hand-drawn content is a refactor target (THE RULE above). |
 | What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
@@ -1447,7 +1452,7 @@ ViewNode::new(WidgetKind::Button)
 // …realize() produces exactly this — which native code (chrome: closures + signals) writes directly:
 Button::destructive("Delete")
     .child(Icon::new(Glyph::Trash))
-    .on_click(move || emit(intent))
+    .on_click(move |_| emit(intent))
 ```
 
 > ⚠️ **THREE QUARTERS BUILT.** The API is meant to be transparent — always prefer common, well
@@ -1642,7 +1647,7 @@ The app side (`heca/src/chrome/`, the providers) must **only compose existing wi
 - Import via `use heca_grid_ui::prelude::*;` (widgets, builder traits, `Theme`, `Color`, signals, events).
 - Build a retained tree (`Flex`/`Card`/`Button`/…), then each frame: `LayoutEngine::new().compute(&mut root, size)` → paint into a `Scene` with `PaintCx` → `heca_renderer::scene::enqueue_scene(grid, text, &scene)`.
 - Widgets opt into builder methods via marker traits: **`LayoutExt`** (`.width/.height/.padding/.gap/.justify/.align/.grow/.disabled/.tab_index`), **`StyleExt`** (surfaces only: `.background/.border/.glow/.radius`), **`Parent`** (`.child`).
-- **Change widgets report via callbacks**, not return values: `.on_change(|action: Action| …)` carrying `Action::value("<name>-change", SignalData::…)` (`toggle-change`/Bool, `checkbox-change`/Bool, `input-change`/String, `tab-change`/Usize). Buttons use `.on_click(|| …)`.
+- **Change widgets report via callbacks**, not return values: `.on_change(|action: Action| …)` carrying `Action::value("<name>-change", SignalData::…)` (`toggle-change`/Bool, `checkbox-change`/Bool, `input-change`/String, `tab-change`/Usize). Buttons use `.on_click(|_| …)`.
 - **`Base.disabled`** (dim+inert+unfocusable) and **`Base.tab_index`** are common to all widgets. Focus via one `FocusManager` (Tab/Shift+Tab, click-focus, `deliver_key`). Animations via `tick(dt) -> bool`.
 
 **Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`, `Panel` (titled section), `Row` (clickable/selectable), `Item`, `ItemGroup`, `Grid`, `DockFrame`, `ChromeRegion`, `ScrollRegion`; wrappers `KeyHint` (pick keycap), `FocusScope` (a whole area's keyboard focus: gates its subtree's keys + draws the ring), `Visibility`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`, `Select`; overlays `Overlay` (base layer; blocking = a layer property), `Dialog`, `CommandPalette`, `ContextMenu`, `Tooltip`, `ToastStack`; display `Badge`, `Tag`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`, and **`animation/`** — how a surface arrives and leaves: the `Animate` TRAIT (the extension point), the `Animation` vocabulary a caller NAMES (`Animation::Fade` / `ZoomFade` / `Animation::of(mine)`), `AnimationFrame`, `Presence` (an OPTIONAL animation plus the open/leave rules), and `Fade`/`Zoom`/`Sequence`/`ZoomFade` one per file. `Overlay::animation(Animation)` is the one builder, native and declarative alike; the verbs are `open()`/`hide()`/`toggle()`, and a mounted surface is driven by its host (`LayerRegistry::show` → `root.open()`), never by itself.

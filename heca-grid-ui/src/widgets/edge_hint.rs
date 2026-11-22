@@ -100,7 +100,7 @@ impl EdgeHint {
                     .icon(glyph)
                     .flash(count.flash)
                     .child(Label::new("").with_text_signal(count.text))
-                    .on_click(move || {
+                    .on_click(move |_| {
                         request.set(Some(edge));
                         crate::request_frame();
                     })

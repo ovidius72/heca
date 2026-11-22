@@ -8,7 +8,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Pane {
     let select = move |i: usize, item: Item| -> Item {
         states.borrow_mut().push(item.state());
         let states = states.clone();
-        item.on_activate(move || {
+        item.on_click(move |_| {
             selected.set(i);
             for (j, s) in states.borrow().iter().enumerate() {
                 s.set(j == i);

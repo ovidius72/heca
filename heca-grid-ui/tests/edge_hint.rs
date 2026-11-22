@@ -37,7 +37,7 @@ fn rows_wanting_attention_out_of_sight_are_counted_and_a_click_reveals_and_activ
             Row::new()
                 .flash(*flash)
                 .height(Length::Px(40.0))
-                .on_activate(move || activated.set(Some(i)))
+                .on_click(move |_| activated.set(Some(i)))
                 .child(Label::new(format!("row {i}"))),
         );
     }

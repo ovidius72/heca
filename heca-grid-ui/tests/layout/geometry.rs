@@ -14,7 +14,7 @@ fn a_state_highlight_never_crops_the_content_it_covers() {
     let hovered_pill = |padding: f32| {
         let mut row = Row::new()
             .padding(padding)
-            .on_activate(|| {})
+            .on_click(|_| {})
             .child(fixed_box(60.0, 24.0));
         LayoutEngine::new().compute(&mut row, Size::new(200.0, 60.0));
         let b = row.base().bounds;

@@ -6,7 +6,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
 
     let click = |label: &str| {
         let name = label.to_string();
-        move || println!("[showcase] {name} clicked")
+        move |_: &mut heca_grid_ui::event::EventCx<'_>| println!("[showcase] {name} clicked")
     };
     Flex::row()
         .gap(14.0)
@@ -21,7 +21,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         // The label shows the current theme name; the showcase tree is
         // rebuilt on change so every widget picks up the new palette.
         .child(
-            Button::primary(format!("⇄ THEME: {}", theme.colors.name)).on_click(move || {
+            Button::primary(format!("⇄ THEME: {}", theme.colors.name)).on_click(move |_| {
                 let next = (ctl.theme_idx.get_untracked() + 1) % THEME_NAMES.len();
                 ctl.theme_idx.set(next);
             }),

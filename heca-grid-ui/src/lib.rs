@@ -77,9 +77,9 @@ pub use builders::{
 pub use color::Color;
 pub use component::{
     Base, Component, Event, FrameWake, GridKey, Handled, Modifiers, PaintCx, WidgetIntent,
-    WidgetModel, area, area_slot, collect_damage, deliver, dispatch, frame_served, frame_waker,
-    holds_keyboard, install_frame_request, needs_layout, overlay_occluded_at, paint_child,
-    request_frame, shift_subtree, unmount_child,
+    WidgetModel, area, area_slot, click, collect_damage, deliver, dispatch, frame_served,
+    frame_waker, holds_keyboard, install_frame_request, needs_layout, overlay_occluded_at,
+    paint_child, request_frame, shift_subtree, unmount_child,
 };
 pub use cursor::{Cursor, cursor_at};
 pub use drag::{DropAction, DropHit, DropSide, resolve_at, source_at};
@@ -102,7 +102,9 @@ pub use hint::{
 pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
-pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
+pub use nav::{
+    child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut, path_with_key,
+};
 pub use pointer::{
     EdgeScroll, PointerState, clear_hover, dragged_kind, dragging, edge_scroll, hit_test,
     pointer_held,

@@ -247,7 +247,7 @@ pub(crate) fn build_pane_header(
                 .icon(spec.glyph)
                 .variant(variant)
                 .active(spec.is_active)
-                .on_click(fire);
+                .on_click(move |_| fire());
             // **The button's identity, from its data — the action it runs.**
             //
             // Without it the identity is DERIVED from the button's content, and a derived identity

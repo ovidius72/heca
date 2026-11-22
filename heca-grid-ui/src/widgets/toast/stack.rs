@@ -33,7 +33,7 @@
 //! move, because a card occludes the points it covers — and passes everything else through
 //! (`Handled::No`), so cards block only the strip of UI they actually cover.
 
-use crate::builders::LayoutExt;
+use crate::builders::{EventExt, LayoutExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Direction, Justify, Length};
@@ -256,7 +256,7 @@ impl ToastStack {
             t = t.action(
                 Button::new(action.label.clone())
                     .variant(action.variant)
-                    .on_click(move || {
+                    .on_click(move |_| {
                         if let Some(f) = &cb {
                             f(id, &key);
                         }

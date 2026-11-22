@@ -253,7 +253,7 @@ Two ways exist to build a screen and they produce the same widgets:
 
 ```rust
 // The app's own code — it can hold functions and live values.
-Button::destructive("Restart").on_click(move || restart(id))
+Button::destructive("Restart").on_click(move |_| restart(id))
 
 // A description — plain data, so it can be sent anywhere.
 ViewNode::new(WidgetId::Button)

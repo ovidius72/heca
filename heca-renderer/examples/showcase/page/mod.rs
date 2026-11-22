@@ -284,7 +284,7 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Label::new(
                     "Zoom in; on the way out the dissolve rides the shrink.",
                 ))
-                .child(Button::secondary("CLOSE").on_click(move || dismiss_it.set(false))),
+                .child(Button::secondary("CLOSE").on_click(move |_| dismiss_it.set(false))),
         )
         .on_outside_click(move || dismiss_it.set(false));
 
@@ -352,11 +352,11 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Label::new("· pane-9  (redis-cli)"))
                 .child(Label::new("· pane-10 (k9s)")),
         )
-        .action(Button::secondary("Cancel").on_click(move || {
+        .action(Button::secondary("Cancel").on_click(move |_| {
             println!("[showcase] dialog cancelled");
             cancel_open.set(false);
         }))
-        .action(Button::destructive("Delete").on_click(move || {
+        .action(Button::destructive("Delete").on_click(move |_| {
             println!("[showcase] dialog: pane deleted");
             delete_open.set(false);
         }))

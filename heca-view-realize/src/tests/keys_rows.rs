@@ -244,16 +244,15 @@ fn a_described_row_is_clickable_and_keyboard_activatable() {
         row.as_mut(),
         &Event::pointer_released(at, heca_grid_ui::PointerButton::Left),
     );
-    // A raw key reaches only the widget that owns the keyboard — a real surface focuses the row
+    // A key reaches only the widget that owns the keyboard — a real surface focuses the row
     // before sending one, and an unfocused row taking Enter is what let a card eat the key
-    // meant for the list around it.
+    // meant for the list around it. It goes through the keymap, as the app sends it: Enter is
+    // bound to `activate`, which presses the focused row.
     heca_grid_ui::reactive::SignalUpdate::set(&row.base_mut().focused, true);
-    heca_grid_ui::dispatch(
-        row.as_mut(),
-        &Event::Key {
-            key: GridKey::Enter,
-            pressed: true,
-        },
+    heca_grid_ui::Keymap::with_defaults().dispatch(
+        GridKey::Enter,
+        heca_grid_ui::Modifiers::default(),
+        |event| heca_grid_ui::dispatch(row.as_mut(), event),
     );
 
     let fired = fired.borrow();

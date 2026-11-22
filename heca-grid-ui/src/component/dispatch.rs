@@ -27,6 +27,7 @@ pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
 /// wheel or a release. That is not a mistake anyone makes on purpose; it is what a hand-written
 /// list does over time. Now there is no list.
 pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
+    new_click();
     // **What is held down is remembered here, once.** It is an announcement about the device, so it
     // is recorded before it is passed on and everything else reads it from
     // [`event::modifiers`](crate::event::modifiers) — instead of each widget keeping a private copy
@@ -88,6 +89,58 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
     broadcast(node, ev)
 }
 
+/// Whether `node` is a control a press can use: it listens to clicks and is not disabled.
+fn is_pressable(node: &dyn Component) -> bool {
+    let base = node.base();
+    node.is_control() && base.activatable && !base.disabled.get_untracked()
+}
+
+/// Press `node`: a real click at its centre, through the same rules a mouse click goes through.
+fn press(node: &mut dyn Component) -> Handled {
+    new_click();
+    let b = node.base().bounds;
+    let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let _ = react(
+        node,
+        &Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b)),
+    );
+    Handled::Yes
+}
+
+/// **Use the widget as a click would** — the DOM's `el.click()`: a real [`Event::Click`] at its
+/// centre, delivered down to it and bubbling back up through the handlers it and its containers
+/// registered. Every programmatic press goes through here — a dialog's primary button, a
+/// collapsed button in a group's overflow row, Enter on a focused control — so none of them can
+/// drift from what the mouse does. `Handled::Yes` when the click was delivered, `Handled::No` when
+/// the widget is not something a click uses (nothing listens, or it is disabled).
+pub fn click(root: &mut dyn Component, path: &[usize]) -> Handled {
+    click_at(root, path)
+}
+
+fn click_at(root: &mut dyn Component, path: &[usize]) -> Handled {
+    new_click();
+    let Some(target) = node_at(root, path) else {
+        return Handled::No;
+    };
+    let base = target.base();
+    if !base.activatable || base.disabled.get_untracked() {
+        return Handled::No;
+    }
+    let b = base.bounds;
+    let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let ev = Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b));
+    // Used, whatever its handlers did with it: the click bubbles on to its containers as a mouse
+    // click does, but the key that became it is spent — it must not also reach a dialog's primary.
+    let _ = deliver_to_path(root, path, &ev);
+    Handled::Yes
+}
+
+fn node_at<'a>(root: &'a dyn Component, path: &[usize]) -> Option<&'a dyn Component> {
+    path.iter().try_fold(root, |node, step| {
+        node.base().children.get(*step).map(AsRef::as_ref)
+    })
+}
+
 /// Events that follow keyboard focus rather than the whole tree.
 ///
 /// [`Event::Widget`] is one of them: a semantic intent is what a key **resolved to**, so it belongs
@@ -145,6 +198,15 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
+    } else if matches!(ev, Event::Widget(crate::event::WidgetIntent::Activate))
+        && is_pressable(node)
+    {
+        // **`activate` presses the control that holds the keyboard** — a button, a row — the way a
+        // browser's Enter presses a focused `<button>` and not a `<div>`. The keys are the
+        // config's (`[keys.widgets] activate`), never written here; and only the control the
+        // keyboard is on, never one somewhere inside a focused region, so a dock holding the
+        // keyboard leaves `activate` to its own keys.
+        return press(node);
     } else if matches!(ev, Event::Widget(_)) {
         // **An intent enters the focused region.** It is not a key — it is what a key *resolved to*,
         // a capability named out loud (`ScrollPageDown`, `Dismiss`), so it is addressed to the
@@ -175,10 +237,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
         // that belongs here.
         run_pick(node);
     }
-    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
-        return Handled::Yes;
-    }
-    node.on_event(ev)
+    react(node, ev)
 }
 
 /// **Do to `node` what picking it means**, in two cases and in this order:
@@ -192,7 +251,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
 ///    does.
 pub(crate) fn run_pick(node: &mut dyn Component) {
     if let Some(hint) = &node.base().hint {
-        hint.run();
+        crate::intent::dispatching_to(node.base().dispatch_to.clone(), || hint.run());
         return;
     }
     if !crate::hint::is_target(node) {
@@ -203,7 +262,48 @@ pub(crate) fn run_pick(node: &mut dyn Component) {
     let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     let click = Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b));
     node.base_mut().run_handlers(&click);
-    node.on_event(&click);
+    own_event(node, &click);
+}
+
+thread_local! {
+    /// Whether a control already used the click being delivered — see [`react`].
+    static CLICK_TAKEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// A new click is about to be delivered: nothing has used it yet.
+pub(crate) fn new_click() {
+    CLICK_TAKEN.with(|c| c.set(false));
+}
+
+/// **A widget answers an event**: its registered handlers, then its own event code.
+///
+/// **A click is used by one control.** The innermost control under it — a × in a card, a button
+/// in a row — uses it, and the controls around it do not, so closing a notification does not also
+/// open it. Containers that are not controls still hear it as it bubbles: a dock focuses itself on
+/// any click inside it. Written here once, so no control stops propagation by hand.
+pub(crate) fn react(node: &mut dyn Component, ev: &Event) -> Handled {
+    let control_click = matches!(ev, Event::Click(_))
+        && node.is_control()
+        && node.base().activatable
+        && !node.base().disabled.get_untracked();
+    if control_click && CLICK_TAKEN.with(std::cell::Cell::get) {
+        return Handled::No;
+    }
+    if control_click {
+        CLICK_TAKEN.with(|c| c.set(true));
+    }
+    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
+        return Handled::Yes;
+    }
+    own_event(node, ev)
+}
+
+/// **The widget's own event code, as that widget** — a dispatch it makes there takes its route
+/// (`Base::dispatch_to`). Every walk calls a widget through this, so no widget, and no walk, has
+/// to remember it.
+pub(crate) fn own_event(node: &mut dyn Component, ev: &Event) -> Handled {
+    let route = node.base().dispatch_to.clone();
+    crate::intent::dispatching_to(route, || node.on_event(ev))
 }
 
 /// Capture down, children last-first, bubble up — for the events that are addressed to everything
@@ -223,10 +323,7 @@ fn broadcast(node: &mut dyn Component, ev: &Event) -> Handled {
     if from_subtree == Handled::Yes {
         return Handled::Yes;
     }
-    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
-        return Handled::Yes;
-    }
-    node.on_event(ev)
+    react(node, ev)
 }
 
 /// The bounds of the first descendant (or `node` itself) asking to be kept in view, in tree order.

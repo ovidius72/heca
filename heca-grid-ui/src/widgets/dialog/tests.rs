@@ -1,4 +1,5 @@
 use super::*;
+use crate::builders::{EventExt, IdentityExt};
 use crate::event::PointerButton;
 use crate::widgets::{Button, Label};
 use std::cell::Cell;
@@ -199,7 +200,7 @@ fn text_input_body_types_and_submit_nav_fires_primary() {
     // A form dialog: an Input body + OK (primary) / Cancel. `open` focuses the Input first.
     let mut d = Dialog::new("Rename pane")
         .body(Input::new().value("term"))
-        .action(Button::new("OK").on_click(move || f.set(true)))
+        .action(Button::new("OK").on_click(move |_| f.set(true)))
         .action(Button::new("Cancel"))
         .default_open(true);
     // Typed text is delivered field-first to (and consumed by) the focused input. Text, not a
@@ -339,10 +340,10 @@ fn interleaved_body_and_actions_keep_field_focus_and_primary_activation() {
     let submit = primary.clone();
     let cancel = canceled.clone();
     let mut dialog = Dialog::new("Rename")
-        .action(Button::new("Save").on_click(move || submit.set(true)))
+        .action(Button::new("Save").on_click(move |_| submit.set(true)))
         .child(Input::new().value("name"))
         .child(Label::new("A second body component"))
-        .action(Button::new("Cancel").on_click(move || cancel.set(true)))
+        .action(Button::new("Cancel").on_click(move |_| cancel.set(true)))
         .default_open(true);
 
     assert_eq!(
@@ -451,4 +452,28 @@ fn resizing_a_panel_gives_extra_height_to_its_body() {
         }
         previous = Some((height, body, title, actions));
     }
+}
+
+/// **Enter on a focused Cancel presses Cancel**, not the dialog's primary action: the framework
+/// turns the key into a click on the control holding the keyboard before the key travels on.
+#[test]
+fn enter_on_a_focused_cancel_presses_cancel_not_ok() {
+    let ok = Rc::new(Cell::new(false));
+    let cancel = Rc::new(Cell::new(false));
+    let (o, c) = (ok.clone(), cancel.clone());
+    let mut d = Dialog::new("Close the pane?")
+        .action(Button::new("OK").on_click(move |_| o.set(true)))
+        .action(
+            Button::new("Cancel")
+                .key("cancel")
+                .on_click(move |_| c.set(true)),
+        )
+        .default_open(true);
+    crate::nav::node_with_key_mut(&mut d, "cancel")
+        .expect("the Cancel button is in the dialog")
+        .base()
+        .focus(false);
+    let _ = crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::Activate));
+    assert!(cancel.get(), "the focused Cancel was pressed");
+    assert!(!ok.get(), "and the primary action was not");
 }

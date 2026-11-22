@@ -212,7 +212,9 @@ impl Keymap {
         km.bind(Char('k'), ctrl, MenuUp);
         km.bind(Char('j'), ctrl, MenuDown);
         // Shared.
+        // The same two keys heca ships under `[keys.widgets] activate`.
         km.bind(Enter, none, Activate);
+        km.bind(Space, none, Activate);
         km.bind(Escape, none, Dismiss);
         km
     }
