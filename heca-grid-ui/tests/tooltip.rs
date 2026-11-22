@@ -159,7 +159,7 @@ fn tooltip_is_transparent_to_child_events() {
         Some(0),
         "wrapped child is reachable by Tab"
     );
-    focus.deliver_key(&mut tip, heca_grid_ui::GridKey::Enter);
+    common::press_key(&mut tip, heca_grid_ui::GridKey::Enter);
     assert_eq!(
         clicks.get(),
         1,

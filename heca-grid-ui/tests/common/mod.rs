@@ -108,3 +108,13 @@ pub fn texts(scene: &Scene) -> Vec<TextCmd> {
         })
         .collect()
 }
+
+/// **Press a key the way the app does**: through the keymap, which turns it into what it is bound
+/// to (`Enter` and `Space` into `activate`, as `[keys.widgets]` ships them) before the tree sees
+/// it. A test that dispatched the raw key skipped that step, which the app never does.
+#[allow(dead_code)] // each test binary uses its own share of these helpers
+pub fn press_key(root: &mut dyn Component, key: heca_grid_ui::GridKey) -> Handled {
+    heca_grid_ui::Keymap::with_defaults().dispatch(key, heca_grid_ui::Modifiers::default(), |event| {
+        heca_grid_ui::dispatch(&mut *root, event)
+    })
+}

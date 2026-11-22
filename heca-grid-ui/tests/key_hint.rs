@@ -119,7 +119,7 @@ fn key_hint_is_transparent_to_focus_and_activation() {
     );
 
     // Events route through the wrapper to the child.
-    focus.deliver_key(&mut wrapped, heca_grid_ui::GridKey::Enter);
+    common::press_key(&mut wrapped, heca_grid_ui::GridKey::Enter);
     assert_eq!(clicks.get(), 1, "Enter activates the wrapped child");
 }
 

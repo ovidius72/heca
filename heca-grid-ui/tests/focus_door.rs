@@ -19,13 +19,7 @@ fn centre(root: &dyn Component, child: usize) -> Point {
 }
 
 fn enter(root: &mut dyn Component) {
-    heca_grid_ui::dispatch(
-        root,
-        &Event::Key {
-            key: GridKey::Enter,
-            pressed: true,
-        },
-    );
+    common::press_key(root, heca_grid_ui::GridKey::Enter);
 }
 
 #[test]

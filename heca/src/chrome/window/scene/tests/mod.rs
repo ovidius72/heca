@@ -3,6 +3,7 @@ use super::*;
 mod docks;
 mod regions;
 mod routes;
+mod dock_keys;
 
 /// **The two sidebar toggles keep their letters when you toggle a sidebar**.
 ///

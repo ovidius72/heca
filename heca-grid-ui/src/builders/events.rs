@@ -77,13 +77,23 @@ pub trait EventExt: Component + Sized {
         self
     }
 
-    /// **Pressing this does `intent`** — a click, Enter or Space on it, and its `prefix+/` letter,
-    /// which carries the same intent so a picker can hide a letter whose action would be refused.
-    /// The native twin of a description's `.on_press(Intent)`:
+    /// **Pressing this does `intent`** — the one-line form for a control whose press is a named
+    /// action. It registers a click handler that dispatches `intent`, and gives the widget the
+    /// `prefix+/` letter carrying the same intent (so a picker can hide the letter when the action
+    /// would be refused). The native twin of a description's `.on_press(Intent)`:
     ///
     /// ```ignore
-    /// Row::new().on_press(Intent::new("focus_pane").arg("pane_id", id))
+    /// Button::new("Restart").on_press(Intent::new("docker.restart").arg("id", id))
     /// ```
+    ///
+    /// - The intent goes to the nearest container listening with [`on_dispatch`](Self::on_dispatch)
+    ///   — heca's seat round every dock and layer — so it arrives addressed, with no mount or
+    ///   emitter passed in.
+    /// - The keyboard presses it with no declaration: the `activate` action (Enter and Space in
+    ///   `[keys.widgets]`, config not code) presses the control that holds the keyboard.
+    /// - A shortcut of its own is a key bound to the action's name in a keys file, never here.
+    ///
+    /// Full guide: `docs/widgets.md` → "`on_press(Intent)`".
     fn on_press(self, intent: heca_view::Intent) -> Self {
         let run = intent.clone();
         let mut pressed = self.on_click(move |ev| ev.dispatch(run.clone()));
