@@ -112,6 +112,12 @@ impl Component for Input {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }
+        // The × of a clearable field was clicked: its click bubbles here, and the field empties.
+        if self.clear_requested.take() {
+            self.clear();
+            self.base.mark_needs_layout();
+            return Handled::Yes;
+        }
         let handled = match ev {
             Event::Widget(WidgetIntent::EditSubmit) => {
                 if let Some(submit) = &self.on_submit {
@@ -195,6 +201,10 @@ impl Component for Input {
             }
             Event::Widget(WidgetIntent::EditSelectAll) => {
                 self.select_all();
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::ClearInput) => {
+                self.clear();
                 Handled::Yes
             }
             _ => Handled::No,

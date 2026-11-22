@@ -509,6 +509,7 @@ dismiss       = "Escape"                    # Close / cancel the overlay
 edit_delete_back          = "Ctrl+h"                 # Input: delete one char before the caret
 edit_delete_to_line_start = "Ctrl+u"                 # Input: delete from the caret to line start
 edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole field (Cmd+a on macOS)
+clear_input               = ["Super+Shift+Backspace", "Ctrl+Shift+Backspace"]  # Input: empty the field wherever the caret is (Cmd+Shift+Backspace on macOS; Cmd+Backspace still deletes to the line start) — the keyboard twin of a clearable field's ×
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Custom modes — [[keys.mode]]

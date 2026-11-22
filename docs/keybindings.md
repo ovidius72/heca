@@ -511,6 +511,7 @@ dismiss       = "Escape"                   # close / cancel the overlay
 edit_delete_back          = "Ctrl+h"                 # delete one char before the caret
 edit_delete_to_line_start = "Ctrl+u"                 # delete from the caret to line start
 edit_select_all           = ["Ctrl+a", "Super+a"]    # select the whole field (Cmd+a on macOS)
+clear_input               = ["Super+Shift+Backspace", "Ctrl+Shift+Backspace"]  # empty the field wherever the caret is (Cmd+Shift+Backspace on macOS); a clearable field's × does the same
 ```
 
 - **Tab / Shift+Tab** traverse focus and stay inside a modal dialog. A selected suggestion may

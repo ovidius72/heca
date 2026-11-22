@@ -222,6 +222,7 @@ pub(super) fn search_bar(shared: Rc<Shared>) -> Flex {
     let (edited, gained, lost) = (shared.clone(), shared.clone(), shared.clone());
     let field = Input::new()
         .value(query)
+        .clearable(true)
         .follow_focus(focus)
         .on_change(move |action| {
             if let SignalData::String(text) = action.data {

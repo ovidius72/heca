@@ -151,6 +151,11 @@ impl BadgeButton {
 }
 
 impl Input {
+    /// **An × at the right end that empties the field** while it holds text — mirrors grid-ui
+    /// `Input::clearable`. The keyboard twin, `clear_input`, works on every field.
+    pub fn clearable(self, clearable: bool) -> Self {
+        self.prop("clearable", clearable)
+    }
     /// Keep an empty field's placeholder visible while focused (default false).
     pub fn placeholder_on_focus(self, show: bool) -> Self {
         self.prop("placeholder_on_focus", show)

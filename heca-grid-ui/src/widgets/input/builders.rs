@@ -1,5 +1,5 @@
 use super::*;
-use crate::builders::Parent;
+use crate::builders::{EventExt, Parent, PresenceExt, ToneExt, TooltipExt};
 
 #[heca_grid_ui_macros::props]
 impl Input {
@@ -32,6 +32,7 @@ impl Input {
             view,
             on_change: None,
             on_submit: None,
+            clear_requested: std::rc::Rc::new(std::cell::Cell::new(false)),
         }
     }
 
@@ -94,6 +95,40 @@ impl Input {
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
+        self
+    }
+
+    /// **An × at the field's right end that empties it** — shown while the field holds text, gone
+    /// when it is empty, with the [`IconButton`](crate::widgets::IconButton)'s hover from the theme.
+    /// A click empties the field and leaves the keyboard in it (the field
+    /// [keeps the keyboard](crate::component::Base::keeps_keyboard), so the × gets its click and
+    /// not the keyboard), and reports the change through
+    /// [`on_change`](Self::on_change) exactly as typing does. The keyboard twin is `clear_input` in
+    /// `[keys.widgets]` (`WidgetIntent::ClearInput`), which works on every field, clearable or not.
+    ///
+    /// ```ignore
+    /// Input::new().value(query).clearable(true).on_change(|a| …)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn clearable(mut self, clearable: bool) -> Self {
+        if !clearable {
+            return self;
+        }
+        let text = self.text;
+        let requested = self.clear_requested.clone();
+        self.base.style.layout.align = "center".into();
+        // The field keeps the keyboard: a press on the × clicks it and leaves the keyboard here.
+        self.base.keeps_keyboard = true;
+        self.base.children.push(crate::WidgetModel::new(
+            crate::widgets::IconButton::new(
+                crate::widgets::Icon::new(crate::widgets::Glyph::XCircle)
+                    .content_tone(crate::Tone::Muted),
+            )
+            .size(crate::style::WidgetSize::Small)
+            .tooltip("Clear")
+            .hidden(move || text.get().is_empty())
+            .on_click(move |_| requested.set(true)),
+        ));
         self
     }
 

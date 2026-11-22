@@ -50,6 +50,16 @@ impl Input {
         }
     }
 
+    /// Empty the field, wherever the caret is, and report it like any edit. An empty field stays
+    /// as it is and reports nothing.
+    pub(super) fn clear(&mut self) {
+        self.anchor = None;
+        self.cursor = 0;
+        if !self.text.get_untracked().is_empty() {
+            self.commit(String::new());
+        }
+    }
+
     pub(super) fn insert_text(&mut self, text: &str) {
         if text.is_empty() {
             return;

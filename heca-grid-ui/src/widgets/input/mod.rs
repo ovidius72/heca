@@ -13,10 +13,11 @@
 //!
 //! The readline/select-all **shortcuts** are host-configured, not baked in
 //! (`widget-keys-config`): Ctrl+h (delete back), Ctrl+u (delete to line start), and
-//! Ctrl/Cmd+A (select all) arrive as the semantic [`Event::Widget`] intents
-//! `EditDeleteBack` / `EditDeleteToLineStart` / `EditSelectAll`, which the host resolves
-//! from the configurable `[keys.widgets]` `edit_delete_back` / `edit_delete_to_line_start` /
-//! `edit_select_all` bindings.
+//! Ctrl/Cmd+A (select all) and Cmd+Shift+Backspace / Ctrl+Shift+Backspace (empty the field) arrive as
+//! the semantic [`Event::Widget`] intents `EditDeleteBack` / `EditDeleteToLineStart` /
+//! `EditSelectAll` / `ClearInput`, which the host resolves from the configurable `[keys.widgets]`
+//! `edit_delete_back` / `edit_delete_to_line_start` / `edit_select_all` / `clear_input` bindings.
+//! [`clearable`](Input::clearable) adds the mouse twin of `ClearInput`: an × at the right end.
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
@@ -93,6 +94,9 @@ pub struct Input {
     view: std::rc::Rc<std::cell::RefCell<content::View>>,
     on_change: Option<Box<dyn Fn(Action)>>,
     on_submit: Option<Box<dyn Fn(Action)>>,
+    /// Set by a [`clearable`](Input::clearable) field's × when it is clicked; the click then
+    /// bubbles to the field, which empties itself — the × owns no text and the field no hit-test.
+    clear_requested: std::rc::Rc<std::cell::Cell<bool>>,
 }
 
 impl Default for Input {

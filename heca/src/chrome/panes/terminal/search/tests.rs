@@ -562,12 +562,19 @@ fn the_field_does_not_move_when_the_counter_appears_and_the_arrows_step() {
         "the counter {counter:?} is above the field {after:?}"
     );
 
-    // The arrows: the icons drawn right of the field, up first.
+    // The field's × closes the field on the right; the arrows are the icons right of it, up first.
+    let cross = heca_grid_ui::widgets::Glyph::XCircle
+        .primary_char()
+        .expect("the × has a glyph")
+        .to_string();
+    let field_end = drawn(&root)
+        .into_iter()
+        .filter(|(text, _)| text.starts_with(&cross))
+        .map(|(_, r)| r.loc.x + r.size.w)
+        .fold(after.loc.x + after.size.w, f64::max);
     let mut arrows: Vec<f64> = drawn(&root)
         .into_iter()
-        .filter(|(_, r)| {
-            r.loc.x > after.loc.x + after.size.w && r.loc.y >= counter.loc.y + counter.size.h
-        })
+        .filter(|(_, r)| r.loc.x > field_end && r.loc.y >= counter.loc.y + counter.size.h)
         .map(|(_, r)| r.loc.x + r.size.w / 2.0)
         .collect();
     arrows.dedup();

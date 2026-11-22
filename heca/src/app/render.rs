@@ -106,13 +106,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
 }
 
 /// **The search field's prompt, in the user's own keys** — each step names what `[keys.widgets]`
-/// binds it to (`menu_down` next, `menu_up` previous, `dismiss` close), so rebinding one changes
-/// the prompt; a step bound to no key is left out rather than named wrongly.
+/// binds it to (`menu_down` next, `menu_up` previous, `clear_input` clear, `dismiss` close), so
+/// rebinding one changes the prompt; a step bound to no key is left out rather than named wrongly.
 fn search_prompt(shortcuts: &crate::chrome::ActionShortcuts) -> String {
     let mut prompt = " — type to search".to_string();
     for (name, says) in [
         ("menu_down", "next"),
         ("menu_up", "previous"),
+        ("clear_input", "clear"),
         ("dismiss", "close"),
     ] {
         if let Some(keys) = shortcuts.get(name) {

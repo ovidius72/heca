@@ -3892,12 +3892,30 @@ rest glow (`interaction.control_rest_glow`).
 
 - **Construct**: `Input::new()`.
 - **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.font_size(f32)` (else inherits;
-  field height tracks the font), `.on_change(impl Fn(Action))`. Plus the shared `LayoutExt`:
+  field height tracks the font), `.on_change(impl Fn(Action))`, `.clearable(bool)` (default
+  `false`). Plus the shared `LayoutExt`:
   `.disabled(bool)` (dims + inert + unfocusable), `.tab_index(i32)`, `.width/.height`.
 - **Accessors / mutators**: `.text() -> Signal<String>`, `.value_str() -> String`,
   `.set_value(text)` (replace the content imperatively), `.selection() -> Option<(usize,usize)>`,
   `.selected_text() -> Option<String>`.
 - **Emits**: `"input-change"` / `SignalData::String` (the full new text) on every edit.
+- **Clearable — `.clearable(true)`**: an × at the field's right end while it holds text, gone when
+  it is empty — a small [`IconButton`](#iconbutton) (`Glyph::XCircle` in the muted text tone), so it
+  lights up under the pointer like any icon button. A click empties the field, reports
+  `"input-change"` with `""` exactly as typing would, and leaves the keyboard in the field: a
+  clearable field [keeps the keyboard](#focusscope) (`Base::keeps_keyboard`), so the × gets its
+  click and not the keyboard; the click bubbles to the field, which empties itself. The keyboard twin is `WidgetIntent::ClearInput` (`clear_input`), which works
+  on every field, clearable or not.
+
+```rust
+// Native: a search field with an × that empties it.
+Input::new().value(query).clearable(true).on_change(|a| { /* re-run the search */ })
+```
+
+```rust
+// Declarative (heca-view SDK); JSON: { "kind": "Input", "props": { "clearable": true } }
+Input::new().clearable(true)
+```
 
 > **Focus + keys come from the container.** The Input consumes keys **only when focused** and the
 > host delivers them (e.g. a [`FocusManager`](#), or a [`Dialog`](#dialog) which routes keys
@@ -3931,6 +3949,7 @@ to the focused field):
 | `EditDeleteBack` | `Ctrl+h` (`edit_delete_back`) | delete one char before the caret |
 | `EditDeleteToLineStart` | `Ctrl+u` (`edit_delete_to_line_start`) | delete from the caret to line start |
 | `EditSelectAll` | `Ctrl+a` / `Super+a` (`edit_select_all`) | select the whole field |
+| `ClearInput` | `Super+Shift+Backspace` / `Ctrl+Shift+Backspace` (`clear_input`) | empty the field, wherever the caret is |
 
 App wiring: `build_widget_keymap` → `AppState.widget_keymap` (`heca_grid_ui::Keymap`), dispatched in
 the overlay key branch (`heca/src/app/events.rs`). See the `widget-keys-config` requirement and [Keybindings](keybindings.md#widget-navigation-and-editing--keyswidgets).

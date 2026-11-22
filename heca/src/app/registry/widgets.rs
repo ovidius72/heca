@@ -38,6 +38,7 @@ const WIDGET_KEYS: &[(&str, heca_grid_ui::WidgetIntent)] = {
             WidgetIntent::EditDeleteToLineStart,
         ),
         ("edit_select_all", WidgetIntent::EditSelectAll),
+        ("clear_input", WidgetIntent::ClearInput),
         ("edit_submit", WidgetIntent::EditSubmit),
         ("item_previous", WidgetIntent::ItemPrevious),
         ("item_next", WidgetIntent::ItemNext),
@@ -222,5 +223,31 @@ mod tests {
                 "{name} must not be a WmAction (widget-keys-config is a separate map)",
             );
         }
+    }
+
+    /// **The shipped `clear_input` keys empty a field; Cmd+Backspace does not** — it stays the
+    /// field's own "delete to the line start".
+    #[test]
+    fn clear_input_is_on_the_shift_chords_and_cmd_backspace_stays_free() {
+        use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
+        let km = build_widget_keymap(&heca_config::theme::Config::default());
+        let chord = |meta, ctrl, shift| Modifiers {
+            meta,
+            ctrl,
+            shift,
+            ..Default::default()
+        };
+        for mods in [chord(true, false, true), chord(false, true, true)] {
+            assert!(
+                km.resolve(GridKey::Backspace, mods)
+                    .contains(&WidgetIntent::ClearInput),
+                "{mods:?}"
+            );
+        }
+        assert!(
+            !km.resolve(GridKey::Backspace, chord(true, false, false))
+                .contains(&WidgetIntent::ClearInput),
+            "Cmd+Backspace is not clear_input"
+        );
     }
 }
