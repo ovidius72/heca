@@ -25,7 +25,8 @@
   "taskIds": [
     "efcabb13-b1e1-4fc8-8e29-1b66f50e79ac",
     "25b8c84f-6a93-48ea-9206-ceb249b4c21b",
-    "02d73556-acee-4f84-ad6f-06ce6ac571e1"
+    "02d73556-acee-4f84-ad6f-06ce6ac571e1",
+    "65d7eebf-3b0e-4c18-9692-548acf915dc7"
   ],
   "tasks": [
     {
@@ -195,7 +196,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-009-point-25-antonio-2026-11-19-resizing-with-shift-held-behaves-wrongly-reproduce-with-him-first-which-resize-pane-column-drag-keyboard-resize-mode-then-fix",
           "number": 9,
           "title": "Point 25 (Antonio, 2026-11-19): resizing with Shift held behaves wrongly — reproduce with him first (which resize: pane/column drag, keyboard resize mode?), then fix.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-010-point-26-antonio-2026-11-19-the-window-prints-audio-stream-error-a-buffer-underrun-or-overrun-occurred-repeatedly-to-its-terminal-under-load-agent-sounds-playback-find-where-it-is-printed-stop-the-noise-check-whether-sounds-are-lost",
@@ -207,7 +208,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-011-point-27-antonio-2026-11-19-a-mouse-selection-in-a-terminal-does-not-scroll-the-history-when-the-pointer-reaches-the-top-of-the-terminal-dragging-past-the-top-edge-must-scroll-back-and-extend-the-selection-and-past-the-bottom-edge-forward",
           "number": 11,
           "title": "Point 27 (Antonio, 2026-11-19): a mouse selection in a terminal does not scroll the history when the pointer reaches the top of the terminal — dragging past the top edge must scroll back and extend the selection (and past the bottom edge forward).",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-012-22-zsh-tests-and-a-heca-started-inside-a-heca-pane-read-heca-s-own-zshenv-recursively-job-table-full-or-recursion-limit-exceeded-done-on-feat-t572-terminal-wire-07b4f5be-a-heca-zsh-folder-is-recognised-by-its-header-line-and-the-user-s-folder-is-used-instead",
@@ -225,7 +226,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-016-point-29-antonio-2026-11-20-opening-heca-on-a-folder-from-the-installed-app-a-an-action-install-the-heca-command-in-path-like-vs-code-s-install-code-command-links-heca-the-binary-inside-applications-heca-app-contents-macos-into-a-path-folder-so-heca-new-heca-attach-work-from-a-terminal-reachable-from-palette-key-and-rpc-per-os-macos-link-windows-path-linux-already-in-path-via-package-b-drop-a-folder-on-the-dock-finder-icon-or-open-with-heca-the-bundle-declares-it-opens-folders-heca-receives-the-open-event-and-creates-attaches-a-session-in-that-folder-winit-does-not-expose-macos-open-events-directly-verify-how-first-today-a-user-can-already-do-it-from-inside-the-app-with-the-session-palette-mode-folder-picker-t522-shape-agreed-with-antonio-before-code",
           "number": 14,
           "title": "Point 29 (Antonio, 2026-11-20): opening heca on a folder from the installed app — (a) an action \"Install the heca command in PATH\" (like VS Code's \"Install 'code' command\"): links `heca` (the binary inside /Applications/heca.app/Contents/MacOS/) into a PATH folder so `heca --new` / `heca --attach` work from a terminal; reachable from palette, key and RPC; per-OS (macOS link, Windows PATH, Linux already in PATH via package). (b) Drop a folder on the Dock/Finder icon or \"Open With heca\": the bundle declares it opens folders, heca receives the open event and creates/attaches a session in that folder — winit does not expose macOS open events directly, verify how first. Today a user can already do it from inside the app with the session palette (`#` mode, folder picker, T522). Shape agreed with Antonio before code.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-017-18-window-server-version-check-do-antonio-2026-11-20-a-window-and-a-server-of-different-builds-speak-different-wire-formats-t572-changed-it-and-nothing-checks-a-new-window-attaching-to-an-old-server-e-g-applications-heca-server-started-before-an-upgrade-holding-long-running-work-cannot-read-it-with-unknown-effects-wanted-the-first-message-of-a-connection-carries-a-protocol-version-on-mismatch-the-window-says-plainly-that-the-server-is-another-version-and-must-be-restarted-and-how-sessions-come-back-layout-restored-programs-per-resume-programs-and-touches-nothing-one-place-for-the-version-constant-bumped-by-any-wire-change-heca-src-server-wire-heca-pro-uses-this-wire-agree-the-shape-with-it-decision-15ec67fc-later-separate-decision-upgrading-the-server-while-keeping-terminals-alive-hand-the-open-ptys-to-the-new-server",
@@ -243,7 +244,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-019-2-terminal-round-glyphs-drawn-as-squares-investigate-description-point-2",
           "number": 17,
           "title": "2. Terminal round glyphs (⏺/●) drawn as squares — investigate (description point 2)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-020-3-paste-in-the-terminal-s-right-click-menu-description-point-3",
@@ -255,7 +256,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-021-4-macos-heca-was-prevented-from-modifying-apps-no-code-note-it-in-docs-release-notes-description-point-4",
           "number": 19,
           "title": "4. macOS \"heca was prevented from modifying apps\" — no code; note it in docs/release notes (description point 4)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-022-5-zoom-a-pane-in-a-split-column-bring-design-options-to-antonio-description-point-5",
@@ -267,7 +268,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-023-6-default-session-folder-when-launched-from-the-icon-home-not-verify-and-fix-description-point-6",
           "number": 21,
           "title": "6. Default session folder when launched from the icon: home, not \"/\" — verify and fix (description point 6)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-024-7-fit-the-visible-columns-into-the-viewport-study-relation-to-zoom-description-point-7",
@@ -327,7 +328,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-033-16-attention-on-a-pane-row-scrolled-out-of-sight-form-with-antonio-scroll-into-view-in-scrollregion-description-point-16",
           "number": 31,
           "title": "16. Attention on a pane row scrolled out of sight — form with Antonio; scroll-into-view in ScrollRegion (description point 16)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-034-17-a-new-pane-starts-in-the-asker-s-folder-with-shell-takes-the-asker-s-cwd-description-point-17",
@@ -363,7 +364,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-039-30-typed-keys-reach-the-shell-out-of-order-under-load-do-whole-fix-antonio-2026-11-20-ciao-typed-while-rendering-lags-arrives-as-cia-o-cause-found-on-the-server-two-writers-feed-one-shell-a-key-that-maps-to-a-backendkeyevent-letters-heca-src-app-keyboard-rs-328-key-character-backendkeycode-char-goes-processinput-key-engine-process-key-event-wezterm-key-down-which-writes-through-wezterm-s-own-bufwriter-threadedwriter-on-its-own-thread-wezterm-term-src-terminalstate-mod-rs-507-anything-sent-as-bytes-space-namedkey-space-is-missing-from-that-table-so-keyboard-rs-321-makes-it-b-plus-pastes-ime-textinput-text-terminalrun-goes-processinput-bytes-pty-write-input-sharedwriter-directly-on-the-server-thread-heca-core-src-backend-terminal-pane-rs-42-pty-rs-305-under-load-wezterm-s-thread-lags-and-the-direct-write-overtakes-it-fix-the-class-not-the-space-every-byte-bound-for-one-terminal-s-shell-travels-one-ordered-path-in-heca-core-study-how-since-wezterm-always-inserts-its-thread-and-exposes-no-raw-write-test-interleaved-key-events-and-raw-bytes-reach-the-pty-in-the-order-sent-with-the-writer-thread-artificially-slowed",
           "number": 37,
           "title": "30. TYPED KEYS REACH THE SHELL OUT OF ORDER under load — DO, whole fix (Antonio, 2026-11-20: \"ciao \" typed while rendering lags arrives as \"cia o\"). Cause found: on the server two writers feed one shell. A key that maps to a BackendKeyEvent (letters: heca/src/app/keyboard.rs:328 Key::Character → BackendKeyCode::Char) goes ProcessInput::Key → engine.process_key_event → wezterm key_down, which writes through wezterm's own BufWriter<ThreadedWriter> on its own thread (wezterm term/src/terminalstate/mod.rs:507). Anything sent as bytes (Space — NamedKey::Space is missing from that table, so keyboard.rs:321 makes it b\" \" — plus pastes, IME/TextInput text, TerminalRun) goes ProcessInput::Bytes → pty.write_input → SharedWriter directly on the server thread (heca-core/src/backend/terminal/pane.rs:42, pty.rs:305). Under load wezterm's thread lags and the direct write overtakes it. Fix the class, not the space: every byte bound for one terminal's shell travels one ordered path in heca-core (study how, since wezterm always inserts its thread and exposes no raw write). Test: interleaved key events and raw bytes reach the pty in the order sent, with the writer thread artificially slowed.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-040-31-the-focused-terminal-makes-feedback-sounds-do-antonio-2026-11-20-standalone-while-typing-in-the-pane-rule-only-an-unfocused-terminal-sounds-heca-src-client-feedback-rs-70-plays-a-sound-when-the-pane-is-not-input-focused-pane-heca-src-app-state-keyboard-terminal-rs-8-which-is-none-when-heca-s-window-is-not-frontmost-a-palette-dialog-is-open-or-hypothesis-to-test-first-when-the-focused-pane-s-process-has-exited-identity-of-focused-pane-finds-no-backend-as-after-the-ctrl-c-that-produced-pane-14-process-exited-code-130-write-the-failing-test-first-focused-pane-whose-process-exits-does-not-sound-then-fix-in-one-place",
@@ -411,7 +412,7 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-045-last-was-idea-i028-antonio-2026-11-21-heca-pro-can-wait-palette-1-asks-for-an-action-s-arguments-choosing-an-action-with-required-arguments-opens-one-step-per-argument-a-list-for-an-enum-region-a-list-of-what-exists-now-for-a-reference-kind-new-arg-kind-dock-later-workspace-pane-today-container-id-is-plain-text-a-text-field-for-free-text-for-every-action-built-in-and-extension-scripts-pass-arguments-as-today-2-heca-pro-an-extension-adds-its-own-data-to-palette-rows-for-a-palette-mode-a-function-from-the-row-s-item-for-the-session-to-extra-content-text-badge-tone-followed-live-so-heca-pro-instances-are-marked-inside-with-no-second-mode-windows-agents-counts-join-the-public-sessionentry-key-name-folder-state-today-the-same-live-session-list-readable-from-a-window-side-dock-today-only-server-side-cx-sessions-session-changed-switching-exists-switch-session-shared-piece-built-once-a-live-public-list-of-sessions-later-docks-workspaces-panes-readable-from-the-window",
           "number": 45,
           "title": "LAST (was idea I028; Antonio 2026-11-21: heca-pro can wait) — Palette: (1) asks for an action's arguments: choosing an action with required arguments opens one step per argument — a list for an enum (region), a list of what exists now for a reference kind (new arg kind \"dock\", later \"workspace\"/\"pane\"; today container_id is plain Text), a text field for free text; for every action, built-in and extension; scripts pass arguments as today. (2) heca-pro: an extension adds its own data to palette rows — for a palette mode, a function from the row's item (for `#`, the session) to extra content (text/badge/tone), followed live, so heca-pro instances are marked inside `#` with no second mode; windows + agents counts join the public SessionEntry (key, name, folder, state today); the same live session list readable from a window-side dock (today only server-side cx.sessions() + \"session.changed\"). Switching exists: switch_session. Shared piece, built once: a live public list of sessions (later docks, workspaces, panes) readable from the window.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-046-a-heca-pro-2026-11-21-workspace-identity-workspacekey-session-key-workspace-id-survives-reorder-and-restart-actioncx-workspace-cx-state-active-workspace-signal-workspace-focused-event-pr-338-merged",
@@ -441,49 +442,49 @@
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-050-heca-pro-finding-2026-11-21-formatting-is-not-checked-ci-github-workflows-ci-yml-runs-only-clippy-and-test-cargo-fmt-all-check-on-main-reports-differences-in-dozens-of-files-heca-heca-config-heca-core-heca-grid-ui-cause-no-style-was-ever-fixed-and-agents-md-says-don-t-run-cargo-fmt-instead-proposal-antonio-to-confirm-the-one-shot-reformat-fix-the-style-in-rustfmt-toml-reformat-the-whole-codebase-in-one-commit-when-no-other-branch-is-open-add-cargo-fmt-all-check-to-ci-remove-the-don-t-run-cargo-fmt-gotcha-from-agents-md",
           "number": 50,
           "title": "heca-pro finding (2026-11-21) — FORMATTING IS NOT CHECKED. CI (.github/workflows/ci.yml) runs only clippy and test; `cargo fmt --all -- --check` on main reports differences in dozens of files (heca, heca-config, heca-core, heca-grid-ui). Cause: no style was ever fixed, and AGENTS.md says \"don't run cargo fmt\" instead. Proposal (Antonio to confirm the one-shot reformat): fix the style in rustfmt.toml, reformat the whole codebase in one commit when no other branch is open, add `cargo fmt --all -- --check` to CI, remove the \"don't run cargo fmt\" gotcha from AGENTS.md.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-051-heca-pro-finding-2026-11-21-description-numbers-travel-as-f32-propinput-number-f64-is-read-through-as-f32-heca-grid-ui-src-prop-rs-and-the-props-macro-maps-usize-f64-through-it-too-heca-grid-ui-macros-src-lib-rs-168-so-an-epoch-time-in-ms-1-7e12-cannot-reach-a-widget-from-a-description-heca-pro-had-to-mark-its-elapsed-widget-s-epoch-builder-host-only-listed-in-heca-view-realize-no-kind-fix-in-one-place-keep-full-precision-and-convert-to-the-type-the-builder-asks-for-integer-f64-f32-then-heca-pro-can-open-that-builder-to-descriptions",
           "number": 51,
           "title": "heca-pro finding (2026-11-21) — DESCRIPTION NUMBERS TRAVEL AS f32. PropInput::Number(f64) is read through as_f32() (heca-grid-ui/src/prop.rs) and the props macro maps usize/f64 through it too (heca-grid-ui-macros/src/lib.rs ~168), so an epoch time in ms (~1.7e12) cannot reach a widget from a description (heca-pro had to mark its Elapsed widget's epoch builder host_only, listed in heca-view-realize NO_KIND). Fix in one place: keep full precision and convert to the type the builder asks for (integer, f64, f32); then heca-pro can open that builder to descriptions.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-052-agent-integration-takes-effect-only-after-a-reload-antonio-2026-11-21-heca-install-integration-claude-writes-enabled-true-into-config-toml-but-a-running-server-never-re-reads-it-so-panes-get-no-claude-launcher-in-their-path-and-no-reports-icons-arrive-installing-must-tell-the-running-server-which-turns-the-agent-on-in-every-pane-at-once",
           "number": 52,
           "title": "AGENT INTEGRATION TAKES EFFECT ONLY AFTER A RELOAD (Antonio, 2026-11-21): `heca install integration claude` writes `enabled = true` into config.toml, but a running server never re-reads it, so panes get no `claude` launcher in their PATH and no reports/icons arrive. Installing must tell the running server, which turns the agent on in every pane at once.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-053-server-messages-are-lost-found-2026-11-21-when-the-app-starts-from-finder-the-background-server-s-stdout-stderr-go-to-dev-null-so-every-warn-author-eprintln-on-the-server-e-g-cannot-update-terminal-agent-reporting-is-seen-by-nobody-send-them-to-a-log-file-in-the-server-s-folder-and-or-a-notification",
           "number": 53,
           "title": "SERVER MESSAGES ARE LOST (found 2026-11-21): when the app starts from Finder the background server's stdout/stderr go to /dev/null, so every warn_author / eprintln on the server (e.g. \"cannot update terminal agent reporting\") is seen by nobody. Send them to a log file in the server's folder and/or a notification.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-054-slow-wheel-does-not-scroll-the-terminal-antonio-2026-11-21-turning-the-wheel-slowly-does-nothing-only-a-faster-turn-scrolls-likely-small-deltas-are-rounded-to-zero-lines-and-lost-instead-of-being-accumulated-until-they-make-a-whole-line-investigate-and-fix-in-the-library-s-scroll-handling",
           "number": 54,
           "title": "SLOW WHEEL DOES NOT SCROLL THE TERMINAL (Antonio, 2026-11-21): turning the wheel slowly does nothing; only a faster turn scrolls. Likely small deltas are rounded to zero lines and lost instead of being accumulated until they make a whole line — investigate and fix in the library's scroll handling.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-055-agent-session-line-repeats-the-pane-name-antonio-2026-11-21-under-the-agent-line-the-sidebar-row-shows-the-agent-s-session-title-defaulting-to-the-pane-name-when-the-agent-sends-none-agent-line-mod-rs-84-so-a-named-pane-shows-its-name-twice-and-the-card-grows-agreed-appearance-sidebar-agent-session-line-reported-default-only-a-session-title-the-agent-sent-and-only-if-it-differs-from-the-pane-name-always-its-session-title-or-default-to-the-pane-name-today-s-behaviour-never-in-config-default-toml-with-a-comment-applies-on-reload",
           "number": 55,
           "title": "AGENT SESSION LINE REPEATS THE PANE NAME (Antonio, 2026-11-21): under the agent line the sidebar row shows the agent's session title, defaulting to the pane name when the agent sends none (agent_line/mod.rs:84), so a named pane shows its name twice and the card grows. Agreed: `[appearance.sidebar] agent_session_line` = \"reported\" (default: only a session title the agent sent, and only if it differs from the pane name) | \"always\" (its session title, or default to the pane name — today's behaviour) | \"never\". In config.default.toml with a comment; applies on reload.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-056-claude-background-resumed-sessions-do-not-report-antonio-2026-11-21-resuming-a-claude-code-background-session-in-a-pane-runs-only-the-front-end-in-the-pane-it-has-heca-s-env-and-reports-sessionstart-once-waiting-forever-and-the-front-end-s-default-model-claude-sonnet-instead-of-the-real-one-the-session-doing-the-work-runs-in-claude-code-s-daemon-outside-heca-so-its-hooks-have-no-heca-agent-report-and-send-nothing-proposal-every-hook-carries-claude-s-session-id-when-the-pane-s-front-end-reports-heca-records-session-id-pane-a-hook-without-heca-s-env-looks-the-session-up-and-reports-to-that-pane-take-the-model-from-work-events-not-from-sessionstart",
           "number": 56,
           "title": "CLAUDE BACKGROUND / RESUMED SESSIONS DO NOT REPORT (Antonio, 2026-11-21): resuming a Claude Code background session in a pane runs only the front-end in the pane (it has heca's env and reports SessionStart once → \"Waiting\" forever, and the front-end's default model \"claude-sonnet\" instead of the real one); the session doing the work runs in Claude Code's daemon outside heca, so its hooks have no HECA_AGENT_REPORT and send nothing. Proposal: every hook carries Claude's session_id; when the pane's front-end reports, heca records session_id → pane; a hook without heca's env looks the session up and reports to that pane. Take the model from work events, not from SessionStart.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "25b8c84f-6a93-48ea-9206-ceb249b4c21b-check-057-agent-model-goes-stale-antonio-2026-11-21-the-sidebar-shows-the-model-from-sessionstart-only-so-after-model-it-still-says-claude-sonnet-research-claude-code-has-a-postmodelswitch-hook-after-the-session-s-model-changes-including-changes-claude-code-makes-on-its-own-such-as-restoring-the-model-when-you-resume-with-from-model-to-model-source-command-auto-resume-https-code-claude-com-docs-en-hooks-do-install-postmodelswitch-in-the-claude-integration-and-update-the-shown-model-from-to-model-antonio-s-fallback-rule-for-an-agent-with-no-such-signal-codex-pi-opencode-unless-they-report-it-show-only-the-icon-and-the-agent-s-name-claude-codex-pi-opencode-no-model",
           "number": 57,
           "title": "AGENT MODEL GOES STALE (Antonio, 2026-11-21): the sidebar shows the model from SessionStart only, so after /model it still says \"claude-sonnet…\". Research: Claude Code has a PostModelSwitch hook (\"after the session's model changes, including changes Claude Code makes on its own, such as restoring the model when you resume\") with from_model / to_model / source (command|auto|resume) — https://code.claude.com/docs/en/hooks. Do: install PostModelSwitch in the Claude integration and update the shown model from to_model. Antonio's fallback rule for an agent with no such signal (codex/pi/opencode unless they report it): show only the icon and the agent's name (Claude / Codex / Pi / OpenCode), no model.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -514,7 +515,7 @@
       "startedAt": "2026-11-19T17:36:39.451Z",
       "completedAt": "",
       "createdAt": "2026-11-19T10:17:09.901Z",
-      "updatedAt": "2026-11-21T18:14:17.594Z",
+      "updatedAt": "2026-11-21T21:40:23.060Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:6305f255-9e87-49ae-9f4d-f52d0af949f2",
@@ -629,247 +630,48 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "65d7eebf-3b0e-4c18-9692-548acf915dc7",
+      "phaseId": "d223d614-fc68-4a4f-b432-32bf18b3120b",
+      "number": 573,
+      "shortId": "EJBFP",
+      "priority": 4,
+      "shortName": "action-arguments-that-default",
+      "title": "Action arguments that default to \"where you are\" — fewer questions for simple actions (to discuss with Antonio)",
+      "status": "planned",
+      "description": "**To discuss with Antonio before any code** (his words, 2026-11-22: \"Discutiamolo più avanti in feature Improvements con task apposita\").\n\n# The problem\nSimple actions ask too much. `move_column` asks 4 questions in the palette (src_ws, src_col, dst_ws, dst_idx) to move the column you are in; Antonio: \"move col to ws chiede 4/5 informazioni\".\n\n# What exists (branch feat/t567-selection-autoscroll)\n- `ArgKind::Workspace / Column / Pane` (heca/src/args.rs) — the palette lists them by name with the current one preselected, so Enter = \"this one\" (heca/src/chrome/surfaces/palette/arguments.rs: `Places`, `Choices::List`). Every built-in action naming a workspace/column/pane declares the kind (heca/src/actions/builtins/*.rs, 52 sites).\n- The palette asks only **required** arguments (`next_missing`, arguments.rs).\n- Built-in actions read arguments as text through `input/build` (`get_u64`/`get_usize`) — pure, no app state; a key binding with args is resolved when config loads.\n- heca-pro-dev's T565 B adds `ActionMeta::typed_args` at the top of `dispatch_intent` (app/interaction/dispatch.rs) — the point every named intent passes, with state.\n\n# The proposal discussed (not decided)\nAn action declares which arguments mean \"where you are\" when not given — e.g. `ArgDescriptor::current(\"src_ws\", ArgKind::Workspace, ..)` (optional + defaults to current). heca fills them in ONE place with state — beside `typed_args` in `dispatch_intent` (plus the server-side RPC path) — so the palette, keys and RPC all get it, and extensions/plugins declare it the same way. `move_column` would ask only dst_ws and dst_idx.\n\n# Open questions for Antonio\n- Which arguments are \"subject\" (default current) vs \"target\" (always asked)? Declared per action, or by a naming rule (src_* / ws_idx / col_idx / pane_id = subject)?\n- Should the palette still offer to change a defaulted argument (e.g. a row \"from another column…\"), or never ask it?\n- Key bindings resolve at config load (no state): fill at press time instead?\n\n# Edge cases\n- Floating focus (no active column) — what is \"the current column\"?\n- A column argument after a workspace argument that was given explicitly: current column of THAT workspace (palette `workspace_for` rule).\n- RPC from a script with no window: \"current\" = the session's active workspace/pane.",
+      "descriptionUpdatedAt": "2026-11-22T13:16:08.482Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-22T13:16:08.419Z",
+      "updatedAt": "2026-11-22T13:16:08.419Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-18T18:40:53.598Z",
-  "updatedAt": "2026-11-21T18:14:17.594Z",
-  "handoff": "# heca-pro unblocked (PR #333 merged); T567 continues on feat/t567-findings-2 — tooltips done, next point to choose\n\nCreated at: 2026-11-19T18:32:59.781Z\nUpdated at: 2026-11-20T20:16:01.350Z\nReason: heca-pro is unblocked (PR #333 merged) and the tooltip work is committed and pushed on feat/t567-findings-2; Antonio asked for a phase handoff so a cold session can pick T567 up from the next open point.\n- Feature: F010 — Improvements. Phase: P110(F010) — Build and release.\n- Task: P110(F010)/T567 — Findings from using the installed app (in-progress). Checklist 14/41 done; the 17 description points are now checklist items C18-C34 (work goes in the checklist, not the description).\n- Exact resume point: worktree `/Users/antonio/projects/heca-feat-567`, branch `feat/t567-findings-2` (from main after PR #333), head `c520174f`, pushed, working tree clean. Next point NOT chosen: ask Antonio.\n\n## Current and partial state\n- PR #333 merged into main 2026-11-20 (an exception to \"PR only at end of task\", approved to unblock heca-pro). It delivered: `[[docks]]` entries (name = kind, id, location, order, flex); `regions(..)` applied at any time (startup + every frame), recipes `append(|| Dock::new(..))`, `remove(id)` in any region; reload applies changed entries; `Provider::spawn(id)` lets an entry with an unknown id add a dock of that kind (workspaces does); RowVariant Plain/Tinted/Filled; DockFrame Section/.leading/.header/.header_actions/.collapsible/.grip, parts aligned to Item's inset; Item spaces from theme steps, height = content + padding, empty slot takes no gap; transparent wrappers lay their child out like its parent; Visibility::new().visible(b).child(c) (breaking, agreed); tooltip words/signal/widget; heca::run(\"Heca Pro\") title; one workspaces dock at startup. T572 done (closing a connection wakes a waiting reader, cherry-picked). heca-pro told everything; T528 C7 ticked.\n- On feat/t567-findings-2 (committed, not in main): 9723f583 docs — why regions/providers are not components and how they work (regions.rs, providers/mod.rs, widgets.md); c520174f tooltips — `[appearance] tooltip_delay_ms` (default 500) via `tooltip::set_default_delay` at start and reload, quick = half, own delay stays; a Label that cuts its text, a Tag segment the chip cuts off, and a Button showing only its icon offer their text on hover only while hidden/cut; a hand tooltip on the widget or any ancestor wins (PaintCx.hand_tip_above); duplicate hand tooltips removed (sidebar branch, FolderLine, Tag segments, palette path, ButtonGroup); floating panels keep a gap from the window edge (place_beside). Antonio eye-checked tooltips and the edge gap: OK. C41 ticked.\n- T567 open with known cause: C39 \"cia o\" (typed keys out of order: letters go wezterm key_down on its own writer thread, Space/bytes go pty.write_input directly — fix the class: one ordered path to the shell in heca-core); C40 focused terminal makes feedback sounds (hypothesis to test first: a focused pane whose process exited no longer counts as focused, input_focused_pane → None); C17 window/server version check. Others open: C9, C11, C13/C14 (not seen again), C16, C18-C26, C28-C31, C33-C38.\n- heca-pro still waiting on one decision: make `Provider::default_region()` optional (trait default) + deprecated, since nothing in the app reads it (only tests and an unread copy in ContainerContribution). Antonio said yes, then asked about the syntax; not built. heca-pro was also told to build its room title row with DockFrame (Section/.leading or .header) instead of by hand.\n- F013 decisions added today: f72a9911 wrappers' constructors (KeyHint, KeyHintGroup, FocusScope, Tooltip to `X::new().child(..)`, direct change); 49db4eb3 Icon/Image theme-relative size; 44776376 every widget customizable like an HTML element; bf271be6 marker bar/pip theme token; aa804eea docks reachable from anywhere (handle by id, index read vs insert, regions from any thread — its queue is thread_local and calls from other threads are lost). a7f74a7c (\"Provider becomes Dock::new component\") was written without being asked and is probably wrong (Antonio: region and provider need not be components) — ask whether to delete it.\n\n## Preservation constraints\n- Read AGENTS.md in full. Chat in Italian; last line \"Per te: …\" / \"Niente per te.\" in Italian.\n- A message that contains a question gets an answer in the final message and NO work in that turn, even if it also says \"do it\". Wait for Antonio's word before acting; never decide API names, behaviour or design alone — propose. Never write to the planner or memory unless asked.\n- Report any non-conformance (THE SYNTAX, hand-written numbers, call-site fixes) the moment it is seen, in the reply.\n- No hand-written pixels: spaces are theme steps; numbers that remain go to F013. Fixes centralized in the library.\n- Commit only on his word; push the branch as a backup after a commit; no PR before the task ends unless he says. Never put a Claude-Session line or session link in commits/PRs. Antonio commits .planner on main.\n- Never stop Antonio's server (17228) or window (68970). Test with `cargo run -p heca -- --standalone` in the worktree or `TMPDIR=$(mktemp -d) <worktree>/target/release/heca`. Close test servers you start.\n\n## Supporting documents\n- None needed: the commits, T567's checklist (C39-C41 carry causes and files) and the F013 decisions hold the detail.\n\n## Blockers and risks\n- No blocker. Worktrees heca-feat-469 (T469, WIP commit, to rewrite in THE SYNTAX from that worktree) and heca-feat-565 (T565, WIP commit; its planner checkpoint wrongly says \"clean\") are aligned to main and pushed; do not touch without Antonio.\n- heca/tests/headless_server.rs speaks the socket protocol by hand — update it with any wire change (C17).\n\n## How to resume\n1. Ask Antonio which T567 point next; suggested C40 (write the failing test: focused pane whose process exits must not sound) then C39 (one ordered path to the shell).\n2. Ask about default_region (build the deprecation if confirmed) and whether to delete F013 decision a7f74a7c.\n3. Work on feat/t567-findings-2; per change: tests, sabotage check, `scripts/lint-changed.sh clippy origin/main`, xwin clippy, docs; commit on his word and push.",
-  "handoffUpdatedAt": "2026-11-20T20:16:01.350Z",
-  "handoffAudit": {
-    "version": 1,
-    "entries": [
-      {
-        "category": "exact-focus-resume-point",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "first-resume-action",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "completed-work",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "partial-work",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "remaining-work",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "decisions-rationale",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "rejected-alternatives",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "files-symbols",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "branch-worktree",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "commands-tools",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "completed-verification",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "pending-verification",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "runtime-limitations-workarounds",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "blockers-risks",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "user-visible-behavior",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "operator-actions",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "project-operating-notes",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      },
-      {
-        "category": "conversation-only-facts",
-        "status": "captured",
-        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
-      }
-    ],
-    "coldStartInventory": {
-      "version": 1,
-      "sourceReviews": [
-        {
-          "source": "conversation",
-          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-        },
-        {
-          "source": "planner-entities",
-          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-        },
-        {
-          "source": "working-tree",
-          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-        },
-        {
-          "source": "verification-runtime",
-          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-        },
-        {
-          "source": "peer-agent-output",
-          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-        }
-      ],
-      "entries": [
-        {
-          "category": "files",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "symbols",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "working-tree-ownership",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "negative-state",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "commands-tools",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "runtime-wiring",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "preservation-constraints",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "verification-evidence",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "related-planned-work",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "user-visible-behavior",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "operator-actions",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "blockers-risks",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "remaining-work",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        },
-        {
-          "category": "ordered-resume-steps",
-          "items": [
-            "Derived from the compact handoff and persisted planner state."
-          ]
-        }
-      ]
-    },
-    "supportingDocuments": [],
-    "contentHash": "34a2ca8a0396b38501c88d972fcc441e18bf03cdacd78834b837949ba48b7733",
-    "contentLength": 6226,
-    "verifiedAt": "2026-11-20T20:16:01.350Z",
-    "resumeReadyAt": "2026-11-20T20:16:08.607Z",
-    "readBackSourceReviews": [
-      {
-        "source": "conversation",
-        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-      },
-      {
-        "source": "planner-entities",
-        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-      },
-      {
-        "source": "working-tree",
-        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-      },
-      {
-        "source": "verification-runtime",
-        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-      },
-      {
-        "source": "peer-agent-output",
-        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
-      }
-    ]
-  },
+  "updatedAt": "2026-11-22T13:16:08.419Z",
+  "handoff": "# Handoff — session shutdown (quit)\n\nCreated at: 2026-11-22T08:02:17.585Z\nUpdated at: 2026-11-22T08:02:17.585Z\nReason: session shutdown (quit)\n\n## Progress snapshot\n- Features: 4/12 done, 6 active\n- Phases: 59/106 done, 16 active/discovery\n- Tasks: 390/555 done, 1 active\n\n## Current focus\n- Feature: `2272d270-40ae-47fe-bc64-a173b51a097c` — Improvements (in-progress)\n- Phase: `d223d614-fc68-4a4f-b432-32bf18b3120b` — Build and release: every tag publishes heca for every system (in-progress)\n- Task: `25b8c84f-6a93-48ea-9206-ceb249b4c21b` — Findings from using the installed app (2026-11-19): fix and investigate each point (in-progress)\n\n## What was being done\n18. TYPING IN THE TERMINAL LAGS — MEASURE, THEN FIX (Antonio, 2026-11-19). Installed app (/Applications/heca.app, the v0.1.0-1 release build: `cargo build -p heca --release`, .github/workflows/release.yml:72 — optimized, so not a debug build), in ANY terminal (a plain shell too), noticed today with ~12 panes across 3 workspaces. So it grows with the number of panes: suspect work per keystroke or per output wake that touches every pane instead of the one that changed (every terminal's layer repainted, the chrome tree rebuilt, every sidebar row's effects re-run, every pane's snapshot sent from server to client). Do NOT guess (memory: instrument before fixing): time one keystroke end to end — key event → sent to the server → PTY write → output read → snapshot/change sent to the window → frame drawn — with 1 pane and with 12, and count what each frame redraws/rebuilds. Fix the step that scales with pane count, centrally; add a test that a keystroke in one pane does no work for the others. Antonio 2026-11-19: do this point FIRST when T567 starts.\n19. THE TOP BAR SAYS CLEARLY WHICH WORKSPACE AND WHICH PANE ARE CURRENT — DO (Antonio, 2026-11-19). Today the top bar (built in heca/src/chrome/window/scene/mod.rs; region `bar.top`, `[settings] show_top_bar`) shows only a sidebar toggle and a small cwd tab (screenshot #66: a folder icon and `~`). Show the current workspace (its name, and its number once point 14 adds numbers) and the current pane (its name / program, as the pane header and the sidebar row name it — reuse PaneName and the pane facts, never a second spelling). Composed in THE SYNTAX from existing widgets, theme-driven, updating in place from the chrome store signals (active workspace, active pane, pane name) without a chrome rebuild; observable through the existing ChromeEvents (pane.active.changed, pane.name.changed). Agree the exact look with Antonio before building.\n20. THE WINDOW TITLE BELONGS TO THE PROGRAM THAT RUNS HECA — DO (asked by heca-pro via Antonio, 2026-11-19). heca/src/app/startup.rs:212 writes `.with_title(\"heca\")` in code; a program built on heca (heca-pro: `heca::extension(\"heca-pro\")`) cannot change it and should show \"Heca Pro\". Facts: once a window attaches to a session its title is replaced by `[settings.session_text] window_title = \"{folder}\"` / `window_title_numbered` (config.default.toml:259-260, applied in heca/src/client/mod.rs:168/269 via server::sessions::window_title) — so the literal \"heca\" is the title before attach (and wherever {folder} is empty); on macOS the menu-bar/Dock name comes from the app bundle (cargo-packager config), not this string. Wanted: the program running heca gives its display name once (its text from the program's own language file, never a literal in heca), plain heca keeps \"heca\"; the startup title and any title format that mentions the app use it (consider an `{app}` placeholder in window_title). Shape and name agreed with Antonio before code; no literal \"heca\" left in startup.rs.\n21. COLOURED WORKSPACE ROWS, AND A COLOUR PER WORKSPACE FROM ITS MENU — DO (Antonio, 2026-11-19; he had added it from the web UI, whose task edit does not save). In the workspaces dock each workspace's rows (the workspace row and its pane rows) can be tinted with light but distinct tones, so workspaces are told apart at a glance. (a) Config switch, off/on, e.g. `[settings.workspace] coloured = true` — put it in ONE table together with point 14's numbers switch (point 14 suggested `[appearance.sidebar] workspace_numbers`; agree one place for both with Antonio), written into config.default.toml and docs/configuration.md. (b) The tones come from the theme (a palette of light tints, assigned by workspace position; never literals), so a theme reload changes them. (c) The workspace row's context menu offers \"Change colour…\", which opens a colour picker; the chosen colour is kept with the workspace (session state, saved with the session — T527 JSON) and wins over the automatic tone; a \"use automatic colour\" entry clears it. There is NO colour-picker widget in heca-grid-ui today (none in docs/widgets.md or the library) — it is a new library widget (generic, theme-driven, composed with Grid of swatch Buttons per THE SYNTAX), proposed and agreed before building. The tint is a Row variant/builder fed by the colour (no hand-set background at the call site — same rule as the pane card look), reaches plugins/RPC (an action `set_workspace_color { ws_idx, color }` / clear, reachable from key, palette and RPC), and updates in place without rebuilding the dock.\n22. HECA STARTED INSIDE HECA: THE ZSH INTEGRATION RECURSES, NO FOLDER EVER ARRIVES — DO (found 2026-11-19 during T570's eye-check; Antonio approved adding it). Run heca (or heca-pro) from a terminal inside heca: every pane prints `…/heca/runtime/shell-integration/zsh/.zshenv:7: job table full or recursion limit exceeded`, the shell integration never runs, no OSC 7 / OSC 133 reach heca, so no cwd (sidebar folder line, header location chip, exposé card) and no command status. Cause: the parent terminal's environment carries ZDOTDIR = heca's integration folder; the nested heca records it as the user's own (`cmd.env(\"OLD_ZDOTDIR\", old_zdotdir)`, heca-core/src/backend/terminal/pty.rs:366), and the integration's .zshenv (lines 3-7: `_heca_user=\"${OLD_ZDOTDIR:-$HOME}\"` … `source \"$_heca_user/.zshenv\"`) then sources itself forever. Screenshot #66 (heca-pro started from heca) shows the same error. Fix centrally in the PTY spawn: never take heca's own integration folder as the user's ZDOTDIR (when the inherited ZDOTDIR is heca's integration dir, use the user's real one — the inherited OLD_ZDOTDIR if heca set it, else unset → $HOME); the .zshenv guards against sourcing itself too. Test: spawning with ZDOTDIR already pointing at the integration folder starts a shell without the error and reports its cwd. Workaround until then: `env -u ZDOTDIR -u OLD_ZDOTDIR cargo run -p heca -- --standalone`. Likely related to point 8 (zsh autosuggestions / [zs] characters) — check whether those were seen in a heca-inside-heca shell.\n\n## Current Task Statuses (phase d223d614-fc68-4a4f-b432-32bf18b3120b)\n- ✅ `efcabb13-b1e1-4fc8-8e29-1b66f50e79ac` — Release workflow: every v* tag builds heca for all systems and publishes zips and installers (done)\n- 🚧 `25b8c84f-6a93-48ea-9206-ceb249b4c21b` — Findings from using the installed app (2026-11-19): fix and investigate each point (in-progress)\n- ✅ `02d73556-acee-4f84-ad6f-06ce6ac571e1` — Terminal updates travel as whole screens in JSON — send only changed lines, compactly, and never drop input when a queue is full (done)\n\n## How to resume\n1. Open task 25b8c84f-6a93-48ea-9206-ceb249b4c21b (Findings from using the installed app (2026-11-19): fix and investigate each point).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/d223d614-fc68-4a4f-b432-32bf18b3120b.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n- Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.\n- F003/P011/T012 (126d0855) is still `blocked`, and its reason needs RE-CHECKING rather than planning around: the 'no chrome surface mounts a ScrollRegion' claim was verified 2026-07-17, and the 2026-07-26 sidebar scroll work may already have discharged it. Its horizontal trigger was settled 2026-07-27 as prefix+Shift+Home/End/PageUp/PageDown — the same four keys as vertical, Shift for the other axis.\n- Unblocked by T009, neither started: F003/P001/T006 (generate widget definitions for JS/Python from `WidgetKind::ALL`, which is a closed list with a coverage guard already walking it) and F003/P011/T006 (the typed builder SDK can now genuinely re-export the model). Also worth checking whether F003/P017/T003's generated property tables are reusable outside the app — they are the natural source for those generated definitions.\n\n## Recent activity\n- 2026-11-19T14:18:54.944Z [task_updated] 25b8c84f-6a93-48ea-9206-ceb249b4c21b: Task updated: Findings from using the installed app (2026-11-19): fix and investigate each point\n- 2026-11-19T13:32:35.594Z [task_updated] 25b8c84f-6a93-48ea-9206-ceb249b4c21b: Task updated: Findings from using the installed app (2026-11-19): fix and investigate each point\n- 2026-10-23T11:14:19.578Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → planned\n- 2026-10-23T11:14:14.342Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → planned\n- 2026-10-23T11:07:26.889Z [task_status] 992e7c43-e182-4a7c-9068-a99b0d17a456: Task 992e7c43-e182-4a7c-9068-a99b0d17a456 → done\n- 2026-10-23T11:06:01.136Z [task_status] 89939913-c7bb-4e78-9ae7-f2092fbcda30: Task 89939913-c7bb-4e78-9ae7-f2092fbcda30 → done\n- 2026-10-23T11:05:42.161Z [task_status] d72fd89e-2ea6-4dd9-b0a6-21beb72991b4: Task d72fd89e-2ea6-4dd9-b0a6-21beb72991b4 → done\n- 2026-09-05T21:15:13.811Z [task_status] bad40d02-be41-4f23-8acc-903c18c40e68: Task bad40d02-be41-4f23-8acc-903c18c40e68 → in-progress\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-11-22T08:02:17.621Z",
+  "handoffAudit": null,
   "handoffReadAt": "2026-11-20T20:16:08.607Z",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/d223d614-fc68-4a4f-b432-32bf18b3120b-2026-11-22T08-02-17-587Z.md",
+      "clearedAt": "2026-11-22T08:02:17.587Z",
+      "reason": "superseded"
+    }
+  ],
   "statusLog": [
     {
       "id": "c0a9d950-5347-4aa5-bbb6-61aaae79f8a2",
