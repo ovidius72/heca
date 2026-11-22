@@ -37,13 +37,10 @@ impl Dialog {
     /// this only runs for the non-button-focused case.
     fn activate_primary(&mut self) {
         // The first declared action is primary; body-builder order cannot change its row.
-        if let Some(row) = self.part_mut(ACTIONS_AREA)
-            && let Some(primary) = row.base_mut().children.first_mut()
-        {
-            // **Ask it to act; do not pretend to be a keyboard.** This used to dispatch a
-            // synthetic `Event::Key { Enter }` and relied on the button claiming raw keys whether
-            // or not it was focused.
-            primary.activate();
+        // **Click it, as the mouse would.** This used to dispatch a synthetic `Event::Key { Enter }`
+        // and relied on the button claiming raw keys whether or not it was focused.
+        if let Some(row) = self.part_mut(ACTIONS_AREA) {
+            let _ = crate::component::click(row.as_mut(), &[0]);
         }
     }
 

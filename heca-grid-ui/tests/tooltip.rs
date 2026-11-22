@@ -147,7 +147,7 @@ fn tooltip_is_transparent_to_child_events() {
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
     let mut tip = Tooltip::new(
-        Item::new("file").on_activate(move || sink.set(sink.get() + 1)),
+        Item::new("file").on_click(move |_| sink.set(sink.get() + 1)),
         "open",
     );
     LayoutEngine::new().compute(&mut tip, Size::new(200.0, 60.0));
@@ -159,7 +159,7 @@ fn tooltip_is_transparent_to_child_events() {
         Some(0),
         "wrapped child is reachable by Tab"
     );
-    focus.deliver_key(&mut tip, heca_grid_ui::GridKey::Enter);
+    common::press_key(&mut tip, heca_grid_ui::GridKey::Enter);
     assert_eq!(
         clicks.get(),
         1,

@@ -42,7 +42,7 @@ fn a_control_takes_the_left_press_and_lets_every_other_button_past() {
 #[test]
 fn one_click_target_is_declared_not_written_out() {
     let button = Button::primary("A");
-    let row = Row::new().on_activate(|| {});
+    let row = Row::new().on_click(|_| {});
     let plain = Label::new("text");
     assert!(button.base().one_click_target);
     assert!(row.base().one_click_target, "an interactive row is one too");

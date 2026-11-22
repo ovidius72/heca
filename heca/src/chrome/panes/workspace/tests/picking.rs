@@ -5,18 +5,6 @@ use crate::chrome::panes::pane::shell::PANE_CONTENT_AREA;
 use heca_grid_ui::builders::Parent;
 use heca_grid_ui::reactive::SignalGet;
 
-/// The path from `root` to the node keyed `key`.
-fn path_of(root: &dyn Component, key: &str) -> Option<Vec<usize>> {
-    if root.base().key.as_deref() == Some(key) {
-        return Some(Vec::new());
-    }
-    root.base().children.iter().enumerate().find_map(|(i, child)| {
-        let mut path = path_of(child.as_ref(), key)?;
-        path.insert(0, i);
-        Some(path)
-    })
-}
-
 /// The node at `path` below `root`.
 fn node_at<'a>(root: &'a dyn Component, path: &[usize]) -> &'a dyn Component {
     path.iter()
@@ -25,7 +13,7 @@ fn node_at<'a>(root: &'a dyn Component, path: &[usize]) -> &'a dyn Component {
 
 /// The pane `id`'s path, and the ordinary picker's targets inside it.
 fn letters_in_pane(ws: &dyn Component, id: u64) -> (Vec<usize>, Vec<Vec<usize>>) {
-    let pane = path_of(ws, &crate::chrome::pane_key(PaneId(id))).expect("the pane is built");
+    let pane = heca_grid_ui::path_with_key(ws, &crate::chrome::pane_key(PaneId(id))).expect("the pane is built");
     let inside = heca_grid_ui::collect_hints(ws)
         .into_iter()
         .map(|(path, _)| path)
@@ -86,7 +74,7 @@ fn a_column_is_not_lettered_by_the_ordinary_picker() {
         .map(|(path, _)| path)
         .collect();
     for col in [1, 2] {
-        let column = path_of(ws.as_ref(), &crate::chrome::column_key(ColumnId(col)))
+        let column = heca_grid_ui::path_with_key(ws.as_ref(), &crate::chrome::column_key(ColumnId(col)))
             .expect("the column is built");
         assert!(
             !targets.contains(&column),
@@ -106,7 +94,7 @@ fn picking_a_pane_gives_what_runs_in_it_the_keyboard() {
             ..seams()
         },
     );
-    let pane = path_of(ws.as_ref(), &crate::chrome::pane_key(PaneId(11))).expect("built");
+    let pane = heca_grid_ui::path_with_key(ws.as_ref(), &crate::chrome::pane_key(PaneId(11))).expect("built");
     assert!(heca_grid_ui::fire_hint(ws.as_mut(), &pane));
     assert_eq!(*picked.borrow(), vec![PaneId(11)], "the pane was focused");
     assert_eq!(
@@ -160,7 +148,7 @@ fn a_pane_asked_for_by_name_wears_the_letter() {
         &key,
         Some("q".into())
     ));
-    let pane = path_of(ws.as_ref(), &key).expect("built");
+    let pane = heca_grid_ui::path_with_key(ws.as_ref(), &key).expect("built");
     assert_eq!(
         node_at(ws.as_ref(), &pane).base().hint_label.get(),
         Some("q".into())

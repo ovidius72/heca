@@ -13,7 +13,7 @@ fn item_activates_on_click_when_interactive() {
 
     let hits = Rc::new(Cell::new(0u32));
     let h = hits.clone();
-    let mut item = Item::new("VIEW PROFILE").on_activate(move || h.set(h.get() + 1));
+    let mut item = Item::new("VIEW PROFILE").on_click(move |_| h.set(h.get() + 1));
     LayoutEngine::new().compute(&mut item, Size::new(260.0, 40.0));
 
     assert!(item.focusable(), "interactive item is focusable");
@@ -29,13 +29,7 @@ fn item_activates_on_click_when_interactive() {
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
     item.base().focus(true);
-    heca_grid_ui::dispatch(
-        &mut item,
-        &Event::Key {
-            key: GridKey::Space,
-            pressed: true,
-        },
-    );
+    common::press_key(&mut item, heca_grid_ui::GridKey::Space);
     assert_eq!(hits.get(), 2);
 }
 
@@ -189,7 +183,7 @@ fn pane_draws_rounded_accent_border_no_brackets() {
 #[test]
 fn item_group_collapses_rows_out_of_layout() {
     use heca_grid_ui::ItemGroup;
-    let row = || Item::new("row").on_activate(|| {});
+    let row = || Item::new("row").on_click(|_| {});
     let mut group = ItemGroup::new("GROUP").child(row()).child(row());
 
     // Expanded: header + 2 rows all take height.
@@ -220,7 +214,7 @@ fn row_activates_on_click_and_key_when_interactive() {
     let sink = clicks.clone();
     let mut row = Row::new()
         .child(Label::new("PANE 1"))
-        .on_activate(move || sink.set(sink.get() + 1));
+        .on_click(move |_| sink.set(sink.get() + 1));
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
 
     assert!(row.focusable(), "an interactive row is focusable");
@@ -231,18 +225,14 @@ fn row_activates_on_click_and_key_when_interactive() {
 
     click_at(&mut row, outside, PointerButton::Left);
     assert_eq!(clicks.get(), 0, "a click outside the row does nothing");
-    // **A raw key reaches the widget that owns the keyboard.** Unfocused, the row does not take
+    // **A key reaches the widget that owns the keyboard.** Unfocused, the row does not take
     // Enter — which is what stopped it eating keys meant for the list it sits in.
-    let enter = Event::Key {
-        key: GridKey::Enter,
-        pressed: true,
-    };
-    heca_grid_ui::dispatch(&mut row, &enter);
+    common::press_key(&mut row, GridKey::Enter);
     assert_eq!(clicks.get(), 0, "an unfocused row ignores Enter");
     click_at(&mut row, center, PointerButton::Left);
     assert_eq!(clicks.get(), 1, "a click inside the row activates it");
     // …and the click gave it the keyboard, as clicking a control does anywhere else.
-    heca_grid_ui::dispatch(&mut row, &enter);
+    common::press_key(&mut row, GridKey::Enter);
     assert_eq!(clicks.get(), 2, "Enter activates the row that was clicked");
 }
 
@@ -252,7 +242,7 @@ fn row_activates_on_click_and_key_when_interactive() {
 #[test]
 fn a_focused_row_leaves_j_and_k_to_the_container_above() {
     use heca_grid_ui::Row;
-    let mut row = Row::new().child(Label::new("pane")).on_activate(|| {});
+    let mut row = Row::new().child(Label::new("pane")).on_click(|_| {});
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
     row.base().focus(false);
 
@@ -348,7 +338,7 @@ fn rail_cell_activates_on_click_and_enter() {
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
     let mut cell = RailCell::new(Icon::new(Glyph::GitBranch).size(20.0))
-        .on_activate(move || sink.set(sink.get() + 1));
+        .on_click(move |_| sink.set(sink.get() + 1));
     LayoutEngine::new().compute(&mut cell, Size::new(200.0, 200.0));
 
     let b = cell.base().bounds;
@@ -357,12 +347,6 @@ fn rail_cell_activates_on_click_and_enter() {
     // would before sending one.
     cell.base().focus(true);
     click_at(&mut cell, center, PointerButton::Left);
-    heca_grid_ui::dispatch(
-        &mut cell,
-        &Event::Key {
-            key: heca_grid_ui::GridKey::Enter,
-            pressed: true,
-        },
-    );
+    common::press_key(&mut cell, heca_grid_ui::GridKey::Enter);
     assert_eq!(clicks.get(), 2, "click + Enter both activate the cell");
 }

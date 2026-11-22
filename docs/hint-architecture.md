@@ -122,7 +122,7 @@ not work** — two red tests said so before anything was built on it:
 - **Eight widgets keep their action in a private field of their own** — `Button`, `IconButton`,
   `BadgeButton`, `Toast`, `Choice`, `RailCell`, `Item`, `Row`. `Handlers::has(Click)` is `false` for a
   `Button`, the case that matters most.
-- **`on_click` and `on_activate` are two spellings of one thing**, so no set of `EventKind`s names it
+- **`on_click` and `on_press` are one thing** (`on_press` is a click that dispatches an intent), so no set of `EventKind`s names it
   either.
 
 So it is a field after all: **`Base::activatable`**, set wherever the action is wired — once in

@@ -8,7 +8,7 @@
 //! [`Item`] rows.
 
 use crate::action::{Action, SignalData};
-use crate::builders::LayoutExt;
+use crate::builders::{EventExt, LayoutExt};
 use crate::component::{Base, Component, Event, Handled};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::Direction;
@@ -45,7 +45,7 @@ impl ItemGroup {
         // visibility + chevron are synced in `event()` (which has `&mut self`).
         let header = Item::new(label)
             .leading(chevron_label)
-            .on_activate(move || expanded.set(!expanded.get_untracked()));
+            .on_click(move |_| expanded.set(!expanded.get_untracked()));
 
         let mut base = Base::container();
         base.style.layout.direction = Direction::Column;

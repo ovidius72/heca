@@ -4,7 +4,7 @@ pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
 
     let click = |label: &str| {
         let name = label.to_string();
-        move || println!("[showcase] {name} clicked")
+        move |_: &mut heca_grid_ui::event::EventCx<'_>| println!("[showcase] {name} clicked")
     };
     Flex::column()
         .gap(10.0)
@@ -17,7 +17,7 @@ pub(super) fn build(_cx: &DemoCx<'_>) -> Flex {
                 // nothing declared.
                 .action(Button::outline("Retry").on_click(click("toast-retry")))
                 .action(Button::ghost("Details").on_click(click("toast-details")))
-                .on_dismiss(click("toast-dismiss")),
+                .on_dismiss(|| println!("[showcase] toast-dismiss clicked")),
         )
         // A COMPOSED body: the slot takes any component, not just a line of text — so a
         // notification can carry structure. Neither Label names a colour; the body slot

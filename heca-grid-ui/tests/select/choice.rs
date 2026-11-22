@@ -68,9 +68,9 @@ fn a_choice_is_one_tab_stop_whatever_it_contains() {
         .child(
             Choice::labeled("a", "A")
                 .child(Toggle::new())
-                .on_activate(|| {}),
+                .on_click(|_| {}),
         )
-        .child(Choice::labeled("b", "B").on_activate(|| {}));
+        .child(Choice::labeled("b", "B").on_click(|_| {}));
 
     let mut focus = FocusManager::new();
     focus.advance(&mut ui, true);
@@ -94,8 +94,8 @@ fn a_choice_is_one_tab_stop_whatever_it_contains() {
 #[test]
 fn choice_at_resolves_a_pick_from_real_bounds() {
     let mut list = Flex::column()
-        .child(Choice::labeled("a", "AAA").on_activate(|| {}))
-        .child(Choice::labeled("b", "BBB").on_activate(|| {}));
+        .child(Choice::labeled("a", "AAA").on_click(|_| {}))
+        .child(Choice::labeled("b", "BBB").on_click(|_| {}));
     LayoutEngine::new().compute(&mut list, Size::new(200.0, 200.0));
 
     let second = list.base().children[1].base().bounds;

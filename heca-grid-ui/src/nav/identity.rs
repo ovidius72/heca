@@ -89,7 +89,12 @@ pub fn node_with_key<'a>(root: &'a dyn Component, key: &str) -> Option<&'a dyn C
         .find_map(|c| node_with_key(c.as_ref(), key))
 }
 
-/// The path to the node that answers to `key`, for descending to it mutably.
+/// **The path from `root` to the widget that answers to `key`** — what a caller descends with
+/// when it has to act on the widget mutably, a test included.
+pub fn path_with_key(root: &dyn Component, key: &str) -> Option<Vec<usize>> {
+    path_to_key(root, key, &mut Vec::new())
+}
+
 fn path_to_key(root: &dyn Component, key: &str, here: &mut Vec<usize>) -> Option<Vec<usize>> {
     if root.base().answers_to(key) {
         return Some(here.clone());
@@ -110,7 +115,7 @@ pub fn node_with_key_mut<'a>(
     root: &'a mut dyn Component,
     key: &str,
 ) -> Option<&'a mut dyn Component> {
-    let path = path_to_key(root, key, &mut Vec::new())?;
+    let path = path_with_key(root, key)?;
     let mut node = root;
     for step in path {
         node = node.base_mut().children.get_mut(step)?.as_mut();

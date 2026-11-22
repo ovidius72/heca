@@ -6,7 +6,7 @@
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
@@ -36,7 +36,6 @@ pub struct BadgeButton {
     seen_label: String,
     variant: BadgeVariant,
     flash: Flash,
-    on_click: Option<Box<dyn Fn()>>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -53,7 +52,6 @@ impl BadgeButton {
             seen_label: String::new(),
             variant: BadgeVariant::Accent,
             flash: Flash::new(),
-            on_click: None,
         };
         button.seen_label = button.label.get_untracked();
         button.remeasure();
@@ -87,13 +85,6 @@ impl BadgeButton {
         self
     }
 
-    /// Set the click callback.
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_click = Some(Box::new(f));
-        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
-        self
-    }
 
     /// The reactive label signal, so hosts can update the text live.
     pub fn label_signal(&self) -> Signal<String> {
@@ -212,51 +203,18 @@ impl Component for BadgeButton {
         }
     }
 
-    /// Capture, not bubble: this control is **one click target and one Tab stop**
-    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
-    /// never see the press first. Handling it before the children is what keeps that true.
+    /// The press shows on the control itself; what it does belongs to its click handlers.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if !self.base.visible.get_untracked() || self.base.disabled.get_untracked() {
-            return Handled::No;
+        if matches!(ev, Event::Click(_)) && self.base.activatable && !self.base.disabled.get_untracked() {
+            self.flash.trigger();
         }
-        match ev {
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
-                self.flash.trigger();
-                if let Some(f) = &self.on_click {
-                    f();
-                }
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
+        Handled::No
     }
 
-    /// **The click, after its children have declined it.**
-    ///
-    /// The press is taken in capture (so composed content can never take it first) and the click
-    /// it turns into is delivered to whoever took that press — this control — which is what makes
-    /// "one control, one click target" a framework rule rather than something each control
-    /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
-    /// refusal and can take the click with `stop_propagation`.
-    fn on_event(&mut self, ev: &Event) -> Handled {
-        if !self.base.visible.get_untracked() || self.base.disabled.get_untracked() {
-            return Handled::No;
-        }
-        match ev {
-            Event::Click(_) => {
-                self.flash.trigger();
-                if let Some(f) = &self.on_click {
-                    f();
-                }
-                Handled::Yes
-            }
-            _ => Handled::No,
-        }
+    fn is_control(&self) -> bool {
+        true
     }
+
 
     fn tick(&mut self, dt: f32) -> bool {
         let next = self.label.get_untracked();
@@ -274,6 +232,7 @@ impl LayoutExt for BadgeButton {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builders::EventExt;
     use crate::event::PointerButton;
     use crate::reactive::SignalUpdate;
     use std::cell::Cell;
@@ -283,7 +242,7 @@ mod tests {
     fn button_click_fires_callback() {
         let hit = Rc::new(Cell::new(0));
         let out = hit.clone();
-        let mut b = BadgeButton::new("LIVE").on_click(move || out.set(out.get() + 1));
+        let mut b = BadgeButton::new("LIVE").on_click(move |_| out.set(out.get() + 1));
         b.base_mut().bounds = heca_core::layout::Rectangle::new(
             heca_core::layout::Point::new(0.0, 0.0),
             heca_core::layout::Size::new(80.0, 24.0),
@@ -296,10 +255,9 @@ mod tests {
             Handled::Yes
         );
         assert_eq!(hit.get(), 0, "the press alone has not clicked anything yet");
-        assert_eq!(
-            crate::component::dispatch(&mut b, &Event::pointer_released(pos, PointerButton::Left)),
-            Handled::Yes
-        );
+        // The click bubbles on to whatever holds the button, as a mouse click does; what matters
+        // is that the button's own handler heard it.
+        let _ = crate::component::dispatch(&mut b, &Event::pointer_released(pos, PointerButton::Left));
         assert_eq!(hit.get(), 1);
     }
 

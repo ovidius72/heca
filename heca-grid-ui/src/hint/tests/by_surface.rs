@@ -1,6 +1,8 @@
 //! **Whose targets are whose** — the grouping a host with layered surfaces needs, so no host
 //! writes it twice.
 
+use crate::builders::EventExt;
+
 use crate::builders::Parent as _;
 use crate::component::Component;
 use crate::hint::*;
@@ -12,12 +14,12 @@ use heca_core::layout::Size;
 fn page_with_a_seated_surface() -> Flex {
     use crate::widgets::Button;
 
-    let mut surface = Flex::column().child(Button::new("in the surface").on_click(|| {}));
+    let mut surface = Flex::column().child(Button::new("in the surface").on_click(|_| {}));
     surface.base_mut().key = Some("surface:1".into());
     surface.base_mut().surface = true;
 
     let mut root = Flex::column()
-        .child(Flex::column().child(Button::new("on the page").on_click(|| {})))
+        .child(Flex::column().child(Button::new("on the page").on_click(|_| {})))
         .child(surface);
     crate::LayoutEngine::new().compute(&mut root, Size::new(800.0, 600.0));
     root
@@ -86,12 +88,12 @@ fn the_page_is_the_group_with_no_path_and_a_surface_carries_its_own_key() {
 fn a_nested_surface_owns_its_own_targets() {
     use crate::widgets::Button;
 
-    let mut inner = Flex::column().child(Button::new("in the menu").on_click(|| {}));
+    let mut inner = Flex::column().child(Button::new("in the menu").on_click(|_| {}));
     inner.base_mut().key = Some("menu".into());
     inner.base_mut().surface = true;
 
     let mut outer = Flex::column()
-        .child(Button::new("in the dialog").on_click(|| {}))
+        .child(Button::new("in the dialog").on_click(|_| {}))
         .child(inner);
     outer.base_mut().key = Some("dialog".into());
     outer.base_mut().surface = true;
@@ -135,7 +137,7 @@ fn a_surface_declares_what_it_obscures_with_one_line_on_the_widget() {
     use crate::widgets::Button;
 
     let mut panel = Flex::column()
-        .child(Button::new("in my panel").on_click(|| {}))
+        .child(Button::new("in my panel").on_click(|_| {}))
         .lock(true);
     // Taking the keyboard is NOT written: an overlay holds focus while it is open, and that is
     // how it takes keys. A bare `Flex` has no such story, so this test says so explicitly —
@@ -169,7 +171,7 @@ fn a_surface_declares_what_it_obscures_with_one_line_on_the_widget() {
 fn a_surface_that_declares_nothing_obscures_nothing() {
     use crate::widgets::Button;
 
-    let mut ambient = Flex::column().child(Button::new("a toast").on_click(|| {}));
+    let mut ambient = Flex::column().child(Button::new("a toast").on_click(|_| {}));
     ambient.base_mut().key = Some("heca.notifications".into());
     ambient.base_mut().surface = true;
 

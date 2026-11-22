@@ -1,7 +1,7 @@
 //! Opening a dialog, or a panel from a description, as a layer.
 
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt as _};
+use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, EventExt as _, HintExt as _};
 use heca_view::ViewNode;
 
 use super::spec::{ModalResult, ModalSpec, OverlayId};
@@ -143,7 +143,7 @@ pub(super) fn build_modal_root(
         let hint = fire.clone();
         let button = Button::new(action.label.clone())
             .variant(variant)
-            .on_click(fire);
+            .on_click(move |_| fire());
         // Reactive validation: disable this button while a required form field is empty (blocks
         // blank submission). Binds the button's `disabled` signal to the field's live value.
         if let Some(field) = &action.disable_when_empty

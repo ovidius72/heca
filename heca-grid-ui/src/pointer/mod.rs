@@ -670,15 +670,25 @@ fn or(a: Handled, b: Handled) -> Handled {
 /// Fire [`Event::Mount`] on every widget in `root` that has not had one yet, and mark it mounted.
 /// Called by the layout pass, which is the first moment a tree is live and laid out.
 pub(crate) fn fire_mounts(node: &mut dyn Component) {
+    // The root keeps the route it already had: a tree laid out on its own is still inside
+    // whatever routed it when the whole window was laid out.
+    let held = node.base().dispatch_to.clone();
+    mount_walk(node, held);
+}
+
+/// Fire mounts and hand each widget its intent route: its own, else the one above it.
+fn mount_walk(node: &mut dyn Component, above: Option<crate::intent::DispatchHandler>) {
+    let route = node.base().dispatch_handler.clone().or(above);
+    node.base_mut().dispatch_to = route.clone();
     if !node.base().mounted.get() {
         node.base().mounted.set(true);
         let ev = Event::Mount;
         let _ = node.base_mut().run_handlers(&ev);
-        let _ = node.on_event(&ev);
+        let _ = crate::component::own_event(node, &ev);
     }
     let n = node.base().children.len();
     for i in 0..n {
         let child = &mut node.base_mut().children[i];
-        fire_mounts(child.as_mut());
+        mount_walk(child.as_mut(), route.clone());
     }
 }
