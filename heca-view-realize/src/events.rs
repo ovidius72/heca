@@ -22,6 +22,7 @@ pub fn native(event: ViewEvent) -> Option<EventKind> {
         V::FocusLost => Some(K::Blur),
         V::Key => Some(K::Key),
         V::Scroll => Some(K::Scroll),
+        V::EdgeScroll => Some(K::EdgeScroll),
         V::DragStart => Some(K::DragStart),
         V::Drag => Some(K::Drag),
         V::DragEnd => Some(K::DragEnd),
@@ -60,6 +61,7 @@ pub fn described(kind: EventKind) -> Option<ViewEvent> {
         K::Blur => Some(V::FocusLost),
         K::Key => Some(V::Key),
         K::Scroll => Some(V::Scroll),
+        K::EdgeScroll => Some(V::EdgeScroll),
         K::DragStart => Some(V::DragStart),
         K::Drag => Some(V::Drag),
         K::DragEnd => Some(V::DragEnd),
@@ -67,10 +69,8 @@ pub fn described(kind: EventKind) -> Option<ViewEvent> {
         K::DragOver => Some(V::DragOver),
         K::DragLeave => Some(V::DragLeave),
         K::Drop => Some(V::Drop),
-        // A left click is bound as `press`, which is more than this one event. A drag held past
-        // an edge (`EdgeScroll`) has no described name yet.
+        // A left click is bound as `press`, which is more than this one event.
         K::Click
-        | K::EdgeScroll
         | K::TextInput
         | K::FilesDropped
         | K::ModifiersChanged

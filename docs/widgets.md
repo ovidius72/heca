@@ -264,6 +264,9 @@ Surface::new()
 The host runs `heca_grid_ui::edge_scroll(root, dt, EdgeScroll { distance, speed })` once a frame
 with the user's settings; a widget never measures where the pointer is.
 
+A plugin binds the same event by its described name, `edge_scroll`, and its intent is sent every
+frame the drag is held past the edge: `{ "events": { "edge_scroll": { "action": "mylist.scroll" } } }`.
+
 | Piece | What it is |
 |---|---|
 | `ev.capture_pointer()` | In a `PointerDown` handler: keep the pointer until the button is up — every move, the release and `EdgeScroll` come to this widget wherever the pointer goes — **without** taking the press, so a window gesture (a divider, the move modifier) can still claim it. The browser's `setPointerCapture`. A widget that consumes the press captures anyway. |
