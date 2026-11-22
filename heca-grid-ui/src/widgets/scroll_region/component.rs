@@ -46,10 +46,11 @@ impl Component for ScrollRegion {
         // surface, carries no glow). A STYLED region (a scrollable panel) without an
         // explicit `.glow(..)` falls back to the theme rest glow, like every surface.
         let s = &self.base.style;
-        if (s.visual.fill.is_some() || s.visual.border.is_some()) && s.visual.glow.is_none() {
+        let fill = s.visual.fill_in(cx.theme());
+        if (fill.is_some() || s.visual.border.is_some()) && s.visual.glow.is_none() {
             cx.rect(
                 vp,
-                s.visual.fill.unwrap_or(crate::color::Color::TRANSPARENT),
+                fill.unwrap_or(crate::color::Color::TRANSPARENT),
                 s.visual.border,
                 s.visual.radius,
                 cx.rest_glow(SURFACE_GLOW_RADIUS),

@@ -93,6 +93,7 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
             .children(),
         WidgetDefinition::new(WidgetId::Surface, containers::surface)
             .names("Surface", "Surface")
+            .properties::<Surface>()
             .children(),
         WidgetDefinition::new(WidgetId::Panel, containers::panel)
             .names("Panel", "Panel")

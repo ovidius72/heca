@@ -20,7 +20,7 @@ pub(super) fn build(theme: &Theme) -> Grid {
                 }
             }
         });
-    let text = editor.text();
+    let text = editor.text_signal();
     let send = Button::new("Append entry").on_click(move |_| {
         let message = text.get_untracked();
         if !message.is_empty() {

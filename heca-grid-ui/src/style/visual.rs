@@ -15,6 +15,13 @@ use super::*;
 #[serde(default)]
 pub struct Visual {
     pub fill: Option<Color>,
+    /// **A fill named by the theme colour it follows** (`"surface"`), set by
+    /// [`StyleExt::background`](crate::builders::StyleExt::background) with
+    /// [`Fill::theme`](crate::style::Fill::theme) and resolved at paint by
+    /// [`fill_in`](Self::fill_in), so it follows a theme reload with no rebuild. A description
+    /// names a token too, but resolves it when the tree is built, so this is not serialized.
+    #[serde(skip)]
+    pub fill_theme: Option<&'static str>,
     pub border: Option<Border>,
     pub glow: Option<Glow>,
     /// **The accent this widget and everything inside it paints its chrome with** — CSS's
@@ -57,6 +64,7 @@ impl Default for Visual {
     fn default() -> Self {
         Self {
             fill: None,
+            fill_theme: None,
             border: None,
             glow: None,
             accent: None,
@@ -67,5 +75,45 @@ impl Default for Visual {
             font_size: 0.0,
             font_scale: 1.0,
         }
+    }
+}
+
+impl Visual {
+    /// **The fill to paint with this frame**: the colour written, else the theme colour named,
+    /// else none. Every widget that paints its own fill reads it through here.
+    pub fn fill_in(&self, theme: &crate::theme::Theme) -> Option<Color> {
+        self.fill.or_else(|| {
+            self.fill_theme
+                .and_then(|name| theme.colors.color_named(name))
+        })
+    }
+}
+
+/// **What [`background`](crate::builders::StyleExt::background) paints**: a colour, or a theme
+/// colour by name, which follows the theme.
+///
+/// ```ignore
+/// Surface::new().background(Fill::theme("surface"))   // follows the theme
+/// Surface::new().background(Color::rgb(0x20, 0x20, 0x28))   // this colour, whatever the theme
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Fill {
+    /// This colour, whatever the theme.
+    Color(Color),
+    /// The theme's colour of this name — a field of the theme (`"surface"`, `"accent"`,
+    /// `"border"`, …), read when it is drawn.
+    Theme(&'static str),
+}
+
+impl Fill {
+    /// The theme's colour of this name, read when it is drawn.
+    pub const fn theme(name: &'static str) -> Self {
+        Self::Theme(name)
+    }
+}
+
+impl From<Color> for Fill {
+    fn from(colour: Color) -> Self {
+        Self::Color(colour)
     }
 }

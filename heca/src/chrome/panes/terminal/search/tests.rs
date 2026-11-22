@@ -518,38 +518,64 @@ fn stepping_with_no_matches_goes_nowhere() {
     assert_eq!(t.current_match(), None);
 }
 
-/// **The field stays where it is when the counter appears**, and the bar's arrows step through the
-/// matches — up to the previous one, down to the next.
+/// **The field does not move when the counter appears** — the counter goes above it — and the
+/// bar's arrows step through the matches: up to the previous one, down to the next. Found by what
+/// is drawn, the way the user sees it.
 #[test]
 fn the_field_does_not_move_when_the_counter_appears_and_the_arrows_step() {
     let (t, mut root, said) = placed();
     t.find();
     frame(&mut root);
-    let field_at = |root: &heca_grid_ui::WidgetModel| {
-        let bar = root.base().children[0].base().children[2].base();
-        bar.children[1].base().bounds
+    let drawn = |root: &heca_grid_ui::WidgetModel| -> Vec<(String, heca_grid_ui::Rectangle)> {
+        painted(root.as_ref())
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some((t.text.clone(), t.rect)),
+                _ => None,
+            })
+            .collect()
     };
-    let before = field_at(&root);
     heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("a".into()));
+    frame(&mut root);
+    let query_at = |root: &heca_grid_ui::WidgetModel| {
+        drawn(root)
+            .into_iter()
+            .find(|(text, _)| text == "a")
+            .expect("the field draws the query")
+            .1
+    };
+    let before = query_at(&root);
     t.show_matches(vec![found(101, 0, 1), found(105, 0, 1)], Some(0));
     frame(&mut root);
-    let after = field_at(&root);
-    // The bar is anchored at its right edge: the field's right edge, beside the arrows, stays put
-    // (in a terminal too narrow for the whole bar the field gives up room on its left).
+    let after = query_at(&root);
     assert_eq!(
-        before.loc.x + before.size.w,
-        after.loc.x + after.size.w,
+        before.loc, after.loc,
         "the counter appeared without moving the field"
     );
+    let counter = drawn(&root)
+        .into_iter()
+        .find(|(text, _)| text == "1/2")
+        .expect("the counter is drawn")
+        .1;
+    assert!(
+        counter.loc.y + counter.size.h <= after.loc.y,
+        "the counter {counter:?} is above the field {after:?}"
+    );
 
+    // The arrows: the icons drawn right of the field, up first.
+    let mut arrows: Vec<f64> = drawn(&root)
+        .into_iter()
+        .filter(|(_, r)| {
+            r.loc.x > after.loc.x + after.size.w && r.loc.y >= counter.loc.y + counter.size.h
+        })
+        .map(|(_, r)| r.loc.x + r.size.w / 2.0)
+        .collect();
+    arrows.dedup();
+    assert_eq!(arrows.len(), 2, "an up and a down arrow beside the field");
+    let y = after.loc.y + after.size.h / 2.0;
     said.borrow_mut().clear();
-    let bar = root.base().children[0].base().children[2].base();
-    let arrow = |i: usize| {
-        let r = bar.children[i].base().bounds;
-        heca_grid_ui::Point::new(r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0)
-    };
-    let (up, down) = (arrow(2), arrow(3));
-    for at in [down, up] {
+    for x in [arrows[1], arrows[0]] {
+        let at = heca_grid_ui::Point::new(x, y);
         heca_grid_ui::dispatch(
             root.as_mut(),
             &Event::pointer_pressed(at, PointerButton::Left),
@@ -575,5 +601,87 @@ fn the_field_does_not_move_when_the_counter_appears_and_the_arrows_step() {
     assert!(
         !typed_into_the_program(&said),
         "the keyboard is back in the field"
+    );
+}
+
+/// **The search box is one opaque panel** — the theme's `surface` colour behind the field, so the
+/// terminal's text never shows through — and in a terminal too narrow for its full width it stays
+/// inside, off the terminal's left edge, rather than leaning on it.
+#[test]
+fn the_search_box_is_an_opaque_panel_inside_the_terminal() {
+    let narrow = 160.0;
+    let (seams, _said) = recording();
+    let t = Terminal::unbound();
+    t.bind(seams);
+    t.show(&viewport());
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), narrow, 200.0);
+    t.find();
+    root.tick(0.0);
+    LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(narrow, 200.0));
+    heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("a".into()));
+    root.tick(0.0);
+    LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(narrow, 200.0));
+
+    let theme = Theme::default();
+    let scene = painted(root.as_ref());
+    let query = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) if t.text == "a" => Some(t.rect),
+            _ => None,
+        })
+        .expect("the field draws the query");
+    let panel = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r)
+                if r.fill == theme.colors.surface
+                    && r.rect.loc.x <= query.loc.x
+                    && r.rect.loc.x + r.rect.size.w >= query.loc.x + query.size.w =>
+            {
+                Some(r.rect)
+            }
+            _ => None,
+        })
+        .expect("an opaque panel in the theme's surface colour behind the field");
+    assert!(
+        panel.loc.x > 0.0 && panel.loc.x + panel.size.w < narrow,
+        "the panel {panel:?} stays inside a {narrow}-wide terminal, off both edges"
+    );
+}
+
+/// **The row holding the search box takes no clicks of its own**: a press beside the panel, on the
+/// terminal's last lines, still reaches the terminal (to select, or for its program's mouse).
+#[test]
+fn a_press_beside_the_search_box_reaches_the_terminal() {
+    let narrow = 300.0;
+    let (seams, said) = recording();
+    let t = Terminal::unbound();
+    t.bind(seams);
+    t.show(&viewport());
+    let mut root = laid_out_in(heca_grid_ui::WidgetModel::new(t.clone()), narrow, 200.0);
+    t.find();
+    root.tick(0.0);
+    LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(narrow, 200.0));
+    let theme = Theme::default();
+    let panel = painted(root.as_ref())
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r) if r.fill == theme.colors.surface => Some(r.rect),
+            _ => None,
+        })
+        .expect("the search panel is drawn");
+    let beside = heca_grid_ui::Point::new(panel.loc.x / 2.0, panel.loc.y + panel.size.h / 2.0);
+    said.borrow_mut().clear();
+    heca_grid_ui::dispatch(
+        root.as_mut(),
+        &Event::pointer_pressed(beside, PointerButton::Left),
+    );
+    assert!(
+        said.borrow()
+            .iter()
+            .any(|i| matches!(i, TerminalInput::Press { .. })),
+        "the terminal heard the press beside the panel: {:?}",
+        said.borrow()
     );
 }

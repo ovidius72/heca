@@ -337,7 +337,10 @@ impl Component for Row {
         // `glow_size` setting at rest; an unfilled row stays surface-less and flat.
         let s = &self.base.style;
         // A background or radius set by hand wins over the variant's.
-        let fill = s.visual.fill.or_else(|| self.variant.fill(cx.theme()));
+        let fill = s
+            .visual
+            .fill_in(cx.theme())
+            .or_else(|| self.variant.fill(cx.theme()));
         let radius = if s.visual.radius > 0.0 || self.variant == RowVariant::Plain {
             s.visual.radius
         } else {

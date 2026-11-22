@@ -6,9 +6,20 @@ use crate::scene::{Border, Glow};
 
 /// Visual decoration builders — **surfaces only**.
 pub trait StyleExt: Component + Sized {
-    /// Background fill.
-    fn background(mut self, c: Color) -> Self {
-        self.authored_style_mut().visual.fill = Some(c);
+    /// **Background fill** — a colour, or a theme colour by name that follows the theme:
+    /// `.background(Fill::theme("surface"))`. See [`Fill`](crate::style::Fill).
+    fn background(mut self, fill: impl Into<crate::style::Fill>) -> Self {
+        let visual = &mut self.authored_style_mut().visual;
+        match fill.into() {
+            crate::style::Fill::Color(colour) => {
+                visual.fill = Some(colour);
+                visual.fill_theme = None;
+            }
+            crate::style::Fill::Theme(name) => {
+                visual.fill = None;
+                visual.fill_theme = Some(name);
+            }
+        }
         self
     }
     /// Border outline.

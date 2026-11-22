@@ -134,6 +134,14 @@ impl Parent for Card {}
 impl Parent for Scroll {}
 impl Parent for Panel {}
 impl Parent for Surface {}
+
+impl Surface {
+    /// **Wear the panel look** — a menu's material: the theme's surface fill, corner radius, edge and
+    /// a drop shadow as deep as `elevation` says. Mirrors grid-ui `Surface::elevation`.
+    pub fn elevation(self, elevation: crate::ViewElevation) -> Self {
+        self.prop("elevation", elevation)
+    }
+}
 impl Parent for ItemGroup {}
 impl Parent for DockFrame {}
 impl Parent for Overlay {}

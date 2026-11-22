@@ -49,7 +49,8 @@ pub(super) fn surface(
     node: &ViewNode,
     cx: &mut RealizeCx<'_>,
 ) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
-    attach_children(heca_grid_ui::WidgetModel::new(Surface::new()), node, cx)
+    let surface = with_props(Surface::new(), node, cx.theme);
+    attach_children(heca_grid_ui::WidgetModel::new(surface), node, cx)
 }
 
 pub(super) fn panel(

@@ -2157,8 +2157,37 @@ border, glow and radius, plus padding, gap, direction and children. Reach for it
 needs a background or padding around its content.
 
 - **Construct**: `Surface::new()` / `Surface::column()` (a column), `Surface::row()` (a row).
-- **Decoration** (`StyleExt`): `.background(Color)`, `.border(Color, width)`, `.radius(px)`,
-  `.glow(Color)` / `.glow_with(..)`.
+- **Decoration** (`StyleExt`): `.background(impl Into<Fill>)`, `.border(Color, width)`,
+  `.radius(px)`, `.glow(Color)` / `.glow_with(..)`.
+- **A background that follows the theme**: `.background(Fill::theme("surface"))` names one of the
+  theme's colours (`surface`, `background`, `accent`, `border`, … — the theme's own colour fields)
+  and reads it **when it is drawn**, so a theme reload repaints it with no rebuild. A plain
+  `Color` still works (`.background(color)`) and stays that colour whatever the theme. A name that
+  is not a theme colour paints no fill. A description writes the same name as its `fill` token
+  (`"fill": "surface"`), resolved through the same lookup (`heca_theme::Theme::color_named`).
+
+- **The panel look — `.elevation(PanelElevation)`**: the surface wears the material every menu,
+  dialog and the command palette wear, painted by the one function they share
+  (`paint_panel_chrome`): the theme's `surface` fill, its corner radius, the edge the user's
+  `overlay_border_style` draws, and a drop shadow — full for `PanelElevation::Panel`, lighter for
+  `PanelElevation::Hover`. It follows a theme reload. A `.border(..)` set on the surface is the
+  edge's colour when the style draws one, and a `.glow(..)` is kept; fill, radius and shadow are
+  the theme's. Unset (the default), the surface paints only what its own `StyleExt` says.
+
+```rust
+// A small panel floating over a terminal, in the menus' material.
+Surface::column()
+    .elevation(PanelElevation::Panel)
+    .padding(Spacing::Sm)
+    .child(Label::new("3/12").muted(true).size(WidgetSize::Caption))
+    .child(Input::new())
+```
+
+```rust
+// The same from a plugin (heca-view SDK) — realize calls the same builder.
+Surface::new().elevation(ViewElevation::Panel).child(Label::new("3/12"))
+// JSON: { "kind": "Surface", "props": { "elevation": "panel" }, "children": [ … ] }
+```
 - **Arrangement** (`LayoutExt`, `Parent`): the same `.padding*` / `.pad_*(Spacing)` / `.gap*` /
   `.width` / `.height` / `.grow` / `.child(..)` as [`Flex`](#flex--container).
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.

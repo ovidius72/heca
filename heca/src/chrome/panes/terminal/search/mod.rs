@@ -16,8 +16,8 @@ use heca_grid_ui::builders::{EventExt, FocusExt, LayoutExt, Parent, PresenceExt,
 use heca_grid_ui::component::PaintCx;
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
-use heca_grid_ui::style::{Length, Spacing};
-use heca_grid_ui::widgets::{Flex, Glyph, Icon, IconButton, Input, Tag};
+use heca_grid_ui::style::{Length, Spacing, WidgetSize};
+use heca_grid_ui::widgets::{Flex, Glyph, Icon, IconButton, Input, Label, PanelElevation, Surface};
 
 use super::input::{Search, TerminalInput};
 use super::shared::Shared;
@@ -237,42 +237,65 @@ pub(super) fn search_bar(shared: Rc<Shared>) -> Flex {
             lost.emit(TerminalInput::Search(Search::Editing(false)));
         });
     let (back, ahead) = (shared.clone(), shared.clone());
-    // The counter sits LEFT of the field and the arrows right of it: the bar is anchored at its
-    // right edge, so the counter appearing or growing never moves the field. In a narrow terminal
-    // only the field gives up room — the counter and the arrows are never cut. An arrow steps and
-    // hands the keyboard back to the field, so typing and Ctrl+j/k go on where they were.
-    Flex::row()
-        .align("center")
-        .gap(Spacing::Sm)
+    // **One panel in the terminal's bottom-right corner, in the menus' material** — the theme's
+    // surface fill, rounded corners, edge and drop shadow — so the terminal's text never shows
+    // through it. Inside, the match count in
+    // small quiet text over the field's right end, then the field and its two arrows. The panel is
+    // anchored at the bottom, so the count appearing, changing or going grows it upwards and never
+    // moves the field; it is never wider than the terminal, and when room is short only the field
+    // gives some up. An arrow steps and hands the keyboard back to the field, so typing and
+    // Ctrl+j/k go on where they were.
+    let panel = Surface::column()
+        .elevation(PanelElevation::Panel)
+        .padding(Spacing::Sm)
+        .gap(Spacing::Xs)
         .child(
-            Tag::new("")
-                .label(count)
-                .shrink(0.0)
+            Label::new("")
+                .text(count)
+                .muted(true)
+                .size(WidgetSize::Caption)
+                .align_self("end")
                 .hidden(move || count.with(String::is_empty)),
         )
-        .child(field)
         .child(
-            IconButton::new(Icon::new(Glyph::CaretUp))
-                .shrink(0.0)
-                .tooltip("Previous match")
-                .on_click(move |_| {
-                    back.step(false);
-                    back.search.open();
-                }),
-        )
-        .child(
-            IconButton::new(Icon::new(Glyph::CaretDown))
-                .shrink(0.0)
-                .tooltip("Next match")
-                .on_click(move |_| {
-                    ahead.step(true);
-                    ahead.search.open();
-                }),
-        )
+            Flex::row()
+                .align("center")
+                .gap(Spacing::Xs)
+                .child(field)
+                .child(
+                    IconButton::new(Icon::new(Glyph::CaretUp))
+                        .shrink(0.0)
+                        .tooltip("Previous match")
+                        .on_click(move |_| {
+                            back.step(false);
+                            back.search.open();
+                        }),
+                )
+                .child(
+                    IconButton::new(Icon::new(Glyph::CaretDown))
+                        .shrink(0.0)
+                        .tooltip("Next match")
+                        .on_click(move |_| {
+                            ahead.step(true);
+                            ahead.search.open();
+                        }),
+                ),
+        );
+    // The row across the terminal's bottom holds the panel at its right end; the space around the
+    // panel is the row's padding, inside the terminal, so a narrow terminal shrinks the panel
+    // rather than pushing it past the left edge.
+    Flex::row()
+        .justify("end")
+        .padding(Spacing::Sm)
+        .child(panel)
         .hidden(move || !open.get())
-        .at_rect(Length::Auto, Length::Auto, Length::Auto, Length::Auto)
+        .at_rect(
+            Length::Auto,
+            Length::Auto,
+            Length::Percent(1.0),
+            Length::Auto,
+        )
         .align_self("end")
-        .margin(Spacing::Sm)
 }
 
 #[cfg(test)]

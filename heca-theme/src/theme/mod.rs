@@ -13,6 +13,7 @@ mod effects;
 mod flash;
 mod input;
 mod interaction;
+mod named;
 
 pub use dialog::DialogStyle;
 pub use effects::{FrameStyle, GlowLevel, Intensity, Shadow};

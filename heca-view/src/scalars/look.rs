@@ -33,6 +33,14 @@ value_set! {
         Accent => "accent", Neutral => "neutral", Success => "success",
         Warning => "warning", Danger => "danger", Outline => "outline",
     }
+    /// How high a [`Surface`](crate::build::Surface) sits above the page — mirrors grid-ui
+    /// `PanelElevation`; set, the surface wears the panel look (theme fill, corners, edge, shadow).
+    pub enum ViewElevation {
+        /// A panel over the page: a menu's, a dialog's, the palette's material. Full shadow.
+        Panel => "panel",
+        /// Hovering just above its target, like a tooltip. A lighter shadow.
+        Hover => "hover",
+    }
     /// How a surface arrives and leaves — mirrors grid-ui `NamedAnimation` (`Overlay`).
     ///
     /// The **built-ins**, which is all a description can name: a live animation is a Rust type, and a

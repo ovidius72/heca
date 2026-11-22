@@ -656,7 +656,7 @@ impl Component for DockFrame {
         }
         let radius = cx.theme().colors.border_radius;
         let b = self.base.bounds;
-        let fill = self.base.style.visual.fill;
+        let fill = self.base.style.visual.fill_in(cx.theme());
 
         // Background fill — rounded by theme radius. An explicit `.glow(..)`
         // (StyleExt) wins; otherwise the theme rest glow gives the frame the

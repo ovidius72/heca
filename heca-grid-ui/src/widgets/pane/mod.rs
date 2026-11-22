@@ -180,7 +180,7 @@ impl Component for Pane {
             return;
         }
         let b = self.base.bounds;
-        let fill = self.base.style.visual.fill;
+        let fill = self.base.style.visual.fill_in(cx.theme());
 
         let radius = self.radius(cx.theme());
         // Surface glow: an explicit `.glow(..)` (StyleExt) wins; otherwise the
