@@ -30,7 +30,8 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Workspace next | `Ctrl+N` | Switch to next workspace (down) |
 | Workspace prev | `Ctrl+P` | Switch to prev workspace (up) |
 | Focus toggle (local) | `i` | Toggle between last two panes in same workspace |
-| Focus toggle (global) | `Shift+I` | Toggle between last two panes globally |
+| Focus toggle (global) | `Shift+I` | Toggle between the current and the last-visited workspace |
+| Focus toggle (last) | `Ctrl+I` | Toggle between the current pane and the last one you were in, whichever workspace it is in (`focus_toggle_last`) |
 
 ## Pane Operations
 

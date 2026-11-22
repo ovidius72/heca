@@ -57,6 +57,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::PrevPane
         | WmAction::FocusToggleLocal
         | WmAction::FocusToggleGlobal
+        | WmAction::FocusToggleLast
         | WmAction::SplitHorizontal
         | WmAction::SplitVertical
         | WmAction::ZoomColumn

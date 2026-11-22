@@ -86,6 +86,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         args: &[],
     },
+    ActionDescriptor {
+        name: "focus_toggle_last",
+        side: Side::Client,
+        label: "Last Pane Anywhere",
+        description: "Toggle between the current pane and the last-focused one, in whichever workspace it is.",
+        icon: None,
+        args: &[],
+    },
     // ── Actions that name their target (action-task-E) ──
     //
     // These are built by name + arguments through `build_action` — from a `config.toml`

@@ -25,6 +25,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::WorkspacePrev, handle_workspace_prev);
     registry.register(WmActionKind::FocusToggleLocal, handle_focus_toggle_local);
     registry.register(WmActionKind::FocusToggleGlobal, handle_focus_toggle_global);
+    registry.register(WmActionKind::FocusToggleLast, handle_focus_toggle_last);
     registry.register(WmActionKind::FocusPane, handle_focus_pane);
     registry.register(WmActionKind::FocusWorkspace, handle_focus_workspace);
 

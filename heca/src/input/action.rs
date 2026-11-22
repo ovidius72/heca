@@ -67,6 +67,7 @@ pub enum WmAction {
     WorkspacePrev,
     FocusToggleLocal,
     FocusToggleGlobal,
+    FocusToggleLast,
 
     // ── Navigation (parameterized) ──
     FocusPane {

@@ -104,6 +104,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "workspace_next" => Some(WmAction::WorkspaceNext),
         "focus_toggle_local" => Some(WmAction::FocusToggleLocal),
         "focus_toggle_global" => Some(WmAction::FocusToggleGlobal),
+        "focus_toggle_last" => Some(WmAction::FocusToggleLast),
         "workspace_prev" => Some(WmAction::WorkspacePrev),
         "create_workspace" => Some(WmAction::CreateWorkspace),
         "rename_workspace" => Some(WmAction::RenameWorkspace),
