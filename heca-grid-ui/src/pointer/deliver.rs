@@ -40,7 +40,7 @@ pub fn deliver_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Han
         };
         // Always, consumed or not: a container that reports what its subtree did must hear about
         // the click the row inside it took.
-        node.after_subtree(ev, from_subtree);
+        crate::component::after_subtree(node, ev, from_subtree);
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
@@ -127,9 +127,9 @@ pub(super) fn delivering<T>(f: impl FnOnce() -> T) -> (T, bool) {
 impl Base {
     /// Run this widget's registered handlers for `ev`, if it has any.
     pub(crate) fn run_handlers(&mut self, ev: &Event) -> crate::event::HandlerOutcome {
-        // **A disabled widget hears no click**, whoever registered for it — the rule is here once,
-        // not in each control's own event code.
-        if matches!(ev, Event::Click(_)) && self.disabled.get_untracked() {
+        // **A disabled widget is not used**, whoever registered for it — no click of any button,
+        // no run of them. The rule is here once, not in each control's own event code.
+        if ev.kind().uses_widget() && self.disabled.get_untracked() {
             return crate::event::HandlerOutcome {
                 handled: Handled::No,
                 default_prevented: false,

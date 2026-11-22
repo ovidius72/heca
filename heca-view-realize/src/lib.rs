@@ -201,6 +201,16 @@ pub(crate) fn apply_common_props(
     // plugin's row gets the identical menu heca's own rows get with nothing written — which is the
     // whole of ⭐⭐ RULE ZERO here. Building it from parts would be the second path, and it would
     // get the anchor, the dismissal and the keys only approximately right.
+    // **Every native event, by the same name** (`events.rs`): a node that binds `right_click`,
+    // `pointer_enter`, `drop`… gets a listener that sends its intent, on whatever kind it is.
+    for (name, intent) in &node.events {
+        let Some(kind) = crate::events::native_by_name(name) else {
+            continue;
+        };
+        let emit = emit.clone();
+        let intent = intent.clone();
+        heca_grid_ui::builders::listen(realized, kind, move |_| emit(intent.clone()));
+    }
     if !node.menu.is_empty() {
         let items = node.menu.clone();
         let emit = emit.clone();
@@ -391,6 +401,7 @@ pub(crate) fn apply_common_props(
     }
 }
 
+pub mod events;
 mod intents;
 mod registry;
 pub use registry::{

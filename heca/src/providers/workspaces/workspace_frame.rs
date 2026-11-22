@@ -56,7 +56,6 @@ impl WorkspaceFrame<'_> {
         // The header toggle records the workspace in the toggle sink; the app flips
         // its collapsed state (canonical, in `chrome_state.workspaces`) and the tree
         // rebuilds (F4.3). Collapse is read back from that same shared state.
-        let emit = seams.emit.clone();
         let mut dock = DockFrame::new(ws.name.clone())
             // **What the fold control's letter means** — this is the file that assigns the
             // vocabulary: a workspace's own letter is `warning` a few lines down, a pane's is the
@@ -67,9 +66,11 @@ impl WorkspaceFrame<'_> {
             .frameless(true)
             .gap(Spacing::Xs) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
+            // Folding names its action; the dock's listener sends it seated on this dock.
             .on_toggle(move |_| {
-                emit.fire(
-                    crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
+                heca_grid_ui::intent::send(
+                    crate::chrome::Intent::new("toggle_workspace_collapsed")
+                        .arg("ws_idx", crate::chrome::PropValue::Int(ws_idx as i64)),
                 );
             })
             .header_actions(badge);

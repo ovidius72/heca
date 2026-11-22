@@ -33,17 +33,15 @@ pub(crate) fn focus_pane_of(
 /// The app's edges, gathered once. A test calls this to get exactly the seams and nothing else
 /// (AGENTS.md § 0b-bis rule 3).
 pub(crate) fn callbacks(state: &crate::app_state::AppState) -> ColumnCallbacks {
-    let proxy = state.event_proxy.clone();
     ColumnCallbacks {
         tint: crate::chrome::chrome_gui_theme(state).colors.success,
         pick: std::rc::Rc::new(move |pane_id: PaneId| {
-            // The column asks; the core does. A pick is a **keyboard** gesture: it lands on
-            // nothing, so where the keyboard is is its context — the same reasoning a pane's own
-            // pick already applies.
-            let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                source: crate::app::interaction::InteractionSource::Keyboard,
-                intent: crate::app::interaction::InteractionIntent::FocusPane { pane_id },
-            });
+            // The column asks; the core does. A pick is a **keyboard** gesture, and the host that
+            // runs it says so (`chrome::fire_hint`), so the column names only its action.
+            heca_grid_ui::intent::send(
+                crate::chrome::Intent::new("focus_pane")
+                    .arg("pane_id", crate::chrome::PropValue::Int(pane_id.0 as i64)),
+            );
         }),
     }
 }

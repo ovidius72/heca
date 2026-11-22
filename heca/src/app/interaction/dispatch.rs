@@ -36,6 +36,7 @@ pub(super) fn target_overlay(
 pub(super) fn resolve_overlay_control(
     state: &mut AppState,
     registry: &ActionRegistry,
+    source: InteractionSource,
     action: &WmAction,
 ) {
     let (named, result) = match action {
@@ -43,6 +44,17 @@ pub(super) fn resolve_overlay_control(
         WmAction::CloseOverlay { overlay } => (*overlay, None),
         _ => return,
     };
+    // **Which overlay, when the call did not say**: the one whose widgets sent it. A dialog's
+    // button sends `submit_overlay` by name, and its layer's listener stamps the call with that
+    // layer (`InteractionSource::Surface`), so the button answers its own dialog — not whichever
+    // modal happens to be in front. Only a call from nowhere in particular falls to the front one.
+    let named = named.or_else(|| match source {
+        InteractionSource::Surface(key) => state
+            .layers
+            .layer_of_surface(key)
+            .map(crate::chrome::OverlayId),
+        _ => None,
+    });
     let Some(overlay) = target_overlay(state, named) else {
         return;
     };
@@ -66,19 +78,23 @@ pub(crate) fn dispatch_intent(
     source: InteractionSource,
     intent: InteractionIntent,
 ) -> crate::actions::ActionResult {
+    // **Every named action reads its arguments as it declared them**, whatever door the call came
+    // through — a config binding and the palette carry text, code carries numbers. Once, here,
+    // where every window dispatch passes, so no door can forget it.
+    let intent = typed(&state.action_catalog, intent);
     // Overlay control (§2.7.2): `SubmitOverlay`/`CloseOverlay` are resolved here — not via the
     // `ActionRegistry` — because resolving an overlay runs its completion, which needs the
     // registry to dispatch a follow-up action (a handler gets no registry). Intercepted before
-    // routing, like the `FocusPaneThenAction` composite below. Always allowed (overlay control
+    // routing, like the container composite below. Always allowed (overlay control
     // has no focus-domain policy; the follow-up action it dispatches is routed on its own).
     if let InteractionIntent::ActivateAction(action) = &intent
         && action.is_overlay_control()
     {
-        resolve_overlay_control(state, registry, action);
+        resolve_overlay_control(state, registry, source, action);
         return Ok(());
     }
 
-    // The container half of the same composite. Its outcome is dropped here — a click and a menu
+    // **Focus a container, then act on it.** Its outcome is dropped here — a click and a menu
     // pick have nowhere to report one — while RPC calls the same function for the answer.
     if let InteractionIntent::FocusContainerThenAction { container, action } = &intent {
         let (container, action) = (container.clone(), action.clone());
@@ -86,22 +102,6 @@ pub(crate) fn dispatch_intent(
         return Ok(());
     }
 
-    // Composite: focus the pane, then run the action — each half policy-routed on its
-    // own (mirrors what an active-targeted pane button does across two events on click).
-    if let InteractionIntent::FocusPaneThenAction { pane_id, action } = intent {
-        dispatch_intent(
-            state,
-            registry,
-            source,
-            InteractionIntent::FocusPane { pane_id },
-        )?;
-        return dispatch_intent(
-            state,
-            registry,
-            source,
-            InteractionIntent::ActivateAction(*action),
-        );
-    }
     // Kept for the debug line below: routing consumes the intent, and a refusal that cannot name
     // what was refused is not actionable.
     #[cfg(debug_assertions)]
@@ -125,18 +125,8 @@ pub(crate) fn dispatch_intent(
         RouteDecision::Allow(InteractionIntent::FocusContainerThenAction { container, action }) => {
             focus_container_then_action(state, registry, source, &container, &action);
         }
-        RouteDecision::Allow(InteractionIntent::FocusPaneThenAction { pane_id, action }) => {
-            registry.execute(&WmAction::FocusPane { pane_id }, state)?;
-            return registry.execute(&action, state);
-        }
         RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
             return registry.execute(&WmAction::FocusPane { pane_id }, state);
-        }
-        RouteDecision::Allow(InteractionIntent::ExposeCursor { pane_id }) => {
-            crate::chrome::record_expose_cursor(state, pane_id);
-        }
-        RouteDecision::Allow(InteractionIntent::ToggleWorkspaceCollapsed { ws_idx }) => {
-            crate::handlers::apply_ws_collapse(state, ws_idx, None);
         }
         RouteDecision::Allow(InteractionIntent::StartSidebarDrag { .. }) => {
             #[cfg(debug_assertions)]
@@ -229,5 +219,30 @@ pub(crate) fn dispatch_action_ref(
             source,
             InteractionIntent::View(intent.clone()),
         ),
+    }
+}
+
+/// `intent` with its named action's arguments turned into the types the action declared
+/// ([`ActionMeta::typed_args`](crate::actions::ActionMeta::typed_args)). Only the two kinds that
+/// carry a named action change; an action the catalog does not know is left as it is.
+pub(super) fn typed(
+    catalog: &crate::actions::ActionCatalog,
+    intent: InteractionIntent,
+) -> InteractionIntent {
+    let typed_view = |mut action: crate::chrome::Intent| {
+        if let Some(meta) = catalog.find(&action.action) {
+            action.args = meta.typed_args(std::mem::take(&mut action.args));
+        }
+        action
+    };
+    match intent {
+        InteractionIntent::View(action) => InteractionIntent::View(typed_view(action)),
+        InteractionIntent::FocusContainerThenAction { container, action } => {
+            InteractionIntent::FocusContainerThenAction {
+                container,
+                action: typed_view(action),
+            }
+        }
+        other => other,
     }
 }

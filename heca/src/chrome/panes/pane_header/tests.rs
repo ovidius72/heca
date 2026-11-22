@@ -450,3 +450,48 @@ fn pane_header_key_tracks_its_shape_never_its_words() {
         "a status this bar does not render must not rebuild it",
     );
 }
+
+/// **A header button names its action, and one that acts on the focused pane focuses this pane
+/// first** — `focus_pane`, then `zoom_column`, in that order, through the widget's own dispatch.
+/// The header carries no event channel of its own.
+#[test]
+fn a_zoom_button_focuses_its_pane_then_zooms() {
+    use heca_grid_ui::{LayoutEngine, Size};
+    let sent = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let seen = sent.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| seen.borrow_mut().push(intent));
+    let facts = facts_for("/tmp");
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let buttons = crate::chrome::panes::pane_items::PaneButtons::default();
+    let zoom = buttons.get("zoom").expect("heca ships zoom");
+    let content = PaneHeaderContent {
+        facts: &facts,
+        segments: &[],
+        chips: &crate::chrome::panes::pane_items::PaneChips::default(),
+        actions: &[zoom],
+        ws_idx: 0,
+        col_idx: 0,
+        zoomed: false,
+        floating: false,
+        shortcuts: &ActionShortcuts::default(),
+        catalog: &catalog,
+    };
+    let ctx = PaneHeaderCtx {
+        pane_id: PaneId(1),
+        ws_idx: 0,
+        col_idx: 0,
+    };
+    let mut header = build_pane_header(&content, heca_grid_ui::Color::rgb(0, 0, 0), ctx)
+        .expect("a header with a button");
+    LayoutEngine::new().compute(&mut header, Size::new(600.0, 40.0));
+    let key = crate::chrome::pane_control_key(PaneId(1), "zoom_column");
+    let path = heca_grid_ui::path_with_key(&header, &key).expect("the zoom button is shown");
+    let _ = heca_grid_ui::click(&mut header, &path);
+    let sent = sent.borrow();
+    let names: Vec<&str> = sent.iter().map(|i| i.action.as_str()).collect();
+    assert_eq!(names, ["focus_pane", "zoom_column"]);
+    assert_eq!(
+        sent[0].args.get("pane_id"),
+        Some(&crate::chrome::PropValue::Int(1))
+    );
+}

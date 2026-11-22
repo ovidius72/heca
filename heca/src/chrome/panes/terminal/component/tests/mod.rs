@@ -3,7 +3,7 @@
 use super::super::input::{Cell as GridCell, Grid, Seams, TerminalCommand};
 use super::super::model::TerminalId;
 use super::super::testing::{header_above, laid_out_in, recording};
-use super::super::viewport::{ScrollIntents, Viewport};
+use super::super::viewport::{ScrollTarget, Viewport};
 use super::*;
 use heca_config::appearance::ScrollbarVisibility;
 use heca_grid_ui::component::{Event, Handled};
@@ -24,10 +24,14 @@ mod pointer;
 mod typing;
 mod zoom;
 
-/// Seams that ignore input — for tests of the scrollback controls.
-fn seams(scroll: ScrollIntents) -> Seams {
+/// Seams that ignore input, for terminal 7 owned by pane 3 — for tests of the scrollback
+/// controls, which name their actions from it.
+fn seams() -> Seams {
     Seams {
-        scroll,
+        scroll: ScrollTarget {
+            pane: Some(heca_core::layout::PaneId(3)),
+            terminal: super::super::TerminalId(7),
+        },
         input: Box::new(|_| {}),
         command: Box::new(|_, _| {}),
     }

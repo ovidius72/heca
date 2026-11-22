@@ -15,7 +15,7 @@ fn deleting_a_card_moves_the_cursor_to_its_neighbour_first() {
         .borrow()
         .iter()
         .map(|i| match () {
-            _ if i.contains("ExposeCursor") => "cursor".to_string(),
+            _ if i.contains("expose_cursor_to") => "cursor".to_string(),
             _ if i.contains("close_pane_by_id") => "delete".to_string(),
             _ => "other".to_string(),
         })

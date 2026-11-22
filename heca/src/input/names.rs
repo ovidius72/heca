@@ -147,7 +147,6 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "scroll_page_up" => Some(WmAction::ScrollPageUp),
         "scroll_page_down" => Some(WmAction::ScrollPageDown),
         "scroll_to_top" => Some(WmAction::ScrollToTop),
-        "scroll_to_bottom" => Some(WmAction::ScrollToBottom),
         "scroll_page_left" => Some(WmAction::ScrollPageLeft),
         "scroll_page_right" => Some(WmAction::ScrollPageRight),
         "scroll_to_left_edge" => Some(WmAction::ScrollToLeftEdge),

@@ -272,6 +272,11 @@ fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
     let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
     let mut body = (c.build)(&ctx, &mut bx);
 
+    // What the body sends by name from a callback (`intent::send`): built alone it sits in no dock,
+    // so that reaches the host's sink — this one.
+    let sent: Rc<std::cell::RefCell<Vec<String>>> = Default::default();
+    let seen = sent.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| seen.borrow_mut().push(intent.action));
     // Every pick in the built body, run in document order.
     for (path, _) in heca_grid_ui::collect_hints(body.as_ref()) {
         assert!(heca_grid_ui::fire_hint(body.as_mut(), &path));
@@ -307,11 +312,11 @@ fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
     // like any other — was unreachable by `prefix+/` purely because of what it had been put
     // inside. Where a widget sits does not decide what it can do.
     assert!(
-        fired
-            .borrow()
+        sent.borrow()
             .iter()
-            .any(|i| !matches!(i, InteractionIntent::View(_))),
-        "the row's collapse control was lettered too, and picking it ran its own action"
+            .any(|action| action == "toggle_workspace_collapsed"),
+        "the row's collapse control was lettered too, and picking it ran its own action: {:?}",
+        sent.borrow(),
     );
 }
 

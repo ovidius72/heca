@@ -8,6 +8,11 @@ use super::*;
 fn action_policy_classifies_these_as_documented() {
     // Spot-check specific classifications
     assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
+    // Folding one workspace's row is the same act as folding the active one.
+    assert_eq!(
+        action_policy(&WmAction::ToggleWorkspaceCollapsed { ws_idx: 0 }),
+        action_policy(&WmAction::ToggleCurrentWorkspaceCollapsed)
+    );
     // Column rename (active or by-idx) is a tiled-layout op → TiledOnly, like RenameColumn.
     assert_eq!(
         action_policy(&WmAction::RenameColumn),
@@ -73,7 +78,10 @@ fn action_policy_classifies_these_as_documented() {
         );
     }
     assert_eq!(
-        action_policy(&WmAction::ScrollToOffset { rows: 0 }),
+        action_policy(&WmAction::ScrollToOffset {
+            rows: 0,
+            terminal: None
+        }),
         ActionPolicy::KeyboardTerminal
     );
     assert_eq!(

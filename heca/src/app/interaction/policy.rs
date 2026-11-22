@@ -112,6 +112,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed
+        | WmAction::ToggleWorkspaceCollapsed { .. }
         | WmAction::CollapseCurrentColumn
         | WmAction::ExpandCurrentColumn
         | WmAction::ToggleCurrentColumnCollapsed
@@ -160,7 +161,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ScrollPageUp
         | WmAction::ScrollPageDown
         | WmAction::ScrollToTop
-        | WmAction::ScrollToBottom
+        | WmAction::ScrollToBottom { .. }
         | WmAction::ScrollToOffset { .. }
         // Selection acts on the focused pane and is allowed in both
         // tiled and floating domains.
@@ -294,18 +295,4 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,
     }
-}
-
-/// Whether `action` is permitted while the focused pane is in the **floating**
-/// domain — the same rule the router applies (`FocusedPaneLocal` + `Global` pass;
-/// `TiledOnly` / `WorkspaceLevel` / `AlwaysAllowed` are blocked when floating).
-///
-/// Used by the pane info-bar to hide buttons that don't apply to a floating pane
-/// (split / zoom / move are `TiledOnly`; float / close are `FocusedPaneLocal`), so
-/// the visible set follows the policy rather than a hardcoded list.
-pub(crate) fn action_allowed_when_floating(action: &WmAction) -> bool {
-    matches!(
-        action_policy(action),
-        ActionPolicy::FocusedPaneLocal | ActionPolicy::KeyboardTerminal | ActionPolicy::Global
-    )
 }
