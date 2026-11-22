@@ -108,6 +108,10 @@ pub fn build_registry() -> ActionRegistry {
         handle_toggle_current_workspace_collapsed,
     );
     registry.register(
+        WmActionKind::ToggleWorkspaceCollapsed,
+        handle_toggle_workspace_collapsed,
+    );
+    registry.register(
         WmActionKind::CollapseCurrentColumn,
         handle_collapse_current_column,
     );

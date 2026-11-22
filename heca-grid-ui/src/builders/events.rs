@@ -50,7 +50,7 @@ pub trait EventExt: Component + Sized {
     /// container receives what its children fire. The nearest container listening wins. heca uses
     /// it on the wrapper round every dock to address what the dock asks for; widgets never know.
     fn on_dispatch(mut self, f: impl Fn(heca_view::Intent) + 'static) -> Self {
-        self.base_mut().dispatch_handler = Some(std::rc::Rc::new(f));
+        listen_to_dispatch(&mut self, f);
         self
     }
 
@@ -300,6 +300,12 @@ pub trait EventExt: Component + Sized {
 }
 
 impl<T: Component + Sized> EventExt for T {}
+
+/// **Listen to what is dispatched inside any widget** — what [`EventExt::on_dispatch`] does, for a
+/// tree held as `dyn Component` (a layer's root once it is built). One function, like [`listen`].
+pub fn listen_to_dispatch(widget: &mut dyn Component, f: impl Fn(heca_view::Intent) + 'static) {
+    widget.base_mut().dispatch_handler = Some(std::rc::Rc::new(f));
+}
 
 /// **Listen to `kind` on any widget** — what [`EventExt::on`] does, for a widget held as
 /// `dyn Component` (a realized description, a boxed child). One function, so the rules about what

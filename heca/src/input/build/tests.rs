@@ -35,8 +35,42 @@ fn test_build_scroll_to_offset() {
     let args = std::collections::HashMap::from([("rows".to_string(), "42".to_string())]);
     assert_eq!(
         build_action("scroll_to_offset", &args),
-        Some(WmAction::ScrollToOffset { rows: 42 })
+        Some(WmAction::ScrollToOffset { rows: 42, terminal: None })
     );
+}
+
+/// **A scroll can name the terminal it scrolls** — the chip or scrollbar of the one clicked; without
+/// a name it is the keyboard's terminal, as before.
+#[test]
+fn a_scroll_names_its_terminal_or_takes_the_keyboards() {
+    let named = std::collections::HashMap::from([
+        ("rows".to_string(), "3".to_string()),
+        ("terminal".to_string(), "9".to_string()),
+    ]);
+    assert_eq!(
+        build_action("scroll_to_offset", &named),
+        Some(WmAction::ScrollToOffset { rows: 3, terminal: Some(9) })
+    );
+    let terminal = std::collections::HashMap::from([("terminal".to_string(), "9".to_string())]);
+    assert_eq!(
+        build_action("scroll_to_bottom", &terminal),
+        Some(WmAction::ScrollToBottom { terminal: Some(9) })
+    );
+    assert_eq!(
+        build_action("scroll_to_bottom", &std::collections::HashMap::new()),
+        Some(WmAction::ScrollToBottom { terminal: None })
+    );
+}
+
+/// **One workspace's row folds by its index**, and a bare name folds nothing rather than row 0.
+#[test]
+fn a_workspace_row_folds_by_its_index_and_never_by_default() {
+    let args = std::collections::HashMap::from([("ws_idx".to_string(), "2".to_string())]);
+    assert_eq!(
+        build_action("toggle_workspace_collapsed", &args),
+        Some(WmAction::ToggleWorkspaceCollapsed { ws_idx: 2 })
+    );
+    assert_eq!(build_action("toggle_workspace_collapsed", &std::collections::HashMap::new()), None);
 }
 
 #[test]

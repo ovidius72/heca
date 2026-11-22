@@ -228,3 +228,49 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<crate::
         root
     }))
 }
+
+/// The action that moves the map's cursor onto a pane — what an arrow key on the map and handing
+/// the cursor on before a delete both do.
+pub(crate) const CURSOR_ACTION: &str = "expose_cursor_to";
+
+/// **Register `expose_cursor_to`**, so the map's cursor is moved by name: from a card's own widget
+/// (`ev.dispatch`), a script, a plugin. It was an internal message only the map could send.
+pub(crate) fn register_cursor_action(
+    registry: &mut crate::actions::ActionRegistry,
+    catalog: &mut crate::actions::ActionCatalog,
+) -> Result<crate::actions::ActionHandle, crate::actions::DuplicateAction> {
+    use crate::args::{ArgKind, ArgSpec};
+    crate::actions::register_dynamic(
+        registry,
+        catalog,
+        crate::actions::ActionMeta {
+            name: CURSOR_ACTION.into(),
+            label: "Exposé: Move Cursor to Pane".into(),
+            description: "Move the exposé map's cursor onto a pane.".into(),
+            category: crate::actions::ActionCategory::Chrome,
+            owner: None,
+            icon: None,
+            // The map covers the panes whenever this is used, so refusing it while an overlay is up
+            // would refuse it always — the same reason its message was always allowed.
+            policy: crate::app::interaction::ActionPolicy::Global,
+            args: vec![ArgSpec {
+                name: "pane_id".into(),
+                kind: ArgKind::Int,
+                required: true,
+                description: "The pane the cursor moves to.".into(),
+                values: Vec::new(),
+            }],
+            confirm: None,
+        },
+        Some(std::rc::Rc::new(|state, intent| {
+            let pane = match intent.args.get("pane_id") {
+                Some(heca_view::PropValue::Int(id)) => u64::try_from(*id).ok(),
+                Some(heca_view::PropValue::Text(id)) => id.parse().ok(),
+                _ => None,
+            };
+            if let Some(pane) = pane {
+                record_expose_cursor(state, PaneId(pane));
+            }
+        })),
+    )
+}

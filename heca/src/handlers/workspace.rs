@@ -61,6 +61,14 @@ pub fn handle_toggle_current_workspace_collapsed(state: &mut AppState, _action: 
     Ok(())
 }
 
+/// Fold or unfold the workspace the action names — its row's fold control, a script, a key.
+pub fn handle_toggle_workspace_collapsed(state: &mut AppState, action: &WmAction) -> crate::actions::ActionResult {
+    if let WmAction::ToggleWorkspaceCollapsed { ws_idx } = action {
+        apply_ws_collapse(state, *ws_idx, None);
+    }
+    Ok(())
+}
+
 pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return Ok(());

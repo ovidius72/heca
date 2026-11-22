@@ -241,7 +241,11 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         label: "Scroll to Bottom",
         description: "Snap the terminal viewport to the live bottom immediately. Stays in Normal mode, repeatable.",
         icon: Some(Glyph::CaretDown),
-        args: &[],
+        args: &[ArgDescriptor::optional(
+            "terminal",
+            ArgKind::Int,
+            "The terminal's id, as the store issued it. Without it, the terminal the keyboard is on.",
+        )],
     },
     // ── Horizontal scroll (a chrome container's scroll area; a pane has one axis) ──
     ActionDescriptor {
@@ -250,11 +254,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         label: "Scroll to Offset",
         description: "Jump the terminal viewport to an explicit offset in rows above the live bottom. Used by the GUI scrollbar and RPC; no default keybinding.",
         icon: None,
-        args: &[ArgDescriptor::required(
-            "rows",
-            ArgKind::Int,
-            "Rows above the live bottom to jump to.",
-        )],
+        args: &[
+            ArgDescriptor::required("rows", ArgKind::Int, "Rows above the live bottom to jump to."),
+            ArgDescriptor::optional(
+                "terminal",
+                ArgKind::Int,
+                "The terminal's id, as the store issued it. Without it, the terminal the keyboard is on.",
+            ),
+        ],
     },
     // ── Selection (host capability) ──
     ActionDescriptor {

@@ -112,6 +112,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed
+        | WmAction::ToggleWorkspaceCollapsed { .. }
         | WmAction::CollapseCurrentColumn
         | WmAction::ExpandCurrentColumn
         | WmAction::ToggleCurrentColumnCollapsed
@@ -160,7 +161,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ScrollPageUp
         | WmAction::ScrollPageDown
         | WmAction::ScrollToTop
-        | WmAction::ScrollToBottom
+        | WmAction::ScrollToBottom { .. }
         | WmAction::ScrollToOffset { .. }
         // Selection acts on the focused pane and is allowed in both
         // tiled and floating domains.

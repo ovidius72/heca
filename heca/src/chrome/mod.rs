@@ -63,7 +63,9 @@ pub(crate) use surfaces::context_menu::{
     ContextMenuRegistry, ContextPath, DropdownItem, DropdownSpec, open_context_menu_for,
     open_dropdown, resolve_active_context,
 };
-pub(crate) use surfaces::expose::{record_expose_cursor, register as register_expose};
+pub(crate) use surfaces::expose::{
+    record_expose_cursor, register as register_expose, register_cursor_action as register_expose_cursor,
+};
 pub(crate) use surfaces::glue::{rebuild_named_layer, register_named_layer};
 pub(crate) use surfaces::layers::{HOST_OWNER, LayerId, LayerKind, LayerRegistry, surface_key_of};
 pub(crate) use surfaces::notifications::{

@@ -51,6 +51,7 @@ pub(crate) mod expose_grid;
 pub(crate) mod model;
 pub(crate) mod pane_card;
 mod wiring;
+pub(crate) use wiring::register_cursor_action;
 pub(crate) mod workspace_row;
 
 #[cfg(test)]

@@ -240,6 +240,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[],
     },
     ActionDescriptor {
+        name: "toggle_workspace_collapsed",
+        side: Side::Client,
+        label: "Toggle a Workspace Row",
+        description: "Fold or unfold one workspace's row in the sidebar tree UI.",
+        icon: None,
+        args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to fold or unfold.")],
+    },
+    ActionDescriptor {
         name: "collapse_current_column",
         side: Side::Client,
         label: "Collapse Column Row",

@@ -148,10 +148,9 @@ impl LayerRegistry {
         };
         let emit = emitter(self.surface_key(id));
         if let Some(node) = crate::chrome::surface_node_mut(window, id) {
-            // Written on the seat the host put round the tree, beside `surface_slot` — a boxed tree
-            // has no builder left to call.
-            node.base_mut().dispatch_handler =
-                Some(std::rc::Rc::new(move |intent| emit.fire_intent(intent)));
+            heca_grid_ui::builders::listen_to_dispatch(node.as_mut(), move |intent| {
+                emit.fire_intent(intent)
+            });
         }
     }
 
