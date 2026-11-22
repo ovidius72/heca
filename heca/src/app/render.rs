@@ -16,6 +16,7 @@ use crate::chrome::ChromeConfig;
 pub(crate) fn status_mode_parts(
     input_mode: &InputMode,
     catalog: &crate::actions::ActionCatalog,
+    shortcuts: &crate::chrome::ActionShortcuts,
 ) -> (&'static str, String) {
     // For pick modes the prompt suffix is sourced from the action's `ActionDescriptor`
     // (via `pending_pick`) so the text lives in one place — the action catalog.
@@ -35,10 +36,7 @@ pub(crate) fn status_mode_parts(
         InputMode::HintPick { .. } => {
             ("HINT", " — press a letter to activate a target".to_string())
         }
-        InputMode::Search { .. } => (
-            "SEARCH",
-            " — type to search, Enter / ↓ next, ↑ previous, Esc to close".to_string(),
-        ),
+        InputMode::Search { .. } => ("SEARCH", search_prompt(shortcuts)),
         InputMode::PaneSwap { focus_after, .. } => (
             if *focus_after { "SWAP+FOCUS" } else { "SWAP" },
             pick_suffix(),
@@ -107,6 +105,23 @@ pub(crate) fn render_frame(state: &mut AppState) {
     };
 }
 
+/// **The search field's prompt, in the user's own keys** — each step names what `[keys.widgets]`
+/// binds it to (`menu_down` next, `menu_up` previous, `dismiss` close), so rebinding one changes
+/// the prompt; a step bound to no key is left out rather than named wrongly.
+fn search_prompt(shortcuts: &crate::chrome::ActionShortcuts) -> String {
+    let mut prompt = " — type to search".to_string();
+    for (name, says) in [
+        ("menu_down", "next"),
+        ("menu_up", "previous"),
+        ("dismiss", "close"),
+    ] {
+        if let Some(keys) = shortcuts.get(name) {
+            prompt.push_str(&format!(", {keys} {says}"));
+        }
+    }
+    prompt
+}
+
 /// Update session viewport to match current chrome/content area size.
 pub(crate) fn update_session_viewport(state: &mut AppState) {
     let pane_area = ChromeConfig::of(state).content_rect();
@@ -130,7 +145,8 @@ mod tests {
                     candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
                     focus_after: true,
                 },
-                &catalog
+                &catalog,
+                &Default::default(),
             ),
             (
                 "TAKE+",
@@ -139,9 +155,54 @@ mod tests {
         );
 
         assert_eq!(
-            status_mode_parts(&InputMode::ConfirmDelete, &catalog),
+            status_mode_parts(&InputMode::ConfirmDelete, &catalog, &Default::default()),
             ("CONFIRM", String::new()),
             "the prompt lives in the Modal now — the status bar shows only the mode word"
+        );
+    }
+
+    /// **The search prompt names the user's own keys**: by default the arrows and Ctrl+j/k and
+    /// Escape, and after `[keys.widgets] dismiss = "Ctrl+g"` it says Ctrl+g — the prompt follows the
+    /// binding instead of naming a key itself.
+    #[test]
+    fn the_search_prompt_names_the_keys_the_user_bound() {
+        let shortcuts_of = |config: &heca_config::theme::Config| {
+            let keymaps = crate::app::registry::build_keymaps(
+                config,
+                &mut crate::app::conflicts::Conflicts::default(),
+            );
+            crate::chrome::ActionShortcuts::from_index(
+                &keymaps.by_action,
+                crate::shortcut::KeyStyle::Compact,
+            )
+        };
+        let catalog = ActionCatalog::with_builtins();
+        let search = InputMode::Search {
+            terminal: crate::chrome::panes::terminal::TerminalId(1),
+        };
+
+        let defaults = heca_config::theme::Config::default();
+        let (_, prompt) = status_mode_parts(&search, &catalog, &shortcuts_of(&defaults));
+        for says in ["next", "previous", "close"] {
+            assert!(prompt.contains(says), "{prompt}");
+        }
+        let escape = shortcuts_of(&defaults)
+            .get("dismiss")
+            .expect("dismiss is bound");
+        assert!(prompt.contains(&format!("{escape} close")), "{prompt}");
+
+        let rebound = heca_config::theme::Config {
+            keys: toml::from_str("[widgets]\ndismiss = \"Ctrl+g\"\n").expect("keys parse"),
+            ..heca_config::theme::Config::default()
+        };
+        let ctrl_g = shortcuts_of(&rebound)
+            .get("dismiss")
+            .expect("rebound dismiss");
+        let (_, prompt) = status_mode_parts(&search, &catalog, &shortcuts_of(&rebound));
+        assert!(prompt.contains(&format!("{ctrl_g} close")), "{prompt}");
+        assert!(
+            !prompt.contains(&format!("{escape} close")),
+            "the old key is gone: {prompt}"
         );
     }
 }

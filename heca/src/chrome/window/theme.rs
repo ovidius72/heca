@@ -211,8 +211,11 @@ pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
         .and_then(|ws| ws.active_pane())
         .map(|p| p.custom_name.as_deref().unwrap_or(p.title.as_str()))
         .unwrap_or("—");
-    let (mode_str, rename_hint) =
-        crate::app::render::status_mode_parts(&state.input_mode, &state.action_catalog);
+    let (mode_str, rename_hint) = crate::app::render::status_mode_parts(
+        &state.input_mode,
+        &state.action_catalog,
+        &state.action_shortcuts,
+    );
     // **A reply to the last key wins the tail of the bar.** It is there because that key could not
     // do what was asked, so showing the mode's ordinary prompt beside it would answer a question
     // nobody asked. The mode word stays: what you are in has not changed.
