@@ -349,7 +349,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         name: "search_scrollback",
         side: Side::Client,
         label: "Search Scrollback",
-        description: "Type to search the scrollback; Enter keeps matches, Esc cancels.",
+        description: "Type to search the scrollback; Enter or ↓ goes to the next match, ↑ to the previous, Esc closes.",
         icon: Some(Glyph::Search),
         args: &[],
     },

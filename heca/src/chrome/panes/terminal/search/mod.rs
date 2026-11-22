@@ -12,12 +12,12 @@ use std::rc::Rc;
 use heca_core::backend::SearchMatch;
 use heca_core::layout::{Point, Rectangle, Size};
 use heca_grid_ui::SignalData;
-use heca_grid_ui::builders::{EventExt, FocusExt, LayoutExt, Parent, PresenceExt};
+use heca_grid_ui::builders::{EventExt, FocusExt, LayoutExt, Parent, PresenceExt, TooltipExt};
 use heca_grid_ui::component::PaintCx;
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
 use heca_grid_ui::style::{Length, Spacing};
-use heca_grid_ui::widgets::{Flex, Input, Tag};
+use heca_grid_ui::widgets::{Flex, Glyph, Icon, IconButton, Input, Tag};
 
 use super::input::{Search, TerminalInput};
 use super::shared::Shared;
@@ -236,14 +236,38 @@ pub(super) fn search_bar(shared: Rc<Shared>) -> Flex {
             lost.search.focus.set(false);
             lost.emit(TerminalInput::Search(Search::Editing(false)));
         });
+    let (back, ahead) = (shared.clone(), shared.clone());
+    // The counter sits LEFT of the field and the arrows right of it: the bar is anchored at its
+    // right edge, so the counter appearing or growing never moves the field. In a narrow terminal
+    // only the field gives up room — the counter and the arrows are never cut. An arrow steps and
+    // hands the keyboard back to the field, so typing and Ctrl+j/k go on where they were.
     Flex::row()
         .align("center")
         .gap(Spacing::Sm)
-        .child(field)
         .child(
             Tag::new("")
                 .label(count)
+                .shrink(0.0)
                 .hidden(move || count.with(String::is_empty)),
+        )
+        .child(field)
+        .child(
+            IconButton::new(Icon::new(Glyph::CaretUp))
+                .shrink(0.0)
+                .tooltip("Previous match")
+                .on_click(move |_| {
+                    back.step(false);
+                    back.search.open();
+                }),
+        )
+        .child(
+            IconButton::new(Icon::new(Glyph::CaretDown))
+                .shrink(0.0)
+                .tooltip("Next match")
+                .on_click(move |_| {
+                    ahead.step(true);
+                    ahead.search.open();
+                }),
         )
         .hidden(move || !open.get())
         .at_rect(Length::Auto, Length::Auto, Length::Auto, Length::Auto)

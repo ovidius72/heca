@@ -266,7 +266,7 @@ search_scrollback    = ["Super+f", "Ctrl+Shift+f"]
 #   v / Space     begin selection
 #   o             flip selection endpoint
 #   Shift+o       open the link under the caret
-#   /             search the scrollback (type query; Enter keeps, Esc cancels)
+#   /             search the scrollback (type the query; Enter / ↓ / Ctrl+j next, ↑ / Ctrl+k previous, Esc closes)
 #   n / Shift+n   jump to next / previous search match
 #   Esc           exit
 

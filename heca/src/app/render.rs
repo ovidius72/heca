@@ -37,7 +37,7 @@ pub(crate) fn status_mode_parts(
         }
         InputMode::Search { .. } => (
             "SEARCH",
-            " — type to search, Enter to keep, Esc to cancel".to_string(),
+            " — type to search, Enter / ↓ next, ↑ previous, Esc to close".to_string(),
         ),
         InputMode::PaneSwap { focus_after, .. } => (
             if *focus_after { "SWAP+FOCUS" } else { "SWAP" },

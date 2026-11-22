@@ -297,62 +297,58 @@ fn what_is_typed_after_find_is_the_query_and_not_the_programs() {
     );
 }
 
-/// Keys the field does not take (an arrow, say) are not the program's either while it is there.
+/// Press `key` the way a window does — its text, the key, then the `[keys.widgets]` intents it is
+/// bound to — with heca's default bindings.
+fn press(root: &mut heca_grid_ui::WidgetModel, key: GridKey) -> Handled {
+    heca_grid_ui::Keymap::with_defaults().deliver_press(
+        &heca_grid_ui::KeyPress {
+            key,
+            text: None,
+            mods: Default::default(),
+        },
+        |event| heca_grid_ui::dispatch(root.as_mut(), event),
+    )
+}
+
+/// Keys the field does not take are not the program's either while it is there — they go on to
+/// the widget bindings, and nothing is typed into the process behind the bar.
 #[test]
 fn a_key_the_field_does_not_take_is_not_typed_into_the_program() {
     let (t, mut root, said) = placed();
     t.find();
     frame(&mut root);
-
-    let handled = heca_grid_ui::dispatch(
-        root.as_mut(),
-        &Event::Key {
-            key: GridKey::ArrowUp,
-            pressed: true,
-        },
-    );
-
-    assert_eq!(
-        handled,
-        Handled::Yes,
-        "swallowed, so nothing behind it answers"
-    );
+    press(&mut root, GridKey::Tab);
     assert!(!typed_into_the_program(&said));
 }
 
-/// Enter leaves the field and keeps the matches: the keyboard is the terminal's again, and typing
-/// is the program's.
+/// **Enter, ↓ and Ctrl+j go to the next match, ↑ and Ctrl+k to the previous one** — `activate`,
+/// `menu_down` and `menu_up` of `[keys.widgets]` — and the keyboard stays in the field.
 #[test]
-fn enter_gives_the_keyboard_back_to_the_terminal() {
+fn enter_and_the_vertical_keys_step_through_the_matches_from_the_field() {
     let (t, mut root, said) = placed();
     t.find();
     frame(&mut root);
     heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("a".into()));
     said.borrow_mut().clear();
 
-    heca_grid_ui::dispatch(
-        root.as_mut(),
-        &Event::Key {
-            key: GridKey::Enter,
-            pressed: true,
-        },
-    );
+    for key in [GridKey::Enter, GridKey::ArrowDown] {
+        assert_eq!(press(&mut root, key), Handled::Yes, "{key:?} is answered");
+    }
+    assert_eq!(press(&mut root, GridKey::ArrowUp), Handled::Yes);
     assert_eq!(
-        *said.borrow(),
-        vec![TerminalInput::Search(Search::Editing(false))],
-        "focus returns during Enter, without waiting for another event"
-    );
-    heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("x".into()));
-
-    assert_eq!(
-        *said.borrow(),
+        said_search(&said),
         vec![
-            TerminalInput::Search(Search::Editing(false)),
-            TerminalInput::Text("x".into()),
+            Search::Step { forward: true },
+            Search::Step { forward: true },
+            Search::Step { forward: false },
         ],
-        "the field let go, and the program heard the x"
     );
-    assert!(t.search_open(), "and the search is still open for n / N");
+    heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("b".into()));
+    assert!(
+        !typed_into_the_program(&said),
+        "the keyboard is still in the field"
+    );
+    assert!(t.search_open());
 }
 
 /// Escape dismisses the search: it says so, the bar goes, and typing is the program's.
@@ -363,13 +359,7 @@ fn escape_dismisses_the_search() {
     frame(&mut root);
     heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("a".into()));
 
-    heca_grid_ui::dispatch(
-        root.as_mut(),
-        &Event::Key {
-            key: GridKey::Escape,
-            pressed: true,
-        },
-    );
+    press(&mut root, GridKey::Escape);
 
     assert!(said_search(&said).contains(&Search::Close));
     assert!(!t.search_open());
@@ -442,7 +432,7 @@ fn the_counter_shows_the_match_position() {
         scene
             .iter()
             .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "2/2")),
-        "the chip reads 2/2"
+        "the chip reads 2/2 in full, even in a narrow terminal"
     );
 }
 
@@ -526,4 +516,64 @@ fn stepping_with_no_matches_goes_nowhere() {
     let t = Terminal::unbound();
     assert!(!t.step_match(true));
     assert_eq!(t.current_match(), None);
+}
+
+/// **The field stays where it is when the counter appears**, and the bar's arrows step through the
+/// matches — up to the previous one, down to the next.
+#[test]
+fn the_field_does_not_move_when_the_counter_appears_and_the_arrows_step() {
+    let (t, mut root, said) = placed();
+    t.find();
+    frame(&mut root);
+    let field_at = |root: &heca_grid_ui::WidgetModel| {
+        let bar = root.base().children[0].base().children[2].base();
+        bar.children[1].base().bounds
+    };
+    let before = field_at(&root);
+    heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("a".into()));
+    t.show_matches(vec![found(101, 0, 1), found(105, 0, 1)], Some(0));
+    frame(&mut root);
+    let after = field_at(&root);
+    // The bar is anchored at its right edge: the field's right edge, beside the arrows, stays put
+    // (in a terminal too narrow for the whole bar the field gives up room on its left).
+    assert_eq!(
+        before.loc.x + before.size.w,
+        after.loc.x + after.size.w,
+        "the counter appeared without moving the field"
+    );
+
+    said.borrow_mut().clear();
+    let bar = root.base().children[0].base().children[2].base();
+    let arrow = |i: usize| {
+        let r = bar.children[i].base().bounds;
+        heca_grid_ui::Point::new(r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0)
+    };
+    let (up, down) = (arrow(2), arrow(3));
+    for at in [down, up] {
+        heca_grid_ui::dispatch(
+            root.as_mut(),
+            &Event::pointer_pressed(at, PointerButton::Left),
+        );
+        heca_grid_ui::dispatch(
+            root.as_mut(),
+            &Event::pointer_released(at, PointerButton::Left),
+        );
+    }
+    let steps: Vec<Search> = said_search(&said)
+        .into_iter()
+        .filter(|s| matches!(s, Search::Step { .. }))
+        .collect();
+    assert_eq!(
+        steps,
+        vec![
+            Search::Step { forward: true },
+            Search::Step { forward: false }
+        ],
+    );
+    frame(&mut root);
+    heca_grid_ui::dispatch(root.as_mut(), &Event::TextInput("b".into()));
+    assert!(
+        !typed_into_the_program(&said),
+        "the keyboard is back in the field"
+    );
 }
