@@ -80,9 +80,8 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         pane_states.borrow_mut().push(row.state());
         let pane_states = pane_states.clone();
         // DnD framework (universal `DragExt`): each card is a drag source, and what
-        // it drags is the name it declares about itself. The app resolves a drop via
-        // `drag::source_at`/`resolve_at` over the laid-out tree and paints
-        // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
+        // it drags is the name it declares about itself. The framework runs the gesture and
+        // draws what follows the pointer — see docs/widgets.md §Drag and drop.
         row.key(format!("pane:{i}")).draggable().on_click(move |_| {
             pane_sel.set(i);
             for (j, s) in pane_states.borrow().iter().enumerate() {
@@ -245,10 +244,9 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         ));
     // MarkerGroup: a column-style grouping fronted by a left marker bar
     // that lights to the accent when the group is active (here: the first).
-    // Each group is also a DnD drag source + drop target (universal `DragExt`)
-    // grabbed by its left grip gutter — this is how the app drags whole
-    // *columns* (F4.5). A column drag accepts only column/workspace targets via
-    // `drag::resolve_at_filtered`, so nested pane rows fall through to the group.
+    // Each group is also a DnD drag source + drop target (universal `DragExt`) —
+    // this is how the app drags whole *columns*. A column drag is taken only by
+    // targets that `accepts(["column"])`, so nested pane rows fall through to the group.
     let marker_demo = Flex::column()
         .gap(8.0)
         .child(
@@ -305,7 +303,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                         .placement(HintPlacement::CenterRight),
                 ),
         )
-        // The two host-painted drop visuals: a MOVE inserts (line on an edge);
+        // The two drop visuals the framework draws: a MOVE inserts (line on an edge);
         // a SWAP exchanges the whole item (double frame, no before/after).
         .child(
             Label::new("DROP INDICATORS")
@@ -382,10 +380,60 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
                 .color(theme.colors.muted)
                 .font_scale(0.74),
         );
+    // **Drag anywhere** — not a sidebar: a row of tabs and a column of items in one panel. Each
+    // says what it is and what it takes, by the name it declares; the framework runs the gesture
+    // and draws the picture, the line and the swap frame. In the row the line stands on the edge
+    // and before/after are left/right; in the column it lies along it. A drop says what it means
+    // in its own handler — here it only reports it.
+    let last_drop = signal(String::from("drag a tab or an item"));
+    let report = move |target: String| {
+        move |ev: &mut heca_grid_ui::event::EventCx<'_>| {
+            if let Some(d) = ev.event().drag() {
+                last_drop.set(format!("{} → {:?} {target}", d.item, d.side));
+            }
+        }
+    };
+    let tabs = Flex::row().gap(Spacing::Xs).child(
+        ["one", "two", "three"]
+            .into_iter()
+            .map(|name| {
+                let key = format!("tab:{name}");
+                Badge::new(name)
+                    .key(key.clone())
+                    .draggable_as("tab")
+                    .accepts_beside(["tab"])
+                    .on_drop(report(key))
+            })
+            .collect::<Vec<_>>(),
+    );
+    let items = Flex::column().gap(Spacing::Xs).child(
+        ["alpha", "beta", "gamma"]
+            .into_iter()
+            .map(|name| {
+                let key = format!("item:{name}");
+                Row::new()
+                    .key(key.clone())
+                    .draggable_as("item")
+                    .accepts_beside(["item"])
+                    .on_drop(report(key))
+                    .child(Label::new(name))
+            })
+            .collect::<Vec<_>>(),
+    );
+    let drag_anywhere_demo = Card::new("DRAG ANYWHERE — not a sidebar")
+        .child(tabs)
+        .child(items)
+        .child(
+            Label::new("")
+                .text(last_drop)
+                .muted(true)
+                .size(WidgetSize::Caption),
+        );
     let panes_col = Flex::column()
         .width(380.0)
         .gap(16.0)
         .child(panes)
+        .child(drag_anywhere_demo)
         .child(marker_demo)
         .child(focus_ring_demo)
         .child(prefix_demo);

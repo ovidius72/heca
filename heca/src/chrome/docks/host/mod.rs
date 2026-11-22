@@ -253,12 +253,25 @@ impl ChromeHost {
         Ok(())
     }
 
-    /// Reorder a container within its region, inserting it immediately before
-    /// `before` (or at the end when `before` is `None`). A `before` that names a
-    /// container not in the region is an error ([`MoveError::TargetNotFound`]) —
-    /// "put X before Y" fails loudly rather than silently appending. Emits
-    /// [`ChromeEvent::ContainerPlacementChanged`].
+    /// Put a container immediately before `before` (or at the end of its own region when `before`
+    /// is `None`). **Wherever `before` is**: a target in another region moves the container there
+    /// first, validated like [`move_container`](Self::move_container) — "put X before Y" is one
+    /// request, whichever region Y sits in, which is what dropping a dock beside a dock in the
+    /// other sidebar means. A `before` that names no container is an error
+    /// ([`MoveError::TargetNotFound`]) — it fails loudly rather than silently appending, and
+    /// changes nothing. Emits [`ChromeEvent::ContainerPlacementChanged`].
     pub fn reorder(&mut self, id: &str, before: Option<&str>) -> Result<(), MoveError> {
+        if !self.placement.contains_key(id) {
+            return Err(MoveError::UnknownContainer);
+        }
+        if let Some(b) = before {
+            let target_region = self
+                .placement
+                .get(b)
+                .copied()
+                .ok_or(MoveError::TargetNotFound)?;
+            self.move_container(id, target_region)?;
+        }
         let region = self
             .placement
             .get(id)
@@ -295,7 +308,8 @@ impl ChromeHost {
         Ok(())
     }
 
-    /// Reorder a container within its region, inserting it immediately **after** `after`.
+    /// Put a container immediately **after** `after` — wherever `after` is, like
+    /// [`reorder`](Self::reorder).
     ///
     /// The mirror of [`reorder`](Self::reorder). "Put X after Y" is not expressible as "put X before
     /// Z" without knowing what follows Y, which only the host knows — a caller (a plugin, a drag
@@ -303,18 +317,25 @@ impl ChromeHost {
     /// container not in the region is an error ([`MoveError::TargetNotFound`]); when `after` is the
     /// last container, X lands at the end. Emits [`ChromeEvent::ContainerPlacementChanged`].
     pub fn reorder_after(&mut self, id: &str, after: &str) -> Result<(), MoveError> {
+        if !self.placement.contains_key(id) {
+            return Err(MoveError::UnknownContainer);
+        }
         let region = self
             .placement
-            .get(id)
+            .get(after)
             .copied()
-            .ok_or(MoveError::UnknownContainer)?;
+            .ok_or(MoveError::TargetNotFound)?;
         let list = &self.regions[region].contributions;
-        // The container that follows `after` is the one to insert before; none ⇒ append (`None`).
+        // The container that follows `after` is the one to insert before; none ⇒ the end of
+        // `after`'s region, so the container is moved there first.
         let after_idx = list
             .iter()
             .position(|m| m.id() == after)
             .ok_or(MoveError::TargetNotFound)?;
         let before = list.get(after_idx + 1).map(|m| m.id().to_string());
+        if before.is_none() {
+            self.move_container(id, region)?;
+        }
         self.reorder(id, before.as_deref())
     }
 

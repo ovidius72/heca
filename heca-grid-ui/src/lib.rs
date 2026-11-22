@@ -82,7 +82,7 @@ pub use component::{
     paint_child, request_frame, shift_subtree, unmount_child,
 };
 pub use cursor::{Cursor, cursor_at};
-pub use drag::{DropAction, DropHit, DropSide, resolve_at, source_at};
+pub use drag::{DropAction, DropHit, DropSide, Flow, resolve_at, source_at};
 pub use effects::{Attention, Eased, Flash};
 pub use event::typed_text;
 pub use event::{

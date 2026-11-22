@@ -33,10 +33,15 @@ pub trait DragExt: Component + Sized {
     /// Say nothing and every target takes it, which is what [`draggable`](Self::draggable) alone
     /// means. The word is never interpreted by the library, and it is not from a list the library
     /// knows — a closed set is one a plugin cannot join.
-    fn draggable_as(mut self, kind: impl Into<String>) -> Self {
-        let b = self.base_mut();
-        b.draggable = true;
-        b.drag_kind = Some(kind.into());
+    ///
+    /// Takes an `Option` too ([`IntoName`](super::IntoName)): `None` leaves the widget as it was,
+    /// not draggable, so a row that only sometimes can be picked up needs no branch.
+    fn draggable_as(mut self, kind: impl super::IntoName) -> Self {
+        if let Some(kind) = kind.into_name() {
+            let b = self.base_mut();
+            b.draggable = true;
+            b.drag_kind = Some(kind);
+        }
         self
     }
 
@@ -52,12 +57,39 @@ pub trait DragExt: Component + Sized {
         self
     }
 
+    /// **Pick it up only by its handle** — a widget inside it marked
+    /// [`drag_handle`](Self::drag_handle). A press anywhere else in it starts no drag of it, so its
+    /// content keeps its own clicks and selection. [`DockFrame`](crate::widgets::DockFrame) does
+    /// this with its grip.
+    ///
+    /// ```ignore
+    /// Flex::row().key("card:1").draggable_as("card").drag_by_handle()
+    ///     .child(Label::new("≡").drag_handle())
+    ///     .child(content)
+    /// ```
+    fn drag_by_handle(mut self) -> Self {
+        self.base_mut().drag_by_handle = true;
+        self
+    }
+
+    /// **This widget is a handle**: a press on it picks up the nearest enclosing widget that is
+    /// [`drag_by_handle`](Self::drag_by_handle). One that is not draggable leaves the handle doing
+    /// nothing — it never reaches past to pick up something further out.
+    fn drag_handle(mut self) -> Self {
+        self.base_mut().drag_handle = true;
+        self
+    }
+
     /// **Make it draggable only while `rule` holds** for what is held down when the press moves
     /// far enough to start a drag — `draggable_when(|m| m.meta)` is "Cmd+drag". Without the rule
     /// the press stays whatever the widget's content makes of it (a terminal's selection).
     ///
     /// The rule is asked when a drag would start, never again: a drag in flight does not end
     /// because the key came up.
+    ///
+    /// **Holding the key is a deliberate request**, so a source picked up by its rule wins over
+    /// anything inside it that would start on any press — Cmd+drag on a row inside a dock carries
+    /// the dock, not the row.
     fn draggable_when(mut self, rule: impl Fn(crate::event::Modifiers) -> bool + 'static) -> Self {
         self.base_mut().drag_gate = Some(std::rc::Rc::new(rule));
         self
@@ -77,11 +109,16 @@ pub trait DragExt: Component + Sized {
     ///
     /// Declaring nothing takes anything. Implies [`drop_target`](Self::drop_target), because a
     /// widget saying what it takes has said it takes something.
-    fn accepts(mut self, kinds: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        let b = self.base_mut();
-        b.drop_target = true;
-        b.accepts = kinds.into_iter().map(Into::into).collect();
-        b.accepts_onto = true;
+    ///
+    /// Takes an `Option` too ([`IntoNames`](super::IntoNames)): `None` leaves the widget as it was,
+    /// not a drop target.
+    fn accepts(mut self, kinds: impl super::IntoNames) -> Self {
+        if let Some(kinds) = kinds.into_names() {
+            let b = self.base_mut();
+            b.drop_target = true;
+            b.accepts = kinds;
+            b.accepts_onto = true;
+        }
         self
     }
 
@@ -92,11 +129,15 @@ pub trait DragExt: Component + Sized {
     /// reads as two halves and the line flips at the midpoint — never a third band that silently
     /// picks one for you. Use [`accepts`](Self::accepts) where the middle is real, as a pane is for
     /// another pane, which it swaps or moves onto.
-    fn accepts_beside(mut self, kinds: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        let b = self.base_mut();
-        b.drop_target = true;
-        b.accepts = kinds.into_iter().map(Into::into).collect();
-        b.accepts_onto = false;
+    ///
+    /// Takes an `Option` too, like [`accepts`](Self::accepts): `None` leaves the widget as it was.
+    fn accepts_beside(mut self, kinds: impl super::IntoNames) -> Self {
+        if let Some(kinds) = kinds.into_names() {
+            let b = self.base_mut();
+            b.drop_target = true;
+            b.accepts = kinds;
+            b.accepts_onto = false;
+        }
         self
     }
 }

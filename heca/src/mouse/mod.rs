@@ -7,9 +7,6 @@
 //! `heca-grid-ui` runs the gesture over the same tree it lays out and paints; the drop comes back
 //! through `chrome::drain_pending_drops`.
 
-pub(crate) mod release;
-pub(crate) mod surface_left;
-
 use crate::app::interaction::InteractionSource;
 use crate::app_state::AppState;
 use crate::chrome::ChromeConfig;

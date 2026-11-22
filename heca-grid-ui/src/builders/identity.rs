@@ -10,8 +10,8 @@ pub trait IdentityExt: Component + Sized {
     ///
     /// Takes a name, or an `Option` of one: `None` leaves the widget as it was, so a row whose name
     /// may be missing writes `.key(name)` with no branch around it.
-    fn key(mut self, key: impl IntoKey) -> Self {
-        if let Some(key) = key.into_key() {
+    fn key(mut self, key: impl IntoName) -> Self {
+        if let Some(key) = key.into_name() {
             self.base_mut().key = Some(key);
         }
         self
@@ -43,27 +43,29 @@ pub trait IdentityExt: Component + Sized {
 
 impl<T: Component + Sized> IdentityExt for T {}
 
-/// **What `.key(..)` takes**: a name, or an `Option` of one (`None` names nothing).
+/// **What a builder that takes a name takes**: a name, or an `Option` of one. `None` leaves the
+/// widget as it was, so a call site whose name may be missing writes the builder with no branch
+/// around it — `.key(..)`, `.draggable_as(..)`, `DockFrame::grip_glyph(..)`.
 ///
 /// Written out per type rather than for every `Into<String>`: the standard library could one day
 /// let an `Option` turn into a `String`, and Rust refuses a rule that might then mean two things.
-pub trait IntoKey {
+pub trait IntoName {
     /// The name, or `None` for none.
-    fn into_key(self) -> Option<String>;
+    fn into_name(self) -> Option<String>;
 }
 
-macro_rules! into_key {
+macro_rules! into_name {
     ($($t:ty),*) => {$(
-        impl IntoKey for $t {
-            fn into_key(self) -> Option<String> { Some(self.into()) }
+        impl IntoName for $t {
+            fn into_name(self) -> Option<String> { Some(self.into()) }
         }
-        impl IntoKey for Option<$t> {
-            fn into_key(self) -> Option<String> { self.map(Into::into) }
+        impl IntoName for Option<$t> {
+            fn into_name(self) -> Option<String> { self.map(Into::into) }
         }
     )*};
 }
 
-into_key!(
+into_name!(
     &str,
     String,
     &String,
@@ -71,3 +73,37 @@ into_key!(
     Box<str>,
     char
 );
+
+/// **What a builder that takes a set of names takes** — the kinds a drop target accepts: an array
+/// or a `Vec` of names, or an `Option` of one. `None` leaves the widget as it was, so a row that is
+/// only sometimes a drop target writes `.accepts_beside(kinds)` with no branch around it.
+///
+/// An empty set is not `None`: it is a set, and a target that declares one takes anything.
+pub trait IntoNames {
+    /// The names, or `None` for none declared.
+    fn into_names(self) -> Option<Vec<String>>;
+}
+
+impl<S: Into<String>, const N: usize> IntoNames for [S; N] {
+    fn into_names(self) -> Option<Vec<String>> {
+        Some(self.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<S: Into<String>> IntoNames for Vec<S> {
+    fn into_names(self) -> Option<Vec<String>> {
+        Some(self.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<S: Into<String>, const N: usize> IntoNames for Option<[S; N]> {
+    fn into_names(self) -> Option<Vec<String>> {
+        self.and_then(IntoNames::into_names)
+    }
+}
+
+impl<S: Into<String>> IntoNames for Option<Vec<S>> {
+    fn into_names(self) -> Option<Vec<String>> {
+        self.and_then(IntoNames::into_names)
+    }
+}

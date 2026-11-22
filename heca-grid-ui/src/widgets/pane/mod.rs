@@ -137,9 +137,14 @@ impl Pane {
     /// **The frame's color**, whatever its style: the border of [`FrameStyle::Bordered`] and the
     /// brackets of [`FrameStyle::Bracketed`]. Unset, a border takes the theme `border` color and
     /// brackets the theme `accent`.
+    ///
+    /// Takes an `Option` too: `None` leaves the colour as it was, so a frame whose colour may be
+    /// unset writes `.border_color(color)` with no branch around it.
     #[heca_grid_ui_macros::prop]
-    pub fn border_color(mut self, color: Color) -> Self {
-        self.border_color = Some(color);
+    pub fn border_color(mut self, color: impl Into<Option<Color>>) -> Self {
+        if let Some(color) = color.into() {
+            self.border_color = Some(color);
+        }
         self
     }
 

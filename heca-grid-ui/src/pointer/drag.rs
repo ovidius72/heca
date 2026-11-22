@@ -56,7 +56,7 @@ pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPoi
     let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
     update_drag_over(
         root,
-        hit.as_ref().map(|h| (h.path.clone(), h.side)),
+        hit.as_ref().map(|h| (h.path.clone(), h.side, h.flow)),
         &item,
         raw,
     );
@@ -143,14 +143,14 @@ pub(super) fn announce(root: &mut dyn Component, source: &[usize], ev: &Event) {
 /// Move the "a drag is over me" flag to `now`, emitting enter/leave/over as it goes.
 pub(super) fn update_drag_over(
     root: &mut dyn Component,
-    now: Option<(Path, DropSide)>,
+    now: Option<(Path, DropSide, crate::drag::Flow)>,
     item: &str,
     raw: &RawPointer,
 ) {
     let previous = drag_over_path(root);
     // **The node the walk found, not a second search for its name.** Two seatings of one container
     // give their rows the same name, so a search lights whichever comes first — the other sidebar.
-    let current = now.as_ref().map(|(path, _)| path.clone());
+    let current = now.as_ref().map(|(path, _, _)| path.clone());
     if previous != current
         && let Some(path) = previous.clone()
     {
@@ -159,8 +159,11 @@ pub(super) fn update_drag_over(
         let _ = deliver_path(root, &path, &ev);
     }
     if let Some(path) = current {
-        let side = now.map_or(DropSide::Onto, |(_, s)| s);
+        let (side, flow) = now.map_or((DropSide::Onto, crate::drag::Flow::Down), |(_, s, f)| {
+            (s, f)
+        });
         node_at(root, &path).base().pointer.drag_side.set(side);
+        node_at(root, &path).base().pointer.drag_flow.set(flow);
         if previous.as_ref() != Some(&path) {
             node_at(root, &path).base().pointer.drag_over.set(true);
             let ev = Event::DragEnter(drag_event(item, raw, side));
@@ -173,23 +176,7 @@ pub(super) fn update_drag_over(
 
 /// The innermost drag source at or above the pressed widget, and its path.
 pub(super) fn drag_source_on(root: &dyn Component, press: &[usize]) -> Option<(Path, String)> {
-    let mut node = root;
-    let mut best: Option<(Path, String)> = None;
-    let mut here = Path::new();
-    if let Some(id) = startable_identity(root, &here) {
-        best = Some((here.clone(), id));
-    }
-    for i in press {
-        let Some(child) = node.base().children.get(*i) else {
-            break;
-        };
-        node = child.as_ref();
-        here.push(*i);
-        if let Some(id) = startable_identity(root, &here) {
-            best = Some((here.clone(), id));
-        }
-    }
-    best
+    crate::drag::resolve::source_on(root, press)
 }
 
 /// **Is a drag in flight anywhere in this tree?**
@@ -222,7 +209,6 @@ pub(super) fn drag_over_path(root: &dyn Component) -> Option<Path> {
     find(root, &|c| c.base().pointer.drag_over.get())
 }
 
-/// The path to the drop target registered under `id`.
 /// The dragged identity of the widget at `path`, when it is a drag source at all — the same
 /// answer [`drag::source_at`](crate::drag::source_at) gives, so the gesture and the resolution
 /// cannot disagree about what is being carried.
@@ -231,21 +217,11 @@ pub(super) fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<Stri
     if !node.is_drag_source() {
         return None;
     }
-    node.base()
-        .key
-        .clone()
-        .or_else(|| crate::nav::identity_of(root, path))
+    crate::drag::resolve::drag_identity(root, node, path)
 }
 
 /// [`drag_identity`], but only for a widget whose pick-up rule holds right now — what a *new* drag
 /// asks. One in flight uses [`drag_identity`], which is never refused.
-fn startable_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
-    node_at(root, path)
-        .may_start_drag()
-        .then(|| drag_identity(root, path))
-        .flatten()
-}
-
 pub(super) fn clear_drag_over(root: &dyn Component) {
     walk(root, &|c| c.base().pointer.drag_over.set(false));
 }

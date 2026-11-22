@@ -74,9 +74,11 @@ impl<'a> PaintCx<'a> {
 
     /// Draw a **drop indicator** over a target's `bounds`: an accent insertion line
     /// for [`DropSide::Before`]/[`After`](DropSide), or an accent wash + outline for
-    /// [`DropSide::Onto`]. Theme-driven (derives from `accent`); the app calls this
-    /// over the bounds returned by [`resolve_at`](crate::drag::resolve_at).
-    pub fn drop_indicator(&mut self, bounds: Rectangle, side: DropSide) {
+    /// [`DropSide::Onto`]. Theme-driven (derives from `accent`).
+    ///
+    /// The line lies across the way the list runs ([`Flow`](crate::drag::Flow)): along the top or
+    /// bottom edge in a column, down the left or right edge in a row.
+    pub fn drop_indicator(&mut self, bounds: Rectangle, side: DropSide, flow: crate::drag::Flow) {
         let accent = self.accent();
         match side {
             DropSide::Onto => {
@@ -99,17 +101,32 @@ impl<'a> PaintCx<'a> {
                 );
             }
             DropSide::Before | DropSide::After => {
+                use crate::drag::Flow;
                 let thickness = 2.0;
-                let y = if side == DropSide::Before {
-                    bounds.loc.y - thickness / 2.0
-                } else {
-                    bounds.loc.y + bounds.size.h - thickness / 2.0
+                let half = thickness / 2.0;
+                let (right, bottom) = (
+                    bounds.loc.x + bounds.size.w - half,
+                    bounds.loc.y + bounds.size.h - half,
+                );
+                let (left, top) = (bounds.loc.x - half, bounds.loc.y - half);
+                // The edge *before* sits at the start of the way the list runs.
+                let line = match (flow, side == DropSide::Before) {
+                    (Flow::Down, true) | (Flow::Up, false) => {
+                        (bounds.loc.x, top, bounds.size.w, thickness)
+                    }
+                    (Flow::Down, false) | (Flow::Up, true) => {
+                        (bounds.loc.x, bottom, bounds.size.w, thickness)
+                    }
+                    (Flow::Right, true) | (Flow::Left, false) => {
+                        (left, bounds.loc.y, thickness, bounds.size.h)
+                    }
+                    (Flow::Right, false) | (Flow::Left, true) => {
+                        (right, bounds.loc.y, thickness, bounds.size.h)
+                    }
                 };
+                let (x, y, w, h) = line;
                 self.rect(
-                    Rectangle::new(
-                        Point::new(bounds.loc.x, y),
-                        Size::new(bounds.size.w, thickness),
-                    ),
+                    Rectangle::new(Point::new(x, y), Size::new(w, h)),
                     accent,
                     None,
                     1.0,

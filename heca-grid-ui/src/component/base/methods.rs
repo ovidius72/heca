@@ -108,6 +108,8 @@ impl Base {
             drag_gate: None,
             drag_kind: None,
             drag_chip: false,
+            drag_by_handle: false,
+            drag_handle: false,
             drop_target: false,
             accepts: Vec::new(),
             accepts_onto: true,

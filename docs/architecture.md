@@ -167,10 +167,9 @@ Core modules:
   `events`, `context_menu`, `host`; plus `expose/` (`pane_card` → `column_card`
   → `workspace_row` → `expose_grid` + `model` + `testing`) and `pane/`
   (`shell` + `model` + `testing`)
-- `mouse/` — `target`, `hit_test`, `interactive`, `drag`, `release`, `render`,
-  `resize`, `surface_left`, `tests`
+- `mouse/` — `mod` (cursor shape, posting a drop's action), `tests`
 - `providers/` — `actions`; `workspaces/` (`model`, `dock_view`, `column_group`,
-  `workspace_frame`, `pane_row`, `seams`, `testing`)
+  `workspace_frame`, `pane_row`, `drop`, `seams`, `testing`)
 - `components/` — shared app components
 
 ## Dependency rules worth remembering

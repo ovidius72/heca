@@ -10,21 +10,14 @@
 //! Presentation-only and domain-neutral, like [`ItemGroup`](super::ItemGroup):
 //! the header toggles an `expanded` [`Signal`] and (optionally) reports it via
 //! [`on_toggle`](DockFrame::on_toggle); collapsing hides the body via
-//! `style.hidden` (`display: none`), so it folds out of layout entirely. The
-//! drag-handle grip is **drawn but wired to nothing** (see [`child`](DockFrame::child) seam).
+//! `style.hidden` (`display: none`), so it folds out of layout entirely.
 //!
-//! **Two different drags will use it, and they are not the same feature** — worth knowing before
-//! reading it as one:
-//!
-//! - the frame as a **container**: drag the whole dock into another chrome region. The host's
-//!   actions for this already exist (`chrome.container.move_to_region` and friends); only the mouse
-//!   surface is missing.
-//! - the frame as a **row inside** a container: reorder it within the list. heca mounts one frameless
-//!   `DockFrame` per workspace row, so this is the drag its grip sits next to (workspace
-//!   drag-to-reorder), which still needs its own action and drop logic.
-//!
-//! Until one of them wires a drag, the grip promises something nothing does. It is left in place
-//! deliberately, as a placeholder for those two drags.
+//! **The grip is the frame's handle.** A frame made draggable (`.draggable_as(..)`) is picked up by
+//! its grip and nowhere else ([`DragExt::drag_by_handle`](crate::builders::DragExt::drag_by_handle)),
+//! so its title row still folds on a click and its body keeps its own presses. A frame that is not
+//! draggable leaves the grip doing nothing: it never reaches past the frame to pick up what holds
+//! it. heca-pro's rooms are frames dragged this way; heca's docks are moved by the host, which
+//! makes the seat around every dock draggable with the window's move key.
 //!
 //! **Rail mode (built).** A Dock hosted in a
 //! [`ChromeRegion`](super::ChromeRegion) can collapse to an **icon rail**. Bind
@@ -36,7 +29,7 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{EventExt, LayoutExt, Parent, PlaceExt, StyleExt};
+use crate::builders::{DragExt, EventExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -234,6 +227,9 @@ impl DockFrame {
         let custom = take(CUSTOM_AREA);
         let kept_leading = take(LEADING_AREA);
         let leading_part = self.leading.take().or(kept_leading);
+        // Picked up only by the grip while the title row shows one.
+        self.base.drag_by_handle =
+            self.grip && custom.is_none() && self.variant == DockFrameVariant::Dock;
         let (toggle, corner): (crate::WidgetModel, _) = match (custom, self.variant) {
             (Some(content), _) => (
                 crate::WidgetModel::new(
@@ -250,7 +246,9 @@ impl DockFrame {
             (None, DockFrameVariant::Dock) => {
                 let mut leading = Flex::row().align("center").gap(LEADING_GAP);
                 if self.grip {
-                    leading = leading.child(Label::new(self.grip_glyph.clone()));
+                    // **The grip is the frame's handle**: a frame that can be dragged is picked up
+                    // by it, and nowhere else, so its content keeps its own clicks.
+                    leading = leading.child(Label::new(self.grip_glyph.clone()).drag_handle());
                 }
                 (
                     crate::WidgetModel::new(
@@ -374,10 +372,15 @@ impl DockFrame {
     /// ```ignore
     /// DockFrame::new("Lobby").grip_glyph("≡")
     /// ```
+    ///
+    /// Takes an `Option` too: `None` keeps the glyph it has, so a frame that is only sometimes a
+    /// reorderable row needs no branch.
     #[heca_grid_ui_macros::prop]
-    pub fn grip_glyph(mut self, glyph: impl Into<String>) -> Self {
-        self.grip_glyph = glyph.into();
-        self.build_toggle();
+    pub fn grip_glyph(mut self, glyph: impl crate::builders::IntoName) -> Self {
+        if let Some(glyph) = glyph.into_name() {
+            self.grip_glyph = glyph;
+            self.build_toggle();
+        }
         self
     }
 

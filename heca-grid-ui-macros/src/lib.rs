@@ -172,14 +172,21 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
             quote!(value.as_whole::<#ty>())
         }
         "String" => quote!(value.as_text().map(::std::string::ToString::to_string)),
-        t if t.contains("Into<String>") || t.contains("IntoTextValue") => {
+        // A name, or a builder that also takes an optional one (`IntoName`), or a fixed or live
+        // text (`IntoTextValue`): static data always brings a string, which is the fixed half.
+        t if t.contains("Into<String>")
+            || t.contains("IntoName")
+            || t.contains("IntoTextValue") =>
+        {
             quote!(value.as_text().map(::std::string::ToString::to_string))
         }
         t if t.starts_with('&') || t.contains("dyn") || t.contains("implFn") => return None,
         // A colour arrives as text and parses through `Color`'s own `FromStr` (`#rgb`, `#rrggbb`,
         // `#rrggbbaa`). A THEME TOKEN NAME never reaches here: the host resolves it to hex first,
         // where it has the theme — the library stays free of any notion of a token.
-        "Color" => quote!(
+        // A colour, or a builder that also takes an optional one: static data always brings a
+        // colour, which is the `Some` half.
+        "Color" | "implInto<Option<Color>>" => quote!(
             value
                 .as_text()
                 .and_then(|s| s.parse::<::heca_theme::Color>().ok())

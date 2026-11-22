@@ -45,7 +45,7 @@ pub use events::{EventExt, listen, listen_to_dispatch};
 pub use flash::FlashExt;
 pub use focus::FocusExt;
 pub use hint::HintExt;
-pub use identity::{IdentityExt, IntoKey};
+pub use identity::{IdentityExt, IntoName, IntoNames};
 pub use layout::LayoutExt;
 pub use menu::MenuExt;
 pub use place::PlaceExt;

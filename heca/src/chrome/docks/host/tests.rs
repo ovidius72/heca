@@ -231,3 +231,39 @@ fn reorder_moves_after_target() {
     assert_eq!(h.reorder_after("a", "zzz"), Err(MoveError::TargetNotFound));
     assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
 }
+
+/// **"Put X before Y" wherever Y is.** Dropping a dock beside a dock in the other sidebar is one
+/// request: the container moves to Y's region and lands beside it, after Y as well as before.
+#[test]
+fn reorder_moves_across_regions_to_where_the_target_is() {
+    let mut h = host();
+    for (id, region) in [
+        ("a", RegionId::LeftSidebar),
+        ("b", RegionId::RightSidebar),
+        ("c", RegionId::RightSidebar),
+    ] {
+        seat(&mut h, TestProvider::new(id, RegionSet::sidebars(), region));
+    }
+    h.reorder("a", Some("c")).unwrap();
+    assert_eq!(ids(&h, RegionId::RightSidebar), ["b", "a", "c"]);
+    assert!(ids(&h, RegionId::LeftSidebar).is_empty());
+    assert_eq!(h.placement("a"), Some(RegionId::RightSidebar));
+
+    h.move_container("a", RegionId::LeftSidebar).unwrap();
+    h.reorder_after("a", "c").unwrap();
+    assert_eq!(
+        ids(&h, RegionId::RightSidebar),
+        ["b", "c", "a"],
+        "after the last: the end of its region"
+    );
+    h.move_container("a", RegionId::LeftSidebar).unwrap();
+    h.reorder_after("a", "b").unwrap();
+    assert_eq!(ids(&h, RegionId::RightSidebar), ["b", "a", "c"]);
+
+    assert_eq!(h.reorder("a", Some("zzz")), Err(MoveError::TargetNotFound));
+    assert_eq!(
+        ids(&h, RegionId::RightSidebar),
+        ["b", "a", "c"],
+        "a missing target changes nothing"
+    );
+}

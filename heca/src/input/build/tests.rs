@@ -319,3 +319,65 @@ fn test_spawn_command_takes_a_folder() {
     };
     assert_eq!(cwd.as_deref(), Some("/tmp/work"));
 }
+
+/// **Moving a dock is an action first** (T333): the line a keybinding's `args`, a menu entry, a
+/// plugin and an RPC call all send builds the same action the drag will post. A drag that could do
+/// something no key can would break input parity.
+#[test]
+fn a_dock_move_is_built_from_the_line_every_door_sends() {
+    let line = |pairs: &[(&str, &str)]| {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect::<std::collections::HashMap<_, _>>()
+    };
+    assert_eq!(
+        build_action(
+            "chrome.container.move_to_region",
+            &line(&[("container_id", "workspaces"), ("region", "sidebar.right")])
+        ),
+        Some(WmAction::MoveContainerToRegion {
+            container_id: "workspaces".into(),
+            region: crate::chrome::RegionId::RightSidebar,
+        })
+    );
+    assert_eq!(
+        build_action(
+            "chrome.container.reorder_before",
+            &line(&[("container_id", "notes"), ("before_id", "workspaces")])
+        ),
+        Some(WmAction::ReorderContainerBefore {
+            container_id: "notes".into(),
+            before_id: Some("workspaces".into()),
+        })
+    );
+    assert_eq!(
+        build_action(
+            "chrome.container.reorder_before",
+            &line(&[("container_id", "notes")])
+        ),
+        Some(WmAction::ReorderContainerBefore {
+            container_id: "notes".into(),
+            before_id: None,
+        }),
+        "no target: to the end",
+    );
+    assert_eq!(
+        build_action(
+            "chrome.container.reorder_after",
+            &line(&[("container_id", "notes"), ("after_id", "workspaces")])
+        ),
+        Some(WmAction::ReorderContainerAfter {
+            container_id: "notes".into(),
+            after_id: "workspaces".into(),
+        })
+    );
+    assert_eq!(
+        build_action(
+            "chrome.container.reorder_after",
+            &line(&[("container_id", "notes")])
+        ),
+        None,
+        "after nothing means nothing",
+    );
+}

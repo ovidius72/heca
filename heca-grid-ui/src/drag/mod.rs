@@ -16,11 +16,11 @@
 //!   caller never has to search for it again by name — two seatings of one container give their
 //!   rows the same name.
 
-mod resolve;
+pub(crate) mod resolve;
 pub(crate) mod sink;
 
 pub use resolve::{
-    DropAction, DropHit, DropSide, resolve_at, resolve_at_filtered, resolve_at_for, set_swap_rule,
-    source_at,
+    DropAction, DropHit, DropSide, Flow, resolve_at, resolve_at_filtered, resolve_at_for,
+    set_swap_rule, source_at,
 };
 pub use sink::{Dropped, has_drop_sink, install_drop_sink};
