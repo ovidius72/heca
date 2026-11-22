@@ -24,8 +24,8 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let session_text = session.text_signal();
     let session = Visibility::new().visible(false).child(session);
     let session_visible = session.visible_signal();
-    let status = text(cx, FontWeight::Regular);
-    let status_text = status.text_signal();
+    // The status is its glyph alone; its words are the glyph's tooltip.
+    let status_text = signal(String::new());
     let task = text(cx, FontWeight::Regular).muted(true);
     let task_text = task.text_signal();
     let task = Visibility::new().visible(false).child(task);
@@ -65,10 +65,8 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
                     .child(
                         Flex::row()
                             .align("center")
-                            .gap(Spacing::Xs)
                             .content_tone_signal(status_tone)
-                            .child(indicator)
-                            .child(status)
+                            .child(indicator.tooltip_signal(status_text))
                             .area("status"),
                     ),
             )

@@ -691,7 +691,8 @@ model. It hides itself in other panes. The line under it is the program's sessio
 **`[appearance.sidebar] agent_session_line`**: `"reported"` (default) shows only a title the program
 sent, and only when it is not the pane's name already; `"always"` shows the title, or the pane's name
 when the program sent none; `"never"` hides it.
-Its labels and glyphs come from `[settings.agents.statuses]`; unlisted status ids are shown as reported.
+The status is its glyph alone, in its tone; its label is the glyph's tooltip. Both come from
+`[settings.agents.statuses]`; an unlisted status id is its own tooltip.
 
 ## Agent status and sounds
 

@@ -340,7 +340,8 @@ fn on_activate(&mut self, ctx: &heca::ChromeCtx<'_>) -> heca::ProviderHandles {
 
 Each status can set `label`, `icon` (a shared glyph name), `tone` and `sound`.
 Tones use the current theme: `accent`, `muted`, `warning`, `success` or `danger`.
-The icon and label follow that tone together, including for plugin-defined statuses:
+The row shows the icon in that tone, with the label as its tooltip, including for plugin-defined
+statuses:
 
 ```toml
 [settings.agents.statuses.review_ready]

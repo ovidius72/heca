@@ -417,7 +417,8 @@ executables = ["opencode"]
 "permission.asked" = "waiting_permission"
 "permission.replied" = "working"
 
-# Status ids are open. Add your own label, glyph or sound file here. Colours follow the theme.
+# Status ids are open. Add your own label (the glyph's tooltip), glyph or sound file here. Colours
+# follow the theme.
 [settings.agents.statuses.working]
 label = "Working"
 icon = "lightning"
