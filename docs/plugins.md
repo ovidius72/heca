@@ -138,8 +138,11 @@ P022/T075; these are the shapes it carries.)
   goes to the nearest. Nothing else is written; see
   [`widgets.md` → EdgeHint](widgets.md#edgehint).
 - **Action arguments.** Declare each argument's kind (`int`, `float`, `bool`, `text`, `enum` with
-  its words, `dock`) and the palette asks for them, one step each — the docks mounted now for a
-  `dock`. A plugin writes no picker.
+  its words, `dock`, `workspace`, `column`, `pane`) and the palette asks for them, one step each —
+  the docks mounted now for a `dock`; the workspaces, columns or panes **by name** for the last three,
+  starting on the one you are in, so Enter means "this one". A `column` lists the columns of the
+  workspace the nearest `workspace` argument before it chose (the current one when none did). A
+  blank `int`/`float`/`text` field shows a row saying what to type. A plugin writes no picker.
 - **Numbers keep full precision** across the boundary and become the builder's type at the end
   (§ 6), so a timestamp or a large id arrives exact.
 - **An agent's brand mark carries its own solid background**, as the brand draws its app icon

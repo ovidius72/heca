@@ -112,7 +112,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         args: &[ArgDescriptor::required(
             "pane_id",
-            ArgKind::Int,
+            ArgKind::Pane,
             "The pane to focus.",
         )],
     },
@@ -124,7 +124,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         args: &[ArgDescriptor::required(
             "ws_idx",
-            ArgKind::Int,
+            ArgKind::Workspace,
             "Index of the workspace to switch to.",
         )],
     },

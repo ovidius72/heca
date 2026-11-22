@@ -46,7 +46,7 @@ pub(crate) fn ask_action_arguments(
         emit.fire(run_intent(&meta.name, &given, owners.get(&meta.name)));
         return Ok(());
     };
-    let choices = Choices::of(&missing, docks(state));
+    let choices = Choices::of(&missing, &Places::of(state, &meta.args, &missing, &given));
     let label = meta.label.clone();
     let placeholder = format!("{label} › {}: {}", missing.name, missing.description);
     let palette = CommandPalette::new()
@@ -83,6 +83,81 @@ fn run_intent(
     }
 }
 
+/// **What an argument that names something can be**, read from the app as it is now: the docks
+/// mounted, the workspaces, the columns of the workspace the argument is about, the panes. Only the
+/// list the argument asks for is filled.
+#[derive(Default)]
+struct Places {
+    docks: Vec<String>,
+    named: Vec<Choice>,
+}
+
+impl Places {
+    fn of(state: &AppState, args: &[ArgSpec], arg: &ArgSpec, given: &[(String, String)]) -> Self {
+        let layout = state.layout();
+        let (programs, panes, add_name) = (
+            &state.client.programs,
+            &state.chrome_state.panes,
+            state.settings.pane_renamed_add_process_name,
+        );
+        let named = match arg.kind {
+            ArgKind::Workspace => named(workspace_entries(layout, None), |entry| {
+                let idx = entry.id.strip_prefix("ws:")?;
+                Some((idx.to_owned(), entry.current))
+            }),
+            ArgKind::Column => {
+                let ws = workspace_for(args, arg, given)
+                    .unwrap_or_else(|| layout.active_workspace_idx());
+                named(
+                    column_entries(layout, ws, programs, panes, add_name),
+                    |entry| Some((entry.id.rsplit(':').next()?.to_owned(), entry.current)),
+                )
+            }
+            ArgKind::Pane => named(
+                pane_entries(layout, programs, panes, add_name, None),
+                |entry| Some((entry.pane?.0.to_string(), entry.current)),
+            ),
+            _ => Vec::new(),
+        };
+        Self {
+            docks: docks(state),
+            named,
+        }
+    }
+}
+
+/// The workspace a column argument is about: the value of the nearest workspace argument declared
+/// before it, when one was chosen.
+fn workspace_for(args: &[ArgSpec], arg: &ArgSpec, given: &[(String, String)]) -> Option<usize> {
+    let before = args.iter().position(|a| a.name == arg.name)?;
+    args[..before]
+        .iter()
+        .rev()
+        .find(|a| a.kind == ArgKind::Workspace)
+        .and_then(|a| given.iter().find(|(name, _)| *name == a.name))
+        .and_then(|(_, value)| value.parse().ok())
+}
+
+/// Palette rows as choices: each row's value (read out of it by `value`), its name and where it is,
+/// and whether it is the one you are on — which is where the selection starts.
+fn named(
+    entries: Vec<PaletteEntry>,
+    value: impl Fn(&PaletteEntry) -> Option<(String, bool)>,
+) -> Vec<Choice> {
+    entries
+        .into_iter()
+        .filter_map(|entry| {
+            let (value, current) = value(&entry)?;
+            Some(Choice {
+                value,
+                label: entry.label,
+                description: Some(entry.description),
+                current,
+            })
+        })
+        .collect()
+}
+
 /// The docks mounted right now, by id — what a dock argument offers.
 fn docks(state: &AppState) -> Vec<String> {
     crate::RegionId::ALL
@@ -92,20 +167,48 @@ fn docks(state: &AppState) -> Vec<String> {
         .collect()
 }
 
+/// One row an argument offers: the value it sets, what the user reads, and whether it is the one
+/// they are on now.
+#[derive(Clone, Debug, PartialEq)]
+struct Choice {
+    value: String,
+    label: String,
+    description: Option<String>,
+    current: bool,
+}
+
+impl Choice {
+    /// A row whose words are its value.
+    fn word(value: impl Into<String>) -> Self {
+        let value = value.into();
+        Self {
+            label: value.clone(),
+            value,
+            description: None,
+            current: false,
+        }
+    }
+}
+
 /// **The rows one argument offers.**
 enum Choices {
-    /// A fixed list: its words, the docks, or true/false.
-    Words(Vec<String>),
+    /// A list to pick from: its words, the docks, true/false, or the workspaces, columns or panes by
+    /// name.
+    List(Vec<Choice>),
     /// Anything typed: the typed text is the one row, once it reads as the argument's kind.
     Typed,
 }
 
 impl Choices {
-    fn of(arg: &ArgSpec, docks: Vec<String>) -> Self {
+    fn of(arg: &ArgSpec, places: &Places) -> Self {
+        let words = |words: &[String]| words.iter().map(Choice::word).collect();
         match arg.kind {
-            ArgKind::Enum => Self::Words(arg.values.clone()),
-            ArgKind::Dock => Self::Words(docks),
-            ArgKind::Bool => Self::Words(vec!["true".into(), "false".into()]),
+            ArgKind::Enum => Self::List(words(&arg.values)),
+            ArgKind::Dock => Self::List(words(&places.docks)),
+            ArgKind::Bool => Self::List(words(&["true".into(), "false".into()])),
+            ArgKind::Workspace | ArgKind::Column | ArgKind::Pane => {
+                Self::List(places.named.clone())
+            }
             ArgKind::Text | ArgKind::Int | ArgKind::Float => Self::Typed,
         }
     }
@@ -126,13 +229,35 @@ impl Choices {
             move || emit.fire(next.clone())
         };
         match self {
-            Self::Words(words) => words
+            Self::List(choices) => choices
                 .iter()
-                .map(|word| Command::new(word.clone(), choose(word.clone())))
+                .map(|choice| {
+                    let mut row = Command::new(choice.label.clone(), choose(choice.value.clone()))
+                        .completion(choice.value.clone())
+                        .current(choice.current)
+                        .preselect(choice.current);
+                    if let Some(description) = &choice.description {
+                        row = row.description(description.clone());
+                    }
+                    row
+                })
                 .collect(),
             Self::Typed => {
                 let typed = query.trim();
-                if typed.is_empty() || !arg.accepts(typed) {
+                if typed.is_empty() {
+                    // **A blank field says what it wants**: one row naming the argument and what to
+                    // type. Choosing it asks the same question again.
+                    let same = ask_again(action, given);
+                    let emit = emit.clone();
+                    return vec![
+                        Command::new(
+                            format!("{}: type {}", arg.name, arg.expected()),
+                            move || emit.fire(same.clone()),
+                        )
+                        .description(arg.description.clone()),
+                    ];
+                }
+                if !arg.accepts(typed) {
                     return Vec::new();
                 }
                 vec![
@@ -221,17 +346,31 @@ mod tests {
     #[test]
     fn each_kind_offers_what_fits_it() {
         let docks = vec!["workspaces".to_string(), "heca-pro.rooms".to_string()];
-        assert!(
-            matches!(Choices::of(&arg("r", ArgKind::Enum, true, &["a", "b"]), docks.clone()), Choices::Words(w) if w == ["a", "b"])
+        let places = Places {
+            docks: docks.clone(),
+            named: Vec::new(),
+        };
+        let values = |choices: Choices| match choices {
+            Choices::List(list) => list.into_iter().map(|c| c.value).collect::<Vec<_>>(),
+            Choices::Typed => panic!("a list"),
+        };
+        assert_eq!(
+            values(Choices::of(
+                &arg("r", ArgKind::Enum, true, &["a", "b"]),
+                &places
+            )),
+            ["a", "b"]
         );
-        assert!(
-            matches!(Choices::of(&arg("d", ArgKind::Dock, true, &[]), docks.clone()), Choices::Words(w) if w == docks)
+        assert_eq!(
+            values(Choices::of(&arg("d", ArgKind::Dock, true, &[]), &places)),
+            docks
         );
-        assert!(
-            matches!(Choices::of(&arg("b", ArgKind::Bool, true, &[]), Vec::new()), Choices::Words(w) if w == ["true", "false"])
+        assert_eq!(
+            values(Choices::of(&arg("b", ArgKind::Bool, true, &[]), &places)),
+            ["true", "false"]
         );
         assert!(matches!(
-            Choices::of(&arg("n", ArgKind::Int, true, &[]), Vec::new()),
+            Choices::of(&arg("n", ArgKind::Int, true, &[]), &places),
             Choices::Typed
         ));
         let number = arg("n", ArgKind::Int, true, &[]);
@@ -248,11 +387,78 @@ mod tests {
                 .len(),
             1
         );
-        assert!(
+        assert_eq!(
             Choices::Typed
                 .commands("a", &[], &number, "  ", &emit)
-                .is_empty(),
-            "nothing typed: no row"
+                .len(),
+            1,
+            "nothing typed: one row saying what to type"
         );
+    }
+
+    /// **A column argument is about the workspace chosen before it** — the nearest workspace
+    /// argument declared earlier — and the current one when none was chosen.
+    #[test]
+    fn a_column_follows_the_workspace_chosen_before_it() {
+        let args = [
+            arg("src_ws", ArgKind::Workspace, true, &[]),
+            arg("src_col", ArgKind::Column, true, &[]),
+            arg("dst_ws", ArgKind::Workspace, true, &[]),
+            arg("dst_idx", ArgKind::Column, true, &[]),
+        ];
+        let given = vec![
+            ("src_ws".to_string(), "1".to_string()),
+            ("dst_ws".into(), "3".into()),
+        ];
+        assert_eq!(workspace_for(&args, &args[1], &given), Some(1));
+        assert_eq!(
+            workspace_for(&args, &args[3], &given),
+            Some(3),
+            "the nearest one before it"
+        );
+        assert_eq!(
+            workspace_for(&args, &args[1], &[]),
+            None,
+            "none chosen: the current one"
+        );
+    }
+
+    /// **Workspaces, columns and panes are offered by name**, each with the value it sets and
+    /// whether it is the one you are on — the row the selection starts on.
+    #[test]
+    fn workspaces_columns_and_panes_are_offered_by_name() {
+        let named = vec![
+            Choice {
+                value: "0".into(),
+                label: "main".into(),
+                description: Some("2 columns".into()),
+                current: false,
+            },
+            Choice {
+                value: "1".into(),
+                label: "heca-pro".into(),
+                description: None,
+                current: true,
+            },
+        ];
+        let places = Places {
+            docks: Vec::new(),
+            named: named.clone(),
+        };
+        for kind in [ArgKind::Workspace, ArgKind::Column, ArgKind::Pane] {
+            let Choices::List(list) = Choices::of(&arg("x", kind, true, &[]), &places) else {
+                panic!("a list for {kind:?}")
+            };
+            assert_eq!(list, named);
+        }
+        let emit = ChromeIntentEmitter::of(InteractionSource::Keyboard, |_, _| {});
+        let rows = Choices::List(named).commands(
+            "move_column",
+            &[],
+            &arg("src_ws", ArgKind::Workspace, true, &[]),
+            "",
+            &emit,
+        );
+        assert_eq!(rows.len(), 2);
     }
 }

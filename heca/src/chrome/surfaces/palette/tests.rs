@@ -468,3 +468,28 @@ fn the_focused_components_actions_come_first_and_the_rest_stay_listed() {
             .collect::<Vec<_>>(),
     );
 }
+
+/// **A column row is named by the panes it holds** — the names the pane rows use — and the column
+/// the window has focused is the current one, where an argument's list starts.
+#[test]
+fn a_column_row_is_named_by_its_panes_and_the_focused_one_is_current() {
+    let session = session_with_panes();
+    let panes = mirrored_panes(&session.session);
+    let programs = heca_config::programs::ProgramsConfig::default();
+    let names = pane_entries(session.l(), &programs, &panes, true, None);
+    let rows = column_entries(session.l(), 0, &programs, &panes, true);
+    assert_eq!(rows.len(), 2, "one row per column: {rows:?}");
+    assert_eq!(rows[0].label, find(&names, "pane:1").label);
+    assert_eq!(rows[1].label, find(&names, "pane:2").label);
+    let current: Vec<bool> = rows.iter().map(|row| row.current).collect();
+    assert_eq!(
+        current.iter().filter(|c| **c).count(),
+        1,
+        "exactly one is where you are"
+    );
+    assert!(rows.iter().all(|row| row.description.ends_with("Editing")));
+    assert!(
+        column_entries(session.l(), 9, &programs, &panes, true).is_empty(),
+        "no such workspace"
+    );
+}

@@ -47,7 +47,7 @@ use crate::chrome::{ActionShortcuts, home_relative_path, pane_info_view};
 use actions::{entries, group_of};
 pub(crate) use model::OpenPalette;
 use model::{OwnerInfo, PaletteEntry};
-use targets::{pane_entries, workspace_entries};
+use targets::{column_entries, pane_entries, workspace_entries};
 
 /// Which component owns each declared action right now, and where it would land.
 ///
