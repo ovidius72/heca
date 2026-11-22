@@ -32,8 +32,6 @@ named_set! {
         /// A `Splitter`'s edge was dragged — the intent carries `delta`: how many px it moved along
         /// its axis since the last report, sent at every pointer move while held.
         Resize => "resize",
-        /// A left click on the node — the bare event, with no pick attached (that is `press`).
-        Click => "click",
         /// A second click in the same run.
         DoubleClick => "double_click",
         /// A third click in the same run.

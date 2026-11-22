@@ -12,7 +12,6 @@ pub fn native(event: ViewEvent) -> Option<EventKind> {
     use EventKind as K;
     use ViewEvent as V;
     match event {
-        V::Click => Some(K::Click),
         V::DoubleClick => Some(K::DoubleClick),
         V::TripleClick => Some(K::TripleClick),
         V::RightClick => Some(K::RightClick),
@@ -30,6 +29,8 @@ pub fn native(event: ViewEvent) -> Option<EventKind> {
         V::DragOver => Some(K::DragOver),
         V::DragLeave => Some(K::DragLeave),
         V::Drop => Some(K::Drop),
+        // `press` is a left click, Enter/Space on the focused control and the prefix+/ letter
+        // together, so it is not one native event: each widget realizes it.
         V::Press
         | V::Hint
         | V::Change
@@ -49,7 +50,6 @@ pub fn described(kind: EventKind) -> Option<ViewEvent> {
     use EventKind as K;
     use ViewEvent as V;
     match kind {
-        K::Click => Some(V::Click),
         K::DoubleClick => Some(V::DoubleClick),
         K::TripleClick => Some(V::TripleClick),
         K::RightClick => Some(V::RightClick),
@@ -67,7 +67,9 @@ pub fn described(kind: EventKind) -> Option<ViewEvent> {
         K::DragOver => Some(V::DragOver),
         K::DragLeave => Some(V::DragLeave),
         K::Drop => Some(V::Drop),
-        K::TextInput
+        // A left click is bound as `press`, which is more than this one event.
+        K::Click
+        | K::TextInput
         | K::FilesDropped
         | K::ModifiersChanged
         | K::Widget
