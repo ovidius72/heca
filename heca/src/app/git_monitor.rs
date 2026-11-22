@@ -1,5 +1,12 @@
 //! Per-frame git metadata monitor for pane runtime state.
 //!
+//! **Asking git never blocks the loop.** A status walk of a large repository takes tens of
+//! milliseconds, and the loop that runs it also reads keys and draws frames — in standalone it is the
+//! window's own loop — so every refresh used to freeze typing. The real provider
+//! ([`BackgroundGit`]) answers from a worker thread: a question it has no answer to yet is
+//! [`Inspection::Pending`], the pane keeps what it showed, and the worker wakes the loop when the
+//! answer is ready.
+//!
 //! This complements `process_monitor`: once canonical `Pane.runtime.cwd` is
 //! populated, this module resolves repo metadata for that cwd,
 //! caches it by repo root, and projects it back onto canonical
@@ -20,15 +27,32 @@ struct GitSnapshot {
     info: GitInfo,
 }
 
-trait GitProvider {
-    fn inspect(&self, cwd: &Path) -> Option<GitSnapshot>;
+/// What asking git about a folder gave.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Inspection {
+    /// The folder is in this repository, in this state.
+    Repo(GitSnapshot),
+    /// The folder is in no repository.
+    NotRepo,
+    /// Asked, not answered yet: keep what is shown and ask again next refresh.
+    Pending,
 }
 
-#[derive(Default)]
+impl From<Option<GitSnapshot>> for Inspection {
+    fn from(snapshot: Option<GitSnapshot>) -> Self {
+        snapshot.map_or(Self::NotRepo, Self::Repo)
+    }
+}
+
+trait GitProvider {
+    fn inspect(&self, cwd: &Path) -> Inspection;
+}
+
+/// The git work itself — run on [`BackgroundGit`]'s worker, never on the loop.
 struct Git2Provider;
 
-impl GitProvider for Git2Provider {
-    fn inspect(&self, cwd: &Path) -> Option<GitSnapshot> {
+impl Git2Provider {
+    fn inspect_now(cwd: &Path) -> Option<GitSnapshot> {
         use git2::{BranchType, Repository, Status, StatusOptions};
 
         let repo = Repository::discover(cwd).ok()?;
@@ -95,6 +119,72 @@ impl GitProvider for Git2Provider {
     }
 }
 
+/// **Git asked from a worker thread.** A folder asked about is sent to the worker once; until its
+/// answer is back, asking again is [`Inspection::Pending`]. The worker wakes the loop when an answer
+/// is ready, so the next refresh picks it up.
+pub(crate) struct BackgroundGit {
+    ask: std::sync::mpsc::Sender<PathBuf>,
+    answers: std::sync::Arc<std::sync::Mutex<HashMap<PathBuf, Option<GitSnapshot>>>>,
+    asked: std::cell::RefCell<HashSet<PathBuf>>,
+}
+
+impl BackgroundGit {
+    /// A worker running `inspect`, waking the loop with `wake` after each answer.
+    fn start(
+        inspect: fn(&Path) -> Option<GitSnapshot>,
+        wake: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+    ) -> Self {
+        let (ask, questions) = std::sync::mpsc::channel::<PathBuf>();
+        let answers = std::sync::Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let filled = answers.clone();
+        // It ends when the sender is dropped: `recv` fails once the cache that owns it is gone.
+        let _ = std::thread::Builder::new()
+            .name("heca-git".into())
+            .spawn(move || {
+                while let Ok(cwd) = questions.recv() {
+                    let answer = inspect(&cwd);
+                    if let Ok(mut answers) = filled.lock() {
+                        answers.insert(cwd, answer);
+                    }
+                    if let Some(wake) = &wake {
+                        wake();
+                    }
+                }
+            });
+        Self {
+            ask,
+            answers,
+            asked: Default::default(),
+        }
+    }
+}
+
+impl GitProvider for BackgroundGit {
+    fn inspect(&self, cwd: &Path) -> Inspection {
+        let answered = self
+            .answers
+            .lock()
+            .ok()
+            .and_then(|mut answers| answers.remove(cwd));
+        if let Some(answer) = answered {
+            self.asked.borrow_mut().remove(cwd);
+            return answer.into();
+        }
+        if self.asked.borrow_mut().insert(cwd.to_path_buf())
+            && self.ask.send(cwd.to_path_buf()).is_err()
+        {
+            self.asked.borrow_mut().remove(cwd);
+        }
+        Inspection::Pending
+    }
+}
+
+impl std::fmt::Debug for BackgroundGit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BackgroundGit")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PaneGitState {
     raw_cwd: Option<PathBuf>,
@@ -112,6 +202,8 @@ struct RepoGitCacheEntry {
 pub(crate) struct GitRuntimeCache {
     pane_state: HashMap<PaneId, PaneGitState>,
     repos: HashMap<PathBuf, RepoGitCacheEntry>,
+    /// The worker that asks git, started on the first refresh.
+    background: Option<BackgroundGit>,
 }
 
 struct GitSyncContext<'a, P> {
@@ -126,8 +218,18 @@ struct GitSyncContext<'a, P> {
 /// server owns the cache, and asking git is the server's work, never a window's.
 ///
 /// [`ServerState::refresh_git`]: crate::server::ServerState::refresh_git
-pub(crate) fn refresh(session: &mut Session, cache: &mut GitRuntimeCache, now: Instant) {
-    sync_pane_git_from_cwds_impl(session, cache, &Git2Provider, now, GIT_REFRESH_INTERVAL);
+pub(crate) fn refresh(
+    session: &mut Session,
+    cache: &mut GitRuntimeCache,
+    now: Instant,
+    wake: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+) {
+    let provider = cache
+        .background
+        .take()
+        .unwrap_or_else(|| BackgroundGit::start(Git2Provider::inspect_now, wake));
+    sync_pane_git_from_cwds_impl(session, cache, &provider, now, GIT_REFRESH_INTERVAL);
+    cache.background = Some(provider);
 }
 
 fn sync_pane_git_from_cwds_impl<P: GitProvider>(
@@ -188,7 +290,9 @@ fn sync_one_pane_git<P: GitProvider>(
     if cwd_changed {
         let canonical_cwd = fs::canonicalize(&raw_cwd).unwrap_or_else(|_| raw_cwd.clone());
         match ctx.provider.inspect(&canonical_cwd) {
-            Some(snapshot) => {
+            // Not answered yet: nothing is recorded, so the next refresh asks again.
+            Inspection::Pending => {}
+            Inspection::Repo(snapshot) => {
                 ctx.live_roots.insert(snapshot.repo_root.clone());
                 ctx.cache.repos.insert(
                     snapshot.repo_root.clone(),
@@ -207,7 +311,7 @@ fn sync_one_pane_git<P: GitProvider>(
                     },
                 );
             }
-            None => {
+            Inspection::NotRepo => {
                 *git = None;
                 ctx.cache.pane_state.insert(
                     pane_id,
@@ -241,7 +345,11 @@ fn sync_one_pane_git<P: GitProvider>(
 
     if should_refresh {
         match ctx.provider.inspect(&cwd_path) {
-            Some(snapshot) => {
+            // Not answered yet: show what the repository last said.
+            Inspection::Pending => {
+                *git = ctx.cache.repos.get(&root).map(|entry| entry.info.clone());
+            }
+            Inspection::Repo(snapshot) => {
                 ctx.live_roots.insert(snapshot.repo_root.clone());
                 ctx.cache.repos.insert(
                     snapshot.repo_root.clone(),
@@ -260,7 +368,7 @@ fn sync_one_pane_git<P: GitProvider>(
                     },
                 );
             }
-            None => {
+            Inspection::NotRepo => {
                 *git = None;
                 ctx.cache.pane_state.insert(
                     pane_id,
@@ -283,7 +391,10 @@ fn sync_one_pane_git<P: GitProvider>(
 
 #[cfg(test)]
 mod tests {
-    use super::{GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, sync_pane_git_from_cwds_impl};
+    use super::{
+        BackgroundGit, GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, Inspection,
+        sync_pane_git_from_cwds_impl,
+    };
     use heca_core::layout::{Pane, PaneId, Session, Size, testing::Windowed};
     use std::cell::Cell;
     use std::collections::HashMap;
@@ -310,9 +421,9 @@ mod tests {
     }
 
     impl GitProvider for FakeGitProvider {
-        fn inspect(&self, cwd: &Path) -> Option<GitSnapshot> {
+        fn inspect(&self, cwd: &Path) -> Inspection {
             self.calls.set(self.calls.get() + 1);
-            self.snapshots.get(cwd).cloned().flatten()
+            self.snapshots.get(cwd).cloned().flatten().into()
         }
     }
 
@@ -530,9 +641,7 @@ mod tests {
         repo.status_file(Path::new("note.txt"))
             .expect("status file");
 
-        let snapshot = super::Git2Provider
-            .inspect(temp.path())
-            .expect("git snapshot");
+        let snapshot = super::Git2Provider::inspect_now(temp.path()).expect("git snapshot");
 
         assert_eq!(
             fs::canonicalize(&snapshot.repo_root).expect("canonical repo root"),
@@ -549,5 +658,53 @@ mod tests {
         assert!(snapshot.info.modified >= 1);
         assert!(snapshot.info.added >= 1);
         assert!(snapshot.info.dirty);
+    }
+
+    /// **The loop never waits for git**: a folder asked about for the first time is `Pending`, the
+    /// worker wakes the loop once it has the answer, and the next question gets it. A pane shows
+    /// nothing new until then — and nothing was blocked meanwhile.
+    #[test]
+    fn git_is_asked_on_a_worker_and_the_loop_is_woken_with_the_answer() {
+        fn slow_answer(cwd: &Path) -> Option<GitSnapshot> {
+            std::thread::sleep(Duration::from_millis(30));
+            Some(GitSnapshot {
+                repo_root: cwd.to_path_buf(),
+                info: GitInfo {
+                    branch: Some("main".into()),
+                    ..GitInfo::default()
+                },
+            })
+        }
+        let (woken, wakes) = std::sync::mpsc::channel();
+        let git = BackgroundGit::start(
+            slow_answer,
+            Some(std::sync::Arc::new(move || {
+                let _ = woken.send(());
+            })),
+        );
+        let cwd = Path::new("/repo");
+        let asked = Instant::now();
+        assert_eq!(git.inspect(cwd), Inspection::Pending);
+        assert!(
+            asked.elapsed() < Duration::from_millis(30),
+            "asking did not wait for git"
+        );
+        assert_eq!(
+            git.inspect(cwd),
+            Inspection::Pending,
+            "asked once, still waiting"
+        );
+        wakes
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the worker wakes the loop with the answer");
+        let Inspection::Repo(snapshot) = git.inspect(cwd) else {
+            panic!("the answer is there after the wake")
+        };
+        assert_eq!(snapshot.info.branch.as_deref(), Some("main"));
+        assert_eq!(
+            git.inspect(cwd),
+            Inspection::Pending,
+            "asking again starts a new question"
+        );
     }
 }

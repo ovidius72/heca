@@ -232,7 +232,8 @@ impl ServerState {
     /// still lives in it (the step that splits the session's shared layout from each window's view
     /// moves it here).
     pub(crate) fn refresh_git(&mut self, session: &mut heca_core::layout::Session, now: Instant) {
-        crate::app::git_monitor::refresh(session, &mut self.git_runtime_cache, now);
+        let wake = self.waker.as_ref().map(ServerWaker::on_output);
+        crate::app::git_monitor::refresh(session, &mut self.git_runtime_cache, now, wake);
     }
 
     /// **When the server next has something to do** — the next notification deadline — or `None`
