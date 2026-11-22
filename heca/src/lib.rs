@@ -582,6 +582,44 @@ impl ApplicationHandler<AppEvent> for HecaApp {
     }
 }
 
+/// **The program heca runs as** — its name and, optionally, its icon — in THE SYNTAX:
+///
+/// ```ignore
+/// heca::App::new("Heca Pro").icon(include_bytes!("../assets/icon.png")).run();
+/// ```
+///
+/// `heca::run("heca")` is `App::new("heca").run()`. The icon is the window's (Windows, Linux) and
+/// the Dock's (macOS) while the program runs; without one, heca's own logo. A user's `icon.png`
+/// beside `config.toml` wins over both. The installed app's icon comes from its package.
+pub struct App {
+    name: String,
+    icon: Option<&'static [u8]>,
+}
+
+impl App {
+    /// A program called `name` — the window's title before a session, and the `{app}` of titles.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            icon: None,
+        }
+    }
+
+    /// Its icon: an encoded image (PNG), shown for the window and the Dock while it runs.
+    pub fn icon(mut self, png: &'static [u8]) -> Self {
+        self.icon = Some(png);
+        self
+    }
+
+    /// Run it — [`run`] with this name and icon.
+    pub fn run(self) {
+        if let Some(icon) = self.icon {
+            crate::entry::app_icon::set(icon);
+        }
+        run(self.name);
+    }
+}
+
 /// Run heca: answer a command-line question and return, or open the window and run until it closes.
 ///
 /// The whole of the `heca` program, and the last line of any program built on it — whatever a

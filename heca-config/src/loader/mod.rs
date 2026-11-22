@@ -361,12 +361,27 @@ pub fn user_config_path() -> Option<PathBuf> {
         .or_else(|| paths.into_iter().flatten().next())
 }
 
+/// **Where the user's own file `name` lives**, in priority order — `~/.config/heca/<name>`, then the
+/// system's config folder. The one search order for every user file beside the config.
+fn user_file_paths(name: &str) -> [Option<PathBuf>; 2] {
+    [
+        dirs::home_dir().map(|h| h.join(".config").join("heca").join(name)),
+        Some(config_dir().join(name)),
+    ]
+}
+
 /// Candidate paths for the user's `keybindings.toml`, in priority order.
 pub(super) fn keybindings_file_paths() -> [Option<PathBuf>; 2] {
-    [
-        dirs::home_dir().map(|h| h.join(".config").join("heca").join("keybindings.toml")),
-        Some(config_dir().join("keybindings.toml")),
-    ]
+    user_file_paths("keybindings.toml")
+}
+
+/// **The user's own app icon** (`icon.png` beside the config), when there is one — it takes the
+/// place of the icon the program ships. Optional: without it the program's icon stands.
+pub fn user_icon_path() -> Option<PathBuf> {
+    user_file_paths("icon.png")
+        .into_iter()
+        .flatten()
+        .find(|path| path.is_file())
 }
 
 /// Read and TOML-parse the first existing file among `paths`. Missing files are

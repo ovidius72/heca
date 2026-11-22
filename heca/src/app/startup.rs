@@ -211,6 +211,7 @@ pub(crate) async fn init_state(
     crate::chrome::window::theme::apply_widget_settings(&appearance);
     let window_attrs = Window::default_attributes()
         .with_title(crate::entry::app_name::get())
+        .with_window_icon(crate::entry::app_icon::window_icon())
         .with_inner_size(winit::dpi::LogicalSize::new(
             app_config.config.settings.window_width as f64,
             app_config.config.settings.window_height as f64,
@@ -222,6 +223,8 @@ pub(crate) async fn init_state(
             .expect("Failed to create window"),
     );
     apply_window_vibrancy(window.as_ref(), &appearance);
+    #[cfg(target_os = "macos")]
+    crate::entry::app_icon::show_in_dock();
     let scale_factor = window.scale_factor();
 
     let gpu = heca_renderer::gpu::WindowGpu::new(

@@ -2,7 +2,10 @@
 
 heca loads config from `~/.config/heca/config.toml` (general settings) and
 `~/.config/heca/keybindings.toml` (keybindings) — `%APPDATA%\heca\…` on Windows.
-Both are optional and deep-merged over the built-in defaults, which live in two
+An `icon.png` in the same folder, also optional, is the app's icon while it runs (the window's on
+Windows and Linux, the Dock's on macOS) in place of heca's logo; the installed app's icon in the
+Finder or a launcher stays the package's.
+The two config files are optional and deep-merged over the built-in defaults, which live in two
 versioned, embedded files (the single source of truth — copy and edit them):
 
 - `config.default.toml` — default `[settings]`, `[appearance]`, `[font]`, `[program]`

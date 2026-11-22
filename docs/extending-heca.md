@@ -29,7 +29,10 @@ fn main() { heca::run("heca"); }
 
 A program built on heca says who it is, adds what it wants through heca's **existing doors**, and
 calls the same `heca::run(..)` with its own fixed name — `heca::run("Heca Pro")` — which titles its
-windows (`Heca Pro - ~/projects/x`). Nothing here is a second mechanism: each door fills the one heca's own
+windows (`Heca Pro - ~/projects/x`). Its own icon, optional, goes with the name —
+`heca::App::new("Heca Pro").icon(include_bytes!("../assets/icon.png")).run()` — and is the window's
+and the Dock's while it runs (a user's `icon.png` beside the config still wins); the installed icon is
+the program's own package's. Nothing here is a second mechanism: each door fills the one heca's own
 parts use, so what is added is reachable from a key, a menu, the palette and RPC with nothing written
 for any of them. A worked, runnable example: `heca/examples/extend_heca.rs`
 (`cargo run -p heca --example extend_heca`).
