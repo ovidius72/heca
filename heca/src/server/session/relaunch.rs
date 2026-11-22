@@ -67,6 +67,13 @@ impl SessionRuntime {
             spec.cwd = Some(folder.to_owned());
             spec.program = Program::Shell;
         }
+        // `HECA_LOG_SESSIONS=1`: what each saved terminal was brought back as, and from what.
+        if std::env::var_os("HECA_LOG_SESSIONS").is_some() {
+            eprintln!(
+                "[sessions] restored {:?}: agent={:?} (inferred={inferred}) running={} -> {:?}",
+                recorded.owner, recorded.agent, recorded.running, spec.program
+            );
+        }
         Ok(spec)
     }
 
