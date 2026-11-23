@@ -42,27 +42,6 @@ fn default_terminal_images() -> bool {
     true
 }
 
-/// Default bell window-attention policy: `true` (request the OS attention cue —
-/// Dock bounce / taskbar flash — on a bell while the window is unfocused).
-fn default_terminal_bell_attention() -> bool {
-    true
-}
-
-/// Default visual-bell policy: `false` (no on-screen flash).
-fn default_terminal_bell_visual() -> bool {
-    false
-}
-
-/// Default audible-bell policy: `false` (no system beep).
-fn default_terminal_bell_audible() -> bool {
-    false
-}
-
-/// Peak opacity (0..=255) of the visual-bell flash when `bell_flash_alpha` is unset.
-fn default_terminal_bell_flash_alpha() -> u8 {
-    56
-}
-
 /// Opacity (0..=255) of a scrollback-search match's highlight, and of the current match's (bolder),
 /// when `search_match_alpha` / `search_current_match_alpha` are unset.
 fn default_terminal_search_match_alpha() -> u8 {
@@ -127,23 +106,6 @@ pub struct TerminalAppearance {
     /// not just explicit OSC 8 links. Default `true`.
     #[serde(default = "default_terminal_link_detection")]
     pub link_detection: bool,
-    /// On a terminal **bell** (`\a` / `Alert::Bell`), request the OS window
-    /// attention cue (Dock bounce / taskbar flash) while the window is unfocused.
-    /// Default `true`.
-    #[serde(default = "default_terminal_bell_attention")]
-    pub bell_attention: bool,
-    /// On a terminal bell, flash the content area briefly (visual bell). Fires
-    /// regardless of focus. Default `false`.
-    #[serde(default = "default_terminal_bell_visual")]
-    pub bell_visual: bool,
-    /// On a terminal bell, emit a system beep (audible bell). Fires regardless of
-    /// focus. macOS only for now (`NSBeep`); a no-op elsewhere. Default `false`.
-    #[serde(default = "default_terminal_bell_audible")]
-    pub bell_audible: bool,
-    /// How bright the visual bell's flash is at its peak, 0 (invisible) … 255 (solid). It fades out
-    /// over the flash window. Only used with `bell_visual`.
-    #[serde(default = "default_terminal_bell_flash_alpha")]
-    pub bell_flash_alpha: u8,
     /// Opacity of the highlight over every scrollback-search match, 0 … 255.
     #[serde(default = "default_terminal_search_match_alpha")]
     pub search_match_alpha: u8,
@@ -186,10 +148,6 @@ impl Default for TerminalAppearance {
             hyperlink_style: default_terminal_hyperlink_style(),
             hyperlink_color: None,
             link_detection: default_terminal_link_detection(),
-            bell_attention: default_terminal_bell_attention(),
-            bell_visual: default_terminal_bell_visual(),
-            bell_audible: default_terminal_bell_audible(),
-            bell_flash_alpha: default_terminal_bell_flash_alpha(),
             search_match_alpha: default_terminal_search_match_alpha(),
             search_current_match_alpha: default_terminal_search_current_match_alpha(),
             images: default_terminal_images(),

@@ -13,7 +13,7 @@
 //! `style.hidden` (`display: none`), so it folds out of layout entirely.
 //!
 //! **The grip is the frame's handle.** A frame made draggable (`.draggable_as(..)`) is picked up by
-//! its grip and nowhere else ([`DragExt::drag_by_handle`](crate::builders::DragExt::drag_by_handle)),
+//! its grip and nowhere else ([`DragExt::drag_by_handle`]),
 //! so its title row still folds on a click and its body keeps its own presses. A frame that is not
 //! draggable leaves the grip doing nothing: it never reaches past the frame to pick up what holds
 //! it. heca's workspace rows and heca-pro's rooms are frames dragged this way; heca's docks are

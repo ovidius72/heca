@@ -187,6 +187,26 @@ pub trait HintExt: Component + Sized {
         self.base_mut().hint_style.offset_y = px;
         self
     }
+
+    /// **Put the letter beside this widget, never over it**, so what it shows stays readable —
+    /// `false` keeps it over the widget whatever its size. Unset, the size decides: a widget too
+    /// small to cover (an icon) gets its letter beside it, anything larger over itself.
+    ///
+    /// Where beside depends on the placement: a [`TopLeftCorner`](crate::widgets::HintPlacement::TopLeftCorner)
+    /// letter sits above the start, else to its left, else below — wherever there is room; any
+    /// other is a caption centred below, flipped above near the bottom edge.
+    ///
+    /// ```ignore
+    /// Flex::row()                                   // a link in a terminal
+    ///     .hint_placement(HintPlacement::TopLeftCorner)
+    ///     .hint_outside(true)
+    ///     .on_hint(Intent::new("open_link").arg("url", url))
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    fn hint_outside(mut self, outside: bool) -> Self {
+        self.base_mut().hint_style.outside = Some(outside);
+        self
+    }
 }
 
 impl<T: Component + Sized> HintExt for T {}

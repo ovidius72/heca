@@ -60,7 +60,7 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
     state.window_root.tick(0.0);
     let (w, h) = (v.w, v.h);
     let theme = crate::chrome::chrome_gui_theme(state);
-    let mut scene = {
+    let scene = {
         let _s = crate::slow_steps::step("frame.layout_and_paint_chrome");
         crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &theme)
     };
@@ -68,11 +68,6 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
     // thing under the pointer are painted by the widgets the drag passes through, inside
     // `paint_child` — so nothing opts in, and a plugin's own row gets the same feedback.
     // The host pass that drew this for the left sidebar alone is gone.
-    // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks, painted
-    // into the chrome scene so they sit above pane content. terminal-task-18.
-    crate::chrome::paint_link_hints(state, &mut scene, w, h, &theme);
-    // Visual-bell flash over the content area (fades out). terminal-task-17.
-    crate::chrome::paint_bell_flash(state, &mut scene, v.pane_area, w, h, &theme);
 
     // The trees just built may have declared terminals: one more frame starts and draws them.
     if crate::chrome::panes::terminal::declared_waiting() {

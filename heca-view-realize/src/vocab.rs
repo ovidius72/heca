@@ -5,7 +5,7 @@ use heca_grid_ui::{ButtonVariant, ToastPosition, ToastSeverity, WidgetSize};
 use heca_view::{PropValue, ViewNode, ViewSize, ViewVariant};
 
 /// A hint placement by the name serde gives [`ViewHintPlacement`](heca_view::ViewHintPlacement) —
-/// `"top_center"`, `"center"`, `"center_right"`, `"top_right"`, `"top_left"`. An unknown name keeps the
+/// `"top_center"`, `"center"`, `"center_right"`, `"top_right"`, `"top_left"`, `"top_left_corner"`. An unknown name keeps the
 /// default. A keycap tone by the name serde gives [`ViewHintTone`](heca_view::ViewHintTone).
 pub(crate) fn hint_tone(name: &str) -> Option<heca_grid_ui::Tone> {
     use heca_grid_ui::Tone as T;
@@ -27,6 +27,7 @@ pub(crate) fn hint_placement(name: &str) -> Option<heca_grid_ui::widgets::HintPl
         "center_right" => P::CenterRight,
         "top_right" => P::TopRight,
         "top_left" => P::TopLeft,
+        "top_left_corner" => P::TopLeftCorner,
         _ => return None,
     })
 }

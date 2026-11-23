@@ -22,8 +22,6 @@ pub(crate) struct FrameReasons {
     pub(crate) backend_closed: bool,
     /// A chrome signal changed the tree's signature.
     pub(crate) chrome_runtime: bool,
-    /// A visual-bell flash is fading.
-    pub(crate) bell_flashing: bool,
     /// The session's own animations (pane open, column slide).
     pub(crate) session_animating: bool,
     /// A terminal is mid-animation.
@@ -37,7 +35,7 @@ pub(crate) struct FrameReasons {
 }
 
 /// How many reasons there are. One place, so nothing sized from it can be wrong.
-const COUNT: usize = 10;
+const COUNT: usize = 9;
 
 impl FrameReasons {
     /// **The one list.** Every reason, paired with the name it goes by — so `any` and anything that
@@ -48,7 +46,6 @@ impl FrameReasons {
             (self.backend_data, "backend_data"),
             (self.backend_closed, "backend_closed"),
             (self.chrome_runtime, "chrome_runtime"),
-            (self.bell_flashing, "bell_flashing"),
             (self.session_animating, "session_animating"),
             (self.terminal_animating, "terminal_animating"),
             (self.image_animating, "image_animating"),

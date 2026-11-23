@@ -17,9 +17,8 @@ mod surface;
 
 use modes::{SELECTION_MODE, handle_chord_mode, handle_mode, handle_prefix_mode};
 use pick_modes::{
-    handle_column_pick_mode, handle_dock_pick_mode, handle_follow_link_mode, handle_hint_pick_mode,
-    handle_pane_select_mode, handle_pane_swap_mode, handle_pane_take_mode,
-    handle_workspace_pick_mode,
+    handle_column_pick_mode, handle_dock_pick_mode, handle_hint_pick_mode, handle_pane_select_mode,
+    handle_pane_swap_mode, handle_pane_take_mode, handle_workspace_pick_mode,
 };
 pub(crate) use surface::{
     FOCUS_LAYER, FocusedSurface, LAYER_FLOOR, focused_surface, surface_action, way_out_action,
@@ -194,10 +193,7 @@ pub(crate) fn handle_keyboard_input(
         InputMode::PaneSelect { candidates } => {
             handle_pane_select_mode(registry, state, &candidates, ctx);
         }
-        InputMode::FollowLink { candidates } => {
-            handle_follow_link_mode(registry, state, &candidates, ctx);
-        }
-        InputMode::HintPick { candidates } => {
+        InputMode::HintPick { candidates, .. } => {
             handle_hint_pick_mode(registry, state, &candidates, ctx);
         }
         InputMode::Search { .. } => {

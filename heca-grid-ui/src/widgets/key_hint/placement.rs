@@ -35,6 +35,12 @@ pub enum HintPlacement {
     /// widget's own to place, and it is the reason it exists as a variant: the rule was real, it
     /// just lived in a host paint pass where no call site could ask for it.
     TopLeft,
+    /// **At the target's top-left corner**, at the picker's own letter size — never inset and never
+    /// centred in a band. For a target that is a run of text on one line — a link in a terminal —
+    /// whose letter belongs at its first character, however short the run is. Over the corner by
+    /// default; with [`outside`](HintStyle::outside) it sits just beside the start instead —
+    /// above it, else to its left, else below, wherever there is room.
+    TopLeftCorner,
 }
 
 /// **How a widget's hint keycap is drawn.**
@@ -59,6 +65,11 @@ pub struct HintStyle {
     pub tone: Option<Tone>,
     /// Extra vertical nudge applied after placement — positive moves it down.
     pub offset_y: f64,
+    /// **Whether the cap goes beside the target instead of over it**, so what the target shows
+    /// stays readable. `None` — the default — lets the size decide: a target too small to cover
+    /// (an icon) gets its cap beside it, anything larger gets it over itself. `Some` says so
+    /// outright, either way. Set through [`HintExt::hint_outside`](crate::builders::HintExt::hint_outside).
+    pub outside: Option<bool>,
 }
 
 /// **What colour a keycap is: an explicit choice, then a declared meaning, then the picker's own.**
@@ -97,6 +108,11 @@ const LEFT_INSET: f64 = 2.0;
 
 /// The cap font for a target of `bounds` at inherited `font`, under `style`.
 fn hint_font(font: f32, style: &HintStyle, bounds: Rectangle) -> f32 {
+    // On the corner, the letter is the picker's own size: it covers the first character of a line
+    // of text, so neither the compact shrink nor the large-target growth applies.
+    if style.placement == HintPlacement::TopLeftCorner {
+        return style.size.unwrap_or(font);
+    }
     if style.size.is_none() && is_compact(bounds, font) {
         // A small target gets a small cap, or the chip is wider than the thing it labels.
         return font * HINT_COMPACT_MUL;
@@ -132,12 +148,48 @@ fn keycap_rect(
     style: &HintStyle,
     text: &str,
     viewport: Size,
+    clip: Option<Rectangle>,
 ) -> (Rectangle, Rectangle) {
     let Size { w, h } = keycap_size(hint_font(font, style, b), text);
-    // **A target too small to cover goes beside it, not over it.** Centred just below, so the
-    // icon stays fully visible with its letter as a caption; flipped above when below would
-    // fall off the bottom of the viewport.
-    if style.size.is_none() && is_compact(b, font) {
+    // **Beside or over** — said outright by the widget, or decided by its size. A corner letter is
+    // over its corner unless the widget asks otherwise: a short link is "small" by size, and its
+    // letter still belongs at its first character.
+    let outside = style.outside.unwrap_or_else(|| {
+        style.placement != HintPlacement::TopLeftCorner
+            && style.size.is_none()
+            && is_compact(b, font)
+    });
+    // **Beside the start of a line of text**: above its first character, else to its left, else
+    // below — the first that fits in what can be seen (`clip`, else the viewport), so the text
+    // itself is never covered.
+    if style.placement == HintPlacement::TopLeftCorner && outside {
+        let room = clip.unwrap_or_else(|| Rectangle::new(Point::new(0.0, 0.0), viewport));
+        let size = Size::new(w, h);
+        let fits = |at: Point| room.contains_rect(Rectangle::new(at, size));
+        let above = Point::new(b.loc.x, b.loc.y - h - HINT_ADJACENT_GAP);
+        let left = Point::new(b.loc.x - w - HINT_ADJACENT_GAP, b.loc.y);
+        let below = Point::new(b.loc.x, b.loc.y + b.size.h + HINT_ADJACENT_GAP);
+        let at = [above, left]
+            .into_iter()
+            .find(|at| fits(*at))
+            .unwrap_or(below);
+        let cap = Rectangle::new(Point::new(at.x, at.y + style.offset_y), size);
+        return (cap, cap.union(b));
+    }
+    // **On the corner, whatever the target's size** — before the compact rule, which would move
+    // the letter of a short link off its first character. The cap may be larger than the target
+    // (a one-line link), so it may live in the target and the cap together.
+    if style.placement == HintPlacement::TopLeftCorner {
+        let cap = Rectangle::new(
+            Point::new(b.loc.x, b.loc.y + style.offset_y),
+            Size::new(w, h),
+        );
+        return (cap, cap.union(b));
+    }
+    // **A target too small to cover goes beside it, not over it** — and so does any target that
+    // asked for it. Centred just below, so the icon stays fully visible with its letter as a
+    // caption; flipped above when below would fall off the bottom of the viewport.
+    if outside {
         let x = b.loc.x + (b.size.w - w) / 2.0;
         let below = b.loc.y + b.size.h + HINT_ADJACENT_GAP;
         let y = if below + h <= viewport.h {
@@ -167,6 +219,8 @@ fn keycap_rect(
             b.loc.y + (b.size.h - h) / 2.0,
         ),
         HintPlacement::TopRight => (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + TOP_INSET),
+        // Answered above, before the compact rule.
+        HintPlacement::TopLeftCorner => (b.loc.x, b.loc.y),
         HintPlacement::TopLeft => {
             // Centred within a shallow band from the top edge, so a tall card gets its letter
             // on the top line rather than floating in the middle of the picture.
@@ -278,7 +332,14 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     // has to be resolved here, before the fallback, or the fallback always wins and the tone is
     // silently dead.
     style.color = Some(cap_tint(&style, cx.theme()));
-    let (cap, permitted) = keycap_rect(base.bounds, picker_font, &style, &text, cx.viewport());
+    let (cap, permitted) = keycap_rect(
+        base.bounds,
+        picker_font,
+        &style,
+        &text,
+        cx.viewport(),
+        cx.clip(),
+    );
     let Some(cap) = fit_into_view(cap, permitted, cx.clip()) else {
         return;
     };
@@ -366,7 +427,8 @@ mod tests {
         let clip = rect(316.0, 40.0, 320.0, 728.0);
         let viewport = Size::new(1400.0, 768.0);
 
-        let (cap, permitted) = keycap_rect(button, font, &HintStyle::default(), "w", viewport);
+        let (cap, permitted) =
+            keycap_rect(button, font, &HintStyle::default(), "w", viewport, None);
         assert!(
             cap.loc.y >= button.loc.y + button.size.h,
             "placed below the icon it captions: {cap:?}",
@@ -377,6 +439,64 @@ mod tests {
             fitted, cap,
             "and the clamp leaves it beside the icon, not on it"
         );
+    }
+
+    /// **On the corner means on the corner** — a terminal link two cells wide and one cell tall is
+    /// "compact" by size, and still gets its letter exactly on its first character, at the
+    /// picker's own size; the clamp leaves it there.
+    #[test]
+    fn a_corner_cap_sits_on_the_first_character_however_short_the_target() {
+        use super::{HintPlacement, hint_font, keycap_size};
+        let font = 12.0;
+        let link = rect(300.0, 120.0, 16.0, 17.0);
+        let clip = rect(0.0, 0.0, 800.0, 600.0);
+        let style = HintStyle {
+            placement: HintPlacement::TopLeftCorner,
+            ..HintStyle::default()
+        };
+        let (cap, permitted) = keycap_rect(link, font, &style, "a", Size::new(800.0, 600.0), None);
+        assert_eq!(cap.loc, link.loc, "on the link's top-left corner: {cap:?}");
+        assert_eq!(hint_font(font, &style, link), font, "the picker's own size");
+        assert_eq!(cap.size, keycap_size(font, "a"));
+        assert_eq!(
+            fit_into_view(cap, permitted, Some(clip)),
+            Some(cap),
+            "left where it is"
+        );
+    }
+
+    /// **Beside the start of a line of text, wherever there is room** — `hint_outside` on a corner
+    /// letter: above the first character, else to its left when the line is the first one, else
+    /// below when it is also at the left edge. The text itself is never covered.
+    #[test]
+    fn an_outside_corner_cap_goes_above_else_left_else_below() {
+        use super::HintPlacement;
+        let font = 12.0;
+        let style = HintStyle {
+            placement: HintPlacement::TopLeftCorner,
+            outside: Some(true),
+            ..HintStyle::default()
+        };
+        let room = rect(0.0, 0.0, 800.0, 600.0);
+        let place = |link: Rectangle| {
+            keycap_rect(link, font, &style, "a", Size::new(800.0, 600.0), Some(room)).0
+        };
+        let covers = |cap: Rectangle, link: Rectangle| cap.intersection(link).is_some();
+
+        let middle = rect(300.0, 120.0, 50.0, 17.0);
+        let cap = place(middle);
+        assert!(cap.loc.y + cap.size.h <= middle.loc.y, "above: {cap:?}");
+        assert_eq!(cap.loc.x, middle.loc.x, "at the first character");
+
+        let first_row = rect(300.0, 0.0, 50.0, 17.0);
+        let cap = place(first_row);
+        assert!(cap.loc.x + cap.size.w <= first_row.loc.x, "left: {cap:?}");
+        assert!(!covers(cap, first_row));
+
+        let corner = rect(0.0, 0.0, 50.0, 17.0);
+        let cap = place(corner);
+        assert!(cap.loc.y >= corner.loc.y + corner.size.h, "below: {cap:?}");
+        assert!(!covers(cap, corner));
     }
 
     /// **…and flips above only when below would fall off the viewport.**
@@ -390,7 +510,8 @@ mod tests {
         let clip = rect(316.0, 0.0, 320.0, 728.0);
         let viewport = Size::new(1400.0, 80.0); // nothing fits under the button
 
-        let (cap, permitted) = keycap_rect(button, font, &HintStyle::default(), "w", viewport);
+        let (cap, permitted) =
+            keycap_rect(button, font, &HintStyle::default(), "w", viewport, None);
         assert!(
             cap.loc.y + cap.size.h <= button.loc.y,
             "flipped above the icon: {cap:?}",

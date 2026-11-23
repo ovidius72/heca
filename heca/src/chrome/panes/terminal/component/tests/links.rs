@@ -85,12 +85,11 @@ fn a_link_covers_its_cells_from_the_start_up_to_the_end() {
 }
 
 #[test]
-fn cell_origins_and_link_queries_follow_the_rendered_terminal_after_a_shift() {
+fn cells_and_link_queries_follow_the_rendered_terminal_after_a_shift() {
     let (t, mut root, ..) = with_a_link();
     heca_grid_ui::component::shift_subtree(root.as_mut(), 50.0, 60.0);
     let _ = painted(root.as_ref());
 
-    assert_eq!(t.cell_origin(3, 4), Some((90.0, 120.0)));
     let cell = t.cell_at((95.0, 121.0)).expect("on the rendered link");
     assert_eq!((cell.row, cell.col), (3, 4));
     assert_eq!(
@@ -172,4 +171,50 @@ fn the_cursor_is_a_hand_over_a_link_only_while_the_window_key_is_held() {
         Cursor::Pointer,
         "off a link"
     );
+}
+
+/// **A link is a pick target over its own cells, in the links' set only** — what
+/// `prefix+Shift+o` letters. Picking it sends the same `open_link` a click with the window's key
+/// held sends; `prefix+/`'s ordinary set does not see it; and the layer the regions live in lets
+/// the pointer through, so a click on the link is still the terminal's.
+#[test]
+fn a_link_is_a_pick_target_over_its_cells_in_the_links_set_only() {
+    let (_t, mut root, said, opened) = with_a_link();
+    root.tick(0.0);
+    heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 200.0));
+
+    let links =
+        heca_grid_ui::collect_hints_scoped(root.as_ref(), Some(super::super::super::LINK_SCOPE));
+    assert_eq!(links.len(), 1, "{links:?}");
+    let (path, bounds) = links[0].clone();
+    // Row 3, cells 4 up to 9, of a 10 × 20 cell grid.
+    assert_eq!(
+        bounds,
+        Rectangle::new(
+            heca_grid_ui::Point::new(40.0, 60.0),
+            heca_grid_ui::Size::new(50.0, 20.0)
+        )
+    );
+    assert!(
+        heca_grid_ui::collect_hints(root.as_ref())
+            .iter()
+            .all(|(p, _)| *p != path),
+        "not one of prefix+/'s targets"
+    );
+
+    assert!(heca_grid_ui::fire_hint(root.as_mut(), &path));
+    assert_eq!(
+        *opened.borrow(),
+        ["open_link Some(Text(\"https://example.com\"))"]
+    );
+
+    opened.borrow_mut().clear();
+    hold(root.as_mut(), cmd());
+    click(root.as_mut(), on_link());
+    assert_eq!(
+        opened.borrow().len(),
+        1,
+        "the click went through the layer to the terminal"
+    );
+    assert!(pointer_input(&said).is_empty(), "{:?}", said.borrow());
 }

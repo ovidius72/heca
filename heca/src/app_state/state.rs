@@ -242,10 +242,6 @@ pub struct AppState {
     pub modifiers: ModifiersState,
     /// Host-owned shared selection state, reusable across pane/backend types.
     pub selection: SelectionState,
-    /// Deadline of an active **visual bell** flash (`None` = not flashing). Set on a
-    /// terminal bell when `[appearance.terminal] bell_visual` is on; the render pass
-    /// draws a fading content-area overlay until `Instant::now()` reaches it.
-    pub bell_flash_until: Option<std::time::Instant>,
     /// **When a widget asked to be drawn again**, with no event coming to prompt it.
     ///
     /// Some behaviour is due at a *time*: a tooltip revealing once the pointer has rested, a caret
@@ -255,7 +251,7 @@ pub struct AppState {
     /// when it gets there** — without it, waking finds every reason-to-draw false and goes straight
     /// back to sleep, which is a tooltip that appears only when you nudge the mouse.
     ///
-    /// Same shape as [`bell_flash_until`](Self::bell_flash_until): a deadline the frame loop reads,
+    /// A deadline the frame loop reads,
     /// never a per-widget timer the host would have to keep in step.
     pub widget_frame_due: Option<std::time::Instant>,
     // (The right-click context menu + the destructive-confirm prompt are now host-owned overlay

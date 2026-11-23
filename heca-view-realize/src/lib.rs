@@ -343,6 +343,9 @@ pub(crate) fn apply_common_props(
     {
         style.offset_y = px;
     }
+    if let Some(outside) = node.props.get("hint_outside").and_then(PropValue::as_bool) {
+        style.outside = Some(outside);
+    }
 
     // **Which pickers this target answers to** — read for every kind, like the placement above.
     // A described surface gets two verbs over one tree exactly as a native one does; without it a

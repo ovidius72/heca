@@ -30,6 +30,7 @@ mod component;
 pub(crate) mod content;
 mod declared;
 mod input;
+mod links;
 mod model;
 mod search;
 mod shared;
@@ -44,6 +45,7 @@ pub(crate) use component::TerminalRef;
 pub(crate) use component::nodes_built;
 use input::TerminalCommand;
 pub(crate) use input::{Cell, Grid, Page, Search, TerminalInput};
+pub(crate) use links::LINK_SCOPE;
 pub(crate) use model::TerminalId;
 pub(crate) use viewport::Viewport;
 

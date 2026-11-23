@@ -6,7 +6,6 @@
 //! links, search — lives in the files beside this one, one concern each.
 
 mod frames;
-mod hyperlinks;
 mod input;
 mod search;
 pub(crate) use search::receive_matches;
@@ -15,7 +14,6 @@ mod typing;
 mod wheel;
 
 pub(crate) use frames::{column_frames, laid_out_pane_ids, layout_origin, pane_outer_frames};
-pub(crate) use hyperlinks::{cell_screen_pos, collect_link_hints};
 pub(crate) use input::{HeardPresses, on_left_release, on_terminal_input};
 pub(crate) use search::{enter_scrollback_search, search_step};
 pub(crate) use selection::{

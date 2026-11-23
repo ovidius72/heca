@@ -21,7 +21,8 @@
 # stops the animation at that timeout or earlier when the pane is acknowledged.
 # Timeout does not mark feedback seen. Cadence/colours come from the theme;
 # the flash uses the pane row's configured radius, not a separate flash radius.
-# Separate from toast auto-dismiss and the terminal bell. See docs/configuration.md: Pane Feedback Settings.
+# Separate from toast auto-dismiss. A terminal bell (\a) in a pane raises this same feedback
+# (status `bell` below). See docs/configuration.md: Pane Feedback Settings.
 notification_flash = 8000
 # Pane-feedback audio: TOML boolean true or false, without quotes; default true.
 # true = one configured sound per new background event, not per pulse or window.
@@ -456,6 +457,12 @@ label = "Success"
 icon = "check_circle"
 tone = "success"
 sound = { source = "asset:completed" }
+# A program in a pane rang the terminal bell (\a). Raised by heca itself for any pane, agent or not.
+[settings.agents.statuses.bell]
+label = "Bell"
+icon = "bell"
+tone = "warning"
+sound = { source = "asset:attention" }
 
 # ─────────────────────────────────────────────────────────────────────────────
 [confirm]
@@ -633,12 +640,6 @@ tooltip_delay_ms = 500
 # hyperlink_color       : link color (e.g. "#5fafff"); omit to use the theme accent.
 # link_detection        : auto-detect plain-text URLs (echo, logs) as links too,
 #                         not just explicit OSC 8 links. true | false
-# bell_attention        : on a bell (\a), request the OS attention cue (Dock
-#                         bounce / taskbar flash) while unfocused. true | false
-# bell_visual           : flash the content area briefly on a bell. true | false
-# bell_audible          : system beep on a bell (macOS only for now). true | false
-# bell_flash_alpha      : how bright the visual bell's flash is at its peak, 0 (invisible)
-#                         … 255 (solid). Only used with bell_visual.
 # search_match_alpha    : opacity of the highlight over every scrollback-search match, 0 … 255.
 # search_current_match_alpha : the same for the match the search is on (bolder).
 # padding               : space between the pane edge and the terminal grid, px on
@@ -656,10 +657,6 @@ ligatures = true
 hyperlink_style = "underline"
 # hyperlink_color = "#5fafff"
 link_detection = true
-bell_attention = true
-bell_visual = false
-bell_audible = false
-bell_flash_alpha = 56
 search_match_alpha = 64
 search_current_match_alpha = 150
 # padding               = 0

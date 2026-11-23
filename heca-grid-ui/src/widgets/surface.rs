@@ -7,7 +7,7 @@
 //!
 //! [`elevation`](Surface::elevation) gives it the **panel look** every menu, dialog and palette
 //! wears — the theme's surface fill, corner radius, edge (`overlay_border_style`) and drop shadow,
-//! from the one place that paints them ([`paint_panel_chrome`](super::paint_panel_chrome)).
+//! from the one place that paints them ([`paint_panel_chrome`]).
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, PaintCx, paint_child};

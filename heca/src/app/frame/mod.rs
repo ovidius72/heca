@@ -8,8 +8,6 @@
 //! 3. [`Frame::open`] — the surface, the command encoder and the views the frame draws into;
 //! 4. [`Frame::clear_and_background`], [`Frame::flush_window`], [`Frame::finish`] — the passes.
 
-use heca_core::layout::Rectangle;
-
 use crate::app::scene_flush::{ChromePassOpts, Flushed, flush_scene};
 use crate::app::terminal_render::TerminalRenderState;
 use crate::app_state::AppState;
@@ -32,8 +30,6 @@ pub(super) struct FrameValues {
     /// The window in logical pixels.
     w: f32,
     h: f32,
-    /// The content area: where the panes live.
-    pane_area: Rectangle,
     glow_alpha_scale: f32,
     surface_alpha: f32,
     /// Floating panes use independent opacity/blur/border knobs so they can stay readable (opaque
@@ -101,7 +97,6 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let chrome = ChromeConfig::of(state);
-    let pane_area = chrome.content_rect();
     state.text_renderer.begin_frame();
     state.text_renderer.set_damage(None);
     state.text_renderer.set_clip(None);
@@ -118,7 +113,6 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
         scale,
         w: phys_size.width as f32 / scale,
         h: phys_size.height as f32 / scale,
-        pane_area,
         glow_alpha_scale: heca_renderer::scene::glow_alpha_scale_for_background(
             state.theme.background.to_f32x4(),
         ),

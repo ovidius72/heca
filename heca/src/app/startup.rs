@@ -446,7 +446,6 @@ pub(crate) async fn init_state(
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         selection: app_state::SelectionState::new(),
-        bell_flash_until: None,
         widget_frame_due: None,
         last_focused: None,
         last_visited_ws: None,
