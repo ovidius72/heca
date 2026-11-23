@@ -292,6 +292,21 @@ delete_pane = "x"
 pick        = "s"
 ```
 
+The workspaces dock's own keys, as shipped — each acts on the row under its cursor:
+
+| Key | Action | What it does |
+|---|---|---|
+| `j` / `k`, `↓` / `↑` | `cursor_down` / `cursor_up` | Move the cursor. |
+| `Shift+j` / `Shift+k`, `Shift+↓` / `Shift+↑` | `move_selected_down` / `move_selected_up` | Move the **workspace** the cursor is in one place down / up — on any row, since the dock is the list of workspaces. The cursor stays on its row. |
+| `Ctrl+j` / `Ctrl+k`, `Ctrl+↓` / `Ctrl+↑` | `swap_selected_down` / `swap_selected_up` | Swap the **pane** under the cursor with its neighbour in the column (nothing on a workspace row, nothing past the end). |
+| `x`, `Shift+x`, `r`, `z`, `w`, `p`, `c` | `delete_selected`, `delete_selected_column`, `rename_selected`, `zoom_selected`, `create_workspace`, `create_pane`, `create_column` | As named. |
+
+Moving workspaces is also a plain action, wherever the keyboard is: `move_workspace_up` /
+`move_workspace_down` (`prefix+Ctrl+Shift+p` / `prefix+Ctrl+Shift+n`) move the workspace the window
+shows, and `move_workspace ws_idx=3 to_idx=0` (from a key with `args`, a script or a plugin) moves any
+workspace to any place — `to_idx` counted as the list is after the move. Dragging a workspace row by
+its grip sends the same action.
+
 An optional `id` narrows an entry to **one placement**, layered over the entry without one — for a
 dock placed more than once (heca starts with one workspaces dock; a program built on heca may add
 another, e.g. `workspaces.right`):

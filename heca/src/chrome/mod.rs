@@ -33,8 +33,9 @@ pub(crate) use input::emitter::layer_emitter;
 pub use input::emitter::{ChromeIntentEmitter, fires, picks};
 pub(crate) use input::identity::warn_author;
 pub(crate) use input::names::{
-    COLUMN_PICK_SCOPE, DOCK_DRAG_KIND, DOCK_PICK_SCOPE, PANE_DRAG_KIND, column_key,
-    pane_control_key, pane_id_of_key, pane_key, row_key, row_of_key, slot_key, slot_of_key,
+    COLUMN_PICK_SCOPE, DOCK_DRAG_KIND, DOCK_PICK_SCOPE, PANE_DRAG_KIND, WORKSPACE_DRAG_KIND,
+    column_key, pane_control_key, pane_id_of_key, pane_key, row_key, row_of_key, slot_key,
+    slot_of_key,
 };
 
 // ── panes ──

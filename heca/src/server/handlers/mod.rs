@@ -14,6 +14,7 @@ mod move_column;
 mod move_pane;
 #[cfg(test)]
 mod move_tests;
+mod move_workspace;
 mod names;
 #[cfg(test)]
 mod names_tests;
@@ -74,6 +75,9 @@ pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
         K::ClosePaneById => remove::close_pane_by_id,
         K::DeleteColumn => remove::delete_column,
         K::DeleteWorkspace => remove::delete_workspace,
+        K::MoveWorkspace => move_workspace::move_workspace,
+        K::MoveWorkspaceUp => move_workspace::move_workspace_up,
+        K::MoveWorkspaceDown => move_workspace::move_workspace_down,
         K::RenameTarget => names::rename_target,
         K::RenameWorkspaceTo => names::rename_workspace_to,
         K::RenameColumnTo => names::rename_column_to,

@@ -122,6 +122,17 @@ pub(super) fn build_layout(
         "delete_workspace" => Some(WmAction::DeleteWorkspace {
             ws_idx: get_usize(args, "ws_idx")?,
         }),
+        // `ws_idx` is optional on all three: a bare key moves the workspace the window shows.
+        "move_workspace" => Some(WmAction::MoveWorkspace {
+            ws_idx: get_usize(args, "ws_idx"),
+            to_idx: get_usize(args, "to_idx")?,
+        }),
+        "move_workspace_up" => Some(WmAction::MoveWorkspaceUp {
+            ws_idx: get_usize(args, "ws_idx"),
+        }),
+        "move_workspace_down" => Some(WmAction::MoveWorkspaceDown {
+            ws_idx: get_usize(args, "ws_idx"),
+        }),
         "toggle_workspace_collapsed" => Some(WmAction::ToggleWorkspaceCollapsed {
             ws_idx: get_usize(args, "ws_idx")?,
         }),

@@ -25,7 +25,7 @@ impl AppState {
                 crate::chrome::discard_overlays(self);
                 self.focused_pane = None;
                 self.last_focused = None;
-                self.last_visited_ws_idx = None;
+                self.last_visited_ws = None;
                 self.last_visited_pane_per_ws.clear();
                 self.expose_cursor_per_ws.clear();
                 self.expose_cursor_ws = None;
@@ -41,7 +41,7 @@ impl AppState {
                 self.view
                     .replace_session(&mut self.session, session, self.scale_factor);
             } else {
-                self.session = session;
+                self.view.update_session(&mut self.session, session);
             }
         }
         self.view

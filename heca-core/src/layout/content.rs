@@ -28,6 +28,10 @@ pub struct SessionContent {
 pub struct WorkspaceContent {
     pub id: WorkspaceId,
     pub name: Option<String>,
+    /// Its own number ([`Workspace::number`]). Absent in content from before numbers existed,
+    /// which reads as `0` and is numbered on rebuild.
+    #[serde(default)]
+    pub number: u32,
     pub columns: Vec<ColumnContent>,
     pub floating: Vec<FloatingContent>,
 }
@@ -79,6 +83,7 @@ impl WorkspaceContent {
         Self {
             id: ws.id,
             name: ws.name.clone(),
+            number: ws.number,
             columns: ws.scrolling.columns.iter().map(ColumnContent::of).collect(),
             floating: ws.floating_panes.iter().map(FloatingContent::of).collect(),
         }
@@ -140,6 +145,7 @@ impl WorkspaceContent {
         Workspace {
             id: self.id,
             name: self.name.clone(),
+            number: self.number,
             scrolling,
             floating_panes: self.floating.iter().map(FloatingContent::rebuild).collect(),
         }

@@ -387,3 +387,81 @@ fn the_sidebar_selection_a_plugin_reads_comes_from_the_focused_placements_key() 
         Some(crate::chrome::SidebarSelection::Pane { pane_id: PaneId(1) }),
     );
 }
+
+/// **`Shift+k/j` move the workspace the cursor is in, on any row** — through the same
+/// `move_workspace_up/down` a key and a script send, aimed at the cursor's workspace.
+#[test]
+fn move_selected_moves_the_cursors_workspace_from_any_row() {
+    let store = store_with_tree();
+    let p = WorkspacesContainerProvider::new("workspaces");
+    let mut cx = ProviderCx::new("workspaces", store.clone());
+    for row in ["the workspace header", "a pane row inside it"] {
+        assert_eq!(
+            p.perform(
+                MOVE_SELECTED_DOWN,
+                &Intent::new(MOVE_SELECTED_DOWN),
+                &mut cx
+            ),
+            Handled::Yes,
+            "{row}"
+        );
+        let asked = cx.drain();
+        assert_eq!(asked[0].action, "move_workspace_down", "{row}");
+        assert_eq!(
+            asked[0].args.get("ws_idx"),
+            Some(&PropValue::Int(0)),
+            "{row}"
+        );
+        p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
+        cx.drain();
+    }
+    p.perform(MOVE_SELECTED_UP, &Intent::new(MOVE_SELECTED_UP), &mut cx);
+    assert_eq!(cx.drain()[0].action, "move_workspace_up");
+}
+
+/// **`Ctrl+k/j` swap the pane under the cursor with its neighbour in the column** — through the
+/// by-id `swap`; nothing on a workspace row, nothing past the end of the column.
+#[test]
+fn swap_selected_trades_the_cursors_pane_with_its_neighbour() {
+    let store = store();
+    {
+        let mut t = tree();
+        t.workspaces[0].columns[0].panes.push(PaneEntry {
+            pane_id: PaneId(2),
+            name: "pane2".into(),
+            custom_name: None,
+        });
+        t.sync_flat_items();
+        *store.workspaces.tree_mut() = t;
+    }
+    let p = WorkspacesContainerProvider::new("workspaces");
+    let mut cx = ProviderCx::new("workspaces", store.clone());
+    assert_eq!(
+        p.perform(
+            SWAP_SELECTED_DOWN,
+            &Intent::new(SWAP_SELECTED_DOWN),
+            &mut cx
+        ),
+        Handled::No,
+        "a workspace row has no pane to swap"
+    );
+    p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
+    cx.drain();
+    assert_eq!(
+        p.perform(SWAP_SELECTED_UP, &Intent::new(SWAP_SELECTED_UP), &mut cx),
+        Handled::No,
+        "the first pane has nothing above it"
+    );
+    assert_eq!(
+        p.perform(
+            SWAP_SELECTED_DOWN,
+            &Intent::new(SWAP_SELECTED_DOWN),
+            &mut cx
+        ),
+        Handled::Yes
+    );
+    let asked = cx.drain();
+    assert_eq!(asked[0].action, "swap");
+    assert_eq!(asked[0].args.get("a_id"), Some(&PropValue::Int(1)));
+    assert_eq!(asked[0].args.get("b_id"), Some(&PropValue::Int(2)));
+}

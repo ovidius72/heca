@@ -65,7 +65,7 @@ impl WorkspaceFrame<'_> {
             .fold_hint_tone(Tone::Muted)
             .frameless(true)
             .gap(Spacing::Xs) // tighten the workspace header → body spacing
-            .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
+            .expanded(!seams.ws_state.is_collapsed(ws_id))
             // Folding names its action; the dock's listener sends it seated on this dock.
             .on_toggle(move |_| {
                 heca_grid_ui::intent::send(
@@ -117,7 +117,7 @@ impl WorkspaceFrame<'_> {
                     active_sig,
                     active.is_some_and(|a| ws_pane_ids.contains(&a)),
                 );
-                super::pane_row::set_if_changed(previous_sig, store.previous_ws() == Some(ws_idx));
+                super::pane_row::set_if_changed(previous_sig, store.previous_ws() == Some(ws_id));
             });
         }
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
@@ -128,8 +128,13 @@ impl WorkspaceFrame<'_> {
             ChromeDragItem::Workspace { ws: ws_idx },
         );
         // A workspace takes either: a pane dropped on its header or empty area moves in — the only
-        // way into an empty one — and a column moves to its end.
-        dock = dock.accepts(["pane", "column"]);
+        // way into an empty one — and a column moves to its end. **And it is carried by its grip
+        // and lands beside another workspace** — a reorder, so before or after, never onto
+        // (`providers/workspaces/drop.rs` turns it into `move_workspace`).
+        dock = dock
+            .accepts(["pane", "column"])
+            .draggable_as(crate::chrome::WORKSPACE_DRAG_KIND)
+            .accepts_beside([crate::chrome::WORKSPACE_DRAG_KIND]);
         // Columns stacked with a clear gap between them (the gap + bar mark each column);
         // panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(Spacing::Sm);
@@ -219,7 +224,7 @@ mod tests {
             !frame.active_state().get_untracked(),
             "and not once focus leaves it"
         );
-        store.set_previous_ws(Some(0));
+        store.set_previous_ws(Some(tree.workspaces[0].ws_id));
         assert!(
             frame.previous_state().get_untracked(),
             "and the one prefix+Shift+i would return to",

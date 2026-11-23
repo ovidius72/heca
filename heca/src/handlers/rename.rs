@@ -192,11 +192,7 @@ fn enter_workspace_rename(state: &mut AppState, ws_idx: usize) {
         .session
         .workspaces
         .get(ws_idx)
-        .map(|ws| {
-            ws.name
-                .clone()
-                .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1))
-        })
+        .map(|ws| ws.label())
         .unwrap_or_default();
     open_rename_dialog(state, RenameTarget::Workspace(ws_idx), current_name);
 }

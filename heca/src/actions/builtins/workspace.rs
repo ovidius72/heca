@@ -42,6 +42,52 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             "Index of the workspace to delete.",
         )],
     },
+    // ── Workspace order ──
+    // What the sidebar's grip drag sends, what the workspaces dock's Shift+k/j send for the row
+    // under its cursor, and what a key sends for the shown workspace.
+    ActionDescriptor {
+        name: "move_workspace",
+        side: Side::Server,
+        label: "Move Workspace To",
+        description: "Move a workspace to a position in the list (counted after the move; past the end is last).",
+        icon: None,
+        args: &[
+            ArgDescriptor::optional(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace to move; omit for the one the window shows.",
+            ),
+            ArgDescriptor::required(
+                "to_idx",
+                ArgKind::Int,
+                "Where it ends up, counted as the list is after the move.",
+            ),
+        ],
+    },
+    ActionDescriptor {
+        name: "move_workspace_up",
+        side: Side::Server,
+        label: "Move Workspace Up",
+        description: "Move a workspace one place up in the list (the first stays).",
+        icon: Some(Glyph::CaretUp),
+        args: &[ArgDescriptor::optional(
+            "ws_idx",
+            ArgKind::Int,
+            "Index of the workspace to move; omit for the one the window shows.",
+        )],
+    },
+    ActionDescriptor {
+        name: "move_workspace_down",
+        side: Side::Server,
+        label: "Move Workspace Down",
+        description: "Move a workspace one place down in the list (the last stays).",
+        icon: Some(Glyph::CaretDown),
+        args: &[ArgDescriptor::optional(
+            "ws_idx",
+            ArgKind::Int,
+            "Index of the workspace to move; omit for the one the window shows.",
+        )],
+    },
     // ── Actions that name their target (action-task-E) ──
     //
     // These are built by name + arguments through `build_action` — from a `config.toml`

@@ -191,7 +191,10 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::RenameWorkspaceTo { .. }
         | WmAction::ResetWorkspaceName
         | WmAction::ResetWorkspaceNameByIdx { .. }
-        | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,
+        | WmAction::DeleteWorkspace { .. }
+        | WmAction::MoveWorkspace { .. }
+        | WmAction::MoveWorkspaceUp { .. }
+        | WmAction::MoveWorkspaceDown { .. } => ActionPolicy::WorkspaceLevel,
 
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
         WmAction::CommandPalette { .. }

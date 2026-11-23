@@ -516,6 +516,23 @@ pub enum WmAction {
         ws_idx: usize,
     },
 
+    // ── Workspace order ──
+    /// Move a workspace so it sits at `to_idx`, counted as the list is after the move (past the end
+    /// is last). `ws_idx` unset is the workspace the asking window shows. What the sidebar's grip
+    /// drag sends, and what a script says.
+    MoveWorkspace {
+        ws_idx: Option<usize>,
+        to_idx: usize,
+    },
+    /// Move a workspace one place up (earlier); the first stays. `ws_idx` unset is the shown one.
+    MoveWorkspaceUp {
+        ws_idx: Option<usize>,
+    },
+    /// Move a workspace one place down (later); the last stays. `ws_idx` unset is the shown one.
+    MoveWorkspaceDown {
+        ws_idx: Option<usize>,
+    },
+
     // ── Take pane (parameterized) ──
     TakePane {
         pane_id: PaneId,

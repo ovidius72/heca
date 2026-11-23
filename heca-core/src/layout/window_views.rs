@@ -97,6 +97,20 @@ impl WindowViews {
     }
 
     /// Forget cached views of sessions removed from the server's directory.
+    /// **Take newer content for the session this window shows** — the one way a window's session
+    /// is replaced by the same session, changed.
+    ///
+    /// The shown workspace is held by identity first. A window that never chose one shows the
+    /// first, and "the first" must stay the workspace it was — not whichever is first once the
+    /// list is reordered, which is how moving the first workspace down left the window, its focus
+    /// and the dock's cursor on the workspace that took its place.
+    pub fn update_session(&mut self, session: &mut Session, replacement: Session) {
+        if self.current.active_workspace.is_none() {
+            self.current.active_workspace = session.workspace_id(0);
+        }
+        *session = replacement;
+    }
+
     pub fn retain_sessions(&mut self, keep: impl Fn(SessionId) -> bool) {
         self.saved.retain(|id, _| keep(*id));
     }
@@ -139,6 +153,26 @@ mod tests {
             .active_pane()
             .unwrap()
             .id
+    }
+
+    /// **A window that never chose a workspace keeps showing the one it showed** when newer
+    /// content moves it: the first workspace moved down is still the shown one, not the workspace
+    /// that took its place.
+    #[test]
+    fn newer_content_keeps_the_shown_workspace_even_when_none_was_chosen() {
+        let mut session = Session::new(SessionId(1), Default::default());
+        session.add_workspace();
+        let mut views = WindowViews::new(WindowView::new(Size::new(900.0, 600.0), 1.0));
+        let first = session.workspace_id(0);
+        let mut newer = session.clone();
+        assert!(newer.move_workspace(0, 1));
+        views.update_session(&mut session, newer);
+        assert_eq!(session.through(&views).active_workspace_idx(), 1);
+        assert_eq!(
+            session.workspace_id(1),
+            first,
+            "the one it showed, where it now is"
+        );
     }
 
     #[test]

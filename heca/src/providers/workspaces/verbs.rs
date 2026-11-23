@@ -3,6 +3,8 @@
 
 use super::*;
 
+/// One row up or down: where the cursor steps, and which neighbour a swap of the selected pane
+/// trades with.
 pub(super) enum Step {
     Up,
     Down,
@@ -214,6 +216,38 @@ impl WorkspacesContainerProvider {
         cx.dispatch(
             action,
             PropMap::from([(arg.to_string(), PropValue::Int(value))]),
+        );
+        Handled::Yes
+    }
+
+    /// Swap the pane under the cursor with its neighbour one `step` along its column, through the
+    /// by-id `swap` every other door uses. Declines on a row that is not a tiled pane, and at the
+    /// end of the column.
+    pub(super) fn swap_selected_pane(&self, cx: &mut ProviderCx<'_>, step: Step) -> Handled {
+        let pair = {
+            let state = cx.state();
+            let tree = state.workspaces().tree();
+            let Some(WorkspaceRow::Pane { pane_id }) = tree.current_item().cloned() else {
+                return Handled::No;
+            };
+            tree.column_of(pane_id).and_then(|panes| {
+                let at = panes.iter().position(|p| *p == pane_id)?;
+                let other = match step {
+                    Step::Up => at.checked_sub(1)?,
+                    Step::Down => at + 1,
+                };
+                panes.get(other).map(|other| (pane_id, *other))
+            })
+        };
+        let Some((a, b)) = pair else {
+            return Handled::No;
+        };
+        cx.dispatch(
+            "swap",
+            PropMap::from([
+                ("a_id".to_string(), PropValue::Int(a.0 as i64)),
+                ("b_id".to_string(), PropValue::Int(b.0 as i64)),
+            ]),
         );
         Handled::Yes
     }

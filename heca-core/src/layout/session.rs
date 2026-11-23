@@ -22,6 +22,8 @@ pub struct Session {
     pub options: LayoutOptions,
     /// Next ID counter.
     next_id: u64,
+    /// The number the next workspace is given ([`Workspace::number`]) — only ever counts up.
+    next_number: u32,
 }
 
 impl Session {
@@ -32,6 +34,7 @@ impl Session {
             workspaces: Vec::new(),
             options,
             next_id: 1,
+            next_number: 1,
         };
 
         // Create initial workspace.
@@ -46,8 +49,15 @@ impl Session {
     pub(crate) fn from_parts(
         id: SessionId,
         options: LayoutOptions,
-        workspaces: Vec<Workspace>,
+        mut workspaces: Vec<Workspace>,
     ) -> Self {
+        // A workspace that arrives without a number — content from before numbers existed — takes
+        // the next one after those that have one, in list order, so every workspace has a name.
+        let mut next_number = workspaces.iter().map(|ws| ws.number).max().unwrap_or(0) + 1;
+        for ws in workspaces.iter_mut().filter(|ws| ws.number == 0) {
+            ws.number = next_number;
+            next_number += 1;
+        }
         let max_id = workspaces
             .iter()
             .flat_map(|ws| {
@@ -64,6 +74,7 @@ impl Session {
             workspaces,
             options,
             next_id: max_id + 1,
+            next_number,
         }
     }
 
@@ -106,8 +117,10 @@ impl Session {
     /// Create a new workspace and append it.
     pub fn add_workspace(&mut self) -> WorkspaceId {
         let id = WorkspaceId(self.next_id());
-        self.workspaces
-            .push(Workspace::new(id, self.options.clone()));
+        let mut ws = Workspace::new(id, self.options.clone());
+        ws.number = self.next_number;
+        self.next_number += 1;
+        self.workspaces.push(ws);
         id
     }
 }

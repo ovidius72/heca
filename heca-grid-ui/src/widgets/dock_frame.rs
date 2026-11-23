@@ -16,8 +16,8 @@
 //! its grip and nowhere else ([`DragExt::drag_by_handle`](crate::builders::DragExt::drag_by_handle)),
 //! so its title row still folds on a click and its body keeps its own presses. A frame that is not
 //! draggable leaves the grip doing nothing: it never reaches past the frame to pick up what holds
-//! it. heca-pro's rooms are frames dragged this way; heca's docks are moved by the host, which
-//! makes the seat around every dock draggable with the window's move key.
+//! it. heca's workspace rows and heca-pro's rooms are frames dragged this way; heca's docks are
+//! moved by the host, which makes the seat around every dock draggable with the window's move key.
 //!
 //! **Rail mode (built).** A Dock hosted in a
 //! [`ChromeRegion`](super::ChromeRegion) can collapse to an **icon rail**. Bind

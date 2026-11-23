@@ -14,6 +14,10 @@ use super::types::*;
 pub struct Workspace {
     pub id: WorkspaceId,
     pub name: Option<String>,
+    /// **Its own number**, given when it was made and kept wherever it moves: the `N` of the
+    /// "Workspace N" it is called until it is named. Never reused within a session — the next
+    /// workspace takes the next number even after one is removed. `0` is "not numbered yet".
+    pub number: u32,
     /// The scrollable-tiling layout.
     pub scrolling: ScrollingSpace,
     /// Floating panes (future feature).
@@ -51,9 +55,19 @@ impl Workspace {
         Self {
             id,
             name: None,
+            number: 0,
             scrolling,
             floating_panes: Vec::new(),
         }
+    }
+
+    /// **What it is called**: the name it was given, or "Workspace" and its own number. The one
+    /// rule every surface shows — the dock, the exposé, the palette, the rename prompt — so a
+    /// workspace keeps its name wherever it moves in the list.
+    pub fn label(&self) -> String {
+        self.name
+            .clone()
+            .unwrap_or_else(|| format!("Workspace {}", self.number))
     }
 
     pub fn has_panes(&self) -> bool {

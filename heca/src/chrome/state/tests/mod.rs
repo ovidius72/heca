@@ -21,9 +21,10 @@ fn clone_is_a_shallow_alias_not_a_snapshot() {
         99.0,
         "clone must alias the same signal store — including the per-mount offsets"
     );
-    b.workspaces.toggle_ws_collapsed(3);
+    let ws = heca_core::layout::WorkspaceId(3);
+    b.workspaces.set_collapsed(ws, 3, true);
     assert!(
-        a.workspaces.is_ws_collapsed(3),
+        a.workspaces.is_collapsed(ws),
         "collapse via clone must be seen by original"
     );
 }
