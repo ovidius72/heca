@@ -79,8 +79,10 @@ impl WorkspaceFrame<'_> {
             // Its number, as a key would name it — shown while `workspace_numbers` is on.
             .leading({
                 let numbers = seams.ws_state.workspace_numbers;
+                // Quiet and small: an index beside the name, never read as part of it.
                 Label::new(workspace_number(ws_idx))
                     .size(WidgetSize::Caption)
+                    .muted(true)
                     .hidden(move || !heca_grid_ui::reactive::SignalGet::get(&numbers))
             });
         // Keep the active identity live. The theme may enable a workspace-wide wash through
@@ -206,6 +208,42 @@ mod tests {
                 "{expected:?} missing from the frame: {declared:?}",
             );
         }
+    }
+
+    /// **The position number is quiet, the name is not** — the number is drawn in the theme's
+    /// muted tone so it reads as an index beside the name ("1  Workspace 1"), never as part of it.
+    #[test]
+    fn the_position_number_is_drawn_quieter_than_the_name() {
+        let mut fx = Fixture::default();
+        let tree = testing::tree();
+        let frame = {
+            let (seams, mut reg) = fx.split("left");
+            WorkspaceFrame {
+                workspace: &tree.workspaces[0],
+            }
+            .build(&seams, &mut reg)
+        };
+        let mut theme = heca_grid_ui::theme::Theme::default();
+        theme.colors.muted = heca_grid_ui::Color::rgb(0x55, 0x66, 0x77);
+        let mut root = Flex::column().child(frame);
+        let scene = crate::chrome::paint_chrome_root(&mut root, 300.0, 200.0, &theme);
+        let colour_of = |text: &str| {
+            scene.iter().find_map(|c| match c {
+                heca_grid_ui::DrawCommand::Text(t) if t.text == text => Some(t.color),
+                _ => None,
+            })
+        };
+        assert_eq!(
+            colour_of("1"),
+            Some(theme.colors.muted),
+            "the number is muted"
+        );
+        let name = tree.workspaces[0].name.clone();
+        assert_ne!(
+            colour_of(&name),
+            Some(theme.colors.muted),
+            "the name is not"
+        );
     }
 
     /// The frame's own two states follow focus from the store, for the same reason a row's do:
