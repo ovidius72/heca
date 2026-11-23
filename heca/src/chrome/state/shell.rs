@@ -72,6 +72,12 @@ pub struct SharedChromeState {
     /// A row's `key` is what writes it — a row declares its identity once and the cursor, the
     /// right-click target and drag are readers of that one declaration.
     container_cursor: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<Option<String>>>>>,
+    /// **Which placements are folded to their header**, per mount — only meaningful while the
+    /// region shows headers (more than one dock in it). Written by `chrome.container.toggle_collapsed`.
+    container_collapsed: std::rc::Rc<std::cell::RefCell<HashMap<String, bool>>>,
+    /// **The row a dock's cursor came from when it stepped onto the header**, per mount — where
+    /// stepping down from the header goes back to.
+    header_return: std::rc::Rc<std::cell::RefCell<HashMap<String, Option<String>>>>,
 }
 
 impl SharedChromeState {
@@ -207,6 +213,38 @@ impl SharedChromeState {
     ///
     /// Keyed by **mount id** for the same reason the scroll offset is: place a container twice and
     /// each seating gets its own cursor over the same content.
+    /// Whether placement `container` is folded to its header.
+    pub fn is_container_collapsed(&self, container: &str) -> bool {
+        self.container_collapsed
+            .borrow()
+            .get(container)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Fold placement `container` to its header, or open it again.
+    pub fn set_container_collapsed(&self, container: &str, collapsed: bool) {
+        self.container_collapsed
+            .borrow_mut()
+            .insert(container.to_string(), collapsed);
+    }
+
+    /// Remember the row placement `container`'s cursor left for its header.
+    pub(crate) fn set_header_return(&self, container: &str, row: Option<String>) {
+        self.header_return
+            .borrow_mut()
+            .insert(container.to_string(), row);
+    }
+
+    /// The row placement `container`'s cursor left for its header, if any.
+    pub(crate) fn header_return(&self, container: &str) -> Option<String> {
+        self.header_return
+            .borrow()
+            .get(container)
+            .cloned()
+            .flatten()
+    }
+
     pub fn container_cursor(&self, container: &str) -> Signal<Option<String>> {
         if let Some(existing) = self.container_cursor.borrow().get(container) {
             return *existing;
@@ -252,6 +290,8 @@ impl SharedChromeState {
             dock_focus_request: signal(None),
             last_focused_container: signal(None),
             container_cursor: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
+            container_collapsed: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
+            header_return: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
         }
     }
 

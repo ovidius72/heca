@@ -253,6 +253,8 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
         | WmAction::ReorderContainerAfter { .. }
+        | WmAction::ToggleContainerCollapsed { .. }
+        | WmAction::ResizeContainer { .. }
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
         // **Releasing** chrome focus is always allowed, in every domain. It is the way back to the
         // main region, and a way out that can be blocked is not a way out — the same reason `Esc`

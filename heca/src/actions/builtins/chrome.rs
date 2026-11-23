@@ -216,6 +216,37 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         ],
     },
     ActionDescriptor {
+        name: "chrome.container.toggle_collapsed",
+        side: Side::Client,
+        label: "Fold or Open a Container",
+        description: "Fold a chrome container to its header, or open it — while its region shows more than one.",
+        icon: Some(Glyph::CaretUp),
+        args: &[ArgDescriptor::optional(
+            "container_id",
+            ArgKind::Text,
+            "Id of the container; omit for the one that holds the keyboard.",
+        )],
+    },
+    ActionDescriptor {
+        name: "chrome.container.resize",
+        side: Side::Client,
+        label: "Resize a Container",
+        description: "Make a chrome container taller or shorter, taking the room from its neighbour in the region.",
+        icon: None,
+        args: &[
+            ArgDescriptor::optional(
+                "container_id",
+                ArgKind::Text,
+                "Id of the container to resize; omit for the one that holds the keyboard.",
+            ),
+            ArgDescriptor::required(
+                "by",
+                ArgKind::Float,
+                "Pixels to grow by; negative to shrink.",
+            ),
+        ],
+    },
+    ActionDescriptor {
         name: "collapse_current_workspace",
         side: Side::Client,
         label: "Collapse Workspace Row",

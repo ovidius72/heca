@@ -14,6 +14,7 @@
 
 use crate::chrome::*;
 use heca_grid_ui::builders::DragExt;
+use heca_grid_ui::widgets::DockFrame;
 
 /// Make a node take the box its parent gives it instead of the size of its own content.
 ///
@@ -55,6 +56,7 @@ fn focus_and_pick(
     share: f32,
     has_cursor: bool,
     movable: bool,
+    headed: bool,
     ctx: &crate::providers::ChromeCtx<'_>,
 ) -> WidgetModel {
     let move_key = ctx
@@ -136,6 +138,8 @@ fn focus_and_pick(
             // (`chrome::dock_drop_action`), posted as a `chrome.container.*` action.
             .draggable_as(movable.then_some(crate::chrome::DOCK_DRAG_KIND))
             .draggable_when(move |held| crate::modifier::held(move_key, held))
+            // With a header, its grip picks the dock up with no key as well.
+            .drag_by_handle(headed)
             .accepts_beside([crate::chrome::DOCK_DRAG_KIND]),
     )
 }
@@ -162,7 +166,18 @@ pub(in crate::chrome) fn build_region_content(
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
 ) -> Option<WidgetModel> {
-    let mut bodies = host
+    // What each dock built, before the host wraps it: whether there are headers depends on how
+    // many there are, so they are all built first.
+    struct Built {
+        order: heca_grid_ui::order::Order,
+        id: String,
+        title: String,
+        body: WidgetModel,
+        parts: f32,
+        navigable: bool,
+        movable: bool,
+    }
+    let mut built = host
         .contributions(region)
         .iter()
         .filter_map(|mounted| match mounted.provider().build_contribution(ctx) {
@@ -177,32 +192,62 @@ pub(in crate::chrome) fn build_region_content(
                 // a size of its own: it is a list anyone may append to.
                 let placed = mounted.placement();
                 let own = &body.base().style.layout;
-                let parts = placed.flex.or(own.flex).unwrap_or(1.0);
+                // A share the user gave by hand (resizing) wins over both.
+                let parts = mounted
+                    .hand_share()
+                    .or(placed.flex)
+                    .or(own.flex)
+                    .unwrap_or(1.0);
                 let order = placed.order.or(own.order).unwrap_or_default();
-                // The part goes on the OUTERMOST node, so it has to be applied after the wrappers:
-                // a part set only on the body would leave the wrapper content-sized and divide
-                // nothing (one level up).
-                Some((
+                Some(Built {
                     order,
-                    c.id.clone(),
-                    with_flex(
-                        focus_and_pick(
-                            body,
-                            &c.id,
-                            parts,
-                            mounted.keyboard_navigable(),
-                            c.movable,
-                            ctx,
-                        ),
-                        parts,
-                    ),
-                ))
+                    id: c.id.clone(),
+                    title: c.title.clone(),
+                    body,
+                    parts,
+                    navigable: mounted.keyboard_navigable(),
+                    movable: c.movable,
+                })
             }
             _ => None,
         })
         .collect::<Vec<_>>();
     // Lower first; ties — and every dock that said nothing — keep the order they were added.
-    bodies.sort_by_key(|(order, _, _)| *order);
+    built.sort_by_key(|dock| dock.order);
+    // **Every dock has a header**: its name, the grip it is dragged by, and the fold — alone in its
+    // region too, so a dock looks and moves the same whatever sits beside it.
+    let headed = !built.is_empty();
+    let bodies = built
+        .into_iter()
+        .map(|dock| {
+            let folded = headed && ctx.state().is_container_collapsed(&dock.id);
+            // A folded dock is its header alone, sized to it; the others share what is left.
+            let parts = if folded { 0.0 } else { dock.parts };
+            let body = match headed {
+                true => with_header(dock.body, &dock.id, &dock.title, folded, parts),
+                false => dock.body,
+            };
+            // The part goes on the OUTERMOST node, so it has to be applied after the wrappers:
+            // a part set only on the body would leave the wrapper content-sized and divide
+            // nothing (one level up).
+            (
+                dock.order,
+                dock.id.clone(),
+                with_flex(
+                    focus_and_pick(
+                        body,
+                        &dock.id,
+                        parts,
+                        dock.navigable,
+                        dock.movable,
+                        headed,
+                        ctx,
+                    ),
+                    parts,
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
     let ids: Vec<String> = bodies.iter().map(|(_, id, _)| id.clone()).collect();
     let mut bodies: Vec<WidgetModel> = bodies.into_iter().map(|(_, _, body)| body).collect();
     match bodies.len() {
@@ -231,9 +276,9 @@ pub(in crate::chrome) fn build_region_content(
             let mut bodies = bodies.into_iter();
             let first = bodies.next();
             let rest: Vec<WidgetModel> = ids
-                .iter()
+                .windows(2)
                 .zip(bodies)
-                .flat_map(|(above, body)| [dock_gap(above, gap, drag), body])
+                .flat_map(|(pair, body)| [dock_gap(&pair[0], &pair[1], gap, drag, ctx), body])
                 .collect();
             Some(heca_grid_ui::WidgetModel::new(
                 Flex::column().flex(1.0).child(first).child(rest),
@@ -242,8 +287,51 @@ pub(in crate::chrome) fn build_region_content(
     }
 }
 
+/// **A dock's header**, shown while its region holds more than one: the grip it is dragged by, its
+/// name, and the fold at the end — then the body, hidden while folded. A `Row` (the row a dock's
+/// cursor can stand on) holding the small widgets, at the region's normal size; the rows inside a
+/// dock are smaller.
+fn with_header(body: WidgetModel, id: &str, title: &str, folded: bool, parts: f32) -> WidgetModel {
+    let mut body = body;
+    if folded {
+        body.base_mut().style.layout.hidden = true;
+    }
+    let fold = Intent::new("chrome.container.toggle_collapsed")
+        .arg("container_id", PropValue::Text(id.to_string()));
+    let caret = match folded {
+        true => heca_grid_ui::Glyph::CaretRight,
+        false => heca_grid_ui::Glyph::CaretDown,
+    };
+    // A `Row` so the dock's cursor can stand on it (it lights by its key, like any row), holding
+    // the parts: the grip, the name, the caret.
+    let header = heca_grid_ui::widgets::Row::new()
+        // The theme's surface behind it — a shade apart from the dock's rows (their titles have
+        // none, its pane cards the `Tinted` veil), so the dock reads as the thing that holds them.
+        .variant(heca_grid_ui::widgets::RowVariant::Filled)
+        .key(crate::chrome::dock_header_key(id))
+        .on_press(fold)
+        // The parts straight in the row, so its own air is the only air: grip, name, caret.
+        .align("center")
+        .gap(heca_grid_ui::style::Spacing::Sm)
+        .child(Label::new(DockFrame::GRIP).drag_handle())
+        .child(Label::new(title).grow(1.0))
+        .child(Icon::new(caret));
+    let column = Flex::column().child(header).child(body);
+    // Pass the share down through the column, so the body fills what the dock was given.
+    let mut column = WidgetModel::new(column);
+    if parts > 0.0 {
+        pass_box_down(column.as_mut());
+        if let Some(body) = column.base_mut().children.last_mut() {
+            pass_box_down(body.as_mut());
+        }
+    }
+    column
+}
+
 /// **The space between two docks**: the rule that tells them apart, with the region's gap above and
-/// below it — and a place a dock dropped there lands, after the dock above (`after`).
+/// below it — a place a dock dropped there lands, after the dock above (`after`) — and **the edge
+/// that resizes them**: dragged, it sends `chrome.container.resize` for the dock above, the same
+/// action a key and a script send.
 ///
 /// A rule rather than a gap alone, so two docks read as two things rather than one long list. It is
 /// a sibling, not part of a dock: it asks for no part, so it keeps its natural size and the docks
@@ -251,8 +339,10 @@ pub(in crate::chrome) fn build_region_content(
 /// follows a reload.
 fn dock_gap(
     after: &str,
+    before: &str,
     gap: heca_grid_ui::style::Space,
     drag: &mut DragItemRegistry,
+    ctx: &crate::providers::ChromeCtx<'_>,
 ) -> WidgetModel {
     let key = format!("dock-gap:{after}");
     drag.register(
@@ -266,7 +356,27 @@ fn dock_gap(
             .key(key)
             .padding_y(gap)
             .accepts([crate::chrome::DOCK_DRAG_KIND])
-            .child(Separator::horizontal()),
+            // Either neighbour dropped here stays where it is, so neither is offered the place.
+            .accepts_when({
+                let (above, below) = (after.to_string(), before.to_string());
+                move |source| source != above && source != below
+            })
+            .child(
+                heca_grid_ui::widgets::Splitter::horizontal()
+                    .line(true)
+                    .on_resize({
+                        let (emit, dock) = (ctx.emit_intent().cloned(), after.to_string());
+                        move |by| {
+                            if let Some(emit) = &emit {
+                                emit.fire_intent(
+                                    Intent::new("chrome.container.resize")
+                                        .arg("container_id", PropValue::Text(dock.clone()))
+                                        .arg("by", PropValue::Float(f64::from(by))),
+                                );
+                            }
+                        }
+                    }),
+            ),
     )
 }
 

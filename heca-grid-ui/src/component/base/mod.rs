@@ -4,6 +4,9 @@ use super::*;
 
 mod methods;
 
+/// Which carried sources a drop target takes, by their identity ([`Base::accepts_from`]).
+pub type SourceRule = std::rc::Rc<dyn Fn(&str) -> bool>;
+
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
     /// Layout + visual style.
@@ -149,6 +152,10 @@ pub struct Base {
     /// and another workspace *beside* itself, and each is read its own way. Set with
     /// [`DragExt::accepts_beside`](crate::builders::DragExt::accepts_beside).
     pub accepts_beside: Vec<String>,
+    /// **Which sources it takes**, by what was carried — on top of the kinds. Set with
+    /// [`DragExt::accepts_when`](crate::builders::DragExt::accepts_when); `None` takes any source of
+    /// a kind it accepts.
+    pub accepts_from: Option<SourceRule>,
     /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and the drag are three readers of this one declaration.
     ///

@@ -236,6 +236,11 @@ impl DockFrame {
     pub fn grip_glyph(self, glyph: impl Into<String>) -> Self {
         self.prop("grip_glyph", glyph.into())
     }
+    /// The size of the title row alone — a row of a list nested in a dock, smaller than the dock's
+    /// own header, without shrinking what it holds.
+    pub fn title_size(self, size: crate::ViewSize) -> Self {
+        self.prop("title_size", size)
+    }
     /// Show as the current one.
     pub fn active(self, on: bool) -> Self {
         self.prop("active", on)

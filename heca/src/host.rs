@@ -115,6 +115,11 @@ impl<'a> StateView<'a> {
         self.state.container_cursor(container)
     }
 
+    /// Whether **this placement** is folded to its header (`chrome.container.toggle_collapsed`).
+    pub fn is_container_collapsed(&self, container: &str) -> bool {
+        self.state.is_container_collapsed(container)
+    }
+
     /// The currently active (focused) pane, if any.
     pub fn active_pane(&self) -> Option<PaneId> {
         self.state.workspaces.active_pane()

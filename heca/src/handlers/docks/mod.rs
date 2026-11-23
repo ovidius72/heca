@@ -261,6 +261,106 @@ pub fn handle_reorder_container_after(
         .map_err(|e| format!("cannot reorder container '{container_id}' after '{after_id}': {e}"))
 }
 
+/// Fold a placed dock to its header, or open it again — the header's chevron, a key, a script.
+/// Unnamed, it is the dock that holds the keyboard. The region is rebuilt with the dock's new share
+/// (`chrome_signature` reads the fold).
+pub fn handle_toggle_container_collapsed(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
+    let WmAction::ToggleContainerCollapsed { container_id } = action else {
+        return Ok(());
+    };
+    let Some(dock) = container_id
+        .clone()
+        .or_else(|| crate::app::tree_focus::focused_dock(state))
+    else {
+        return Ok(());
+    };
+    if state.chrome_host.placement(&dock).is_none() {
+        return Err(format!("no dock '{dock}' is placed"));
+    }
+    let folded = state.chrome_state.is_container_collapsed(&dock);
+    state.chrome_state.set_container_collapsed(&dock, !folded);
+    Ok(())
+}
+
+/// **The least a resize leaves a dock**, in lines of the interface font — its header and a row,
+/// so a dock never shrinks to nothing under the pointer. Folding is how a dock goes to its header.
+const MIN_DOCK_LINES: f64 = 4.0;
+
+/// Make a placed dock taller or shorter by `by` pixels, taking the room from its neighbour — the
+/// edge between two docks while it is dragged, a key, a script.
+///
+/// **Shares follow what is seen.** Every open dock of the region gets the share its height on
+/// screen is now — so a dock whose own body asked for a share does not jump — and then the two
+/// neighbours trade `by` pixels, neither going below a minimum that follows the font. The shares
+/// are then the user's, as a hand move is.
+pub fn handle_resize_container(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
+    let WmAction::ResizeContainer { container_id, by } = action else {
+        return Ok(());
+    };
+    // Unnamed, it is the dock that holds the keyboard — what a key in the resize mode means.
+    let Some(container_id) = container_id
+        .clone()
+        .or_else(|| crate::app::tree_focus::focused_dock(state))
+    else {
+        return Ok(());
+    };
+    let container_id = &container_id;
+    let Some(region) = state.chrome_host.placement(container_id) else {
+        return Err(format!("no dock '{container_id}' is placed"));
+    };
+    let height = |id: &str| {
+        heca_grid_ui::node_with_key(&state.window_root, id).map(|seat| seat.base().bounds.size.h)
+    };
+    // The open docks of the region, as shown, with their heights.
+    let open: Vec<(String, f64)> = state
+        .chrome_host
+        .shown(region)
+        .into_iter()
+        .filter(|(id, _)| !state.chrome_state.is_container_collapsed(id))
+        .filter_map(|(id, _)| Some((id.clone(), height(&id)?)))
+        .collect();
+    let Some(at) = open.iter().position(|(id, _)| id == container_id) else {
+        return Ok(());
+    };
+    // **`by` moves an edge, as for panes**: the one below the dock, or the one above when it is the
+    // last — so a positive `by` (down) grows the dock above an edge and shrinks the one below it.
+    let (other, by) = if at + 1 < open.len() {
+        (at + 1, *by)
+    } else if at > 0 {
+        (at - 1, -*by)
+    } else {
+        return Ok(());
+    };
+    let total: f64 = open.iter().map(|(_, h)| h).sum();
+    if total <= 0.0 {
+        return Ok(());
+    }
+    let floor = f64::from(state.app_ui_font_size()) * MIN_DOCK_LINES;
+    let mut heights: Vec<f64> = open.iter().map(|(_, h)| *h).collect();
+    let pair = heights[at] + heights[other];
+    let grown = (heights[at] + by).clamp(floor.min(pair / 2.0), (pair - floor).max(pair / 2.0));
+    heights[at] = grown;
+    heights[other] = pair - grown;
+    // Shares that average one, so a dock added later at its default share sits among them. Set on
+    // the host (for every rebuild) and on the drawn dock itself, so the region is not rebuilt and a
+    // drag of the edge goes on under the pointer.
+    let count = heights.len() as f64;
+    for ((id, _), h) in open.iter().zip(&heights) {
+        let share = (h / total * count) as f32;
+        state.chrome_host.set_share(id, share);
+        if let Some(seat) = heca_grid_ui::node_with_key_mut(&mut state.window_root, id) {
+            seat.base_mut().style.layout.flex = Some(share);
+        }
+    }
+    Ok(())
+}
+
 /// Show / hide / toggle a chrome region — the runtime side of `[settings] show_*`.
 pub fn handle_set_region_visible(
     state: &mut AppState,

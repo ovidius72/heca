@@ -42,6 +42,15 @@ pub(super) fn build_chrome(
             container_id: get_string(args, "container_id")?,
             after_id: get_string(args, "after_id")?,
         }),
+        // `container_id` is optional: a bare key folds the dock that holds the keyboard.
+        "chrome.container.toggle_collapsed" => Some(WmAction::ToggleContainerCollapsed {
+            container_id: get_string(args, "container_id"),
+        }),
+        // `container_id` is optional: a key in the resize mode means the dock that holds the keyboard.
+        "chrome.container.resize" => Some(WmAction::ResizeContainer {
+            container_id: get_string(args, "container_id"),
+            by: super::get_f64(args, "by")?,
+        }),
         // `dock` is OPTIONAL, which is what makes one action serve both doors: a keybinding cannot
         // name a container, so a bare binding picks one by letter; a caller that knows which dock it
         // wants says so and skips the pick. An action with a *required* argument could not be bound

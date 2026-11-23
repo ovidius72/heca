@@ -465,3 +465,69 @@ fn swap_selected_trades_the_cursors_pane_with_its_neighbour() {
     assert_eq!(asked[0].args.get("a_id"), Some(&PropValue::Int(1)));
     assert_eq!(asked[0].args.get("b_id"), Some(&PropValue::Int(2)));
 }
+
+/// **The dock's header is the row above its first**: from the top, `k` steps onto it; there `h`
+/// folds the dock, `l` opens it, `j` goes back to the row the cursor came from, and a dock verb
+/// that acts on a row (delete) does nothing. Driven through the same two steps the host takes around
+/// every dock action (`providers::actions`), on a real dock and store.
+#[test]
+fn up_from_the_first_row_is_the_docks_header_and_it_folds_and_opens() {
+    use crate::providers::actions::{header_answers, step_onto_header};
+    let store = store_with_tree();
+    let p = WorkspacesContainerProvider::new("workspaces");
+    let header = crate::chrome::dock_header_key("workspaces");
+    let cursor = |s: &SharedChromeState| {
+        use heca_grid_ui::reactive::SignalGet as _;
+        s.container_cursor("workspaces").get_untracked()
+    };
+    // What the host does with a dock's action: the header first, then the dock, then the step up.
+    let press = |action: &str| -> Vec<Intent> {
+        if header_answers(&store, "workspaces", action) {
+            return Vec::new();
+        }
+        let before = cursor(&store);
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+        p.perform(action, &Intent::new(action), &mut cx);
+        step_onto_header(&store, "workspaces", action, before);
+        cx.drain()
+    };
+
+    press(CURSOR_DOWN);
+    press(CURSOR_UP);
+    let first_row = cursor(&store);
+    assert_ne!(
+        first_row.as_deref(),
+        Some(header.as_str()),
+        "on the first row"
+    );
+    press(CURSOR_UP);
+    assert_eq!(
+        cursor(&store).as_deref(),
+        Some(header.as_str()),
+        "up from the top: the header"
+    );
+
+    assert!(
+        press(DELETE_SELECTED).is_empty(),
+        "a row verb on the header does nothing"
+    );
+    press(COLLAPSE_ROW);
+    assert!(
+        store.is_container_collapsed("workspaces"),
+        "h folds the dock"
+    );
+    press(CURSOR_DOWN);
+    assert_eq!(
+        cursor(&store).as_deref(),
+        Some(header.as_str()),
+        "folded: nowhere below to go"
+    );
+    press(ACTIVATE_SELECTED);
+    assert!(!store.is_container_collapsed("workspaces"), "l opens it");
+    press(CURSOR_DOWN);
+    assert_eq!(
+        cursor(&store),
+        first_row,
+        "j goes back to the row it came from"
+    );
+}

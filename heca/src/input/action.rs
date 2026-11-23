@@ -570,6 +570,18 @@ pub enum WmAction {
         container_id: String,
         after_id: String,
     },
+    /// Fold a placed dock to its header, or open it — shown while its region holds more than one
+    /// dock. `container_id` unset is the dock that holds the keyboard.
+    ToggleContainerCollapsed {
+        container_id: Option<String>,
+    },
+    /// Make a placed dock `by` pixels taller (negative: shorter), taking the room from the dock
+    /// after it in its region (or before it, when it is the last). The edge between two docks
+    /// sends it while dragged.
+    ResizeContainer {
+        container_id: Option<String>,
+        by: f64,
+    },
     /// Show, hide or toggle a chrome region — zero width/height when hidden. The same one state
     /// `[settings] show_left_sidebar` and friends start, and `SidebarLeft`/`SidebarRight` toggle.
     SetRegionVisible {

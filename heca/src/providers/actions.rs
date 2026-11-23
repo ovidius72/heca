@@ -188,6 +188,10 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
     // which is the one place it is true.
     let mut aimed = intent.clone();
     aimed.args.remove(SEAT_ARG);
+    if header_answers(&state.chrome_state, &mount, &aimed.action) {
+        return;
+    }
+    let cursor_before = cursor_of(&state.chrome_state, &mount);
     let mut cx = ProviderCx::new(&mount, state.chrome_state.clone());
     let queued = match state.chrome_host.provider(&mount) {
         // `&self` — the component reads its own domain state, which is the point of `perform`
@@ -209,6 +213,10 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
             return;
         }
     };
+    // **Up from the first row is the header.** A dock that did not move its cursor on `cursor_up`
+    // is at its top, so the cursor steps onto the header heca drew above it — every dock, with
+    // nothing written by any of them.
+    step_onto_header(&state.chrome_state, &mount, &aimed.action, cursor_before);
     // What the component asked for goes out the same door its widgets' clicks do, so it is
     // policy-routed and confirm-gated identically — a component cannot reach past the gate by
     // asking for something from inside `perform`.
@@ -220,6 +228,66 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
                 intent: crate::app::interaction::InteractionIntent::View(queued_intent),
             });
     }
+}
+
+/// A dock action's verb — the part after its kind (`workspaces.cursor_up` → `cursor_up`).
+fn verb_of(action: &str) -> &str {
+    action.rsplit('.').next().unwrap_or(action)
+}
+
+/// Where placement `mount`'s cursor is.
+fn cursor_of(store: &crate::chrome::SharedChromeState, mount: &str) -> Option<String> {
+    use heca_grid_ui::reactive::SignalGet as _;
+    store.container_cursor(mount).get_untracked()
+}
+
+/// **Up from the first row is the header.** A dock that did not move its cursor on `cursor_up` is
+/// at its top, so the cursor steps onto the header heca drew above it — every dock, with nothing
+/// written by any of them. `before` is where the cursor was before the dock ran the verb.
+pub(crate) fn step_onto_header(
+    store: &crate::chrome::SharedChromeState,
+    mount: &str,
+    action: &str,
+    before: Option<String>,
+) {
+    if verb_of(action) == "cursor_up" && cursor_of(store, mount) == before {
+        store.set_header_return(mount, before);
+        store.set_container_cursor(mount, Some(crate::chrome::dock_header_key(mount)));
+    }
+}
+
+/// **The header answers while the cursor is on it** — or while the dock is folded, when it is all
+/// there is: `h` folds the dock, `l` / `Enter` open it, `j` goes back to the row the cursor came
+/// from, and every other verb of the dock does nothing. Answers whether it took the action.
+pub(crate) fn header_answers(
+    store: &crate::chrome::SharedChromeState,
+    mount: &str,
+    action: &str,
+) -> bool {
+    let header = crate::chrome::dock_header_key(mount);
+    let folded = store.is_container_collapsed(mount);
+    let on_header = cursor_of(store, mount).as_deref() == Some(header.as_str());
+    if !on_header && !folded {
+        return false;
+    }
+    if !on_header {
+        // Folded: its rows are hidden, so the cursor belongs on the header.
+        store.set_header_return(mount, cursor_of(store, mount));
+        store.set_container_cursor(mount, Some(header.clone()));
+    }
+    match verb_of(action) {
+        "collapse_row" => store.set_container_collapsed(mount, true),
+        "activate_selected" => store.set_container_collapsed(mount, false),
+        "cursor_down" if !folded => {
+            let back = store.header_return(mount);
+            store.set_container_cursor(mount, back);
+        }
+        // Nothing above the header, nothing below a folded dock — and no other verb of the dock:
+        // they act on a row, and the cursor is on none of the dock's own (deleting "the row under
+        // the cursor" must not reach whatever row the dock last had).
+        _ => {}
+    }
+    true
 }
 
 /// **The argument that addresses a call at one seating.**

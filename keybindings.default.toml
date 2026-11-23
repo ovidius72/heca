@@ -850,6 +850,17 @@ move_selected_up   = "Shift+k,Shift+ArrowUp"
 move_selected_down = "Shift+j,Shift+ArrowDown"
 swap_selected_up   = "Ctrl+k,Ctrl+ArrowUp"
 swap_selected_down = "Ctrl+j,Ctrl+ArrowDown"
+# **This dock's size**: Alt+j moves its edge down, Alt+k up — the edge below it, or above it when it
+# is the last in the sidebar, as `prefix+r` moves a pane's. The same action the edge between two
+# docks sends while dragged; with no `container_id` it means the dock that holds the keyboard.
+[[keys.surface.bind]]
+action = "chrome.container.resize"
+keys   = ["Alt+j", "Alt+Down"]
+args   = { by = "40" }
+[[keys.surface.bind]]
+action = "chrome.container.resize"
+keys   = ["Alt+k", "Alt+Up"]
+args   = { by = "-40" }
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Surface keys — the layers
