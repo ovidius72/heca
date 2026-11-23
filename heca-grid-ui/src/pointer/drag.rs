@@ -46,7 +46,7 @@ pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPoi
     }
 
     let kind = node_at(root, &source_path).base().drag_kind.clone();
-    let hit = crate::drag::resolve_at_for(root, raw.pos, kind.as_deref());
+    let hit = crate::drag::resolve_at_carrying(root, raw.pos, kind.as_deref(), Some(&item));
     {
         // The source draws what follows the cursor, so it is the source that must know where the
         // cursor is: its own bounds still say where it was picked up from.
@@ -78,7 +78,7 @@ pub(super) fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled
         return Handled::No;
     };
     let kind = node_at(root, &source_path).base().drag_kind.clone();
-    let hit = crate::drag::resolve_at_for(root, raw.pos, kind.as_deref());
+    let hit = crate::drag::resolve_at_carrying(root, raw.pos, kind.as_deref(), Some(&item));
     let mut handled = Handled::No;
     if let Some(hit) = hit.as_ref() {
         let ev = Event::Drop(drag_event(&item, raw, hit.side));

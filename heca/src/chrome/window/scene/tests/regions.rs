@@ -20,7 +20,7 @@ fn a_rule_separates_containers_without_taking_a_share() {
     }
     // Two containers with a rule between them, as `build_region_content` assembles them.
     stack.base_mut().children.push(with_flex(body(), 1.0));
-    stack = stack.child(Separator::horizontal());
+    stack = stack.child(heca_grid_ui::widgets::Separator::horizontal());
     stack.base_mut().children.push(with_flex(body(), 1.0));
 
     let mut root = Flex::column().height(600.0).child(stack);
@@ -500,4 +500,88 @@ fn docks_are_carried_by_the_move_key_and_land_beside_each_other() {
     let place =
         find_key(&empty, "sidebar.right").expect("an empty sidebar is somewhere to put a dock");
     assert!(place.accepts_drag(Some(crate::chrome::DOCK_DRAG_KIND)));
+}
+
+/// **Every dock has a header** — its grip picks the dock up with no key, alone in its region too —
+/// and a dock folded to its header takes no share, its body hidden.
+#[test]
+fn docks_sharing_a_region_have_headers_and_fold() {
+    use crate::providers::ChromeCtx;
+    let chrome = SharedChromeState::new(280.0, 260.0);
+    let mut host = super::ChromeHost::new(chrome.events());
+    for id in ["first", "second"] {
+        host.register(
+            super::RegionId::LeftSidebar,
+            Box::new(crate::providers::WorkspacesContainerProvider::new(id)),
+        );
+    }
+    chrome.set_container_collapsed("second", true);
+    let theme = GuiTheme::default();
+    let emit = ChromeIntentEmitter::of(
+        crate::app::interaction::InteractionSource::Keyboard,
+        |_, _| {},
+    );
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let ctx = ChromeCtx::for_build(&chrome, &theme, &emit, &catalog);
+    let body = super::build_region_content(
+        &host,
+        super::RegionId::LeftSidebar,
+        &ctx,
+        &mut super::ChromeSignals::default(),
+        &mut super::DragItemRegistry::default(),
+    )
+    .expect("two docks are seated");
+    let [first, _gap, second] = &body.base().children[..] else {
+        panic!("two docks and the space between them");
+    };
+    fn has_handle(c: &dyn heca_grid_ui::Component) -> bool {
+        c.base().drag_handle || c.base().children.iter().any(|ch| has_handle(ch.as_ref()))
+    }
+    for seat in [first, second] {
+        assert!(
+            seat.base().drag_by_handle,
+            "a headed dock is picked up by its grip"
+        );
+        assert!(
+            has_handle(seat.as_ref()),
+            "and its header carries that grip"
+        );
+    }
+    assert_eq!(
+        second.base().style.layout.flex,
+        Some(0.0),
+        "folded: no share"
+    );
+    // The cursor standing on a header lights it, as it lights any row of the dock.
+    assert!(
+        heca_grid_ui::select_key_in_scope(
+            first.as_ref(),
+            "first",
+            Some(&crate::chrome::dock_header_key("first"))
+        ),
+        "the header is a row the dock's cursor lights"
+    );
+    assert!(
+        first.base().style.layout.flex.is_some_and(|f| f > 0.0),
+        "open: its share"
+    );
+
+    // One dock alone in its region still has its header.
+    let mut alone = super::ChromeHost::new(chrome.events());
+    alone.register(
+        super::RegionId::LeftSidebar,
+        Box::new(crate::providers::WorkspacesContainerProvider::new("only")),
+    );
+    let body = super::build_region_content(
+        &alone,
+        super::RegionId::LeftSidebar,
+        &ctx,
+        &mut super::ChromeSignals::default(),
+        &mut super::DragItemRegistry::default(),
+    )
+    .expect("one dock");
+    assert!(
+        body.base().drag_by_handle,
+        "alone too, it has its header, and its grip carries it"
+    );
 }

@@ -57,18 +57,34 @@ pub trait DragExt: Component + Sized {
         self
     }
 
+    /// **Take a drop only from the sources `rule` allows**, by the identity of what is carried — on
+    /// top of the kinds it accepts. For a target that would do nothing with some of them: the space
+    /// between two docks takes any dock except the two it sits between, since dropping either there
+    /// leaves it where it is. A source it refuses is never drawn on, like a kind it does not take.
+    ///
+    /// ```ignore
+    /// gap.accepts(["dock"]).accepts_when(move |source| source != above && source != below)
+    /// ```
+    fn accepts_when(mut self, rule: impl Fn(&str) -> bool + 'static) -> Self {
+        self.base_mut().accepts_from = Some(std::rc::Rc::new(rule));
+        self
+    }
+
     /// **Pick it up only by its handle** — a widget inside it marked
     /// [`drag_handle`](Self::drag_handle). A press anywhere else in it starts no drag of it, so its
     /// content keeps its own clicks and selection. [`DockFrame`](crate::widgets::DockFrame) does
     /// this with its grip.
     ///
     /// ```ignore
-    /// Flex::row().key("card:1").draggable_as("card").drag_by_handle()
-    ///     .child(Label::new("≡").drag_handle())
+    /// Flex::row().key("card:1").draggable_as("card").drag_by_handle(true)
+    ///     .child(Label::new(DockFrame::GRIP).drag_handle())
     ///     .child(content)
     /// ```
-    fn drag_by_handle(mut self) -> Self {
-        self.base_mut().drag_by_handle = true;
+    ///
+    /// With [`draggable_when`](Self::draggable_when) as well, it is both: its handle picks it up
+    /// with no key, and the key held picks it up from anywhere in it.
+    fn drag_by_handle(mut self, on: bool) -> Self {
+        self.base_mut().drag_by_handle = on;
         self
     }
 

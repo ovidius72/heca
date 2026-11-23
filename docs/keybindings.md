@@ -301,6 +301,23 @@ The workspaces dock's own keys, as shipped — each acts on the row under its cu
 | `Ctrl+j` / `Ctrl+k`, `Ctrl+↓` / `Ctrl+↑` | `swap_selected_down` / `swap_selected_up` | Swap the **pane** under the cursor with its neighbour in the column (nothing on a workspace row, nothing past the end). |
 | `x`, `Shift+x`, `r`, `z`, `w`, `p`, `c` | `delete_selected`, `delete_selected_column`, `rename_selected`, `zoom_selected`, `create_workspace`, `create_pane`, `create_column` | As named. |
 
+**Docks sharing a sidebar** are folded and resized by plain actions too, bindable with `args`:
+`chrome.container.toggle_collapsed` (`container_id` optional — omitted, the dock that holds the
+keyboard) and `chrome.container.resize container_id=… by=40` (pixels; negative shrinks; the room comes
+from the neighbouring dock; `container_id` omitted is the dock that holds the keyboard). The header's
+caret and the edge between two docks send the same ones. A dock binds them in its own
+`[[keys.surface]]` entry — the workspaces dock ships `Alt+j` / `Alt+k` (and `Alt+↓` / `Alt+↑`), which
+move its edge down / up as `prefix+r` moves a pane's:
+
+```toml
+[[keys.surface]]
+name = "workspaces"
+[[keys.surface.bind]]
+action = "chrome.container.resize"
+keys   = ["Alt+j", "Alt+Down"]
+args   = { by = "40" }
+```
+
 Moving workspaces is also a plain action, wherever the keyboard is: `move_workspace_up` /
 `move_workspace_down` (`prefix+Ctrl+Shift+p` / `prefix+Ctrl+Shift+n`) move the workspace the window
 shows, and `move_workspace ws_idx=3 to_idx=0` (from a key with `args`, a script or a plugin) moves any
