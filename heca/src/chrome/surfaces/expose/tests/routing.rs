@@ -64,7 +64,6 @@ fn an_activate_on_the_seated_map_goes_out_as_the_maps_gesture() {
     let rows = model(s.l(), |p| p.title.clone(), false);
     let mut root = map(
         &rows,
-        &GuiTheme::default(),
         Some(PaneId(2)),
         &LayoutOptions::default(),
         &shipped_keys(),

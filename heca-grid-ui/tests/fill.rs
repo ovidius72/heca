@@ -104,3 +104,36 @@ fn an_elevated_surface_wears_the_panel_look_and_follows_the_theme() {
     LayoutEngine::new().compute(&mut plain, Size::new(100.0, 100.0));
     assert!(rects(&plain, &one).is_empty(), "no elevation, no panel");
 }
+
+/// **A theme colour at a theme opacity, and a colour the theme derives** — both read when drawn:
+/// `Fill::theme("background").alpha("scrim")` is the theme's background at its scrim alpha, and
+/// a derived colour the theme leaves unset paints what the theme derives for it.
+#[test]
+fn a_theme_fill_takes_a_theme_alpha_and_a_derived_colour() {
+    let mut theme = Theme::default();
+    theme.colors.background = heca_grid_ui::Color::rgb(0x20, 0x30, 0x40);
+    theme.colors.interaction.scrim = 90;
+    theme.colors.top_bottom_pane_background = None;
+    let painted = |fill: heca_grid_ui::ThemeFill| {
+        let mut surface = Surface::new()
+            .background(fill)
+            .width(Length::Px(40.0))
+            .height(Length::Px(20.0));
+        LayoutEngine::new().compute(&mut surface, Size::new(100.0, 100.0));
+        fills(&surface, &theme)
+    };
+    assert_eq!(
+        painted(Fill::theme("background").alpha("scrim")),
+        [theme.colors.background.with_alpha(90)],
+        "the background at the scrim's opacity"
+    );
+    assert_eq!(
+        painted(Fill::theme("top_bottom_pane_background")),
+        [theme.colors.effective_top_bottom_pane_background()],
+        "a derived colour paints what the theme derives"
+    );
+    assert!(
+        painted(Fill::theme("background").alpha("chartreuse")).is_empty(),
+        "an opacity that is not the theme's paints nothing"
+    );
+}

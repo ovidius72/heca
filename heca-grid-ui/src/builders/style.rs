@@ -15,9 +15,9 @@ pub trait StyleExt: Component + Sized {
                 visual.fill = Some(colour);
                 visual.fill_theme = None;
             }
-            crate::style::Fill::Theme(name) => {
+            crate::style::Fill::Theme(fill) => {
                 visual.fill = None;
-                visual.fill_theme = Some(name);
+                visual.fill_theme = Some(fill);
             }
         }
         self

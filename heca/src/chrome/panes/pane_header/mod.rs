@@ -33,7 +33,6 @@ impl HeaderEnv {
     pub(crate) fn of(state: &crate::app_state::AppState) -> std::rc::Rc<Self> {
         std::rc::Rc::new(Self {
             theme: crate::chrome::chrome_gui_theme(state),
-            band: crate::chrome::window::theme::top_bottom_pane_background_color(&state.theme),
             segment_names: state.appearance.pane.title_segments.clone(),
             action_names: state.appearance.pane.title_actions.clone(),
             chips: state.pane_chips.clone(),

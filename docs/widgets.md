@@ -2178,7 +2178,11 @@ needs a background or padding around its content.
   `.radius(px)`, `.glow(Color)` / `.glow_with(..)`.
 - **A background that follows the theme**: `.background(Fill::theme("surface"))` names one of the
   theme's colours (`surface`, `background`, `accent`, `border`, … — the theme's own colour fields)
-  and reads it **when it is drawn**, so a theme reload repaints it with no rebuild. A plain
+  and reads it **when it is drawn**, so a theme reload repaints it with no rebuild. A colour the
+  theme derives when it leaves it unset (`top_bottom_pane_background`, `selected_background`, …)
+  answers with what it derives. `.alpha("scrim")` draws it at one of the theme's opacities (its
+  interaction alphas): `Fill::theme("background").alpha("scrim")` is the backdrop veil the exposé
+  wears. A plain
   `Color` still works (`.background(color)`) and stays that colour whatever the theme. A name that
   is not a theme colour paints no fill. A description writes the same name as its `fill` token
   (`"fill": "surface"`), resolved through the same lookup (`heca_theme::Theme::color_named`).

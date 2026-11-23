@@ -14,7 +14,6 @@ fn built(
 ) {
     let s = session();
     let rows = model(s.l(), |p| p.title.clone(), false);
-    let theme = GuiTheme::default();
     let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
     // Built alone, the map sits in no layer, so what it sends reaches the host's sink — this one.
     let sink = seen.clone();
@@ -23,7 +22,6 @@ fn built(
     });
     let mut root = map(
         &rows,
-        &theme,
         start,
         &LayoutOptions::default(),
         &shipped_keys(),

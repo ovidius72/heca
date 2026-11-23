@@ -119,7 +119,7 @@ pub use heca_grid_ui_macros::{PropName, prop, props};
 pub use prop::{PropInput, PropName, SetProp};
 pub use style::{
     Align, Direction, Fill, FontWeight, GridCell, Justify, Layout, Length, LetterSpacing,
-    LineHeight, Spacing, Style, TextTransform, Track, Visual, WidgetSize,
+    LineHeight, Spacing, Style, TextTransform, ThemeFill, Track, Visual, WidgetSize,
 };
 pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use tone::Tone;
@@ -165,7 +165,7 @@ pub mod prelude {
     pub use crate::scene::{TextAlign, TextStyle};
     pub use crate::style::{
         Align, Direction, Fill, FontWeight, GridCell, Justify, Length, LetterSpacing, LineHeight,
-        Spacing, TextTransform, Track, WidgetSize,
+        Spacing, TextTransform, ThemeFill, Track, WidgetSize,
     };
     pub use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
     pub use crate::tone::Tone;
