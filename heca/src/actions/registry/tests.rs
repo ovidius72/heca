@@ -306,3 +306,50 @@ fn a_wrong_argument_is_named_in_the_refusal() {
         "{error}"
     );
 }
+
+/// **A service's action receives its arguments in the types it declared**, however the call came
+/// in. The window and the RPC line typed them at their own doors and the server did not, so a
+/// service still had to read a declared `Int` as text-or-number for itself.
+#[test]
+fn a_service_action_receives_its_arguments_in_the_declared_types() {
+    use heca_view::PropValue;
+    let mut allow = super::server::AllowLocal;
+    let mut catalog = ActionCatalog::with_builtins();
+    let mut registry = ActionRegistry::new();
+    let count = crate::args::ArgSpec {
+        name: "count".into(),
+        kind: crate::args::ArgKind::Int,
+        required: true,
+        description: String::new(),
+        values: Vec::new(),
+    };
+    super::register_service_dynamic(
+        &mut registry,
+        &mut catalog,
+        crate::actions::ActionMeta::new("demo.place").arg(count),
+    )
+    .expect("a new service action");
+    let store = crate::chrome::SharedChromeState::new(0.0, 0.0);
+    let intent = crate::chrome::Intent::new("demo.place").arg("count", PropValue::Text("3".into()));
+    let mut received = None;
+    registry
+        .execute_server_with(
+            &catalog,
+            &Default::default(),
+            store,
+            &mut allow,
+            &intent,
+            &mut |step| {
+                if let crate::actions::ServerStep::Service(intent) = step {
+                    received = intent.args.get("count").cloned();
+                }
+                Ok(Vec::new())
+            },
+        )
+        .expect("the service action runs");
+    assert_eq!(
+        received,
+        Some(PropValue::Int(3)),
+        "a declared Int arrives as an Int"
+    );
+}

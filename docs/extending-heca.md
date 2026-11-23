@@ -164,7 +164,7 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | something at the end of palette rows | `demo.palette("session").to_raw(f)` / `.to_description(f)` | client | `f(&PaletteItem) -> Option<widget>` (native) or `Option<ViewNode>` (a plugin, realized by heca); see [Sessions and their projects](#sessions-and-their-projects) |
 | a service | `demo.service("s", factory)` | server | something that lives inside the server, once; see [A service inside the server](#a-service-inside-the-server) |
 | a listener | `service.on("session.changed", \|svc, cx, ev\| …)` | server | THE EVENTS on a service; see [Sessions and their projects](#sessions-and-their-projects) |
-| a folder line | `heca::FolderLine::new(theme).path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
+| a folder line | `heca::FolderLine::new().path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
 | a terminal agent driver | `demo.agent_driver(MyDriver::new())` | terminal owner | implements `heca::agent::AgentDriver`; scoped as `demo.<driver id>` and used by the same launch/report path as built-in drivers |
 
 Dock and layer factories return ordinary components. For a dock, implement
@@ -447,6 +447,8 @@ let demo = heca::extension("demo");
 let rooms = demo.service("rooms", |cx| Ok(Rooms::open(cx.config(), cx.inbox())?));
 
 // 2. An action on it. It is an ordinary action: a key, a menu, the palette and RPC all find it.
+//    Its arguments reach the handler in the types it declares — a declared `Int` is an `Int`
+//    whether a key, a script line or code sent it — so the handler parses nothing itself.
 rooms.action(
     demo.action("join").label("Join room"),
     |rooms, cx, intent| rooms.join(cx, intent), // returns an `ActionResult`
@@ -816,7 +818,7 @@ the front so the end survives, the whole path on hover. Place it like any widget
 signal, and an empty path hides the line and its gap:
 
 ```rust
-let line = heca::FolderLine::new(theme).path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
+let line = heca::FolderLine::new().path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
 let path = line.path_signal();
 let card = Flex::column().child(Label::new(member)).child(line);
 path.set(new_folder);           // in place, no rebuild
