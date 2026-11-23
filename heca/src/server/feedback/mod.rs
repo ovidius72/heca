@@ -40,6 +40,10 @@ impl From<&AgentState> for Event {
     }
 }
 
+/// The status a terminal bell raises — its label, glyph and sound are
+/// `[settings.agents.statuses.bell]` in the configuration, like every other status.
+pub(crate) const BELL_STATUS: &str = "bell";
+
 #[derive(Default)]
 pub(crate) struct Feedback {
     panes: BTreeMap<PaneId, PaneFeedback>,
@@ -98,6 +102,13 @@ impl Feedback {
                 .as_str()
                 .to_owned(),
         );
+    }
+
+    /// **A program in `pane` rang the terminal bell (`\a`).** A bell asks for attention the way an
+    /// agent waiting for you does, so it raises the same feedback — the pane's row flashes and the
+    /// `bell` status sounds (`[settings.agents.statuses.bell]`), in any window not looking at it.
+    pub(crate) fn bell(&mut self, pane: PaneId) {
+        self.raise(pane, BELL_STATUS.to_owned());
     }
 
     fn raise(&mut self, pane: PaneId, status: String) {

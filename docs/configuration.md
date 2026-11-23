@@ -558,22 +558,30 @@ terminal uses — the same approach Ghostty and kitty take.
 
 ### Terminal bell
 
-A terminal bell (`\a`) can drive up to three independent cues, configured under
-`[appearance.terminal]`:
+A terminal bell (`\a`, rung by a program — `make; printf '\a'`, vim, an ssh session) is **attention
+feedback** for its pane, the same feedback an agent waiting for you raises: in a window not looking
+at that pane, its row in the workspaces dock flashes and the `bell` status sound plays (see
+[Pane Feedback Settings](#pane-feedback-settings)). The pane you are looking at gets nothing — you
+are already there. Its label, glyph and sound are a status like any other:
+
+```toml
+[settings.agents.statuses.bell]
+label = "Bell"
+icon = "bell"
+tone = "warning"
+sound = { source = "asset:attention" }   # or a file of your own
+```
+
+The old `[appearance.terminal]` keys `bell_attention`, `bell_visual`, `bell_audible` and
+`bell_flash_alpha` are no longer read; a config that sets them is told so at start-up.
+
+The scrollback-search highlights stay under `[appearance.terminal]`:
 
 ```toml
 [appearance.terminal]
-bell_attention = true   # OS attention cue (Dock bounce / taskbar flash) while unfocused
-bell_visual    = false  # brief accent flash over the content area
-bell_audible   = false  # system beep (macOS only for now; no-op elsewhere)
-bell_flash_alpha = 56   # how bright the visual bell's flash is at its peak, 0..=255
 search_match_alpha = 64          # scrollback-search match highlight, 0..=255
 search_current_match_alpha = 150 # the match the search is on (bolder)
 ```
-
-`bell_attention` only fires while the window is unfocused; the visual and audible
-bells fire on any bell. All default off except `bell_attention`. Changes apply
-live with `prefix+Shift+r` (no restart).
 
 ## Pane Info Bar
 

@@ -616,41 +616,6 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
     scene
 }
 
-/// Paint the **visual-bell** flash: a brief accent-tinted overlay over the content
-/// area that fades out, while `state.bell_flash_until` is in the future. Drawn into
-/// the chrome scene (on top). No-op when no flash is active. terminal-task-17.
-pub(crate) fn paint_bell_flash(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    content_rect: Rectangle,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let Some(deadline) = state.bell_flash_until else {
-        return;
-    };
-    let now = std::time::Instant::now();
-    if now >= deadline {
-        return;
-    }
-    let frac = deadline.saturating_duration_since(now).as_secs_f32()
-        / crate::app::lifecycle::BELL_FLASH_DURATION.as_secs_f32();
-    let alpha =
-        (frac.clamp(0.0, 1.0) * state.appearance.terminal.bell_flash_alpha as f32).round() as u8;
-    if alpha == 0 {
-        return;
-    }
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    cx.rect(
-        content_rect,
-        theme.colors.accent.with_alpha(alpha),
-        None,
-        0.0,
-        None,
-    );
-}
-
 /// Paint follow-link keycaps over the focused terminal's hyperlinks while
 /// [`InputMode::FollowLink`](crate::app_state::InputMode::FollowLink) is active.
 /// Drawn into the chrome scene (painted last, on top of pane content) so the

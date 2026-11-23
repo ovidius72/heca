@@ -1,4 +1,5 @@
-//! Process I/O belongs to the server; OS clipboard and bell presentation belong to clients.
+//! Process I/O belongs to the server; OS clipboard presentation belongs to clients. A terminal bell
+//! is attention feedback for its pane, raised here like a finished command.
 
 use super::ServerState;
 use heca_core::{backend::BackendAlert, layout::PaneId};
@@ -6,7 +7,6 @@ use heca_core::{backend::BackendAlert, layout::PaneId};
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub(crate) struct BackendPoll {
     pub(crate) has_data: bool,
-    pub(crate) bell_any: bool,
     pub(crate) terminal_animating: bool,
     pub(crate) clipboard_writes: Vec<String>,
     pub(crate) closing_panes: Vec<PaneId>,
@@ -14,7 +14,7 @@ pub(crate) struct BackendPoll {
 
 impl BackendPoll {
     pub(super) fn has_effects(&self) -> bool {
-        self.bell_any || !self.clipboard_writes.is_empty()
+        !self.clipboard_writes.is_empty()
     }
 }
 
@@ -23,12 +23,13 @@ impl ServerState {
     pub(crate) fn poll_backends(&mut self) -> BackendPoll {
         let mut result = BackendPoll::default();
         let mut completions = Vec::new();
+        let mut bells = Vec::new();
         for (id, backend) in self.backends.iter_mut() {
             result.terminal_animating |= backend.tick_animation();
             result.has_data |= backend.update();
             for alert in backend.take_alerts() {
                 match alert {
-                    BackendAlert::Bell => result.bell_any = true,
+                    BackendAlert::Bell => bells.push(id),
                     BackendAlert::ProcessCompleted { exit_code } => {
                         completions.push((id, exit_code))
                     }
@@ -37,6 +38,11 @@ impl ServerState {
             result
                 .clipboard_writes
                 .extend(backend.take_clipboard_writes());
+        }
+        for id in bells {
+            if let Some(pane) = self.backends.pane_of(id) {
+                self.feedback.bell(pane);
+            }
         }
         for (id, exit_code) in completions {
             if let Some(pane) = self.backends.pane_of(id) {
@@ -65,13 +71,6 @@ mod tests {
 
     #[test]
     fn presentation_effects_are_not_discarded() {
-        assert!(
-            BackendPoll {
-                bell_any: true,
-                ..Default::default()
-            }
-            .has_effects()
-        );
         assert!(
             BackendPoll {
                 clipboard_writes: vec!["text".into()],

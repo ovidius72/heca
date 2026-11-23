@@ -88,9 +88,7 @@ pub use surfaces::palette::{PaletteItem, PaletteRows};
 // ── window ──
 pub use window::division::ChromeConfig;
 pub(crate) use window::retained::{RetainedChrome, chrome_signature};
-pub(crate) use window::scene::{
-    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints,
-};
+pub(crate) use window::scene::{build_chrome_root, paint_chrome_root, paint_link_hints};
 pub(crate) use window::signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) use window::theme::{SidebarLook, chrome_colors, chrome_gui_theme, chrome_status};
 pub(crate) use window::window_root::{

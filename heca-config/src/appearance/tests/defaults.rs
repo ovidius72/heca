@@ -1,6 +1,6 @@
 use super::super::*;
 
-/// The bars, the drag label, the new-column opening and the bell/search highlights have a home
+/// The bars, the drag label, the new-column opening and the search highlights have a home
 /// in config instead of a constant in the app — and today's values are what they default to.
 #[test]
 fn the_look_values_that_were_app_constants_default_to_what_they_were() {
@@ -11,7 +11,6 @@ fn the_look_values_that_were_app_constants_default_to_what_they_were() {
     assert_eq!(cfg.effective_drag_label_size(1000.0), 72.0);
     assert_eq!(cfg.effective_drag_label_size(200.0), 50.0);
     assert_eq!(cfg.effective_drag_label_size(40.0), 24.0);
-    assert_eq!(cfg.terminal.bell_flash_alpha, 56);
     assert_eq!(cfg.terminal.search_match_alpha, 64);
     assert_eq!(cfg.terminal.search_current_match_alpha, 150);
 }
@@ -20,8 +19,7 @@ fn the_look_values_that_were_app_constants_default_to_what_they_were() {
 fn a_configured_look_value_wins_and_is_kept_sane() {
     let cfg: AppearanceConfig = toml::from_str(
         "top_bar_height = 40.0\nbottom_bar_height = 1000.0\n[pane]\n\
-         drag_label_min_size = 10.0\ndrag_label_max_size = 5.0\n\
-         [terminal]\nbell_flash_alpha = 200\n",
+         drag_label_min_size = 10.0\ndrag_label_max_size = 5.0\n",
     )
     .expect("parses");
     assert_eq!(cfg.effective_top_bar_height(), 40.0);
@@ -32,7 +30,6 @@ fn a_configured_look_value_wins_and_is_kept_sane() {
     );
     // A max below the min cannot invert the range.
     assert_eq!(cfg.effective_drag_label_size(1000.0), 10.0);
-    assert_eq!(cfg.terminal.bell_flash_alpha, 200);
 }
 
 #[test]
