@@ -371,6 +371,20 @@ impl Icon {
         icon
     }
 
+    /// **The glyph to show** — a [`Glyph`], or one that changes (a `Signal<Glyph>`, a
+    /// `Memo<Glyph>`, a function reading signals), followed in place with no rebuild.
+    ///
+    /// ```ignore
+    /// Icon::new(Glyph::Circle).glyph(move || line().icon)
+    /// ```
+    #[heca_grid_ui_macros::host_only(
+        "a description names its glyph with the icon's `icon` property; a live glyph is a closure"
+    )]
+    pub fn glyph(self, glyph: impl crate::builders::IntoGlyphValue) -> Self {
+        glyph.into_glyph_value().show_in(self.glyph);
+        self
+    }
+
     /// Handle to the icon's glyph signal so hosts can update it live.
     pub fn glyph_signal(&self) -> Signal<Glyph> {
         self.glyph

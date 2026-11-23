@@ -2,7 +2,7 @@
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::component::{Base, Component, PaintCx};
-use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use heca_grid_ui::reactive::{Signal, SignalGet, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label};
 
@@ -56,10 +56,11 @@ impl FolderLine {
         }
     }
 
-    /// The path to show, as the user should read it (heca shows a pane's directory home-relative).
-    /// Default: empty, which hides the line.
-    pub fn path(self, path: impl Into<String>) -> Self {
-        self.path.set(path.into());
+    /// The path to show, as the user should read it (heca shows a pane's directory home-relative)
+    /// — fixed, or a value that changes (a signal, or a function reading signals), followed in
+    /// place. Default: empty, which hides the line.
+    pub fn path(self, path: impl heca_grid_ui::builders::IntoTextValue) -> Self {
+        path.into_text_value().show_in(self.path);
         self
     }
 
@@ -174,6 +175,7 @@ impl Component for FolderLine {
 mod tests {
     use super::*;
     use heca_grid_ui::LayoutEngine;
+    use heca_grid_ui::reactive::SignalUpdate;
 
     fn line(path: &str) -> FolderLine {
         FolderLine::new().path(path)

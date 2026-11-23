@@ -5006,6 +5006,10 @@ enclosing control, falling back to `theme.foreground`; the secondary layer follo
 `theme.icon_secondary_alpha`. So an icon composed inside a `Button` tints and fades with it.
 
 - **Construct**: `Icon::new(Glyph)`.
+- **The glyph may change**: `.glyph(value)` takes a `Glyph`, a `Signal<Glyph>`, a `Memo<Glyph>` or a
+  function reading signals, and follows it in place (`Icon::new(Glyph::Circle).glyph(move ||
+  line().icon)`). Native only — a description names its glyph with the `icon` property.
+  `.glyph_signal()` still sets it from outside.
 - **Builders**: `.size(px)` (glyph pixels — **not** the `WidgetSize` variant; use
   `Style::set_size` for that, since `size` is taken), `.color(Color)` (primary — opts out of
   inheritance), `.secondary_color(Color)`, `.glow(bool)` (default `false` — see below).
@@ -5323,12 +5327,14 @@ A signal-driven wrapper that hides or shows exactly one child without rebuilding
 Use it for optional metadata rows and exceptional-state indicators that should collapse
 cleanly when absent.
 
-- **Construct**: `Visibility::new()` — empty and shown — then `.visible(bool)` (default `true`) and
+- **Construct**: `Visibility::new()` — empty and shown — then `.visible(value)` (default `true`) and
   `.child(widget)`: the one widget it shows and hides (a second `.child` replaces the first; wrap a
   `Flex` to hide several together). The order of the two builders does not matter.
-- **Live update**: `.visible_signal() -> Signal<bool>`. To follow a value you already have, use
-  `.hidden(value)` on the child itself instead — no wrapper (see "The two ways of not showing
-  something" below).
+- **The value may change**: `.visible(..)` takes a `bool`, a `Signal<bool>`, a `Memo<bool>` or a
+  function reading signals, and follows it in place — the library's one fixed-or-live value
+  (`LiveValue`), as `.hidden(..)` takes. `.visible_signal() -> Signal<bool>` still sets it from
+  outside. On a widget you can put a builder on, `.hidden(value)` on the child itself needs no
+  wrapper (see "The two ways of not showing something" below).
 - **Hidden means gone from the layout**, the wrapper's box as well as the child's: its parent spends
   no gap on it.
 - **Transparent to layout**: the child is laid out exactly as it would be without the wrapper. A
@@ -5341,6 +5347,9 @@ cleanly when absent.
 ```rust
 let error = Visibility::new().visible(false).child(StatusDot::error());
 error.visible_signal().set(true);
+
+// Following a value: shown while the pane is in a repository.
+Visibility::new().visible(move || facts().git.is_some()).child(git_row)
 ```
 
 > ⛔ **Attach it always, and wrap nothing around it.**

@@ -27,7 +27,7 @@ impl TextValue {
     /// **Show it in `target`** — the widget's own text signal: a fixed text is written once, a live
     /// one is followed (the widget's signal is written whenever it changes, and a frame is asked
     /// for). For a widget that only shows the text.
-    pub(crate) fn show_in(self, target: Signal<String>) {
+    pub fn show_in(self, target: Signal<String>) {
         match self.0 {
             Source::Fixed(text) => target.set(text),
             Source::Signal(signal) => follow(target, move || signal.get()),

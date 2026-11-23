@@ -11,11 +11,11 @@ use std::rc::Rc;
 
 use heca_grid_ui::Tone;
 use heca_grid_ui::builders::{LayoutExt, Parent, ToneExt};
-use heca_grid_ui::reactive::create_effect;
+use heca_grid_ui::reactive::{SignalGet, create_memo};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 
-use super::pane_row::{META_INDENT, set_if_changed};
+use super::pane_row::META_INDENT;
 use crate::chrome::panes::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLine};
 
 /// The built-in lines; configuration chooses their order and visibility.
@@ -39,145 +39,108 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
 /// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
 /// pane_lines`, and nothing else.
 fn cwd_line(cx: &LineCx<'_>) -> crate::components::FolderLine {
-    let line = crate::components::FolderLine::new()
-        .size(WidgetSize::Caption)
-        .indent(META_INDENT);
-    let path = line.path_signal();
     let facts = cx.facts.clone();
-    create_effect(move |_| {
-        // Cut to a home-relative form here, at the binding, so there is one spelling of "where this
-        // pane is". No directory is an empty path, which hides the line.
-        let cwd = facts().cwd;
-        set_if_changed(
-            path,
-            cwd.as_deref()
+    // Cut to a home-relative form here, at the binding, so there is one spelling of "where this
+    // pane is". No directory is an empty path, which hides the line.
+    crate::components::FolderLine::new()
+        .size(WidgetSize::Caption)
+        .indent(META_INDENT)
+        .path(move || {
+            facts()
+                .cwd
+                .as_deref()
                 .map(crate::chrome::home_relative_path)
-                .unwrap_or_default(),
-        );
-    });
-    line
+                .unwrap_or_default()
+        })
 }
 
 /// **The git state**: branch (cut for a narrow sidebar, the full name on hover) and the counts of
 /// added, modified and deleted files. Absent outside a repository; a count of nothing is absent.
 fn git_line(cx: &LineCx<'_>) -> Visibility {
+    use crate::chrome::panes::pane_header::{git_added, git_branch, git_deleted, git_modified};
+    // The pane's git state, read once per change and shared by every part of the row below.
+    let facts = cx.facts.clone();
+    let git = create_memo(move |_| facts().git);
     // Colours are named by meaning and read from the theme when drawn: the branch in the text
     // colour (no colour of its own), its glyph and the counts in their tones.
-    // **Cut from the front by the row's own box**, so the tail — the meaningful end of a branch,
-    // `…security-upgrade` — survives, and how much fits is whatever the sidebar is wide enough for.
-    let branch_label = Label::new("").truncate(Ellipsis::Start);
-    // Cut, it offers the whole name on hover by itself (a label does that for any text it cuts).
-    let branch_shown = branch_label.text_signal();
-
+    //
     // One count: a glyph and its words, hidden while there is nothing to say.
-    let count = |glyph: Glyph, tone: Tone| {
-        // **A count is never cut**: it is the part of the row that is short and that says the most,
-        // so it keeps its own width and the branch beside it is what gives way.
-        let label = Label::new("").truncate(Ellipsis::None);
-        let text = label.text_signal();
-        let segment = Visibility::new().visible(false).child(
+    let count =
+        |glyph: Glyph, tone: Tone, words: fn(&heca_core::runtime::GitInfo) -> Option<String>| {
+            let value = move || git.get().as_ref().and_then(words);
+            // **A count is never cut**: it is the part of the row that is short and that says the most,
+            // so it keeps its own width and the branch beside it is what gives way.
+            Visibility::new().visible(move || value().is_some()).child(
+                Flex::row()
+                    .align("center")
+                    .gap(Spacing::Xs)
+                    .shrink(0.0)
+                    .content_tone(tone)
+                    .child(Icon::new(glyph))
+                    .child(
+                        Label::new("")
+                            .text(move || value().unwrap_or_default())
+                            .truncate(Ellipsis::None),
+                    ),
+            )
+        };
+    Visibility::new()
+        .visible(move || git.get().is_some())
+        .child(
             Flex::row()
                 .align("center")
-                .gap(Spacing::Xs)
-                .shrink(0.0)
-                .content_tone(tone)
-                .child(Icon::new(glyph))
-                .child(label),
-        );
-        let visible = segment.visible_signal();
-        (segment, text, visible)
-    };
-    let (added, added_text, added_visible) = count(Glyph::Plus, Tone::Success);
-    let (modified, modified_text, modified_visible) = count(Glyph::Warning, Tone::Warning);
-    let (deleted, deleted_text, deleted_visible) = count(Glyph::Minus, Tone::Danger);
-
-    let row = Visibility::new().visible(false).child(
-        Flex::row()
-            .align("center")
-            .size(WidgetSize::Caption)
-            .gap(Spacing::Sm)
-            .padding_x(META_INDENT)
-            // Never wider than the card: the row is as wide as its content up to the card, and then
-            // the branch — the one child that can — takes the squeeze.
-            .max_width(Length::FULL)
-            .child(
-                Icon::new(Glyph::GitBranch)
-                    .content_tone(Tone::Warning)
-                    .shrink(0.0),
-            )
-            .child(branch_label)
-            .child(added)
-            .child(modified)
-            .child(deleted),
-    );
-    let visible = row.visible_signal();
-
-    let facts = cx.facts.clone();
-    create_effect(move |_| {
-        let git = facts().git;
-        set_if_changed(visible, git.is_some());
-        let branch = git
-            .as_ref()
-            .map(crate::chrome::panes::pane_header::git_branch)
-            .unwrap_or_default();
-        set_if_changed(branch_shown, branch);
-        for (visible, text, value) in [
-            (
-                added_visible,
-                added_text,
-                git.as_ref()
-                    .and_then(crate::chrome::panes::pane_header::git_added),
-            ),
-            (
-                modified_visible,
-                modified_text,
-                git.as_ref()
-                    .and_then(crate::chrome::panes::pane_header::git_modified),
-            ),
-            (
-                deleted_visible,
-                deleted_text,
-                git.as_ref()
-                    .and_then(crate::chrome::panes::pane_header::git_deleted),
-            ),
-        ] {
-            set_if_changed(visible, value.is_some());
-            set_if_changed(text, value.unwrap_or_default());
-        }
-    });
-    row
+                .size(WidgetSize::Caption)
+                .gap(Spacing::Sm)
+                .padding_x(META_INDENT)
+                // Never wider than the card: the row is as wide as its content up to the card, and then
+                // the branch — the one child that can — takes the squeeze.
+                .max_width(Length::FULL)
+                .child(
+                    Icon::new(Glyph::GitBranch)
+                        .content_tone(Tone::Warning)
+                        .shrink(0.0),
+                )
+                // **Cut from the front by the row's own box**, so the tail — the meaningful end of a
+                // branch, `…security-upgrade` — survives; cut, it offers the whole name on hover.
+                .child(
+                    Label::new("")
+                        .text(move || git.get().as_ref().map(git_branch).unwrap_or_default())
+                        .truncate(Ellipsis::Start),
+                )
+                .child(count(Glyph::Plus, Tone::Success, git_added))
+                .child(count(Glyph::Warning, Tone::Warning, git_modified))
+                .child(count(Glyph::Minus, Tone::Danger, git_deleted)),
+        )
 }
 
 /// **A line another crate added**: an icon and some text, shown while `produce` has something to
 /// say for the pane. It runs again when the pane's facts change — that is what the subscription is.
 pub(crate) fn text_line(produce: Rc<ProduceLine>) -> Rc<BuildLine> {
     Rc::new(move |cx: &LineCx<'_>| {
-        // No colour of its own: the line takes the text colour where it is drawn.
-        let label = Label::new("");
-        let text = label.text_signal();
-        let icon = Icon::new(Glyph::Circle);
-        let glyph = icon.glyph_signal();
-        let row = Visibility::new().visible(false).child(
-            Flex::row()
-                .align("center")
-                .size(WidgetSize::Caption)
-                .gap(Spacing::Sm)
-                .padding_x(META_INDENT)
-                .child(icon)
-                .child(label),
-        );
-        let visible = row.visible_signal();
         let facts = cx.facts.clone();
         let produce = produce.clone();
-        create_effect(move |_| match produce(&facts()) {
-            Some(line) => {
-                set_if_changed(text, line.text);
-                set_if_changed(glyph, line.icon);
-                set_if_changed(visible, true);
-            }
-            None => set_if_changed(visible, false),
-        });
-        heca_grid_ui::WidgetModel::new(row)
+        // What the line says for the pane now, read once per change and shared by its parts.
+        let line = create_memo(move |_| produce(&facts()));
+        // No colour of its own: the line takes the text colour where it is drawn.
+        heca_grid_ui::WidgetModel::new(
+            Visibility::new()
+                .visible(move || line.get().is_some())
+                .child(
+                    Flex::row()
+                        .align("center")
+                        .size(WidgetSize::Caption)
+                        .gap(Spacing::Sm)
+                        .padding_x(META_INDENT)
+                        .child(
+                            Icon::new(Glyph::Circle)
+                                .glyph(move || line.get().map_or(Glyph::Circle, |line| line.icon)),
+                        )
+                        .child(
+                            Label::new("")
+                                .text(move || line.get().map(|line| line.text).unwrap_or_default()),
+                        ),
+                ),
+        )
     })
 }
 
