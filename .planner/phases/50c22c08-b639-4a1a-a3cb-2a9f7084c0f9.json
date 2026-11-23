@@ -37,11 +37,20 @@
       "priority": 2,
       "shortName": "move-workspace-action",
       "title": "MoveWorkspace action and handler",
-      "status": "planned",
-      "description": "Action/handler per spostare una workspace.",
-      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
+      "status": "done",
+      "description": "Action/handler per spostare una workspace.\n\n---\n**Completion summary:**\nDone by the heca-pro-dev session, branch feat/p030-workspace-reorder (worktree heca-feat-p030), commit d9dd6248; 3314 tests pass, clippy and fmt clean; Antonio tested it in the app (2026-11-23). PR opens on Antonio's word. Built: Session::move_workspace in heca-core, plus three server actions: move_workspace (ws_idx?, to_idx; to_idx counted after the move, past the end is last), move_workspace_up and move_workspace_down (ws_idx?; unset = the shown workspace). Reported as LayoutChanged, no new wire message. All three in the catalog with typed args and the WorkspaceLevel policy. Default keys: prefix+Ctrl+Shift+p / n. Same commit: dock keys on the cursor row (Shift+k/j and Shift+arrows move the cursor's workspace; Ctrl+k/j and Ctrl+arrows swap the cursor's pane with its neighbour); per-workspace state (folds, previous workspace, pane history, exposé cursor) kept by identity instead of position, fixing wrong-workspace after a delete; Workspace::number given at creation and never reused, Workspace::label as the one \"Workspace N\" rule; guard test that every built-in action is reachable from a script line.",
+      "descriptionUpdatedAt": "2026-11-23T08:49:48.295Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "07adf34a-c743-4f9d-8bc8-8001d5f2efad-check-001-planned-done",
+          "date": "2026-11-23T08:49:48.293Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done by the heca-pro-dev session, branch feat/p030-workspace-reorder (worktree heca-feat-p030), commit d9dd6248; 3314 tests pass, clippy and fmt clean; Antonio tested it in the app (2026-11-23). PR opens on Antonio's word. Built: Session::move_workspace in heca-core, plus three server actions: move_workspace (ws_idx?, to_idx; to_idx counted after the move, past the end is last), move_workspace_up and move_workspace_down (ws_idx?; unset = the shown workspace). Reported as LayoutChanged, no new wire message. All three in the catalog with typed args and the WorkspaceLevel policy. Default keys: prefix+Ctrl+Shift+p / n. Same commit: dock keys on the cursor row (Shift+k/j and Shift+arrows move the cursor's workspace; Ctrl+k/j and Ctrl+arrows swap the cursor's pane with its neighbour); per-workspace state (folds, previous workspace, pane history, exposé cursor) kept by identity instead of position, fixing wrong-workspace after a delete; Workspace::number given at creation and never reused, Workspace::label as the one \"Workspace N\" rule; guard test that every built-in action is reachable from a script line."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -49,10 +58,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-23T08:49:48.293Z",
+      "completedAt": "2026-11-23T08:49:48.293Z",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-23T08:49:48.293Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -64,11 +73,20 @@
       "priority": 3,
       "shortName": "workspace-rows-draggable",
       "title": "Make workspace rows draggable",
-      "status": "planned",
-      "description": "Rendere draggable le righe workspace.",
-      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
+      "status": "done",
+      "description": "Rendere draggable le righe workspace.\n\n---\n**Completion summary:**\nDone by the heca-pro-dev session (feat/p030-workspace-reorder, d9dd6248; Antonio tested it in the app). The workspace row is draggable_as(\"workspace\") and is picked up by its grip (a DockFrame's grip is the frame's handle).",
+      "descriptionUpdatedAt": "2026-11-23T08:49:50.102Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b9ec89da-9cd9-4b72-8efc-8e89ecb43203-check-001-planned-done",
+          "date": "2026-11-23T08:49:50.101Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done by the heca-pro-dev session (feat/p030-workspace-reorder, d9dd6248; Antonio tested it in the app). The workspace row is draggable_as(\"workspace\") and is picked up by its grip (a DockFrame's grip is the frame's handle)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -76,10 +94,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-23T08:49:50.101Z",
+      "completedAt": "2026-11-23T08:49:50.101Z",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-23T08:49:50.101Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -91,11 +109,20 @@
       "priority": 1,
       "shortName": "workspace-drag-payload",
       "title": "Add Workspace drag payload",
-      "status": "planned",
-      "description": "Payload DnD per le workspace.",
-      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
+      "status": "done",
+      "description": "Payload DnD per le workspace.\n\n---\n**Completion summary:**\nDone by the heca-pro-dev session (feat/p030-workspace-reorder, d9dd6248; Antonio tested it in the app). The old-plan meaning (a dedicated payload type) is gone: the row's key plus the \"workspace\" kind is the whole payload.",
+      "descriptionUpdatedAt": "2026-11-23T08:49:51.821Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "d8ebde50-62a9-469c-bd13-b94a0eab8fd1-check-001-planned-done",
+          "date": "2026-11-23T08:49:51.819Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done by the heca-pro-dev session (feat/p030-workspace-reorder, d9dd6248; Antonio tested it in the app). The old-plan meaning (a dedicated payload type) is gone: the row's key plus the \"workspace\" kind is the whole payload."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -103,10 +130,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-23T08:49:51.819Z",
+      "completedAt": "2026-11-23T08:49:51.819Z",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-23T08:49:51.819Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -118,11 +145,20 @@
       "priority": 4,
       "shortName": "workspace-drop-reorder",
       "title": "Workspace drop reorder logic",
-      "status": "planned",
-      "description": "Logica di reorder delle workspace via drop.",
-      "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
+      "status": "done",
+      "description": "Logica di reorder delle workspace via drop.\n\n---\n**Completion summary:**\nDone by the heca-pro-dev session (feat/p030-workspace-reorder, d9dd6248; Antonio tested it in the app). The row accepts_beside([\"workspace\"]); dropping before or after another row sends move_workspace (heca/src/providers/workspaces/drop.rs). heca-grid-ui: onto or beside is said per kind (accepts and accepts_beside combine).",
+      "descriptionUpdatedAt": "2026-11-23T08:49:53.717Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "eb960be7-92ab-4ed8-80d9-1a8e579ab114-check-001-planned-done",
+          "date": "2026-11-23T08:49:53.715Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done by the heca-pro-dev session (feat/p030-workspace-reorder, d9dd6248; Antonio tested it in the app). The row accepts_beside([\"workspace\"]); dropping before or after another row sends move_workspace (heca/src/providers/workspaces/drop.rs). heca-grid-ui: onto or beside is said per kind (accepts and accepts_beside combine)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -130,21 +166,38 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-23T08:49:53.715Z",
+      "completedAt": "2026-11-23T08:49:53.715Z",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-23T08:49:53.715Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-10-19T16:16:52.190Z",
+  "updatedAt": "2026-11-23T08:49:53.715Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "8a21378d-7607-48b6-b771-099fb8f627e0",
+      "date": "2026-11-23T08:49:48.329Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "c3bc906b-6503-44de-a4cc-a620d758ecf8",
+      "date": "2026-11-23T08:49:53.749Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
   "sessionInfo": []
 }

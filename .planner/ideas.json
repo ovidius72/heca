@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 32,
+  "nextIdeaNumber": 33,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -240,6 +240,16 @@
       "promotion": null,
       "createdAt": "2026-11-22T19:01:41.980Z",
       "updatedAt": "2026-11-22T19:01:41.980Z"
+    },
+    {
+      "id": "13918d51-557d-4222-8da7-cc3ae3716ca2",
+      "number": 32,
+      "shortId": "Q2VF2",
+      "title": "Move anything draggable from the keyboard: generic move_to / swap_with / take",
+      "description": "Requested by Antonio (2026-11-22, via heca-pro-dev, confirmed by Antonio to this session). Nothing is being built yet; still deciding.\n\nWHY: heca is keyboard-first, but only panes and columns can be moved by keyboard today, through purpose-built picks (T178: move_pane_to_column_pick, move_pane_to_workspace_pick, move_column_to_workspace_pick, plus swap_pane, pane_take, ...). Workspaces (P030), rooms in heca-pro, docks and plugin rows can be dragged with the mouse but not moved by keyboard. Building a pick per surface means the same problem again tomorrow, so it must be generic and work for everything draggable.\n\nSHAPE discussed with Antonio (not final):\n- Three verbs, bindable actions, valid for anything that declares draggable_as / accepts / accepts_beside:\n  - move_to: the selection goes where you pick;\n  - swap_with: the selection swaps with what you pick (the drag's Swap drop);\n  - take: pick what to bring, and it lands where the selection is.\n- The same pattern as open_for_keyboard: heca passes the library the selection (the dock cursor's key, or the focused widget); the library finds what would be carried (the same rule as a mouse press, drag::resolve::source_on) and letters only the places it can land, in a different colour from prefix+/.\n- The letter does the drop: the same Drop event / host drop sink, with the same side, so the same action the mouse sends. No per-surface code; a plugin's rows get it free.\n- With nothing selected, it first asks for the source by letters (two picks).\n\nOPEN QUESTIONS:\n(1) Letters on insertion points (\"after A\" = \"before B\" is one letter, plus a letter on targets that take something onto them), or a letter on the target and then arrows for before/after.\n(2) Insertion points must keep stable letters by identity (\"after A\"), never by position, per the hint letter rule.\n(3) The existing pane/column picks keep their action names and keys (compatibility rule) and later become thin names over the generic verbs, removed as code only once verified identical (letter colours, focus after the move).\n(4) Whether it goes together with P030 (workspace reorder), which needs the same mechanism.\n\nRELATED: T178 (app-12), P079/T333 (dock moves are chrome.container.* actions), P030 (app-05).",
+      "promotion": null,
+      "createdAt": "2026-11-22T20:17:47.248Z",
+      "updatedAt": "2026-11-22T20:17:47.248Z"
     }
   ]
 }

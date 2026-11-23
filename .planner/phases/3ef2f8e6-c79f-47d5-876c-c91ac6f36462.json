@@ -39,41 +39,44 @@
       "priority": 1,
       "shortName": "region-drag-surfaces",
       "title": "Drag is a widget capability, not a region: delete DragSurfaceId and the per-surface machinery",
-      "status": "planned",
-      "description": "**⚠️ This REVERSES the phase's \"ADDITIVE ONLY — add variants, never remove one\" rule, and the\noriginal plan of this task (\"add right sidebar, top bar and bottom bar variants\"). Decided by\nAntonio 2026-08-06, after F004/P084/T394 gave the framework a real drag vocabulary.**\n\nHis words: *\"DND it's not only a thing of left/right/top/bottom bars? it should be available as\nother widgets for plugin developers to be used in pane, overlay, sidebar, etc.. WHY WE ARE ALWAYS\nHARDCODING?\"* — and, about `heca/src/mouse/drag.rs`: *\"this should be up to the DockView that\nmanages the workspaces, not the sidebar or the mouse.\"*\n\n# Why the old plan is dead\n\nAdding variants makes the enum longer, not open. A closed enum of **regions** cannot describe a\ndrag inside a pane, inside an overlay, or inside a plugin's own subtree — and a plugin cannot add a\nvariant at runtime, which is what T330 was invented to paper over.\n\nThe reason it looked like a region problem is historical: the app's drag predates the framework\nhaving any, so it was built where the mouse events were, one handler per surface.\n\n# What exists now (F004/P084/T394, 2026-08-06)\n\n- `Base::drag_source` / `Base::drop_target` — universal, on **every** widget, declared with\n  `DragExt::draggable(id)` / `.drop_target(id)`.\n- The router emits `DragStart` / `Drag` / `DragEnd` / `DragEnter` / `DragOver` / `DragLeave` /\n  `Drop` to whichever widget is under the pointer, with `DragEvent::side` (Before/Onto/After)\n  already computed. It hit-tests **every mounted tree**, so this works in a pane, an overlay,\n  either sidebar or a plugin subtree today — nothing in it names a region.\n- 8 px threshold, capture, and the end-of-gesture guarantee (`DragEnd` always fires) are the\n  framework's.\n\n# The work\n\n1. **Delete the region layer**: `DragSurfaceId`, `DragContext`, `SurfaceDragState`,\n   `heca/src/mouse/drag.rs`, `heca/src/mouse/surface_left.rs`, `heca/src/mouse/target.rs`, the drag\n   half of `heca/src/mouse/release.rs`, and `sidebar_bounds`. Also the early return at\n   `heca/src/mouse.rs` (`if point_in_right_sidebar(...) { ...; return None; }`) — the reason the\n   right sidebar could not drag at all while the left one could, with identical widgets.\n2. **The ghost and the insertion line move INTO `heca-grid-ui`.** The app paints both per surface\n   today; they are one drag visual for every drag, and a plugin cannot draw them. This is the only\n   part that moves rather than being deleted.\n3. **The workspace drop logic moves to `heca/src/providers/workspaces/`** — beside the rows it is\n   about. The container declares its rows draggable, answers `Drop` with an action through the\n   registry, and nothing named `surface_left.rs` exists.\n4. `DragItemKind` — decide whether it survives at all; the payload is the host's, keyed by the\n   opaque `DragItemId` the container itself registered.\n5. T330 (plugin open variants) **dissolves** if this lands: there is no enum left to open.\n\n# Done when\n\n- A widget is draggable by declaring one id, wherever it is mounted.\n- The right sidebar drags because nothing distinguishes it from the left.\n- The move is still reachable from keyboard and RPC (the phase's action-first rule stands).\n- Antonio drags in the app: left sidebar, right sidebar, and between them.",
-      "descriptionUpdatedAt": "2026-07-26T11:44:50.918444Z",
+      "status": "done",
+      "description": "**⚠️ This REVERSES the phase's \"ADDITIVE ONLY — add variants, never remove one\" rule, and the\noriginal plan of this task (\"add right sidebar, top bar and bottom bar variants\"). Decided by\nAntonio 2026-08-06, after F004/P084/T394 gave the framework a real drag vocabulary.**\n\nHis words: *\"DND it's not only a thing of left/right/top/bottom bars? it should be available as\nother widgets for plugin developers to be used in pane, overlay, sidebar, etc.. WHY WE ARE ALWAYS\nHARDCODING?\"* — and, about `heca/src/mouse/drag.rs`: *\"this should be up to the DockView that\nmanages the workspaces, not the sidebar or the mouse.\"*\n\n# Why the old plan is dead\n\nAdding variants makes the enum longer, not open. A closed enum of **regions** cannot describe a\ndrag inside a pane, inside an overlay, or inside a plugin's own subtree — and a plugin cannot add a\nvariant at runtime, which is what T330 was invented to paper over.\n\nThe reason it looked like a region problem is historical: the app's drag predates the framework\nhaving any, so it was built where the mouse events were, one handler per surface.\n\n# What exists now (F004/P084/T394, 2026-08-06)\n\n- `Base::drag_source` / `Base::drop_target` — universal, on **every** widget, declared with\n  `DragExt::draggable(id)` / `.drop_target(id)`.\n- The router emits `DragStart` / `Drag` / `DragEnd` / `DragEnter` / `DragOver` / `DragLeave` /\n  `Drop` to whichever widget is under the pointer, with `DragEvent::side` (Before/Onto/After)\n  already computed. It hit-tests **every mounted tree**, so this works in a pane, an overlay,\n  either sidebar or a plugin subtree today — nothing in it names a region.\n- 8 px threshold, capture, and the end-of-gesture guarantee (`DragEnd` always fires) are the\n  framework's.\n\n# The work\n\n1. **Delete the region layer**: `DragSurfaceId`, `DragContext`, `SurfaceDragState`,\n   `heca/src/mouse/drag.rs`, `heca/src/mouse/surface_left.rs`, `heca/src/mouse/target.rs`, the drag\n   half of `heca/src/mouse/release.rs`, and `sidebar_bounds`. Also the early return at\n   `heca/src/mouse.rs` (`if point_in_right_sidebar(...) { ...; return None; }`) — the reason the\n   right sidebar could not drag at all while the left one could, with identical widgets.\n2. **The ghost and the insertion line move INTO `heca-grid-ui`.** The app paints both per surface\n   today; they are one drag visual for every drag, and a plugin cannot draw them. This is the only\n   part that moves rather than being deleted.\n3. **The workspace drop logic moves to `heca/src/providers/workspaces/`** — beside the rows it is\n   about. The container declares its rows draggable, answers `Drop` with an action through the\n   registry, and nothing named `surface_left.rs` exists.\n4. `DragItemKind` — decide whether it survives at all; the payload is the host's, keyed by the\n   opaque `DragItemId` the container itself registered.\n5. T330 (plugin open variants) **dissolves** if this lands: there is no enum left to open.\n\n# Done when\n\n- A widget is draggable by declaring one id, wherever it is mounted.\n- The right sidebar drags because nothing distinguishes it from the left.\n- The move is still reachable from keyboard and RPC (the phase's action-first rule stands).\n- Antonio drags in the app: left sidebar, right sidebar, and between them.\n\n---\n**Completion summary:**\nClosed on Antonio's word (2026-11-22), checklist rectified: the three items of the pre-2026-08-06 additive plan were removed (they contradict the reversal in this task's description) and replaced by the description's \"The work\" points. Verified on main (6a9fbc10, PR #354): (1) region layer gone — DragSurfaceId, DragContext, SurfaceDragState, sidebar_bounds, point_in_right_sidebar, DragItemKind have no occurrence; mouse/drag.rs, mouse/target.rs, mouse/surface_left.rs, mouse/release.rs deleted. (2) ghost and insertion line in heca-grid-ui/src/drag/ (T396). (3) workspace drop logic in heca/src/providers/workspaces/drop.rs (T333, 34a2cf80). (4) DragItemKind gone. (5) T330 rejected. Done-when: Antonio dragged in the app (T333 keyboard/mouse agreement, T325 dock drag).",
+      "descriptionUpdatedAt": "2026-11-22T21:01:43.467Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "1203fec7-aa63-4369-b1de-e02986482f1d-check-001-planned-done",
+          "date": "2026-11-22T21:01:43.465Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed on Antonio's word (2026-11-22), checklist rectified: the three items of the pre-2026-08-06 additive plan were removed (they contradict the reversal in this task's description) and replaced by the description's \"The work\" points. Verified on main (6a9fbc10, PR #354): (1) region layer gone — DragSurfaceId, DragContext, SurfaceDragState, sidebar_bounds, point_in_right_sidebar, DragItemKind have no occurrence; mouse/drag.rs, mouse/target.rs, mouse/surface_left.rs, mouse/release.rs deleted. (2) ghost and insertion line in heca-grid-ui/src/drag/ (T396). (3) workspace drop logic in heca/src/providers/workspaces/drop.rs (T333, 34a2cf80). (4) DragItemKind gone. (5) T330 rejected. Done-when: Antonio dragged in the app (T333 keyboard/mouse agreement, T325 dock drag)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "region-drag-surfaces-c1",
+          "id": "1203fec7-aa63-4369-b1de-e02986482f1d-check-001-1-delete-the-region-layer-dragsurfaceid-dragcontext-surfacedragstate-mouse-drag-rs-mouse-target-rs-sidebar-bounds-the-right-sidebar-early-return-done-before-with-t396-surface-left-rs-and-release-rs-deleted-in-t333",
           "number": 1,
-          "title": "New surface variants added additively",
-          "checked": false
+          "title": "(1) Delete the region layer: DragSurfaceId, DragContext, SurfaceDragState, mouse/drag.rs, mouse/target.rs, sidebar_bounds, the right-sidebar early return (done before, with T396; surface_left.rs and release.rs deleted in T333)",
+          "checked": true
         },
         {
-          "id": "region-drag-surfaces-c2",
+          "id": "1203fec7-aa63-4369-b1de-e02986482f1d-check-002-3-the-workspace-drop-logic-beside-the-rows-in-providers-workspaces-t333-34a2cf80-providers-workspaces-drop-rs-mouse-surface-left-rs-and-mouse-release-rs-deleted",
           "number": 2,
-          "title": "No existing type or variant changed",
-          "checked": false
-        },
-        {
-          "id": "region-drag-surfaces-c3",
-          "number": 3,
-          "title": "Compiler-required match arms filled in",
-          "checked": false
+          "title": "(3) The workspace drop logic beside the rows in providers/workspaces/ (T333, 34a2cf80: providers/workspaces/drop.rs; mouse/surface_left.rs and mouse/release.rs deleted)",
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-22T21:01:43.465Z",
+      "completedAt": "2026-11-22T21:01:43.465Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-08-06T15:34:17.483Z",
+      "updatedAt": "2026-11-22T21:01:43.465Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -85,11 +88,20 @@
       "priority": 2,
       "shortName": "dockframe-drag-handle",
       "title": "DockFrame gets the drag handle it was specified with",
-      "status": "planned",
-      "description": "`DockFrame` was specified as title + collapse toggle + DRAG HANDLE + header-controls slot. The handle was never built — the grip is drawn but wired to nothing (see dock_frame.rs module docs).\n\n── Dependency (updated 2026-10-19) ──\nSTALE REF: `SurfaceDragState`/`DragItem` were deleted with T318/T396 — the framework now owns the gesture (DragStart/Drag/DragEnd on the source). The grip must drive the move ACTION (T333: chrome.dock.move_to_region / reorder_before), never a direct mutation.\nBLOCKED ON T333 (the action must exist first). Also tied to P030 (workspace drag-to-reorder) — the sibling drag the grip sits next to. Do not wire the grip before the action exists.",
-      "descriptionUpdatedAt": "2026-10-19T15:59:16.885Z",
+      "status": "done",
+      "description": "`DockFrame` was specified as title + collapse toggle + DRAG HANDLE + header-controls slot. The handle was never built — the grip is drawn but wired to nothing (see dock_frame.rs module docs).\n\n── Dependency (updated 2026-10-19) ──\nSTALE REF: `SurfaceDragState`/`DragItem` were deleted with T318/T396 — the framework now owns the gesture (DragStart/Drag/DragEnd on the source). The grip must drive the move ACTION (T333: chrome.dock.move_to_region / reorder_before), never a direct mutation.\nBLOCKED ON T333 (the action must exist first). Also tied to P030 (workspace drag-to-reorder) — the sibling drag the grip sits next to. Do not wire the grip before the action exists.\n\n---\n**Completion summary:**\nDone by the heca-pro-dev session, PR #354 (merged by Antonio 2026-11-22, e0bdf074). What was built: the seat round every dock is carried by the window's move key (interactive_move_modifier) when the dock is movable; a DockFrame's grip is the handle of its own frame (DragExt::drag_by_handle / drag_handle, heca-grid-ui/src/builders/drag.rs); the framework draws the picture. Antonio dragged a dock in the app. Follow-up: P030 (workspace reorder from the grip; the workspace-row grips do nothing until then).\n\nForced completion overrode 3 unchecked checklist item(s): Drag handle drives SurfaceDragState, Ghost renders in the overlay layer, USER drags a container. Motivation: The checklist describes the old plan (SurfaceDragState, an overlay ghost), which T318 deleted; the work was built on the framework's drag instead, as recorded in the evidence.",
+      "descriptionUpdatedAt": "2026-11-22T21:01:50.249Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "69a41dcc-1648-41a7-b317-7f9b141b8dcf-check-001-planned-done",
+          "date": "2026-11-22T21:01:50.248Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done by the heca-pro-dev session, PR #354 (merged by Antonio 2026-11-22, e0bdf074). What was built: the seat round every dock is carried by the window's move key (interactive_move_modifier) when the dock is movable; a DockFrame's grip is the handle of its own frame (DragExt::drag_by_handle / drag_handle, heca-grid-ui/src/builders/drag.rs); the framework draws the picture. Antonio dragged a dock in the app. Follow-up: P030 (workspace reorder from the grip; the workspace-row grips do nothing until then).\n\nForced completion overrode 3 unchecked checklist item(s): Drag handle drives SurfaceDragState, Ghost renders in the overlay layer, USER drags a container. Motivation: The checklist describes the old plan (SurfaceDragState, an overlay ghost), which T318 deleted; the work was built on the framework's drag instead, as recorded in the evidence."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -116,10 +128,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-22T21:01:50.248Z",
+      "completedAt": "2026-11-22T21:01:50.248Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-10-19T15:59:16.884Z",
+      "updatedAt": "2026-11-22T21:01:50.248Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -131,11 +143,20 @@
       "priority": 3,
       "shortName": "region-drop-targets",
       "title": "ChromeRegion and inter-dock gaps receive",
-      "status": "planned",
-      "description": "They set `hover_item` when they can accept. `DragContext` already updates hover on EVERY surface, not just the active one, so several drop targets highlight at once — the cross-region model is already there.\n\n── Dependency (updated 2026-10-19) ──\nThe cross-region hover model landed with T318/T396 (framework-owned drag; DragEnter/DragOver/DragLeave with a computed side). What remains is making ChromeRegion + inter-dock gaps ACCEPT a drop, which is the move action in T333.\nBLOCKED ON T333.",
-      "descriptionUpdatedAt": "2026-10-19T15:59:19.064Z",
+      "status": "done",
+      "description": "They set `hover_item` when they can accept. `DragContext` already updates hover on EVERY surface, not just the active one, so several drop targets highlight at once — the cross-region model is already there.\n\n── Dependency (updated 2026-10-19) ──\nThe cross-region hover model landed with T318/T396 (framework-owned drag; DragEnter/DragOver/DragLeave with a computed side). What remains is making ChromeRegion + inter-dock gaps ACCEPT a drop, which is the move action in T333.\nBLOCKED ON T333.\n\n---\n**Completion summary:**\nDone by the heca-pro-dev session, PR #354 (merged by Antonio 2026-11-22, e0bdf074). What was built: seats take a dock beside them, the space between two docks takes one (after the one above), an empty sidebar takes one; the drop becomes chrome.container.reorder_before / reorder_after (which now move a container to wherever its target is) or move_to_region (heca/src/chrome/docks/drop.rs).\n\nForced completion overrode 3 unchecked checklist item(s): Region and gaps set hover_item, Multiple targets highlight at once, Insertion line renders in the overlay layer. Motivation: The checklist describes the old plan (hover_item); the work was built on the framework's drop targets instead, as recorded in the evidence.",
+      "descriptionUpdatedAt": "2026-11-22T21:01:52.244Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "87175753-f899-4090-9acb-28a48d93457a-check-001-planned-done",
+          "date": "2026-11-22T21:01:52.243Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done by the heca-pro-dev session, PR #354 (merged by Antonio 2026-11-22, e0bdf074). What was built: seats take a dock beside them, the space between two docks takes one (after the one above), an empty sidebar takes one; the drop becomes chrome.container.reorder_before / reorder_after (which now move a container to wherever its target is) or move_to_region (heca/src/chrome/docks/drop.rs).\n\nForced completion overrode 3 unchecked checklist item(s): Region and gaps set hover_item, Multiple targets highlight at once, Insertion line renders in the overlay layer. Motivation: The checklist describes the old plan (hover_item); the work was built on the framework's drop targets instead, as recorded in the evidence."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -162,10 +183,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-22T21:01:52.243Z",
+      "completedAt": "2026-11-22T21:01:52.243Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-10-19T15:59:19.063Z",
+      "updatedAt": "2026-11-22T21:01:52.243Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -226,11 +247,20 @@
       "priority": 4,
       "shortName": "action-first-then-drag",
       "title": "The move is an ACTION first; drag is only the mouse surface",
-      "status": "planned",
-      "description": "⚠️ Build the action BEFORE the drag. On drop, dispatch `chrome.dock.move_to_region` / `chrome.dock.reorder_before` through the registry — never mutate directly. The same move MUST be reachable by keyboard and RPC (input parity, AGENTS.md). A drag that does something no keybinding can do is a rule violation.\n\n── Note (updated 2026-10-19) ──\nPREREQUISITE for the rest of P079: T325 (DockFrame grip) and T326 (ChromeRegion/gaps accept a drop) both depend on this action existing. The structural refactor is already done — T318 (delete the region layer / DragSurfaceId) and T396 (framework-owned drag ghost + insertion line). This action + wiring the grip is what's left.\nShares its shape with P030 (workspace drag-to-reorder): build both moves as actions first, then the drag is only the mouse surface.",
-      "descriptionUpdatedAt": "2026-10-19T15:59:22.317Z",
+      "status": "done",
+      "description": "⚠️ Build the action BEFORE the drag. On drop, dispatch `chrome.dock.move_to_region` / `chrome.dock.reorder_before` through the registry — never mutate directly. The same move MUST be reachable by keyboard and RPC (input parity, AGENTS.md). A drag that does something no keybinding can do is a rule violation.\n\n── Note (updated 2026-10-19) ──\nPREREQUISITE for the rest of P079: T325 (DockFrame grip) and T326 (ChromeRegion/gaps accept a drop) both depend on this action existing. The structural refactor is already done — T318 (delete the region layer / DragSurfaceId) and T396 (framework-owned drag ghost + insertion line). This action + wiring the grip is what's left.\nShares its shape with P030 (workspace drag-to-reorder): build both moves as actions first, then the drag is only the mouse surface.\n\n---\n**Completion summary:**\nDone by the heca-pro-dev session on branch feat/t333-dnd (stacked on feat/pane-row-clean, PR #353): commits 3f9374b8 (code + widgets.md) and f433ae32 (docs); 3293 tests pass, clippy and fmt clean. Antonio checked it in the app and confirmed keyboard and mouse agree (2026-11-22). PR opens after #353 is merged, on Antonio's word.\n1. The moves are actions reachable from keyboard + RPC: they already existed as chrome.container.move_to_region, move_left_sidebar, move_right_sidebar, reorder_before, reorder_after (the task text's chrome.dock.* names do not exist); a test shows the line a key, a menu, a plugin and RPC send builds each.\n2. A drop dispatches the action, never mutates: pane and column drops answer with swap / place_pane / swap_columns / move_column. The dock grip itself still has no drag: that is T325.\n3. Adding-New-Actions checklist: not applicable, no new action.\n4. Keyboard and mouse agree: confirmed by Antonio.\n5. Before/after follow the list direction (Flow, read from where the neighbours are drawn); the insertion line stands on the edge in a row and lies along it in a column.\n6. Drag builders accept Option: draggable_as, accepts, accepts_beside, grip_glyph; IntoKey renamed IntoName, new IntoNames; on_drop stays a plain closure (a closure behind an Option cannot infer its parameter) — approved by Antonio.\n7. T318 point 3: drop logic in providers/workspaces/drop.rs; mouse/surface_left.rs and mouse/release.rs deleted.\nDocs: widgets.md \"Drag and drop\" rewritten; chrome-and-ui.md (§2.6, §3, open questions, §22) and architecture.md (mouse/, providers/ lists) match the code.\nLeft in P079: T325 (DockFrame grip as drag source) and T326 (regions and gaps accept a drop); both drops can send the existing chrome.container.* actions.\n\nForced completion overrode 1 unchecked checklist item(s): Follow the full Adding-New-Actions checklist. Motivation: C3 \"Follow the full Adding-New-Actions checklist\" does not apply: no new action was added — the moves already existed as chrome.container.move_to_region / move_left_sidebar / move_right_sidebar / reorder_before / reorder_after, and the drops reuse swap / place_pane / swap_columns / move_column.",
+      "descriptionUpdatedAt": "2026-11-22T19:25:44.856Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8-check-001-planned-done",
+          "date": "2026-11-22T19:25:44.854Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done by the heca-pro-dev session on branch feat/t333-dnd (stacked on feat/pane-row-clean, PR #353): commits 3f9374b8 (code + widgets.md) and f433ae32 (docs); 3293 tests pass, clippy and fmt clean. Antonio checked it in the app and confirmed keyboard and mouse agree (2026-11-22). PR opens after #353 is merged, on Antonio's word.\n1. The moves are actions reachable from keyboard + RPC: they already existed as chrome.container.move_to_region, move_left_sidebar, move_right_sidebar, reorder_before, reorder_after (the task text's chrome.dock.* names do not exist); a test shows the line a key, a menu, a plugin and RPC send builds each.\n2. A drop dispatches the action, never mutates: pane and column drops answer with swap / place_pane / swap_columns / move_column. The dock grip itself still has no drag: that is T325.\n3. Adding-New-Actions checklist: not applicable, no new action.\n4. Keyboard and mouse agree: confirmed by Antonio.\n5. Before/after follow the list direction (Flow, read from where the neighbours are drawn); the insertion line stands on the edge in a row and lies along it in a column.\n6. Drag builders accept Option: draggable_as, accepts, accepts_beside, grip_glyph; IntoKey renamed IntoName, new IntoNames; on_drop stays a plain closure (a closure behind an Option cannot infer its parameter) — approved by Antonio.\n7. T318 point 3: drop logic in providers/workspaces/drop.rs; mouse/surface_left.rs and mouse/release.rs deleted.\nDocs: widgets.md \"Drag and drop\" rewritten; chrome-and-ui.md (§2.6, §3, open questions, §22) and architecture.md (mouse/, providers/ lists) match the code.\nLeft in P079: T325 (DockFrame grip as drag source) and T326 (regions and gaps accept a drop); both drops can send the existing chrome.container.* actions.\n\nForced completion overrode 1 unchecked checklist item(s): Follow the full Adding-New-Actions checklist. Motivation: C3 \"Follow the full Adding-New-Actions checklist\" does not apply: no new action was added — the moves already existed as chrome.container.move_to_region / move_left_sidebar / move_right_sidebar / reorder_before / reorder_after, and the drops reuse swap / place_pane / swap_columns / move_column."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -238,13 +268,13 @@
           "id": "action-first-then-drag-c1",
           "number": 1,
           "title": "Actions exist and work from keyboard + RPC first",
-          "checked": false
+          "checked": true
         },
         {
           "id": "action-first-then-drag-c2",
           "number": 2,
           "title": "Drop dispatches the action, never mutates",
-          "checked": false
+          "checked": true
         },
         {
           "id": "action-first-then-drag-c3",
@@ -256,35 +286,35 @@
           "id": "action-first-then-drag-c4",
           "number": 4,
           "title": "USER confirms keyboard and mouse agree",
-          "checked": false
+          "checked": true
         },
         {
           "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8-check-005-a-drop-s-before-after-follows-the-list-s-direction-left-right-in-a-row-of-targets-and-the-insertion-line-turns-with-it-today-drag-resolve-rs-side-for-reads-only-y",
           "number": 5,
           "title": "A drop's before/after follows the list's direction (left/right in a row of targets), and the insertion line turns with it — today drag/resolve.rs side_for reads only y",
-          "checked": false
+          "checked": true
         },
         {
           "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8-check-006-drag-builders-draggable-as-accepts-accepts-beside-on-drop-grip-glyph-accept-option-like-child-and-on-hint",
           "number": 6,
           "title": "Drag builders (draggable_as, accepts, accepts_beside, on_drop, grip_glyph) accept Option, like .child and .on_hint",
-          "checked": false
+          "checked": true
         },
         {
           "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8-check-007-t318-s-remaining-point-3-the-workspace-drop-logic-in-heca-src-mouse-surface-left-rs-called-from-chrome-input-dispatch-rs-moves-beside-the-rows-in-providers-workspaces",
           "number": 7,
           "title": "T318's remaining point 3: the workspace drop logic in heca/src/mouse/surface_left.rs (called from chrome/input/dispatch.rs) moves beside the rows in providers/workspaces/",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-22T19:25:44.854Z",
+      "completedAt": "2026-11-22T19:25:44.854Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-11-22T15:25:30.192Z",
+      "updatedAt": "2026-11-22T19:25:44.854Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -296,11 +326,20 @@
       "priority": 6,
       "shortName": "the-drag-ghost-and-the-inserti",
       "title": "The drag ghost and the insertion line belong to the framework, not to each surface",
-      "status": "planned",
-      "description": "Split out of `P079(F004)/T318` (which deletes the region layer) because this is the one part that\n**moves into `heca-grid-ui`** rather than being deleted. Decided with T318, 2026-08-06.\n\n# What exists\n\n- **App-side, per surface.** `SurfaceDragState.ghost_label: Option<DragLabel>` carries the chip's\n  text and a hand-maintained `x`/`y` (`heca/src/mouse/drag.rs` sets it on threshold and moves it on\n  every cursor step); `heca/src/app/render.rs` paints it. The insertion indicator is drawn from\n  `DropHit { bounds, side }` at the app's own call sites.\n- `DragLabel` and `DropSide`/`DropHit` already live in `heca-grid-ui/src/drag/`, so the *types* are\n  in the right crate; only the drawing and the position bookkeeping are not.\n- Since F004/P084/T394 the framework owns the gesture: `DragStart`/`Drag`/`DragEnd` on the source,\n  `DragEnter`/`DragOver`/`DragLeave`/`Drop` on the target, with `DragEvent::side` computed for it.\n\n# Why it moves\n\nA plugin's widget can be draggable (it declares one id) but **cannot draw the drag**: the ghost and\nthe insertion line are painted by app code that knows which sidebar it is in. One drag should look\nlike one drag wherever it happens, and the widget author should write none of it — the same bargain\nas `Base::hovered` and the focus ring.\n\n# The work\n\n1. A framework-owned overlay for the in-flight drag: the ghost follows the pointer (the router\n   already has every move), and the insertion line draws against the current drop target's bounds\n   and `side`. Both painted through `PaintCx::with_overlay`, so they composite above everything, and\n   both read every colour/radius/width from the `Theme` — no magic numbers, per the widget rules.\n2. What the ghost *shows* is the widget's to say, not the framework's: reuse\n   `Component::text_summary()` (the accessible-name path) for the default, with an explicit\n   override for a source that wants something else. **Do not** re-introduce a host-supplied string\n   that the app has to keep in step with the row it came from\n   (`heca/src/mouse/drag.rs::drag_ghost_label` re-derives it from the session on every drag start).\n3. Delete `SurfaceDragState.ghost_label` and its two writers, and the ghost paint in\n   `heca/src/app/render.rs`.\n4. Showcase: a drag demo that is not a sidebar — two lists in a panel — so the \"works anywhere\"\n   claim is visible and not just asserted.\n5. Docs: `docs/widgets.md` drag section + rustdoc, per the mandatory both-audiences rule.\n\n# Edge cases\n\n- A drag that ends over nothing still clears the ghost (`DragEnd` always fires — the framework\n  guarantees it).\n- The pointer leaving the window mid-drag (`Event::pointer_cancelled()`) clears both visuals.\n- A source removed mid-drag (a rebuild during the gesture) must not leave a ghost painted.\n\n# Done when\n\nAntonio drags a row in the app and sees the same ghost and the same insertion line in the left\nsidebar, the right sidebar, and a non-sidebar surface — with no app code drawing any of it.",
-      "descriptionUpdatedAt": "2026-08-06T15:34:42.957Z",
+      "status": "done",
+      "description": "Split out of `P079(F004)/T318` (which deletes the region layer) because this is the one part that\n**moves into `heca-grid-ui`** rather than being deleted. Decided with T318, 2026-08-06.\n\n# What exists\n\n- **App-side, per surface.** `SurfaceDragState.ghost_label: Option<DragLabel>` carries the chip's\n  text and a hand-maintained `x`/`y` (`heca/src/mouse/drag.rs` sets it on threshold and moves it on\n  every cursor step); `heca/src/app/render.rs` paints it. The insertion indicator is drawn from\n  `DropHit { bounds, side }` at the app's own call sites.\n- `DragLabel` and `DropSide`/`DropHit` already live in `heca-grid-ui/src/drag/`, so the *types* are\n  in the right crate; only the drawing and the position bookkeeping are not.\n- Since F004/P084/T394 the framework owns the gesture: `DragStart`/`Drag`/`DragEnd` on the source,\n  `DragEnter`/`DragOver`/`DragLeave`/`Drop` on the target, with `DragEvent::side` computed for it.\n\n# Why it moves\n\nA plugin's widget can be draggable (it declares one id) but **cannot draw the drag**: the ghost and\nthe insertion line are painted by app code that knows which sidebar it is in. One drag should look\nlike one drag wherever it happens, and the widget author should write none of it — the same bargain\nas `Base::hovered` and the focus ring.\n\n# The work\n\n1. A framework-owned overlay for the in-flight drag: the ghost follows the pointer (the router\n   already has every move), and the insertion line draws against the current drop target's bounds\n   and `side`. Both painted through `PaintCx::with_overlay`, so they composite above everything, and\n   both read every colour/radius/width from the `Theme` — no magic numbers, per the widget rules.\n2. What the ghost *shows* is the widget's to say, not the framework's: reuse\n   `Component::text_summary()` (the accessible-name path) for the default, with an explicit\n   override for a source that wants something else. **Do not** re-introduce a host-supplied string\n   that the app has to keep in step with the row it came from\n   (`heca/src/mouse/drag.rs::drag_ghost_label` re-derives it from the session on every drag start).\n3. Delete `SurfaceDragState.ghost_label` and its two writers, and the ghost paint in\n   `heca/src/app/render.rs`.\n4. Showcase: a drag demo that is not a sidebar — two lists in a panel — so the \"works anywhere\"\n   claim is visible and not just asserted.\n5. Docs: `docs/widgets.md` drag section + rustdoc, per the mandatory both-audiences rule.\n\n# Edge cases\n\n- A drag that ends over nothing still clears the ghost (`DragEnd` always fires — the framework\n  guarantees it).\n- The pointer leaving the window mid-drag (`Event::pointer_cancelled()`) clears both visuals.\n- A source removed mid-drag (a rebuild during the gesture) must not leave a ghost painted.\n\n# Done when\n\nAntonio drags a row in the app and sees the same ghost and the same insertion line in the left\nsidebar, the right sidebar, and a non-sidebar surface — with no app code drawing any of it.\n\n---\n**Completion summary:**\nDone (closed 2026-11-22 on Antonio's word, PR #354 merged). Points 1-3 (the drag ghost and the insertion line drawn by the framework, heca-grid-ui/src/drag/) were already in code; point 4: the showcase \"Drag anywhere\" panel (tabs in a row, items in a column, not a sidebar); point 5: docs/widgets.md \"Drag and drop\" rewritten (heca-pro-dev session, T333/P079 commits 34a2cf80, 9ad642ec, e0bdf074).",
+      "descriptionUpdatedAt": "2026-11-22T21:01:54.940Z",
       "notes": "2026-11-22, checked in code on main (not by eye): the ghost and the insertion line are painted by heca-grid-ui (component/paint_cx/chrome.rs, component/paint_walk.rs) and no ghost_label is left in heca. Its \"Done when\" is Antonio's eye check of a drag in the left sidebar, the right sidebar and a non-sidebar surface, so it stays open until that check.",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "98c0e646-a0d7-4087-b72d-af9a3a8db523-check-001-planned-done",
+          "date": "2026-11-22T21:01:54.939Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done (closed 2026-11-22 on Antonio's word, PR #354 merged). Points 1-3 (the drag ghost and the insertion line drawn by the framework, heca-grid-ui/src/drag/) were already in code; point 4: the showcase \"Drag anywhere\" panel (tabs in a row, items in a column, not a sidebar); point 5: docs/widgets.md \"Drag and drop\" rewritten (heca-pro-dev session, T333/P079 commits 34a2cf80, 9ad642ec, e0bdf074)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -308,16 +347,16 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-22T21:01:54.939Z",
+      "completedAt": "2026-11-22T21:01:54.939Z",
       "createdAt": "2026-08-06T15:34:42.957Z",
-      "updatedAt": "2026-11-22T15:25:37.831Z",
+      "updatedAt": "2026-11-22T21:01:54.939Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-26T08:37:59.875Z",
-  "updatedAt": "2026-11-22T15:25:37.831Z",
+  "updatedAt": "2026-11-22T21:01:54.939Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -330,6 +369,22 @@
       "fromStatus": "draft",
       "toStatus": "planned",
       "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "c0f764eb-a696-4e99-bac5-0d5a39744386",
+      "date": "2026-11-22T19:25:44.885Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "5c97af5b-038e-4399-96c1-cfae05be2511",
+      "date": "2026-11-22T21:01:54.972Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],
