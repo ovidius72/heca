@@ -196,3 +196,56 @@ fn scrollback_size_override_replaces_default_capacity() {
         "scrollback_size override should cap retained history at scrollback_size + visible_rows"
     );
 }
+
+/// A process that reads slowly: every write waits, and what arrived is kept in order.
+struct SlowReader(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for SlowReader {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// **Keys, typed text and a paste reach the process in the order they were sent**, however slowly it
+/// reads. A space used to be written straight to the process while the letters around it waited
+/// in the emulator's own queue, so under load "ciao " arrived as "cia o".
+#[test]
+fn keys_text_and_paste_arrive_in_the_order_sent() {
+    let arrived = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let writer = SharedWriter::new(Box::new(SlowReader(arrived.clone())));
+    let mut engine = TerminalEngine::new(
+        80,
+        24,
+        (8.0, 16.0),
+        writer,
+        None,
+        crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+    )
+    .expect("terminal engine should initialize");
+    let key = |c| crate::backend::BackendKeyEvent {
+        code: crate::backend::BackendKeyCode::Char(c),
+        modifiers: Default::default(),
+    };
+    assert!(engine.process_key_event(&key('c')));
+    assert!(engine.type_text("ia"));
+    assert!(engine.process_key_event(&key('o')));
+    assert!(engine.type_text(" "));
+    assert!(engine.paste("x\ny"));
+    assert!(engine.process_key_event(&key('!')));
+    assert!(engine.type_text("\x7f"));
+    let want = b"ciao x\ny!\x7f";
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while arrived.lock().unwrap().len() < want.len() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(
+        arrived.lock().unwrap().as_slice(),
+        want,
+        "in order, and the paste verbatim"
+    );
+}

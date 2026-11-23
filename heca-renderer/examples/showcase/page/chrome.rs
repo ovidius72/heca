@@ -425,7 +425,7 @@ pub(super) fn build(cx: &DemoCx<'_>) -> Flex {
         .child(items)
         .child(
             Label::new("")
-                .with_text_signal(last_drop)
+                .text(last_drop)
                 .muted(true)
                 .size(WidgetSize::Caption),
         );

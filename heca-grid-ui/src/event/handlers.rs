@@ -15,6 +15,8 @@ use heca_core::layout::Point;
 pub struct HandlerOutcome {
     pub handled: Handled,
     pub default_prevented: bool,
+    /// A handler called [`EventCx::capture_pointer`].
+    pub captures_pointer: bool,
 }
 
 /// What a [`Base`](crate::component::Base) handler is given: the event, and the one lever it has
@@ -27,6 +29,7 @@ pub struct EventCx<'a> {
     event: &'a Event,
     stop: bool,
     prevented: bool,
+    capture: bool,
 }
 
 impl<'a> EventCx<'a> {
@@ -36,6 +39,7 @@ impl<'a> EventCx<'a> {
             event,
             stop: false,
             prevented: false,
+            capture: false,
         }
     }
 
@@ -101,6 +105,21 @@ impl<'a> EventCx<'a> {
     /// meant for the list it sits in.
     pub fn stop_propagation(&mut self) {
         self.stop = true;
+    }
+
+    /// **Keep the pointer until the button is up — without taking the press.** The browser's
+    /// `setPointerCapture`. Called from a [`PointerDown`](crate::event::Event::PointerDown)
+    /// handler, it sends this widget every move and the release wherever the pointer goes, and an
+    /// [`EdgeScroll`](crate::event::Event::EdgeScroll) every frame while it is outside the widget —
+    /// but the press still carries on to everything else, so a window gesture on the same press is
+    /// not stolen. A widget that consumes the press captures anyway; this is for one that must not.
+    ///
+    /// ```ignore
+    /// .on(EventKind::PointerDown, |ev| ev.capture_pointer())
+    /// .on_edge_scroll(|ev| scroll_by(ev.pointer().and_then(|p| p.delta_pixels)))
+    /// ```
+    pub fn capture_pointer(&mut self) {
+        self.capture = true;
     }
 
     /// Whether a handler called [`stop_propagation`](Self::stop_propagation).
@@ -173,6 +192,7 @@ impl Handlers {
                 Handled::No
             },
             default_prevented: cx.default_prevented(),
+            captures_pointer: cx.capture,
         }
     }
 }

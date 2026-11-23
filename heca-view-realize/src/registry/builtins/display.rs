@@ -84,6 +84,17 @@ pub(super) struct DotInputs {
     status: heca_grid_ui::DotStatus,
 }
 
+/// **`edge_hint`** — pinned in a `scroll` (`slot: "pinned"`), it counts the rows wanting attention
+/// out of sight. It takes no properties: what it shows is the region's.
+pub(super) fn edge_hint(
+    _node: &ViewNode,
+    _cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    Ok(heca_grid_ui::WidgetModel::new(
+        heca_grid_ui::widgets::EdgeHint::new(),
+    ))
+}
+
 pub(super) fn status_dot(
     node: &ViewNode,
     cx: &mut RealizeCx<'_>,

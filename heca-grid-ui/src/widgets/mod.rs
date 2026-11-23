@@ -117,6 +117,8 @@ pub use resizable::Resizable;
 pub use row::{Row, RowVariant};
 pub use scroll_bar::ScrollBar;
 pub use scroll_region::{RevealAlign, ScrollAxes, ScrollInfo, ScrollRegion};
+mod edge_hint;
+pub use edge_hint::{EdgeHint, RevealEdge, ScrollFacts};
 pub use select::Select;
 pub use separator::{Orientation, Separator};
 pub use spinner::Spinner;

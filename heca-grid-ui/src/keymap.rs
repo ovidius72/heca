@@ -199,6 +199,24 @@ impl Keymap {
         km.bind(Char('u'), ctrl, EditDeleteToLineStart);
         km.bind(Char('a'), ctrl, EditSelectAll);
         km.bind(Char('a'), meta, EditSelectAll);
+        km.bind(
+            Backspace,
+            Modifiers {
+                meta: true,
+                shift: true,
+                ..Default::default()
+            },
+            ClearInput,
+        );
+        km.bind(
+            Backspace,
+            Modifiers {
+                ctrl: true,
+                shift: true,
+                ..Default::default()
+            },
+            ClearInput,
+        );
         // Horizontal navigation. An unconsumed Tab continues normal focus traversal;
         // completion-capable widgets may consume its Complete intent instead.
         km.bind(ArrowLeft, none, ItemPrevious);

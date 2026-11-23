@@ -48,6 +48,9 @@ heca_precmd() {
   heca__osc "133;A"
   heca__emit_cwd
   HECA_HAVE_PREEXEC=0
+  # **Forget where commands were found.** heca can turn an agent on after this shell started — its
+  # launcher appears in $HECA_AGENT_BIN — and zsh would keep running the program it found first.
+  [[ -n "${HECA_AGENT_BIN:-}" ]] && hash -r
   return "$exit_status"
 }
 

@@ -96,7 +96,7 @@ fn window_overrides_keep_other_file_defaults() {
 }
 
 #[test]
-fn aliases_and_nested_overrides_keep_the_other_defaults() {
+fn nested_overrides_keep_the_other_defaults() {
     let expected = SettingsConfig {
         terminal_wheel_scroll_lines: 7,
         notification_system: NotificationSystemConfig {
@@ -106,7 +106,7 @@ fn aliases_and_nested_overrides_keep_the_other_defaults() {
         ..SettingsConfig::default()
     };
     let direct: SettingsConfig =
-        toml::from_str("terminal-wheel-scroll-lines = 7\n[notification-system]\nmax_visible = 2")
+        toml::from_str("terminal_wheel_scroll_lines = 7\n[notification_system]\nmax_visible = 2")
             .unwrap();
     assert_eq!(direct, expected);
 }

@@ -288,6 +288,9 @@ mod tests {
                 ArgKind::Bool => "true".to_string(),
                 ArgKind::Text => "x".to_string(),
                 ArgKind::Enum => arg.values.first().cloned().unwrap_or_default(),
+                ArgKind::Dock => "workspaces".to_string(),
+                ArgKind::Workspace | ArgKind::Column => "0".to_string(),
+                ArgKind::Pane => "1".to_string(),
             };
             let line = std::iter::once(meta.name.clone())
                 .chain(

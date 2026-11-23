@@ -114,11 +114,7 @@ impl AppState {
     /// through the one window-side builder, so the cut and action wiring live in one place.
     pub(crate) fn rebuild_toasts(&mut self) {
         use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
-        let next: Vec<_> = self
-            .notifications
-            .iter()
-            .map(crate::notification::toast_spec)
-            .collect();
+        let next = crate::notification::toasts_for(&self.notifications, self.focused_pane);
         if self.toasts.get_untracked() != next {
             self.toasts.set(next);
         }

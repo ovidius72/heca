@@ -99,3 +99,55 @@ pub(crate) fn workspace_entries(
         })
         .collect()
 }
+
+/// **Every column of workspace `ws_idx`**, as palette rows named by the panes they hold — the same
+/// names the pane rows use. The column the window has focused there is the current one.
+pub(crate) fn column_entries(
+    layout: heca_core::layout::Layout<'_>,
+    ws_idx: usize,
+    programs: &heca_config::programs::ProgramsConfig,
+    panes: &crate::chrome::PaneRuntimeStore,
+    add_process_name: bool,
+) -> Vec<PaletteEntry> {
+    let Some(ws) = layout.workspace(ws_idx) else {
+        return Vec::new();
+    };
+    let ws_name = ws.content().label();
+    let scroll = ws.scroll();
+    let active = scroll.active_column_idx();
+    scroll
+        .columns
+        .iter()
+        .enumerate()
+        .map(|(col_idx, column)| {
+            let names: Vec<String> = column
+                .panes
+                .iter()
+                .map(|pane| {
+                    pane_info_view(
+                        programs,
+                        &pane.title,
+                        pane.custom_name.as_deref(),
+                        panes.presentation(pane.id).as_ref(),
+                        add_process_name,
+                    )
+                    .label()
+                })
+                .collect();
+            PaletteEntry {
+                id: format!("col:{ws_idx}:{col_idx}"),
+                rank_id: None,
+                pane: None,
+                current: col_idx == active,
+                preselect: col_idx == active,
+                label: names.join(", "),
+                description: format!("Column {} · {ws_name}", col_idx + 1),
+                icon: Some(Glyph::SquareSplitHorizontal),
+                description_path: false,
+                detail: None,
+                shortcuts: Vec::new(),
+                intent: None,
+            }
+        })
+        .collect()
+}

@@ -138,16 +138,15 @@ pub(crate) fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> 
 ///
 /// Sidebar shell backgrounds are driven separately so left/right sidebars can
 /// use distinct theme tokens without changing the inner chrome surface color.
-pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color, Color) {
+pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color) {
     let bar_bg = chrome_bar_color(state);
     let sidebar_bg = chrome_shell_surface_color(state);
-    let fg = state.theme.foreground;
-    (bar_bg, sidebar_bg, fg)
+    (bar_bg, sidebar_bg)
 }
 
 /// Bridge the loaded app theme into a GuiTheme for chrome widgets.
 pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
-    let (_, sidebar_bg, _) = chrome_colors(state);
+    let (_, sidebar_bg) = chrome_colors(state);
     let mut theme = app_theme_to_gui_theme(&state.theme, &state.font_config);
     // App-wide font zoom scales the chrome/UI font alongside the terminals, so the
     // sidebar/tabs/status bar grow/shrink together with the panes. Read at paint
@@ -182,9 +181,6 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // app-wide BORDER control. Read at paint time, so it live-reloads. Drives the
     // chrome + sidebar frame width.
     theme.colors.border_width = state.appearance.effective_border_width(&state.theme);
-    // Global decorative border color (config `border_color`, theme fallback) —
-    // drives the chrome/sidebar `bordered` frame. Read at paint, so it live-reloads.
-    theme.colors.border = state.appearance.effective_border_color(&state.theme);
     // Affordance outlines (focus ring + selection) get their own configurable
     // width, independent of the decorative border so they stay visible at
     // `border_width = 0`.
@@ -211,8 +207,11 @@ pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
         .and_then(|ws| ws.active_pane())
         .map(|p| p.custom_name.as_deref().unwrap_or(p.title.as_str()))
         .unwrap_or("—");
-    let (mode_str, rename_hint) =
-        crate::app::render::status_mode_parts(&state.input_mode, &state.action_catalog);
+    let (mode_str, rename_hint) = crate::app::render::status_mode_parts(
+        &state.input_mode,
+        &state.action_catalog,
+        &state.action_shortcuts,
+    );
     // **A reply to the last key wins the tail of the bar.** It is there because that key could not
     // do what was asked, so showing the mode's ordinary prompt beside it would answer a question
     // nobody asked. The mode word stays: what you are in has not changed.

@@ -101,6 +101,15 @@ CPU and the average number of render passes it began:
 It is CPU time only: the GPU runs after the frame is submitted, so work moved from the CPU to the GPU
 looks like a win here. Off unless the variable is set.
 
+To find **why a saved agent did not come back**, set `HECA_LOG_SESSIONS=1`. On the way out heca
+prints, for each terminal, what it writes down — the agent it reported (driver and conversation id),
+what it was launched with, whether a program was running — and on the way back what each one was
+brought back as:
+
+```sh
+HECA_LOG_SESSIONS=1 ./target/debug/heca --standalone 2>> sessions.log
+```
+
 To find **which step is slow** — a single long frame, or a server turn that stalls typing — set
 `HECA_SLOW_MS` to a threshold in milliseconds. Every timed step that takes at least that long prints
 one line on stderr, with the seconds since start; inner steps come before the outer ones that contain

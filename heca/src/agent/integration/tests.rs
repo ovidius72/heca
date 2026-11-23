@@ -105,6 +105,7 @@ fn fixture(root: &Path, version: &str) -> Integrations {
             reporter: heca_core::agent::reporting::ReportingHelper {
                 executable: std::env::current_exe().unwrap(),
                 max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
+                launched_status: String::new(),
             },
             home: root.to_owned(),
             directory: root.join("heca-data/integrations"),

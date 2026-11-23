@@ -168,6 +168,12 @@ fn every_exported_component_has_a_plain_external_construction_and_composition_ex
         .child(widget!(Separator, Separator::horizontal()))
         .child(widget!(Spinner, Spinner::new()))
         .child(widget!(Splitter, Splitter::vertical()))
+        .child(widget!(
+            EdgeHint,
+            ScrollRegion::new()
+                .child(Label::new("Row"))
+                .pinned(EdgeHint::new())
+        ))
         .child(widget!(StatusDot, StatusDot::new(DotStatus::Online)))
         .child(widget!(
             Surface,

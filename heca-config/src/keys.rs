@@ -116,10 +116,11 @@ pub type KeybindingMap = HashMap<String, BindingValue>;
 /// A keybinding that spawns an external command (rather than triggering a WM action).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommandKeybindConfig {
-    #[serde(alias = "keys")]
+    /// The key that runs it — `keys`, the name every binding table uses.
+    #[serde(rename = "keys")]
     pub key: String,
     pub command: String,
-    #[serde(default = "default_command_kind", alias = "command_type")]
+    #[serde(default = "default_command_kind")]
     pub kind: String,
     #[serde(default)]
     pub float: bool,
@@ -162,7 +163,6 @@ pub struct ModeBindingConfig {
     /// does in `[keys]` or `[[keys.surface]]`. It used to be a bare `String`, which meant
     /// a mode block needed a whole repeated `[[keys.mode.bindings]]` per key — the same capability
     /// spelled two ways in two tables.
-    #[serde(alias = "key")]
     pub keys: BindingValue,
     /// Arguments for parameterized actions.
     /// e.g. `args = { target = "column", axis = "x", amount = "50" }`
@@ -207,8 +207,7 @@ fn default_mode_sticky() -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KeysConfig {
     /// The prefix key that activates prefix mode.
-    /// Accepts both `prefix` and `prefix_key` for compatibility.
-    #[serde(default = "default_prefix_key", alias = "prefix_key")]
+    #[serde(default = "default_prefix_key")]
     pub prefix: String,
     /// **How long prefix mode waits for the next key**, in milliseconds.
     ///

@@ -110,6 +110,20 @@ impl Terminals<'_> {
         Ok(ensured)
     }
 
+    /// **Replace `pane`'s program with the user's shell, as the same terminal** — same id, so the
+    /// windows showing it keep typing into it and drawing it. For a program that ended in a pane
+    /// that stays (an agent heca resumed).
+    pub(crate) fn replace_with_shell(
+        &mut self,
+        pane: PaneId,
+        cwd: Option<PathBuf>,
+        grid: (usize, usize),
+        cell: (f32, f32),
+    ) {
+        self.backends.end_process_keep_id(pane);
+        self.start_shell(pane, cwd, grid, cell);
+    }
+
     /// End the processes of these panes, which are gone.
     pub(crate) fn end(&mut self, panes: impl IntoIterator<Item = PaneId>) {
         self.backends.kill_all(panes);

@@ -15,7 +15,6 @@
 use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::style::Length;
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, GridCell};
 
 use super::column_card::ColumnCard;
@@ -34,7 +33,6 @@ pub(crate) struct WorkspaceRow<'a> {
     pub(crate) gap: f64,
     /// The pane a back-and-forth binding would return to, if it is in this workspace.
     pub(crate) previous: Option<PaneId>,
-    pub(crate) theme: &'a GuiTheme,
     pub(crate) cb: &'a ExposeCallbacks,
 }
 
@@ -97,7 +95,6 @@ impl WorkspaceRow<'_> {
                 ws_idx: ws.ws_idx,
                 previous: self.previous,
                 next_of: &next_of,
-                theme: self.theme,
                 cb: self.cb,
             }
             .build();
@@ -129,7 +126,6 @@ impl WorkspaceRow<'_> {
                 // everywhere else.
                 col_idx: ws.columns.len().saturating_sub(1),
                 next: next_of(float.pane_id),
-                theme: self.theme,
                 cb: self.cb,
             }
             .build();
@@ -162,7 +158,7 @@ mod tests {
     use super::*;
     use crate::chrome::surfaces::expose::model::{ExposeColumn, ExposeFloating, ExposePane};
     use crate::chrome::surfaces::expose::pane_card::pane_key;
-    use crate::chrome::surfaces::expose::testing::{callbacks, card_of, lay_out, theme};
+    use crate::chrome::surfaces::expose::testing::{callbacks, card_of, lay_out};
     use heca_core::layout::PaneId;
 
     fn pane(id: u64, h: f64) -> ExposePane {
@@ -200,7 +196,6 @@ mod tests {
 
     fn row(ws: &ExposeWorkspace, widest: f64, w: f64, h: f64) -> heca_grid_ui::WidgetModel {
         let (cb, _sink) = callbacks();
-        let theme = theme();
         let (row, _cells) = WorkspaceRow {
             workspace: ws,
             previous: None,
@@ -208,7 +203,6 @@ mod tests {
             // No air, so an assertion reads against the numbers it was given rather than against
             // the gap as well. The gap has its own test in `ExposeGrid`.
             gap: 0.0,
-            theme: &theme,
             cb: &cb,
         }
         .build();

@@ -53,6 +53,10 @@ impl Inbox {
     }
 }
 
+/// The event a launch report carries — heca's own, never a program's, so no `feedback_events` list
+/// names it and starting an agent makes no sound.
+pub(super) const LAUNCHED_EVENT: &str = "heca.launched";
+
 pub(super) struct ReportReader {
     launch: Option<crate::backend::ProcessLaunch>,
     path: PathBuf,
@@ -89,6 +93,30 @@ impl ReportReader {
     pub(super) fn with_launch(mut self, launch: crate::backend::ProcessLaunch) -> Self {
         self.launch = Some(launch);
         self
+    }
+
+    /// **The agent has started** — the report heca makes for it, in `status`, stamped by its driver
+    /// like one the agent wrote, so its line shows from launch. `None` for an empty status (nothing
+    /// until the agent reports).
+    pub(super) fn launched(&self, status: &str) -> Option<AgentState> {
+        if status.is_empty() {
+            return None;
+        }
+        let mut state = AgentState::new(
+            self.driver.id(),
+            self.driver.name(),
+            super::AgentStatus::new(status),
+        );
+        state.event = Some(LAUNCHED_EVENT.to_owned());
+        // A resumed program is already in a conversation: keep it from launch, so it survives
+        // however soon the program is closed — even before it reports anything itself.
+        state.session_id = self
+            .launch
+            .as_ref()
+            .and_then(|launch| self.driver.session_of(launch));
+        state.launch.clone_from(&self.launch);
+        super::registry::stamp(self.driver.as_ref(), &mut state);
+        Some(state)
     }
 
     fn read(&mut self, inbox: &Inbox) -> io::Result<()> {

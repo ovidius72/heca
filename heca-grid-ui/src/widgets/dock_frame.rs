@@ -227,11 +227,7 @@ impl DockFrame {
             }
         };
         let chevron_text = self.chevron;
-        let chevron = move || {
-            Label::new("")
-                .with_text_signal(chevron_text)
-                .area(CHEVRON_AREA)
-        };
+        let chevron = move || Label::new("").text(chevron_text).area(CHEVRON_AREA);
         let mut take = |name: &str| {
             self.part_mut(TOGGLE_AREA)
                 .and_then(|toggle| crate::component::area_slot(toggle.base_mut(), name))
@@ -690,7 +686,7 @@ impl Component for DockFrame {
         }
         let radius = cx.theme().colors.border_radius;
         let b = self.base.bounds;
-        let fill = self.base.style.visual.fill;
+        let fill = self.base.style.visual.fill_in(cx.theme());
 
         // Background fill — rounded by theme radius. An explicit `.glow(..)`
         // (StyleExt) wins; otherwise the theme rest glow gives the frame the

@@ -36,6 +36,10 @@ pub(super) fn run_show_config() -> String {
                 .iter()
                 .map(|s| format!("{} = {}  # {}", s.key, s.value, s.file.display()))
                 .collect();
+            // Keys a file sets that heca does not read: said, never dropped in silence.
+            for (path, unread) in &found.unread {
+                lines.push(format!("# {}: {unread}", path.display()));
+            }
             if let Some(path) = found.untrusted_project {
                 lines.push(format!(
                     "# {} (not trusted, ignored) — run `heca --trust` in that folder to apply it",

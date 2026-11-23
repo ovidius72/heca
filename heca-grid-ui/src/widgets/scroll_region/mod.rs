@@ -237,6 +237,9 @@ pub struct ScrollInfo<'a> {
 /// descendant consumed the event.
 pub struct ScrollRegion {
     base: Base,
+    /// How many of the **last** children are pinned ([`pinned`](Self::pinned)): drawn over the
+    /// content, out of its flow, and never scrolled.
+    pinned: usize,
     /// Which axes scroll (default [`ScrollAxes::Vertical`]).
     axes: ScrollAxes,
     /// Follow new content only when the viewport was at its previous bottom.
@@ -341,7 +344,17 @@ impl Default for ScrollRegion {
 }
 impl LayoutExt for ScrollRegion {}
 impl StyleExt for ScrollRegion {}
-impl Parent for ScrollRegion {}
+impl Parent for ScrollRegion {
+    /// Content goes **before** the pinned children, whatever order the builders were called in —
+    /// so `.pinned(hint).child(rows)` and `.child(rows).pinned(hint)` are the same region.
+    fn child(mut self, c: impl crate::builders::IntoChildren) -> Self {
+        let at = self.base.children.len() - self.pinned;
+        let pinned: Vec<_> = self.base.children.drain(at..).collect();
+        c.attach(&mut self.base);
+        self.base.children.extend(pinned);
+        self
+    }
+}
 
 #[cfg(test)]
 mod tests;

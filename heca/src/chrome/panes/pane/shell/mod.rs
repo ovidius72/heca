@@ -60,7 +60,6 @@ impl<C: heca_grid_ui::builders::IntoChildren> PaneShell<'_, C> {
             border_width,
             border_radius,
             content_inset,
-            accent,
             active_glow,
             ..
         } = *self.model;
@@ -75,21 +74,21 @@ impl<C: heca_grid_ui::builders::IntoChildren> PaneShell<'_, C> {
             .width(heca_grid_ui::Length::Percent(1.0))
             .height(heca_grid_ui::Length::Percent(1.0))
             .padding(content_inset)
-            .border(to_gui_color(border_color), border_width)
+            .border(border_color, border_width)
             .radius(border_radius)
             // What it holds is cut to its round corners, wherever it is drawn — in its column, or
             // as the picture carried under the pointer.
             .clip_children(true);
         if active {
-            pane = pane.glow_with(to_gui_color(border_color), active_glow.0, active_glow.1);
+            pane = pane.glow_with(border_color, active_glow.0, active_glow.1);
         }
         // A floating pane covers what is under it, in its own paint: a fill, or a blur of what lies
         // beneath — no host step has to draw either between the panes.
         if let Some(float) = self.model.float {
             pane = if float.frost > 0.0 {
-                pane.frosted(float.frost)
+                pane.blur(float.frost)
             } else {
-                pane.background(to_gui_color(float.background))
+                pane.background(float.background)
             };
         }
 
@@ -174,8 +173,10 @@ impl<C: heca_grid_ui::builders::IntoChildren> PaneShell<'_, C> {
             // Centred over the pane, which is where the letter is today and what the maintainer
             // expects. `TopCenter` is for compact square targets; a pane is the large-target case.
             .hint_placement(HintPlacement::Center)
-            // The theme accent, not the ambient one: see `PaneShellModel::accent`.
-            .hint_color(to_gui_color(accent))
+            // **The letter is the theme's accent, not the pane's.** A pane publishes its border
+            // colour as the accent of what it holds; a letter says "press this to go here", which
+            // is not a pane state, so it asks for the theme's own accent by meaning.
+            .hint_tone(heca_grid_ui::Tone::Accent)
             .on_hint(heca_grid_ui::Hint::of(picked, move || pick(pane_id)))
     }
 }
@@ -197,7 +198,7 @@ fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
 /// This is the third thing in this file to move out of the rebuild key for the same reason; the
 /// other two are the rect and the header's words, each with the same story.
 pub(crate) fn focus_state_to(root: &mut dyn heca_grid_ui::Component, model: &PaneShellModel) {
-    let color = to_gui_color(model.border_color);
+    let color = model.border_color;
     let base = root.base_mut();
     base.focus_fallback = model.active;
     if let Some(border) = base.style.visual.border.as_mut() {
@@ -208,7 +209,7 @@ pub(crate) fn focus_state_to(root: &mut dyn heca_grid_ui::Component, model: &Pan
         radius: model.active_glow.0,
         intensity: model.active_glow.1,
     });
-    base.hint_style.color = Some(to_gui_color(model.accent));
+    base.hint_style.tone = Some(heca_grid_ui::Tone::Accent);
     // **A pane re-tints what it holds by publishing its hue, not by swapping the theme.**
     //
     // An active pane really does mean to re-accent its contents — that is its identity. It used to
@@ -217,15 +218,6 @@ pub(crate) fn focus_state_to(root: &mut dyn heca_grid_ui::Component, model: &Pan
     // paint one. Published as a tone, the hue reaches the same widgets through the ordinary walk,
     // so who paints the pane stops mattering.
     base.style.visual.accent = Some(color);
-}
-
-fn to_gui_color(color: [f32; 4]) -> heca_grid_ui::Color {
-    heca_grid_ui::Color::new(
-        (color[0] * 255.0) as u8,
-        (color[1] * 255.0) as u8,
-        (color[2] * 255.0) as u8,
-        (color[3] * 255.0) as u8,
-    )
 }
 
 #[cfg(test)]

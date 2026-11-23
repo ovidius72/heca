@@ -24,21 +24,13 @@ pub(crate) struct PaneShellModel {
     pub(crate) active: bool,
     /// Frame style from `[appearance.pane] border_style`.
     pub(crate) frame: heca_config::appearance::BorderStyle,
-    pub(crate) border_color: [f32; 4],
+    pub(crate) border_color: heca_grid_ui::Color,
     pub(crate) border_width: f32,
     pub(crate) border_radius: f32,
     /// Inner padding reserved for the content that draws inside the frame.
     pub(crate) content_inset: f32,
-    /// The **theme accent**, for the pick keycap.
-    ///
-    /// Carried explicitly because the pane is painted with a doctored theme whose `accent` is set
-    /// to *this pane's border colour* — so a keycap left on the default tint comes out dim on an
-    /// inactive pane and unreadable. A letter says "press this to go here"; it is not a pane-state
-    /// colour, so it must not follow the border.
-    pub(crate) accent: [f32; 4],
     /// The halo an **active** pane wears: its falloff radius and strength, from the theme's
-    /// `active_glow_radius` / `active_glow_strength`. Carried here, like the accent, because the
-    /// pane is painted with a doctored theme and must not read them from it.
+    /// `active_glow_radius` / `active_glow_strength`.
     pub(crate) active_glow: (f32, f32),
     /// What only a **floating** pane wears: it covers what is under it, so it fills itself or
     /// frosts what lies beneath. `None` for a pane in a column.
@@ -51,7 +43,7 @@ pub(crate) struct PaneShellModel {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct FloatLook {
     /// The fill, when the pane is solid.
-    pub(crate) background: [f32; 4],
+    pub(crate) background: heca_grid_ui::Color,
     /// Blur what lies beneath by this many logical px instead of filling; `0.0` is solid.
     pub(crate) frost: f32,
 }

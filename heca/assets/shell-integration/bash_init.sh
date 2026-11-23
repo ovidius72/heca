@@ -70,6 +70,9 @@ heca__prompt_command() {
   heca__emit_cwd
   HECA_HAVE_PREEXEC=0
   HECA_LAST_COMMAND=""
+  # Forget where commands were found: an agent turned on after this shell started puts its launcher
+  # in $HECA_AGENT_BIN, and bash would keep running the program it found first.
+  [ -n "${HECA_AGENT_BIN:-}" ] && hash -r
   if [ -n "$HECA_OLD_PROMPT_COMMAND" ]; then
     eval "$HECA_OLD_PROMPT_COMMAND"
   fi

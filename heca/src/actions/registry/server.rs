@@ -150,6 +150,20 @@ impl ActionRegistry {
             confirm,
             store,
         } = resolving;
+        // **The arguments in the types the action declares**, once, here — the door every action a
+        // server runs passes, a service's own and each follow-up included — as the window's and
+        // the RPC line's doors do (`ActionMeta::typed_args`). A handler reads a declared `Int` as
+        // an `Int` whoever sent it, and no service parses text-or-number for itself.
+        let typed;
+        let intent = match catalog.find(&intent.action) {
+            Some(meta) => {
+                let mut copy = intent.clone();
+                copy.args = meta.typed_args(std::mem::take(&mut copy.args));
+                typed = copy;
+                &typed
+            }
+            None => intent,
+        };
         let name = &intent.action;
         let action = check_server_intent(catalog, confirm, intent, gate.is_external())?;
         gate.permit(intent, parent)?;

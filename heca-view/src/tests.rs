@@ -380,8 +380,8 @@ fn an_event_is_bound_and_read_by_the_one_vocabulary() {
     );
     assert_eq!(
         ViewEvent::ALL.len(),
-        27,
-        "press, hint, change, submit, toggle, dismiss, action, activate, move, resize, and the 17 \
-         native events a node binds by the native name (double_click … drop)"
+        28,
+        "press, hint, change, submit, toggle, dismiss, action, activate, move, resize, and the 18 \
+         native events a node binds by the native name (double_click … drop, edge_scroll)"
     );
 }

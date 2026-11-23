@@ -1,6 +1,6 @@
 //! Focus moves: columns, panes and workspaces, and the focus toggles.
 
-use crate::app::focus::focus_pane_by_id;
+use crate::app::focus::{find_pane_workspace, focus_pane_by_id};
 use crate::app_state::AppState;
 use crate::input::WmAction;
 use crate::switch_workspace_tracked;
@@ -94,6 +94,21 @@ pub fn handle_focus_toggle_global(
         if prev_ws != current_ws {
             switch_workspace_tracked(state, prev_ws);
         }
+    }
+    Ok(())
+}
+
+/// **Back to the last pane you were in, wherever it is** — another workspace included. Run again, it
+/// returns, like switching between two windows. A pane that has closed since is no answer.
+pub fn handle_focus_toggle_last(
+    state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
+    if let Some(last) = state.last_focused
+        && Some(last) != state.focused_pane
+        && find_pane_workspace(&state.session, last).is_some()
+    {
+        focus_pane_by_id(state, last);
     }
     Ok(())
 }

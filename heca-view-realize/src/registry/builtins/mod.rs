@@ -1,6 +1,7 @@
 //! Built-in registration definitions: one factory/metadata entry per supported widget.
 
-use heca_grid_ui::builders::{EventExt, IdentityExt};
+use heca_grid_ui::builders::EventExt;
+use heca_grid_ui::builders::IdentityExt;
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
 use heca_grid_ui::{
     Action, Alert, Badge, BadgeButton, Button, Card, Checkbox, Choice, DockFrame, Flex, Gauge,
@@ -92,6 +93,7 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
             .children(),
         WidgetDefinition::new(WidgetId::Surface, containers::surface)
             .names("Surface", "Surface")
+            .properties::<Surface>()
             .children(),
         WidgetDefinition::new(WidgetId::Panel, containers::panel)
             .names("Panel", "Panel")
@@ -145,6 +147,7 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
         WidgetDefinition::new(WidgetId::Alert, display::alert)
             .names("Alert", "Alert")
             .properties::<Alert>(),
+        WidgetDefinition::new(WidgetId::EdgeHint, display::edge_hint).names("EdgeHint", "EdgeHint"),
         WidgetDefinition::new(WidgetId::StatusDot, display::status_dot)
             .names("StatusDot", "StatusDot")
             .properties::<StatusDot>()

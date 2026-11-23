@@ -2,7 +2,7 @@
 //! without rebuilding the tree.
 
 use crate::component::{Base, Component, PaintCx};
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet, signal};
 
 /// A wrapper that toggles one child's layout and paint presence from a boolean signal.
 ///
@@ -50,12 +50,19 @@ impl Visibility {
         }
     }
 
-    /// **Whether the child shows** (default `true`). Hidden means gone from the layout, not only
-    /// unpainted. Change it later through [`visible_signal`](Self::visible_signal).
-    pub fn visible(mut self, visible: bool) -> Self {
-        self.visible.set(visible);
-        self.seen = visible;
-        self.apply(visible);
+    /// **Whether the child shows** (default `true`) — a `bool`, or a value that changes (a
+    /// `Signal<bool>`, a `Memo<bool>`, a function reading signals), followed in place. Hidden means
+    /// gone from the layout, not only unpainted.
+    ///
+    /// ```ignore
+    /// Visibility::new().visible(move || facts().git.is_some()).child(git_row)
+    /// ```
+    pub fn visible(mut self, visible: impl crate::builders::IntoBoolValue) -> Self {
+        let visible = visible.into_bool_value();
+        let now = visible.now();
+        self.seen = now;
+        self.apply(now);
+        visible.show_in(self.visible);
         self
     }
 

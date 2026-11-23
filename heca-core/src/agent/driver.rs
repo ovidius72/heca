@@ -95,6 +95,14 @@ pub trait AgentDriver: Send + Sync {
         None
     }
 
+    /// **The conversation `launch` continues**, when it is a resume — the id given to the program's
+    /// own "resume this session" (`claude --resume <id>`, `codex resume <id>`). The host records it
+    /// from launch, so a program that reports its identity only once a turn starts still keeps the
+    /// conversation it was resumed into, however soon it is closed again. The default is `None`.
+    fn session_of(&self, _launch: &ProcessLaunch) -> Option<String> {
+        None
+    }
+
     /// Read a status report. Return `None` for unrelated input; do not infer a state from it.
     ///
     /// # Errors

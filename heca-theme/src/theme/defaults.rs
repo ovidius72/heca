@@ -62,7 +62,7 @@ pub(super) fn default_overlay_frost_radius() -> f32 {
 pub(super) fn default_float_bg() -> Color {
     Color::new(49, 50, 68, 255)
 }
-pub(super) fn default_float_accent() -> Color {
+pub(super) fn default_float_pane_border() -> Color {
     Color::new(137, 180, 250, 255)
 }
 pub(super) fn default_float_focus() -> Color {

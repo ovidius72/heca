@@ -46,10 +46,11 @@ impl Component for ScrollRegion {
         // surface, carries no glow). A STYLED region (a scrollable panel) without an
         // explicit `.glow(..)` falls back to the theme rest glow, like every surface.
         let s = &self.base.style;
-        if (s.visual.fill.is_some() || s.visual.border.is_some()) && s.visual.glow.is_none() {
+        let fill = s.visual.fill_in(cx.theme());
+        if (fill.is_some() || s.visual.border.is_some()) && s.visual.glow.is_none() {
             cx.rect(
                 vp,
-                s.visual.fill.unwrap_or(crate::color::Color::TRANSPARENT),
+                fill.unwrap_or(crate::color::Color::TRANSPARENT),
                 s.visual.border,
                 s.visual.radius,
                 cx.rest_glow(SURFACE_GLOW_RADIUS),
@@ -239,6 +240,7 @@ impl Component for ScrollRegion {
             animating |= child.tick(dt);
         }
         animating |= self.advance_eased(dt);
+        self.tell_pinned();
         let mut fire: Option<(bool, Point)> = None;
         if let Some(tr) = &mut self.track_repeat {
             tr.next_in -= dt;
@@ -265,5 +267,88 @@ impl Component for ScrollRegion {
             }
         }
         animating
+    }
+}
+
+impl ScrollRegion {
+    /// **Tell the pinned children what is out of sight, and do the reveal one asks for.** Rows that
+    /// want attention (a repeating flash) above the viewport or below it are counted, with the tone
+    /// the nearest on each side asks in; a reveal brings the nearest on that side into view and
+    /// picks it, as its letter would.
+    fn tell_pinned(&mut self) {
+        if self.pinned == 0 {
+            return;
+        }
+        let viewport = self.base.bounds;
+        let (top, bottom) = (viewport.loc.y, viewport.loc.y + viewport.size.h);
+        let mut above: Vec<Attention> = Vec::new();
+        let mut below: Vec<Attention> = Vec::new();
+        for (i, child) in self.content().iter().enumerate() {
+            collect_attention(child.as_ref(), &mut vec![i], &mut |found| {
+                if found.rect.loc.y + found.rect.size.h <= top {
+                    above.push(found);
+                } else if found.rect.loc.y >= bottom {
+                    below.push(found);
+                }
+            });
+        }
+        // Nearest first: the lowest of those above, the highest of those below.
+        above.sort_by(|a, b| b.rect.loc.y.total_cmp(&a.rect.loc.y));
+        below.sort_by(|a, b| a.rect.loc.y.total_cmp(&b.rect.loc.y));
+        let facts = crate::widgets::ScrollFacts {
+            attention_above: above.len(),
+            attention_below: below.len(),
+            tone_above: above.first().map(|found| found.tone),
+            tone_below: below.first().map(|found| found.tone),
+        };
+        let content = self.content_len();
+        let mut reveal = None;
+        for child in self.base.children[content..].iter_mut() {
+            child.scroll_facts(facts);
+            reveal = reveal.or(child.take_reveal());
+        }
+        let nearest = match reveal {
+            Some(crate::widgets::RevealEdge::Above) => above.into_iter().next(),
+            Some(crate::widgets::RevealEdge::Below) => below.into_iter().next(),
+            None => None,
+        };
+        if let Some(Attention { rect, path, .. }) = nearest {
+            self.ensure_visible(rect);
+            // **Activated as a pick is**: the keyboard goes where a press would, then the row's own
+            // declaration or click runs — the one path every pick and letter takes.
+            crate::hint::fire_hint(self, &path);
+        }
+    }
+}
+
+/// A descendant asking for attention: where it is on screen, its path from the region's content,
+/// and the tone it asks in.
+struct Attention {
+    rect: crate::Rectangle,
+    path: Vec<usize>,
+    tone: crate::Tone,
+}
+
+/// Every descendant of `node` that wants attention.
+fn collect_attention(
+    node: &dyn Component,
+    path: &mut Vec<usize>,
+    found: &mut dyn FnMut(Attention),
+) {
+    if !node.is_shown() {
+        return;
+    }
+    if let Some(tone) = crate::flash::attention(node.base()) {
+        found(Attention {
+            rect: node.base().bounds,
+            path: path.clone(),
+            tone,
+        });
+        return;
+    }
+    for (i, child) in node.base().children.iter().enumerate() {
+        path.push(i);
+        collect_attention(child.as_ref(), path, found);
+        path.pop();
     }
 }

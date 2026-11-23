@@ -11,7 +11,7 @@ use heca_core::layout::Rectangle;
 /// are **about** that widget rather than about a place: enter, leave, focus, mount. There is no
 /// path to walk, and a widget sees them through the same two hooks as everything else.
 pub(super) fn deliver_self(node: &mut dyn Component, ev: &Event) {
-    if node.on_event_capture(ev) == Handled::Yes {
+    if crate::component::own_capture(node, ev) == Handled::Yes {
         return;
     }
     let _ = crate::component::react(node, ev);
@@ -27,7 +27,7 @@ pub(super) fn deliver_self(node: &mut dyn Component, ev: &Event) {
 /// [`Handled::Yes`], or a handler by calling
 /// [`EventCx::stop_propagation`](crate::event::EventCx::stop_propagation).
 pub fn deliver_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
-    if node.on_event_capture(ev) == Handled::Yes {
+    if crate::component::own_capture(node, ev) == Handled::Yes {
         return Handled::Yes;
     }
     if claims_primary_press(node, ev) {
@@ -133,6 +133,7 @@ impl Base {
             return crate::event::HandlerOutcome {
                 handled: Handled::No,
                 default_prevented: false,
+                captures_pointer: false,
             };
         }
         let route = self.dispatch_to.clone();
@@ -142,11 +143,15 @@ impl Base {
                 if out.default_prevented {
                     note_default_prevented();
                 }
+                if out.captures_pointer {
+                    self.pointer.capture.set(true);
+                }
                 out
             }
             None => crate::event::HandlerOutcome {
                 handled: Handled::No,
                 default_prevented: false,
+                captures_pointer: false,
             },
         }
     }

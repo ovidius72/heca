@@ -69,7 +69,7 @@ pub(super) fn input(
     Ok({
         let mut input = with_props(Input::new().value(text_of(node)), node, theme);
         if let Some(name) = name_prop(node) {
-            let sig = input.text();
+            let sig = input.text_signal();
             cx.forms.bind(
                 name.clone(),
                 Box::new(move || PropValue::Text(sig.get_untracked())),

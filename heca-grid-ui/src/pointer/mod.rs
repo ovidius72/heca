@@ -110,6 +110,9 @@ pub struct PointerState {
     /// Set on the widget that consumed a [`PointerDown`](Event::PointerDown): moves and the
     /// release route here until the button comes up.
     capture: Cell<bool>,
+    /// Where the pointer last was while this widget held it — what
+    /// [`edge_scroll`] measures against the widget's bounds every frame, when no move arrives.
+    held_at: Cell<Option<RawPointer>>,
     /// The live press this widget is the target of: where it landed, and with which button.
     press: Cell<Option<(Point, PointerButton)>>,
     /// The click run: when the last press landed and how many it made. Kept **after** the release,
@@ -140,6 +143,7 @@ impl PointerState {
             hovered: signal(false),
             hovered_since: Cell::new(None),
             capture: Cell::new(false),
+            held_at: Cell::new(None),
             press: Cell::new(None),
             run: Cell::new(None),
             dragging: Cell::new(false),
@@ -270,6 +274,9 @@ fn retarget_hover(root: &mut dyn Component, raw: &RawPointer) -> Option<Path> {
 fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let target = retarget_hover(root, raw);
     let capture = capture_path(root);
+    if let Some(path) = &capture {
+        node_at(root, path).base().pointer.held_at.set(Some(*raw));
+    }
     let mut handled = Handled::No;
     // A gesture in flight owns the pointer: it hears the move wherever the cursor went. Otherwise
     // the move belongs to whatever is under it now.
@@ -337,6 +344,10 @@ fn route_press(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     if handled == Handled::Yes {
         // Whoever took the press owns the rest of the gesture.
         set_capture(root, &path);
+    }
+    // Taken, or held without taking it (`EventCx::capture_pointer`): remember where it began.
+    if let Some(held) = capture_path(root) {
+        node_at(root, &held).base().pointer.held_at.set(Some(*raw));
     }
     handled
 }
@@ -463,6 +474,74 @@ fn cancel(root: &mut dyn Component, raw: &RawPointer) {
     }
     clear_press(root);
     clear_capture(root);
+}
+
+// ─────────────────────────────── edge scroll ───────────────────────────────
+
+/// **How fast a drag past a widget's edge scrolls it** — the host's setting (`[settings]
+/// edge_scroll_distance` / `edge_scroll_speed`), handed to [`edge_scroll`] each frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgeScroll {
+    /// How far outside the widget, in logical pixels, the pointer must be for full speed. Nearer, it
+    /// scrolls proportionally slower.
+    pub distance: f32,
+    /// Full speed, in logical pixels per second.
+    pub speed: f32,
+}
+
+/// **Whether a widget is holding the pointer** — a press it took, or kept with
+/// [`EventCx::capture_pointer`](crate::event::EventCx::capture_pointer), whose button is not up yet.
+/// A host asks this before cancelling the gesture when the pointer leaves the window: the system
+/// keeps sending a held drag's moves and release from outside it, so a selection dragged past the
+/// window's edge keeps growing instead of being dropped.
+pub fn pointer_held(root: &dyn Component) -> bool {
+    capture_path(root).is_some()
+}
+
+/// **Run once a frame by the host**: if a widget holds the pointer and the pointer is outside it,
+/// that widget hears [`Event::EdgeScroll`] with how far to scroll this frame — nothing has to move
+/// the mouse for a selection to keep growing. Returns whether it is still scrolling, so the host
+/// keeps asking for frames while the pointer stays outside.
+pub fn edge_scroll(root: &mut dyn Component, dt: f32, setting: EdgeScroll) -> bool {
+    let Some(path) = capture_path(root) else {
+        return false;
+    };
+    let node = node_at(root, &path);
+    let Some(raw) = node.base().pointer.held_at.get() else {
+        return false;
+    };
+    let bounds = node.base().bounds;
+    let past = |at: f64, start: f64, size: f64| -> f32 {
+        if at < start {
+            (at - start) as f32
+        } else if at > start + size {
+            (at - start - size) as f32
+        } else {
+            0.0
+        }
+    };
+    let over_x = past(raw.pos.x, bounds.loc.x, bounds.size.w);
+    let over_y = past(raw.pos.y, bounds.loc.y, bounds.size.h);
+    if over_x == 0.0 && over_y == 0.0 {
+        return false;
+    }
+    let step = |over: f32| -> f32 {
+        let share = if setting.distance > 0.0 {
+            (over.abs() / setting.distance).min(1.0)
+        } else {
+            1.0
+        };
+        over.signum() * share * setting.speed * dt
+    };
+    let mut ev = pointer_event(&raw, 0);
+    ev.delta_x = 0.0;
+    ev.delta_y = 0.0;
+    ev.delta_pixels = Some((
+        if over_x == 0.0 { 0.0 } else { step(over_x) },
+        if over_y == 0.0 { 0.0 } else { step(over_y) },
+    ));
+    let _ = deliver_targeted(root, &path, Event::EdgeScroll(ev));
+    true
 }
 
 // ─────────────────────────────── hit-testing ───────────────────────────────
@@ -628,7 +707,10 @@ fn set_capture(root: &dyn Component, path: &[usize]) {
 }
 
 fn clear_capture(root: &dyn Component) {
-    walk(root, &|c| c.base().pointer.capture.set(false));
+    walk(root, &|c| {
+        c.base().pointer.capture.set(false);
+        c.base().pointer.held_at.set(None);
+    });
 }
 
 fn clear_press(root: &dyn Component) {

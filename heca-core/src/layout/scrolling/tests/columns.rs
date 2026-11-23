@@ -505,3 +505,41 @@ fn a_swapped_column_is_kept_on_screen_at_the_edges() {
         }
     }
 }
+
+/// **Moving a column's left edge leaves the view where it was**, as every window sees it from the
+/// server: the boundary trades width between the two columns, so the active column's right edge and
+/// everything left of the pair stay put on screen — no empty space opens at the left of the strip.
+/// The two widths used to reach a window as two resizes, read as a move of columns, and the view
+/// jumped by what the boundary moved.
+#[test]
+fn moving_a_left_edge_keeps_the_view_and_the_active_right_edge_in_place() {
+    use crate::layout::scrolling::SpaceEffect;
+    let mut s = space_with_columns(3);
+    s.m().activate_column(1);
+    let screen = |s: &Seen| {
+        let r = s.r();
+        (r.view_pos(), r.column_x(2) - r.view_pos())
+    };
+    let (view_before, right_edge_before) = screen(&s);
+    for delta in [-0.1, 0.1] {
+        let before = s.r().positions();
+        let width = s.view.area.size.w;
+        let effects = s.space.move_left_boundary(1, delta, width);
+        assert!(!effects.is_empty(), "the boundary moved");
+        // As a window gets them from the server: one change per effect, each shown against where
+        // things were before the key was pressed.
+        let Seen { space, view, .. } = &mut s;
+        for effect in effects {
+            view.react_to(space, &[SpaceEffect::Column(effect)], &before);
+        }
+        let (view_now, right_edge_now) = screen(&s);
+        assert!(
+            (view_now - view_before).abs() < 0.5,
+            "the view stays ({view_before} → {view_now}, delta {delta})"
+        );
+        assert!(
+            (right_edge_now - right_edge_before).abs() < 0.5,
+            "the active column's right edge stays on screen ({right_edge_before} → {right_edge_now}, delta {delta})"
+        );
+    }
+}

@@ -36,7 +36,7 @@ active_wash_alpha = 0.0
 card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }
 float_background = "#313244"
-float_accent = "#89b4fa"
+float_pane_border = "#89b4fa"
 float_focus = "#fab387"
 drag_ghost_bg = "#89b4fad9"
 drag_ghost_fg = "#ffffff"

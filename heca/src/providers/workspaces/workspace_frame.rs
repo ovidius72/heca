@@ -15,9 +15,11 @@ use super::{
     row_hint, workspace_key, workspace_row_items,
 };
 use heca_grid_ui::Tone;
+use heca_grid_ui::builders::PresenceExt;
 use heca_grid_ui::builders::{DragExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent};
 use heca_grid_ui::style::Spacing;
-use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement};
+use heca_grid_ui::style::WidgetSize;
+use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, Label};
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
 /// whose body is the workspace's columns followed by its floating panes.
@@ -76,7 +78,16 @@ impl WorkspaceFrame<'_> {
                         .arg("ws_idx", crate::chrome::PropValue::Int(ws_idx as i64)),
                 );
             })
-            .header_actions(badge);
+            .header_actions(badge)
+            // Its number, as a key would name it — shown while `workspace_numbers` is on.
+            .leading({
+                let numbers = seams.ws_state.workspace_numbers;
+                // Quiet and small: an index beside the name, never read as part of it.
+                Label::new(workspace_number(ws_idx))
+                    .size(WidgetSize::Caption)
+                    .muted(true)
+                    .hidden(move || !heca_grid_ui::reactive::SignalGet::get(&numbers))
+            });
         // Keep the active identity live. The theme may enable a workspace-wide wash through
         // `active_wash_alpha` (off by default); the count badge also identifies this workspace.
         dock = dock.active(active_ws);
@@ -202,6 +213,42 @@ mod tests {
         }
     }
 
+    /// **The position number is quiet, the name is not** — the number is drawn in the theme's
+    /// muted tone so it reads as an index beside the name ("1  Workspace 1"), never as part of it.
+    #[test]
+    fn the_position_number_is_drawn_quieter_than_the_name() {
+        let mut fx = Fixture::default();
+        let tree = testing::tree();
+        let frame = {
+            let (seams, mut reg) = fx.split("left");
+            WorkspaceFrame {
+                workspace: &tree.workspaces[0],
+            }
+            .build(&seams, &mut reg)
+        };
+        let mut theme = heca_grid_ui::theme::Theme::default();
+        theme.colors.muted = heca_grid_ui::Color::rgb(0x55, 0x66, 0x77);
+        let mut root = Flex::column().child(frame);
+        let scene = crate::chrome::paint_chrome_root(&mut root, 300.0, 200.0, &theme);
+        let colour_of = |text: &str| {
+            scene.iter().find_map(|c| match c {
+                heca_grid_ui::DrawCommand::Text(t) if t.text == text => Some(t.color),
+                _ => None,
+            })
+        };
+        assert_eq!(
+            colour_of("1"),
+            Some(theme.colors.muted),
+            "the number is muted"
+        );
+        let name = tree.workspaces[0].name.clone();
+        assert_ne!(
+            colour_of(&name),
+            Some(theme.colors.muted),
+            "the name is not"
+        );
+    }
+
     /// The frame's own two states follow focus from the store, for the same reason a row's do:
     /// change them after the frame is built and it follows, with nothing handed to the host.
     #[test]
@@ -232,5 +279,26 @@ mod tests {
             frame.previous_state().get_untracked(),
             "and the one prefix+Shift+i would return to",
         );
+    }
+}
+
+/// **The number a workspace row shows**: 1 to 9, then `0` for the tenth (the keyboard's order),
+/// then 11, 12, … — `ws_idx` counts from 0.
+pub(crate) fn workspace_number(ws_idx: usize) -> String {
+    match ws_idx + 1 {
+        10 => "0".to_string(),
+        n => n.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod number_tests {
+    #[test]
+    fn a_workspace_is_numbered_as_the_keyboard_counts() {
+        let shown: Vec<String> = [0, 1, 8, 9, 10]
+            .into_iter()
+            .map(super::workspace_number)
+            .collect();
+        assert_eq!(shown, ["1", "2", "9", "0", "11"]);
     }
 }

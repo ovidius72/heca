@@ -16,12 +16,27 @@ pub(crate) fn entries(
 ) -> Vec<PaletteEntry> {
     let mut rows: Vec<(bool, PaletteEntry)> = catalog
         .all()
-        .flat_map(|meta| offers(meta).into_iter().map(move |choice| (meta, choice)))
-        .map(|(meta, choice)| {
+        .flat_map(|meta| {
+            let offered = offers(meta);
+            // An action the palette cannot run with a word alone is still listed: choosing it asks
+            // for its arguments, one step each (`arguments.rs`).
+            let rows = if offered.is_empty() {
+                vec![Row::Ask]
+            } else {
+                offered.into_iter().map(Row::Run).collect()
+            };
+            rows.into_iter().map(move |row| (meta, row))
+        })
+        .map(|(meta, row)| {
             let owner = owners.get(&meta.name);
-            let base = match &choice {
-                Some((_, value)) => format!("{} › {value}", meta.label),
-                None => meta.label.clone(),
+            let choice = match &row {
+                Row::Run(choice) => choice.clone(),
+                Row::Ask => None,
+            };
+            let base = match (&choice, &row) {
+                (Some((_, value)), _) => format!("{} › {value}", meta.label),
+                (None, Row::Ask) => format!("{}…", meta.label),
+                (None, Row::Run(_)) => meta.label.clone(),
             };
             let label = match owner {
                 Some(o) => format!("{} › {base}", o.title),
@@ -31,12 +46,13 @@ pub(crate) fn entries(
             if let Some((arg, value)) = &choice {
                 action = action.arg(arg.clone(), PropValue::Text(value.clone()));
             }
-            let intent = match owner {
-                Some(o) => InteractionIntent::FocusContainerThenAction {
+            let intent = match (owner, &row) {
+                (_, Row::Ask) => super::arguments::ask_again(&meta.name, &[]),
+                (Some(o), _) => InteractionIntent::FocusContainerThenAction {
                     container: o.mount.clone(),
                     action,
                 },
-                None => InteractionIntent::View(action),
+                (None, _) => InteractionIntent::View(action),
             };
             // A name alone, or the name and the one word chosen — unique, and the same tomorrow.
             let id = match &choice {
@@ -70,6 +86,13 @@ pub(crate) fn entries(
     rows.into_iter().map(|(_, entry)| entry).collect()
 }
 
+/// One palette row of an action: run it (bare, or with the one word chosen), or ask for its
+/// arguments first.
+enum Row {
+    Run(Option<(String, String)>),
+    Ask,
+}
+
 /// The focused component's actions lead while the query is empty.
 ///
 /// The focused-first rule exists so that focusing a component puts *its* verbs at hand, and
@@ -95,10 +118,8 @@ pub(super) fn group_of(
 ///   one word (`sidebar.left`, `left-sidebar`, `left`) would be the same command three times, so a
 ///   word is kept only when it builds an action no earlier word built; the parser is the judge, and
 ///   there is no second list of "canonical" spellings to keep in step.
-/// - **Anything else** → no row. Thirty-odd built-ins take a target (`close_pane_by_id`,
-///   `move_column`, `float_at`, …); each is the targeted form of an act whose bare form is already
-///   listed, and exists for the surfaces that *do* carry a target — a header button, a context-menu
-///   entry, a drag, an RPC line. Listing one would look like a working command and do nothing.
+/// - **Anything else** → nothing to run with a word alone (empty): [`entries`] lists it as one row
+///   that asks for its arguments, a step each, before running it (`arguments.rs`).
 ///
 /// This is arity, **not policy**: what the current domain permits is judged at dispatch, and what an
 /// action takes is fixed at its declaration — so the rule reads the `args` every action is already

@@ -65,6 +65,7 @@ fn sample(kind: heca_grid_ui::EventKind) -> Event {
             pressed: true,
         },
         K::Scroll => Event::Scroll(p),
+        K::EdgeScroll => Event::EdgeScroll(p),
         K::DragStart => Event::DragStart(drag()),
         K::Drag => Event::Drag(drag()),
         K::DragEnd => Event::DragEnd(drag()),

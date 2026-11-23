@@ -143,7 +143,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "container_id",
-                ArgKind::Text,
+                ArgKind::Dock,
                 "Id of the container to move.",
             ),
             ArgDescriptor::required_enum(
@@ -161,7 +161,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::ArrowLineLeft),
         args: &[ArgDescriptor::required(
             "container_id",
-            ArgKind::Text,
+            ArgKind::Dock,
             "Id of the container to move.",
         )],
     },
@@ -173,7 +173,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::ArrowLineRight),
         args: &[ArgDescriptor::required(
             "container_id",
-            ArgKind::Text,
+            ArgKind::Dock,
             "Id of the container to move.",
         )],
     },
@@ -186,7 +186,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "container_id",
-                ArgKind::Text,
+                ArgKind::Dock,
                 "Id of the container to move.",
             ),
             ArgDescriptor::optional(
@@ -205,7 +205,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "container_id",
-                ArgKind::Text,
+                ArgKind::Dock,
                 "Id of the container to move.",
             ),
             ArgDescriptor::required(

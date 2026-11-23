@@ -30,7 +30,7 @@ fn blank_text_removes_padding_rule_and_parent_gap_without_caller_visibility() {
     let text = signal("Build".to_owned());
     let mut root = Flex::column()
         .gap(Spacing::Sm)
-        .child(Caption::new("").with_text_signal(text).padding(Spacing::Lg))
+        .child(Caption::new("").text(text).padding(Spacing::Lg))
         .child(Label::new("Body"));
     let mut layout = LayoutEngine::new();
     for value in ["Build", "", "  \n ", "Logs"] {
@@ -84,9 +84,9 @@ fn constructor_and_signal_builders_preserve_common_properties_in_either_order() 
         .size(WidgetSize::Normal)
         .gap("sm")
         .padding_x("md")
-        .with_text_signal(text);
+        .text(text);
     let mut last = Caption::new("Build")
-        .with_text_signal(text)
+        .text(text)
         .size(WidgetSize::Normal)
         .gap("sm")
         .padding_x("md");

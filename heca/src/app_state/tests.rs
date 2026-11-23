@@ -5,6 +5,7 @@ fn pane_name_delay_uses_the_same_startup_and_reload_mapping_and_rejects_invalid_
     let mut app = heca_config::loader::AppConfig {
         config: Default::default(),
         theme: Default::default(),
+        theme_problems: Vec::new(),
     };
     assert_eq!(WindowSettings::from_config(&app).pane_name_delay, 1000);
     for millis in [0, 250, u64::MAX] {
@@ -27,6 +28,7 @@ fn folder_case_defaults_and_reload_mapping_do_not_change_other_searches() {
     let mut app = heca_config::loader::AppConfig {
         config: Default::default(),
         theme: Default::default(),
+        theme_problems: Vec::new(),
     };
     let settings = WindowSettings::from_config(&app);
     assert_eq!(settings.folder_search_case, SearchCase::Insensitive);
@@ -42,6 +44,7 @@ fn switching_sessions_with_identical_settings_does_not_reset_presentation() {
     let current = heca_config::loader::AppConfig {
         config: Default::default(),
         theme: Default::default(),
+        theme_problems: Vec::new(),
     };
     assert!(!ReloadReason::Session.requires_apply(&current, &current.clone()));
     assert!(ReloadReason::Explicit.requires_apply(&current, &current.clone()));

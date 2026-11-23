@@ -141,7 +141,14 @@ impl ScrollingSpace {
     }
 
     /// Move the boundary to the left of column `idx` by `delta`: the column before it and this
-    /// one trade width. Says what changed.
+    /// one trade width. Says what changed — **one** effect, on the column before: its left edge is
+    /// the one that did not move, and the pair's total width is unchanged, so a window that keeps
+    /// that edge in place keeps the active column's right edge, and everything else, where it was.
+    ///
+    /// Two `Resized` effects used to be said, one per column. A window shows each against where
+    /// things were before the key, and the second — anchored on the active column's own left edge,
+    /// which the boundary had just moved — scrolled the view by that much and opened empty space at
+    /// the left of the strip.
     pub fn move_left_boundary(
         &mut self,
         idx: usize,
@@ -154,13 +161,12 @@ impl ScrollingSpace {
         ) else {
             return Vec::new();
         };
-        [
-            self.resize_column_by(left, moved, working_width),
-            self.resize_column_by(idx, -moved, working_width),
-        ]
-        .into_iter()
-        .flatten()
-        .collect()
+        let grew = self.resize_column_by(left, moved, working_width);
+        let shrank = self.resize_column_by(idx, -moved, working_width);
+        if grew.is_none() && shrank.is_none() {
+            return Vec::new();
+        }
+        vec![ColumnEffect::Resized { idx: left }]
     }
 
     /// Put `column` at `idx` (the end when past it).

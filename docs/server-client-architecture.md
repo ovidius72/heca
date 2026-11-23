@@ -354,6 +354,15 @@ No handles, no window types, no types from the terminal library.
 
 ---
 
+
+## The server's log
+
+The background server is started with no terminal, so it writes what it says — warnings, failures
+it recovered from — to **`heca.log`** in its own folder, `<data>/heca/servers/<server>/`
+(`~/Library/Application Support/heca/servers/default/` on macOS). The previous run's is kept as
+`heca.log.1`, so a report can include the run that went wrong and the files never grow past two runs.
+A standalone window's server shares the window's process and prints where the window prints.
+
 ## Sessions across a restart
 
 The server keeps its sessions in a file and rebuilds them when it starts, so a session outlives the
@@ -395,9 +404,15 @@ started the way Restart starts one: the one relaunch path decides each terminal.
   `pi --session <id>` (`heca/src/agent/drivers/resume.rs`, one grammar per program beside its driver).
   A non-interactive launch (`claude -p`, `pi -p`, `codex exec`, `opencode run`) is not resumed.
   A terminal whose switch is off gets the user's normal shell.
-- A harness that cannot be resumed — no native id was reported, its driver has no `resume`, or its
+- A harness that reported to heca but never named a conversation had none — Codex and OpenCode name
+  theirs only once a turn starts — and starts again as it was launched, with no notification. (A
+  Codex whose reporting hooks are not approved names nothing either; it then starts fresh, and
+  `/resume` in it brings the old conversation back.) A resumed harness is known to be in its
+  conversation from launch (`AgentDriver::session_of` reads it from the resume words), so it comes
+  back again even if closed before a turn.
+- A harness that cannot be resumed — it never reported at all, its driver has no `resume`, or its
   driver is not registered — gets the user's shell in its folder and a notification says why. It is
-  never started as a new conversation.
+  never started as a new conversation in place of one.
 - A folder that is gone gives a shell in the home folder and the usual notification; a program is not
   run in the wrong folder.
 - A file that is missing is a first start. One that is corrupt or from a newer heca starts the server

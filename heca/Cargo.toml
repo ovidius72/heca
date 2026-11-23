@@ -12,6 +12,8 @@ heca-grid-ui = { path = "../heca-grid-ui" }
 heca-view = { path = "../heca-view" }
 heca-view-realize = { path = "../heca-view-realize" }
 winit.workspace = true
+# Reads the app icon (PNG) for the window and the Dock — `entry::app_icon`.
+image = { version = "0.25", default-features = false, features = ["png"] }
 wgpu = { workspace = true }
 pollster = { workspace = true }
 arboard = "3.6"
@@ -38,8 +40,12 @@ toml = "0.8"
 [target.'cfg(target_os = "macos")'.dependencies]
 raw-window-handle = "0.6"
 objc2 = "0.5.2"
-objc2-foundation = { version = "0.2.2", default-features = false, features = ["std", "NSGeometry", "NSThread", "NSString"] }
-objc2-app-kit = { version = "0.2.2", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSVisualEffectView", "NSAlert", "NSApplication"] }
+objc2-foundation = { version = "0.2.2", default-features = false, features = ["std", "NSGeometry", "NSThread", "NSString", "NSData"] }
+objc2-app-kit = { version = "0.2.2", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSVisualEffectView", "NSAlert", "NSApplication", "NSImage"] }
+
+[target.'cfg(unix)'.dependencies]
+# The background server sends its own messages to its log file (`server/runtime/log.rs`).
+libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-vibrancy = "0.5"

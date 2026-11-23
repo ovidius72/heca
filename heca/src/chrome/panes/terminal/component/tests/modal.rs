@@ -1,6 +1,7 @@
 //! A modal shares the window, not the terminal's input or layout.
 
 use super::*;
+use heca_grid_ui::component::GridKey;
 use heca_grid_ui::reactive::SignalGet;
 use heca_grid_ui::{Command, CommandPalette, KeyPress, Keymap, LayoutEngine, WidgetModel};
 

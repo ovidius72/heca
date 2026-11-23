@@ -113,6 +113,47 @@ arguments. The consequence to design around: our own chrome updates in place thr
 a plugin's change is a new description. Fine for a panel or a dialog; not for something changing
 many times a second, which stays ours.
 
+### What a plugin reads and adds — sessions, palette rows, action arguments
+
+The same doors native extensions use, in their data form. (The sandbox runtime that carries them is
+P022/T075; these are the shapes it carries.)
+
+- **Sessions.** `on("session.changed", …)` — heard on the server and in a window alike — carries
+  what happened (`created` · `renamed` · `terminated` · `restarted` · `deleted`) and the session:
+  its key (lasting), name, folder, state, and how many windows show it and agents run in it. The
+  whole list is plain data, so a plugin's panel lists sessions as any list.
+- **Something at the end of a palette row.** For a palette mode (`"session"`, the `#` list,
+  today) a plugin answers, per row, with a **description** — `palette("session").to_description(..)`
+  — or nothing. heca realizes it into the same widget a native extension's `to_raw` gives; several
+  contributions sit side by side in registration order:
+
+  ```rust
+  plugin.palette("session").to_description(|item| {
+      let session = item.session()?;
+      is_mine(session.key()).then(|| build::Badge::new("pro").variant(heca_view::ViewBadgeVariant::Accent).into())
+  });
+  ```
+- **"More below that wants you."** A plugin's list pins an `edge_hint` in its `scroll`
+  (`slot: "pinned"`): rows with a repeating flash out of sight are counted on the edges, and a click
+  goes to the nearest. Nothing else is written; see
+  [`widgets.md` → EdgeHint](widgets.md#edgehint).
+- **Action arguments.** Declare each argument's kind (`int`, `float`, `bool`, `text`, `enum` with
+  its words, `dock`, `workspace`, `column`, `pane`) and the palette asks for them, one step each —
+  the docks mounted now for a `dock`; the workspaces, columns or panes **by name** for the last three,
+  starting on the one you are in, so Enter means "this one". A `column` lists the columns of the
+  workspace the nearest `workspace` argument before it chose (the current one when none did). A
+  blank `int`/`float`/`text` field shows a row saying what to type. A plugin writes no picker.
+- **Numbers keep full precision** across the boundary and become the builder's type at the end
+  (§ 6), so a timestamp or a large id arrives exact.
+- **An agent's brand mark carries its own solid background**, as the brand draws its app icon
+  (Claude: white on coral; Codex: black on white). The theme is the user's, so a one-colour mark on a
+  transparent background disappears on some theme. Only brand marks keep their own colours;
+  everything else follows the theme.
+
+What stays native-only, because it is a closure (R4): `capture_pointer` / `on_edge_scroll` and a
+`Command::trailing` maker. A plugin gets the behaviour from the widgets that own it (a described
+`Terminal` selects past its edge) and adds to palette rows through `to_description`.
+
 ### What is missing, and where it is tracked
 
 - **Other languages.** Generated type definitions from the host registry metadata. Today a Rust author gets editor help and a JavaScript or Python author gets
@@ -537,7 +578,9 @@ nothing for the letter to run.
 
 ## 6. Values
 
-- Numbers, text and true/false as themselves.
+- Numbers, text and true/false as themselves. A number keeps its **full precision** until the
+  builder takes it: a whole-number property gets it rounded and held inside its range (never
+  wrapped), so a timestamp in milliseconds arrives exact.
 - Enums as their **name**, lower case with underscores: `"space_between"`, `"small"`, `"both"`.
   The enum's own variants are the accepted list, so adding a variant accepts it with no list to
   update anywhere.

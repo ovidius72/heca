@@ -525,3 +525,232 @@ fn input_edit_deletes_char_and_deletes_to_line_start() {
         "EditDeleteToLineStart clears to the start of the line"
     );
 }
+
+/// **A field bound to an outside text shows what is typed, writes it out, and shows what is written
+/// in** — the drawn text, not only the value: the field once wrote the outside signal while its own
+/// label kept showing an empty one.
+#[test]
+fn a_field_bound_to_an_outside_text_draws_and_shares_it_both_ways() {
+    let drawn = |input: &mut Input| -> Vec<String> {
+        LayoutEngine::new().compute(input, Size::new(300.0, 60.0));
+        let theme = Theme::default();
+        let mut scene = heca_grid_ui::Scene::new();
+        {
+            let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(input, &mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|cmd| match cmd {
+                DrawCommand::Text(text) => Some(text.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let query = heca_grid_ui::reactive::signal(String::new());
+    let mut input = Input::new().value(query);
+    give_keyboard(&mut input);
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    type_text(&mut input, "Lib");
+    assert_eq!(
+        query.get_untracked(),
+        "Lib",
+        "what is typed reaches the outside text"
+    );
+    assert!(
+        drawn(&mut input).iter().any(|t| t == "Lib"),
+        "and the field draws it"
+    );
+    query.set("Movies".into());
+    assert!(
+        drawn(&mut input).iter().any(|t| t == "Movies"),
+        "what is written in is drawn"
+    );
+}
+
+/// **A clearable field shows an × while it holds text, and a click on it empties the field** —
+/// reported through `on_change` like typing, with the keyboard still in the field, and the × gone
+/// once the field is empty. Found by what is drawn.
+#[test]
+fn a_clearable_fields_cross_empties_it_and_keeps_the_keyboard() {
+    use heca_grid_ui::{Action, SignalData, widgets::Glyph};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let said: Rc<RefCell<Vec<String>>> = Rc::default();
+    let sink = said.clone();
+    let mut input = Input::new().clearable(true).on_change(move |a: Action| {
+        if let SignalData::String(text) = a.data {
+            sink.borrow_mut().push(text);
+        }
+    });
+    give_keyboard(&mut input);
+    let size = Size::new(300.0, 60.0);
+    LayoutEngine::new().compute(&mut input, size);
+    let cross = Glyph::XCircle
+        .primary_char()
+        .expect("the × has a glyph")
+        .to_string();
+    let cross_at = |input: &mut Input| {
+        LayoutEngine::new().compute(input, size);
+        let theme = Theme::default();
+        let mut scene = heca_grid_ui::Scene::new();
+        heca_grid_ui::paint_child(input, &mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+        scene.iter().find_map(|c| match c {
+            DrawCommand::Text(t) if t.text.starts_with(&cross) => Some(t.rect),
+            _ => None,
+        })
+    };
+    assert!(cross_at(&mut input).is_none(), "an empty field shows no ×");
+
+    type_text(&mut input, "lib");
+    let at = cross_at(&mut input).expect("a field with text shows the ×");
+    let field = input.base().bounds;
+    assert!(
+        at.loc.x > field.loc.x + field.size.w / 2.0,
+        "the × {at:?} sits at the field's right end {field:?}"
+    );
+    click_at(
+        &mut input,
+        Point::new(at.loc.x + at.size.w / 2.0, at.loc.y + at.size.h / 2.0),
+        PointerButton::Left,
+    );
+    assert_eq!(
+        input.text_signal().get_untracked(),
+        "",
+        "the click emptied the field"
+    );
+    assert_eq!(
+        said.borrow().last().map(String::as_str),
+        Some(""),
+        "reported like typing"
+    );
+    assert!(cross_at(&mut input).is_none(), "and the × is gone");
+    type_text(&mut input, "x");
+    assert_eq!(
+        input.text_signal().get_untracked(),
+        "x",
+        "the keyboard stayed in the field"
+    );
+}
+
+/// **`clear_input` empties any field, wherever the caret is** — the keyboard twin of the ×, on the
+/// default keys (Cmd/Super+Shift+Backspace, Ctrl+Shift+Backspace).
+#[test]
+fn clear_input_empties_the_field_wherever_the_caret_is() {
+    use heca_grid_ui::{GridKey, KeyPress, Keymap, Modifiers};
+    for mods in [
+        Modifiers {
+            meta: true,
+            shift: true,
+            ..Default::default()
+        },
+        Modifiers {
+            ctrl: true,
+            shift: true,
+            ..Default::default()
+        },
+    ] {
+        let mut input = Input::new();
+        give_keyboard(&mut input);
+        LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+        type_text(&mut input, "library");
+        heca_grid_ui::dispatch(
+            &mut input,
+            &Event::Key {
+                key: GridKey::ArrowLeft,
+                pressed: true,
+            },
+        );
+        Keymap::with_defaults().deliver_press(
+            &KeyPress {
+                key: GridKey::Backspace,
+                text: None,
+                mods,
+            },
+            |event| heca_grid_ui::dispatch(&mut input, event),
+        );
+        assert_eq!(
+            input.text_signal().get_untracked(),
+            "",
+            "{mods:?} emptied the field"
+        );
+    }
+}
+
+/// **Cmd+Backspace stays the field's own "delete to the line start"** — `clear_input` is on the
+/// Shift chords, so the plain Cmd chord never empties the field.
+#[test]
+fn cmd_backspace_is_not_clear_input() {
+    use heca_grid_ui::{GridKey, Keymap, Modifiers, WidgetIntent};
+    let meta = Modifiers {
+        meta: true,
+        ..Default::default()
+    };
+    assert!(
+        !Keymap::with_defaults()
+            .resolve(GridKey::Backspace, meta)
+            .contains(&WidgetIntent::ClearInput),
+        "Cmd+Backspace is not bound to clear_input"
+    );
+}
+
+/// **The × answers the pointer**: hovered, it paints more than at rest — the hover frame of an
+/// `IconButton` — so it reads as something to press.
+#[test]
+fn a_clearable_fields_cross_lights_up_under_the_pointer() {
+    use heca_grid_ui::widgets::Glyph;
+    let mut input = Input::new().clearable(true);
+    give_keyboard(&mut input);
+    let size = Size::new(300.0, 60.0);
+    LayoutEngine::new().compute(&mut input, size);
+    type_text(&mut input, "lib");
+    LayoutEngine::new().compute(&mut input, size);
+    let theme = Theme::default();
+    let cross = Glyph::XCircle
+        .primary_char()
+        .expect("the × has a glyph")
+        .to_string();
+    let frame = |input: &Input| {
+        let mut scene = heca_grid_ui::Scene::new();
+        heca_grid_ui::paint_child(input, &mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+        scene
+    };
+    let at = frame(&input)
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) if t.text.starts_with(&cross) => Some(t.rect),
+            _ => None,
+        })
+        .expect("the × is drawn");
+    let field_width = input.base().bounds.size.w;
+    // Painted boxes around the × that are smaller than the field: the ×'s own frame.
+    let rects_near = |scene: &heca_grid_ui::Scene| {
+        scene
+            .iter()
+            .filter(|c| {
+                matches!(c, DrawCommand::Rect(r)
+                    if r.rect.loc.x <= at.loc.x
+                        && r.rect.loc.x + r.rect.size.w >= at.loc.x + at.size.w
+                        && r.rect.size.w < field_width
+                        && r.fill.a > 0)
+            })
+            .count()
+    };
+    let rest = rects_near(&frame(&input));
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::pointer_moved(Point::new(
+            at.loc.x + at.size.w / 2.0,
+            at.loc.y + at.size.h / 2.0,
+        )),
+    );
+    for _ in 0..30 {
+        input.tick(0.05);
+    }
+    let hovered = rects_near(&frame(&input));
+    assert!(
+        hovered > rest,
+        "hovered the × paints a frame: {rest} at rest, {hovered} hovered"
+    );
+}

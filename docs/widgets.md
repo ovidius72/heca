@@ -250,6 +250,34 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 
 ### The event model — the framework resolves the pointer and walks the tree
 
+**Dragging past the edge.** A widget that keeps the pointer while a button is held hears
+`EdgeScroll` every frame the pointer is outside it — how a selection keeps growing past the edge
+of what holds it, with the mouse still. The terminal does exactly this, inside itself: whoever
+places a `Terminal` writes nothing, and a selection dragged above it scrolls its history.
+
+```rust
+Surface::new()
+    .on(EventKind::PointerDown, |ev| ev.capture_pointer())          // hold the pointer, keep the press free
+    .on_edge_scroll(|ev| scroll_by(ev.pointer().and_then(|p| p.delta_pixels)))
+```
+
+The host runs `heca_grid_ui::edge_scroll(root, dt, EdgeScroll { distance, speed })` once a frame
+with the user's settings; a widget never measures where the pointer is.
+
+A plugin binds the same event by its described name, `edge_scroll`, and its intent is sent every
+frame the drag is held past the edge: `{ "events": { "edge_scroll": { "action": "mylist.scroll" } } }`.
+
+| Piece | What it is |
+|---|---|
+| `ev.capture_pointer()` | In a `PointerDown` handler: keep the pointer until the button is up — every move, the release and `EdgeScroll` come to this widget wherever the pointer goes — **without** taking the press, so a window gesture (a divider, the move modifier) can still claim it. The browser's `setPointerCapture`. A widget that consumes the press captures anyway. |
+| `.on_edge_scroll(f)` | Hears `Event::EdgeScroll` every frame a held drag is outside the widget, with the mouse still. `ev.pointer().delta_pixels` is how far to scroll **this frame**, in logical pixels: negative `y` above (back), positive below, the same for `x`; it grows with how far outside the pointer is, up to `edge_scroll_speed` px/s at `edge_scroll_distance` px away. `pos` is where the pointer is, so a selection can stretch to the edge it moves towards. The line deltas are zero: convert the pixels to your own unit, keeping what is left over for the next frame. |
+| `heca_grid_ui::edge_scroll(root, dt, EdgeScroll { distance, speed })` | The host's one call per frame; returns whether something is still scrolling, so the host keeps asking for frames. heca passes `[settings] edge_scroll_distance` / `edge_scroll_speed`, gated by `auto_scroll_edge`. |
+| `heca_grid_ui::pointer_held(root)` | Whether a widget holds the pointer. A host asks it before cancelling gestures when the pointer leaves the window: the system keeps sending a held drag's moves and release from outside, so a selection dragged below the window keeps growing. |
+
+Native only: these are handlers (closures), which a description cannot carry (R4 in
+[`plugins.md`](plugins.md)). A described tree gets the behaviour from the widgets that own it — a
+described `Terminal` selects past its edge with nothing written.
+
 **A widget never routes events to its children, and never works out what an event meant.** Both are
 `heca_grid_ui`'s, once, for every widget:
 
@@ -900,6 +928,8 @@ let row = Row::new()
 | `.on_pointer_down(f)` / `.on_pointer_up(f)` / `.on_pointer_move(f)` | The raw halves of a gesture. Stopping propagation on a `pointer_down` **captures the pointer** until the release. |
 | `.on_pointer_enter(f)` / `.on_pointer_leave(f)` | Hover transitions. Several widgets on one path enter together, so claiming one is almost always wrong. |
 | `.on_scroll(f)` | The wheel over this widget. Stop propagation to keep it from also scrolling whatever contains this widget. |
+| `.on_edge_scroll(f)` | **A drag this widget holds is past its edge** — every frame, even with the mouse still. `ev.pointer().delta_pixels` is how far to scroll this frame (negative above/left, positive below/right), faster the further outside, up to `[settings] edge_scroll_speed` at `edge_scroll_distance` away. The widget converts the pixels into its own unit. Needs the widget to hold the pointer: a consumed press, or `ev.capture_pointer()`. |
+| `ev.capture_pointer()` | Called in a `PointerDown` handler: **keep the pointer until the button is up without taking the press** (the browser's `setPointerCapture`). Every move, the release and `EdgeScroll` come to this widget wherever the pointer goes, and the press still reaches the window's own gestures. |
 | `.on_pointer_down_outside(f)` | A press landed somewhere else — how a popup closes itself. |
 | `.on_hint(f)` | **What a pick does to this widget, when that differs from acting on it** — the override, on every widget. Fires in the **target phase only**; listen with `.on(EventKind::Hint, …)` to watch picks from your children instead. Takes an `Option` too: `None` declares nothing, so `.on_hint(pick)` needs no branch when a row only sometimes has a pick. |
 | `.on_key(f)` / `.on_text_input(f)` | A key, or committed text, that reached this widget — it holds the keyboard, or contains what does. Intercepting a shortcut or a quick-pick letter is the same one line as intercepting a click. |
@@ -948,7 +978,9 @@ instead of `.on_click(move |ev| ev.dispatch(intent.clone()))` plus a separate `.
 - **Where the intent goes:** to the listener of the container that holds the widget
   (`EventExt::on_dispatch`). heca seats each dock and each layer in one, so the intent arrives
   seated on that dock or surface and judged as a gesture there — the author passes no mount and no
-  emitter.
+  emitter. The same holds for **every** place a widget can send from: its handlers, its own event
+  code, its capture code on the way in (a grid choosing the card under its cursor on `Activate`)
+  and what it reports after its subtree — so a send from any of them reaches the same container.
 - **The keyboard comes free:** Enter and Space press it through `activate` when it holds the
   keyboard; nothing to declare.
 - **Its own shortcut, if it needs one,** is a key bound to the action's name in a keys file (an
@@ -2142,8 +2174,41 @@ border, glow and radius, plus padding, gap, direction and children. Reach for it
 needs a background or padding around its content.
 
 - **Construct**: `Surface::new()` / `Surface::column()` (a column), `Surface::row()` (a row).
-- **Decoration** (`StyleExt`): `.background(Color)`, `.border(Color, width)`, `.radius(px)`,
-  `.glow(Color)` / `.glow_with(..)`.
+- **Decoration** (`StyleExt`): `.background(impl Into<Fill>)`, `.border(Color, width)`,
+  `.radius(px)`, `.glow(Color)` / `.glow_with(..)`.
+- **A background that follows the theme**: `.background(Fill::theme("surface"))` names one of the
+  theme's colours (`surface`, `background`, `accent`, `border`, … — the theme's own colour fields)
+  and reads it **when it is drawn**, so a theme reload repaints it with no rebuild. A colour the
+  theme derives when it leaves it unset (`top_bottom_pane_background`, `selected_background`, …)
+  answers with what it derives. `.alpha("scrim")` draws it at one of the theme's opacities (its
+  interaction alphas): `Fill::theme("background").alpha("scrim")` is the backdrop veil the exposé
+  wears. A plain
+  `Color` still works (`.background(color)`) and stays that colour whatever the theme. A name that
+  is not a theme colour paints no fill. A description writes the same name as its `fill` token
+  (`"fill": "surface"`), resolved through the same lookup (`heca_theme::Theme::color_named`).
+
+- **The panel look — `.elevation(PanelElevation)`**: the surface wears the material every menu,
+  dialog and the command palette wear, painted by the one function they share
+  (`paint_panel_chrome`): the theme's `surface` fill, its corner radius, the edge the user's
+  `overlay_border_style` draws, and a drop shadow — full for `PanelElevation::Panel`, lighter for
+  `PanelElevation::Hover`. It follows a theme reload. A `.border(..)` set on the surface is the
+  edge's colour when the style draws one, and a `.glow(..)` is kept; fill, radius and shadow are
+  the theme's. Unset (the default), the surface paints only what its own `StyleExt` says.
+
+```rust
+// A small panel floating over a terminal, in the menus' material.
+Surface::column()
+    .elevation(PanelElevation::Panel)
+    .padding(Spacing::Sm)
+    .child(Label::new("3/12").muted(true).size(WidgetSize::Caption))
+    .child(Input::new())
+```
+
+```rust
+// The same from a plugin (heca-view SDK) — realize calls the same builder.
+Surface::new().elevation(ViewElevation::Panel).child(Label::new("3/12"))
+// JSON: { "kind": "Surface", "props": { "elevation": "panel" }, "children": [ … ] }
+```
 - **Arrangement** (`LayoutExt`, `Parent`): the same `.padding*` / `.pad_*(Spacing)` / `.gap*` /
   `.width` / `.height` / `.grow` / `.child(..)` as [`Flex`](#flex--container).
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
@@ -2242,7 +2307,7 @@ properties are applied after children are attached.
 
 The typed described container is `heca_view::build::Pane::new()`. It accepts arbitrary described
 children and nested layouts through `.child(...)`, with `border_style(ViewFrameStyle)`,
-`border_color(...)` and `frosted(...)`. It constructs the same generic frame as the native widget;
+`border_color(...)` and `blur(...)`. It constructs the same generic frame as the native widget;
 there is no built-in Terminal requirement or automatic header.
 
 
@@ -2288,7 +2353,7 @@ width/radius/colour via `bracket_frame_with`.
 - **Frame**: `.border_style(FrameStyle)` (or `.bordered()` / `.bracketed()` / `.frameless()`),
   `.border_width(w)`, `.border_color(c)`, `.radius(r)`. Each unset one follows the theme, so the
   global controls still drive every pane that does not set its own.
-- **Frosted**: `.frosted(radius)` blurs what is drawn behind the pane by `radius` logical px, in scene
+- **Blur**: `.blur(radius)` blurs what is drawn behind the pane by `radius` logical px, in scene
   order — it blurs what lies under it and nothing of what comes after, its own content included. A
   floating pane that should show what is under it says this instead of filling itself.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
@@ -2341,6 +2406,20 @@ factories. An external host registers its own resource implementations. Ownershi
 the host's `WidgetRegistry::realize_for` context; a serialized `owner` property cannot select
 another plugin's session. Same owner/name reuses T449's native session store; configuration after
 startup never restarts its process. Managed workspace creation and restoration remain P094/T452.
+
+What it does by itself, wherever it is placed — nothing for whoever places it to write:
+
+- **A selection dragged past its edge scrolls the history** and stretches to the edge cell, every
+  frame the pointer stays outside, faster the further away, mouse still or not; past the window's
+  edge too. It keeps the pointer from the press (`capture_pointer`) without taking it from a window
+  gesture.
+- **Everything typed reaches the program in order**: keys, typed text and pastes go through one
+  path, so text typed under load never arrives shuffled. A paste is bracketed when the program asked
+  for bracketed paste, verbatim otherwise.
+- **The wheel counts in lines**: a slow turn moves a line after a couple of small turns instead of
+  waiting for whole notches.
+- **A character the terminal font lacks** falls back to another font; one drawn in colour (an emoji,
+  `⏺`) keeps its colours, a plain one takes the text colour.
 
 ```rust
 let demo = heca::extension("demo");
@@ -2687,6 +2766,33 @@ vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
+**Pinned children — what sits on the edges of a list, not in it.** `.pinned(child)` puts a child
+over the content: not scrolled, out of the content's flow, the size of the region (content added
+later with `.child(..)` still goes before it). Each frame the region tells it what is out of sight
+(`Component::scroll_facts`) and does a reveal it asks for (`Component::take_reveal`); a pinned child
+that is a surface passes the pointer through where it draws nothing, so the rows under it stay
+clickable. Described: a child of `scroll` with `slot: "pinned"` — `build::Scroll::new().pinned(..)`.
+
+#### EdgeHint
+
+**How many rows wanting attention are out of sight**, on the region's edges — a caret up and the
+count at the top, a caret down and the count at the bottom, hidden when there are none. Each pill
+flashes in the tone of the nearest row it stands for, and stops when nothing on its side asks. A row wants attention while it has a **repeating
+flash** (`.flash(handle)` + `handle.repeat(tone)`, or `repeat_for` until it runs out); a finite
+burst does not count, and nothing else is declared. A click on a pill brings the nearest such row on
+that side into view and picks it, as its letter would (focus, then its own click); `prefix+/` letters the pills like any button.
+
+```rust
+ScrollRegion::new()
+    .child(rows)                          // each row flashes with `repeat` while it wants you
+    .pinned(EdgeHint::new())
+```
+
+Described (a plugin): `{ "kind": "scroll", "children": [ …rows…, { "kind": "edge_hint", "props": { "slot": "pinned" } } ] }`,
+or `build::Scroll::new().child(rows).pinned(build::EdgeHint::new())`. It takes no properties: what
+it shows is its region's. heca's workspaces dock pins one, so a pane whose agent finished out of
+sight is said on the edge.
+
 **Following appended content.** `.follow_bottom(true)` keeps the new bottom in view only when the
 reader was at the previous bottom. Off by default. Scrolling up pauses it; returning to the bottom
 resumes it. It also handles reflow and viewport resize. The same `follow_bottom` Bool property and
@@ -3010,8 +3116,9 @@ Place it before any content using ordinary composition.
   `.padding(...)` and the other normal layout builders. Defaults are `Small`, muted text, the theme's
   border colour for the rule, `Xs` gap/horizontal padding and full available width. No pixel sizing
   or caller-computed text width is required. Text truncates at the end when space is tight.
-- **Live text**: `.text_signal() -> Signal<String>` updates a mounted caption;
-  `.with_text_signal(signal)` binds an existing signal. Blank or whitespace-only text removes the
+- **Live text**: `.text(..)` takes a fixed text or one that changes (a `Signal<String>`, a
+  `Memo<String>`, a function reading signals — see "A text that may change");
+  `.text_signal() -> Signal<String>` updates a mounted caption. Blank or whitespace-only text removes the
   entire caption from layout, including its padding, rule and any parent gap. No caller-written
   `Visibility` is needed. An explicit `.hidden(true)` remains respected when text changes.
 - **Theme changes**: size/spacing follow the inherited font; text/rule colours read the current theme.
@@ -3064,8 +3171,9 @@ let ago = Elapsed::since(sent_at, Label::new("").size(WidgetSize::Caption));
 The label keeps its own look; `Elapsed` is transparent to layout, so it sits in a row exactly where
 the label would.
 
-A description cannot set the moment yet: its numbers travel as `f32`, which cannot hold an epoch
-time to the second, so `at_millis` and `format` are host-only.
+`at_millis` is a property: a description's numbers keep full precision (an epoch time in
+milliseconds arrives exact), so it is ready for a described kind, which is not declared yet.
+`format` is host-only — a function cannot cross as a static property.
 
 ### Label
 
@@ -3232,14 +3340,14 @@ Stateful adapters, such as [`ScrollBar`](#scrollbar), bind data to native signal
 
 **Preformatted text and shared values.** `.preserve_whitespace(true)` preserves spaces and explicit
 newlines while wrapping (default false); use it for editable text and source excerpts. It is also
-the `preserve_whitespace` Bool property / `build::Label::preserve_whitespace`. Native code can use
-`.with_text_signal(signal)` to share an existing `Signal<String>`; descriptions carry static `text`
-instead. Layout and painting use the same wrapper, including source character indices.
+the `preserve_whitespace` Bool property / `build::Label::preserve_whitespace`. Native code can pass
+a `Signal<String>` to `.text(..)` to share it (see "A text that may change"); descriptions carry
+static `text` instead. Layout and painting use the same wrapper, including source character indices.
 
 ```rust
 use heca_grid_ui::{Label, reactive::signal};
 let value = signal(String::from("two  spaces\nand a newline"));
-let label = Label::new("").with_text_signal(value).wrap(true).preserve_whitespace(true);
+let label = Label::new("").text(value).wrap(true).preserve_whitespace(true);
 ```
 
 ```rust
@@ -3806,12 +3914,30 @@ rest glow (`interaction.control_rest_glow`).
 
 - **Construct**: `Input::new()`.
 - **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.font_size(f32)` (else inherits;
-  field height tracks the font), `.on_change(impl Fn(Action))`. Plus the shared `LayoutExt`:
+  field height tracks the font), `.on_change(impl Fn(Action))`, `.clearable(bool)` (default
+  `false`). Plus the shared `LayoutExt`:
   `.disabled(bool)` (dims + inert + unfocusable), `.tab_index(i32)`, `.width/.height`.
 - **Accessors / mutators**: `.text() -> Signal<String>`, `.value_str() -> String`,
   `.set_value(text)` (replace the content imperatively), `.selection() -> Option<(usize,usize)>`,
   `.selected_text() -> Option<String>`.
 - **Emits**: `"input-change"` / `SignalData::String` (the full new text) on every edit.
+- **Clearable — `.clearable(true)`**: an × at the field's right end while it holds text, gone when
+  it is empty — a small [`IconButton`](#iconbutton) (`Glyph::XCircle` in the muted text tone), so it
+  lights up under the pointer like any icon button. A click empties the field, reports
+  `"input-change"` with `""` exactly as typing would, and leaves the keyboard in the field: a
+  clearable field [keeps the keyboard](#focusscope) (`Base::keeps_keyboard`), so the × gets its
+  click and not the keyboard; the click bubbles to the field, which empties itself. The keyboard twin is `WidgetIntent::ClearInput` (`clear_input`), which works
+  on every field, clearable or not.
+
+```rust
+// Native: a search field with an × that empties it.
+Input::new().value(query).clearable(true).on_change(|a| { /* re-run the search */ })
+```
+
+```rust
+// Declarative (heca-view SDK); JSON: { "kind": "Input", "props": { "clearable": true } }
+Input::new().clearable(true)
+```
 
 > **Focus + keys come from the container.** The Input consumes keys **only when focused** and the
 > host delivers them (e.g. a [`FocusManager`](#), or a [`Dialog`](#dialog) which routes keys
@@ -3845,6 +3971,7 @@ to the focused field):
 | `EditDeleteBack` | `Ctrl+h` (`edit_delete_back`) | delete one char before the caret |
 | `EditDeleteToLineStart` | `Ctrl+u` (`edit_delete_to_line_start`) | delete from the caret to line start |
 | `EditSelectAll` | `Ctrl+a` / `Super+a` (`edit_select_all`) | select the whole field |
+| `ClearInput` | `Super+Shift+Backspace` / `Ctrl+Shift+Backspace` (`clear_input`) | empty the field, wherever the caret is |
 
 App wiring: `build_widget_keymap` → `AppState.widget_keymap` (`heca_grid_ui::Keymap`), dispatched in
 the overlay key branch (`heca/src/app/events.rs`). See the `widget-keys-config` requirement and [Keybindings](keybindings.md#widget-navigation-and-editing--keyswidgets).
@@ -4307,7 +4434,7 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
   | --- | --- | --- |
   | `Plain` (default) | nothing — only the states show | lists, menus |
   | `Tinted` | a veil: the theme's text colour at `card_background_alpha`, the controls' corner radius, `Sm` air inside | the workspaces dock's pane rows; a card in any dock |
-  | `Filled` | a solid box: the theme's `surface`, the same corners, `Xs` air inside | the exposé's cards — over something busy |
+  | `Filled` | a solid box: the theme's `surface`, the same corners, `Xs` air inside; its three states differ in kind — `.active(true)` (where you are) fills the card with the theme's selected colour, the cursor (where Enter goes) is the accent outline every row's cursor wears, `.previous(true)` fills it with the card-sized neutral mark (`card_previous_background`, a lift towards the text colour) | the exposé's cards — over something busy |
 
   ```rust
   Row::new().variant(RowVariant::Tinted).child(Grid::new() /* icon, name, folder */)
@@ -4883,6 +5010,10 @@ enclosing control, falling back to `theme.foreground`; the secondary layer follo
 `theme.icon_secondary_alpha`. So an icon composed inside a `Button` tints and fades with it.
 
 - **Construct**: `Icon::new(Glyph)`.
+- **The glyph may change**: `.glyph(value)` takes a `Glyph`, a `Signal<Glyph>`, a `Memo<Glyph>` or a
+  function reading signals, and follows it in place (`Icon::new(Glyph::Circle).glyph(move ||
+  line().icon)`). Native only — a description names its glyph with the `icon` property.
+  `.glyph_signal()` still sets it from outside.
 - **Builders**: `.size(px)` (glyph pixels — **not** the `WidgetSize` variant; use
   `Style::set_size` for that, since `size` is taken), `.color(Color)` (primary — opts out of
   inheritance), `.secondary_color(Color)`, `.glow(bool)` (default `false` — see below).
@@ -4921,7 +5052,7 @@ ViewNode::new(WidgetId::Icon).prop("icon", PropValue::Glyph("git_branch".into())
 
   > `Folder`, `FolderOpen`, `File`, `FileCode`, `GitBranch`, `GitCommit`, `GitMerge`,
   > `GitPullRequest`, `Terminal` (`terminal-window`), `Gear` (`gear-six`),
-  > `Search` (`magnifying-glass`), `Close` (`x`), `Check`, `CheckCircle`, `ChatCircleDots`, `Lock`, `CaretRight`, `CaretLeft`, `CaretDown`, `Play`,
+  > `Search` (`magnifying-glass`), `Close` (`x`), `Check`, `CheckCircle`, `ChatCircleDots`, `Hourglass`, `Lock`, `CaretRight`, `CaretLeft`, `CaretDown`, `Play`,
   > `Pause`, `Stop`, `Warning`, `WarningCircle`, `Info`, `Circle`, `Lightning`, `List`,
   > `Sidebar` (`sidebar-simple`), `DotsThreeVertical`, `ArrowRight`, `ArrowLineLeft`,
   > `ArrowLineRight`, `Plus`, `Minus`, `SquareSplitVertical`, `XSquare`, `FrameCorners`, `Cards`,
@@ -5200,12 +5331,14 @@ A signal-driven wrapper that hides or shows exactly one child without rebuilding
 Use it for optional metadata rows and exceptional-state indicators that should collapse
 cleanly when absent.
 
-- **Construct**: `Visibility::new()` — empty and shown — then `.visible(bool)` (default `true`) and
+- **Construct**: `Visibility::new()` — empty and shown — then `.visible(value)` (default `true`) and
   `.child(widget)`: the one widget it shows and hides (a second `.child` replaces the first; wrap a
   `Flex` to hide several together). The order of the two builders does not matter.
-- **Live update**: `.visible_signal() -> Signal<bool>`. To follow a value you already have, use
-  `.hidden(value)` on the child itself instead — no wrapper (see "The two ways of not showing
-  something" below).
+- **The value may change**: `.visible(..)` takes a `bool`, a `Signal<bool>`, a `Memo<bool>` or a
+  function reading signals, and follows it in place — the library's one fixed-or-live value
+  (`LiveValue`), as `.hidden(..)` takes. `.visible_signal() -> Signal<bool>` still sets it from
+  outside. On a widget you can put a builder on, `.hidden(value)` on the child itself needs no
+  wrapper (see "The two ways of not showing something" below).
 - **Hidden means gone from the layout**, the wrapper's box as well as the child's: its parent spends
   no gap on it.
 - **Transparent to layout**: the child is laid out exactly as it would be without the wrapper. A
@@ -5218,6 +5351,9 @@ cleanly when absent.
 ```rust
 let error = Visibility::new().visible(false).child(StatusDot::error());
 error.visible_signal().set(true);
+
+// Following a value: shown while the pane is in a repository.
+Visibility::new().visible(move || facts().git.is_some()).child(git_row)
 ```
 
 > ⛔ **Attach it always, and wrap nothing around it.**
@@ -5279,6 +5415,34 @@ tree sets them as plain booleans; a changing value is native, because a signal c
 ```rust
 Label::new("No rooms yet").hidden(move || !rooms.with(Vec::is_empty))   // display, derived
 StatusDot::error().visible(failed)                                      // visibility, failed: Signal<bool>
+```
+
+#### A text that may change — `.text(..)`, `.label(..)`, `.value(..)`
+
+The same rule for words: one builder takes a fixed text **or** one that changes, never a second
+`with_*_signal` builder. `Label::text`, `Caption::text`, `Tag::label` and `Input::value` take
+`impl IntoTextValue` — a `&str`, a `String`, a `Signal<String>`, a `Memo<String>` or a function
+reading signals:
+
+```rust
+Label::new("").text(title)                                // title: Signal<String> — followed
+Tag::new("").label(move || format!("{}/{}", at.get(), n.get()))   // derived from other signals
+Input::new().value(query)                                 // query: Signal<String> — shared both ways
+```
+
+A `Signal<String>` given to an `Input` becomes the field's own, so what is typed is written into it;
+given to a label it is followed. A described tree sets them as plain text. The getter that hands
+back a widget's live text is `*_signal()` (`Label::text_signal`, `Input::text_signal`).
+
+#### Where the keyboard goes — `.follow_focus(..)`, `.follow_focus_modal(..)`
+
+`.follow_focus(signal)` on any widget takes the keyboard when the signal turns true and lets it go
+when it turns false — only a change moves focus, so a click elsewhere while it stays true is left
+alone. `.follow_focus_modal(signal)` is the same for a surface over the page, and gives the keyboard
+back to whoever held it when the surface opened. Nobody writes `base_mut().follow_focus(..)`.
+
+```rust
+Input::new().value(query).follow_focus(search_requested)
 ```
 
 Between them there is nothing left for a `Visibility` **kind** to do, which is why there is none.
@@ -5410,7 +5574,7 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Badge`; a click on it never folds. With your own `.header` it is usually not needed — put the
   actions inside your header — but the two may be used together),
   `.collapsible(bool)` (default `true`; `false` keeps the body open, hides the chevron and a click
-  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿` — `DockFrame::GRIP`, the reorder handle every reorderable list shares; set one only for a handle that means something else; takes an `Option`, and `None` keeps the glyph), `.title_size(WidgetSize)` (the title row alone, text and padding — a row of a list nested in a dock reads smaller than the dock's header without shrinking what it holds),
+  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿` — `DockFrame::GRIP`, the reorder handle every reorderable list shares; set one only for a handle that means something else; takes an `Option`, and `None` keeps the glyph; described: `heca_view::build::DockFrame::new(..).grip_glyph(..)`, the `grip_glyph` property), `.title_size(WidgetSize)` (the title row alone, text and padding — a row of a list nested in a dock reads smaller than the dock's header without shrinking what it holds),
   `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
@@ -6113,6 +6277,9 @@ Flex::column().child(shown.map(|view| &view.rooms, RoomRow::new))
 - `signal.map(make)` on a `Signal<Vec<T>>`, `shown.map(pick, make)` on a `ServiceState` (heca).
   `T: Clone + PartialEq`. The general form both are built on is `BoundChildren::new(read, make)`,
   where `read` is any function that reads values that change.
+- **A list the component may not have** is an `Option`, exactly as an optional widget is:
+  `.child(report.map(|signal| signal.map(build_line)))` — `None` attaches nothing. No always-present
+  empty signal is needed just to have something to hand over.
 - **Which child an item keeps**: an item is its own identity. An item equal to one already shown
   keeps that child wherever it moved — focus, hover, its own scroll and state included; a gone item
   loses its child; a new one gets one; an item whose data changed is a new item and its child is
@@ -6390,26 +6557,45 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   the chrome around it. `.panel(..)` also takes a mapper-produced panel (e.g.
   `heca`'s `realize(ViewNode)`).
 - **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
-  scrim, outside input falls through), `.frosted(bool)` (default `false` — see *The frosted
+  scrim, outside input falls through), `.blur(bool)` (default `false` — see *The blurred
+  backdrop* below), `.decorated(bool)` (default `true` — see *A panel, or content on the
   backdrop* below), `.opened(bool)` (the **initial** state — see *Showing and
   hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
 
-#### The frosted backdrop — `.frosted(true)`
+#### A panel, or content on the backdrop — `.decorated(bool)`
 
-**Blur what is behind the surface.** The scrim's counterpart: a scrim *tints* what is underneath,
-a frost takes its *detail* away, and a surface may want either, both or neither.
+By default an overlay draws its **panel** — its own fill, border and shadow, the material every
+dialog and menu wears — and puts the content inside it: a sheet on the dimmed page.
+`.decorated(false)` draws none of it: the content sits straight on the backdrop (the scrim when
+`blocking`, the blur when `blur`). That is the shape of a surface that fills the window, like the
+exposé's map: its "panel" would be the whole screen, and a panel fill there is only a second tint
+over the scrim.
 
 ```rust
-Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdrop
+Overlay::new().blocking(true).panel(dialog)                           // a panel on the dimmed page
+Overlay::new().blocking(true).blur(true).decorated(false).panel(map)  // content on the backdrop
 ```
 
 ```json
-{"kind": "overlay", "props": {"blocking": true, "frosted": true}}
+{"kind": "overlay", "props": {"blocking": true, "blur": true, "decorated": false}}
+```
+
+#### The blurred backdrop — `.blur(true)`
+
+**Blur what is behind the surface.** The scrim's counterpart: a scrim *tints* what is underneath,
+a blur takes its *detail* away, and a surface may want either, both or neither.
+
+```rust
+Overlay::new().blocking(true).blur(true).panel(map)   // the exposé's backdrop
+```
+
+```json
+{"kind": "overlay", "props": {"blocking": true, "blur": true}}
 ```
 
 - **Strength is the theme's**, never the caller's — `overlay_frost_radius`, beside the scrim alpha
-  it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every frosted
+  it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every blurred
   surface answers together. A described surface asks for the *effect*, never a radius.
 - **It blurs exactly what it occludes** — the viewport when `blocking`, the panel alone when not.
   The same reach [`overlay_occludes`](#component-trait) reports, read from one place, so the frost
@@ -6425,7 +6611,7 @@ Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdr
   requests, then flushes the overlay bands, which is what "after everything beneath me, before me"
   means in one pass order.
 
-A frosted surface therefore needs **nothing** from whoever places it: no registration, no host pass
+A blurred surface therefore needs **nothing** from whoever places it: no registration, no host pass
 keyed on it, no declaration outside the tree.
 - **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
   `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
@@ -6945,6 +7131,7 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.path(text)` | A single-line second row for a path; preserves its trailing portion when shortened and exposes the complete value in a tooltip. Does not expand when selected. |
 | `.detail(text)` | A separate single-line metadata row below the description or path, sized by the normal layout engine. |
 | `.icon(Glyph)` | Optional leading icon; default absent. The icon column stays aligned for rows without one. |
+| `.trailing(\|\| widget)` | Something at the end of the row's first line, after the title — any widget (a badge, a count). Handed as a way to **make** it, because a row can be built more than once. The title gives way to it on a narrow panel. Host-only (a function). Default absent. |
 | `.keys([KeyCap, …])` | Add one binding as a row of keycaps. Repeat for several bindings; default none. The active mode reserves one shared shortcut column. |
 | `.id(text)` | Optional stable identity for ranking by past choices. Without one the row still matches and sorts, with no usage boost. |
 | `.group(u16)` | Default `0`. Lower groups lead while the effective query is empty. Typing hands ordering to the matcher. |
@@ -6960,6 +7147,16 @@ row and, on the selected row, `foreground` at the overlay hint alpha (`interacti
 bindings and measured description. The widget owns selection,
 mode filtering, search, history, panel drawing and dismissal; the caller supplies rows, callbacks,
 words and optional shared memory.
+
+**Something after a row's title** — `.trailing(|| widget)`: a badge, a count, a status, drawn on the
+title's line, right of it; the title is cut to make room on a narrow panel. Given as a way to make it,
+because a row can be built more than once. In heca, extensions and plugins add to a mode's rows with
+`extension.palette("session").to_raw(..)` / `.to_description(..)`, which arrive here — see
+[`extending-heca.md` → Sessions and their projects](extending-heca.md#sessions-and-their-projects).
+
+```rust
+Command::new("work", run).trailing(|| Badge::accent("pro"))
+```
 
 #### Native composition
 
@@ -7703,6 +7900,11 @@ props a kind reads in addition to the layout set above.
 Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
 and a bad value costs only itself: the good props on the same node still apply.
 
+**A number keeps its full precision** until the builder takes it, then becomes the builder's type in
+one place (`PropInput::as_f64` / `as_f32` / `as_whole::<T>()`): a whole-number builder (`u8`…`u64`,
+`i8`…`i64`, `usize`) gets it rounded and held inside its range — a negative count is `0`, a too-large
+one the largest, never wrapped. So an epoch time in milliseconds (`Elapsed::at_millis`) arrives exact.
+
 > **A `Button`'s children are its content, and they win.** A Button node *with* children is realized
 > as an empty button holding them (an arbitrary tree, any depth); a **childless** node falls back to
 > its scalar sugar — `text` → a bold `Label`, `icon` → a leading `Icon` — which builds the very same
@@ -7719,7 +7921,7 @@ and a bad value costs only itself: the good props on the same node still apply.
 | `Surface` | (container — children only) | — |
 | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
-| **`Overlay`** | `blocking` (Bool, default `true`), `frosted` (Bool, default `false` — blur what is behind it, at the theme's radius), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
+| **`Overlay`** | `blocking` (Bool, default `true`), `blur` (Bool, default `false` — blur what is behind it, at the theme's radius), `decorated` (Bool, default `true` — `false`: no panel fill, border or shadow, the content sits on the backdrop), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Caption` | `text` (blank collapses the whole caption); common size/tone/layout properties | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
@@ -7969,6 +8171,15 @@ costs only itself and the rest of the call still stands — the same rule a widg
 `describe-action <name>` (below) is how you find out what an action takes without reading its source.
 
 ### Registering a custom (name-keyed) action
+
+> **What an action declares is what the palette asks.** Every argument has a kind — `Int`, `Float`,
+> `Bool`, `Text`, `Enum` (its words in `values`) or **`Dock`** (the id of a dock mounted now; heca's
+> `container_id` arguments are this kind). An action with required arguments is listed in the palette
+> with `…`; choosing it opens one step per required argument not given yet — the words for an `Enum`,
+> the mounted docks for a `Dock`, true/false for a `Bool`, the typed text for the rest (accepted once
+> it reads as the kind) — then it runs, aimed at the component that owns it. A key or a script opens
+> the same steps: `command_palette action=<name> arguments="a=1 b='x y'"`. Declare the right kind and
+> nothing else is needed.
 
 `WmAction` is a **closed enum** — a provider or plugin cannot add a variant to it. An action of your
 own is therefore keyed by a **stable string id** and registered at runtime, after which every surface
@@ -8282,6 +8493,12 @@ Nothing here measures text or computes a size — `Tag` hugs its content and the
 the rest. This is what `heca`'s scrollback-search bar does; it previously guessed its own
 width from a hardcoded glyph advance ratio (`chars × font × 0.62`), which broke for any
 font whose advance differed and had to be re-tuned by hand.
+
+#### `fill_parent` — the whole parent, out of the flow
+
+`.fill_parent()` places a widget over its parent's whole content box — what a layer on top of the
+content takes (a scrim, a [`ScrollRegion::pinned`](#scrollregion) child). It is `at_rect` with the
+corner at the origin and both sizes `Length::FULL`, said without numbers.
 
 #### `at_rect` — a rect **inside** a parent, in fractions of it
 

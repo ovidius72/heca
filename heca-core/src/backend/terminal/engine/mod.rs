@@ -33,15 +33,6 @@ impl SharedWriter {
             inner: Arc::new(Mutex::new(writer)),
         }
     }
-
-    pub(super) fn write_bytes(&self, buf: &[u8]) -> IoResult<()> {
-        let mut writer = self
-            .inner
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-        writer.write_all(buf)?;
-        writer.flush()
-    }
 }
 
 impl Write for SharedWriter {
@@ -114,6 +105,12 @@ struct HecaTerminalConfig {
 impl TerminalConfiguration for HecaTerminalConfig {
     fn color_palette(&self) -> ColorPalette {
         self.palette.clone()
+    }
+
+    /// **A paste goes in as it was copied** — no newline rewritten, on every system, as heca has
+    /// always pasted.
+    fn canonicalize_pasted_newlines(&self) -> wezterm_term::config::NewlineCanon {
+        wezterm_term::config::NewlineCanon::None
     }
 
     fn scrollback_size(&self) -> usize {
@@ -307,8 +304,33 @@ impl TerminalEngine {
 
     /// Whether the program has enabled bracketed paste (DECSET 2004), so pasted
     /// text must be wrapped in `ESC[200~ … ESC[201~`.
+    #[cfg(test)]
     pub(super) fn bracketed_paste_enabled(&self) -> bool {
         self.terminal.bracketed_paste_enabled()
+    }
+
+    /// **Text the user typed, as the program would get it from the keys** — each character a key
+    /// press, so it travels the one path keys travel, in order. A character with no modifier is sent
+    /// exactly as it is; DEL is the Backspace key, which sends the same byte.
+    ///
+    /// The terminal emulator writes keys from a thread of its own. Bytes written straight to the
+    /// process beside it overtook keys still waiting there under load — "ciao " arrived as
+    /// "cia o", the space having gone the direct way. Nothing typed goes the direct way now.
+    pub(super) fn type_text(&mut self, text: &str) -> bool {
+        text.chars().all(|c| {
+            let key = if c == '\x7f' {
+                KeyCode::Backspace
+            } else {
+                KeyCode::Char(c)
+            };
+            self.terminal.key_down(key, KeyModifiers::NONE).is_ok()
+        })
+    }
+
+    /// **Paste**, through the same path as keys and typed text — bracketed when the program asked
+    /// for bracketed paste (DECSET 2004), verbatim otherwise.
+    pub(super) fn paste(&mut self, text: &str) -> bool {
+        self.terminal.send_paste(text).is_ok()
     }
 
     pub(super) fn take_alerts(&self) -> Vec<BackendAlert> {

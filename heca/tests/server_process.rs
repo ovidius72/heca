@@ -1,5 +1,6 @@
 //! The real binary, on every platform: `heca --server`, `heca rpc`, `heca --kill-server`.
 
+mod common;
 use std::{
     path::Path,
     process::{Child, Command, Stdio},
@@ -16,16 +17,7 @@ impl Drop for Server {
 
 /// `heca` with its runtime and temp folders inside `root`, so it finds only the server of this test.
 fn heca(root: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_heca"));
-    command
-        .env("XDG_RUNTIME_DIR", root)
-        .env("TMPDIR", root)
-        .env("TMP", root)
-        .env("TEMP", root)
-        .env("HOME", root.join("home"))
-        .env("XDG_CONFIG_HOME", root.join("config"))
-        .current_dir(root);
-    command
+    common::isolated_heca(root)
 }
 
 fn output(command: &mut Command) -> String {

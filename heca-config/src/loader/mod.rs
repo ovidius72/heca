@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 mod project;
 mod sources;
+pub mod unread;
 
 pub use project::{
     ProjectFile, project_config_path, read_project, read_project_in, read_project_with,
@@ -67,28 +68,11 @@ pub(crate) fn parse_default_program_entries() -> HashMap<String, ProgramMeta> {
     }
 }
 
-/// **The one key-by-key merge**: `over` onto `base` — tables merge per-key (recursively); scalars and
-/// arrays are replaced by `over`. Arrays are intentionally NOT concatenated, so a
-/// user `[[keys.command]]`/`[[keys.mode]]` list replaces the default list wholesale.
-///
-/// Every layer of configuration goes through it — the embedded defaults, the user's files and the
-/// project's `.heca/config.toml` — so two layers can never disagree about what "merge" means.
-pub fn deep_merge(base: toml::Value, over: toml::Value) -> toml::Value {
-    match (base, over) {
-        (toml::Value::Table(mut b), toml::Value::Table(o)) => {
-            for (k, ov) in o {
-                let nv = match b.remove(&k) {
-                    Some(bv) => deep_merge(bv, ov),
-                    None => ov,
-                };
-                b.insert(k, nv);
-            }
-            toml::Value::Table(b)
-        }
-        // Scalars and arrays: `over` wins (arrays are replaced, not merged).
-        (_, over) => over,
-    }
-}
+/// **The one key-by-key merge** — `heca_theme::deep_merge`, the same one a theme uses over the
+/// theme it inherits. Every layer of configuration goes through it — the embedded defaults, the
+/// user's files and the project's `.heca/config.toml` — so two layers can never disagree about what
+/// "merge" means.
+pub use heca_theme::deep_merge;
 
 /// **The configuration the embedded defaults and one user file's text make** — what the loader
 /// builds from disk, from a string: a test of "what does this config text do" needs no file.
@@ -160,7 +144,7 @@ pub struct Config {
     /// color theme. See [`crate::font::FontConfig`].
     #[serde(default)]
     pub font: crate::font::FontConfig,
-    #[serde(default, alias = "program")]
+    #[serde(default, rename = "program", alias = "programs")]
     pub programs: ProgramsConfig,
     #[serde(default)]
     pub keys: KeysConfig,
@@ -215,6 +199,10 @@ impl Default for Config {
 pub struct AppConfig {
     pub config: Config,
     pub theme: Theme,
+    /// What was wrong with the chosen theme when it was loaded (a file that does not parse, an
+    /// `inherit` that names no theme, a circle) — empty when nothing was. The theme above is then
+    /// the bundled fallback, and these say why.
+    pub theme_problems: Vec<String>,
 }
 
 impl AppConfig {
@@ -233,10 +221,7 @@ impl AppConfig {
     fn with_default(result: Result<Self, ConfigError>) -> Self {
         result.unwrap_or_else(|e| {
             eprintln!("[heca] config load: {e}, using defaults");
-            let config = Config::default();
-            let mut theme = theme::load(&config.settings.theme);
-            apply_overrides(&mut theme, &config.settings);
-            Self { config, theme }
+            Self::with_theme(Config::default())
         })
     }
 
@@ -255,10 +240,19 @@ impl AppConfig {
     }
 
     fn from_config_result(result: Result<Config, ConfigError>) -> Result<Self, ConfigError> {
-        let config = result?;
-        let mut theme = theme::load(&config.settings.theme);
+        Ok(Self::with_theme(result?))
+    }
+
+    /// `config` with the theme it names, its `[appearance]` overrides laid on, and what was wrong
+    /// with the theme — the one place a configuration gets its theme.
+    fn with_theme(config: Config) -> Self {
+        let (mut theme, theme_problems) = theme::load_checked(&config.settings.theme);
         apply_overrides(&mut theme, &config.settings);
-        Ok(Self { config, theme })
+        Self {
+            config,
+            theme,
+            theme_problems,
+        }
     }
 
     fn load_config_file(folder: Option<&Path>) -> Result<Config, ConfigError> {
@@ -267,15 +261,17 @@ impl AppConfig {
         // (keys). Both are deep-merged at the `toml::Value` level so a partial user
         // file overrides only the values it sets and keeps every other default.
         let mut value = embedded_base();
-        let mut found_user = false;
-        if let Some((_, user)) = read_first_toml(&config_file_paths())? {
-            value = deep_merge(value, user);
-            found_user = true;
+        // Each file the user wrote, kept to say afterwards which of its keys heca did not read.
+        let mut files: Vec<(PathBuf, toml::Value)> = Vec::new();
+        if let Some((path, user)) = read_first_toml(&config_file_paths())? {
+            value = deep_merge(value, user.clone());
+            files.push((path, user));
         }
-        if let Some((_, user)) = read_first_toml(&keybindings_file_paths())? {
-            value = deep_merge(value, user);
-            found_user = true;
+        if let Some((path, user)) = read_first_toml(&keybindings_file_paths())? {
+            value = deep_merge(value, user.clone());
+            files.push((path, user));
         }
+        let found_user = !files.is_empty();
         // The project's own file goes on last, so any key it sets wins. A broken one is reported
         // and left out: a project's typo must not take the user's whole configuration with it.
         let project = match folder.map_or_else(read_project, read_project_in) {
@@ -289,7 +285,14 @@ impl AppConfig {
         if !found_user && applied.is_none() && folder.is_none() {
             return Err(ConfigError::NotFound);
         }
-        layered(value, applied)
+        if let Some((path, project)) = &applied {
+            files.push((path.clone(), project.clone()));
+        }
+        let config = layered(value, applied)?;
+        for (path, file) in &files {
+            unread::report(path, file, &config);
+        }
+        Ok(config)
     }
 }
 
@@ -343,10 +346,7 @@ fn finish(value: toml::Value, blame: &Path) -> Result<Config, ConfigError> {
 
 /// Candidate paths for the user's `config.toml`, in priority order.
 pub(super) fn config_file_paths() -> [Option<PathBuf>; 2] {
-    [
-        dirs::home_dir().map(|h| h.join(".config").join("heca").join("config.toml")),
-        Some(config_dir().join("config.toml")),
-    ]
+    user_file_paths("config.toml")
 }
 
 /// The user file this loader reads, or its first normal location when no file exists yet.
@@ -361,12 +361,28 @@ pub fn user_config_path() -> Option<PathBuf> {
         .or_else(|| paths.into_iter().flatten().next())
 }
 
+/// **Where the user's own file `name` lives**, in priority order — the folders of
+/// [`heca_theme::user_dirs`] (`~/.config/heca`, then the system's config folder), the one search
+/// order every user file shares with the themes.
+fn user_file_paths(name: &str) -> [Option<PathBuf>; 2] {
+    let mut dirs = heca_theme::user_dirs()
+        .into_iter()
+        .map(|dir| dir.join(name));
+    [dirs.next(), dirs.next()]
+}
+
 /// Candidate paths for the user's `keybindings.toml`, in priority order.
 pub(super) fn keybindings_file_paths() -> [Option<PathBuf>; 2] {
-    [
-        dirs::home_dir().map(|h| h.join(".config").join("heca").join("keybindings.toml")),
-        Some(config_dir().join("keybindings.toml")),
-    ]
+    user_file_paths("keybindings.toml")
+}
+
+/// **The user's own app icon** (`icon.png` beside the config), when there is one — it takes the
+/// place of the icon the program ships. Optional: without it the program's icon stands.
+pub fn user_icon_path() -> Option<PathBuf> {
+    user_file_paths("icon.png")
+        .into_iter()
+        .flatten()
+        .find(|path| path.is_file())
 }
 
 /// Read and TOML-parse the first existing file among `paths`. Missing files are

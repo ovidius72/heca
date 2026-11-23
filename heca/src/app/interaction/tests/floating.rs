@@ -20,6 +20,8 @@ fn floating_domain_blocks_tiled_only() {
         WmAction::CommandPalette {
             mode: None,
             query: None,
+            ask: None,
+            arguments: None,
         },
         WmAction::FocusToggleLocal,
         WmAction::PaneSelect,
@@ -240,6 +242,8 @@ fn floating_blocks_always_allowed_from_keyboard() {
         WmAction::CommandPalette {
             mode: None,
             query: None,
+            ask: None,
+            arguments: None,
         },
         WmAction::SpawnCommand {
             command: String::new(),

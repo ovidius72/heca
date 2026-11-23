@@ -77,8 +77,13 @@ pub struct WorkspacesContainerState {
     /// name; mirrored in `sync_chrome_state`, read when a row is built. A change rebuilds the rows
     /// (`chrome_signature` hashes the names), so it is not a per-frame signal.
     pub(crate) pane_lines: Signal<crate::chrome::panes::pane_items::PaneLineSet>,
+    /// `[appearance.sidebar] workspace_numbers`: whether each workspace row shows its number. A
+    /// signal the number follows, so a reload shows or hides it with nothing rebuilt.
+    pub(crate) workspace_numbers: Signal<bool>,
     /// Open status labels and glyphs, read by each agent line's own subscription.
     pub(crate) agent_statuses: Signal<std::rc::Rc<heca_config::settings::AgentStatuses>>,
+    /// `[appearance.sidebar] agent_session_line`, read by each agent line's own subscription.
+    pub(crate) agent_session_line: Signal<heca_config::appearance::AgentSessionLine>,
 }
 
 impl WorkspacesContainerState {
@@ -91,10 +96,26 @@ impl WorkspacesContainerState {
         }
     }
 
+    /// `[appearance.sidebar] agent_session_line`, set only when it changes.
+    pub(crate) fn set_agent_session_line(&self, line: heca_config::appearance::AgentSessionLine) {
+        use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _};
+        if self.agent_session_line.get_untracked() != line {
+            self.agent_session_line.set(line);
+        }
+    }
+
     /// The lines to build under each pane's name. See [`pane_lines`](Self::pane_lines) field.
     pub(crate) fn pane_lines(&self) -> crate::chrome::panes::pane_items::PaneLineSet {
         use heca_grid_ui::reactive::SignalGet as _;
         self.pane_lines.get_untracked()
+    }
+
+    /// Mirror `[appearance.sidebar] workspace_numbers`. Written only when it differs.
+    pub(crate) fn set_workspace_numbers(&self, shown: bool) {
+        use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _};
+        if self.workspace_numbers.get_untracked() != shown {
+            self.workspace_numbers.set(shown);
+        }
     }
 
     /// Mirror the lines that show. Written only when they differ, so an unchanged reload costs nothing.
@@ -140,9 +161,11 @@ impl WorkspacesContainerState {
                 crate::chrome::PaneRowLines::default()
                     .shown(&heca_config::appearance::default_sidebar_pane_lines()),
             ),
+            workspace_numbers: signal(true),
             agent_statuses: signal(std::rc::Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,
             )),
+            agent_session_line: signal(Default::default()),
         }
     }
 

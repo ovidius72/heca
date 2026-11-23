@@ -164,6 +164,18 @@ impl Tag {
         self
     }
 
+    /// **What the first segment says** — a fixed text or one that changes (a `Signal<String>`, a
+    /// `Memo<String>`, a function reading signals), followed in place.
+    ///
+    /// ```ignore
+    /// Tag::new("").label(move || format!("{}/{}", at.get(), total.get()))
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn label(self, label: impl crate::builders::IntoTextValue) -> Self {
+        label.into_text_value().show_in(self.label);
+        self
+    }
+
     /// The reactive signal for the first segment's text label.
     pub fn label_signal(&self) -> Signal<String> {
         self.label

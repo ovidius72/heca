@@ -147,6 +147,13 @@ impl Notification {
         self
     }
 
+    /// **It is about `pane`** — a window does not pop it up while that pane is the one it has
+    /// focused; it is kept in the history either way.
+    pub fn about_pane(mut self, pane: heca_core::layout::PaneId) -> Self {
+        self.draft = self.draft.about_pane(pane);
+        self
+    }
+
     pub fn dedup_key(mut self, key: impl Into<String>) -> Self {
         self.draft = self.draft.dedup_key(key);
         self

@@ -1,6 +1,7 @@
 //! Real binary, real socket and real PTY: the session must survive client teardown.
 #![cfg(unix)]
 
+mod common;
 use serde_json::{Value, json};
 use std::{
     io::{Read, Write},
@@ -149,14 +150,8 @@ fn until_frame(stream: &mut UnixStream, mut accept: impl FnMut(&Value) -> bool) 
 }
 
 fn isolated_command(root: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_heca"));
-    command
-        .env("HOME", root.join("home"))
-        .env("XDG_CONFIG_HOME", root.join("config"))
-        .env("XDG_RUNTIME_DIR", root)
-        .env("TMPDIR", root)
-        .env("SHELL", "/bin/sh")
-        .current_dir(root);
+    let mut command = common::isolated_heca(root);
+    command.env("SHELL", "/bin/sh");
     command
 }
 

@@ -11,6 +11,32 @@ use crate::vocab::severity_prop;
 /// children needs no change to `ViewNode`'s shape: `children` stays one flat vector.
 ///
 /// `DockFrame` has a **default** slot (the body), so an unslotted child lands there.
+/// **A `pinned` child of a `scroll` stays over the content** — the described form of
+/// `ScrollRegion::pinned`, written as a plugin would: it comes last, after the content children,
+/// whichever order the description lists them in.
+#[test]
+fn a_pinned_child_of_a_scroll_stays_after_the_content_whatever_its_order() {
+    let node = ViewNode::new(WidgetId::Scroll)
+        .child(ViewNode::new(WidgetId::EdgeHint).prop("slot", PropValue::Text("pinned".into())))
+        .child(ViewNode::new(WidgetId::Label).text("row a"))
+        .child(ViewNode::new(WidgetId::Label).text("row b"));
+    let region = realize(
+        &node,
+        &Theme::default(),
+        &noop_emitter(),
+        &mut FormBindings::default(),
+    )
+    .expect("valid described scroll");
+    let children = &region.base().children;
+    assert_eq!(children.len(), 3);
+    assert_eq!(children[0].text_summary().as_deref(), Some("row a"));
+    assert_eq!(children[1].text_summary().as_deref(), Some("row b"));
+    assert!(
+        children[2].base().style.layout.placement.is_some(),
+        "the pinned child is out of the flow, last"
+    );
+}
+
 #[test]
 fn dock_frame_routes_its_header_actions_slot_and_defaults_the_rest_to_the_body() {
     let node = ViewNode::new(WidgetId::DockFrame)

@@ -60,6 +60,9 @@ pub enum WidgetIntent {
     EditDeleteToLineStart,
     /// [`Input`](crate::widgets::Input): select the whole field. `edit_select_all`.
     EditSelectAll,
+    /// [`Input`](crate::widgets::Input): empty the field, wherever the caret is — the keyboard
+    /// twin of a [`clearable`](crate::widgets::Input::clearable) field's ×. `clear_input`.
+    ClearInput,
     /// Submit the focused text field through its own handler. Unbound by default; `edit_submit`.
     EditSubmit,
 

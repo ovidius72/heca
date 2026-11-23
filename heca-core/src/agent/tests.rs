@@ -19,6 +19,17 @@ impl ExternalDriver {
 }
 
 impl AgentDriver for ExternalDriver {
+    /// A resume is `--resume <id>`, as the built-in harnesses spell theirs.
+    fn session_of(&self, launch: &crate::backend::ProcessLaunch) -> Option<String> {
+        let at = launch
+            .arguments
+            .iter()
+            .position(|word| word == "--resume")?;
+        launch
+            .arguments
+            .get(at + 1)
+            .map(|id| id.to_string_lossy().into_owned())
+    }
     fn id(&self) -> &str {
         &self.id
     }

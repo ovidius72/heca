@@ -129,14 +129,6 @@ fn a_harness_with_a_native_id_is_resumed_by_its_driver() {
 fn a_harness_that_cannot_be_resumed_gets_a_shell_and_a_report_never_a_new_conversation() {
     let cases = [
         (
-            "no native session identity",
-            DRIVERS_ON,
-            None,
-            "demo.resuming",
-            "Demo",
-            "never reported its own session identity",
-        ),
-        (
             "a driver that cannot resume",
             DRIVERS_ON,
             Some("native-1"),
@@ -432,4 +424,52 @@ fn an_ordinary_typed_command_is_still_replayed_as_recorded() {
     forget_started();
     let _server = restart(server, root.path(), "");
     assert_eq!(started_in(&folder), [Program::Recorded(typed)]);
+}
+
+/// **The report says the cause that is true now.** With Claude's reporting switched on, a Claude that
+/// never said its session ran without reporting (an earlier heca started it directly) — the report
+/// says that, and does not tell the user to switch on what is already on.
+#[test]
+fn a_harness_that_ran_without_reporting_while_it_is_on_is_told_as_such() {
+    let root = tempfile::tempdir().unwrap();
+    let folders = tempfile::tempdir().unwrap();
+    let folder = made(folders.path().join("prova-b"));
+    let text =
+        "[settings]\nresume_harness = true\n[settings.agents.programs.claude]\nenabled = true";
+    let mut server = boot(root.path(), text);
+    make(&mut server, folders.path(), "B");
+    let typed = ProcessLaunch {
+        executable: "/bin/zsh".into(),
+        arguments: vec!["-ic".into(), "claude ".into()],
+        cwd: Some(folder.clone()),
+    };
+    session(&mut server, "B").arrange(|session, state| {
+        let pane = session.add_column(0, 1).unwrap().pane;
+        start_terminal(state, pane, Program::Recorded(typed.clone()), &folder);
+    });
+    forget_started();
+    let mut server = restart(server, root.path(), text);
+    let shown = notices(&mut server, "B");
+    let [(_, Some(body))] = shown.as_slice() else {
+        panic!("reported {shown:?}")
+    };
+    assert!(body.contains("ran without reporting to heca"), "{body}");
+    assert!(
+        !body.contains("settings.agents.programs.claude"),
+        "it is already on: {body}"
+    );
+}
+
+/// **A harness with no conversation yet starts again as it was** — it reported to heca but never
+/// named a conversation (Codex and OpenCode name theirs only once a turn starts), so there is
+/// nothing to replace: it comes back as launched, with no notice.
+#[test]
+fn a_harness_that_never_had_a_conversation_starts_again_as_it_was() {
+    let (mut server, _, agent, _root) = restarted_with(DRIVERS_ON, None, "demo.resuming");
+    let launches = started_in(&agent);
+    assert!(
+        matches!(launches.as_slice(), [Program::Recorded(launch)] if *launch == harness(&agent)),
+        "started again as launched: {launches:?}"
+    );
+    assert!(notices(&mut server, "Work").is_empty(), "nothing to report");
 }

@@ -9,6 +9,11 @@ use heca_config::loader::AppConfig;
 use std::{io, path::Path};
 
 pub(crate) fn serve(socket: Option<&Path>) -> io::Result<()> {
+    // **Who this server is, first**, so even what loading the configuration says lands in its log.
+    let identity = ServerIdentity::claim(ServerKind::Background);
+    if let Ok(log) = identity.own_file("log") {
+        super::log::send_output_to(&log);
+    }
     let config = AppConfig::load();
     let settings = &config.config.settings;
     let (handle, inbox) = super::channel(settings.connection);
@@ -25,7 +30,6 @@ pub(crate) fn serve(socket: Option<&Path>) -> io::Result<()> {
             }
         }
     });
-    let identity = ServerIdentity::claim(ServerKind::Background);
     let server = ServerLoop::from_config(&config, identity, handle.waker())?;
     inbox.run(server);
     Ok(())

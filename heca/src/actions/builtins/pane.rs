@@ -360,7 +360,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         name: "search_scrollback",
         side: Side::Client,
         label: "Search Scrollback",
-        description: "Type to search the scrollback; Enter keeps matches, Esc cancels.",
+        description: "Type to search the scrollback; Enter or ↓ goes to the next match, ↑ to the previous, Esc closes.",
         icon: Some(Glyph::Search),
         args: &[],
     },
@@ -397,7 +397,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Float a pane at an explicit position and size.",
         icon: None,
         args: &[
-            ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to float."),
+            ArgDescriptor::required("pane_id", ArgKind::Pane, "The pane to float."),
             ArgDescriptor::required("x", ArgKind::Float, "Left edge."),
             ArgDescriptor::required("y", ArgKind::Float, "Top edge."),
             ArgDescriptor::required("width", ArgKind::Float, "Width of the floating pane."),
@@ -412,7 +412,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::XSquare),
         args: &[ArgDescriptor::required(
             "pane_id",
-            ArgKind::Int,
+            ArgKind::Pane,
             "The pane to close.",
         )],
     },
@@ -423,7 +423,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Set a pane's name directly, without opening the rename prompt. An empty name clears it.",
         icon: Some(Glyph::NotePencil),
         args: &[
-            ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to rename."),
+            ArgDescriptor::required("pane_id", ArgKind::Pane, "The pane to rename."),
             ArgDescriptor::required("name", ArgKind::Text, "The new name."),
         ],
     },
@@ -435,7 +435,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::NotePencil),
         args: &[ArgDescriptor::required(
             "pane_id",
-            ArgKind::Int,
+            ArgKind::Pane,
             "The pane to rename.",
         )],
     },
@@ -447,7 +447,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         args: &[ArgDescriptor::required(
             "pane_id",
-            ArgKind::Int,
+            ArgKind::Pane,
             "The pane whose name to reset.",
         )],
     },
@@ -465,7 +465,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ),
             ArgDescriptor::optional(
                 "pane_id",
-                ArgKind::Int,
+                ArgKind::Pane,
                 "The pane whose terminal to zoom; omit for the terminal the keyboard is on.",
             ),
             ArgDescriptor::required_enum(
@@ -490,7 +490,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ),
             ArgDescriptor::optional(
                 "pane_id",
-                ArgKind::Int,
+                ArgKind::Pane,
                 "The pane whose terminal to use; omit for the focused one.",
             ),
             ArgDescriptor::optional(
@@ -514,7 +514,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ),
             ArgDescriptor::optional(
                 "pane_id",
-                ArgKind::Int,
+                ArgKind::Pane,
                 "The pane whose terminal to end; omit for the focused one.",
             ),
         ],

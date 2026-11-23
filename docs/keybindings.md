@@ -145,6 +145,21 @@ For sessions, press the prefix and then `#`; no extra character is needed in the
 Override a binding with a `[[keys.bind]]` entry using the same combo, or remove it with
 `"prefix+#" = true` under `[keys.unbind]`. No additional action registration is needed.
 
+**An action that needs arguments asks for them in the palette.** Choosing one (its row ends in `…`)
+opens a step for each required argument it has not been given: its words for a fixed list, the docks
+mounted right now for a dock, true or false, or what you type for a name or a number. When nothing
+required is missing, it runs. A key can open the same steps for one action, with some arguments
+already chosen:
+
+```toml
+[[keys.bind]]
+keys   = "prefix+m"
+action = "command_palette"
+args   = { action = "chrome.container.move_to_region", arguments = "container_id=workspaces" }
+```
+
+The same works from a script: `heca rpc command_palette action=chrome.container.move_to_region`.
+
 ## 3. A mode — a sub-keymap behind one key
 
 While a mode is active its own bindings come first. A key the mode does not bind falls through to
@@ -528,6 +543,7 @@ dismiss       = "Escape"                   # close / cancel the overlay
 edit_delete_back          = "Ctrl+h"                 # delete one char before the caret
 edit_delete_to_line_start = "Ctrl+u"                 # delete from the caret to line start
 edit_select_all           = ["Ctrl+a", "Super+a"]    # select the whole field (Cmd+a on macOS)
+clear_input               = ["Super+Shift+Backspace", "Ctrl+Shift+Backspace"]  # empty the field wherever the caret is (Cmd+Shift+Backspace on macOS); a clearable field's × does the same
 ```
 
 - **Tab / Shift+Tab** traverse focus and stay inside a modal dialog. A selected suggestion may

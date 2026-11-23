@@ -146,7 +146,7 @@ fn host_draws(o: &Overlay) -> (Vec<HostCmd>, Vec<HostCmd>) {
 #[test]
 fn a_frosted_overlay_records_its_blur_in_the_base_band_over_what_it_occludes() {
     let mut o = Overlay::new()
-        .frosted(true)
+        .blur(true)
         .panel(Flex::column().child(Label::new("hi")))
         .default_open(true);
     crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
@@ -188,7 +188,7 @@ fn a_plain_overlay_records_no_backdrop() {
 fn a_non_blocking_frost_reaches_only_as_far_as_the_panel() {
     let mut o = Overlay::new()
         .blocking(false)
-        .frosted(true)
+        .blur(true)
         .panel(Flex::column().child(Label::new("hi")))
         .default_open(true);
     crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
@@ -211,7 +211,7 @@ fn a_non_blocking_frost_reaches_only_as_far_as_the_panel() {
 #[test]
 fn a_frosted_overlays_backdrop_fades_with_it() {
     let mut o = Overlay::new()
-        .frosted(true)
+        .blur(true)
         .animation(Animation::ZoomFade)
         .panel(Flex::column().child(Label::new("hi")))
         .default_open(true);
@@ -232,5 +232,51 @@ fn a_frosted_overlays_backdrop_fades_with_it() {
         base[0].rect,
         Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
         "the zoom moves the panel, never the region being blurred",
+    );
+}
+
+/// **An undecorated overlay is its backdrop and its content** — the scrim still dims the page, but
+/// the panel draws no fill, border or shadow of its own; a decorated one (the default) does.
+#[test]
+fn an_undecorated_overlay_draws_the_scrim_and_no_panel() {
+    let rects = |decorated: bool| {
+        let mut o = Overlay::new()
+            .blocking(true)
+            .decorated(decorated)
+            .panel(Flex::column().child(Label::new("hi")))
+            .default_open(true);
+        crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
+        let theme = crate::theme::Theme::default();
+        let mut scene = crate::scene::Scene::new();
+        crate::component::paint_child(&o, &mut crate::component::PaintCx::new(&mut scene, &theme));
+        let all: Vec<_> = scene
+            .iter()
+            .filter_map(|c| match c {
+                crate::scene::DrawCommand::Rect(r) => Some(*r),
+                _ => None,
+            })
+            .collect();
+        // The scrim covers the viewport (unbounded here, with no host viewport): known by its tint.
+        let scrim = all.iter().any(|r| {
+            r.fill
+                == theme
+                    .colors
+                    .background
+                    .with_alpha(theme.colors.interaction.scrim)
+        });
+        let panel = all
+            .iter()
+            .any(|r| r.shadow.is_some() || r.fill == theme.colors.surface);
+        (scrim, panel)
+    };
+    assert_eq!(
+        rects(true),
+        (true, true),
+        "decorated: the scrim and the panel"
+    );
+    assert_eq!(
+        rects(false),
+        (true, false),
+        "undecorated: the scrim, no panel"
     );
 }

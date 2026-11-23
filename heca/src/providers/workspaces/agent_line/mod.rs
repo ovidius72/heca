@@ -14,6 +14,7 @@ use super::pane_row::{META_INDENT, set_if_changed};
 use crate::agent::AgentIcon;
 use crate::chrome::panes::pane_items::LineCx;
 use crate::components::PaneName;
+use heca_config::appearance::AgentSessionLine;
 
 pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let initial = (cx.facts)();
@@ -23,8 +24,8 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let session_text = session.text_signal();
     let session = Visibility::new().visible(false).child(session);
     let session_visible = session.visible_signal();
-    let status = text(FontWeight::Regular);
-    let status_text = status.text_signal();
+    // The status is its glyph alone; its words are the glyph's tooltip.
+    let status_text = signal(String::new());
     let task = text(FontWeight::Regular).muted(true);
     let task_text = task.text_signal();
     let task = Visibility::new().visible(false).child(task);
@@ -64,10 +65,8 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
                     .child(
                         Flex::row()
                             .align("center")
-                            .gap(Spacing::Xs)
                             .content_tone_signal(status_tone)
-                            .child(indicator)
-                            .child(status)
+                            .child(indicator.tooltip_signal(status_text))
                             .area("status"),
                     ),
             )
@@ -77,6 +76,7 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let visible = row.visible_signal();
     let facts = cx.facts.clone();
     let statuses = cx.agent_statuses;
+    let session_line = cx.agent_session_line;
     create_effect(move |_| {
         let facts = facts();
         set_if_changed(visible, facts.agent.is_some());
@@ -108,14 +108,20 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
             };
             set_if_changed(logo_source, source);
         }
+        // **The model the agent answers with, else its name.** Every built-in agent now keeps its
+        // model current: Codex names it on each event, and Claude's is read from its conversation
+        // log at each event (`reporting::command::last_model`). One that names none shows its name.
         let primary = agent
             .model
-            .filter(|text| !text.is_empty())
+            .filter(|model| !model.is_empty())
             .unwrap_or(agent.name);
-        let session = agent
-            .session_title
-            .filter(|text| !text.is_empty())
-            .unwrap_or(facts.title);
+        let reported = agent.session_title.filter(|text| !text.is_empty());
+        let session = match session_line.get() {
+            AgentSessionLine::Reported => reported.filter(|title| *title != facts.title),
+            AgentSessionLine::Always => Some(reported.unwrap_or(facts.title)),
+            AgentSessionLine::Never => None,
+        }
+        .unwrap_or_default();
         set_if_changed(session_visible, !session.is_empty() && session != primary);
         set_if_changed(primary_text, primary);
         set_if_changed(session_text, session);

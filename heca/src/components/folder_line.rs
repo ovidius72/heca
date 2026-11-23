@@ -2,9 +2,8 @@
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::component::{Base, Component, PaintCx};
-use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use heca_grid_ui::reactive::{Signal, SignalGet, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label};
 
 /// **Where something is** — a folder glyph and a path beside it, cut from the front so the end of
@@ -18,7 +17,7 @@ use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label};
 /// use heca::FolderLine;
 /// use heca_grid_ui::style::{Spacing, WidgetSize};
 ///
-/// let line = FolderLine::new(theme).path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
+/// let line = FolderLine::new().path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
 /// let path = line.path_signal();            // keep it to follow a `cd` without a rebuild
 /// let card = Flex::column().child(name).child(line);
 /// path.set("~/projects/other".into());      // the line updates in place
@@ -37,15 +36,15 @@ pub struct FolderLine {
     path: Signal<String>,
     size: WidgetSize,
     indent: Spacing,
-    color: heca_grid_ui::Color,
     /// Whether the line is shown, as last applied.
     shown: bool,
 }
 
 impl FolderLine {
-    /// A line with no path yet, in the theme's foreground colour — readable, because "where is
-    /// this" is a primary fact, not a muted one.
-    pub fn new(theme: &GuiTheme) -> Self {
+    /// A line with no path yet, in the text colour of where it is placed — the theme's foreground
+    /// unless a parent publishes another — read when it is drawn, so it follows a theme reload.
+    /// Readable, because "where is this" is a primary fact, not a muted one.
+    pub fn new() -> Self {
         let mut base = Base::container();
         base.transparent = true;
         Self {
@@ -53,15 +52,15 @@ impl FolderLine {
             path: signal(String::new()),
             size: WidgetSize::Caption,
             indent: Spacing::None,
-            color: theme.colors.foreground,
             shown: false,
         }
     }
 
-    /// The path to show, as the user should read it (heca shows a pane's directory home-relative).
-    /// Default: empty, which hides the line.
-    pub fn path(self, path: impl Into<String>) -> Self {
-        self.path.set(path.into());
+    /// The path to show, as the user should read it (heca shows a pane's directory home-relative)
+    /// — fixed, or a value that changes (a signal, or a function reading signals), followed in
+    /// place. Default: empty, which hides the line.
+    pub fn path(self, path: impl heca_grid_ui::builders::IntoTextValue) -> Self {
+        path.into_text_value().show_in(self.path);
         self
     }
 
@@ -90,8 +89,7 @@ impl FolderLine {
     /// has spoken.
     fn line(&self) -> Flex {
         let label = Label::new("")
-            .with_text_signal(self.path)
-            .color(self.color)
+            .text(self.path)
             // **Cut from the FRONT, so the tail survives**: `…/projects/heca` says more than
             // `~/projects/he…`, and a path's last components are the ones that tell two apart.
             .truncate(Ellipsis::Start);
@@ -107,7 +105,7 @@ impl FolderLine {
             // **This line absorbs the squeeze** (`Style::flex_shrink`: nothing shrinks unless it
             // says so). A path is the longest thing on a card and the first that should give way.
             .shrink(1.0)
-            .child(Icon::new(Glyph::Folder).color(self.color))
+            .child(Icon::new(Glyph::Folder))
             .child(label)
     }
 
@@ -119,6 +117,12 @@ impl FolderLine {
         for child in self.base.children.iter_mut() {
             child.base_mut().set_hidden(!shown);
         }
+    }
+}
+
+impl Default for FolderLine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -171,9 +175,10 @@ impl Component for FolderLine {
 mod tests {
     use super::*;
     use heca_grid_ui::LayoutEngine;
+    use heca_grid_ui::reactive::SignalUpdate;
 
     fn line(path: &str) -> FolderLine {
-        FolderLine::new(&GuiTheme::default()).path(path)
+        FolderLine::new().path(path)
     }
 
     fn lay_out(root: &mut dyn Component) {
@@ -285,5 +290,29 @@ mod tests {
             folder.loc.x >= name.loc.x + name.size.w,
             "the line sits in its own area, after the name"
         );
+    }
+
+    /// **The line takes its colour when it is drawn**: the same widget, painted under two themes,
+    /// writes its path in each theme's text colour — nothing was copied in when it was built.
+    #[test]
+    fn the_line_follows_the_theme_it_is_painted_with() {
+        let mut widget = line("~/projects/heca");
+        lay_out(&mut widget);
+        let colour_of_path = |foreground: heca_grid_ui::Color| {
+            let mut theme = heca_grid_ui::Theme::default();
+            theme.colors.foreground = foreground;
+            let mut scene = heca_grid_ui::Scene::new();
+            heca_grid_ui::paint_child(&widget, &mut PaintCx::new(&mut scene, &theme));
+            scene.iter().find_map(|c| match c {
+                heca_grid_ui::DrawCommand::Text(t) if t.text.contains("heca") => Some(t.color),
+                _ => None,
+            })
+        };
+        let (one, two) = (
+            heca_grid_ui::Color::rgb(0x11, 0x22, 0x33),
+            heca_grid_ui::Color::rgb(0xdd, 0xcc, 0xbb),
+        );
+        assert_eq!(colour_of_path(one), Some(one));
+        assert_eq!(colour_of_path(two), Some(two), "the new theme, no rebuild");
     }
 }

@@ -251,10 +251,24 @@ impl TerminalBackend {
             .map_err(PtyError::agent_setup)?;
         let agent_wake = wake_on_output.clone();
         let (pty, auto_close_on_exit) = match launch {
-            LaunchTarget::Process(process) => (
-                PtyHandle::new_with_process(cols, rows, cell_size, wake_on_output, process)?,
-                false,
-            ),
+            // An agent heca starts itself (resumed from a saved session) goes through the launcher,
+            // as one typed at a prompt does; the pane still records the program, not the launcher.
+            LaunchTarget::Process(process) => {
+                let started = agent_session
+                    .as_ref()
+                    .and_then(|session| session.through_launcher(process));
+                (
+                    PtyHandle::new_with_process(
+                        cols,
+                        rows,
+                        cell_size,
+                        wake_on_output,
+                        process,
+                        started.as_ref(),
+                    )?,
+                    false,
+                )
+            }
             LaunchTarget::Shell(shell) => {
                 let pty = PtyHandle::new_with_shell(
                     cols,

@@ -68,7 +68,7 @@ fn resizing_respects_both_limits_and_keeps_the_editor_and_scrollbar_alive() {
     let mut input = Input::new()
         .multiline(true)
         .value("one\ntwo\nthree\nfour\nfive\nsix");
-    let text = input.text();
+    let text = input.text_signal();
     common::give_keyboard(&mut input);
     let mut widget = Resizable::new(input)
         .width(220.0)
@@ -123,7 +123,7 @@ fn the_same_control_resizes_non_editor_content() {
 #[test]
 fn pressing_the_grip_hands_focus_to_the_editor_instead_of_an_unrelated_control() {
     let input = Input::new().multiline(true);
-    let text = input.text();
+    let text = input.text_signal();
     let mut other = Input::new().value("other");
     common::give_keyboard(&mut other);
     let mut root = Flex::column()

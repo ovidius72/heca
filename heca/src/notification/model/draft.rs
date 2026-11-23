@@ -28,6 +28,9 @@ pub struct NotificationDraft {
     /// client without the field still deserializes as session-wide.
     #[serde(default)]
     pub(in crate::notification) audience: Audience,
+    /// The pane it is about ([`about_pane`](Self::about_pane)).
+    #[serde(default)]
+    pane: Option<heca_core::layout::PaneId>,
 }
 
 impl NotificationDraft {
@@ -43,7 +46,15 @@ impl NotificationDraft {
             dedup_key: None,
             actions: Vec::new(),
             audience: Audience::Session,
+            pane: None,
         }
+    }
+
+    /// **It is about `pane`**: a window does not pop it up while that pane is the one it has
+    /// focused — the user is already looking at it — and it is kept in the history either way.
+    pub fn about_pane(mut self, pane: heca_core::layout::PaneId) -> Self {
+        self.pane = Some(pane);
+        self
     }
 
     /// Show this only in the window that raised it — feedback for that window's own action, not a
@@ -167,6 +178,7 @@ impl NotificationDraft {
         notification.dedup_key = self.dedup_key;
         notification.actions = self.actions;
         notification.audience = self.audience;
+        notification.pane = self.pane;
         notification
     }
 }

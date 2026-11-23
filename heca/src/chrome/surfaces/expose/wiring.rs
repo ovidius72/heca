@@ -146,7 +146,6 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<crate::
         },
         folders,
     );
-    let theme = crate::chrome::chrome_gui_theme(state);
     let already_up = state.layers.is_visible_named(&state.window_root, &name);
     let here = open_on(
         state.layout(),
@@ -195,7 +194,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<crate::
     // The layer's seat listens for what the map sends (`LayerRegistry::seat`), so the map itself
     // takes no emitter.
     Some(crate::chrome::register_named_layer(state, &name, |_| {
-        let mut root = map(&rows, &theme, here, &options, &keys, previous);
+        let mut root = map(&rows, here, &options, &keys, previous);
         root.base_mut().lock = false;
         root
     }))

@@ -197,3 +197,50 @@ fn the_selected_rows_secondary_text_uses_the_selected_ink_and_the_others_stay_mu
     assert_eq!(after("second description"), selected_ink);
     assert_eq!(after("first description"), theme.colors.muted);
 }
+
+/// **A row can carry something after its title** — drawn on the title's line, to its right, inside
+/// the row, and the title gives way to it rather than running under it.
+#[test]
+fn a_rows_trailing_content_sits_after_its_title_on_the_same_line() {
+    use heca_grid_ui::{Command, CommandPalette, Label};
+    let theme = Theme::default();
+    let mut p = CommandPalette::new()
+        .command(
+            Command::new("work session with a long name that needs room", || {})
+                .trailing(|| Label::new("pro")),
+        )
+        .command(Command::new("plain", || {}))
+        .default_open(true);
+    for width in [1200.0, 420.0] {
+        // A new window width settles on the next frame (the rows are measured at the width they
+        // were drawn at), so it is laid out and drawn twice, as two frames are.
+        for _ in 0..2 {
+            LayoutEngine::new().compute(&mut p, Size::new(width, 800.0));
+            let _ = common::paint_in(&p, &theme, Size::new(width, 800.0));
+        }
+        LayoutEngine::new().compute(&mut p, Size::new(width, 800.0));
+        let scene = common::paint_in(&p, &theme, Size::new(width, 800.0));
+        let text = |name: &str| {
+            scene.iter().find_map(|c| match c {
+                DrawCommand::Text(t) if t.text.starts_with(name) => Some(t.rect),
+                _ => None,
+            })
+        };
+        let title = text("work").expect("the title paints");
+        let trailing =
+            text("pro").unwrap_or_else(|| panic!("the trailing content paints at {width}px"));
+        assert!(
+            trailing.loc.x >= title.loc.x + title.size.w - 0.5,
+            "after the title, not over it, at {width}px"
+        );
+        assert!(
+            (trailing.loc.y + trailing.size.h / 2.0 - (title.loc.y + title.size.h / 2.0)).abs()
+                <= 2.0,
+            "on the title's line at {width}px"
+        );
+        assert!(
+            trailing.loc.x + trailing.size.w <= width,
+            "inside the window at {width}px"
+        );
+    }
+}

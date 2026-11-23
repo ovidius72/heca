@@ -67,6 +67,7 @@ pub enum WmAction {
     WorkspacePrev,
     FocusToggleLocal,
     FocusToggleGlobal,
+    FocusToggleLast,
 
     // ── Navigation (parameterized) ──
     FocusPane {
@@ -257,6 +258,9 @@ pub enum WmAction {
     /// nav cursor never lands on a column, so `delete_selected` can't reach one).
     /// Resolves its target at dispatch and routes through the y/n confirm prompt.
     DeleteCurrentColumn,
+    /// Delete the workspace you are on (and all its panes), after asking — `delete_workspace` aimed
+    /// at the active workspace, so it needs no index and can sit on a key or in the palette.
+    DeleteCurrentWorkspace,
     PaneSelect,
     /// Enter follow-link mode: assign a letter to each visible terminal hyperlink
     /// in the focused pane; the next letter opens that link (via `OpenLink`).
@@ -402,6 +406,11 @@ pub enum WmAction {
     CommandPalette {
         mode: Option<String>,
         query: Option<String>,
+        /// **Ask for this action's arguments, then run it** — one palette step per required argument
+        /// not in `arguments` yet. `mode` and `query` are ignored when it is set.
+        ask: Option<String>,
+        /// The arguments already chosen for `ask`, as `name=value` words (the RPC line's spelling).
+        arguments: Option<String>,
     },
 
     // ── External commands ──
@@ -684,6 +693,9 @@ pub enum WmAction {
 
     // ── Config ──
     ReloadConfig,
+    /// **Put `heca` on the command line** — link the app's executable into `~/.local/bin`
+    /// (macOS, Linux) or add its folder to the user's `PATH` (Windows).
+    InstallCommand,
 
     // ── Notifications ──
     /// Dismiss one visible notification by id. Mouse (the toast's own × — a

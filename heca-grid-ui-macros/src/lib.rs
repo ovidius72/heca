@@ -166,13 +166,18 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
     Some(match text.as_str() {
         "bool" => quote!(value.as_bool()),
         "f32" => quote!(value.as_f32()),
-        "f64" => quote!(value.as_f32().map(|v| v as f64)),
-        "usize" => quote!(value.as_f32().map(|v| v.max(0.0) as usize)),
-        "u16" => quote!(value.as_f32().map(|v| v.max(0.0) as u16)),
+        // Every number is read at full precision and narrowed by `PropInput` itself, once.
+        "f64" => quote!(value.as_f64()),
+        "u8" | "u16" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "i64" | "isize" => {
+            quote!(value.as_whole::<#ty>())
+        }
         "String" => quote!(value.as_text().map(::std::string::ToString::to_string)),
-        // A name, or a builder that also takes an optional one (`IntoName`): static data always
-        // brings a name, which is the `Some` half.
-        t if t.contains("Into<String>") || t.contains("IntoName") => {
+        // A name, or a builder that also takes an optional one (`IntoName`), or a fixed or live
+        // text (`IntoTextValue`): static data always brings a string, which is the fixed half.
+        t if t.contains("Into<String>")
+            || t.contains("IntoName")
+            || t.contains("IntoTextValue") =>
+        {
             quote!(value.as_text().map(::std::string::ToString::to_string))
         }
         t if t.starts_with('&') || t.contains("dyn") || t.contains("implFn") => return None,

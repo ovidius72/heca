@@ -232,7 +232,8 @@ impl ServerState {
     /// still lives in it (the step that splits the session's shared layout from each window's view
     /// moves it here).
     pub(crate) fn refresh_git(&mut self, session: &mut heca_core::layout::Session, now: Instant) {
-        crate::app::git_monitor::refresh(session, &mut self.git_runtime_cache, now);
+        let wake = self.waker.as_ref().map(ServerWaker::on_output);
+        crate::app::git_monitor::refresh(session, &mut self.git_runtime_cache, now, wake);
     }
 
     /// **When the server next has something to do** — the next notification deadline — or `None`
@@ -251,7 +252,7 @@ impl ServerState {
 
     /// **The notifications on show**, as plain serializable data — the projection the server sends
     /// a window, which builds its own toasts from it
-    /// ([`toast_spec`](crate::notification::toast_spec)). Sent on attach and whenever
+    /// ([`toasts_for`](crate::notification::toasts_for)). Sent on attach and whenever
     /// [`Change::NotificationsChanged`] is produced.
     /// The projection for the window on connection `client`: session-wide notifications plus any
     /// addressed to that window. Sent to each client on attach and on every

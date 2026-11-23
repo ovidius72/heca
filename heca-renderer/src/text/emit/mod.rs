@@ -13,14 +13,21 @@ use crate::clip::{combine_clip, intersect};
 
 /// **One glyph's quad**: its four corners over `rect` (logical px), leaning by `slant` — the top
 /// moves right by half of it and the bottom left by half — sampling `uv` and tinted `color`.
-/// `additive` is [`TextVertex::additive`]: `1.0` for a halo that adds light.
+/// `additive` is [`TextVertex::additive`]: `1.0` for a halo that adds light. A glyph with
+/// `own_colours` (an emoji) is drawn in them: only the text colour's opacity applies.
 pub(super) fn glyph_quad(
     rect: TextBox,
     slant: f32,
     uv: [f32; 4],
     color: [f32; 4],
     additive: f32,
+    own_colours: bool,
 ) -> [TextVertex; 4] {
+    let color = if own_colours {
+        [1.0, 1.0, 1.0, color[3]]
+    } else {
+        color
+    };
     let [u0, v0, u1, v1] = uv;
     let top_x = rect.x + slant * 0.5;
     let bottom_x = rect.x - slant * 0.5;

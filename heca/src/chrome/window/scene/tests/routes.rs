@@ -122,7 +122,6 @@ fn a_sidebar_toggle_goes_out_as_a_chrome_gesture() {
         "sidebar_left",
         &crate::chrome::ActionShortcuts::default(),
         &catalog,
-        heca_grid_ui::Color::rgb(255, 255, 255),
     );
     let mut chrome: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         Flex::row()

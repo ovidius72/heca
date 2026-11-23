@@ -85,7 +85,7 @@ impl Frame {
 
         // Frosted chrome colors come from the loaded theme's surface tone, with alpha derived from
         // the current appearance settings.
-        let (side_bg, _, _) = crate::chrome::chrome_colors(state);
+        let (side_bg, _) = crate::chrome::chrome_colors(state);
         state.primitive_renderer.draw_rect(
             0.0,
             0.0,

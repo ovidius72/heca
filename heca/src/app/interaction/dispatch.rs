@@ -72,6 +72,25 @@ pub(super) fn resolve_overlay_control(
     crate::chrome::resolve_overlay(state, registry, overlay, result);
 }
 
+/// **A palette that has closed itself no longer covers anything.** Running a palette row closes the
+/// palette in the same step, but its layer is popped by an event queued *after* the row's own
+/// intent — so that intent would be judged against a palette still covering the panes, and refused.
+/// The palette's own next step was (`command_palette` asking for an action's next argument), and so
+/// was any row of a custom palette that acts on what is under it. Settled here, before anything is
+/// routed, for every palette: heca's own and an extension's alike. Overlay control is resolved
+/// before this, so a row answered through `SubmitOverlay` still reaches its completion.
+fn settle_closed_palette(state: &mut AppState, registry: &ActionRegistry) {
+    let Some(up) = state.open_palette.as_ref() else {
+        return;
+    };
+    if heca_grid_ui::reactive::SignalGet::get_untracked(&up.open) {
+        return;
+    }
+    let id = up.id;
+    state.open_palette = None;
+    crate::chrome::resolve_overlay(state, registry, id, crate::chrome::ModalResult::Dismissed);
+}
+
 pub(crate) fn dispatch_intent(
     state: &mut AppState,
     registry: &ActionRegistry,
@@ -93,6 +112,7 @@ pub(crate) fn dispatch_intent(
         resolve_overlay_control(state, registry, source, action);
         return Ok(());
     }
+    settle_closed_palette(state, registry);
 
     // **Focus a container, then act on it.** Its outcome is dropped here — a click and a menu
     // pick have nowhere to report one — while RPC calls the same function for the answer.

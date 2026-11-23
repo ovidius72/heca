@@ -96,8 +96,12 @@ ran in each pane. A terminated session stays terminated until Restart; a deleted
 `save_sessions = false` keeps nothing. `resume_programs` and `resume_harness` are independent
 `[settings]` switches, both defaulting to true, for relaunching ordinary programs (with their exact
 arguments) and resuming harnesses through their driver and native session ID. A disabled category,
-and a harness that cannot be resumed (no ID, or a driver without resume), leaves the pane with your
-normal shell; a harness is never started as a new conversation, and you are told. A missing folder
+and a harness that cannot be resumed (it never reported, or a driver without resume), leaves the pane
+with your normal shell; a harness is never started as a new conversation in place of one, and you are
+told. A harness that never had a conversation (nothing typed in Codex or OpenCode yet) simply starts
+again as it was. A program heca brought back (an agent, or `nvim` typed in a shell) runs as the pane's
+own program, so when it ends the pane gets your shell in its folder — as quitting it did before the
+restart — unless the pane's close policy closes it. A missing folder
 gives a shell in your home folder. See
 [Server and client](server-client-architecture.md#sessions-across-a-restart).
 Session dialog text is configurable under `[settings.session_text]`.

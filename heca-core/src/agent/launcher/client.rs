@@ -55,6 +55,19 @@ fn run(arguments: Vec<OsString>) -> Result<i32, AgentError> {
             .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
             .collect(),
     };
+    // **Tell the terminal which program now runs** (OSC 133;E) — what makes the pane treat it as a
+    // running program whose reports count. Said here, for a command typed at a prompt and a program
+    // heca starts itself alike.
+    {
+        use std::io::Write as _;
+        let mut out = std::io::stdout();
+        let _ = write!(
+            out,
+            "\x1b]133;E;{}\x07",
+            crate::agent::session::encode(&request.program)
+        );
+        let _ = out.flush();
+    }
     let setup = request_setup(&directory, &request, Duration::from_millis(timeout), limit)?;
     // The terminal owns the outer directory and removes all run assets when it closes.
     let _assets = directory.keep();

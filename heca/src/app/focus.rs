@@ -24,6 +24,7 @@ pub(crate) fn find_pane_workspace(session: &Session, pane_id: PaneId) -> Option<
 /// **All** focus changes must go through this function — mouse clicks, keyboard nav,
 /// sidebar selection, pane select, swap-and-focus, etc.
 pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
+    let origin = state.focused_pane;
     // Switch workspace if the target pane is not in the current workspace.
     if let Some(target_ws) = find_pane_workspace(&state.session, pane_id)
         && target_ws != state.layout().active_workspace_idx()
@@ -38,6 +39,14 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
     // sync_focus reads the session's active pane, updates AppState, records history,
     // and rebuilds the sidebar tree. This is the ONLY place the sidebar rebuilds.
     sync_focus(state);
+
+    // **The pane you left is the last one**, not the one a workspace switch passed through on the
+    // way: switching lands on that workspace's active pane first, and the history recorded that
+    // stop. Every jump to a pane elsewhere goes through here — a sidebar click, a letter,
+    // `focus_toggle_last` — so it is said once.
+    if origin.is_some() && origin != state.focused_pane {
+        state.last_focused = origin;
+    }
 }
 
 /// The single canonical way to switch workspaces.
@@ -100,6 +109,9 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     notify_focus_changed(state, prev_focused, state.focused_pane);
     if prev_focused != state.focused_pane {
         crate::app::tree_focus::give_focused_pane_the_keyboard(state);
+        // A card held back because it was about the pane in focus may now be worth showing, and
+        // one about the newly focused pane is not.
+        state.rebuild_toasts();
     }
 
     let focus_changed = prev_focused != state.focused_pane;

@@ -29,7 +29,10 @@ fn main() { heca::run("heca"); }
 
 A program built on heca says who it is, adds what it wants through heca's **existing doors**, and
 calls the same `heca::run(..)` with its own fixed name — `heca::run("Heca Pro")` — which titles its
-windows (`Heca Pro - ~/projects/x`). Nothing here is a second mechanism: each door fills the one heca's own
+windows (`Heca Pro - ~/projects/x`). Its own icon, optional, goes with the name —
+`heca::App::new("Heca Pro").icon(include_bytes!("../assets/icon.png")).run()` — and is the window's
+and the Dock's while it runs (a user's `icon.png` beside the config still wins); the installed icon is
+the program's own package's. Nothing here is a second mechanism: each door fills the one heca's own
 parts use, so what is added is reachable from a key, a menu, the palette and RPC with nothing written
 for any of them. A worked, runnable example: `heca/examples/extend_heca.rs`
 (`cargo run -p heca --example extend_heca`).
@@ -158,9 +161,10 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | a terminal | `demo.terminal("s")` | client | the terminal `demo.s` in any tree you build (a dock, an overlay): `.command(..)`, `.cwd(..)`, `.title(..)`; the same name is the same running process, and closing the dock never ends it |
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
+| something at the end of palette rows | `demo.palette("session").to_raw(f)` / `.to_description(f)` | client | `f(&PaletteItem) -> Option<widget>` (native) or `Option<ViewNode>` (a plugin, realized by heca); see [Sessions and their projects](#sessions-and-their-projects) |
 | a service | `demo.service("s", factory)` | server | something that lives inside the server, once; see [A service inside the server](#a-service-inside-the-server) |
 | a listener | `service.on("session.changed", \|svc, cx, ev\| …)` | server | THE EVENTS on a service; see [Sessions and their projects](#sessions-and-their-projects) |
-| a folder line | `heca::FolderLine::new(theme).path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
+| a folder line | `heca::FolderLine::new().path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
 | a terminal agent driver | `demo.agent_driver(MyDriver::new())` | terminal owner | implements `heca::agent::AgentDriver`; scoped as `demo.<driver id>` and used by the same launch/report path as built-in drivers |
 
 Dock and layer factories return ordinary components. For a dock, implement
@@ -273,13 +277,26 @@ way the brand itself draws its app icon: on its own solid tile, in the brand's c
 mark is white on Claude's coral tile, and the Codex mark is OpenAI's black symbol on a white tile.
 Only brand marks keep their own colours this way; everything else heca draws follows the theme.
 
+**A session whose work runs outside heca still reports to its pane.** A program can run a session
+in a process heca never started — Claude Code resumes a background session in its own daemon, and
+only the front-end runs in the pane — so that process's hooks have no `HECA_AGENT_*` variables. When a
+hook that has them reports a native `session_id`, heca remembers the pane's reporting connection under
+that id (an owner-only folder in the user's temporary folder); a hook without them looks its session
+up and reports to the same pane. A pane that is gone has no file to write to, and its entry goes.
+
 The report reader attaches the registered mark after decoding a native report. Lifecycle templates
 do not repeat SVG contents in every event or in the launch environment. A user can override a mark
 with `icon = "/path/to/logo.svg"` under that program's configuration; this works for added drivers too.
 
 `AgentState` also accepts optional `model`, `session_id` and `session_title` values supplied by a
-driver. The row shows a reported model or the configured program name, then the reported session
-title or the pane name. It never invents a model or title. Omitted model/title metadata is retained
+driver. The row shows the program's icon and the model it answers with, or its configured name when
+it reports none. A driver keeps the model current by naming it on its events; for a hook that does
+not, heca reads it from the conversation log the hook names (`transcript_path`, the model of the last
+answer — at the end of a turn it waits a moment for that answer to be written), and a model-switch
+hook names the new one (`to_model`, Claude Code's `PostModelSwitch`, installed with the integration),
+so Claude Code's row follows `/model` at once. Under it, the reported session title, as `[appearance.sidebar] agent_session_line` says
+(by default only a title the program reported that is not the pane's name already). It never
+invents a title. Omitted model/title metadata is retained
 only when the driver and an explicit, nonempty session identity match; a different session clears
 it. Missing fields remain compatible with older reports. Native adapters must forward the metadata
 their program actually supplies.
@@ -326,7 +343,8 @@ fn on_activate(&mut self, ctx: &heca::ChromeCtx<'_>) -> heca::ProviderHandles {
 
 Each status can set `label`, `icon` (a shared glyph name), `tone` and `sound`.
 Tones use the current theme: `accent`, `muted`, `warning`, `success` or `danger`.
-The icon and label follow that tone together, including for plugin-defined statuses:
+The row shows the icon in that tone, with the label as its tooltip, including for plugin-defined
+statuses:
 
 ```toml
 [settings.agents.statuses.review_ready]
@@ -429,6 +447,8 @@ let demo = heca::extension("demo");
 let rooms = demo.service("rooms", |cx| Ok(Rooms::open(cx.config(), cx.inbox())?));
 
 // 2. An action on it. It is an ordinary action: a key, a menu, the palette and RPC all find it.
+//    Its arguments reach the handler in the types it declares — a declared `Int` is an `Int`
+//    whether a key, a script line or code sent it — so the handler parses nothing itself.
 rooms.action(
     demo.action("join").label("Join room"),
     |rooms, cx, intent| rooms.join(cx, intent), // returns an `ActionResult`
@@ -745,6 +765,35 @@ let on_heca = cx.sessions().of_project(Path::new("~/projects/heca"));
 Folders are compared as the file system resolves them, so a project reached through a symbolic link
 or written with a trailing slash is the same project.
 
+Each session also says how many windows show it and how many agents run in it — `entry.windows()`,
+`entry.agents()`.
+
+**In a window, the same list and the same event.** A dock reads every session with
+`cx.state().sessions()` — a value to follow, so a list bound to it keeps up as sessions are made,
+renamed and deleted — and hears `cx.on("session.changed", |ev| …)` with the same kinds:
+
+```rust
+let sessions = cx.state().sessions();
+Flex::column().child(sessions.map(SessionRow::new))
+```
+
+**Something of yours at the end of a palette row.** For a palette mode (`"session"`, the `#` list,
+today), register what to show after a row's title — a widget from native code, or a description
+from a plugin, which heca realizes into the same widget. Several extensions' pieces sit side by side
+in the order they registered; a function that has nothing to say returns `None`:
+
+```rust
+let pro = heca::extension("heca-pro");
+pro.palette("session").to_raw(move |item| {
+    let session = item.session()?;
+    rooms.with(|r| r.is_pro(session.key())).then(|| Badge::accent("pro"))
+});
+// the same as data — what a plugin sends; native code may use it too
+pro.palette("session").to_description(|item| {
+    item.session().map(|_| heca_view::build::Badge::new("pro").variant(heca_view::ViewBadgeVariant::Accent).into())
+});
+```
+
 **To hear when sessions change, listen** (THE EVENTS): `session.changed` carries what happened
 (`ev.kind()`: `Created`, `Renamed`, `Terminated`, `Restarted`, `Deleted`), the session it happened to
 (as it was just before, for a deleted one) and every session after the change.
@@ -769,7 +818,7 @@ the front so the end survives, the whole path on hover. Place it like any widget
 signal, and an empty path hides the line and its gap:
 
 ```rust
-let line = heca::FolderLine::new(theme).path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
+let line = heca::FolderLine::new().path("~/projects/heca").size(WidgetSize::Caption).indent(Spacing::Sm);
 let path = line.path_signal();
 let card = Flex::column().child(Label::new(member)).child(line);
 path.set(new_folder);           // in place, no rebuild

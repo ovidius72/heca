@@ -9,10 +9,8 @@ use super::*;
 fn a_row_carries_no_workspace_label() {
     let s = session();
     let rows = model(s.l(), |p| p.title.clone(), false);
-    let theme = GuiTheme::default();
     let mut root = map(
         &rows,
-        &theme,
         None,
         &LayoutOptions::default(),
         &shipped_keys(),
@@ -25,6 +23,7 @@ fn a_row_carries_no_workspace_label() {
     let viewport = heca_grid_ui::Size::new(1200.0, 800.0);
     heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), viewport);
     let mut scene = heca_grid_ui::Scene::new();
+    let theme = heca_grid_ui::theme::Theme::default();
     root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme).with_viewport(viewport));
     let seen: Vec<String> = scene
         .iter()
@@ -75,10 +74,8 @@ fn the_assembled_map_stays_inside_the_window() {
     for (w, h) in [(1280.0, 800.0), (1900.0, 1200.0), (800.0, 600.0)] {
         let s = session();
         let rows = model(s.l(), |p| p.title.clone(), false);
-        let theme = GuiTheme::default();
         let mut root = map(
             &rows,
-            &theme,
             Some(PaneId(1)),
             &LayoutOptions::default(),
             &shipped_keys(),
@@ -111,10 +108,8 @@ fn the_assembled_map_stays_inside_the_window() {
 fn the_map_owns_its_picker_and_every_card_is_a_target() {
     let s = session();
     let rows = model(s.l(), |p| p.title.clone(), false);
-    let theme = GuiTheme::default();
     let mut root = map(
         &rows,
-        &theme,
         Some(PaneId(1)),
         &LayoutOptions::default(),
         &shipped_keys(),
@@ -133,5 +128,35 @@ fn the_map_owns_its_picker_and_every_card_is_a_target() {
         heca_grid_ui::collect_hints(root.as_ref()).len(),
         2,
         "one pick target per card in the fixture's session",
+    );
+}
+
+/// **The map's backdrop is the theme's background at its scrim opacity, read when drawn** — the
+/// map is built with no theme at all, and painted under a new theme it takes that theme's colours.
+#[test]
+fn the_backdrop_is_the_painting_themes_background_at_its_scrim() {
+    let s = session();
+    let rows = model(s.l(), |p| p.title.clone(), false);
+    let mut root = map(
+        &rows,
+        None,
+        &LayoutOptions::default(),
+        &shipped_keys(),
+        None,
+    );
+    root.show();
+    let viewport = heca_grid_ui::Size::new(1200.0, 800.0);
+    heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), viewport);
+    let mut theme = heca_grid_ui::theme::Theme::default();
+    theme.colors.background = heca_grid_ui::Color::rgb(0x21, 0x43, 0x65);
+    theme.colors.interaction.scrim = 77;
+    let mut scene = heca_grid_ui::Scene::new();
+    root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme).with_viewport(viewport));
+    let veil = theme.colors.background.with_alpha(77);
+    assert!(
+        scene
+            .iter()
+            .any(|c| matches!(c, heca_grid_ui::DrawCommand::Rect(r) if r.fill == veil)),
+        "the backdrop is the painting theme's background at its scrim"
     );
 }

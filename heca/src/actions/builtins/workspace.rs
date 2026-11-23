@@ -31,6 +31,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[],
     },
     ActionDescriptor {
+        name: "delete_current_workspace",
+        side: Side::Client,
+        label: "Delete Current Workspace",
+        description: "Delete the workspace you are on and all its panes, after asking (not the last workspace).",
+        icon: Some(Glyph::StackMinus),
+        args: &[],
+    },
+    ActionDescriptor {
         name: "delete_workspace",
         side: Side::Server,
         label: "Delete Workspace",
@@ -38,7 +46,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::StackMinus),
         args: &[ArgDescriptor::required(
             "ws_idx",
-            ArgKind::Int,
+            ArgKind::Workspace,
             "Index of the workspace to delete.",
         )],
     },
@@ -106,7 +114,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::NotePencil),
         args: &[ArgDescriptor::required(
             "ws_idx",
-            ArgKind::Int,
+            ArgKind::Workspace,
             "Index of the workspace to rename.",
         )],
     },
@@ -117,7 +125,11 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Set a workspace's name directly, without opening the rename prompt. An empty name clears it.",
         icon: Some(Glyph::NotePencil),
         args: &[
-            ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to rename."),
+            ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Workspace,
+                "Index of the workspace to rename.",
+            ),
             ArgDescriptor::required("name", ArgKind::Text, "The new name."),
         ],
     },
@@ -129,7 +141,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: None,
         args: &[ArgDescriptor::required(
             "ws_idx",
-            ArgKind::Int,
+            ArgKind::Workspace,
             "Index of the workspace whose name to reset.",
         )],
     },

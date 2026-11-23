@@ -265,6 +265,13 @@ pub trait EventExt: Component + Sized {
         self.on(crate::event::EventKind::DragSettled, f)
     }
 
+    /// **A drag held by this widget is past its edge** — every frame, even with the mouse still.
+    /// Scroll by [`delta_pixels`](crate::event::PointerEvent::delta_pixels); see
+    /// [`Event::EdgeScroll`](crate::event::Event::EdgeScroll).
+    fn on_edge_scroll(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::EdgeScroll, f)
+    }
+
     /// A drag was released over this drop target.
     fn on_drop(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::Drop, f)

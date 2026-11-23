@@ -126,10 +126,11 @@ impl Pane {
         self
     }
 
-    /// **Frost the pane**: blur what is drawn behind it by `radius` logical px, in scene order, so
-    /// it blurs what lies under it and nothing of what comes after — its own content included.
+    /// **Blur what is behind the pane** by `radius` logical px, in scene order, so it blurs what
+    /// lies under it and nothing of what comes after — its own content included. The same effect
+    /// as [`Overlay::blur`](crate::widgets::Overlay::blur), one name for both.
     #[heca_grid_ui_macros::prop]
-    pub fn frosted(mut self, radius: f32) -> Self {
+    pub fn blur(mut self, radius: f32) -> Self {
         self.frost = (radius > 0.0).then_some(radius);
         self
     }
@@ -185,7 +186,7 @@ impl Component for Pane {
             return;
         }
         let b = self.base.bounds;
-        let fill = self.base.style.visual.fill;
+        let fill = self.base.style.visual.fill_in(cx.theme());
 
         let radius = self.radius(cx.theme());
         // Surface glow: an explicit `.glow(..)` (StyleExt) wins; otherwise the

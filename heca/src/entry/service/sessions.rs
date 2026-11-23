@@ -23,9 +23,25 @@ pub struct SessionEntry {
     name: String,
     folder: Option<PathBuf>,
     state: SessionState,
+    windows: usize,
+    agents: usize,
 }
 
 impl SessionEntry {
+    /// **The entry for a session, from what the server says about it** — the one conversion, read
+    /// the same way by the server's services and by a window. `None` for a session with no lasting
+    /// key yet.
+    pub(crate) fn of(info: &crate::server::sessions::SessionInfo) -> Option<Self> {
+        let state = match info.status {
+            crate::server::sessions::SessionStatus::Active => SessionState::Active,
+            crate::server::sessions::SessionStatus::Terminated => SessionState::Terminated,
+        };
+        let mut entry = Self::new(info.key?, info.name.clone(), info.folder.clone(), state);
+        entry.windows = info.windows;
+        entry.agents = info.agents;
+        Some(entry)
+    }
+
     pub(crate) fn new(
         key: SessionKey,
         name: String,
@@ -37,6 +53,8 @@ impl SessionEntry {
             name,
             folder,
             state,
+            windows: 0,
+            agents: 0,
         }
     }
 
@@ -58,6 +76,16 @@ impl SessionEntry {
     /// Whether the session is running or stopped.
     pub fn state(&self) -> SessionState {
         self.state
+    }
+
+    /// How many windows show the session right now.
+    pub fn windows(&self) -> usize {
+        self.windows
+    }
+
+    /// How many agents are running in the session right now.
+    pub fn agents(&self) -> usize {
+        self.agents
     }
 }
 

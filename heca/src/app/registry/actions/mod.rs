@@ -25,6 +25,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::WorkspacePrev, handle_workspace_prev);
     registry.register(WmActionKind::FocusToggleLocal, handle_focus_toggle_local);
     registry.register(WmActionKind::FocusToggleGlobal, handle_focus_toggle_global);
+    registry.register(WmActionKind::FocusToggleLast, handle_focus_toggle_last);
     registry.register(WmActionKind::FocusPane, handle_focus_pane);
     registry.register(WmActionKind::FocusWorkspace, handle_focus_workspace);
 
@@ -140,6 +141,10 @@ pub fn build_registry() -> ActionRegistry {
     }
     registry.register(WmActionKind::ReloadConfig, handle_reload_config);
     registry.register(
+        WmActionKind::InstallCommand,
+        crate::handlers::handle_install_command,
+    );
+    registry.register(
         WmActionKind::NotificationDismissOne,
         handle_notification_dismiss_one,
     );
@@ -177,6 +182,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         WmActionKind::DeleteCurrentColumn,
         handle_delete_current_column,
+    );
+    registry.register(
+        WmActionKind::DeleteCurrentWorkspace,
+        handle_delete_current_workspace,
     );
 
     // ── Take ──
