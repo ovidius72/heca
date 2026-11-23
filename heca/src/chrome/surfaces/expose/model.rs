@@ -169,10 +169,7 @@ pub(crate) fn model(
 
             ExposeWorkspace {
                 ws_idx,
-                name: ws
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
+                name: ws.label(),
                 active: ws_idx == layout.active_workspace_idx(),
                 floating: ws
                     .floating()

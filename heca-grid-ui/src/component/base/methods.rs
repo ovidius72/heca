@@ -112,7 +112,7 @@ impl Base {
             drag_handle: false,
             drop_target: false,
             accepts: Vec::new(),
-            accepts_onto: true,
+            accepts_beside: Vec::new(),
             key: None,
             scope_key: None,
             keeps_keyboard: false,

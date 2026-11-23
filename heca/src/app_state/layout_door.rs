@@ -71,7 +71,7 @@ impl AppState {
             }
             let mut layout = self.session.through_mut(&mut self.view);
             let mut tracking = super::reaction::Tracking {
-                last_visited_ws: &mut self.last_visited_ws_idx,
+                last_visited_ws: &mut self.last_visited_ws,
                 last_visited_pane_per_ws: &mut self.last_visited_pane_per_ws,
                 expose_cursor_per_ws: &mut self.expose_cursor_per_ws,
             };

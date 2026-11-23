@@ -9,7 +9,10 @@ fn test_chrome() -> crate::chrome::SharedChromeState {
     crate::chrome::SharedChromeState::new(200.0, 200.0)
 }
 fn toggle_ws(tree: &mut WorkspaceTree, chrome: &crate::chrome::SharedChromeState, ws_idx: usize) {
-    chrome.workspaces.toggle_ws_collapsed(ws_idx);
+    // This tree is the test's own, not the store's, so it says which workspace by identity.
+    let ws = tree.workspaces[ws_idx].ws_id;
+    let folded = chrome.workspaces.is_collapsed(ws);
+    chrome.workspaces.set_collapsed(ws, ws_idx, !folded);
     let set = chrome.workspaces.with_collapsed_ws(|s| s.clone());
     tree.apply_ws_collapsed(&set, Some(ws_idx));
 }
@@ -19,7 +22,8 @@ fn set_ws_collapsed(
     ws_idx: usize,
     collapsed: bool,
 ) {
-    chrome.workspaces.set_ws_collapsed(ws_idx, collapsed);
+    let ws = tree.workspaces[ws_idx].ws_id;
+    chrome.workspaces.set_collapsed(ws, ws_idx, collapsed);
     let set = chrome.workspaces.with_collapsed_ws(|s| s.clone());
     tree.apply_ws_collapsed(&set, Some(ws_idx));
 }

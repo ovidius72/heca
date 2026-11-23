@@ -112,12 +112,14 @@ pub trait DragExt: Component + Sized {
     ///
     /// Takes an `Option` too ([`IntoNames`](super::IntoNames)): `None` leaves the widget as it was,
     /// not a drop target.
+    ///
+    /// **Combines with [`accepts_beside`](Self::accepts_beside)**: each kind is read its own way, so
+    /// one row can take a pane onto itself and another row beside itself.
     fn accepts(mut self, kinds: impl super::IntoNames) -> Self {
         if let Some(kinds) = kinds.into_names() {
             let b = self.base_mut();
             b.drop_target = true;
             b.accepts = kinds;
-            b.accepts_onto = true;
         }
         self
     }
@@ -131,12 +133,16 @@ pub trait DragExt: Component + Sized {
     /// another pane, which it swaps or moves onto.
     ///
     /// Takes an `Option` too, like [`accepts`](Self::accepts): `None` leaves the widget as it was.
+    /// Combines with [`accepts`](Self::accepts), per kind.
+    ///
+    /// ```ignore
+    /// DockFrame::new("web").accepts(["pane", "column"]).accepts_beside(["workspace"])
+    /// ```
     fn accepts_beside(mut self, kinds: impl super::IntoNames) -> Self {
         if let Some(kinds) = kinds.into_names() {
             let b = self.base_mut();
             b.drop_target = true;
-            b.accepts = kinds;
-            b.accepts_onto = false;
+            b.accepts_beside = kinds;
         }
         self
     }

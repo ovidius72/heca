@@ -145,6 +145,18 @@ impl WorkspaceTree {
         })
     }
 
+    /// The panes of the column holding `pane_id`, top to bottom — `None` for a pane in no column.
+    pub fn column_of(&self, pane_id: PaneId) -> Option<Vec<PaneId>> {
+        self.workspaces.iter().find_map(|ws| {
+            ws.columns.iter().find_map(|col| {
+                col.panes
+                    .iter()
+                    .any(|p| p.pane_id == pane_id)
+                    .then(|| col.panes.iter().map(|p| p.pane_id).collect())
+            })
+        })
+    }
+
     pub fn new() -> Self {
         Self {
             workspaces: Vec::new(),
@@ -163,14 +175,11 @@ impl WorkspaceTree {
         // Preserve column collapse across rebuild. Workspace collapse is owned by
         // `chrome_state.collapsed_ws` now — callers re-apply it via `apply_ws_collapsed`
         // after sync (so it defaults to expanded here).
-        let prev_col_collapsed: std::collections::HashMap<(usize, usize), bool> = self
+        // By identity, so a fold stays on its column when workspaces or columns are reordered.
+        let prev_col_collapsed: std::collections::HashMap<heca_core::layout::ColumnId, bool> = self
             .workspaces
             .iter()
-            .flat_map(|w| {
-                w.columns
-                    .iter()
-                    .map(move |c| ((w.ws_idx, c.col_idx), c.collapsed))
-            })
+            .flat_map(|w| w.columns.iter().map(|c| (c.col_id, c.collapsed)))
             .collect();
 
         self.workspaces.clear();
@@ -185,10 +194,7 @@ impl WorkspaceTree {
             let mut ws_entry = WorkspaceEntry {
                 ws_idx,
                 ws_id: ws.id,
-                name: ws
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
+                name: ws.label(),
                 custom_name: ws.name.clone(),
                 collapsed,
                 columns: Vec::with_capacity(ws.scrolling.columns.len()),
@@ -203,10 +209,7 @@ impl WorkspaceTree {
 
             for &col_idx in &cols_to_show {
                 if let Some(col) = ws.scrolling.columns.get(col_idx) {
-                    let col_collapsed = prev_col_collapsed
-                        .get(&(ws_idx, col_idx))
-                        .copied()
-                        .unwrap_or(false);
+                    let col_collapsed = prev_col_collapsed.get(&col.id).copied().unwrap_or(false);
                     let mut col_entry = ColumnEntry {
                         col_idx,
                         col_id: col.id,
@@ -460,17 +463,19 @@ impl WorkspaceTree {
     /// owned by `chrome_state`; this only mirrors it for navigation/rendering.
     pub fn apply_ws_collapsed(
         &mut self,
-        set: &std::collections::HashSet<usize>,
+        set: &std::collections::HashSet<heca_core::layout::WorkspaceId>,
         changed_ws: Option<usize>,
     ) {
         // Decide the cursor move BEFORE the flat list changes (indices shift on sync).
         let move_cursor_to_parent = changed_ws.is_some_and(|ws_idx| {
-            set.contains(&ws_idx)
+            self.workspaces
+                .get(ws_idx)
+                .is_some_and(|ws| set.contains(&ws.ws_id))
                 && self.current_item_in_workspace(ws_idx)
                 && !matches!(self.current_item(), Some(WorkspaceRow::Workspace { ws_idx: item_ws, .. }) if *item_ws == ws_idx)
         });
         for ws_entry in &mut self.workspaces {
-            ws_entry.collapsed = set.contains(&ws_entry.ws_idx);
+            ws_entry.collapsed = set.contains(&ws_entry.ws_id);
         }
         self.sync_flat_items();
         if move_cursor_to_parent
@@ -535,8 +540,13 @@ impl WorkspaceTree {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 WorkspaceRowKind::Workspace => {
-                    if let WorkspaceRow::Workspace { ws_idx, .. } = item {
-                        chrome_state.toggle_ws_collapsed(ws_idx);
+                    if let WorkspaceRow::Workspace { ws_idx, ws_id } = item {
+                        // The tree is being changed, so it says which workspace by identity.
+                        chrome_state.set_collapsed(
+                            ws_id,
+                            ws_idx,
+                            !chrome_state.is_collapsed(ws_id),
+                        );
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
@@ -559,8 +569,8 @@ impl WorkspaceTree {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 WorkspaceRowKind::Workspace => {
-                    if let WorkspaceRow::Workspace { ws_idx, .. } = item {
-                        chrome_state.set_ws_collapsed(ws_idx, false);
+                    if let WorkspaceRow::Workspace { ws_idx, ws_id } = item {
+                        chrome_state.set_collapsed(ws_id, ws_idx, false);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
@@ -583,8 +593,8 @@ impl WorkspaceTree {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 WorkspaceRowKind::Workspace => {
-                    if let WorkspaceRow::Workspace { ws_idx, .. } = item {
-                        chrome_state.set_ws_collapsed(ws_idx, true);
+                    if let WorkspaceRow::Workspace { ws_idx, ws_id } = item {
+                        chrome_state.set_collapsed(ws_id, ws_idx, true);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }

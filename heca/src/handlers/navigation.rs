@@ -72,10 +72,9 @@ pub fn handle_focus_toggle_local(
 ) -> crate::actions::ActionResult {
     let ws_idx = state.layout().active_workspace_idx();
     if let Some(prev_pane) = state
-        .last_visited_pane_per_ws
-        .get(ws_idx)
-        .copied()
-        .flatten()
+        .session
+        .workspace_id(ws_idx)
+        .and_then(|ws| state.last_visited_pane_per_ws.get(&ws).copied())
         && Some(prev_pane) != state.focused_pane
     {
         focus_pane_by_id(state, prev_pane);
@@ -87,7 +86,10 @@ pub fn handle_focus_toggle_global(
     state: &mut AppState,
     _action: &WmAction,
 ) -> crate::actions::ActionResult {
-    if let Some(prev_ws) = state.last_visited_ws_idx {
+    if let Some(prev_ws) = state
+        .last_visited_ws
+        .and_then(|ws| state.session.index_of(ws))
+    {
         let current_ws = state.layout().active_workspace_idx();
         if prev_ws != current_ws {
             switch_workspace_tracked(state, prev_ws);

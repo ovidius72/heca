@@ -4,49 +4,35 @@
 //! The server reports past facts about the content ([`Change`]). Which workspace is shown, which
 //! column is active and where the window came from are the window's own decisions, made here once.
 
-use heca_core::layout::{Before, LayoutMut, PaneId};
+use heca_core::layout::{Before, LayoutMut, PaneId, WorkspaceId};
+use std::collections::HashMap;
 
 use crate::input::WmAction;
 use crate::server::{Change, Refusal};
 
 /// What a window remembers about where it has been, by workspace — the parts of its state a
 /// fact about the layout can make stale.
+///
+/// **Kept by workspace identity, never by position.** A workspace keeps its id wherever it moves,
+/// so reordering the list or removing another workspace leaves every memory on the workspace it
+/// belongs to with nothing to shift — and a memory added tomorrow cannot forget to shift.
 pub(crate) struct Tracking<'a> {
     /// The workspace shown before this one.
-    pub(crate) last_visited_ws: &'a mut Option<usize>,
+    pub(crate) last_visited_ws: &'a mut Option<WorkspaceId>,
     /// The pane focused before this one, per workspace.
-    pub(crate) last_visited_pane_per_ws: &'a mut Vec<Option<PaneId>>,
+    pub(crate) last_visited_pane_per_ws: &'a mut HashMap<WorkspaceId, PaneId>,
     /// Where the exposé's cursor was, per workspace.
-    pub(crate) expose_cursor_per_ws: &'a mut Vec<Option<PaneId>>,
+    pub(crate) expose_cursor_per_ws: &'a mut HashMap<WorkspaceId, PaneId>,
 }
 
 impl Tracking<'_> {
-    /// Know workspace `idx`, which is new: nothing was visited in it yet.
-    pub(crate) fn know_workspace(&mut self, idx: usize) {
-        for per_ws in [
-            &mut *self.last_visited_pane_per_ws,
-            &mut *self.expose_cursor_per_ws,
-        ] {
-            if per_ws.len() <= idx {
-                per_ws.resize(idx + 1, None);
-            }
+    /// Forget the workspaces `alive` no longer answers for: what pointed at one points at nothing.
+    pub(crate) fn forget_gone(&mut self, alive: impl Fn(WorkspaceId) -> bool) {
+        if self.last_visited_ws.is_some_and(|id| !alive(id)) {
+            *self.last_visited_ws = None;
         }
-    }
-
-    /// Forget workspace `idx`, which is gone: what pointed at it points at nothing, and what
-    /// pointed past it moves down one.
-    pub(crate) fn forget_workspace(&mut self, idx: usize) {
-        match *self.last_visited_ws {
-            Some(i) if i == idx => *self.last_visited_ws = None,
-            Some(i) if i > idx => *self.last_visited_ws = Some(i - 1),
-            _ => {}
-        }
-        if idx < self.last_visited_pane_per_ws.len() {
-            self.last_visited_pane_per_ws.remove(idx);
-        }
-        if idx < self.expose_cursor_per_ws.len() {
-            self.expose_cursor_per_ws.remove(idx);
-        }
+        self.last_visited_pane_per_ws.retain(|id, _| alive(*id));
+        self.expose_cursor_per_ws.retain(|id, _| alive(*id));
     }
 }
 
@@ -55,14 +41,14 @@ impl Tracking<'_> {
 /// to the same-workspace pane toggle.
 pub(crate) fn show_workspace(
     layout: &mut LayoutMut<'_>,
-    last_visited_ws: &mut Option<usize>,
+    last_visited_ws: &mut Option<WorkspaceId>,
     idx: usize,
 ) {
     let current = layout.reader().active_workspace_idx();
     if current == idx {
         return;
     }
-    *last_visited_ws = Some(current);
+    *last_visited_ws = layout.reader().session().workspace_id(current);
     layout.switch_to_workspace(idx);
 }
 
@@ -226,10 +212,14 @@ pub(crate) fn window_reacts(
                 }
             }
         }
-        Change::WorkspaceAdded { index } => tracking.know_workspace(index),
+        // A new workspace has nothing remembered yet: a memory is made by identity when it is.
+        Change::WorkspaceAdded { .. } => {}
         Change::WorkspaceRemoved { index } => {
             layout.workspace_removed(index);
-            tracking.forget_workspace(index);
+            let session = layout.reader().session();
+            let alive: std::collections::HashSet<WorkspaceId> =
+                session.workspaces.iter().map(|ws| ws.id).collect();
+            tracking.forget_gone(|id| alive.contains(&id));
         }
         Change::Refused(reason) => reaction.refusal = Some(reason),
         Change::NotificationsChanged => reaction.redraw = false,

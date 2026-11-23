@@ -2,6 +2,26 @@
 
 use super::*;
 
+/// The identity of the row at `idx` — the map remembers its cursor by workspace identity.
+fn row(
+    s: &heca_core::layout::testing::Windowed,
+    idx: usize,
+) -> Option<heca_core::layout::WorkspaceId> {
+    s.session.workspace_id(idx)
+}
+
+/// A remembered cursor per row, written by position for the test and kept by identity.
+fn by_row(
+    s: &heca_core::layout::testing::Windowed,
+    panes: &[Option<PaneId>],
+) -> std::collections::HashMap<heca_core::layout::WorkspaceId, PaneId> {
+    panes
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, pane)| Some((row(s, idx)?, (*pane)?)))
+        .collect()
+}
+
 /// **Deleting a card hands the cursor to the next one in the SAME row.** The map is rebuilt
 /// when the session changes under it, and the rebuilt tree has to be told where the highlight
 /// goes — after the delete the pane is gone and its neighbour can no longer be found from it.
@@ -49,15 +69,11 @@ fn opening_the_map_starts_on_the_pane_the_session_is_focused_on() {
         .map(|p| p.id)
         .expect("the fixture has a focused pane");
     // A different pane remembered from a previous browse, in the row the map would open on.
-    let remembered = vec![Some(PaneId(2))];
-    assert_ne!(
-        remembered[0],
-        Some(focused),
-        "the fixture must actually differ"
-    );
+    let remembered = by_row(&s, &[Some(PaneId(2))]);
+    assert_ne!(PaneId(2), focused, "the fixture must actually differ");
 
     assert_eq!(
-        open_on(s.l(), false, Some(0), &remembered),
+        open_on(s.l(), false, row(&s, 0), &remembered),
         Some(focused),
         "a fresh open ignores where the map was left",
     );
@@ -70,7 +86,7 @@ fn opening_the_map_starts_on_the_pane_the_session_is_focused_on() {
 fn rebuilding_the_map_keeps_the_cursor_where_it_stands() {
     let s = session();
     assert_eq!(
-        open_on(s.l(), true, Some(0), &[Some(PaneId(2))]),
+        open_on(s.l(), true, row(&s, 0), &by_row(&s, &[Some(PaneId(2))])),
         Some(PaneId(2)),
         "while the map is up, the remembered cursor wins",
     );
@@ -89,7 +105,12 @@ fn a_rebuild_stays_in_the_row_the_cursor_is_in() {
     s.show(0);
 
     assert_eq!(
-        open_on(s.l(), true, Some(1), &[Some(PaneId(1)), Some(PaneId(3))]),
+        open_on(
+            s.l(),
+            true,
+            row(&s, 1),
+            &by_row(&s, &[Some(PaneId(1)), Some(PaneId(3))])
+        ),
         Some(PaneId(3)),
         "the cursor is in row 1, so the rebuild reads row 1 — not the active workspace's",
     );
@@ -107,7 +128,7 @@ fn a_remembered_pane_that_no_longer_exists_falls_back_to_the_session() {
         .map(|p| p.id)
         .expect("the fixture has a focused pane");
     assert_eq!(
-        open_on(s.l(), true, Some(0), &[Some(PaneId(404))]),
+        open_on(s.l(), true, row(&s, 0), &by_row(&s, &[Some(PaneId(404))])),
         Some(focused),
     );
 }
