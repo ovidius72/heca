@@ -156,7 +156,7 @@ fn a_pane_publishes_its_frame_colour_to_everything_it_holds() {
     }
     .build();
 
-    let frame = [1.0, 0.0, 0.0, 1.0];
+    let frame = heca_grid_ui::Color::rgb(255, 0, 0);
     focus_state_to(
         &mut tree,
         &PaneShellModel {
@@ -168,9 +168,18 @@ fn a_pane_publishes_its_frame_colour_to_everything_it_holds() {
 
     assert_eq!(
         tree.base().style.visual.accent,
-        Some(to_gui_color(frame)),
+        Some(frame),
         "the pane's contents follow its frame colour, whoever paints them",
     );
+    // …but its pick letter does not: a letter says "press this to go here", so it is the theme's
+    // accent by meaning, never the pane's frame colour.
+    let hint = &tree.base().hint_style;
+    assert_eq!(
+        hint.tone,
+        Some(heca_grid_ui::Tone::Accent),
+        "the letter asks for the accent"
+    );
+    assert_eq!(hint.color, None, "and carries no colour of the pane's");
 }
 
 /// **A zoom resizes the pane without rebuilding it** — the regression that shipped.
