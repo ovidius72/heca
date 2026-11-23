@@ -173,3 +173,24 @@ fn a_target_can_belong_to_more_than_one_picker() {
         "still out of the ordinary picker"
     );
 }
+
+/// **A host's scoped picker can run the target it lettered.** `collect_hints_scoped` hands a
+/// host the targets of one set (`prefix+Shift+o`'s links); running the one picked is
+/// `fire_hint` by its path, which names the target outright — so its scope must not refuse it.
+#[test]
+fn a_target_collected_with_a_scope_is_run_by_its_path() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    let ran = Rc::new(Cell::new(false));
+    let seen = ran.clone();
+    let mut root = Flex::column().child(
+        Button::new("link")
+            .hint_scope(["links"])
+            .on_hint(move || seen.set(true)),
+    );
+    lay_out(&mut root);
+    let targets = crate::hint::collect_hints_scoped(&root, Some("links"));
+    assert_eq!(targets.len(), 1, "{targets:?}");
+    assert!(crate::fire_hint(&mut root, &targets[0].0), "the pick ran");
+    assert!(ran.get());
+}

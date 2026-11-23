@@ -393,6 +393,12 @@ pub trait Style: Sized {
         self.prop("hint_offset_y", px)
     }
 
+    /// Put the letter **beside** this node, never over it (`true`), or over it whatever its size
+    /// (`false`). Unset, the size decides. See `HintExt::hint_outside` in the widget library.
+    fn hint_outside(self, outside: bool) -> Self {
+        self.prop("hint_outside", outside)
+    }
+
     /// Keep this node **out of the picker**, however actionable it is. Default `true`.
     ///
     /// The declarative spelling of `HintExt::hintable`. Being pickable is not opt-in — a node

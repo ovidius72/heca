@@ -346,7 +346,7 @@ fn drop_at(
 }
 
 /// Find the drag source a press at `point` would pick up — the same answer the gesture gives
-/// ([`source_on`]), so the grab cursor never promises a drag a press would not start. `None` if
+/// (`source_on`), so the grab cursor never promises a drag a press would not start. `None` if
 /// nothing there can be picked up.
 pub fn source_at(root: &dyn Component, point: Point) -> Option<String> {
     source_on(root, &path_at(root, point)).map(|(_, id)| id)

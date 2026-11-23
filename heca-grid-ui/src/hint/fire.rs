@@ -1,6 +1,6 @@
 //! **The pick itself** — delivered as an event on the walk every other event uses.
 
-use super::collect::is_target;
+use super::collect::is_addressable;
 use crate::component::Component;
 
 /// **Pick the widget at `path`.** `false` when the path no longer leads to a target — a tree rebuilt
@@ -26,7 +26,12 @@ pub fn fire_hint(root: &mut dyn Component, path: &[usize]) -> bool {
             None => return false,
         }
     }
-    if !is_target(node) {
+    // **Running a pick names the target outright** — the letter was already given to it by the
+    // picker that collected it, with whatever scope that picker had — so the question is only
+    // whether a letter could land here at all, never which set it belongs to (`is_addressable`).
+    // Asking `is_target` instead refused every target of a scoped picker: the links
+    // `prefix+Shift+o` letters were offered and then could not be picked.
+    if !is_addressable(node) {
         return false;
     }
     let ev = crate::event::Event::Hint(crate::event::HintEvent {

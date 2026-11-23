@@ -536,7 +536,8 @@ handler (`open` / `xdg-open` / `start`):
   link; the cursor turns into a pointer while it is held over one. A plain click
   still goes to the terminal program.
 - **Keyboard** — `prefix+Shift+o` (`follow_link`) labels every visible link across
-  all on-screen panes with a letter; press the letter to open it, or `Esc` to cancel.
+  all on-screen terminals with a letter; press the letter to open it, or `Esc` to cancel. It is
+  the same picker as `prefix+/`, over the links each terminal declares.
 - **Selection mode** — `Shift+o` opens the link under the caret (`o` stays the
   flip-endpoint binding).
 - **Dropped files** — drop files on a terminal and their full paths are pasted into it, each

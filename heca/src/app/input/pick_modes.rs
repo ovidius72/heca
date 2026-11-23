@@ -43,33 +43,8 @@ pub(super) fn handle_pane_select_mode(
     state.input_mode = InputMode::Normal;
 }
 
-pub(super) fn handle_follow_link_mode(
-    registry: &ActionRegistry,
-    state: &mut AppState,
-    candidates: &[crate::app_state::LinkHint],
-    ctx: KeyInputContext<'_>,
-) {
-    let candidates = candidates.to_vec();
-    // Any key exits the overlay; a matching letter opens its link. Esc just exits.
-    state.input_mode = InputMode::Normal;
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
-    if let Some(ch) = typed
-        && let Some(hint) = candidates.iter().find(|h| h.label == ch)
-    {
-        let _ = dispatch_action(
-            state,
-            registry,
-            InteractionSource::Keyboard,
-            &WmAction::OpenLink {
-                url: hint.url.clone(),
-            },
-        );
-    }
-    state.needs_redraw = true;
-}
-
 /// Universal picker (`InputMode::HintPick`): a matching letter runs what the picked region said a
-/// pick does to it; any other key / Esc just exits. Mirrors [`handle_follow_link_mode`].
+/// pick does to it; any other key / Esc just exits.
 ///
 /// **The host resolves nothing.** There is no registry to look an id up in and no intent to route
 /// here: the region declared the behaviour itself (`KeyHint::on_hint`, or a described node's `hint`

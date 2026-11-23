@@ -5767,7 +5767,8 @@ with no downcasting.
   on the header row | `TopLeft` for a large target whose picture the letter must stay clear of —
   a card in the exposé, a content pane — pinned just inside the top-left and centred within a
   shallow band from the top edge, so it lands on the card's top line rather than floating in the
-  middle of it),
+  middle of it | `TopLeftCorner` for a run of text on one line — a link in a terminal — exactly on
+  its first character, at the picker's own letter size, never moved beside a short target),
   `.size(px)`, `.color(Color)` (override the keycap tint — default theme `accent`; lets a
   host distinguish target *kinds*, e.g. workspace picks tinted `warning` vs pane picks),
   `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
@@ -5775,7 +5776,9 @@ with no downcasting.
   child row fills its column instead of shrinking to content width.
 
   > ⚠️ **Those four are on every widget too**, as `.hint_placement`, `.hint_size`, `.hint_color`
-  > and `.hint_offset_y` — the slot they write (`Base::hint_style`) was always universal, and now
+  > and `.hint_offset_y` (plus `.hint_outside(bool)`, which only the widget form has: the letter
+  > beside the widget, never over it — see the `hint_outside` row below) — the slot they write
+  > (`Base::hint_style`) was always universal, and now
   > the way to set it is. **Prefer them; wrap only when there is no widget to declare on.** The
   > wrapper's four delegate to them, so there is one writer per field rather than two that drift.
   > This is the same move the tooltip made, for the same reason: wrapping is impossible on a widget
@@ -5818,11 +5821,12 @@ Bind neither and the node is not a pick target; bind only `press` and a pick doe
 
 | prop | type | default | what it does |
 | --- | --- | --- | --- |
-| `hint_placement` | `"top_center"` \| `"center"` \| `"center_right"` \| `"top_right"` \| `"top_left"` | `"top_center"` | where the cap sits over the node. |
+| `hint_placement` | `"top_center"` \| `"center"` \| `"center_right"` \| `"top_right"` \| `"top_left"` \| `"top_left_corner"` | `"top_center"` | where the cap sits over the node. |
 | `hint_size` | number | *(from the font)* | cap font size in logical px. An integer is accepted as well as a fraction. |
 | `hint_color` | colour **token name** | `accent` | cap tint, glow included. A token, never a hex literal, so it follows a theme change. |
 | `hint_tone` | `"accent"` \| `"muted"` \| `"warning"` \| `"success"` \| `"danger"` | `accent` | **what the cap means**, left for the theme to colour. `muted` is a structural control — fold this, close that — rather than somewhere to navigate. Prefer it over `hint_color`: a widget composing itself has no theme at build time to take a literal from. |
 | `hint_offset_y` | number | `0` | nudge applied after placement; positive moves the cap down. |
+| `hint_outside` | bool | unset | `true` puts the cap **beside** the node, never over it (a `"top_left_corner"` cap: above the start, else left, else below, wherever there is room; any other: a caption below, flipped above near the bottom edge); `false` keeps it over the node whatever its size. Unset, the size decides: a node too small to cover gets it beside, anything larger over itself. |
 
 **Placement does not make a node pickable.** Anything actionable already wears a letter with nothing
 declared — these only say where it goes, so a node with nothing to act on styles a letter it will
@@ -5889,9 +5893,15 @@ since collapsed still gives the letter back, or the keycap outlives the picker t
 **How the framework uses it** (`heca_grid_ui::hint`): `collect_hints(root)` walks the laid-out tree
 and returns every declaration in document order with the rect its letter goes over; `fire_hint(root,
 &path)` **delivers the pick as an `Event::Hint`** on the walk every other event uses, answering
-`false` when the tree was rebuilt under the letters.
+`false` when the tree was rebuilt under the letters. A host picker over **one set** collects with
+`collect_hints_scoped(root, Some("links"))` (or `collect_hints_by_surface_scoped`) and runs the
+pick with the same `fire_hint`: running a pick names the target outright, so its scope does not
+refuse it. heca's link letters (`prefix+Shift+o`) are exactly this — each terminal declares its
+links with `.hint_scope(["links"]).hint_placement(HintPlacement::TopLeftCorner)`, and the one picker
+letters that set.
 
-**Whose target is whose — `collect_hints_by_surface(root)`.** A host that puts things on *layers*
+**Whose target is whose — `collect_hints_by_surface(root)`** (and `collect_hints_by_surface_scoped(root,
+scope)` for a picker over one set). A host that puts things on *layers*
 needs more than "what can be lettered": it needs to know which surface each target belongs to, so it
 can ask that surface what it hides and stop at the one holding the keyboard. This answers it, and
 hands back everything needed with it — no host walks the tree a second time:

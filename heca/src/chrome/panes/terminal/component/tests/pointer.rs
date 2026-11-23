@@ -170,11 +170,9 @@ fn the_terminal_says_which_cell_is_where() {
         Some((3, 4))
     );
     assert_eq!(t.cell_at((301.0, 5.0)), None, "off the grid");
-    assert_eq!(t.cell_origin(3, 4), Some((40.0, 60.0)));
 
     t.place(None);
     assert_eq!(t.cell_at((45.0, 61.0)), None, "not drawn: no cell");
-    assert_eq!(t.cell_origin(3, 4), None);
 }
 
 /// **A selection dragged past the terminal scrolls its history, with the mouse still** — the

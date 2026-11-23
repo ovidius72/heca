@@ -105,6 +105,7 @@ value_set! {
         CenterRight => "center_right",
         TopRight => "top_right",
         TopLeft => "top_left",
+        TopLeftCorner => "top_left_corner",
     }
 }
 

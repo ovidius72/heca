@@ -117,6 +117,13 @@ impl Terminal {
         // keyboard. Declared after the controls, so it is on top of them.
         base.children
             .push(heca_grid_ui::WidgetModel::new(search_bar(shared.clone())));
+        // **Its links are pick targets** — a layer of regions over the cells they sit in, which the
+        // link picker (`prefix+Shift+o`) letters. It draws nothing and lets the pointer through,
+        // so it takes nothing from the controls or the bar beneath it; a letter goes in the
+        // overlay band, above everything, wherever the layer sits.
+        base.children.push(heca_grid_ui::WidgetModel::new(
+            super::links::LinkTargets::new(shared.clone()),
+        ));
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
         let me = shared.clone();

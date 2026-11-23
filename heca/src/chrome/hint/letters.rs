@@ -100,7 +100,7 @@ fn wanted(mode: &InputMode) -> Vec<(Offer, char)> {
     // **The universal picker is a mode like any other.** Its candidates carry a surface and a path
     // rather than an identity, which is the only difference — and the reason it used to live
     // outside this loop, handing its letters out once and never looking again.
-    if let InputMode::HintPick { candidates } = mode {
+    if let InputMode::HintPick { candidates, .. } = mode {
         out.extend(
             candidates
                 .iter()

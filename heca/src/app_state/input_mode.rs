@@ -155,13 +155,6 @@ pub enum InputMode {
         candidates: Vec<(char, ColumnPickTarget)>,
         pane_id: PaneId,
     },
-    /// Follow-link letter pick: each visible terminal hyperlink across **all
-    /// visible panes** is assigned a letter (a keycap drawn over the link's first
-    /// cell); the next keypress opens that link (`OpenLink`). Entered
-    /// with `prefix+Shift+o`. Each candidate carries its own `pane_id`.
-    FollowLink {
-        candidates: Vec<LinkHint>,
-    },
     /// **A terminal's search field has the keyboard.** Typing goes into that terminal's own tree,
     /// where its field edits the query and the search re-runs live; the widget keys step through the
     /// matches from the field (`activate`/`menu_down` next, `menu_up` previous), `dismiss` closes. The query lives in the terminal's field
@@ -186,20 +179,11 @@ pub enum InputMode {
     /// for exactly as long as the letters are up. Any other key / Esc exits.
     HintPick {
         candidates: Vec<(char, crate::chrome::HintTarget)>,
+        /// **Which set it letters** — `None` for `prefix+/`'s ordinary set, a name for a picker
+        /// over the targets that declared it (`"links"`: `prefix+Shift+o`). Kept with the mode
+        /// because the letters are re-checked every frame against what is visible *in this set*.
+        scope: Option<String>,
     },
-}
-
-/// A single follow-link candidate: the letter to press, the terminal it lives in, where
-/// to stamp its keycap (the link's first visible cell — `row` from the viewport top,
-/// `start_col` inclusive), and the URL to open. Built from `snapshot.hyperlinks`, so
-/// OSC 8 and auto-detected (linkify) links are followed identically.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LinkHint {
-    pub label: char,
-    pub terminal: crate::chrome::panes::terminal::TerminalId,
-    pub row: usize,
-    pub start_col: usize,
-    pub url: String,
 }
 
 /// What a [`InputMode::WorkspacePick`] moves into the picked workspace.
@@ -245,7 +229,6 @@ impl InputMode {
             | InputMode::WorkspacePick { .. }
             | InputMode::ColumnPick { .. }
             | InputMode::DockPick { .. }
-            | InputMode::FollowLink { .. }
             | InputMode::HintPick { .. } => true,
             // Everything else reads keys for something other than picking a letter, or reads none.
             InputMode::Normal
@@ -288,8 +271,7 @@ impl InputMode {
             InputMode::WorkspacePick { candidates, .. } => Some(candidates.len()),
             InputMode::ColumnPick { candidates, .. } => Some(candidates.len()),
             InputMode::DockPick { candidates } => Some(candidates.len()),
-            InputMode::FollowLink { candidates } => Some(candidates.len()),
-            InputMode::HintPick { candidates } => Some(candidates.len()),
+            InputMode::HintPick { candidates, .. } => Some(candidates.len()),
             InputMode::Normal
             | InputMode::Prefix
             | InputMode::Chord { .. }
