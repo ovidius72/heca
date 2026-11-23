@@ -36,7 +36,8 @@
     "ddbbcbb1-e15d-4716-b56d-6e0faff941b3",
     "58fe571d-661f-4bf7-9b2f-0bdd5126b66d",
     "11fe81da-b310-4338-9b8f-d8c706807f2e",
-    "ec50f490-4c43-443a-ad3e-4dac215c31d2"
+    "ec50f490-4c43-443a-ad3e-4dac215c31d2",
+    "f3446ccd-5deb-4493-9453-d6752410d1da"
   ],
   "tasks": [
     {
@@ -668,10 +669,80 @@
       "updatedAt": "2026-11-17T19:41:03.791Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "f3446ccd-5deb-4493-9453-d6752410d1da",
+      "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 575,
+      "shortId": "NJVHA",
+      "priority": 15,
+      "shortName": "the-top-and-bottom-bars-hold-b",
+      "title": "The top and bottom bars hold bar items: bars(\"top\"|\"bottom\").start/center/end/remove/retain, like regions() for docks",
+      "status": "planned",
+      "description": "Agreed with Antonio 2026-11-23 (names chosen by him: start / center / end; separate bar items from docks).\n\nCURRENT STATE\n- `regions(name)` (heca/src/chrome/docks/regions.rs) is the plugin-facing door for docks: append / prepend / remove / retain / gap, queued and applied by ChromeHost. It accepts the names \"bar.top\" / \"bar.bottom\" and `[[docks]] location` accepts them too (heca-config/src/docks.rs:6,30), BUT the bars never draw a region's docks: a dock placed there is invisible.\n- The two bars are hand-built in the window scene (heca/src/chrome/window/scene/mod.rs ~430-490): the top band is a Flex with the sidebar toggles and the window-title Tag; the bottom bar is one Surface + one Label whose text is `chrome_status` (heca/src/chrome/window/theme.rs `chrome_status`), bound through ChromeSignals.status.\n- Their fill is computed by hand: `chrome_bar_color_for` = top_bottom_pane_background × `AppearanceConfig::chrome_opacity()` (heca/src/chrome/window/theme.rs:53-58), handed to the bottom Surface as a Color; the top bar has NO background of its own — it is a GPU rect drawn under the chrome in heca/src/app/frame/draw.rs:~88 (`primitive_renderer.draw_rect(.. side_bg ..)`). This is the bar part of T567 C35.\n- Visibility: settings.show_top_bar / show_bottom_bar via the region map (heca/src/chrome/docks/regions.rs:248-249, heca/src/app_state/metrics.rs:12,25).\n\nWHAT TO BUILD\n1. A second kind beside docks: a BAR ITEM — small, sized to its content, no header/grip/fold/resize (the dock header of P079(F004)/T574 does not apply in a one-line bar). Docks and bar items are different types, so a dock cannot be put in a bar and a bar item cannot be put in a sidebar — a compile error, for plugins too.\n2. The door, the same shape as regions():\n   bars(\"top\").start(|| WindowTitle::new(\"window_title\"));\n   bars(\"top\").end(|| SidebarToggle::new(\"toggle.right\"));\n   bars(\"bottom\").start(|| StatusLine::new(\"status\"));\n   bars(\"bottom\").remove(\"status\");\n   bars(\"bottom\").retain(|id| id != \"clock\");\n   start / center / end = the bar's left / middle / right part (CSS justify start|center|end); within a part, items keep the order they were added. remove(id) takes an item out wherever it is; retain keeps only the items the rule says yes to. Queued and applied the way regions() is; an unknown bar name or id is said out loud and does nothing.\n3. The bar is a shell like the sidebar shell (ChromeRegion, horizontal), with three parts laid out by the library (no computed positions). Its fill comes from the shell, read from the theme and config like the sidebar shell — delete `chrome_bar_color*`, `chrome_colors`' bar half and the GPU rect in frame/draw.rs.\n4. Today's content becomes heca's own bar items, added through the door: WindowTitle (title Tag + following marker), the two SidebarToggle buttons, StatusLine (today's chrome_status text, still live-bound). The look stays IDENTICAL (same content, colours, height) — any visible change is a separate proposal to Antonio.\n5. Config: the user moves/hides items with `[[bar_items]] id = \"status\" location = \"bar.bottom\" side = \"end\"` (location \"none\" hides); `[[docks]] location = \"bar.top\" | \"bar.bottom\"` is no longer accepted and is reported like any retired key (heca-config/src/loader/unread.rs). Write it into config.default.toml and docs/configuration.md.\n6. Reachable from the three surfaces (app, plugin through the SDK/description, RPC) per Rule Zero; show/hide bar stays as today.\n7. Docs: docs/widgets.md (the bar shell and bar item), the regions.rs module docs (regions = docks, bars = bar items), docs/extending-heca.md.\n\nRELATED\n- Closes the bar part of P110(F010)/T567 C35.\n- I030 (workspace name in the top bar) and I001 (a quick-info line in the bottom bar) become bar items on top of this; T261 (top-bar menu) would be one too.\n\nTESTS\n- A bar item appended to each part is drawn there, in order; remove/retain take it out; an unknown id is reported.\n- The bar never exceeds its box (layout test) and the parts do not overlap at narrow widths.\n- The bars look identical to today (painted scene: fill colour and alpha with and without transparency, the title, toggles and status text).\n- A dock cannot be appended to a bar (compile-fail or type-level test); `[[docks]] location = \"bar.top\"` is reported.",
+      "descriptionUpdatedAt": "2026-11-23T13:45:28.950Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f3446ccd-5deb-4493-9453-d6752410d1da-check-001-bar-item-type-bars-door-start-center-end-remove-retain-queued-like-regions",
+          "number": 1,
+          "title": "Bar item type + bars() door (start/center/end/remove/retain), queued like regions()",
+          "checked": false
+        },
+        {
+          "id": "f3446ccd-5deb-4493-9453-d6752410d1da-check-002-bar-shell-horizontal-chromeregion-with-three-parts-fill-from-the-shell-theme-config-delete-chrome-bar-color-and-the-gpu-rect",
+          "number": 2,
+          "title": "Bar shell: horizontal ChromeRegion with three parts; fill from the shell (theme + config); delete chrome_bar_color and the GPU rect",
+          "checked": false
+        },
+        {
+          "id": "f3446ccd-5deb-4493-9453-d6752410d1da-check-003-today-s-content-as-bar-items-windowtitle-sidebartoggle-2-statusline-look-identical",
+          "number": 3,
+          "title": "Today's content as bar items: WindowTitle, SidebarToggle ×2, StatusLine — look identical",
+          "checked": false
+        },
+        {
+          "id": "f3446ccd-5deb-4493-9453-d6752410d1da-check-004-bar-items-config-docks-bar-top-bar-bottom-retired-and-reported-config-default-toml-docs",
+          "number": 4,
+          "title": "[[bar_items]] config; [[docks]] bar.top/bar.bottom retired and reported; config.default.toml + docs",
+          "checked": false
+        },
+        {
+          "id": "f3446ccd-5deb-4493-9453-d6752410d1da-check-005-plugin-sdk-rpc-reachability",
+          "number": 5,
+          "title": "Plugin/SDK + RPC reachability",
+          "checked": false
+        },
+        {
+          "id": "f3446ccd-5deb-4493-9453-d6752410d1da-check-006-docs-widgets-md-regions-rs-module-docs-extending-heca-md",
+          "number": 6,
+          "title": "Docs: widgets.md, regions.rs module docs, extending-heca.md",
+          "checked": false
+        },
+        {
+          "id": "f3446ccd-5deb-4493-9453-d6752410d1da-check-007-tests-incl-identical-look-and-box-test-antonio-s-eye-check",
+          "number": 7,
+          "title": "Tests incl. identical look and box test; Antonio's eye check",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-23T13:45:28.850Z",
+      "updatedAt": "2026-11-23T13:45:28.850Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-20T19:21:25.783Z",
+  "updatedAt": "2026-11-23T13:45:28.850Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,

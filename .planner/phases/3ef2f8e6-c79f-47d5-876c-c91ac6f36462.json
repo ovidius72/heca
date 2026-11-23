@@ -28,7 +28,8 @@
     "87175753-f899-4090-9acb-28a48d93457a",
     "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
     "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
-    "98c0e646-a0d7-4087-b72d-af9a3a8db523"
+    "98c0e646-a0d7-4087-b72d-af9a3a8db523",
+    "41db0ce3-5898-48d0-a98d-b3f650cfbef8"
   ],
   "tasks": [
     {
@@ -353,10 +354,46 @@
       "updatedAt": "2026-11-22T21:01:54.939Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "41db0ce3-5898-48d0-a98d-b3f650cfbef8",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 574,
+      "shortId": "Q988R",
+      "priority": 7,
+      "shortName": "docks-keep-the-order-the-user",
+      "title": "Docks keep the order the user gives them; every dock has a header with grip, fold and resize (PR #356)",
+      "status": "done",
+      "description": "Recorded after the fact, on Antonio's word (2026-11-23). PR #356, merged 2026-11-23 (merge 2fc3e2a0), made by the heca-pro session while testing heca-pro's rooms dock; no task existed for it.\n\nWHAT IT DID\n1. A dock moved by the user (drag, key or script) stays where it was put. Before, a dock carrying an `order` from `[[docks]]` was sorted back over the user's move (heca/src/chrome/docks/host/placing.rs, mounted.rs, host/mod.rs; tests in host/tests.rs and chrome/window/scene/tests/regions.rs).\n2. Every dock has a header: grip, name and fold caret, drawn on RowVariant::Filled (heca-grid-ui/src/widgets/dock_frame.rs).\n   - The grip carries the dock with no modifier key; the move key still carries it from anywhere.\n   - `chrome.container.toggle_collapsed` and `chrome.container.resize` take an optional `container_id` (unset = the focused dock); `by` moves an edge the way pane resize does (heca/src/actions/builtins/chrome.rs, heca/src/input/build/chrome.rs, heca/src/input/action.rs, heca/src/handlers/docks/mod.rs, heca/src/app/interaction/policy.rs, heca/src/app/registry/).\n   - The edge between two docks is a Splitter.\n   - The header is the row above a dock's first row for k/h/l/j, handled once in heca/src/providers/actions.rs for every dock.\n   - New library pieces: `DragExt::accepts_when` (a drop target takes only some sources — heca-grid-ui/src/builders/drag.rs, drag/resolve.rs, pointer/drag.rs), `DockFrame::title_size(WidgetSize)` (also in the SDK, heca-view/src/build/containers.rs), `DockFrame::GRIP` (the one reorder glyph).\n   - The workspaces dock binds Alt+j/k in its `[[keys.surface]]` entry (keybindings.default.toml).\nDocs: docs/widgets.md (DockFrame builders), docs/keybindings.md.\n\nWHY HERE\nP079 is \"drag a container between chrome regions\"; this finishes the user-facing side of moving and sizing docks (grip, order kept, resize), next to P030's workspace reorder.\n\n---\n**Completion summary:**\nShipped in PR #356, merged into main 2026-11-23 (merge commit 2fc3e2a0), built and verified by the heca-pro session with Antonio's eye check while testing heca-pro's rooms dock. Recorded here after the merge on Antonio's word. Files: see the description (docks host placing/mounted, DockFrame header, DragExt::accepts_when, DockFrame::title_size/GRIP, chrome.container.toggle_collapsed/resize with optional container_id, providers/actions.rs header navigation, keybindings.default.toml Alt+j/k). Merged into feat/t567-selection-autoscroll on 2026-11-23 (merge 12d902c2) with one docs/widgets.md conflict resolved by keeping main's text plus the described-form note.",
+      "descriptionUpdatedAt": "2026-11-23T13:38:22.384Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "41db0ce3-5898-48d0-a98d-b3f650cfbef8-check-001-planned-done",
+          "date": "2026-11-23T13:38:22.381Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Shipped in PR #356, merged into main 2026-11-23 (merge commit 2fc3e2a0), built and verified by the heca-pro session with Antonio's eye check while testing heca-pro's rooms dock. Recorded here after the merge on Antonio's word. Files: see the description (docks host placing/mounted, DockFrame header, DragExt::accepts_when, DockFrame::title_size/GRIP, chrome.container.toggle_collapsed/resize with optional container_id, providers/actions.rs header navigation, keybindings.default.toml Alt+j/k). Merged into feat/t567-selection-autoscroll on 2026-11-23 (merge 12d902c2) with one docs/widgets.md conflict resolved by keeping main's text plus the described-form note."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-23T13:38:22.381Z",
+      "completedAt": "2026-11-23T13:38:22.381Z",
+      "createdAt": "2026-11-23T13:38:20.876Z",
+      "updatedAt": "2026-11-23T13:38:22.381Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-26T08:37:59.875Z",
-  "updatedAt": "2026-11-22T21:01:54.939Z",
+  "updatedAt": "2026-11-23T13:38:22.381Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
