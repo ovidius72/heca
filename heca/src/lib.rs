@@ -290,6 +290,7 @@ impl HecaApp {
             // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
             notify_unread_keys();
+            notify_theme_problems(&self.app_config);
             state.theme = self.app_config.theme.clone();
             state.client.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
             // Appearance: opacity re-reads every frame, so updating the snapshot
@@ -399,6 +400,25 @@ impl HecaApp {
 /// **Keys the user's files set that heca does not read**, as one card at start-up and after each
 /// reload — a retired name with the one that replaced it, a misspelling as unknown. The same list
 /// `heca --show-config` ends with; nothing is shown when every key was read.
+/// **What is wrong with the chosen theme**, as one card at start-up and after each reload — a file
+/// that does not parse, an `inherit` naming a theme that does not exist, a chain of themes that comes
+/// back on itself. heca then shows a bundled theme instead, so without this card the user would see
+/// the wrong colours and no reason.
+fn notify_theme_problems(app: &heca_config::loader::AppConfig) {
+    use crate::notification::Notification;
+    if app.theme_problems.is_empty() {
+        return;
+    }
+    Notification::warning(format!(
+        "The theme `{}` could not be read",
+        app.config.settings.theme
+    ))
+    .body(app.theme_problems.join("\n"))
+    .dedup_key("config-theme")
+    .originator()
+    .send();
+}
+
 fn notify_unread_keys() {
     use crate::notification::Notification;
     let unread = heca_config::loader::config_sources()
@@ -521,6 +541,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             // mounted component — so this is the first moment the report can be complete.
             self.conflicts.report();
             notify_unread_keys();
+            notify_theme_problems(&self.app_config);
             self.state = Some(state);
         }
     }

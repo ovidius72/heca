@@ -116,6 +116,23 @@ pub const RETIRED: &[(&str, &str)] = &[
     ("keys.command.key", "keys.command.keys"),
     ("keys.command.command_type", "keys.command.kind"),
     ("keys.mode.bindings.key", "keys.mode.bindings.keys"),
+    // Colours come from the theme: a theme of your own can inherit one and change only these.
+    (
+        "appearance.border_color",
+        "the theme's `border` (a theme of yours: `inherit = \"mocha\"` and `border = \"#…\"`)",
+    ),
+    (
+        "appearance.pane.border_color",
+        "the theme's `pane_border` (a theme of yours: `inherit = \"mocha\"` and `pane_border = \"#…\"`)",
+    ),
+    (
+        "appearance.pane.active_border_color",
+        "the theme's `pane_active_border` (a theme of yours: `inherit = \"mocha\"` and `pane_active_border = \"#…\"`)",
+    ),
+    (
+        "appearance.pane.floating_border_color",
+        "the theme's `float_pane_border` (a theme of yours: `inherit = \"mocha\"` and `float_pane_border = \"#…\"`)",
+    ),
 ];
 
 /// Whether `pattern` (a [`RETIRED`] path, `*` standing for any one name) matches `key`.
@@ -150,6 +167,10 @@ pub struct Unread {
 impl std::fmt::Display for Unread {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.now {
+            // A renamed key is a name to write; a setting that moved elsewhere is said in words.
+            Some(now) if now.contains(' ') => {
+                write!(f, "`{}` is no longer read — use {now} instead", self.key)
+            }
             Some(now) => write!(
                 f,
                 "`{}` is no longer read — write `{now}` instead",
@@ -256,6 +277,39 @@ mod tests {
             Vec::new(),
             "every shipped key lands in a field"
         );
+    }
+
+    /// **A border colour set in configuration is said to belong to the theme now** — each of the
+    /// four retired keys is reported, in words naming the theme's colour that replaced it.
+    #[test]
+    fn a_retired_border_colour_points_at_the_theme() {
+        let (file, config) = config(
+            "[appearance]\nborder_color = \"#ff0000\"\n\n[appearance.pane]\nborder_color = \"#ff0000\"\nactive_border_color = \"#00ff00\"\nfloating_border_color = \"#0000ff\"\n",
+        );
+        let said: Vec<String> = unread_keys(&file, &config)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(said.len(), 4, "{said:?}");
+        for (key, theme_colour) in [
+            ("appearance.border_color", "`border`"),
+            ("appearance.pane.border_color", "`pane_border`"),
+            (
+                "appearance.pane.active_border_color",
+                "`pane_active_border`",
+            ),
+            (
+                "appearance.pane.floating_border_color",
+                "`float_pane_border`",
+            ),
+        ] {
+            assert!(
+                said.iter().any(|line| line.contains(&format!("`{key}`"))
+                    && line.contains(theme_colour)
+                    && line.contains("inherit")),
+                "{key} → {theme_colour}: {said:?}"
+            );
+        }
     }
 
     #[test]

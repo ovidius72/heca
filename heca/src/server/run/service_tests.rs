@@ -161,6 +161,7 @@ pub(super) fn config(text: &str) -> heca_config::loader::AppConfig {
     heca_config::loader::AppConfig {
         config: heca_config::loader::config_from_layers(text).unwrap(),
         theme: Default::default(),
+        theme_problems: Vec::new(),
     }
 }
 

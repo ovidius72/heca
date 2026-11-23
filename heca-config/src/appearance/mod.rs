@@ -218,11 +218,6 @@ pub struct AppearanceConfig {
     /// their own `border_width` is unset. `None` → the theme value.
     #[serde(default)]
     pub border_width: Option<f32>,
-    /// **Global** decorative border color — the `bordered` frame color inherited by
-    /// the chrome and surfaces when their own `border_color` is unset. `None` → the
-    /// theme's (subtle) border color. (The `bracketed` reticle uses the theme accent.)
-    #[serde(default)]
-    pub border_color: Option<Color>,
     /// **Global** corner radius (logical px) inherited by surfaces when their own
     /// `border_radius` is unset. `None` → the theme `border_radius`.
     #[serde(default)]
@@ -284,7 +279,6 @@ impl Default for AppearanceConfig {
             show_focus_border: None,
             overlay_border_style: None,
             border_width: None,
-            border_color: None,
             border_radius: None,
             focus_border_width: None,
             top_bar_height: None,

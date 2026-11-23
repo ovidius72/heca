@@ -270,3 +270,33 @@ fn the_card_previous_mark_is_neutral_not_the_accent() {
     assert_eq!(mark.g, mark.b, "a grey: {mark:?}");
     assert!(mark.r > theme.surface.r, "lifted off the surface: {mark:?}");
 }
+
+/// **A pane's frames are their own colours**: unset, they are what they always were — `border` at
+/// half strength and `accent` — and set, they change the panes alone, leaving `border` and `accent`
+/// to everything else. `float_accent`, the floating frame's earlier name, is still read.
+#[test]
+fn pane_frames_fall_back_to_border_and_accent_and_change_alone() {
+    let mocha = crate::load_theme("mocha");
+    assert_eq!(
+        mocha.effective_pane_border(),
+        mocha.border.with_alpha(PANE_BORDER_ALPHA)
+    );
+    assert_eq!(mocha.effective_pane_active_border(), mocha.accent);
+
+    let mut own = mocha.clone();
+    own.pane_border = Some(Color::rgb(255, 126, 219));
+    own.pane_active_border = Some(Color::rgb(54, 249, 246));
+    assert_eq!(own.effective_pane_border(), Color::rgb(255, 126, 219));
+    assert_eq!(own.effective_pane_active_border(), Color::rgb(54, 249, 246));
+    assert_eq!(
+        (own.border, own.accent),
+        (mocha.border, mocha.accent),
+        "the rest keeps its colours"
+    );
+
+    let old: Theme = toml::from_str(
+        "name = \"old\"\nbackground = \"#000000\"\nforeground = \"#ffffff\"\nborder = \"#111111\"\naccent = \"#222222\"\nborder_radius = 4.0\nborder_width = 1.0\nfloat_accent = \"#fede5d\"\n",
+    )
+    .expect("a theme written with the earlier name");
+    assert_eq!(old.float_pane_border, Color::rgb(254, 222, 93));
+}

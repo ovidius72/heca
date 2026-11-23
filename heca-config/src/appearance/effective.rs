@@ -151,12 +151,6 @@ impl AppearanceConfig {
             .clamp(0.0, MAX_BORDER_WIDTH)
     }
 
-    /// Effective **global** decorative border color: config `border_color`
-    /// override → theme `border`. Used by the chrome / sidebar `bordered` frame.
-    pub fn effective_border_color(&self, theme: &Theme) -> Color {
-        self.border_color.unwrap_or(theme.border)
-    }
-
     /// Effective **global** corner radius: config `border_radius` override → theme
     /// `border_radius`. The fallback surfaces inherit when their own radius is unset.
     pub fn effective_border_radius(&self, theme: &Theme) -> f32 {
@@ -172,15 +166,6 @@ impl AppearanceConfig {
             .clamp(0.0, MAX_BORDER_WIDTH)
     }
 
-    /// Effective inactive pane border color: `[appearance.pane] border_color` →
-    /// global `border_color` → theme `border` at 50% alpha.
-    pub fn effective_pane_border_color(&self, theme: &Theme) -> Color {
-        self.pane
-            .border_color
-            .or(self.border_color)
-            .unwrap_or_else(|| theme.border.with_alpha(128))
-    }
-
     /// Effective pane corner radius: `[appearance.pane] border_radius` → global
     /// `border_radius` → theme, clamped to `[0, 20]`. Higher radii make the rounded
     /// content-clip (stencil) eat into terminal content at the corners; capping
@@ -190,20 +175,6 @@ impl AppearanceConfig {
             .border_radius
             .unwrap_or_else(|| self.effective_border_radius(theme))
             .clamp(0.0, MAX_PANE_RADIUS)
-    }
-
-    /// Effective active pane border color. Config override → theme `accent`.
-    pub fn effective_pane_active_border_color(&self, theme: &Theme) -> Color {
-        self.pane.active_border_color.unwrap_or(theme.accent)
-    }
-
-    /// Effective floating pane border color (applies to all floating panes,
-    /// active or inactive, so they read as a distinct layer). Config override →
-    /// `theme.float_accent`.
-    pub fn effective_pane_floating_border_color(&self, theme: &Theme) -> Color {
-        self.pane
-            .floating_border_color
-            .unwrap_or(theme.float_accent)
     }
 
     /// Effective gap between tiled panes (logical px). Config override → [`DEFAULT_PANE_GAP`].

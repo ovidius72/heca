@@ -547,6 +547,7 @@ mod column_focus_tests {
         AppConfig {
             config,
             theme: Default::default(),
+            theme_problems: Vec::new(),
         }
     }
 

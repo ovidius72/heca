@@ -29,31 +29,6 @@ fn floating_terminal_knobs_are_independent_of_tiled() {
     assert!((cfg.terminal_floating_blur_radius() - 12.0).abs() < 1e-6); // 25% of 48px
 }
 
-#[test]
-fn floating_border_color_resolves_config_then_float_accent() {
-    let mocha = crate::theme::load("mocha");
-
-    // Default: no config override -> theme.float_accent.
-    let cfg = AppearanceConfig::default();
-    assert_eq!(
-        cfg.effective_pane_floating_border_color(&mocha),
-        mocha.float_accent
-    );
-
-    // Config override wins.
-    let cfg = AppearanceConfig {
-        pane: PaneAppearance {
-            floating_border_color: Some(Color::new(1, 2, 3, 255)),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    assert_eq!(
-        cfg.effective_pane_floating_border_color(&mocha),
-        Color::new(1, 2, 3, 255)
-    );
-}
-
 /// The overlay-panel frame is a config/theme decision, never hardcoded: an
 /// `[appearance] overlay_border_style` override wins, otherwise the theme's
 /// `overlay_frame` (themes default `bracketed`).

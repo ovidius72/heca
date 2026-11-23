@@ -113,7 +113,38 @@ answers a key, and worked examples. This page does not repeat it.
 
 ## Theme
 
-Built-in themes: `mocha` (dark), `latte` (light). Create custom themes in `~/.config/heca/themes/mytheme.toml`:
+Built-in themes: `grid_tron`, `mocha` (dark), `latte` (light). Choose one with `theme = "<name>"`, where
+`<name>` is the **file name** without `.toml` — heca looks for `~/.config/heca/themes/<name>.toml` first
+(so a file named after a built-in theme replaces it), then the built-in themes. The `name` inside the
+file is only the theme's label.
+
+**Change only what you want — `inherit`.** A theme can start from another one and say only what it
+changes; everything else is the inherited theme's. The inherited theme can be a built-in one or one of
+yours, and may itself inherit:
+
+```toml
+# ~/.config/heca/themes/my-theme.toml — chosen with `theme = "my-theme"` in config.toml
+name = "My theme"
+inherit = "mocha"
+pane_border = "#ff7edb"         # a pane's frame        (unset: `border` at half strength)
+pane_active_border = "#36f9f6"  # the focused pane's    (unset: `accent`)
+float_pane_border = "#fede5d"   # floating panes' frame (earlier name: `float_accent`, still read)
+```
+
+The panes' frames have their own colours so a theme can change them without touching `border` and
+`accent`, which every other border and highlight in heca uses.
+
+The keys are laid over the inherited theme one by one, the same merge that lays your `config.toml`
+over heca's defaults. If a theme file does not parse, inherits a theme that does not exist, or a chain
+of themes comes back on itself, heca says so at start-up (and after a reload) and shows the built-in
+theme of that name, else `grid_tron`.
+
+Border **colours** live only in the theme: the `[appearance]` keys `border_color` and
+`[appearance.pane] border_color` / `active_border_color` / `floating_border_color` are retired, and a
+config that still sets them is told to use the theme's `border` / `pane_border` /
+`pane_active_border` / `float_pane_border`.
+
+A whole theme of your own, from scratch, looks like this (`~/.config/heca/themes/mytheme.toml`):
 
 ```toml
 name = "My Theme"
@@ -652,12 +683,12 @@ width            = 300          # Sidebar width in px (clamped 160..=560)
 border_style     = "bordered"   # none | bordered | bracketed
 border_width     = 1.0          # frame width px; unset → global border_width
 border_radius    = 12.0         # corner radius px; unset → global/theme radius
-border_color     = "#40e0ff"    # bordered-frame color; unset → global border_color
+border_color     = "#40e0ff"    # bordered-frame color; unset → the theme's border
 background_color = "#0b0f14"     # shell fill; unset → theme sidebar surface
 ```
 
 With `border_style = "bordered"`, the frame is drawn at `border_width` in
-`border_color` (which falls back to the global `[appearance] border_color`). With
+`border_color` (which falls back to the theme's `border`). With
 `"bracketed"` it uses the theme accent corner-reticle, now sized by the same
 `border_width` + `border_radius`. `border_width = 0` removes the border.
 

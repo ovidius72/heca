@@ -36,19 +36,9 @@ pub struct PaneAppearance {
     /// Border width (logical px). `None` → global `border_width` → theme. Clamped `[0, 10]`.
     #[serde(default)]
     pub border_width: Option<f32>,
-    /// Inactive/unfocused border color. `None` → global `border_color` → `theme.border` @50%.
-    #[serde(default)]
-    pub border_color: Option<Color>,
     /// Corner radius (logical px). `None` → global `border_radius` → theme. Clamped `[0, 20]`.
     #[serde(default)]
     pub border_radius: Option<f32>,
-    /// Focused/active border color. `None` → `theme.accent`.
-    #[serde(default)]
-    pub active_border_color: Option<Color>,
-    /// Floating-pane border color (all floating panes, so they read as a distinct
-    /// layer). `None` → `theme.float_accent`.
-    #[serde(default)]
-    pub floating_border_color: Option<Color>,
     /// Gap between tiled panes (logical px). `None` → 8.0.
     #[serde(default)]
     pub gap: Option<f32>,
@@ -82,10 +72,7 @@ impl Default for PaneAppearance {
         Self {
             border_style: None,
             border_width: None,
-            border_color: None,
             border_radius: None,
-            active_border_color: None,
-            floating_border_color: None,
             gap: None,
             padding: None,
             drag_label_size_factor: None,

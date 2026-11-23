@@ -593,13 +593,12 @@ hint_font_size = 12.0
 #    unset; each then falls back to the theme) ──
 # border_width  : decorative border width, px. The app-wide BORDER control. The
 #                 chrome + every surface inherit it. 0 removes borders everywhere.
-# border_color  : the `bordered` frame color (chrome + surfaces). Set to e.g. the
-#                 accent for a bright, visible border. A `bracketed` reticle keeps
-#                 the theme accent unless its own surface sets border_color
-#                 (e.g. [appearance.sidebar] border_color).
 # border_radius : corner radius, px, inherited by surfaces.
+# Border COLOURS come from the theme (`border`; for panes `pane_border`, `pane_active_border`,
+# `float_pane_border`). To change them, make a theme of your own that inherits one — see
+# docs/configuration.md § Theme:
+#   ~/.config/heca/themes/my-theme.toml:  inherit = "mocha"  and  pane_border = "#40e0ff"
 # border_width  = 1.0
-# border_color  = "#40e0ff"
 # border_radius = 12.0
 # Affordance outlines (keyboard focus ring + selected-item highlight) keep their
 # OWN width so they stay visible even with borders off (default 1.5).
@@ -676,10 +675,10 @@ search_current_match_alpha = 150
 # global [appearance] default → theme.
 # border_style : frame decoration. none | bordered | bracketed. Default "bordered".
 # border_width : frame width, px (0 = no border). Clamped [0, 10].
-# border_color : inactive/unfocused frame color.
 # border_radius: corner radius, px. Clamped [0, 20] (keeps the content clip gentle).
-# active_border_color   : focused-pane frame color (default theme accent).
-# floating_border_color : floating-pane frame color (default theme float accent).
+# The frame colours are the theme's: `pane_border` for a pane (unset: `border` at half
+# strength), `pane_active_border` for the pane with the keyboard (unset: `accent`),
+# `float_pane_border` for a floating pane.
 # gap     : gap between tiled panes, px (default 8.0). NOTE: when the pane border
 #           is visible (border_style != "none" and border_width > 0) the gap is
 #           floored at the border width, because adjacent panes each draw a full
@@ -689,10 +688,7 @@ search_current_match_alpha = 150
 # padding : content inset from the frame, px (default 4.0). Clamped [0, 20].
 # border_style          = "bordered"
 # border_width          = 2.0
-# border_color          = "#313244"
 # border_radius         = 20.0
-# active_border_color   = "#89b4fa"
-# floating_border_color = "#89b4fa"
 # gap                   = 8.0
 # padding               = 4.0
 # drag_label_size_factor = 0.25   # the name drawn over a dragged pane: share of its shorter side …
@@ -731,7 +727,7 @@ search_current_match_alpha = 150
 #                                   border_width + border_radius too).
 # border_width    : frame width, px. 0 removes the border. Clamped [0, 10].
 # border_color    : the frame color, for both styles. Unset → "bordered" takes the
-#                   global border_color, "bracketed" the theme accent.
+#                   theme's border, "bracketed" the theme accent.
 # border_radius   : corner radius, px. Clamped [0, 40].
 # background_color: shell fill (unset → theme sidebar surface). Transparency still
 #                   applies on top.

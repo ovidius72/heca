@@ -181,9 +181,6 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // app-wide BORDER control. Read at paint time, so it live-reloads. Drives the
     // chrome + sidebar frame width.
     theme.colors.border_width = state.appearance.effective_border_width(&state.theme);
-    // Global decorative border color (config `border_color`, theme fallback) —
-    // drives the chrome/sidebar `bordered` frame. Read at paint, so it live-reloads.
-    theme.colors.border = state.appearance.effective_border_color(&state.theme);
     // Affordance outlines (focus ring + selection) get their own configurable
     // width, independent of the decorative border so they stay visible at
     // `border_width = 0`.

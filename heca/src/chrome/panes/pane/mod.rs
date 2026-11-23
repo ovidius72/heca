@@ -25,13 +25,9 @@ use heca_core::layout::PaneId;
 /// gathers, everything below takes plain data).
 pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellModel> {
     let frame_style = state.appearance.effective_pane_border_style();
-    let border = state.appearance.effective_pane_border_color(&state.theme);
-    let active_border = state
-        .appearance
-        .effective_pane_active_border_color(&state.theme);
-    let floating_border = state
-        .appearance
-        .effective_pane_floating_border_color(&state.theme);
+    let border = state.theme.effective_pane_border();
+    let active_border = state.theme.effective_pane_active_border();
+    let floating_border = state.theme.float_pane_border;
     let border_width = state.appearance.effective_pane_border_width(&state.theme);
     let border_radius = state.appearance.effective_pane_border_radius(&state.theme);
     let content_inset = state.appearance.effective_pane_padding(&state.theme);
