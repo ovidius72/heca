@@ -24,7 +24,8 @@ mod tests;
 pub use actions::{DeclaredAction, collect_actions, fire_action};
 pub(crate) use collect::is_target;
 pub use collect::{
-    SurfaceHints, collect_hints, collect_hints_by_surface, collect_hints_scoped, hint_targets_of,
+    SurfaceHints, collect_hints, collect_hints_by_surface, collect_hints_by_surface_scoped,
+    collect_hints_scoped, hint_targets_of,
 };
 pub use declaration::{Hint, IntoHint};
 pub use fire::{fire_hint, hint_intent};

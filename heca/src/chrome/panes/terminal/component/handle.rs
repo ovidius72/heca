@@ -242,6 +242,7 @@ impl Terminal {
     }
 
     /// Where it was drawn on the last frame it was on screen, in window coordinates.
+    #[cfg(test)]
     pub(crate) fn placed(&self) -> Option<Rectangle> {
         self.shared.placed.get()
     }
@@ -281,29 +282,12 @@ impl Terminal {
         )
     }
 
-    /// **Where cell `(row, col)` is on screen** (its top-left, window coordinates) — the inverse of
-    /// [`cell_at`](Self::cell_at). `None` when the terminal was not drawn last frame.
-    pub(crate) fn cell_origin(&self, row: usize, col: usize) -> Option<(f32, f32)> {
-        self.shared.placed.get()?;
-        let (cell_w, cell_h) = self.shared.cell.get();
-        let at = self.shared.content_bounds().loc;
-        Some((
-            at.x as f32 + col as f32 * cell_w,
-            at.y as f32 + row as f32 * cell_h,
-        ))
-    }
-
     /// **Say which hyperlinks are on screen** — the backend's capture for this frame.
     pub(crate) fn show_links(&self, links: &[heca_core::backend::HyperlinkSpan]) {
         let mut mine = self.shared.links.borrow_mut();
         if mine.as_slice() != links {
             *mine = links.to_vec();
         }
-    }
-
-    /// Every link on screen, in the order the backend captured them.
-    pub(crate) fn links(&self) -> Vec<heca_core::backend::HyperlinkSpan> {
-        self.shared.links.borrow().clone()
     }
 
     /// The target of the link under `pos` (window coordinates), if the terminal was drawn and the

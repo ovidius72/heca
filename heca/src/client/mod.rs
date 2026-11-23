@@ -579,7 +579,6 @@ impl ClientState {
                 ServerMsg::Dispatch { intents } => update.intents.extend(intents),
                 ServerMsg::Service(service) => update.services.push(service),
                 ServerMsg::BackendEffects(effects) => {
-                    update.effects.bell_any |= effects.bell_any;
                     update
                         .effects
                         .clipboard_writes

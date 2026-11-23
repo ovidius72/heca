@@ -29,6 +29,7 @@ named_set! {
         CheckCircle => "check_circle",
         ChatCircleDots => "chat_circle_dots",
         Hourglass => "hourglass",
+        Bell => "bell",
         Lock => "lock",
         CaretRight => "caret_right",
         CaretLeft => "caret_left",

@@ -283,8 +283,18 @@ pub struct SurfaceHints {
 /// that instead reads the first step of a path is assuming every surface is a direct child of the
 /// root — true only for as long as whatever seats them keeps making it true.
 pub fn collect_hints_by_surface(root: &dyn Component) -> Vec<SurfaceHints> {
+    collect_hints_by_surface_scoped(root, None)
+}
+
+/// [`collect_hints_by_surface`] for a picker with a scope of its own — the targets that named
+/// `scope` with [`hint_scope`](crate::builders::HintExt::hint_scope), grouped the same way. `None`
+/// is the ordinary set, exactly [`collect_hints_by_surface`].
+pub fn collect_hints_by_surface_scoped(
+    root: &dyn Component,
+    scope: Option<&str>,
+) -> Vec<SurfaceHints> {
     let mut groups: Vec<SurfaceHints> = Vec::new();
-    for (path, bounds) in collect_hints(root) {
+    for (path, bounds) in collect_hints_scoped(root, scope) {
         let owner = enclosing_surface(root, &path);
         match groups.iter_mut().find(|g| g.path == owner) {
             Some(g) => g.targets.push((path, bounds)),

@@ -144,10 +144,7 @@ impl AppState {
         if update.session_attached || self.session.shape() != before {
             crate::app::mutations::after_layout_change(self);
         }
-        self.needs_redraw |= update.effects.has_data || update.effects.bell_any;
-        if update.effects.bell_any {
-            crate::app::lifecycle::apply_bell_policy(self);
-        }
+        self.needs_redraw |= update.effects.has_data;
         update.rpc
     }
 }

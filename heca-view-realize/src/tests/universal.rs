@@ -223,6 +223,7 @@ fn where_a_letter_sits_is_declarable_on_any_kind() {
             .prop("hint_placement", PropValue::Text("center_right".into()))
             .prop("hint_size", PropValue::Int(18))
             .prop("hint_offset_y", PropValue::Float(4.0))
+            .prop("hint_outside", PropValue::Bool(true))
             .prop("hint_color", PropValue::Color("danger".into()));
         let theme = Theme::default();
         let widget = realize(&node, &theme, &emit, &mut FormBindings::default())
@@ -237,6 +238,9 @@ fn where_a_letter_sits_is_declarable_on_any_kind() {
         }
         if (style.offset_y - 4.0).abs() > f64::EPSILON {
             missing.push(format!("{kind:?} (offset ignored: {})", style.offset_y));
+        }
+        if style.outside != Some(true) {
+            missing.push(format!("{kind:?} (outside ignored: {:?})", style.outside));
         }
         // A **token name**, resolved against the live theme — never a hex literal written into
         // the description, so a letter follows a theme change with nothing rewritten.

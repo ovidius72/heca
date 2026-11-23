@@ -116,6 +116,11 @@ pub const RETIRED: &[(&str, &str)] = &[
     ("keys.command.key", "keys.command.keys"),
     ("keys.command.command_type", "keys.command.kind"),
     ("keys.mode.bindings.key", "keys.mode.bindings.keys"),
+    // A terminal bell is attention feedback, like an agent waiting for you.
+    ("appearance.terminal.bell_attention", BELL_IS_ATTENTION),
+    ("appearance.terminal.bell_visual", BELL_IS_ATTENTION),
+    ("appearance.terminal.bell_audible", BELL_IS_ATTENTION),
+    ("appearance.terminal.bell_flash_alpha", BELL_IS_ATTENTION),
     // Colours come from the theme: a theme of your own can inherit one and change only these.
     (
         "appearance.border_color",
@@ -134,6 +139,9 @@ pub const RETIRED: &[(&str, &str)] = &[
         "the theme's `float_pane_border` (a theme of yours: `inherit = \"mocha\"` and `float_pane_border = \"#…\"`)",
     ),
 ];
+
+/// What a retired bell key is told: the bell is now the attention feedback every pane has.
+const BELL_IS_ATTENTION: &str = "the attention feedback: a bell in a pane you are not looking at flashes its row and plays the `bell` status sound (`[settings.agents.statuses.bell]`)";
 
 /// Whether `pattern` (a [`RETIRED`] path, `*` standing for any one name) matches `key`.
 fn matches(pattern: &str, key: &str) -> bool {
@@ -276,6 +284,25 @@ mod tests {
             unread_keys(&base, &config),
             Vec::new(),
             "every shipped key lands in a field"
+        );
+    }
+
+    /// **The old bell keys are said to be the attention feedback now** — each one reported, naming
+    /// the `bell` status that replaced them.
+    #[test]
+    fn a_retired_bell_key_points_at_the_attention_feedback() {
+        let (file, config) = config(
+            "[appearance.terminal]\nbell_attention = true\nbell_visual = true\nbell_audible = true\nbell_flash_alpha = 56\n",
+        );
+        let said: Vec<String> = unread_keys(&file, &config)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(said.len(), 4, "{said:?}");
+        assert!(
+            said.iter()
+                .all(|line| line.contains("settings.agents.statuses.bell")),
+            "{said:?}"
         );
     }
 

@@ -232,3 +232,55 @@ fn an_ending_listed_as_quiet_asks_for_no_attention() {
         "an empty list flashes for every ending"
     );
 }
+
+/// **A bell in a pane is attention feedback for that pane** — the same store a finished command
+/// or an agent waiting for you raises, with the `bell` status, so the pane's row flashes and the
+/// status sound plays in a window not looking at it. Nothing is raised for a pane that did not ring.
+#[test]
+fn a_bell_in_a_pane_raises_that_panes_attention_feedback() {
+    use crate::app::backend_store::{Program, TerminalSpec};
+    use heca_core::backend::{BackendAlert, FakeBackend};
+    let mut state = super::super::ServerState::for_tests(Default::default());
+    for (pane, rings) in [(PaneId(7), true), (PaneId(8), false)] {
+        let mut backend = FakeBackend::new(20, 6);
+        if rings {
+            backend.queue_alert(BackendAlert::Bell);
+        }
+        state
+            .backends
+            .ensure(
+                pane,
+                TerminalSpec {
+                    program: Program::Command("vim".into()),
+                    cwd: None,
+                    grid: (20, 6),
+                },
+                |_| Ok(Box::new(backend)),
+            )
+            .unwrap();
+    }
+    state.poll_backends();
+    let projection = state.feedback.snapshot();
+    assert_eq!(
+        projection.len(),
+        1,
+        "only the pane that rang: {projection:?}"
+    );
+    assert_eq!(projection[0].pane_id, PaneId(7));
+    assert_eq!(projection[0].status, super::BELL_STATUS);
+    assert!(projection[0].pending());
+}
+
+/// **The `bell` status has a label, a glyph and a sound in heca's defaults**, so a bell is heard
+/// and shown with nothing written in the user's config.
+#[test]
+fn the_bell_status_is_described_in_the_defaults() {
+    let config = heca_config::loader::config_from_layers("").expect("the defaults parse");
+    let status = config
+        .settings
+        .agents
+        .statuses
+        .get(super::BELL_STATUS)
+        .expect("a `bell` status in config.default.toml");
+    assert!(status.sound.is_some(), "a bell is heard: {status:?}");
+}

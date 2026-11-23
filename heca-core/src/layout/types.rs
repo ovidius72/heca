@@ -180,6 +180,23 @@ impl Rectangle {
             None
         }
     }
+
+    /// Whether `other` lies wholly inside this rectangle — its edges may touch this one's.
+    pub fn contains_rect(&self, other: Self) -> bool {
+        other.loc.x >= self.loc.x
+            && other.loc.y >= self.loc.y
+            && other.loc.x + other.size.w <= self.loc.x + self.size.w
+            && other.loc.y + other.size.h <= self.loc.y + self.size.h
+    }
+
+    /// The smallest rectangle holding both this one and `other`.
+    pub fn union(&self, other: Self) -> Self {
+        let x1 = self.loc.x.min(other.loc.x);
+        let y1 = self.loc.y.min(other.loc.y);
+        let x2 = (self.loc.x + self.size.w).max(other.loc.x + other.size.w);
+        let y2 = (self.loc.y + self.size.h).max(other.loc.y + other.size.h);
+        Self::new(Point::new(x1, y1), Size::new(x2 - x1, y2 - y1))
+    }
 }
 
 /// Which pane focus lands on when it moves to the column on the left or right.
@@ -268,4 +285,38 @@ pub enum CenterFocusedColumn {
     /// Center only when the column doesn't fit with neighbors.
     OnOverflow,
     Always,
+}
+
+#[cfg(test)]
+mod rectangle_tests {
+    use super::{Point, Rectangle, Size};
+
+    fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {
+        Rectangle::new(Point::new(x, y), Size::new(w, h))
+    }
+
+    /// A rectangle holds one inside it, edges touching included, and not one that sticks out.
+    #[test]
+    fn a_rectangle_contains_what_lies_wholly_inside_it() {
+        let room = rect(0.0, 0.0, 100.0, 50.0);
+        assert!(room.contains_rect(rect(10.0, 10.0, 20.0, 20.0)));
+        assert!(room.contains_rect(room), "edges may touch");
+        assert!(
+            !room.contains_rect(rect(90.0, 10.0, 20.0, 20.0)),
+            "sticks out right"
+        );
+        assert!(
+            !room.contains_rect(rect(10.0, -1.0, 20.0, 20.0)),
+            "sticks out above"
+        );
+    }
+
+    /// The union is the smallest rectangle holding both.
+    #[test]
+    fn the_union_holds_both() {
+        let a = rect(10.0, 20.0, 30.0, 10.0);
+        let b = rect(0.0, 25.0, 5.0, 40.0);
+        assert_eq!(a.union(b), rect(0.0, 20.0, 40.0, 45.0));
+        assert_eq!(a.union(a), a);
+    }
 }

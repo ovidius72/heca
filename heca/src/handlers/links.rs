@@ -1,17 +1,17 @@
 //! Opening a link, and the check on which links may be opened.
 
-use super::pick::begin_pick;
 use crate::app::terminal_host::selection::SelectionOwner;
-use crate::app_state::{AppState, InputMode};
+use crate::app_state::AppState;
 use crate::input::WmAction;
 
+/// **Letters on every link on screen** (`prefix+Shift+o`): the one picker, over the links each
+/// terminal declares (`chrome::panes::terminal::LINK_SCOPE`). A picked letter sends the link's
+/// `open_link`, the same act a click on the link with the window's key held sends.
 pub fn handle_follow_link(
     state: &mut AppState,
     _action: &WmAction,
 ) -> crate::actions::ActionResult {
-    let candidates = crate::app::terminal_host::collect_link_hints(state);
-    begin_pick(state, InputMode::FollowLink { candidates });
-    Ok(())
+    super::pick::begin_hint_pick(state, Some(crate::chrome::panes::terminal::LINK_SCOPE))
 }
 
 /// Schemes we are willing to hand to the OS opener. OSC 8 links come from

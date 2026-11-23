@@ -107,7 +107,7 @@ impl Input {
     /// `[keys.widgets]` (`WidgetIntent::ClearInput`), which works on every field, clearable or not.
     ///
     /// ```ignore
-    /// Input::new().value(query).clearable(true).on_change(|a| …)
+    /// Input::new().value(query).clearable(true).on_change(|action| search(action))
     /// ```
     #[heca_grid_ui_macros::prop]
     pub fn clearable(mut self, clearable: bool) -> Self {

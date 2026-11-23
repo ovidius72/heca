@@ -173,10 +173,20 @@ pub(crate) fn assign_letters(
 }
 
 pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) -> crate::actions::ActionResult {
+    begin_hint_pick(state, None)
+}
+
+/// **Open the one picker over `scope`** — `None` is `prefix+/`'s ordinary set, a name the targets
+/// that declared it (`"links"`, `prefix+Shift+o`). Every picker heca opens goes through here, so
+/// the visibility rule, the policy check and the remembered letters are the same for all of them.
+pub(crate) fn begin_hint_pick(
+    state: &mut AppState,
+    scope: Option<&str>,
+) -> crate::actions::ActionResult {
     // Which targets are reachable is decided by the layered surface compositor — one rule
     // (active context + geometric occlusion, no hardcoded z) over the whole surface stack.
     // See `chrome::active_hint_targets` and `docs/surface-compositor.md`.
-    let targets: Vec<crate::chrome::HintTarget> = crate::chrome::active_hint_targets(state)
+    let targets: Vec<crate::chrome::HintTarget> = crate::chrome::active_hint_targets(state, scope)
         .into_iter()
         .map(|(target, _)| target)
         .collect();
@@ -213,7 +223,13 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) -> crate::acti
     // that live there apply here too: a view that becomes covered loses its letter, and a
     // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
     // outside all of it.
-    begin_pick(state, InputMode::HintPick { candidates });
+    begin_pick(
+        state,
+        InputMode::HintPick {
+            candidates,
+            scope: scope.map(str::to_owned),
+        },
+    );
     Ok(())
 }
 

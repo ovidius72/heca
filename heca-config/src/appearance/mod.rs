@@ -3,7 +3,7 @@
 //! | File | What it owns |
 //! |---|---|
 //! | `styles` | the named choices: vibrancy, border style, link style, scrollbar visibility |
-//! | `terminal` | the terminal's look: transparency, scrollbar, ligatures, links, images, bell, search |
+//! | `terminal` | the terminal's look: transparency, scrollbar, ligatures, links, images, search |
 //! | `pane` | the pane's look: header parts and buttons |
 //! | `sidebar` | the sidebar's look: width, row lines |
 //! | `effective` | what wins for each setting: the config, then the theme, then the default |

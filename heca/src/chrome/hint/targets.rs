@@ -17,6 +17,7 @@ use heca_grid_ui::Component;
 /// `docs/surface-compositor.md`.
 pub(crate) fn active_hint_targets(
     state: &crate::app_state::AppState,
+    scope: Option<&str>,
 ) -> Vec<(HintTarget, Rectangle)> {
     // **A letter that would do nothing is worse than no letter**. Candidacy is
     // read off the tree; whether the act it names is permitted *right now* is the app's judgement,
@@ -31,7 +32,7 @@ pub(crate) fn active_hint_targets(
     //
     // A pick is a **keyboard** gesture: it lands on nothing, so where the keyboard is *is* its
     // context — the same reasoning `chrome/pane/mod.rs` and RPC already apply.
-    let visible = visible_hint_targets(state);
+    let visible = visible_hint_targets(state, scope);
     let seen = visible.len();
     let offered: Vec<(HintTarget, Rectangle)> = visible
         .into_iter()
@@ -231,7 +232,10 @@ fn layer_occluders(lock: bool, bounds: Rectangle) -> Vec<Rectangle> {
 /// The visible-pane picker wants the first alone — a pane-select mode letters a pane for reasons of
 /// its own, and answering it with the `prefix+/` picker's policy would be one surface's judgement
 /// applied to another's.
-fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, Rectangle)> {
+fn visible_hint_targets(
+    state: &crate::app_state::AppState,
+    scope: Option<&str>,
+) -> Vec<(HintTarget, Rectangle)> {
     let chrome = ChromeConfig::of(state);
     let (vw, vh) = (chrome.window().w, chrome.window().h);
     let viewport = Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, vh));
@@ -258,7 +262,7 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
     let workspace_at = state.window_root.base().children.iter().position(|c| {
         c.base().key.as_deref() == Some(crate::chrome::panes::workspace::WORKSPACE_KEY)
     });
-    for group in heca_grid_ui::collect_hints_by_surface(&state.window_root) {
+    for group in heca_grid_ui::collect_hints_by_surface_scoped(&state.window_root, scope) {
         let targets: Vec<(HintTarget, Rectangle)> = group
             .targets
             .iter()
@@ -334,7 +338,7 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
         // function that answers that, and collecting, offering and running the pick all ask it —
         // so none of them can disagree about where a pane is.
         let targets = super::surfaces::hint_surface_root(state, &HintSurface::Pane(pane_id))
-            .map(|root| hints_of(&HintSurface::Pane(pane_id), root))
+            .map(|root| hints_of(&HintSurface::Pane(pane_id), root, scope))
             .unwrap_or_default();
         if targets.is_empty() {
             continue;
@@ -371,7 +375,13 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
 /// cannot disagree and costs half as much.
 pub(super) fn visible_views(state: &crate::app_state::AppState) -> VisibleViews {
     let mut views = VisibleViews::default();
-    for (target, _) in visible_hint_targets(state) {
+    // The open picker's own set: a scoped picker's letters are visible in *its* set, which the
+    // ordinary one does not contain.
+    let scope = match &state.input_mode {
+        crate::app_state::InputMode::HintPick { scope, .. } => scope.as_deref(),
+        _ => None,
+    };
+    for (target, _) in visible_hint_targets(state, scope) {
         views.surfaces.insert(target.surface.clone());
         views.targets.insert(target);
     }
@@ -395,8 +405,9 @@ pub(super) struct VisibleViews {
 fn hints_of(
     surface: &HintSurface,
     root: &dyn heca_grid_ui::Component,
+    scope: Option<&str>,
 ) -> Vec<(HintTarget, Rectangle)> {
-    heca_grid_ui::collect_hints(root)
+    heca_grid_ui::collect_hints_scoped(root, scope)
         .into_iter()
         .map(|(path, bounds)| (HintTarget::new(surface, root, path), bounds))
         .collect()

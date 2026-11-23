@@ -234,7 +234,7 @@ impl ChromeHost {
     }
 
     /// Move a container to another region, appending it to the region's list — the placing half,
-    /// for [`[[docks]]`](crate::chrome::DockEntry) and `regions(..)`, where each dock's own `order`
+    /// for [`[[docks]]`](heca_config::docks::DockEntry) and `regions(..)`, where each dock's own `order`
     /// still decides where it shows. Validated against the container's `supported_regions`; a no-op
     /// (still `Ok`) if it's already there. Emits [`ChromeEvent::ContainerPlacementChanged`] on a
     /// real move.

@@ -30,7 +30,10 @@ pub(crate) fn status_mode_parts(
         InputMode::Normal => ("NORMAL", String::new()),
         InputMode::Prefix => ("PREFIX", String::new()),
         InputMode::PaneSelect { .. } => ("SELECT", pick_suffix()),
-        InputMode::FollowLink { .. } => {
+        // The link picker is the one picker over the links' set; it keeps its own words.
+        InputMode::HintPick {
+            scope: Some(scope), ..
+        } if scope == crate::chrome::panes::terminal::LINK_SCOPE => {
             ("FOLLOW", " — press a letter to open the link".to_string())
         }
         InputMode::HintPick { .. } => {
