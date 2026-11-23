@@ -130,8 +130,11 @@ pub struct Overlay {
     /// Blocking layer policy: scrim + swallow outside input (modal). `false` ⇒
     /// no scrim; outside input falls through after the outside-click callback.
     blocking: bool,
-    /// Whether what is behind this surface is blurred — see [`frosted`](Overlay::frosted).
-    frosted: bool,
+    /// Whether what is behind this surface is blurred — see [`blur`](Overlay::blur).
+    blur: bool,
+    /// Whether the panel draws its own fill, border and shadow — see
+    /// [`decorated`](Overlay::decorated).
+    decorated: bool,
     /// Fired when a press lands outside the panel — the standalone dismissal
     /// hook (a composing widget usually implements its own policy instead).
     on_outside_click: Option<Box<dyn Fn()>>,
@@ -197,7 +200,8 @@ impl Overlay {
         Self {
             base,
             blocking: true,
-            frosted: false,
+            blur: false,
+            decorated: true,
             on_outside_click: None,
             on_dismiss: None,
             focus: crate::focus::FocusManager::new(),
@@ -288,12 +292,12 @@ impl Overlay {
     /// underneath, a frost takes its detail away, and a surface may want either, both or neither.
     ///
     /// ```ignore
-    /// Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdrop
+    /// Overlay::new().blocking(true).blur(true).panel(map)   // the exposé's backdrop
     /// ```
     ///
     /// **Strength is the theme's**, not the caller's — `overlay_frost_radius`, beside the scrim
     /// alpha it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every
-    /// frosted surface answers together; nothing is decided at a call site. Same bargain as every
+    /// blurred surface answers together; nothing is decided at a call site. Same bargain as every
     /// other token: the caller picks the semantic, the widget owns the pixels.
     ///
     /// **It blurs exactly what it occludes** — the viewport when [`blocking`](Overlay::blocking),
@@ -303,11 +307,30 @@ impl Overlay {
     ///
     /// The blur is GPU work, so this widget only **records the request** at its place in the
     /// drawing order and the host performs it (`docs/surface-compositor.md` § 0.5). That is why a
-    /// frosted surface needs nothing from whoever places it — no registry, no declaration, no host
+    /// blurred surface needs nothing from whoever places it — no registry, no declaration, no host
     /// pass keyed on it.
     #[heca_grid_ui_macros::prop]
-    pub fn frosted(mut self, frosted: bool) -> Self {
-        self.frosted = frosted;
+    pub fn blur(mut self, blur: bool) -> Self {
+        self.blur = blur;
+        self
+    }
+
+    /// **Whether the panel is drawn as a panel** — its own fill, border and shadow, the material
+    /// every dialog and menu wears ([`paint_panel_chrome`]). Default `true`: a dialog is a panel
+    /// on the dimmed page.
+    ///
+    /// `false` draws none of it: the content sits straight on the backdrop (the scrim when
+    /// [`blocking`](Overlay::blocking), the blur when [`blur`](Overlay::blur)). That is the shape
+    /// of a surface that fills the window — the exposé's map, whose "panel" is the whole screen,
+    /// where a panel fill would only lay a second tint over the scrim.
+    ///
+    /// ```ignore
+    /// Overlay::new().blocking(true).panel(dialog)                          // a panel on the page
+    /// Overlay::new().blocking(true).blur(true).decorated(false).panel(map) // content on the page
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn decorated(mut self, decorated: bool) -> Self {
+        self.decorated = decorated;
         self
     }
 
@@ -493,7 +516,7 @@ impl Overlay {
     }
 
     /// **How far a blocking surface reaches** — the whole viewport, or the panel alone before one
-    /// has been seen. The scrim and the frosted backdrop are the same reach said twice, so they
+    /// has been seen. The scrim and the blurred backdrop are the same reach said twice, so they
     /// read it from one place rather than each deriving it.
     fn scrim_rect(&self, panel: Rectangle) -> Rectangle {
         let vp = self.viewport.get();

@@ -10,9 +10,8 @@
 use heca_core::layout::PaneId;
 use heca_grid_ui::Component;
 use heca_grid_ui::RowVariant;
-use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent};
 use heca_grid_ui::style::Length;
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, Row};
 
 /// The `key` of a pane's box — the row's one identity, so the cursor, the right-click target
@@ -81,7 +80,6 @@ pub(crate) struct PaneCard<'a> {
     /// **Where the cursor goes if this card is deleted** — resolved by the row while this card and
     /// its neighbour both still exist, because afterwards there is nothing left to ask.
     pub(crate) next: Option<PaneId>,
-    pub(crate) theme: &'a GuiTheme,
     pub(crate) cb: &'a ExposeCallbacks,
 }
 
@@ -97,7 +95,6 @@ impl PaneCard<'_> {
     /// letter of its own, because a picker saw two targets where an author had written one thing.
     /// `KeyHint` is for a region that is not a widget you can put a builder on; a card is one.
     pub(crate) fn build(self) -> (Row, GridCell) {
-        let theme = self.theme;
         // The card's own cursor signal, created before anything reads it: the `GridCell` lights it,
         // the card is focused by it, and both are the same value rather than two kept in step.
         let card = Row::new();
@@ -122,35 +119,10 @@ impl PaneCard<'_> {
             .justify("center")
             .active(self.active)
             .previous(self.previous)
-            // **A card has a scale of its own.** The theme's default previous mark is tuned for a
-            // row in a list and shouts on a surface the size of a pane; the workspace *frame*'s is
-            // tuned for a whole container and disappears on one. Both were tried here and both were
-            // wrong, in opposite directions — so the theme carries the third scale, and this asks
-            // for it by name rather than picking a number.
-            .previous_tint(theme.colors.effective_card_previous_background())
+            // A card's states read on a card's scale — the active one wears the focused-pane frame,
+            // the last visited one the theme's card-sized mark — and the `Filled` look owns both.
             // A view of that pane — the same letter it wears everywhere else.
             .key(pane_key(self.pane_id));
-        // **The pane you are on wears the frame it wears in the app.**
-        //
-        // The two fills alone could not carry it: "selected" and "last visited" are one accent ramp
-        // eight points apart, tuned for a sidebar ROW — and the same two lifts on a card the size of
-        // a pane read as one colour. Area changes how a lift reads, which the theme already knows:
-        // a workspace *frame* lifts 0.13 where a row lifts 0.42.
-        //
-        // So the two states differ in **kind** rather than in strength — the same move `Row` makes
-        // between its selected panel and its cursor ring. The current pane takes the accent edge and
-        // the halo a focused pane frame carries (the theme's `active_glow_*`, one definition for
-        // both, so the map cannot drift from the app it pictures); last-visited keeps the faint fill
-        // it had, and now has it to itself.
-        if self.active {
-            card = card
-                .border(theme.colors.accent, theme.focus_border_width)
-                .glow_with(
-                    theme.colors.accent,
-                    theme.colors.active_glow_radius,
-                    theme.colors.active_glow_strength,
-                );
-        }
         // **The card the cursor is on holds the keyboard**, so its own handlers are what a key
         // reaches — and what it does not take bubbles up to the `CardGrid` for the nav keys,
         // exactly as a browser's listbox option does (AGENTS § 0c). The cursor signal *is* the
@@ -181,7 +153,7 @@ impl PaneCard<'_> {
                 // absence, an empty path, so a card has one question to answer rather than two. A
                 // card centres its content, so there is nothing to step in from (no indent).
                 let folder =
-                    crate::components::FolderLine::new(theme).path(self.folder.unwrap_or_default());
+                    crate::components::FolderLine::new().path(self.folder.unwrap_or_default());
                 Flex::column()
                     .align("center")
                     .gap(heca_grid_ui::style::Spacing::Hairline)
@@ -316,7 +288,6 @@ mod tests {
     fn a_card_draws_nothing_outside_itself_however_narrow_it_gets() {
         for box_w in [400.0, 160.0, 80.0, 40.0, 16.0] {
             let (cb, _sink) = callbacks();
-            let theme = theme();
             let (row, _cell) = PaneCard {
                 pane_id: PaneId(7),
                 folder: Some("~/projects/heca"),
@@ -326,7 +297,6 @@ mod tests {
                 ws_idx: 0,
                 col_idx: 0,
                 next: None,
-                theme: &theme,
                 cb: &cb,
             }
             .build();
@@ -348,7 +318,7 @@ mod tests {
                 dump(root.as_ref(), 0);
             }
             let mut scene = heca_grid_ui::Scene::new();
-            root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+            root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme()));
 
             for cmd in scene.iter() {
                 if let heca_grid_ui::DrawCommand::Text(t) = cmd
@@ -374,7 +344,6 @@ mod tests {
     fn a_card_shows_the_folder_its_pane_is_in() {
         let text_of = |folder: Option<&str>| {
             let (cb, _sink) = callbacks();
-            let theme = theme();
             let (row, _cell) = PaneCard {
                 pane_id: PaneId(7),
                 folder,
@@ -384,13 +353,12 @@ mod tests {
                 ws_idx: 0,
                 col_idx: 0,
                 next: None,
-                theme: &theme,
                 cb: &cb,
             }
             .build();
             let root = lay_out(row, 400.0, 200.0);
             let mut scene = heca_grid_ui::Scene::new();
-            root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+            root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme()));
             scene
                 .iter()
                 .filter_map(|c| match c {
@@ -418,14 +386,14 @@ mod tests {
         );
     }
 
-    /// **The pane you are on is told apart by KIND, not by strength.** Two fills eight points
-    /// apart on one accent ramp read as one colour at card size — so the current card takes the
-    /// accent edge and halo a focused pane frame wears, and last-visited keeps the fill to itself.
+    /// **Where you are, where Enter goes and where you were differ in kind.** The current card is
+    /// filled with the selected colour, the cursor is the accent outline, and last-visited is a
+    /// grey fill — two accent tints on one ramp read as one colour at card size.
     #[test]
-    fn the_current_card_wears_the_frame_a_focused_pane_wears() {
-        let visual = |active: bool| {
+    fn the_current_card_is_filled_and_the_last_visited_one_grey() {
+        // What a card paints: (the selected fill, the card-sized previous mark, how many outlines).
+        let painted = |active: bool| {
             let (cb, _sink) = callbacks();
-            let theme = theme();
             let (row, _cell) = PaneCard {
                 pane_id: PaneId(7),
                 folder: None,
@@ -435,24 +403,42 @@ mod tests {
                 ws_idx: 0,
                 col_idx: 0,
                 next: None,
-                theme: &theme,
                 cb: &cb,
             }
             .build();
-            // The card IS the row — it declares its own pick, so there is no wrapper to step into.
-            let v = row.base().style.visual;
-            (v.border.is_some(), v.glow.is_some())
+            let root = lay_out(row.width(Length::FULL).height(Length::FULL), 300.0, 200.0);
+            let mut scene = heca_grid_ui::Scene::new();
+            heca_grid_ui::paint_child(
+                root.as_ref(),
+                &mut heca_grid_ui::PaintCx::new(&mut scene, &theme()),
+            );
+            let rects: Vec<_> = scene
+                .iter()
+                .filter_map(|c| match c {
+                    heca_grid_ui::DrawCommand::Rect(r) => Some(*r),
+                    _ => None,
+                })
+                .collect();
+            let frame = rects
+                .iter()
+                .any(|r| r.fill == theme().colors.effective_selected_background());
+            let previous = rects
+                .iter()
+                .any(|r| r.fill == theme().colors.effective_card_previous_background());
+            let outlines = rects.iter().filter(|r| r.border.is_some()).count();
+            (frame, previous, outlines)
         };
 
         assert_eq!(
-            visual(true),
-            (true, true),
-            "the current card: an accent edge and a halo"
+            painted(true),
+            (true, false, 0),
+            "the current card: filled with the selected colour, no outline (that is the cursor's), \
+             no previous mark"
         );
         assert_eq!(
-            visual(false),
-            (false, false),
-            "and last-visited keeps only its fill, so the two cannot read as one",
+            painted(false),
+            (false, true, 0),
+            "and last-visited keeps only its card-sized grey mark, so the two cannot read as one",
         );
     }
 
@@ -465,7 +451,6 @@ mod tests {
 
     fn card(active: bool, next: Option<PaneId>) -> Built {
         let (cb, sink) = callbacks();
-        let theme = theme();
         let pane = ExposePane {
             pane_id: PaneId(7),
             folder: None,
@@ -482,7 +467,6 @@ mod tests {
             ws_idx: 2,
             col_idx: 3,
             next,
-            theme: &theme,
             cb: &cb,
         }
         .build();
@@ -497,10 +481,9 @@ mod tests {
     #[test]
     fn a_card_shows_its_name_and_its_cell_shares_the_cards_cursor_signal() {
         let (root, cursor, _) = card(true, None);
-        let theme = theme();
         let mut scene = heca_grid_ui::Scene::new();
         root.paint(
-            &mut heca_grid_ui::PaintCx::new(&mut scene, &theme)
+            &mut heca_grid_ui::PaintCx::new(&mut scene, &theme())
                 .with_viewport(heca_grid_ui::Size::new(200.0, 100.0)),
         );
         let drawn: Vec<String> = scene
@@ -665,7 +648,6 @@ mod tests {
     #[test]
     fn a_card_is_one_pick_target_not_two() {
         let (cb, _sink) = callbacks();
-        let theme = theme();
         let (mut card, _) = PaneCard {
             pane_id: PaneId(7),
             folder: None,
@@ -675,7 +657,6 @@ mod tests {
             ws_idx: 0,
             col_idx: 0,
             next: None,
-            theme: &theme,
             cb: &cb,
         }
         .build();

@@ -186,7 +186,7 @@ pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
 /// (`ScrollPageDown`, `Dismiss`), addressed to the focused region, and whichever widget in there
 /// owns it answers. A [`Event::Hint`] runs the target's own pick and nothing below it.
 pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
-    if node.on_event_capture(ev) == Handled::Yes {
+    if own_capture(node, ev) == Handled::Yes {
         return Handled::Yes;
     }
     if let Some((head, rest)) = path.split_first() {
@@ -323,10 +323,20 @@ pub(crate) fn own_event(node: &mut dyn Component, ev: &Event) -> Handled {
     crate::intent::dispatching_to(route, || node.on_event(ev))
 }
 
+/// **The widget's capture code, as that widget** — the way in, before the target. A widget that
+/// answers there (a grid choosing the card under its cursor on `Activate`) sends from its own
+/// route, like its handlers and its own event code do; without it, what a capture sends fell
+/// through to the host with no origin, and a layer's action was refused as an act on the page
+/// behind it. Every walk calls a widget's capture through this.
+pub(crate) fn own_capture(node: &mut dyn Component, ev: &Event) -> Handled {
+    let route = node.base().dispatch_to.clone();
+    crate::intent::dispatching_to(route, || node.on_event_capture(ev))
+}
+
 /// Capture down, children last-first, bubble up — for the events that are addressed to everything
 /// rather than to one widget.
 fn broadcast(node: &mut dyn Component, ev: &Event) -> Handled {
-    if node.on_event_capture(ev) == Handled::Yes {
+    if own_capture(node, ev) == Handled::Yes {
         return Handled::Yes;
     }
     let mut from_subtree = Handled::No;

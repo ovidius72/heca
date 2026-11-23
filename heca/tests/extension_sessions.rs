@@ -8,7 +8,6 @@ use heca::{
 use heca_grid_ui::builders::Parent;
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Spacing, WidgetSize};
-use heca_grid_ui::theme::Theme;
 use heca_grid_ui::widgets::{Flex, Label};
 use heca_grid_ui::{Component, LayoutEngine, Size};
 
@@ -81,7 +80,7 @@ fn an_extension_listens_for_session_changes_and_reads_projects() {
 /// **`FolderLine` is placed like any widget**, and its path follows a signal: empty hides it.
 #[test]
 fn an_extension_places_the_folder_line_and_updates_it_in_place() {
-    let line = FolderLine::new(&Theme::default())
+    let line = FolderLine::new()
         .path("~/projects/heca")
         .size(WidgetSize::Caption)
         .indent(Spacing::Sm);

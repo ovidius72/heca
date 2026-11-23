@@ -12,7 +12,6 @@
 use heca_core::layout::PaneId;
 use heca_grid_ui::builders::LayoutExt;
 use heca_grid_ui::style::Length;
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::CardGrid;
 
 use super::model::ExposeWorkspace;
@@ -31,7 +30,6 @@ pub(crate) struct ExposeGrid<'a> {
     pub(crate) start: Option<PaneId>,
     /// The pane a back-and-forth binding would return to — marked, not selected.
     pub(crate) previous: Option<PaneId>,
-    pub(crate) theme: &'a GuiTheme,
     pub(crate) cb: &'a ExposeCallbacks,
 }
 
@@ -61,7 +59,6 @@ impl ExposeGrid<'_> {
                 widest,
                 gap,
                 previous: self.previous,
-                theme: self.theme,
                 cb: self.cb,
             }
             .build();
@@ -107,7 +104,7 @@ mod tests {
     use crate::chrome::surfaces::expose::model::{ExposeColumn, ExposePane, ExposeWorkspace};
     use crate::chrome::surfaces::expose::pane_card::pane_key;
     use crate::chrome::surfaces::expose::testing::{
-        actions, callbacks, card_of, cards_bounds, lay_out, theme,
+        actions, callbacks, card_of, cards_bounds, lay_out,
     };
 
     /// A workspace of `cols` columns on a screen of `screen`, each column one pane.
@@ -154,13 +151,11 @@ mod tests {
 
     fn grid(rows: &[ExposeWorkspace], w: f64, h: f64) -> heca_grid_ui::WidgetModel {
         let (cb, _sink) = callbacks();
-        let theme = theme();
         let g = ExposeGrid {
             rows,
             gap_frac: 0.1,
             start: None,
             previous: None,
-            theme: &theme,
             cb: &cb,
         }
         .build();
@@ -317,7 +312,6 @@ mod tests {
         use heca_grid_ui::event::{Event, WidgetIntent};
         let rows = vec![ws(0, 3, (800.0, 600.0))];
         let (cb, _sink) = callbacks();
-        let theme = theme();
         // Opened **on a card**: the cursor lights a cell when it is placed, and a map opened on
         // nothing has nothing focused — which is correct, and would make this prove nothing.
         let g = ExposeGrid {
@@ -325,7 +319,6 @@ mod tests {
             gap_frac: 0.1,
             start: Some(PaneId(1)),
             previous: None,
-            theme: &theme,
             cb: &cb,
         }
         .build();
@@ -385,14 +378,12 @@ mod tests {
             h: 150.0,
         });
         let (cb, sink) = callbacks();
-        let theme = theme();
         let g = ExposeGrid {
             rows: &rows,
             gap_frac: 0.1,
             // Start on the last tiled pane, so one step right is the float.
             start: Some(PaneId(1)),
             previous: None,
-            theme: &theme,
             cb: &cb,
         }
         .build();

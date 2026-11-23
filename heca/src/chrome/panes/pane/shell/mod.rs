@@ -87,7 +87,7 @@ impl<C: heca_grid_ui::builders::IntoChildren> PaneShell<'_, C> {
         // beneath — no host step has to draw either between the panes.
         if let Some(float) = self.model.float {
             pane = if float.frost > 0.0 {
-                pane.frosted(float.frost)
+                pane.blur(float.frost)
             } else {
                 pane.background(to_gui_color(float.background))
             };

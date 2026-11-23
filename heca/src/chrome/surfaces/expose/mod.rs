@@ -115,7 +115,6 @@ pub(crate) fn map(
         gap_frac: geometry.overview_gap,
         start,
         previous,
-        theme,
         cb: &cb,
     }
     .build();
@@ -133,7 +132,7 @@ pub(crate) fn map(
             // map a different screen; the blur makes it a lens. One builder on the widget — the
             // surface asks and the host performs it, so this travels with the tree instead of
             // being a fact the registry held about it.
-            .frosted(true)
+            .blur(true)
             // **The map names how it comes and goes, exactly as a plugin's surface would.**
             //
             // It opens by pulling back, the way niri's overview does — the same session seen from
@@ -149,7 +148,7 @@ pub(crate) fn map(
             .animation(Animation::ZoomFade.from(geometry.overview_zoom_from as f32))
             .panel_size(Length::Percent(1.0), Length::Percent(1.0))
             // **The panel is the frost's tint, not a lid.** The blurred frame is stamped under this
-            // surface (`.frosted(true)` above), so the surface here is the background
+            // surface (`.blur(true)` above), so the surface here is the background
             // colour at the theme's scrim strength: enough to hold the cards' contrast, thin
             // enough that the session reads behind them as a blurred wash. Painted opaque it hid
             // the blur completely; left at heca's own window colour — translucent by design, for

@@ -40,3 +40,56 @@ fn a_dismiss_reaches_the_grid_through_the_overlay() {
         "Esc must run the close_overlay ACTION, not a bespoke hide; the emitter saw: {got:?}",
     );
 }
+
+/// **Enter on the map, seated in its layer as the app seats it, goes out as the map's own
+/// gesture** — `focus_pane` included. Found in the app: a click chose the card but Enter was
+/// refused, "blocked ActivateAction(FocusPane) from MouseContent", because the intent lost the
+/// layer's source on the keyboard's path.
+#[test]
+fn an_activate_on_the_seated_map_goes_out_as_the_maps_gesture() {
+    use crate::app::interaction::{InteractionIntent, InteractionSource};
+    use crate::chrome::surfaces::layers::{LayerKind, LayerRegistry};
+    use heca_grid_ui::component::{Event, WidgetIntent as W};
+    let sent = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let seen = sent.clone();
+    let mut reg = LayerRegistry::default();
+    reg.emit_through(move |surface| {
+        let seen = seen.clone();
+        crate::chrome::ChromeIntentEmitter::of(
+            InteractionSource::Surface(surface),
+            move |source, intent| seen.borrow_mut().push((source, intent)),
+        )
+    });
+    let s = session();
+    let rows = model(s.l(), |p| p.title.clone(), false);
+    let mut root = map(
+        &rows,
+        &GuiTheme::default(),
+        Some(PaneId(2)),
+        &LayoutOptions::default(),
+        &shipped_keys(),
+        None,
+    );
+    root.show();
+    let mut window = crate::chrome::new_window_root();
+    let id = reg.add(None, LayerKind::OnDemand, root, &mut window);
+    heca_grid_ui::LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(1900.0, 1200.0));
+
+    let fell_through = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let sink = fell_through.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| sink.borrow_mut().push(intent.action));
+    heca_grid_ui::dispatch(&mut window, &Event::Widget(W::Activate));
+    assert!(
+        fell_through.borrow().is_empty(),
+        "nothing falls through to the host's sink, which the app reads as MouseContent: {:?}",
+        fell_through.borrow()
+    );
+    let sent = sent.borrow();
+    let focus = sent.iter().find(|(_, intent)| match intent {
+        InteractionIntent::View(intent) => intent.action == "focus_pane",
+        _ => false,
+    });
+    let (source, _) =
+        focus.unwrap_or_else(|| panic!("focus_pane went out through the layer: {sent:?}"));
+    assert_eq!(*source, InteractionSource::Surface(reg.surface_key(id)));
+}

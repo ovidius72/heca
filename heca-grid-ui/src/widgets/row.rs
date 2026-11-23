@@ -56,6 +56,12 @@ pub enum RowVariant {
     Tinted,
     /// **A solid box**: the theme's `surface`, the same corners, `Xs` air inside — a card that has
     /// to read as an object over something busy (the exposé's map of panes).
+    ///
+    /// A card is the size of a pane, so its three states differ in **kind**: **active** (where you
+    /// are) fills the card with the theme's selected colour, the **cursor** (where Enter goes) is
+    /// the accent outline every row's cursor wears, and **previous** fills it with the theme's
+    /// card-sized neutral mark (`card_previous_background`, a lift towards the text colour) — an
+    /// accent fill, an accent outline and a grey fill, never two of the same.
     Filled,
 }
 
@@ -71,6 +77,23 @@ impl RowVariant {
                     .with_alpha_f32(theme.colors.card_background_alpha),
             ),
             RowVariant::Filled => Some(theme.colors.surface),
+        }
+    }
+
+    /// The "last visited" mark this look takes, when it has a scale of its own.
+    fn previous_tint(self, theme: &crate::theme::Theme) -> Option<Color> {
+        match self {
+            RowVariant::Filled => Some(theme.colors.effective_card_previous_background()),
+            RowVariant::Plain | RowVariant::Tinted => None,
+        }
+    }
+
+    /// The fill an **active** row of this look takes over its whole box — the theme's selected
+    /// colour on a card — or `None` for the looks whose active state is the selection pill.
+    fn active_fill(self, theme: &crate::theme::Theme) -> Option<Color> {
+        match self {
+            RowVariant::Filled => Some(theme.colors.effective_selected_background()),
+            RowVariant::Plain | RowVariant::Tinted => None,
         }
     }
 
@@ -346,6 +369,11 @@ impl Component for Row {
         } else {
             ctrl_radius
         };
+        let active_fill = active
+            .then(|| self.variant.active_fill(cx.theme()))
+            .flatten();
+        // An active card takes the selected colour over its whole box, in place of its rest fill.
+        let fill = active_fill.or(fill);
         if let (Some(fill), None) = (fill, s.visual.glow) {
             cx.rect(
                 b,
@@ -372,13 +400,16 @@ impl Component for Row {
         if self.previous.get_untracked() && !active {
             cx.rect(
                 sel,
-                self.previous_tint.unwrap_or(previous_bg),
+                self.previous_tint
+                    .or_else(|| self.variant.previous_tint(cx.theme()))
+                    .unwrap_or(previous_bg),
                 None,
                 sel_radius,
                 None,
             );
         }
-        if active {
+        // A look whose active state fills its box (a `Filled` card) needs no selection pill inside.
+        if active && active_fill.is_none() {
             // Selection stays quiet behind content. The stronger glowing navigation ring below
             // still identifies the keyboard cursor when it coincides with the selected row.
             let hue = self.highlight.unwrap_or(selected_bg);

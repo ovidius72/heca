@@ -93,7 +93,7 @@ mod tests {
         let theme = GuiTheme::default();
         let mut root = new_window_root();
         let surface = Overlay::new()
-            .frosted(frosted)
+            .blur(frosted)
             .panel(Flex::row())
             .default_open(true);
         place_surface(

@@ -978,7 +978,9 @@ instead of `.on_click(move |ev| ev.dispatch(intent.clone()))` plus a separate `.
 - **Where the intent goes:** to the listener of the container that holds the widget
   (`EventExt::on_dispatch`). heca seats each dock and each layer in one, so the intent arrives
   seated on that dock or surface and judged as a gesture there — the author passes no mount and no
-  emitter.
+  emitter. The same holds for **every** place a widget can send from: its handlers, its own event
+  code, its capture code on the way in (a grid choosing the card under its cursor on `Activate`)
+  and what it reports after its subtree — so a send from any of them reaches the same container.
 - **The keyboard comes free:** Enter and Space press it through `activate` when it holds the
   keyboard; nothing to declare.
 - **Its own shortcut, if it needs one,** is a key bound to the action's name in a keys file (an
@@ -2301,7 +2303,7 @@ properties are applied after children are attached.
 
 The typed described container is `heca_view::build::Pane::new()`. It accepts arbitrary described
 children and nested layouts through `.child(...)`, with `border_style(ViewFrameStyle)`,
-`border_color(...)` and `frosted(...)`. It constructs the same generic frame as the native widget;
+`border_color(...)` and `blur(...)`. It constructs the same generic frame as the native widget;
 there is no built-in Terminal requirement or automatic header.
 
 
@@ -2347,7 +2349,7 @@ width/radius/colour via `bracket_frame_with`.
 - **Frame**: `.border_style(FrameStyle)` (or `.bordered()` / `.bracketed()` / `.frameless()`),
   `.border_width(w)`, `.border_color(c)`, `.radius(r)`. Each unset one follows the theme, so the
   global controls still drive every pane that does not set its own.
-- **Frosted**: `.frosted(radius)` blurs what is drawn behind the pane by `radius` logical px, in scene
+- **Blur**: `.blur(radius)` blurs what is drawn behind the pane by `radius` logical px, in scene
   order — it blurs what lies under it and nothing of what comes after, its own content included. A
   floating pane that should show what is under it says this instead of filling itself.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
@@ -4428,7 +4430,7 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
   | --- | --- | --- |
   | `Plain` (default) | nothing — only the states show | lists, menus |
   | `Tinted` | a veil: the theme's text colour at `card_background_alpha`, the controls' corner radius, `Sm` air inside | the workspaces dock's pane rows; a card in any dock |
-  | `Filled` | a solid box: the theme's `surface`, the same corners, `Xs` air inside | the exposé's cards — over something busy |
+  | `Filled` | a solid box: the theme's `surface`, the same corners, `Xs` air inside; its three states differ in kind — `.active(true)` (where you are) fills the card with the theme's selected colour, the cursor (where Enter goes) is the accent outline every row's cursor wears, `.previous(true)` fills it with the card-sized neutral mark (`card_previous_background`, a lift towards the text colour) | the exposé's cards — over something busy |
 
   ```rust
   Row::new().variant(RowVariant::Tinted).child(Grid::new() /* icon, name, folder */)
@@ -6541,26 +6543,45 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   the chrome around it. `.panel(..)` also takes a mapper-produced panel (e.g.
   `heca`'s `realize(ViewNode)`).
 - **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
-  scrim, outside input falls through), `.frosted(bool)` (default `false` — see *The frosted
+  scrim, outside input falls through), `.blur(bool)` (default `false` — see *The blurred
+  backdrop* below), `.decorated(bool)` (default `true` — see *A panel, or content on the
   backdrop* below), `.opened(bool)` (the **initial** state — see *Showing and
   hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
 
-#### The frosted backdrop — `.frosted(true)`
+#### A panel, or content on the backdrop — `.decorated(bool)`
 
-**Blur what is behind the surface.** The scrim's counterpart: a scrim *tints* what is underneath,
-a frost takes its *detail* away, and a surface may want either, both or neither.
+By default an overlay draws its **panel** — its own fill, border and shadow, the material every
+dialog and menu wears — and puts the content inside it: a sheet on the dimmed page.
+`.decorated(false)` draws none of it: the content sits straight on the backdrop (the scrim when
+`blocking`, the blur when `blur`). That is the shape of a surface that fills the window, like the
+exposé's map: its "panel" would be the whole screen, and a panel fill there is only a second tint
+over the scrim.
 
 ```rust
-Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdrop
+Overlay::new().blocking(true).panel(dialog)                           // a panel on the dimmed page
+Overlay::new().blocking(true).blur(true).decorated(false).panel(map)  // content on the backdrop
 ```
 
 ```json
-{"kind": "overlay", "props": {"blocking": true, "frosted": true}}
+{"kind": "overlay", "props": {"blocking": true, "blur": true, "decorated": false}}
+```
+
+#### The blurred backdrop — `.blur(true)`
+
+**Blur what is behind the surface.** The scrim's counterpart: a scrim *tints* what is underneath,
+a blur takes its *detail* away, and a surface may want either, both or neither.
+
+```rust
+Overlay::new().blocking(true).blur(true).panel(map)   // the exposé's backdrop
+```
+
+```json
+{"kind": "overlay", "props": {"blocking": true, "blur": true}}
 ```
 
 - **Strength is the theme's**, never the caller's — `overlay_frost_radius`, beside the scrim alpha
-  it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every frosted
+  it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every blurred
   surface answers together. A described surface asks for the *effect*, never a radius.
 - **It blurs exactly what it occludes** — the viewport when `blocking`, the panel alone when not.
   The same reach [`overlay_occludes`](#component-trait) reports, read from one place, so the frost
@@ -6576,7 +6597,7 @@ Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdr
   requests, then flushes the overlay bands, which is what "after everything beneath me, before me"
   means in one pass order.
 
-A frosted surface therefore needs **nothing** from whoever places it: no registration, no host pass
+A blurred surface therefore needs **nothing** from whoever places it: no registration, no host pass
 keyed on it, no declaration outside the tree.
 - **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
   `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
@@ -7886,7 +7907,7 @@ one the largest, never wrapped. So an epoch time in milliseconds (`Elapsed::at_m
 | `Surface` | (container — children only) | — |
 | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
-| **`Overlay`** | `blocking` (Bool, default `true`), `frosted` (Bool, default `false` — blur what is behind it, at the theme's radius), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
+| **`Overlay`** | `blocking` (Bool, default `true`), `blur` (Bool, default `false` — blur what is behind it, at the theme's radius), `decorated` (Bool, default `true` — `false`: no panel fill, border or shadow, the content sits on the backdrop), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Caption` | `text` (blank collapses the whole caption); common size/tone/layout properties | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |

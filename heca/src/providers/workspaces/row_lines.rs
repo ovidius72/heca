@@ -38,7 +38,7 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
 /// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
 /// pane_lines`, and nothing else.
 fn cwd_line(cx: &LineCx<'_>) -> crate::components::FolderLine {
-    let line = crate::components::FolderLine::new(cx.theme)
+    let line = crate::components::FolderLine::new()
         .size(WidgetSize::Caption)
         .indent(META_INDENT);
     let path = line.path_signal();

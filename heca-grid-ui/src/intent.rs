@@ -142,6 +142,53 @@ mod tests {
         );
     }
 
+    /// **What a widget sends on the way in — from its capture code — takes its route too.** A grid
+    /// that chooses the card under its cursor on `Activate` answers in capture; that send once fell
+    /// through to the host with no origin, and the app refused a layer's own choice as an act on
+    /// the page behind it.
+    #[test]
+    fn what_a_widget_sends_from_its_capture_goes_to_its_route() {
+        struct Chooser {
+            base: crate::component::Base,
+        }
+        impl crate::component::Component for Chooser {
+            fn base(&self) -> &crate::component::Base {
+                &self.base
+            }
+            fn base_mut(&mut self) -> &mut crate::component::Base {
+                &mut self.base
+            }
+            fn on_event_capture(&mut self, ev: &crate::event::Event) -> crate::event::Handled {
+                if matches!(
+                    ev,
+                    crate::event::Event::Widget(crate::event::WidgetIntent::Activate)
+                ) {
+                    send(Intent::new("chosen"));
+                    return crate::event::Handled::Yes;
+                }
+                crate::event::Handled::No
+            }
+        }
+        let (host, routed) = routes();
+        let seen = routed.clone();
+        let mut root = Flex::column()
+            .on_dispatch(move |intent| seen.borrow_mut().push(intent.action))
+            .child(Chooser {
+                base: crate::component::Base::new(),
+            });
+        crate::pointer::fire_mounts(&mut root);
+        crate::component::deliver_to_path(
+            &mut root,
+            &[0],
+            &crate::event::Event::Widget(crate::event::WidgetIntent::Activate),
+        );
+        assert_eq!(*routed.borrow(), ["chosen"]);
+        assert!(
+            host.borrow().is_empty(),
+            "nothing reached the host directly"
+        );
+    }
+
     #[test]
     fn without_a_route_a_named_action_reaches_the_host() {
         let (host, _) = routes();

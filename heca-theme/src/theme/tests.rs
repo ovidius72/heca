@@ -252,3 +252,21 @@ fn shadow_serde_roundtrips_color() {
     let s2: Shadow = toml::from_str(&reserialized).unwrap();
     assert_eq!(s, s2);
 }
+
+/// **The exposé's "last visited" card never shares the current card's accent**: derived, it is a
+/// neutral lift towards the text colour, so it differs from the accent frame by hue, not by
+/// strength.
+#[test]
+fn the_card_previous_mark_is_neutral_not_the_accent() {
+    let theme = Theme {
+        surface: Color::rgb(0x10, 0x10, 0x10),
+        foreground: Color::rgb(0xf0, 0xf0, 0xf0),
+        accent: Color::rgb(0x00, 0x80, 0xff),
+        card_previous_background: None,
+        ..Theme::default()
+    };
+    let mark = theme.effective_card_previous_background();
+    assert_eq!(mark.r, mark.g, "a grey: {mark:?}");
+    assert_eq!(mark.g, mark.b, "a grey: {mark:?}");
+    assert!(mark.r > theme.surface.r, "lifted off the surface: {mark:?}");
+}

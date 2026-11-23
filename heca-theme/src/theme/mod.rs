@@ -117,6 +117,9 @@ pub struct Theme {
     /// far smaller than a workspace frame, so a frame's tint vanishes on it. Both were tried on the
     /// map and both were wrong, in opposite directions. `None` derives it — see
     /// [`effective_card_previous_background`](Self::effective_card_previous_background).
+    ///
+    /// Derived from the **text** colour, not the accent: the current card wears the accent frame,
+    /// and an accent tint here — however faint — read as the same colour on the map.
     #[serde(default)]
     pub card_previous_background: Option<Color>,
     #[serde(default)]
@@ -340,8 +343,10 @@ impl Theme {
     /// [`card_previous_background`](Self::card_previous_background) for why a card has a scale of
     /// its own.
     pub fn effective_card_previous_background(&self) -> Color {
+        // Towards the text colour — a neutral lift — so it never shares the accent of the current
+        // card's frame.
         self.card_previous_background
-            .unwrap_or_else(|| self.surface.lerp(self.accent, CARD_PREVIOUS_LIFT))
+            .unwrap_or_else(|| self.surface.lerp(self.foreground, CARD_PREVIOUS_LIFT))
     }
 
     /// The workspace back-and-forth would return to, explicit or derived — fainter than the active
