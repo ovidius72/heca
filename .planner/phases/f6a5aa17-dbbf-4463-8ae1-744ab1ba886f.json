@@ -27,7 +27,8 @@
     "dd0b334f-38d3-46c9-8c5e-991fbb3fae05",
     "f81ee832-a76d-4e80-82ad-85b996799d01",
     "fbc61866-0b17-4225-9bd3-537f45419d4b",
-    "7c6efe48-9453-4b45-97da-8d488787bc72"
+    "7c6efe48-9453-4b45-97da-8d488787bc72",
+    "ccedd8f3-1614-4ad2-acde-03a5436e8cbd"
   ],
   "tasks": [
     {
@@ -53,7 +54,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-11-17T15:11:45.100Z",
+      "updatedAt": "2026-11-23T14:30:04.708Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -166,10 +167,37 @@
       "updatedAt": "2026-10-12T17:47:21.841Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "ccedd8f3-1614-4ad2-acde-03a5436e8cbd",
+      "phaseId": "f6a5aa17-dbbf-4463-8ae1-744ab1ba886f",
+      "number": 576,
+      "shortId": "YQU7Z",
+      "priority": 5,
+      "shortName": "fit-the-visible-columns-into-t",
+      "title": "Fit the visible columns into the window — a command that resizes the visible workspace's columns so they all fit the viewport",
+      "status": "planned",
+      "description": "Moved here from P110(F010)/T567 C22 (Antonio, 2026-11-23: \"la annulliamo, abbiamo un task pairing with niri dove lo rivediamo\").\n\nORIGIN: T567 point 7 (2026-11-19), \"FIT THE COLUMNS INTO THE VIEWPORT — STUDY. No such command today. Study a command that resizes the visible workspace's columns so they all fit the viewport (niri-like), and how it relates to zoom.\"\n\nCURRENT STATE: no such command exists. Columns keep their own width (ColumnWidth::Proportion | Fixed, never normalized — AGENTS.md § Layout Rules) and overflow the viewport by design; the view scrolls (ScrollView.offset). The pane header's zoom button runs zoom_column (heca/src/chrome/panes/pane_items/buttons.rs ~339-347), which widens one column. Zooming a single pane in a split column (T567 C20) is not built.\n\nTO STUDY (with Antonio, before any code):\n- What niri offers here (docs/niri-wiki/: column widths, presets, \"maximize\", \"expand to available width\") and which behaviour heca should match.\n- Whether \"fit\" changes the columns' stored widths (and how they come back) or is a temporary view, like a zoom that restores.\n- How it relates to zoom_column and to a future pane zoom.\n- Reachable by key, palette and RPC through the ActionRegistry, like every action.",
+      "descriptionUpdatedAt": "2026-11-23T14:30:10.285Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-23T14:30:10.163Z",
+      "updatedAt": "2026-11-23T14:30:10.163Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-17T15:11:48.020Z",
+  "updatedAt": "2026-11-23T14:30:10.163Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
