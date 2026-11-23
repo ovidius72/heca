@@ -1273,7 +1273,8 @@ AppState (namespaced signal store) DockFrame (title/collapse/handle) PushClip/Po
 Docks: WorkspacesDock, GitDock…    Grid (tracks + named areas)       (needed for scroll)
   └ own logic + internal items     Item / ItemGroup (rows)
 Actions (the only writes)          Icon, StatusDot, Badge, Tag       (shipped: src/drag/
-DnD meaning = dispatch(action)     DnD hooks → shipped src/drag/      DragContext etc.)
+DnD meaning = dispatch(action)     DragExt: draggable_as / accepts   src/drag/: gesture,
+                                   (any widget, by its key)           feedback, drop sink)
 ```
 
 ---
@@ -1351,11 +1352,10 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 - **No** workspace/tree/expand/drag *semantics* — those belong to the mounted Dock. Replaces the old "Sidebar = tree-nav".
 - **Status:** new.
 
-### 2.6 Drag-and-Drop — extend the shipped framework (see §3)
-- **The DnD system has landed** in `heca-grid-ui/src/drag/` (`DragSurfaceId`/`DragItem`/`SurfaceDragState`/`DragContext`). **Do not build a parallel one.**
-- grid-ui's job: drive `SurfaceDragState`/`DragContext` from `DockFrame`'s drag handle + `ChromeRegion`/`Item` drop targets; ensure every drop is an **action** (P2).
-- Extend **additively** (new `DragSurfaceId`/`DragItemKind` variants); never modify/retype existing drag types or remove variants.
-- **Status:** framework present; DockFrame/region **hooks** are new work — tracked in the planner under F004, not here.
+### 2.6 Drag-and-Drop — any widget, by its name (see §3)
+- **One framework**, in `heca-grid-ui/src/drag/`: a widget declares `.draggable_as(kind)` / `.accepts(kinds)` / `.accepts_beside(kinds)` on its `key`, and the framework runs the gesture and draws the feedback. **Do not build a parallel one.**
+- Every drop that changes something is an **action** (P2), so the same move is reachable from a key and RPC.
+- **Status:** shipped (P079): rows (panes, columns, workspaces, heca-pro rooms), and whole docks — carried by the window's move key, landing beside another dock, in the gap between two, or in an empty sidebar. A `DockFrame`'s grip is its handle.
 
 ### 2.7 Status-driven item composition — neutral primitives + a recipe
 - The rich pane row (program name · git status+icon · exit code · running/idle/stopped style) is **composed**, not a monolith: `Grid` + `Label` + `StatusDot` + `Badge`/`Tag` + `Icon`.
@@ -1376,37 +1376,24 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 
 > **Planner:** feature **F004** · all widgets built
 
-## 3. Drag-and-Drop — build on the **shipped** framework (`heca-grid-ui/src/drag/`)
+## 3. Drag-and-Drop — the framework (`heca-grid-ui/src/drag/`)
 
-The DnD system **landed** (merged from `feature/gpt-refactoring`, 2026-06-09). grid-ui now contains `src/drag/` — a **surface-agnostic, GPU-free state framework**. We **extend** it; we do not invent a parallel one.
+The full API is in [`widgets.md` → Drag and drop](widgets.md#drag-and-drop); this is how chrome uses it.
 
-### What shipped (the real API)
-- **`DragSurfaceId`** — a **closed enum** of drag surfaces (`LeftSidebar` today; `RightSidebar`/`Inspector` are TODO variants). Enum (not trait) on purpose: compiler-checked exhaustiveness, zero-cost dispatch, and it avoids the `Box<dyn> + &mut AppState` self-borrow.
-- **`DragItem { surface, id: DragItemId, kind: DragItemKind, pane_id: Option<u64> }`** — `DragItemId(usize)` is an opaque flat index each surface interprets; `DragItemKind` = `{Pane, Workspace, Column, FloatingPane}`.
-- **`SurfaceDragState { phase, hover_item, source_item, ghost_label }`** — `phase: SurfaceDragPhase = Idle → Starting{threshold,…} → Dragging`. Helpers: `is_dragging`, `dragged_pane_id`, `original_ws`, `is_swap`, `reset`.
-- **`DragContext { active_surface, surfaces: HashMap<DragSurfaceId, SurfaceDragState> }`** — one mouse ⇒ one active surface, but **all** surfaces update `hover_item`, so multiple drop targets highlight at once. This already *is* the cross-region "drag a Dock from one sidebar to another" model.
-- **`DragLabel`** (ghost geometry the renderer follows); **`math::rubberband()` + `DEFAULT_DRAG_THRESHOLD_SQ`**.
-- **Dispatch + meaning are app-side** (`heca/src/mouse/{target.rs (enum dispatch), surface_left.rs, interactive.rs}`); every drop routes through the WM **action registry**. `InteractiveMove` (content-area pane drag) stays a separate app concept, *not* a `SurfaceDragState`.
+### How it works
+- **A widget is dragged by the name it already declares** (`key`). No registry, no ids handed out, no closed list of surfaces: `.draggable_as("pane")` says what it is, `.accepts(["pane"])` / `.accepts_beside(["column"])` what it takes — words its component chose. A plugin's row takes part on the same terms.
+- The framework runs the gesture (threshold, `DragStart` … `Drop`, `DragEnd`) over the same tree that lays out and paints, and draws the feedback itself: the insertion line on the edge the drop lands on, the onto-wash, the swap frame, and a picture of the source under the pointer.
+- **Before / after are list order**, measured along the way the target's list runs (`Flow`, read from where its neighbours sit): left/right in a row, top/bottom in a column.
+- **Move or swap** is decided once, by `DropAction::held()` (the host sets the modifier with `drag::set_swap_rule`).
 
-### Two altitudes — both map onto the shipped model (the hooks are an extension, not a new system)
-- **Dock-level** (move/reorder a `DockFrame` within a region or **between regions**) → a **region is a `DragSurfaceId`**; a Dock is a `DragItem` on it — `DragContext`'s multi-surface hover already supports this.
-- **Item-level** (reorder rows inside a Dock, e.g. panes in `WorkspacesDock`) → the Dock's own surface + its `DragItem`s.
+### What a drop means — always an action (P2 + P3)
+- A widget that knows what its drop means answers in `on_drop` with `ev.dispatch(intent)` — a named action (heca-pro's rooms: `move_room`).
+- A drop no widget claimed crosses to the host once as `Dropped { source, target, side, action }`, both names resolved. heca drains it (`chrome/input/dispatch.rs`) and the component that declared the rows says what it means: the workspaces dock in `providers/workspaces/drop.rs` answers `swap`, `place_pane`, `swap_columns` or `move_column`, and the drain posts it. Nothing mutates directly.
+- **The same move is reachable by keyboard and RPC** through that action. A drag that does something no key can do breaks input parity.
 
-### grid-ui's responsibilities (presentation + state)
-- `DockFrame` (via its drag handle) and `Item` drive `SurfaceDragState.phase` (`Starting`/`Dragging`) carrying a `DragItem`.
-- `ChromeRegion` / inter-dock gaps / `Item` rows set `hover_item` when they can receive.
-- Render ghost/insertion visuals in the **overlay layer** (exists). Clipping the ghost / dropping inside a scroll region needs `PushClip`/`PopClip` (blocked, §2.8).
-
-### App's responsibilities (P2 + P3) — unchanged from what shipped
-- Decide what's draggable; on drop, **dispatch an action** (`chrome.dock.move_to_region`, `chrome.dock.reorder_before`, Dock-internal `workspace.pane.move`, …) through the registry — never mutate directly. Persist placement in AppState.
-- The **same move must be reachable by keyboard + RPC** via that action. DnD is only the mouse surface.
-
-### Extensibility gap & its cheap fix (closed enum ↔ plugins)
-The closed `DragSurfaceId` / `DragItemKind` enums are **correct for built-in surfaces** but a plugin can't extend them at runtime. This **does not bite yet** (built-in-first; plugins = chrome-plan Phase 9). Resolve later, **additively**, with *closed-core + one open variant*:
-- `DragItemKind::Custom(u32)` — so non-WM Docks (Git/Docker) don't inherit WM nouns.
-- `DragSurfaceId::Plugin(PluginSurfaceId)` — one variant funnels dynamic surfaces through runtime dispatch; built-ins keep zero-cost enum dispatch.
-
-> **Additive-only rule (no app impact).** *Extend* the shipped framework — add surfaces, item kinds, and new widget files. **Never** modify/retype an existing drag type (keep `(f32,f32)` as-is; don't swap to `Rectangle`) and **never** remove/rename a variant — the app constructs and exhaustively matches these. Adding a variant changes no behavior; the compiler simply requires new `match` arms at dispatch sites (the point of the closed enum).
+### Two altitudes
+- **Item-level** (rows inside a dock — panes, columns, workspaces, rooms): shipped.
+- **Dock-level** (move a dock within a region or between regions): shipped. The seat the host puts round every dock is carried by the window's move key (the one that carries a pane) and lands beside another dock; the space between two docks lands after the one above; an empty sidebar takes it. The host turns the drop into `chrome.container.reorder_before` / `reorder_after` (which move a container to wherever its target is) or `chrome.container.move_to_region` (`chrome/docks/drop.rs`) — the actions a key and RPC send. heca's docks have no title bar, so they are not moved by a grip: a `DockFrame`'s grip is the handle of **that frame** when the frame is draggable (heca-pro's rooms), and does nothing when it is not. heca's workspace rows are draggable frames: their grip reorders the workspaces (`move_workspace`).
 
 ---
 
@@ -1415,7 +1402,7 @@ The closed `DragSurfaceId` / `DragItemKind` enums are **correct for built-in sur
 
 ## 16. Drag and drop — the shipped framework
 
-> **Planner:** **P079(F004)** (gridui-08) — NOT BUILT: hooks
+> **Planner:** **P079(F004)** (gridui-08) — done: rows and docks drag; dock moves are actions
 
 ## 4. Shared state strategy (the flexible, plugin-ready pattern)
 
@@ -1461,7 +1448,7 @@ The closed `DragSurfaceId` / `DragItemKind` enums are **correct for built-in sur
 - `ChromeHost`, region registry, dock placement/order, persistence.
 - `AppState` (the namespaced store), canonical state, the **action registry**, keybindings, RPC.
 - The **Docks** themselves — `WorkspacesDock` (the current `sidebar.rs` logic, migrated per chrome plan Phase 5), `GitDock`, the docker dock, …
-- The **DnD dispatch + meaning** (`heca/src/mouse/{target,surface_left,interactive}.rs`) — the drop's action. (The drag *state framework* itself lives in grid-ui's `src/drag/`.)
+- The **meaning of a drop** — the action it sends, decided by the component that declared the rows (the workspaces dock: `providers/workspaces/drop.rs`). (The drag framework itself lives in grid-ui's `src/drag/`.)
 - Overlay *ownership* (host-owned per chrome plan §2.7) — grid-ui provides the overlay *layer*; the host owns z-order/focus-trap/ESC/anchoring.
 
 ---
@@ -1482,11 +1469,11 @@ a hand-written `F00x/P00y` in prose is almost certainly invented. Ask the planne
 
 ## 7. Open questions (resolved + remaining)
 
-**Resolved 2026-06-09:** sequencing (vocabulary now) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (build on shipped `src/drag/`, extend additively) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
+**Resolved 2026-06-09:** sequencing (vocabulary now) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (one framework in `src/drag/`, declared by key — see §3) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
 
 **Remaining:**
-- **DnD ↔ action bridge signature** — define the `DockFrame`/region hook → `dispatch(action)` shape on top of `DragContext`; align with the `ActionSink` opaque-id design so DnD + shortcuts share one path.
-- **Closed-enum ↔ plugins** — when non-WM Docks / plugins arrive, add `DragItemKind::Custom(..)` / `DragSurfaceId::Plugin(..)` (additive; chrome-plan Phase 9). Don't genericize now.
+- **DnD ↔ action bridge** — resolved: a drop sends a named action (`ev.dispatch`, or the host's drop drain); see §3.
+- **Closed-enum ↔ plugins** — resolved: there are no closed drag enums any more; a kind is a word the component chooses, so a plugin's rows drag like ours.
 - **Icon font choice** — which family + licensing; confirm renderer 2nd-font registration.
 - **`Grid` surface detail** — how much of taffy grid to expose (min-viable: tracks + areas + span).
 - **`ChromeCtx` shape** — defer until enough docks exist to justify (b) over (a).
@@ -1512,11 +1499,11 @@ a hand-written `F00x/P00y` in prose is almost certainly invented. Ask the planne
 
 ## 7. Open questions (resolved + remaining)
 
-**Resolved 2026-06-09:** sequencing (vocabulary now) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (build on shipped `src/drag/`, extend additively) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
+**Resolved 2026-06-09:** sequencing (vocabulary now) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (one framework in `src/drag/`, declared by key — see §3) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
 
 **Remaining:**
-- **DnD ↔ action bridge signature** — define the `DockFrame`/region hook → `dispatch(action)` shape on top of `DragContext`; align with the `ActionSink` opaque-id design so DnD + shortcuts share one path.
-- **Closed-enum ↔ plugins** — when non-WM Docks / plugins arrive, add `DragItemKind::Custom(..)` / `DragSurfaceId::Plugin(..)` (additive; chrome-plan Phase 9). Don't genericize now.
+- **DnD ↔ action bridge** — resolved: a drop sends a named action (`ev.dispatch`, or the host's drop drain); see §3.
+- **Closed-enum ↔ plugins** — resolved: there are no closed drag enums any more; a kind is a word the component chooses, so a plugin's rows drag like ours.
 - **Icon font choice** — which family + licensing; confirm renderer 2nd-font registration.
 - **`Grid` surface detail** — how much of taffy grid to expose (min-viable: tracks + areas + span).
 - **`ChromeCtx` shape** — defer until enough docks exist to justify (b) over (a).
@@ -1587,10 +1574,10 @@ are the one exception — see the note at the top of Part II.)
 
 Found by auditing this file against the planner on 2026-07-26. Both now exist:
 
-- **Dragging a container between regions** → **P079(F004)** (gridui-08). The framework ships, but
-  `DragSurfaceId` has one variant (`LeftSidebar`), `DockFrame` has no drag handle, and
-  `ChromeRegion` receives nothing. The plugin escape hatch (`DragItemKind::Custom`,
-  `DragSurfaceId::Plugin`) is folded into the same phase.
+- **Dragging a container between regions** → **P079(F004)** (gridui-08), done. A dock is carried by
+  the window's move key and lands beside another, between two, or in an empty sidebar; the drop is
+  a `chrome.container.*` action. No plugin escape hatch is needed: a drag kind is a word the
+  component chooses.
 - **Binding and listing contributed actions** → **F003/P018** (plugin-10). `ActionMeta` already
   carries `default_binding` and `describe_all()` already returns everything a palette needs.
   Nothing reads either, so a registered action can never be triggered by a key.

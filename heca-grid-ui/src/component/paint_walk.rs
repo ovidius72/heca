@@ -126,7 +126,9 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
         let bounds = b.bounds;
         match crate::drag::DropAction::held() {
             crate::drag::DropAction::Swap => cx.swap_indicator(bounds),
-            crate::drag::DropAction::Move => cx.drop_indicator(bounds, b.pointer.drag_side()),
+            crate::drag::DropAction::Move => {
+                cx.drop_indicator(bounds, b.pointer.drag_side(), b.pointer.drag_flow())
+            }
         }
     }
     if b.pointer.is_dragging() {

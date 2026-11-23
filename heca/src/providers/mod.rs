@@ -370,6 +370,8 @@ struct RenderInputs<'a> {
     /// inventing its own" (`heca/src/actions.rs`) — and a container that declares a menu over
     /// built-in actions (`close`, `delete_column`, …) has no other way to honour that.
     catalog: &'a crate::actions::ActionCatalog,
+    /// The window's move key — what is held to pick up a pane, and a dock.
+    move_key: heca_config::theme::ModifierKey,
 }
 
 /// The provider/plugin-facing facade: the read/observe host API, plus the frame's read-only
@@ -411,8 +413,23 @@ impl<'a> ChromeCtx<'a> {
                 theme,
                 emit,
                 catalog,
+                move_key: heca_config::theme::ModifierKey::Super,
             }),
         }
+    }
+
+    /// **The window's move key** for this pass — `settings.interactive_move_modifier`, what is
+    /// held to pick up a pane and a dock. Super until said.
+    pub(crate) fn with_move_key(mut self, key: heca_config::theme::ModifierKey) -> Self {
+        if let Some(render) = self.render.as_mut() {
+            render.move_key = key;
+        }
+        self
+    }
+
+    /// The window's move key, or `None` outside a render pass.
+    pub(crate) fn move_key(&self) -> Option<heca_config::theme::ModifierKey> {
+        self.render.as_ref().map(|r| r.move_key)
     }
 
     /// **The action catalog** — the one place that owns what an action looks like and what it is

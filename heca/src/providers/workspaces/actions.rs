@@ -20,6 +20,12 @@ pub(super) const DELETE_SELECTED: &str = "workspaces.delete_selected";
 pub(super) const RENAME_SELECTED: &str = "workspaces.rename_selected";
 pub(super) const DELETE_COLUMN: &str = "workspaces.delete_selected_column";
 pub(super) const ZOOM_SELECTED: &str = "workspaces.zoom_selected";
+// Order. Moving the *workspace* the cursor is in, whatever row it is on — the dock is the list of
+// workspaces — and swapping the *pane* under the cursor with its neighbour in the column.
+pub(super) const MOVE_SELECTED_UP: &str = "workspaces.move_selected_up";
+pub(super) const MOVE_SELECTED_DOWN: &str = "workspaces.move_selected_down";
+pub(super) const SWAP_SELECTED_UP: &str = "workspaces.swap_selected_up";
+pub(super) const SWAP_SELECTED_DOWN: &str = "workspaces.swap_selected_down";
 
 /// Every action this component declares. See [`Provider::actions`].
 ///
@@ -137,6 +143,34 @@ pub(super) fn declared() -> Vec<ActionMeta> {
             "Zoom Column",
             "Toggle zoom on the column the cursor is in.",
             Glyph::FrameCorners,
+            mutates,
+        ),
+        act(
+            MOVE_SELECTED_UP,
+            "Move Workspace Up",
+            "Move the workspace the cursor is in one place up, whatever row the cursor is on.",
+            Glyph::CaretUp,
+            mutates,
+        ),
+        act(
+            MOVE_SELECTED_DOWN,
+            "Move Workspace Down",
+            "Move the workspace the cursor is in one place down, whatever row the cursor is on.",
+            Glyph::CaretDown,
+            mutates,
+        ),
+        act(
+            SWAP_SELECTED_UP,
+            "Swap Pane Up",
+            "Swap the pane under the cursor with the one above it in its column.",
+            Glyph::CaretUp,
+            mutates,
+        ),
+        act(
+            SWAP_SELECTED_DOWN,
+            "Swap Pane Down",
+            "Swap the pane under the cursor with the one below it in its column.",
+            Glyph::CaretDown,
             mutates,
         ),
     ]

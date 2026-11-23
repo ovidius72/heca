@@ -861,7 +861,7 @@ theme resolves the tone on each paint, including after a theme reload.
 | Trait | What it says about a widget |
 |---|---|
 | `EventExt` | what happens to it — `on_click`, `on_key_down`, `on(kind, f)`, `on_drop`, `on_action`, … |
-| `DragExt` | what it does in a drag — `draggable`, `draggable_as`, `drag_chip`, `drop_target`, `accepts` |
+| `DragExt` | what it does in a drag — `draggable`, `draggable_as`, `drag_chip`, `drop_target`, `accepts`, `accepts_beside`. `draggable_as`, `accepts` and `accepts_beside` take an `Option` too (`IntoName` / `IntoNames`): `None` leaves the widget as it was, so a row that is only sometimes dragged or dropped on needs no branch. `on_drop` takes a closure only — a closure behind an `Option` could not infer its parameter — and needs none: a widget that is not a drop target never hears a drop. |
 | `MenuExt` | the menu a right-click opens — `context_menu` |
 | `TooltipExt` | the tooltip under the pointer — `tooltip`, `tooltip_side`, `tooltip_delay`, … |
 | `HintExt` | the letter it wears while a pick is open — `hintable`, `on_hint`, `hint_placement`, … |
@@ -906,7 +906,7 @@ let row = Row::new()
 | `.on_focus_gained(f)` / `.on_focus_lost(f)` | Keyboard focus arrived or left. (Named this way because `Component::on_focus` is the widget's own hook for the same moment.) |
 | `.on_mount(f)` / `.on_unmount(f)` | Entered a live tree (first layout pass) / is being dropped. `on_unmount` is where a widget releases what it registered with the host, at the moment the tree that registered it goes away. |
 | `.on_drag_start(f)` / `.on_drag(f)` / `.on_drag_end(f)` | The drag this widget is the source of. |
-| `.on_drag_enter(f)` / `.on_drag_over(f)` / `.on_drag_leave(f)` / `.on_drop(f)` | A drag over this drop target; `DragEvent::side` says where in it. |
+| `.on_drag_enter(f)` / `.on_drag_over(f)` / `.on_drag_leave(f)` / `.on_drop(f)` | A drag over this drop target; `DragEvent::side` says where in it — before or after in **list order**, whichever way the list runs. |
 | `.on(kind, f)` | The general form the rest are sugar over. |
 
 **`Base::one_click_target`** — a control declares that the **primary press lands on it, not on the
@@ -1083,7 +1083,7 @@ in some context — a ⊠ under a "close" verb, a column under "move a pane here
 
 | Method | Effect |
 |--------|--------|
-| `.key(impl IntoKey)` | The identity of **this item**, when it is one of a collection you are iterating. A name (`&str`, `String`, `Cow<str>`, `Box<str>`, `char`) or an `Option` of one — `None` leaves the widget unnamed, with no branch at the call site. |
+| `.key(impl IntoName)` | The identity of **this item**, when it is one of a collection you are iterating. A name (`&str`, `String`, `Cow<str>`, `Box<str>`, `char`) or an `Option` of one — `None` leaves the widget unnamed, with no branch at the call site. |
 
 > **`key` replaced `nav_key`** — do not reintroduce the old name. `scope_key` is **still here**:
 > folding it into `key` turned out to change behaviour — see the note at the end of
@@ -2262,7 +2262,8 @@ A generic container for sidebars/panels with three **border styles**
 - **`Bordered`** (default) — a clean continuous border. Width comes from
   `theme.border_width` (read at paint, so the global border control governs it)
   **unless** an explicit `.border_width(w)` override is set on the pane; color
-  from `.border_color(c)`, else an explicit `.border(color, _)`, else `theme.border`.
+  from `.border_color(c)` (takes an `Option` too — `None` leaves it as it was), else an explicit
+  `.border(color, _)`, else `theme.border`.
 - **`Bracketed`** — the self-contained corner-bracket reticle (`PaintCx::bracket_frame`):
   bright rounded corners over a dimmed continuous line, sharing the theme corner radius, in
   `theme.accent` unless the pane sets `.border_color(c)`. It does **not** also draw `style.border`.
@@ -5409,7 +5410,7 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Badge`; a click on it never folds. With your own `.header` it is usually not needed — put the
   actions inside your header — but the two may be used together),
   `.collapsible(bool)` (default `true`; `false` keeps the body open, hides the chevron and a click
-  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿`, the dock-move handle; a frame that is a row of a reorderable list sets its own, e.g. `"≡"`),
+  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿`, the dock-move handle; a frame that is a row of a reorderable list sets its own, e.g. `"≡"`; takes an `Option`, and `None` keeps the glyph),
   `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
@@ -5423,19 +5424,16 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   (`keyboard_navigable`), heca lights the one whose `.key(..)` the cursor is on and darkens the
   rest (`heca_grid_ui::select_key_in_scope`, by key, inside that dock only).
 
-> **The drag-handle grip is drawn but wired to nothing.** If you see it on a workspace header in
-> heca and nothing drags, that is why. **Two different features claim it, and they are not the same
-> thing:**
+> **The grip is the frame's handle.** A frame made draggable (`.draggable_as(..)`) is picked up by
+> its grip and nowhere else, so the title row still folds on a click and the body keeps its own
+> presses (`DragExt::drag_by_handle` / `drag_handle`, which any widget can use the same way). A frame
+> that is not draggable leaves the grip doing nothing — it never reaches past the frame to pick up
+> what holds it. A whole **dock** is moved by the host, not by a frame: the seat heca puts round every
+> dock is dragged with the window's move key, the same key that drags a pane.
 >
-> - the frame as a **container** — drag the whole dock into another chrome region. The actions for
->   this already exist (`chrome.container.move_to_region` and friends); only the mouse surface is
->   missing.
-> - the frame as a **row inside** a container — reorder it in the list. heca mounts one frameless
->   `DockFrame` per workspace row, so this is the drag the grip actually sits beside. This one still
->   needs its own action and drop logic.
->
-> Both are tracked in the planner, and the grip is left in place deliberately as a placeholder for
-> them.
+> In heca the grip shows on each workspace row: the row is `draggable_as("workspace")` and
+> `accepts_beside(["workspace"])`, so dragging it by the grip and dropping it before or after another
+> row sends `move_workspace` — the action `Shift+k`/`Shift+j` in the dock, a key and a script send.
 
 **Native:**
 
@@ -8375,82 +8373,92 @@ dynamic focusability (e.g. an overlay focusable only while its `open` signal is 
 
 ### Drag and drop
 
-A small, **domain-neutral, reusable** drag-and-drop framework lives in
-`heca_grid_ui::drag`. It has three layers, each usable on its own:
+`heca_grid_ui::drag` runs drag and drop for **any widget, by the name it already declares**. Nothing
+to register, no id to hand out, no list of surfaces allowed to take part: a widget says what it is
+and what it takes, and the framework runs the gesture over the same tree that lays out and paints.
+A plugin's row drags on the same terms as a built-in one. The library never knows what is dragged:
+what a drop *means* belongs to whoever declared it.
 
-**1. Universal opt-in (`DragExt`).** Every widget gets `.draggable(id)` and
-`.drop_target(id)` for free (blanket impl, like `visible`/`disabled`). The id is an
-opaque `DragItemId` the *app* maps back to its own model — widgets stay neutral and
-no extra layout nodes are added.
-
-```rust
-Row::new().child(/* … */).draggable(DragItemId::new(i))   // a drag source
-Flex::column().drop_target(DragItemId::new(zone_id))       // a drop zone
-```
-
-`.draggable_when(|m| m.meta)` makes a source pick up only while the rule holds when the press
-travels far enough to start a drag (Cmd+drag); a drag already in flight is never cancelled by the
-rule going false, and without the key the press stays whatever the widget's content makes of it.
-
-A source carries **a picture of itself** under the pointer, as the browser does; `.drag_chip()`
-asks for the small title chip instead. The picture is the widget painted as it is (a terminal's surface included), in the top layer, at the theme's
-`drag_image_alpha` and shrunk by `drag_image_scale` toward the point that was grabbed. The picture's
-host work is marked an *echo*, so a terminal asked where it was drawn answers with its real place,
-not the picture's.
-
-**2. Resolution over the laid-out tree.** Pure bounds walks replace hand-computed
-hit-testing — they read each widget's `Base.bounds` (filled by layout each frame):
-
-- `drag::source_at(root, point) -> Option<DragItemId>` — what a press would pick up.
-- `drag::resolve_at(root, point) -> Option<DropHit>` — the topmost/deepest drop
-  target under the cursor, with `DropHit { id, bounds, side }` where
-  `DropSide` is `Before` / `Onto` / `After` (vertical thirds of the target).
-
-**3. Gesture state + theme-driven visuals.** The state machine is generic over an
-**app-defined payload** `P` — the framework never knows what's being dragged:
-
-- `DragContext<P>` coordinates surfaces (`DragSurfaceId`); each `SurfaceDragState<P>`
-  runs `DragPhase::{Idle, Starting, Dragging}` with a threshold
-  (`DEFAULT_DRAG_THRESHOLD_SQ`, `rubberband`). Use `payload()` / `payload_mut()` to
-  read/update the in-flight payload (e.g. toggle a swap flag mid-drag).
-- `PaintCx::drag_ghost(rect, text, swap)` paints the cursor-following chip (overlay
-  layer); `swap=true` adds an inset double frame (matching `swap_indicator`) so the chip
-  reads as an **exchange**, not a move;
-  `PaintCx::drop_indicator(bounds, side)` paints the insertion line / onto-wash for a
-  **move**; `PaintCx::swap_indicator(bounds)` paints a whole-item **double frame** for a
-  **swap** (an exchange has no before/after — so it deliberately avoids the insertion
-  line). `drag::resolve_at_filtered(root, point, accept)` is the source-aware variant of
-  `resolve_at` (the deepest *accepted* target wins) — e.g. while dragging a container,
-  accept only container-level targets so nested leaves fall through. All derive from
-  `theme.accent` — no hardcoded colors.
-
-**Putting it together** (the app owns `DragContext<AppPayload>` and dispatches its
-own pointer events into the retained tree):
+**1. Declaring it (`DragExt`, on every widget).**
 
 ```rust
-// press: pick up the source under the cursor
-if let Some(id) = drag::source_at(&tree, pos) {
-    let payload = app.payload_for(id);            // app maps id -> its model
-    ctx.surface_mut(surface).unwrap().phase = DragPhase::Starting {
-        payload, start_pos: (pos.x as f32, pos.y as f32),
-        threshold_sq: drag::DEFAULT_DRAG_THRESHOLD_SQ,
-    };
-}
-// move (past threshold): track hover for the indicator
-let hover = drag::resolve_at(&tree, pos);          // Option<DropHit>
-// release: apply the drop
-if let Some(DropHit { id, side, .. }) = hover {
-    app.perform_drop(dragged_payload, id, side);   // app action (move/swap/insert)
-}
+Row::new()
+    .key(format!("room:{id}"))      // what is dragged is the widget's identity
+    .draggable_as("room")           // it can be picked up, and says what it is
+    .accepts_beside(["room"])       // rooms land before or after it, never onto it
+    .on_drop(move |ev| { /* send the action the drop means */ })
 ```
 
-Painted by the host after the tree paints: `cx.drop_indicator(hit.bounds, hit.side)`
-for the hovered target and `cx.drag_ghost(chip_rect, label)` at the cursor.
+| Builder | What it says |
+|---|---|
+| `.draggable()` | It can be picked up, as whatever it is; every target takes it. A widget with no identity has nothing to say about what was picked up. |
+| `.draggable_as(kind)` | It can be picked up, and is a `kind` — a word its component chose (`"pane"`, `"column"`). Takes an `Option`: `None` leaves it as it was. |
+| `.draggable_when(rule)` | Only while `rule` holds for the modifiers when the drag would start (`\|m\| m.meta` is Cmd+drag). Asked once; a drag in flight never ends because a key came up. **Holding the key wins**: a source picked up by its rule beats the rows inside it, so Cmd+drag on a row inside a dock carries the dock. |
+| `.drag_by_handle()` | Picked up only by its handle — a widget inside it marked `.drag_handle()`. A press anywhere else in it starts no drag of it, so its content keeps its clicks. `DockFrame` does this with its grip. |
+| `.drag_handle()` | This widget is a handle: a press on it picks up the nearest enclosing `drag_by_handle` widget. One that is not draggable leaves the handle doing nothing — it never reaches further out. |
+| `.drag_chip()` | Carry the small title chip under the pointer instead of a picture of the widget. |
+| `.drop_target()` | It takes drops, of anything. |
+| `.accepts(kinds)` | It takes these kinds, and has a real middle: before, **onto**, after. Takes an `Option`: `None` leaves it as it was. |
+| `.accepts_beside(kinds)` | It takes these kinds **beside** itself only — a sibling in an ordered list: two halves, no middle. Takes an `Option` too. **Per kind, and it combines with `accepts`**: a workspace row says `.accepts(["pane", "column"]).accepts_beside(["workspace"])`, so a pane lands onto it and another workspace before or after it. |
 
-> Why opaque ids + generic `P`: the framework hosts *any* future surface/container
-> (panes, columns, Docker, agents, git, notes) without change — see
-> `dnd-framework-refactor-plan.md`. Never put app concepts (pane/workspace/column)
-> into the `drag` module.
+**Which widget a press picks up** is one rule, used by the gesture and by the grab cursor alike
+(`drag::source_at`): of the widgets from the root down to the pressed one, a source picked up by its
+key wins; otherwise the innermost that may start, where a handle-only source may start only through
+a handle of its own.
+
+A target refuses what it does not accept *before* anything is drawn on it, so a line never appears
+over something that would then do nothing. What is being carried is never a target for itself or
+for anything inside it.
+
+**2. What a target hears.** `on_drag_enter` / `on_drag_over` / `on_drag_leave` while a drag it
+accepts is over it, `on_drop` on release; `on_drag_in_flight` / `on_drag_settled` when a drag it
+accepts starts or ends anywhere in the window. The source hears `on_drag_start`, `on_drag`,
+`on_drag_end` (always, whether or not anything took it). Every one carries a `DragEvent`: the
+source's identity (`item`), the pointer, the modifiers, and the **side** (`DropSide::Before` /
+`Onto` / `After`).
+
+**Before and after are list order, not screen directions.** The side is measured along the way the
+target's list runs — `Flow::Down` / `Up` / `Right` / `Left`, read from where its nearest drawn
+neighbour sits (a neighbour that also takes drops first). A row of tabs flips before/after at its
+horizontal middle; a column at its vertical one; a list drawn back to front the other way round; a
+target with no neighbour reads as a column. Nothing declares it.
+
+**3. What a drop does — say it with an action.** A drop that changes something sends a **named
+action** (`ev.dispatch(intent)`), never changes the model itself, so the same move is reachable from a
+key, a menu, a plugin and a script. A drop no widget claimed crosses to the host once, through the
+sink the host installed at startup (`drag::install_drop_sink`), as a `Dropped { source, target,
+side, action, modifiers }` with both identities already resolved. `action` is `DropAction::Move` or
+`Swap`, decided in one place (`DropAction::held()`, from the modifier the host set with
+`drag::set_swap_rule`; Shift until it does) — a host acts on it and never reads the modifier again.
+
+**4. What it looks like — drawn by the framework.** The target under the pointer shows an accent
+insertion line on the edge the drop lands on (lying along it in a column, standing on it in a row),
+or a wash and outline for *onto*; on a swap, a double frame round the whole target. The source fades
+where it sits and carries a picture of itself under the pointer, as the browser does: painted as it
+is (a terminal's surface included), in the top layer, at the theme's `drag_image_alpha`, shrunk by
+`drag_image_scale` toward the point that was grabbed. All colours derive from the theme's `accent`.
+A widget that draws its own feedback says so with `Component::paints_own_drag_feedback`.
+
+**Moving a dock (heca).** The seat heca puts round every dock is `draggable_as("dock")` with the
+window's move key (`settings.interactive_move_modifier`, the key that carries a pane) and
+`accepts_beside(["dock"])`; the space between two docks and an empty sidebar take a dock too. A drop
+becomes `chrome.container.reorder_before` / `reorder_after` (beside a dock, in any region — the host
+moves it there) or `chrome.container.move_to_region` (an empty sidebar): the same actions a key and
+RPC send. A dock that is not `movable` is not carried, but is still somewhere to land.
+
+**Seen working anywhere.** The showcase's *Drag anywhere* panel is a row of tabs and a column of
+items in one card — not a sidebar — with the same picture, line and swap frame.
+
+**For a host.** `heca_grid_ui::dragging(root)` says whether a drag is in flight (the cursor, hover
+suppression and anything that must not reach the program in a pane ask it). `drag::resolve_at` /
+`resolve_at_for(root, point, kind)` / `resolve_at_filtered` and `drag::source_at` are the geometry
+underneath — the target under a point (`DropHit { key, path, bounds, side, flow }`, the path so it is
+never searched for again by name) and what a press would pick up. `PaintCx::drop_indicator(bounds,
+side, flow)`, `swap_indicator(bounds)` and `drag_ghost(rect, text, swap)` are the pieces the
+framework draws with.
+
+> Never put app concepts (pane, column, workspace) into the `drag` module: a kind is an opaque word,
+> an identity is an opaque name, and what a drop means is the declaring component's.
 
 ### Registry and public authoring checks
 

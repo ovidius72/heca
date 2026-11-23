@@ -269,6 +269,52 @@ mod tests {
         })
     }
 
+    /// **Every built-in action is reachable from a script**, by its name, with its arguments —
+    /// the same action a key, the palette and a plugin reach, and something that runs it.
+    ///
+    /// Walks the whole catalog, so an action added tomorrow is held to it with nothing to remember:
+    /// a script line with a sample for each required argument must build the action, and either
+    /// the window or the server must have a handler for it.
+    #[test]
+    fn every_builtin_action_is_reachable_from_a_script() {
+        use crate::args::ArgKind;
+        let catalog = ActionCatalog::with_builtins();
+        let registry = crate::app::registry::build_registry();
+        let mut checked = 0;
+        for meta in catalog.all().filter(|m| catalog.is_builtin(&m.name)) {
+            let sample = |arg: &crate::args::ArgSpec| match arg.kind {
+                ArgKind::Int => "1".to_string(),
+                ArgKind::Float => "1.0".to_string(),
+                ArgKind::Bool => "true".to_string(),
+                ArgKind::Text => "x".to_string(),
+                ArgKind::Enum => arg.values.first().cloned().unwrap_or_default(),
+            };
+            let line = std::iter::once(meta.name.clone())
+                .chain(
+                    meta.args
+                        .iter()
+                        .filter(|a| a.required)
+                        .map(|a| format!("{}={}", a.name, sample(a))),
+                )
+                .collect::<Vec<_>>()
+                .join(" ");
+            let (intent, _) = parse_rpc(&line)
+                .and_then(|call| call.into_intent(&catalog))
+                .unwrap_or_else(|e| panic!("`{line}` is not a script line heca takes: {e:?}"));
+            let args = crate::app::interaction::intent_args_as_strings(&intent);
+            let action = crate::input::resolve_action(&meta.name, &args)
+                .unwrap_or_else(|| panic!("`{line}` does not build its action"));
+            // Run by the window's registry, by the server, or — submitting and closing an
+            // overlay — where every dispatch passes, before the registry (`dispatch_intent`).
+            let runs = registry.has_handler(&action)
+                || crate::server::ServerState::runs(action.kind())
+                || action.is_overlay_control();
+            assert!(runs, "`{line}` builds {action:?}, which nothing runs");
+            checked += 1;
+        }
+        assert!(checked > 100, "the catalog was walked: {checked}");
+    }
+
     #[test]
     fn introspect_lists_and_describes_actions() {
         let catalog = crate::actions::ActionCatalog::with_builtins();

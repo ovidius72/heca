@@ -9,6 +9,7 @@ mod actions;
 mod agent_line;
 mod column_group;
 mod dock_view;
+mod drop;
 mod keys;
 mod menus;
 mod model;
@@ -19,6 +20,7 @@ mod verbs;
 mod workspace_frame;
 use actions::*;
 use dock_view::build_body;
+pub(crate) use drop::drop_action;
 pub(crate) use keys::*;
 pub(crate) use menus::*;
 use verbs::{Activate, Fold, RowVerb, Step};
@@ -189,6 +191,10 @@ impl WorkspacesContainerProvider {
             CREATE_PANE => self.at_column(cx, "add_pane_to_column"),
             ZOOM_SELECTED => self.at_column(cx, "zoom_column_at_index"),
             DELETE_COLUMN => self.at_column(cx, "delete_column"),
+            MOVE_SELECTED_UP => self.at_workspace(cx, "move_workspace_up"),
+            MOVE_SELECTED_DOWN => self.at_workspace(cx, "move_workspace_down"),
+            SWAP_SELECTED_UP => self.swap_selected_pane(cx, Step::Up),
+            SWAP_SELECTED_DOWN => self.swap_selected_pane(cx, Step::Down),
             DELETE_SELECTED => self.on_selected_row(cx, RowVerb::Delete),
             RENAME_SELECTED => self.on_selected_row(cx, RowVerb::Rename),
             _ => Handled::No,

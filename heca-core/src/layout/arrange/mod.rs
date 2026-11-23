@@ -78,6 +78,12 @@ impl Record {
 }
 
 impl Session {
+    /// The identity of the workspace at `idx`, which stays its own wherever it moves. `None` past
+    /// the end.
+    pub fn workspace_id(&self, idx: usize) -> Option<WorkspaceId> {
+        self.workspaces.get(idx).map(|ws| ws.id)
+    }
+
     /// Where workspace `id` is now. `None` when it is gone.
     pub fn index_of(&self, id: WorkspaceId) -> Option<usize> {
         self.workspaces.iter().position(|ws| ws.id == id)
@@ -91,6 +97,26 @@ impl Session {
             return false;
         }
         self.workspaces.remove(idx);
+        true
+    }
+
+    /// **Move workspace `from` so it sits at `to`**, counted as the list is after the move; a `to`
+    /// past the end puts it last. Everything inside it goes with it, and every other workspace
+    /// keeps its order. Answers whether anything moved — `false` for an out-of-range `from` or a
+    /// workspace already where it is asked to go.
+    ///
+    /// A window needs no telling: the workspace it shows is held by identity, so its index follows
+    /// by itself.
+    pub fn move_workspace(&mut self, from: usize, to: usize) -> bool {
+        if from >= self.workspaces.len() {
+            return false;
+        }
+        let to = to.min(self.workspaces.len() - 1);
+        if from == to {
+            return false;
+        }
+        let ws = self.workspaces.remove(from);
+        self.workspaces.insert(to, ws);
         true
     }
 

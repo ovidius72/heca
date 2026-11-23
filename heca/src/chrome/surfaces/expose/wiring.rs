@@ -60,13 +60,12 @@ pub(super) fn callbacks(keys: ExposeDeleteKeys) -> ExposeCallbacks {
 }
 
 fn record_expose_cursor(state: &mut crate::app_state::AppState, pane_id: PaneId) {
-    let Some(ws) = crate::app::focus::find_pane_workspace(&state.session, pane_id) else {
+    let Some(ws) = crate::app::focus::find_pane_workspace(&state.session, pane_id)
+        .and_then(|idx| state.session.workspace_id(idx))
+    else {
         return;
     };
-    while state.expose_cursor_per_ws.len() <= ws {
-        state.expose_cursor_per_ws.push(None);
-    }
-    state.expose_cursor_per_ws[ws] = Some(pane_id);
+    state.expose_cursor_per_ws.insert(ws, pane_id);
     // …and which row that is, so a rebuild restores the cursor where it stands rather than at the
     // active workspace's remembered one. See `AppState::expose_cursor_ws`.
     state.expose_cursor_ws = Some(ws);
@@ -89,16 +88,15 @@ fn record_expose_cursor(state: &mut crate::app_state::AppState, pane_id: PaneId)
 pub(super) fn open_on(
     layout: heca_core::layout::Layout<'_>,
     already_up: bool,
-    cursor_ws: Option<usize>,
-    cursor_per_ws: &[Option<PaneId>],
+    cursor_ws: Option<heca_core::layout::WorkspaceId>,
+    cursor_per_ws: &std::collections::HashMap<heca_core::layout::WorkspaceId, PaneId>,
 ) -> Option<PaneId> {
     if already_up {
         // The row the cursor is in, which is not necessarily the active workspace's.
-        let row = cursor_ws.unwrap_or(layout.active_workspace_idx());
-        let remembered = cursor_per_ws
-            .get(row)
-            .copied()
-            .flatten()
+        let row =
+            cursor_ws.or_else(|| layout.session().workspace_id(layout.active_workspace_idx()));
+        let remembered = row
+            .and_then(|row| cursor_per_ws.get(&row).copied())
             // A pane that has since been deleted is no answer at all — fall through to the
             // session's, which is exactly what the cursor was handed on to before it went.
             .filter(|id| crate::app::focus::find_pane_workspace(layout.session(), *id).is_some());
@@ -176,10 +174,9 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<crate::
     };
     // The map's own "you were just here" mark, from the one field the bindings read.
     let previous = state
-        .last_visited_pane_per_ws
-        .get(state.layout().active_workspace_idx())
-        .copied()
-        .flatten()
+        .session
+        .workspace_id(state.layout().active_workspace_idx())
+        .and_then(|ws| state.last_visited_pane_per_ws.get(&ws).copied())
         .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
     // **The map's own sink, so its intents say the map made them** — `register_named_layer` hands it
     // over, stamped with this layer's id. Stamped `Keyboard` before, which was indistinguishable from

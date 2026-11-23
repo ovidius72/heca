@@ -315,8 +315,6 @@ pub(crate) async fn init_state(
         .and_then(|workspace| workspace.active_pane())
         .map(|pane| pane.id);
 
-    let ws_count = session.workspaces.len();
-
     let terminal_layer_scratch =
         app_state::RetainedTerminalScratch::new(&device, config.format, 1, 1);
 
@@ -448,9 +446,9 @@ pub(crate) async fn init_state(
         bell_flash_until: None,
         widget_frame_due: None,
         last_focused: None,
-        last_visited_ws_idx: None,
-        last_visited_pane_per_ws: vec![None; ws_count],
-        expose_cursor_per_ws: vec![None; ws_count],
+        last_visited_ws: None,
+        last_visited_pane_per_ws: Default::default(),
+        expose_cursor_per_ws: Default::default(),
         expose_cursor_ws: None,
         offered_letters: Default::default(),
         remembered_letters: Default::default(),

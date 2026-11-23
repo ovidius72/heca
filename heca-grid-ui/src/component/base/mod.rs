@@ -117,13 +117,22 @@ pub struct Base {
     /// **Show the small chip under the pointer while it is carried**, instead of a picture of this
     /// widget. See [`DragExt::drag_chip`](crate::builders::DragExt::drag_chip).
     pub drag_chip: bool,
+    /// **Picked up only by its handle.** A press elsewhere in it does not start a drag of it; a
+    /// press on a widget marked [`drag_handle`](Self::drag_handle) inside it does. Set with
+    /// [`DragExt::drag_by_handle`](crate::builders::DragExt::drag_by_handle).
+    pub drag_by_handle: bool,
+    /// **This widget is a handle** — a press on it picks up the nearest enclosing widget that is
+    /// [`drag_by_handle`](Self::drag_by_handle). Set with
+    /// [`DragExt::drag_handle`](crate::builders::DragExt::drag_handle).
+    pub drag_handle: bool,
     /// This widget **accepts drops**, identified the same way — by its [`key`](Self::key).
     /// Universal opt-in via
     /// [`DragExt::drop_target`](crate::builders::DragExt::drop_target); resolved
     /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
     pub drop_target: bool,
-    /// **What this widget takes**, by the same words. Empty means it takes anything, which is what
-    /// a target that says nothing gets. Set with
+    /// **What this widget takes onto itself**, by the same words — with a real middle: before it,
+    /// onto it, after it. With [`accepts_beside`](Self::accepts_beside) also empty it takes
+    /// anything, which is what a target that says nothing gets. Set with
     /// [`DragExt::accepts`](crate::builders::DragExt::accepts).
     ///
     /// A target that refuses is not offered: the walk skips it and keeps looking outward, so
@@ -131,18 +140,15 @@ pub struct Base {
     /// exists to end — the line said yes and the release said no, because the drawing and the rule
     /// lived in different places.
     pub accepts: Vec<String>,
-    /// **Can a thing be dropped *onto* this widget, or only beside it?**
+    /// **What this widget takes only beside itself** — as a sibling in an ordered list, where
+    /// "onto" means nothing: a column dropped on a column is a reorder and can only land before or
+    /// after, so for these kinds the target reads as two halves and the insertion line flips at the
+    /// midpoint.
     ///
-    /// `true` — the default — means the middle of the target is real: dropping a pane onto a pane
-    /// swaps or moves it there, so the target reads as three bands (before it, onto it, after it).
-    /// `false` says the target is a **sibling in an ordered list**, where "onto" means nothing: a
-    /// column dropped on a column is a reorder and can only land before or after, so the target
-    /// reads as two halves and the insertion line flips at the midpoint.
-    ///
-    /// Set by [`accepts`](crate::builders::DragExt::accepts) and
-    /// [`accepts_beside`](crate::builders::DragExt::accepts_beside). It exists because the
-    /// two are genuinely different and only the component knows which it is.
-    pub accepts_onto: bool,
+    /// **Per kind**, beside [`accepts`](Self::accepts): a workspace row takes a pane *onto* itself
+    /// and another workspace *beside* itself, and each is read its own way. Set with
+    /// [`DragExt::accepts_beside`](crate::builders::DragExt::accepts_beside).
+    pub accepts_beside: Vec<String>,
     /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and the drag are three readers of this one declaration.
     ///

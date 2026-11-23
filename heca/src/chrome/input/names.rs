@@ -55,6 +55,13 @@ pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
 /// What a pane says it is when it is carried, and what a place for a pane takes.
 pub(crate) const PANE_DRAG_KIND: &str = "pane";
 
+/// What a dock says it is when it is carried, and what a place for a dock takes.
+pub(crate) const DOCK_DRAG_KIND: &str = "dock";
+
+/// What a workspace row says it is when it is carried, and what another workspace row takes
+/// beside itself.
+pub(crate) const WORKSPACE_DRAG_KIND: &str = "workspace";
+
 /// `slot:<n>` — **the place a new column would be made**, `n` columns from the left.
 ///
 /// The workspace writes it and the drop reads it back, so what the name means lives in one place.

@@ -234,10 +234,17 @@ fn a_dock_says_its_own_size_and_the_region_honours_it() {
         .iter()
         .map(|c| c.base().bounds.size.h)
         .collect();
-    println!("ordered small / rule / big: {heights:?}");
+    println!("ordered small / gap / big: {heights:?}");
+    // The space between two docks is a widget of its own (a dock dropped there lands after the
+    // one above), holding the 1px rule.
+    let rule = region.base().children[0].base().children[1].base().children[0]
+        .base()
+        .bounds
+        .size
+        .h;
     assert!(
-        heights[0] < heights[2] && heights[1] <= 2.0,
-        "the small dock comes first and the rule sits between: {heights:?}",
+        heights[0] < heights[2] && rule <= 2.0,
+        "the small dock comes first and the rule sits between: {heights:?}, rule {rule}",
     );
 
     // **And whoever ADDS a dock can say both, over what its body says** — the line for placing
@@ -392,4 +399,105 @@ fn a_second_placement_of_a_container_is_its_own_letter_target() {
             ),
         ],
     );
+}
+
+/// **A dock is carried by the window's move key and lands beside another** (P079). Every seat says
+/// it is a dock and takes docks beside it; the space between two docks takes one too, named after
+/// the dock above; an empty sidebar takes one, named by the region.
+#[test]
+fn docks_are_carried_by_the_move_key_and_land_beside_each_other() {
+    use crate::providers::ChromeCtx;
+    let chrome = SharedChromeState::new(280.0, 260.0);
+    let mut host = super::ChromeHost::new(chrome.events());
+    for id in ["first", "second"] {
+        host.register(
+            super::RegionId::LeftSidebar,
+            Box::new(crate::providers::WorkspacesContainerProvider::new(id)),
+        );
+    }
+    let theme = GuiTheme::default();
+    let emit = ChromeIntentEmitter::of(
+        crate::app::interaction::InteractionSource::Keyboard,
+        |_, _| {},
+    );
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let ctx = ChromeCtx::for_build(&chrome, &theme, &emit, &catalog)
+        .with_move_key(heca_config::theme::ModifierKey::Alt);
+    let mut drag = super::DragItemRegistry::default();
+    let body = super::build_region_content(
+        &host,
+        super::RegionId::LeftSidebar,
+        &ctx,
+        &mut super::ChromeSignals::default(),
+        &mut drag,
+    )
+    .expect("two docks are seated");
+
+    let [first, gap, second] = &body.base().children[..] else {
+        panic!("two docks and the space between them");
+    };
+    for seat in [first, second] {
+        let b = seat.base();
+        assert_eq!(b.drag_kind.as_deref(), Some(crate::chrome::DOCK_DRAG_KIND));
+        assert!(seat.accepts_drag(Some(crate::chrome::DOCK_DRAG_KIND)));
+        let gate = b
+            .drag_gate
+            .as_ref()
+            .expect("carried only while the move key is held");
+        assert!(gate(heca_grid_ui::Modifiers {
+            alt: true,
+            ..Default::default()
+        }));
+        assert!(
+            !gate(heca_grid_ui::Modifiers::default()),
+            "a plain press is the rows'"
+        );
+    }
+    assert_eq!(
+        drag.get("first"),
+        Some(&super::ChromeDragItem::Dock("first".into()))
+    );
+    let gap_key = gap
+        .base()
+        .key
+        .clone()
+        .expect("the space between docks is named");
+    assert!(gap.accepts_drag(Some(crate::chrome::DOCK_DRAG_KIND)));
+    assert_eq!(
+        drag.get(&gap_key),
+        Some(&super::ChromeDragItem::DockGap {
+            after: "first".into()
+        }),
+        "a dock dropped between lands after the one above",
+    );
+
+    let empty = super::build_sidebar_shell(
+        super::RegionId::RightSidebar,
+        280.0,
+        600.0,
+        &super::SidebarLook {
+            background: heca_grid_ui::Color::TRANSPARENT,
+            gap: 8.0,
+            border_style: heca_config::appearance::BorderStyle::Bordered,
+            border_width: 1.0,
+            border_radius: 12.0,
+            border_color: None,
+        },
+        None,
+    );
+    fn find_key<'a>(
+        c: &'a dyn heca_grid_ui::Component,
+        key: &str,
+    ) -> Option<&'a dyn heca_grid_ui::Component> {
+        if c.base().key.as_deref() == Some(key) {
+            return Some(c);
+        }
+        c.base()
+            .children
+            .iter()
+            .find_map(|ch| find_key(ch.as_ref(), key))
+    }
+    let place =
+        find_key(&empty, "sidebar.right").expect("an empty sidebar is somewhere to put a dock");
+    assert!(place.accepts_drag(Some(crate::chrome::DOCK_DRAG_KIND)));
 }

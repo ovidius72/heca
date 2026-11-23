@@ -13,6 +13,7 @@
 //! Split out of `chrome/mod.rs`. Nothing here is new; the passes are unchanged.
 
 use crate::chrome::*;
+use heca_grid_ui::builders::DragExt;
 
 /// Make a node take the box its parent gives it instead of the size of its own content.
 ///
@@ -53,8 +54,12 @@ fn focus_and_pick(
     container: &str,
     share: f32,
     has_cursor: bool,
+    movable: bool,
     ctx: &crate::providers::ChromeCtx<'_>,
 ) -> WidgetModel {
+    let move_key = ctx
+        .move_key()
+        .unwrap_or(heca_config::theme::ModifierKey::Super);
     // The share lands on the outermost node, so every level below it has to pass the box down or the
     // dock keeps its content height inside the slot its share won — measured 1214px inside 296px, the
     // same failure as one level up.
@@ -127,7 +132,15 @@ fn focus_and_pick(
             .keeps_keyboard(has_cursor)
             // Still declared: `offer_hint_by_key` matches it so the DOCK PICK can letter this
             // container (`chrome/hint/letters.rs`). It is no longer read by any hit-test.
-            .scope_key(container),
+            .scope_key(container)
+            // **A dock is carried by the window's move key and lands beside another** — the same
+            // key that carries a pane, so moving a container is one gesture wherever it is. Held,
+            // it wins over the rows inside (`DragExt::draggable_when`). A dock that says it does
+            // not move is still a place to land beside. What the drop means is the host's
+            // (`chrome::dock_drop_action`), posted as a `chrome.container.*` action.
+            .draggable_as(movable.then_some(crate::chrome::DOCK_DRAG_KIND))
+            .draggable_when(move |held| crate::modifier::held(move_key, held))
+            .accepts_beside([crate::chrome::DOCK_DRAG_KIND]),
     )
 }
 
@@ -158,6 +171,7 @@ pub(in crate::chrome) fn build_region_content(
         .iter()
         .filter_map(|mounted| match mounted.provider().build_contribution(ctx) {
             Contribution::Container(c) => {
+                drag.register(c.id.clone(), ChromeDragItem::Dock(c.id.clone()));
                 let mut bx = BuildCx::new(&c.id, signals, drag);
                 let body = (c.build)(ctx, &mut bx);
                 // **How big it is and where it sits.** Whoever added the dock may have said
@@ -174,8 +188,16 @@ pub(in crate::chrome) fn build_region_content(
                 // nothing (one level up).
                 Some((
                     order,
+                    c.id.clone(),
                     with_flex(
-                        focus_and_pick(body, &c.id, parts, mounted.keyboard_navigable(), ctx),
+                        focus_and_pick(
+                            body,
+                            &c.id,
+                            parts,
+                            mounted.keyboard_navigable(),
+                            c.movable,
+                            ctx,
+                        ),
                         parts,
                     ),
                 ))
@@ -184,8 +206,9 @@ pub(in crate::chrome) fn build_region_content(
         })
         .collect::<Vec<_>>();
     // Lower first; ties — and every dock that said nothing — keep the order they were added.
-    bodies.sort_by_key(|(order, _)| *order);
-    let mut bodies: Vec<WidgetModel> = bodies.into_iter().map(|(_, body)| body).collect();
+    bodies.sort_by_key(|(order, _, _)| *order);
+    let ids: Vec<String> = bodies.iter().map(|(_, id, _)| id.clone()).collect();
+    let mut bodies: Vec<WidgetModel> = bodies.into_iter().map(|(_, _, body)| body).collect();
     match bodies.len() {
         0 => None,
         // One container owns the region: its own share already makes it fill the region, so
@@ -205,27 +228,50 @@ pub(in crate::chrome) fn build_region_content(
                 .unwrap_or(heca_grid_ui::style::Space::Step(
                     heca_grid_ui::style::Spacing::Sm,
                 ));
-            let stack = Flex::column().gap(gap).flex(1.0);
-            // A rule between containers, so two of them read as two things rather than one long
-            // list. It is a sibling, not part of a dock: it asks for no part, so it keeps its
-            // natural 1px and the docks divide what is left exactly as they asked. Its colour comes
-            // from the theme's border token, so it follows a reload.
-            let count = bodies.len();
+            // No gap on the column itself: the space between two docks is a widget of its own, so a
+            // dock dropped there has somewhere to land (after the dock above). It is the same space
+            // as before — the gap above the rule, the rule, the gap below.
+            // Docks in the host's order, with the space between each pair before the one below.
+            let mut bodies = bodies.into_iter();
+            let first = bodies.next();
+            let rest: Vec<WidgetModel> = ids
+                .iter()
+                .zip(bodies)
+                .flat_map(|(above, body)| [dock_gap(above, gap, drag), body])
+                .collect();
             Some(heca_grid_ui::WidgetModel::new(
-                bodies
-                    .into_iter()
-                    .enumerate()
-                    .fold(stack, |col, (i, body)| {
-                        let col = if i > 0 && i < count {
-                            col.child(Separator::horizontal())
-                        } else {
-                            col
-                        };
-                        col.child(body)
-                    }),
+                Flex::column().flex(1.0).child(first).child(rest),
             ))
         }
     }
+}
+
+/// **The space between two docks**: the rule that tells them apart, with the region's gap above and
+/// below it — and a place a dock dropped there lands, after the dock above (`after`).
+///
+/// A rule rather than a gap alone, so two docks read as two things rather than one long list. It is
+/// a sibling, not part of a dock: it asks for no part, so it keeps its natural size and the docks
+/// divide what is left exactly as they asked. Its colour comes from the theme's border token, so it
+/// follows a reload.
+fn dock_gap(
+    after: &str,
+    gap: heca_grid_ui::style::Space,
+    drag: &mut DragItemRegistry,
+) -> WidgetModel {
+    let key = format!("dock-gap:{after}");
+    drag.register(
+        key.clone(),
+        ChromeDragItem::DockGap {
+            after: after.to_string(),
+        },
+    );
+    WidgetModel::new(
+        Flex::column()
+            .key(key)
+            .padding_y(gap)
+            .accepts([crate::chrome::DOCK_DRAG_KIND])
+            .child(Separator::horizontal()),
+    )
 }
 
 /// Build a sidebar **SHELL** — a full-height, bracket-framed, frosted panel filling a
@@ -243,6 +289,7 @@ pub(in crate::chrome) fn build_region_content(
 /// as a boxed child rather than through `Parent::child`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_sidebar_shell(
+    region: RegionId,
     region_w: f32,
     sidebar_h: f32,
     look: &SidebarLook,
@@ -252,7 +299,7 @@ pub(super) fn build_sidebar_shell(
     let inner_h = (sidebar_h - look.gap * 2.0).max(0.0);
     // The collapse toggle lives in the always-visible top bar (sidebar-fu-14), so the
     // shell has no header row — the mounted content (if any) fills the body.
-    let mut body = Pane::new()
+    let body = Pane::new()
         .border_style(look.border_style.into())
         .border_width(look.border_width)
         .radius(look.border_radius)
@@ -260,24 +307,30 @@ pub(super) fn build_sidebar_shell(
         .height(inner_h)
         .padding(Spacing::Md)
         .gap(Spacing::Sm)
-        .background(look.background);
-    if let Some(color) = look.border_color {
-        body = body.border_color(color);
-    }
-    if let Some(content) = content {
-        // Mounted directly: **the shell does not scroll**.
-        //
-        // Scrolling is per container. Each one nests its own scroll area and scrolls its own
-        // content, which is what makes two of them in a sidebar independent. A scroll viewport
-        // around the whole stack would defeat that twice over: it takes the wheel for the sidebar
-        // instead of the container under the cursor, and — because a viewport measures its content
-        // at its natural height, which is the whole point of one — it leaves the containers
-        // content-sized, so a fractional share has no height to divide and they bunch at the top.
-        //
-        // The shell's job is to give containers bounds. It hands them the region's height, they
-        // take their shares of it, and each scrolls inside what it got.
-        body = body.child(content);
-    }
+        .background(look.background)
+        // The sidebar's own colour, when it has one; otherwise the frame's default.
+        .border_color(look.border_color);
+    // **An empty sidebar is still somewhere to put a dock.** Its whole body takes one, named by the
+    // region — the name `regions("sidebar.left")` takes — so the drop moves the dock into it
+    // (`chrome::dock_drop_action`).
+    let place = content.is_none().then(|| {
+        Flex::column()
+            .grow(1.0)
+            .key(region.as_str())
+            .accepts([crate::chrome::DOCK_DRAG_KIND])
+    });
+    // The content is mounted directly: **the shell does not scroll**.
+    //
+    // Scrolling is per container. Each one nests its own scroll area and scrolls its own content,
+    // which is what makes two of them in a sidebar independent. A scroll viewport around the whole
+    // stack would defeat that twice over: it takes the wheel for the sidebar instead of the
+    // container under the cursor, and — because a viewport measures its content at its natural
+    // height, which is the whole point of one — it leaves the containers content-sized, so a
+    // fractional share has no height to divide and they bunch at the top.
+    //
+    // The shell's job is to give containers bounds. It hands them the region's height, they take
+    // their shares of it, and each scrolls inside what it got.
+    let body = body.child(content).child(place);
     Flex::column().width(region_w).height(sidebar_h).child(
         Surface::column()
             .width(region_w)
@@ -589,7 +642,8 @@ pub(crate) fn build_chrome_root(
         &theme,
         &emit_intent,
         &state.action_catalog,
-    );
+    )
+    .with_move_key(state.settings.interactive_move_modifier);
 
     let left_w = chrome.left_sidebar_width;
     let left_sidebar = (left_w > 0.0).then(|| {
@@ -600,7 +654,13 @@ pub(crate) fn build_chrome_root(
             &mut signals,
             &mut drag_items,
         );
-        build_sidebar_shell(left_w, sidebar_h, &SidebarLook::left(state), content)
+        build_sidebar_shell(
+            RegionId::LeftSidebar,
+            left_w,
+            sidebar_h,
+            &SidebarLook::left(state),
+            content,
+        )
     });
     let right_w = chrome.right_sidebar_width;
     let right_sidebar = (right_w > 0.0).then(|| {
@@ -611,7 +671,13 @@ pub(crate) fn build_chrome_root(
             &mut signals,
             &mut drag_items,
         );
-        build_sidebar_shell(right_w, sidebar_h, &SidebarLook::right(state), content)
+        build_sidebar_shell(
+            RegionId::RightSidebar,
+            right_w,
+            sidebar_h,
+            &SidebarLook::right(state),
+            content,
+        )
     });
 
     // Top-bar sidebar toggles: always on screen — a hidden sidebar is brought back by the same

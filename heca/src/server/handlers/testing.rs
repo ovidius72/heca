@@ -74,7 +74,7 @@ pub(super) fn facts(changes: &[Change]) -> Vec<Change> {
 pub(super) fn run_and_react(w: &mut Windowed, focused: Option<PaneId>, action: WmAction) {
     let before = w.l().before();
     let changes = run_for(w, focused, action.clone());
-    let (mut last_ws, mut panes, mut cursors) = (None, Vec::new(), Vec::new());
+    let (mut last_ws, mut panes, mut cursors) = (None, Default::default(), Default::default());
     let mut tracking = crate::app_state::reaction::Tracking {
         last_visited_ws: &mut last_ws,
         last_visited_pane_per_ws: &mut panes,

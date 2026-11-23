@@ -220,6 +220,10 @@ swap_left  = "prefix+Ctrl+h"
 swap_right = "prefix+Ctrl+l"
 swap_up    = "prefix+Ctrl+k"
 swap_down  = "prefix+Ctrl+j"
+# The shown workspace, one place up/down the list — `workspace_prev`/`next` with Shift carry it,
+# as Shift carries a column above.
+move_workspace_up   = "prefix+Ctrl+Shift+p"
+move_workspace_down = "prefix+Ctrl+Shift+n"
 
 # ── System ──
 command_palette = "prefix+p"        # Open command palette (actions)
@@ -833,6 +837,13 @@ rename_selected   = "r"          # rename the pane or workspace under the cursor
 delete_selected   = "x"          # the pane or workspace under the cursor
 delete_selected_column = "Shift+x"  # its whole column — the cursor never lands on a column row
 zoom_selected     = "z"
+# Order. `Shift` with a cursor key carries what you stand in: the WORKSPACE the cursor is in, on
+# any row — the dock is the list of workspaces. `Ctrl` swaps the PANE under the cursor with its
+# neighbour in the column, as `prefix+Ctrl+k/j` swaps the focused one. The grip drags the same move.
+move_selected_up   = "Shift+k,Shift+ArrowUp"
+move_selected_down = "Shift+j,Shift+ArrowDown"
+swap_selected_up   = "Ctrl+k,Ctrl+ArrowUp"
+swap_selected_down = "Ctrl+j,Ctrl+ArrowDown"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Surface keys — the layers
