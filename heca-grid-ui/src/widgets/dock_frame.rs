@@ -39,8 +39,9 @@ use crate::widgets::{Flex, Glyph, Grid, Icon, Item, Label, RegionMode};
 /// Chevron glyphs for expanded / collapsed states.
 const CHEVRON_OPEN: &str = "▾";
 const CHEVRON_CLOSED: &str = "▸";
-/// The grip glyph a [`Dock`](DockFrameVariant::Dock)'s title row shows by default — the dock-move
-/// handle. Another one is set with [`DockFrame::grip_glyph`].
+/// The grip glyph a [`Dock`](DockFrameVariant::Dock)'s title row shows by default — **the handle
+/// a row of a reorderable list is dragged by**, the same on every list so one gesture reads one
+/// way. Another one is set with [`DockFrame::grip_glyph`].
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
 const LEADING_GAP: Spacing = Spacing::Sm;
@@ -145,6 +146,8 @@ pub struct DockFrame {
     grip: bool,
     /// The glyph the grip shows ([`grip_glyph`](Self::grip_glyph)); [`GRIP`] unless set.
     grip_glyph: String,
+    /// The size of the title row alone ([`title_size`](Self::title_size)); `None` follows the frame.
+    title_size: Option<crate::style::WidgetSize>,
     /// Whether the header folds the body; `false` hides the chevron and keeps the body open.
     collapsible: Signal<bool>,
     /// The fold letter's tone ([`fold_hint_tone`](DockFrame::fold_hint_tone)), kept so a toggle
@@ -154,6 +157,11 @@ pub struct DockFrame {
 
 #[heca_grid_ui_macros::props]
 impl DockFrame {
+    /// **The reorder handle's glyph** every reorderable list shares — what a frame's grip shows by
+    /// default, and what anything else that is dragged by a handle shows, so one gesture reads one
+    /// way everywhere.
+    pub const GRIP: &'static str = GRIP;
+
     /// A new expanded frame titled `title`. Add body content with `.child(...)`
     /// and header controls with `.header_actions(...)`.
     pub fn new(title: impl Into<String>) -> Self {
@@ -195,6 +203,7 @@ impl DockFrame {
             title: title.into(),
             grip: true,
             grip_glyph: GRIP.to_owned(),
+            title_size: None,
             collapsible: signal(true),
             fold_tone: None,
         };
@@ -278,6 +287,10 @@ impl DockFrame {
             }
         };
         let mut toggle = toggle;
+        if let Some(size) = self.title_size {
+            // Explicit on the title row, so it reaches the row's own parts and nothing below it.
+            toggle.as_mut().authored_style_mut().layout.set_size(size);
+        }
         toggle.base_mut().grid_area = Some(TOGGLE_AREA.to_string());
         toggle.base_mut().hint_style.placement = corner;
         toggle.base_mut().hint_style.tone = self.fold_tone;
@@ -370,8 +383,8 @@ impl DockFrame {
         self
     }
 
-    /// **The glyph the grip shows** (default `⠿`, the dock-move handle). A frame that is a row of a
-    /// reorderable list sets its own — a reorder handle that does not read as "move this dock":
+    /// **The glyph the grip shows** (default `⠿`, the reorder handle every reorderable list shares —
+    /// workspaces, rooms). Set one only for a handle that genuinely means something else:
     ///
     /// ```ignore
     /// DockFrame::new("Lobby").grip_glyph("≡")
@@ -385,6 +398,20 @@ impl DockFrame {
             self.grip_glyph = glyph;
             self.build_toggle();
         }
+        self
+    }
+
+    /// **The size of the title row alone** — its text and, because spacing follows the font, its
+    /// padding. The body keeps its own size: a list of rows nested in a dock reads smaller than the
+    /// dock's own header without shrinking what each row holds.
+    ///
+    /// ```ignore
+    /// DockFrame::new("ws1").title_size(WidgetSize::Caption).child(panes)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn title_size(mut self, size: crate::style::WidgetSize) -> Self {
+        self.title_size = Some(size);
+        self.build_toggle();
         self
     }
 

@@ -63,6 +63,9 @@ impl WorkspaceFrame<'_> {
             // somewhere to navigate, so it reads `muted`. The widget places the letter (only it
             // knows where its chevron is) and says nothing about what it means.
             .fold_hint_tone(Tone::Muted)
+            // A row of the dock's list, smaller than the dock's own header: the title row only, so
+            // the panes inside keep their size.
+            .title_size(heca_grid_ui::style::WidgetSize::Caption)
             .frameless(true)
             .gap(Spacing::Xs) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_collapsed(ws_id))

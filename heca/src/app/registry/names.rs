@@ -329,15 +329,12 @@ mod tests {
             .map(|d| d.name)
             .filter(|n| n.contains('.'))
             .collect();
-        assert_eq!(
-            dotted,
-            [
-                "chrome.container.move_to_region",
-                "chrome.container.move_left_sidebar",
-                "chrome.container.move_right_sidebar",
-                "chrome.container.reorder_before",
-                "chrome.container.reorder_after",
-            ]
+        // The rule itself, not a list to keep in step: every dotted built-in is a chrome container
+        // action, so the next one of that family needs nothing here.
+        assert!(dotted.contains(&"chrome.container.move_to_region"));
+        assert!(
+            dotted.iter().all(|n| n.starts_with("chrome.container.")),
+            "a dotted built-in outside the chrome container family: {dotted:?}"
         );
         // No snake_case alias for the same capability.
         assert!(catalog.find("move_container_to_region").is_none());

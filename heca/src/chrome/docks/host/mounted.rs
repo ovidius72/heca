@@ -18,6 +18,11 @@ pub struct MountedContribution {
     pub(super) provider: Box<dyn Provider>,
     /// What whoever added this dock said about its size and place — wins over the dock's own body.
     pub(super) placement: DockPlacement,
+    /// **The share the user gave it by hand** (the edge between two docks, a key, a script) — kept
+    /// apart from `placement` on purpose: it is not part of the region's
+    /// [`arrangement`](super::ChromeHost::arrangement), so resizing does not rebuild the region and
+    /// the drag under the pointer survives. Applied over the placed share whenever it is built.
+    pub(super) hand_share: Option<f32>,
     /// `Some` once [`Provider::on_activate`] has run, or once the host kept a declared action here;
     /// what it holds lives as long as this stays mounted.
     pub(super) handles: Option<ProviderHandles>,
@@ -36,6 +41,11 @@ impl MountedContribution {
     /// when it was appended). Wins over what the dock's own body says.
     pub fn placement(&self) -> DockPlacement {
         self.placement
+    }
+
+    /// The share the user gave this dock by hand, if any — it wins over the placed one.
+    pub fn hand_share(&self) -> Option<f32> {
+        self.hand_share
     }
 
     /// Does this container do anything with keyboard focus beyond scrolling?

@@ -126,6 +126,7 @@ impl ChromeHost {
             id: id.clone(),
             provider,
             placement,
+            hand_share: None,
             handles: None,
             activated: false,
         };
@@ -217,10 +218,27 @@ impl ChromeHost {
         self.placement.get(id).copied()
     }
 
-    /// Move a container to another region. Validated against the container's
-    /// `supported_regions`; a no-op (still `Ok`) if it's already there. Emits
-    /// [`ChromeEvent::ContainerPlacementChanged`] on a real move.
+    /// **Move a container to another region, as the user asked** — a drag, a key, a script. It lands
+    /// at the end of the region **as the region is shown**, and that order is then the region's own:
+    /// what the user did wins over the `order` the docks were first placed with
+    /// ([`arrange_by_hand`](Self::arrange_by_hand)). Validated against the container's
+    /// `supported_regions`; a no-op (still `Ok`) if it's already there.
     pub fn move_container(&mut self, id: &str, to: RegionId) -> Result<(), MoveError> {
+        if self.placement.get(id) == Some(&to) {
+            return self.relocate(id, to);
+        }
+        self.show_order(to);
+        self.relocate(id, to)?;
+        self.arrange_by_hand(to);
+        Ok(())
+    }
+
+    /// Move a container to another region, appending it to the region's list — the placing half,
+    /// for [`[[docks]]`](crate::chrome::DockEntry) and `regions(..)`, where each dock's own `order`
+    /// still decides where it shows. Validated against the container's `supported_regions`; a no-op
+    /// (still `Ok`) if it's already there. Emits [`ChromeEvent::ContainerPlacementChanged`] on a
+    /// real move.
+    pub(super) fn relocate(&mut self, id: &str, to: RegionId) -> Result<(), MoveError> {
         let from = self
             .placement
             .get(id)
@@ -277,6 +295,9 @@ impl ChromeHost {
             .get(id)
             .copied()
             .ok_or(MoveError::UnknownContainer)?;
+        // "Before Y" is before Y **as the user sees the region** — its `order` decides that, not
+        // the list — so the list is put in that order first, and the result becomes the order.
+        self.show_order(region);
         let list = &mut self.regions[region].contributions;
         let from = list
             .iter()
@@ -301,11 +322,61 @@ impl ChromeHost {
             None => list.len(),
         };
         list.insert(insert_at, mc);
+        self.arrange_by_hand(region);
         self.events.emit(ChromeEvent::ContainerPlacementChanged {
             container_id: id.to_string(),
             region,
         });
         Ok(())
+    }
+
+    /// **The docks of `region` in the order they are shown** (by their placed `order`, ties as
+    /// added), with their placed share.
+    pub fn shown(&self, region: RegionId) -> Vec<(String, Option<f32>)> {
+        let mut docks: Vec<_> = self.regions[region].contributions.iter().collect();
+        docks.sort_by_key(|m| m.placement.order.unwrap_or_default());
+        docks
+            .into_iter()
+            .map(|m| (m.id().to_string(), m.placement.flex))
+            .collect()
+    }
+
+    /// Give dock `id` this share of its region (CSS `flex`), as the user resized it — kept like a
+    /// hand move while the dock's own `[[docks]]` entry is unchanged, and **not** a change of
+    /// arrangement: the caller sets it on the drawn dock too, so nothing is rebuilt mid-drag.
+    pub fn set_share(&mut self, id: &str, flex: f32) {
+        if let Some(m) = self
+            .regions
+            .iter_mut()
+            .flat_map(|r| r.contributions.iter_mut())
+            .find(|m| m.id() == id)
+        {
+            m.hand_share = Some(flex);
+        }
+    }
+
+    /// Put `region`'s list in the order it is shown: by each dock's placed `order`, ties as they
+    /// were added (the order `build_region_content` draws them in).
+    fn show_order(&mut self, region: RegionId) {
+        self.regions[region]
+            .contributions
+            .sort_by_key(|m| m.placement.order.unwrap_or_default());
+    }
+
+    /// **The region's order is now the user's**: every dock in it is placed at its position in the
+    /// list, so a dock first placed with an `order` no longer pulls itself back over a move the
+    /// user made. Kept across a config reload while the dock's own entry is unchanged — the same
+    /// rule as a dock moved to another region by hand.
+    fn arrange_by_hand(&mut self, region: RegionId) {
+        let docks = &mut self.regions[region].contributions;
+        // With no `order` anywhere the list already is the shown order: nothing to write, so a
+        // move that changes nothing changes nothing.
+        if docks.iter().all(|m| m.placement.order.is_none()) {
+            return;
+        }
+        for (i, m) in docks.iter_mut().enumerate() {
+            m.placement.order = Some(heca_grid_ui::order::Order::from(i as i64));
+        }
     }
 
     /// Put a container immediately **after** `after` — wherever `after` is, like
@@ -325,6 +396,8 @@ impl ChromeHost {
             .get(after)
             .copied()
             .ok_or(MoveError::TargetNotFound)?;
+        // What follows `after` **as the region is shown** — its `order` decides that, not the list.
+        self.show_order(region);
         let list = &self.regions[region].contributions;
         // The container that follows `after` is the one to insert before; none ⇒ the end of
         // `after`'s region, so the container is moved there first.

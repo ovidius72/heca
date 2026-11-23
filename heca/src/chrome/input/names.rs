@@ -55,6 +55,13 @@ pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
 /// What a pane says it is when it is carried, and what a place for a pane takes.
 pub(crate) const PANE_DRAG_KIND: &str = "pane";
 
+/// **A dock's header, as a row its cursor can stand on** — `<mount>:header`. heca puts it
+/// there (`window/scene`) and moves the cursor onto it and off it (`providers::actions`), so no
+/// dock knows it exists.
+pub(crate) fn dock_header_key(mount: &str) -> String {
+    format!("{mount}:header")
+}
+
 /// What a dock says it is when it is carried, and what a place for a dock takes.
 pub(crate) const DOCK_DRAG_KIND: &str = "dock";
 

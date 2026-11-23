@@ -233,8 +233,28 @@ pub fn resolve_at(root: &dyn Component, point: Point) -> Option<DropHit> {
 /// going outward, so the drop lands on the nearest thing that would actually take it and nothing
 /// else is ever drawn on.
 pub fn resolve_at_for(root: &dyn Component, point: Point, kind: Option<&str>) -> Option<DropHit> {
+    resolve_at_carrying(root, point, kind, None)
+}
+
+/// [`resolve_at_for`], knowing **which** widget is carried too (its identity), so a target that
+/// takes only some sources ([`accepts_when`](crate::builders::DragExt::accepts_when)) is asked —
+/// what the gesture itself resolves with.
+pub fn resolve_at_carrying(
+    root: &dyn Component,
+    point: Point,
+    kind: Option<&str>,
+    source: Option<&str>,
+) -> Option<DropHit> {
     let mut path = Vec::new();
-    drop_at(root, None, root, point, &|_| true, kind, &mut path)
+    let carried = Carried { kind, source };
+    drop_at(root, None, root, point, &|_| true, carried, &mut path)
+}
+
+/// What a drag carries, as a target is asked whether it takes it.
+#[derive(Clone, Copy)]
+struct Carried<'a> {
+    kind: Option<&'a str>,
+    source: Option<&'a str>,
 }
 
 /// Like [`resolve_at`], but only considers drop targets whose id satisfies
@@ -249,7 +269,11 @@ pub fn resolve_at_filtered(
     accept: &dyn Fn(&str) -> bool,
 ) -> Option<DropHit> {
     let mut path = Vec::new();
-    drop_at(root, None, root, point, accept, None, &mut path)
+    let carried = Carried {
+        kind: None,
+        source: None,
+    };
+    drop_at(root, None, root, point, accept, carried, &mut path)
 }
 
 /// The recursive half of [`resolve_at_filtered`], carrying the path so a hit can be named by
@@ -265,9 +289,10 @@ fn drop_at(
     node: &dyn Component,
     point: Point,
     accept: &dyn Fn(&str) -> bool,
-    kind: Option<&str>,
+    carried: Carried<'_>,
     path: &mut Vec<usize>,
 ) -> Option<DropHit> {
+    let kind = carried.kind;
     // **What is being carried is not somewhere to put it.** Dropping a thing on itself — or on
     // anything inside it — can only mean nothing happens, and a target that will do nothing must
     // not light up as though it will. Skipping the whole subtree is deliberate: a column dropped on
@@ -277,13 +302,27 @@ fn drop_at(
     }
     for (i, child) in node.base().children.iter().enumerate().rev() {
         path.push(i);
-        if let Some(hit) = drop_at(root, Some(node), child.as_ref(), point, accept, kind, path) {
+        if let Some(hit) = drop_at(
+            root,
+            Some(node),
+            child.as_ref(),
+            point,
+            accept,
+            carried,
+            path,
+        ) {
             return Some(hit);
         }
         path.pop();
     }
     if node.is_drop_target()
         && node.accepts_drag(kind)
+        && carried.source.is_none_or(|source| {
+            node.base()
+                .accepts_from
+                .as_ref()
+                .is_none_or(|rule| rule(source))
+        })
         && let Some(key) = drag_identity(root, node, path)
         && accept(&key)
     {
@@ -332,11 +371,12 @@ fn path_at(root: &dyn Component, point: Point) -> Vec<usize> {
 /// **What a press on the widget at `press` picks up**, and its path — the one rule, for the gesture
 /// and for the cursor.
 ///
-/// Of the widgets from the root down to the pressed one: one picked up by its rule
+/// Of the widgets from the root down to the pressed one: one whose key is held
 /// ([`draggable_when`](crate::builders::DragExt::draggable_when)) wins, because holding the key is a
-/// deliberate request; otherwise the innermost that may start. A widget picked up only by its
-/// handle ([`drag_by_handle`](crate::builders::DragExt::drag_by_handle)) may start only when the
-/// press went through a handle of its own — one with no nearer handle-only widget in between.
+/// deliberate request; otherwise the innermost that may start. A source starts by its handle
+/// ([`drag_by_handle`](crate::builders::DragExt::drag_by_handle) — a press through a handle of its
+/// own, with no nearer handle-only widget in between, and no key needed), by its key held (from
+/// anywhere in it), or, when it declares neither, from any press.
 pub(crate) fn source_on(root: &dyn Component, press: &[usize]) -> Option<(Vec<usize>, String)> {
     let mut chain: Vec<(Vec<usize>, &dyn Component)> = vec![(Vec::new(), root)];
     let mut node = root;
@@ -349,23 +389,31 @@ pub(crate) fn source_on(root: &dyn Component, press: &[usize]) -> Option<(Vec<us
         here.push(*i);
         chain.push((here, node));
     }
-    let startable = |at: usize| {
-        let n = chain[at].1;
-        if !n.may_start_drag() {
-            return false;
-        }
-        if !n.base().drag_by_handle {
-            return true;
-        }
-        chain[at + 1..]
-            .iter()
-            .take_while(|(_, below)| !below.base().drag_by_handle)
-            .any(|(_, below)| below.base().drag_handle)
+    let held = |at: usize| {
+        chain[at]
+            .1
+            .base()
+            .drag_gate
+            .as_ref()
+            .is_some_and(|rule| rule(crate::event::modifiers()))
     };
-    let gated = |at: usize| chain[at].1.base().drag_gate.is_some();
+    let through_own_handle = |at: usize| {
+        chain[at].1.base().drag_by_handle
+            && chain[at + 1..]
+                .iter()
+                .take_while(|(_, below)| !below.base().drag_by_handle)
+                .any(|(_, below)| below.base().drag_handle)
+    };
+    // A source starts **by its handle** (no key needed), **by its key held** (from anywhere in it),
+    // or — with neither declared — from any press.
+    let startable = |at: usize| {
+        let b = chain[at].1.base();
+        chain[at].1.is_drag_source()
+            && (through_own_handle(at) || held(at) || (b.drag_gate.is_none() && !b.drag_by_handle))
+    };
     let at = (0..chain.len())
         .rev()
-        .find(|&at| gated(at) && startable(at))
+        .find(|&at| held(at) && startable(at))
         .or_else(|| (0..chain.len()).rev().find(|&at| startable(at)))?;
     let (path, node) = (&chain[at].0, chain[at].1);
     let id = drag_identity(root, node, path)?;
@@ -609,7 +657,7 @@ mod tests {
         let frame = |draggable: bool| {
             let mut frame = Flex::column()
                 .key("room:a")
-                .drag_by_handle()
+                .drag_by_handle(true)
                 .draggable_as(draggable.then_some("room"));
             frame
                 .base_mut()
@@ -666,6 +714,51 @@ mod tests {
             Some("dock".into()),
             "the move key held: the dock, not the room"
         );
+    }
+
+    /// **A source with a handle and a key is picked up either way**: by its handle with no key, and
+    /// from anywhere in it while the key is held — a dock with a header and the move key.
+    #[test]
+    fn a_handle_and_a_key_each_pick_the_source_up() {
+        let mut seat = Flex::column()
+            .key("dock")
+            .draggable_as("dock")
+            .draggable_when(|m| m.meta)
+            .drag_by_handle(true);
+        seat.base_mut()
+            .children
+            .push(crate::WidgetModel::new(Surface::new().drag_handle()));
+        seat.base_mut()
+            .children
+            .push(crate::WidgetModel::new(Surface::new()));
+        let at = |press: &[usize]| source_on(&seat, press).map(|(_, id)| id);
+        assert_eq!(at(&[0]), Some("dock".into()), "the handle, no key");
+        assert_eq!(at(&[1]), None, "the body, no key");
+        crate::event::remember_modifiers(crate::event::Modifiers {
+            meta: true,
+            ..Default::default()
+        });
+        let held = at(&[1]);
+        crate::event::remember_modifiers(crate::event::Modifiers::default());
+        assert_eq!(held, Some("dock".into()), "the body, key held");
+    }
+
+    /// **A target can refuse some sources**, by what is carried: the space between two docks takes
+    /// any dock but the two it sits between. A refused source is not offered the place at all.
+    #[test]
+    fn a_target_can_refuse_some_sources() {
+        let mut gap = Surface::new()
+            .key("gap")
+            .accepts(["dock"])
+            .accepts_when(|source| source != "above" && source != "below");
+        gap.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(90.0, 20.0));
+        let at = |source| {
+            resolve_at_carrying(&gap, Point::new(45.0, 10.0), Some("dock"), Some(source))
+                .map(|h| h.key)
+        };
+        assert_eq!(at("other"), Some("gap".into()));
+        assert_eq!(at("above"), None, "a neighbour dropped here would not move");
+        assert_eq!(at("below"), None);
     }
 
     /// **Onto or beside is said per kind.** A workspace row takes a pane onto itself (a real middle)
