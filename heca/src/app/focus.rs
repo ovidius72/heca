@@ -50,13 +50,13 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
 }
 
 /// The single canonical way to switch workspaces.
-/// Updates last_visited_ws_idx so Prefix+Shift+l can toggle back.
+/// Updates last_visited_ws so Prefix+Shift+l can toggle back.
 /// Does NOT touch last_visited_pane_per_ws — that field is reserved for
 /// same-workspace pane toggle (Prefix+i) and must not be overwritten by
 /// workspace switches.
 pub(crate) fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
     let mut layout = state.session.through_mut(&mut state.view);
-    crate::app_state::show_workspace(&mut layout, &mut state.last_visited_ws_idx, new_idx);
+    crate::app_state::show_workspace(&mut layout, &mut state.last_visited_ws, new_idx);
 }
 
 /// Sync `focused_pane` from session active state and rebuild dependent UI state.
@@ -129,14 +129,11 @@ pub(crate) fn sync_focus(state: &mut AppState) {
             .unwrap_or(false)
     });
     if focus_changed
-        && prev_focused.is_some()
         && prev_ws == current_ws
         && pane_belongs_to_current_ws
+        && let (Some(ws), Some(pane)) = (state.session.workspace_id(current_ws), prev_focused)
     {
-        while state.last_visited_pane_per_ws.len() <= current_ws {
-            state.last_visited_pane_per_ws.push(None);
-        }
-        state.last_visited_pane_per_ws[current_ws] = prev_focused;
+        state.last_visited_pane_per_ws.insert(ws, pane);
     }
 
     // **And where back-and-forth would take you** — published AFTER the history above is written
@@ -165,12 +162,12 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     //   forbids workspace switches from writing it, so reading it here would answer a different
     //   question than the binding asks.
     let local = state
-        .last_visited_pane_per_ws
-        .get(current_ws)
-        .copied()
-        .flatten();
+        .session
+        .workspace_id(current_ws)
+        .and_then(|ws| state.last_visited_pane_per_ws.get(&ws).copied());
     let global = state
-        .last_visited_ws_idx
+        .last_visited_ws
+        .and_then(|ws| state.session.index_of(ws))
         .and_then(|ws| state.layout().workspace(ws))
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
@@ -182,7 +179,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     state
         .chrome_state
         .workspaces
-        .set_previous_ws(state.last_visited_ws_idx);
+        .set_previous_ws(state.last_visited_ws);
 
     // Track global last_focused (for Prefix+Shift+l toggle).
     if focus_changed && prev_focused.is_some() {

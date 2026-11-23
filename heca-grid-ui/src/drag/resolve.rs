@@ -298,7 +298,7 @@ fn drop_at(
                 key,
                 path: path.clone(),
                 bounds,
-                side: side_for(bounds, point, node.base().accepts_onto, flow),
+                side: side_for(bounds, point, node.lands_onto(kind), flow),
                 flow,
             });
         }
@@ -665,6 +665,31 @@ mod tests {
             held,
             Some("dock".into()),
             "the move key held: the dock, not the room"
+        );
+    }
+
+    /// **Onto or beside is said per kind.** A workspace row takes a pane onto itself (a real middle)
+    /// and another workspace only beside itself (two halves): the same point in its middle is
+    /// "onto" for one and "after" for the other.
+    #[test]
+    fn onto_or_beside_is_said_per_kind() {
+        let mut row = Surface::new()
+            .key("ws:1")
+            .accepts(["pane"])
+            .accepts_beside(["workspace"]);
+        row.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(90.0, 90.0));
+        let middle = Point::new(45.0, 50.0);
+        assert_eq!(
+            resolve_at_for(&row, middle, Some("pane")).map(|h| h.side),
+            Some(DropSide::Onto)
+        );
+        assert_eq!(
+            resolve_at_for(&row, middle, Some("workspace")).map(|h| h.side),
+            Some(DropSide::After)
+        );
+        assert!(
+            resolve_at_for(&row, middle, Some("column")).is_none(),
+            "it takes neither"
         );
     }
 

@@ -264,9 +264,9 @@ pub struct AppState {
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
-    pub last_visited_ws_idx: Option<usize>,
+    pub last_visited_ws: Option<heca_core::layout::WorkspaceId>,
     /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
-    pub last_visited_pane_per_ws: Vec<Option<PaneId>>,
+    pub last_visited_pane_per_ws: std::collections::HashMap<heca_core::layout::WorkspaceId, PaneId>,
     /// **Where the exposé's highlight is, per workspace** — the map's own cursor, kept here rather
     /// than inside the widget because the map is rebuilt from scratch every time it opens.
     ///
@@ -279,8 +279,9 @@ pub struct AppState {
     /// where the *app's* focus has been. Moving a highlight around a map is looking, not going: it
     /// must not rewrite the history that `prefix+i` and the sidebar's dim highlight read.
     ///
-    /// Indexed by workspace, grown with the session like its neighbour above.
-    pub expose_cursor_per_ws: Vec<Option<PaneId>>,
+    /// Kept by workspace **identity**, like its neighbour above, so it stays with its workspace
+    /// when the list is reordered or another workspace goes.
+    pub expose_cursor_per_ws: std::collections::HashMap<heca_core::layout::WorkspaceId, PaneId>,
     /// **Which row the map's cursor is currently on** — the workspace, not the pane.
     ///
     /// The map is rebuilt whenever the session changes under it, and a rebuild has to put the
@@ -291,7 +292,7 @@ pub struct AppState {
     ///
     /// Only consulted while the map is **already up**. Opening it fresh still starts at the
     /// workspace you are standing in, which is what the memory above is for.
-    pub expose_cursor_ws: Option<usize>,
+    pub expose_cursor_ws: Option<heca_core::layout::WorkspaceId>,
     /// **Which targets the host currently has a keycap on**, by the identity they declare.
     ///
     /// The whole of the letter-ownership rule: `chrome::hint` withdraws exactly what it offered and

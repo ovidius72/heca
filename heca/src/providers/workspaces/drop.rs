@@ -2,8 +2,8 @@
 //!
 //! The rows say what they are (`draggable_as("pane")`, `accepts(["pane", "column"])`); the framework
 //! runs the gesture and hands back two names, already resolved. This turns them into the action
-//! the drop means — `swap`, `place_pane`, `swap_columns` or `move_column` — and nothing else: the
-//! action does the move, exactly as it would from a key or a plugin.
+//! the drop means — `swap`, `place_pane`, `swap_columns`, `move_column` or `move_workspace` — and
+//! nothing else: the action does the move, exactly as it would from a key or a plugin.
 
 use crate::app_state::AppState;
 use crate::chrome::ChromeDragItem;
@@ -22,10 +22,9 @@ pub(crate) fn drop_action(
     match source {
         ChromeDragItem::Pane(pane_id) => pane_drop(state, pane_id, target, side, swap),
         ChromeDragItem::Column { ws, col } => column_drop(ws, col, target, side, swap),
-        // A workspace is a drop target only — nothing picks one up — and docks are the host's.
-        ChromeDragItem::Workspace { .. }
-        | ChromeDragItem::Dock(_)
-        | ChromeDragItem::DockGap { .. } => None,
+        ChromeDragItem::Workspace { ws } => workspace_drop(ws, target, side),
+        // Docks are the host's.
+        ChromeDragItem::Dock(_) | ChromeDragItem::DockGap { .. } => None,
     }
 }
 
@@ -126,6 +125,25 @@ fn column_drop(
     }
 }
 
+/// A workspace dropped beside another lands before it on its first half and after it on its
+/// second; on itself, or on anything that is not a workspace, it means nothing.
+fn workspace_drop(src: usize, target: ChromeDragItem, side: DropSide) -> Option<WmAction> {
+    let ChromeDragItem::Workspace { ws: dst } = target else {
+        return None;
+    };
+    (src != dst).then(|| WmAction::MoveWorkspace {
+        ws_idx: Some(src),
+        to_idx: index_after_move(src, dst, side == DropSide::Before),
+    })
+}
+
+/// Where an item at `src` ends up when it is put before (or after) the item at `dst` of the same
+/// list: taking it out first shifts everything after it one place back.
+fn index_after_move(src: usize, dst: usize, before: bool) -> usize {
+    let target = if src < dst { dst - 1 } else { dst };
+    if before { target } else { target + 1 }
+}
+
 /// Final insert index for a column **move** onto target column `dst_col` in `dst_ws`,
 /// given a `before` (vs after) drop side. Within the same workspace the source column
 /// is removed first, so the target's index shifts left by one when the source sat to
@@ -140,16 +158,7 @@ fn column_move_dst_idx(
     before: bool,
 ) -> usize {
     if src_ws == dst_ws {
-        let target_final = if src_col < dst_col {
-            dst_col - 1
-        } else {
-            dst_col
-        };
-        if before {
-            target_final
-        } else {
-            target_final + 1
-        }
+        index_after_move(src_col, dst_col, before)
     } else if before {
         dst_col
     } else {
@@ -177,6 +186,38 @@ mod tests {
         // Different workspace: dst is untouched by the source removal.
         assert_eq!(column_move_dst_idx(0, 1, 1, 2, true), 2);
         assert_eq!(column_move_dst_idx(0, 1, 1, 2, false), 3);
+    }
+
+    /// **A workspace dropped beside another moves to that place**, before or after it, counted
+    /// as the list is after the move; on itself it means nothing.
+    #[test]
+    fn a_workspace_drop_moves_it_beside_the_target() {
+        let ws = |ws| ChromeDragItem::Workspace { ws };
+        // [A, B, C, D]: A after C → [B, C, A, D], so A ends at 2.
+        assert_eq!(
+            workspace_drop(0, ws(2), DropSide::After),
+            Some(WmAction::MoveWorkspace {
+                ws_idx: Some(0),
+                to_idx: 2
+            })
+        );
+        // D before B → [A, D, B, C], so D ends at 1.
+        assert_eq!(
+            workspace_drop(3, ws(1), DropSide::Before),
+            Some(WmAction::MoveWorkspace {
+                ws_idx: Some(3),
+                to_idx: 1
+            })
+        );
+        assert_eq!(workspace_drop(1, ws(1), DropSide::After), None);
+        assert_eq!(
+            workspace_drop(
+                1,
+                ChromeDragItem::Pane(heca_core::layout::PaneId(3)),
+                DropSide::After
+            ),
+            None
+        );
     }
 
     /// A column dropped on itself, or a pane on a column, means nothing; a column on a workspace

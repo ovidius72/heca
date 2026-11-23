@@ -492,3 +492,42 @@ fn a_window_follows_a_pane_it_moved_without_scrolling() {
         "the view moved from {rest} to {target}"
     );
 }
+
+/// **A workspace moves to the place asked, one place up or down, and says the layout changed**;
+/// with no workspace named it is the one the window shows; nowhere to go says nothing.
+#[test]
+fn a_workspace_moves_and_says_the_layout_changed() {
+    let mut w = Windowed::with_shape(&[&[&[1]], &[&[2]], &[&[3]]]);
+    let first_pane = |w: &Windowed| -> Vec<u64> {
+        w.session
+            .workspaces
+            .iter()
+            .map(|ws| ws.scrolling.columns[0].panes[0].id.0)
+            .collect()
+    };
+    let changes = run(
+        &mut w,
+        WmAction::MoveWorkspace {
+            ws_idx: Some(2),
+            to_idx: 0,
+        },
+    );
+    assert_eq!(changes, vec![Change::LayoutChanged]);
+    assert_eq!(first_pane(&w), [3, 1, 2]);
+
+    let changes = run(&mut w, WmAction::MoveWorkspaceDown { ws_idx: Some(0) });
+    assert_eq!(changes, vec![Change::LayoutChanged]);
+    assert_eq!(first_pane(&w), [1, 3, 2]);
+    assert!(
+        run(&mut w, WmAction::MoveWorkspaceUp { ws_idx: Some(0) }).is_empty(),
+        "the first stays"
+    );
+    assert!(
+        run(&mut w, WmAction::MoveWorkspaceDown { ws_idx: Some(2) }).is_empty(),
+        "the last stays"
+    );
+    // No workspace named: the one the window shows — the first, in a fresh window.
+    let changes = run(&mut w, WmAction::MoveWorkspaceDown { ws_idx: None });
+    assert_eq!(changes, vec![Change::LayoutChanged]);
+    assert_eq!(first_pane(&w), [3, 1, 2]);
+}

@@ -27,8 +27,8 @@ pub(crate) fn pane_entries(
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
     let mut rows = Vec::new();
-    for (ws_idx, ws) in layout.session().workspaces.iter().enumerate() {
-        let ws_name = workspace_name(ws, ws_idx);
+    for ws in &layout.session().workspaces {
+        let ws_name = ws.label();
         for pane in ws.panes() {
             let info = pane_info_view(
                 programs,
@@ -84,7 +84,7 @@ pub(crate) fn workspace_entries(
             pane: None,
             current: ws_idx == layout.active_workspace_idx(),
             preselect: Some(ws_idx) == last_visited,
-            label: workspace_name(ws, ws_idx),
+            label: ws.label(),
             description: match ws.scrolling.columns.len() {
                 1 => "1 column".to_string(),
                 n => format!("{n} columns"),
@@ -112,7 +112,7 @@ pub(crate) fn column_entries(
     let Some(ws) = layout.workspace(ws_idx) else {
         return Vec::new();
     };
-    let ws_name = workspace_name(ws.content(), ws_idx);
+    let ws_name = ws.content().label();
     let scroll = ws.scroll();
     let active = scroll.active_column_idx();
     scroll
@@ -150,11 +150,4 @@ pub(crate) fn column_entries(
             }
         })
         .collect()
-}
-
-/// What a workspace is called: its own name, or its position spelled out — the sidebar's rule.
-fn workspace_name(ws: &heca_core::layout::Workspace, ws_idx: usize) -> String {
-    ws.name
-        .clone()
-        .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1))
 }

@@ -5595,8 +5595,9 @@ away to a single centered `Icon` while the region is collapsed to a rail.
 > what holds it. A whole **dock** is moved by the host, not by a frame: the seat heca puts round every
 > dock is dragged with the window's move key, the same key that drags a pane.
 >
-> In heca the grip shows on each workspace row, whose frame is not draggable: workspace
-> drag-to-reorder is its own phase (P030), and until then that grip does nothing.
+> In heca the grip shows on each workspace row: the row is `draggable_as("workspace")` and
+> `accepts_beside(["workspace"])`, so dragging it by the grip and dropping it before or after another
+> row sends `move_workspace` — the action `Shift+k`/`Shift+j` in the dock, a key and a script send.
 
 **Native:**
 
@@ -8615,7 +8616,7 @@ Row::new()
 | `.drag_chip()` | Carry the small title chip under the pointer instead of a picture of the widget. |
 | `.drop_target()` | It takes drops, of anything. |
 | `.accepts(kinds)` | It takes these kinds, and has a real middle: before, **onto**, after. Takes an `Option`: `None` leaves it as it was. |
-| `.accepts_beside(kinds)` | It takes these kinds **beside** itself only — a sibling in an ordered list: two halves, no middle. Takes an `Option` too. |
+| `.accepts_beside(kinds)` | It takes these kinds **beside** itself only — a sibling in an ordered list: two halves, no middle. Takes an `Option` too. **Per kind, and it combines with `accepts`**: a workspace row says `.accepts(["pane", "column"]).accepts_beside(["workspace"])`, so a pane lands onto it and another workspace before or after it. |
 
 **Which widget a press picks up** is one rule, used by the gesture and by the grab cursor alike
 (`drag::source_at`): of the widgets from the root down to the pressed one, a source picked up by its

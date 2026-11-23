@@ -12,7 +12,7 @@ pub(crate) struct ChromeSelection {
     /// workspace you came from.
     pub(crate) previous_panes: Signal<Vec<Option<PaneId>>>,
     /// The workspace `prefix+Shift+i` would return to.
-    pub(crate) previous_ws: Signal<Option<usize>>,
+    pub(crate) previous_ws: Signal<Option<heca_core::layout::WorkspaceId>>,
     /// **The workspace this window shows**, by its lasting key — what a dock binds to
     /// ([`StateView::active_workspace`](crate::host::StateView::active_workspace)).
     pub(crate) active_workspace: Signal<Option<crate::entry::service::WorkspaceKey>>,
@@ -48,8 +48,9 @@ pub struct WorkspacesContainerState {
     /// projection rebuilt from `Session` rather than a set of signals. Borrow it for as short a span
     /// as possible — never across a call that might reach back into the store.
     tree: std::rc::Rc<std::cell::RefCell<crate::providers::workspaces::WorkspaceTree>>,
-    /// Workspaces collapsed in this container (by ws index). Read via `with_collapsed_ws`.
-    pub(crate) collapsed_ws: Signal<HashSet<usize>>,
+    /// Workspaces collapsed in this container, **by identity** — so a fold stays on its workspace
+    /// when the list is reordered or another workspace goes. Read via `with_collapsed_ws`.
+    pub(crate) collapsed_ws: Signal<HashSet<heca_core::layout::WorkspaceId>>,
     /// Active/hovered pane in this container.
     pub(crate) selection: ChromeSelection,
     /// The keyboard pick currently in progress (move/select/swap/take), if any. Exposed
@@ -177,11 +178,11 @@ impl WorkspacesContainerState {
         self.selection.previous_panes.get().contains(&Some(pane))
     }
     /// The workspace a back-and-forth binding would return to.
-    pub fn previous_ws(&self) -> Option<usize> {
+    pub fn previous_ws(&self) -> Option<heca_core::layout::WorkspaceId> {
         self.selection.previous_ws.get()
     }
     /// Publish it, from `AppState::last_visited_ws_idx`.
-    pub fn set_previous_ws(&self, ws: Option<usize>) {
+    pub fn set_previous_ws(&self, ws: Option<heca_core::layout::WorkspaceId>) {
         if self.selection.previous_ws.get_untracked() != ws {
             self.selection.previous_ws.set(ws);
         }
@@ -210,12 +211,24 @@ impl WorkspacesContainerState {
     pub fn programs(&self) -> std::rc::Rc<heca_config::programs::ProgramsConfig> {
         self.programs.get_untracked()
     }
-    /// Is workspace `ws_idx` collapsed? (Borrows — no clone.)
+    /// The identity of the workspace at `ws_idx`, as the tree was last built.
+    fn ws_id_at(&self, ws_idx: usize) -> Option<heca_core::layout::WorkspaceId> {
+        self.tree.borrow().workspaces.get(ws_idx).map(|ws| ws.ws_id)
+    }
+    /// Is workspace `ws_idx` collapsed? By position, for a caller that has one.
     pub fn is_ws_collapsed(&self, ws_idx: usize) -> bool {
-        self.collapsed_ws.with(|s| s.contains(&ws_idx))
+        self.ws_id_at(ws_idx)
+            .is_some_and(|ws| self.is_collapsed(ws))
+    }
+    /// Is workspace `ws` collapsed? (Borrows — no clone.)
+    pub fn is_collapsed(&self, ws: heca_core::layout::WorkspaceId) -> bool {
+        self.collapsed_ws.with(|s| s.contains(&ws))
     }
     /// Borrow the collapsed-ws set without cloning it.
-    pub fn with_collapsed_ws<R>(&self, f: impl FnOnce(&HashSet<usize>) -> R) -> R {
+    pub fn with_collapsed_ws<R>(
+        &self,
+        f: impl FnOnce(&HashSet<heca_core::layout::WorkspaceId>) -> R,
+    ) -> R {
         self.collapsed_ws.with(f)
     }
     /// The in-progress keyboard pick (move/select/swap/take), if any.
@@ -273,31 +286,35 @@ impl WorkspacesContainerState {
         self.pending_pick.set(pick.clone());
         self.events.emit(ChromeEvent::PendingPickChanged { pick });
     }
-    /// Set a workspace's collapsed state explicitly.
+    /// Set the collapsed state of the workspace at `ws_idx` explicitly.
     pub fn set_ws_collapsed(&self, ws_idx: usize, collapsed: bool) {
-        let changed = self.is_ws_collapsed(ws_idx) != collapsed;
-        if !changed {
+        if let Some(ws) = self.ws_id_at(ws_idx) {
+            self.set_collapsed(ws, ws_idx, collapsed);
+        }
+    }
+    /// Toggle the collapsed state of the workspace at `ws_idx`.
+    pub fn toggle_ws_collapsed(&self, ws_idx: usize) {
+        if let Some(ws) = self.ws_id_at(ws_idx) {
+            self.set_collapsed(ws, ws_idx, !self.is_collapsed(ws));
+        }
+    }
+    /// Set workspace `ws` (now at `ws_idx`) collapsed or not — for the tree itself, which holds
+    /// both and cannot be asked while it is being changed. Raises `workspace.collapsed.changed`
+    /// with the position, as the event has always carried, on a real change only.
+    pub(crate) fn set_collapsed(
+        &self,
+        ws: heca_core::layout::WorkspaceId,
+        ws_idx: usize,
+        collapsed: bool,
+    ) {
+        if self.is_collapsed(ws) == collapsed {
             return;
         }
         self.collapsed_ws.update(|s| {
             if collapsed {
-                s.insert(ws_idx);
+                s.insert(ws);
             } else {
-                s.remove(&ws_idx);
-            }
-        });
-        self.events
-            .emit(ChromeEvent::WorkspaceCollapsedChanged { ws_idx, collapsed });
-    }
-    /// Toggle a workspace's collapsed state.
-    pub fn toggle_ws_collapsed(&self, ws_idx: usize) {
-        let mut collapsed = false;
-        self.collapsed_ws.update(|s| {
-            if !s.insert(ws_idx) {
-                s.remove(&ws_idx);
-                collapsed = false;
-            } else {
-                collapsed = true;
+                s.remove(&ws);
             }
         });
         self.events

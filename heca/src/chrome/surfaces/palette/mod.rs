@@ -278,7 +278,9 @@ fn standard_palette(
         panes: &state.chrome_state.panes,
         add_process_name: state.settings.pane_renamed_add_process_name,
         last_focused: state.last_focused,
-        last_visited: state.last_visited_ws_idx,
+        last_visited: state
+            .last_visited_ws
+            .and_then(|ws| state.session.index_of(ws)),
     };
     let enter = entering(emit, answered.is_some());
     modes::populate(

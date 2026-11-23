@@ -579,11 +579,21 @@ pub trait Component {
     ///
     /// Asked during resolution, so a target that would refuse is never offered and never drawn on.
     fn accepts_drag(&self, kind: Option<&str>) -> bool {
-        let want = &self.base().accepts;
+        let b = self.base();
         match kind {
-            _ if want.is_empty() => true,
-            Some(k) => want.iter().any(|w| w == k),
+            _ if b.accepts.is_empty() && b.accepts_beside.is_empty() => true,
+            Some(k) => b.accepts.iter().chain(&b.accepts_beside).any(|w| w == k),
             None => true,
+        }
+    }
+
+    /// **Does a drop of `kind` have a middle here?** `false` for a kind this widget takes only
+    /// [`beside`](Base::accepts_beside) itself — two halves, never "onto" — and `true` otherwise.
+    fn lands_onto(&self, kind: Option<&str>) -> bool {
+        let beside = &self.base().accepts_beside;
+        match kind {
+            Some(k) => !beside.iter().any(|w| w == k),
+            None => beside.is_empty() || !self.base().accepts.is_empty(),
         }
     }
 }

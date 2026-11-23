@@ -1,15 +1,23 @@
 //! Tests for [`super`].
 
 use super::*;
-use heca_core::layout::PaneId;
 use heca_core::layout::testing::Windowed;
+use heca_core::layout::{PaneId, WorkspaceId};
 
 /// What a window remembers, owned, for a test to hold.
 #[derive(Default)]
 struct Tracked {
-    last_visited_ws: Option<usize>,
-    last_visited_pane_per_ws: Vec<Option<PaneId>>,
-    expose_cursor_per_ws: Vec<Option<PaneId>>,
+    last_visited_ws: Option<WorkspaceId>,
+    last_visited_pane_per_ws: HashMap<WorkspaceId, PaneId>,
+    expose_cursor_per_ws: HashMap<WorkspaceId, PaneId>,
+}
+
+/// The identity of the workspace at `idx` in `window`.
+fn ws(window: &Windowed, idx: usize) -> WorkspaceId {
+    window
+        .session
+        .workspace_id(idx)
+        .expect("the fixture has it")
 }
 
 impl Tracked {
@@ -44,7 +52,7 @@ fn a_zoom_elsewhere_shows_that_workspace_and_column() {
     );
     assert!(reaction.redraw);
     assert_eq!(window.l().active_workspace_idx(), 1);
-    assert_eq!(tracked.last_visited_ws, Some(0));
+    assert_eq!(tracked.last_visited_ws, Some(ws(&window, 0)));
     let ws = window.l().active_workspace().expect("a workspace");
     assert_eq!(ws.scroll().active_column_idx(), 0);
 }
@@ -117,7 +125,7 @@ fn only_the_asking_window_follows_a_moved_pane() {
         Some(&ask),
     );
     assert_eq!(window.l().active_workspace_idx(), 1);
-    assert_eq!(tracked.last_visited_ws, Some(0));
+    assert_eq!(tracked.last_visited_ws, Some(ws(&window, 0)));
 }
 
 /// The window that moved a pane focuses it where it landed; a pane taken with `focus_after` off
@@ -175,43 +183,40 @@ fn a_moved_column_is_followed_only_when_asked_to() {
     assert_eq!(window.l().active_workspace_idx(), 1);
 }
 
-/// A workspace that is gone is forgotten: what pointed at it points at nothing, and what
-/// pointed past it moves down one.
+/// **A workspace that is gone is forgotten; everything else stays where it was.** Memories are
+/// kept by identity, so a removal shifts nothing: what pointed at the gone workspace points at
+/// nothing, and what pointed at any other still points at it.
 #[test]
 fn a_removed_workspace_is_forgotten_by_the_window() {
-    let mut window = two_workspaces_of_two_columns();
+    let mut window = Windowed::with_shape(&[&[&[1]], &[&[2]], &[&[3]]]);
+    let ids: Vec<WorkspaceId> = (0..3).map(|i| ws(&window, i)).collect();
     let mut tracked = Tracked {
-        last_visited_ws: Some(2),
-        last_visited_pane_per_ws: vec![Some(PaneId(1)), Some(PaneId(2)), Some(PaneId(3))],
-        expose_cursor_per_ws: vec![None, Some(PaneId(2)), None],
+        last_visited_ws: Some(ids[2]),
+        last_visited_pane_per_ws: HashMap::from([
+            (ids[0], PaneId(1)),
+            (ids[1], PaneId(2)),
+            (ids[2], PaneId(3)),
+        ]),
+        expose_cursor_per_ws: HashMap::from([(ids[1], PaneId(2))]),
     };
+    window.session.remove_workspace(1);
     react(
         &mut window,
         &mut tracked,
         &Change::WorkspaceRemoved { index: 1 },
         None,
     );
-    assert_eq!(tracked.last_visited_ws, Some(1));
-    assert_eq!(
-        tracked.last_visited_pane_per_ws,
-        [Some(PaneId(1)), Some(PaneId(3))]
-    );
-    assert_eq!(tracked.expose_cursor_per_ws, [None, None]);
-    react(
-        &mut window,
-        &mut tracked,
-        &Change::WorkspaceRemoved { index: 2 },
-        None,
-    );
     assert_eq!(
         tracked.last_visited_ws,
-        Some(1),
-        "an earlier one is untouched"
+        Some(ids[2]),
+        "kept by identity: nothing shifts"
     );
-    let mut tracked = Tracked {
-        last_visited_ws: Some(1),
-        ..Tracked::default()
-    };
+    assert_eq!(
+        tracked.last_visited_pane_per_ws,
+        HashMap::from([(ids[0], PaneId(1)), (ids[2], PaneId(3))])
+    );
+    assert!(tracked.expose_cursor_per_ws.is_empty());
+    window.session.remove_workspace(1);
     react(
         &mut window,
         &mut tracked,
@@ -221,6 +226,31 @@ fn a_removed_workspace_is_forgotten_by_the_window() {
     assert_eq!(
         tracked.last_visited_ws, None,
         "the one it pointed at is gone"
+    );
+}
+
+/// **A reordered list moves no memory off its workspace** — the case positions got wrong: after
+/// the last workspace moves to the front, every memory still names the workspace it was about.
+#[test]
+fn a_moved_workspace_keeps_what_the_window_remembers_about_it() {
+    let mut window = Windowed::with_shape(&[&[&[1]], &[&[2]], &[&[3]]]);
+    let ids: Vec<WorkspaceId> = (0..3).map(|i| ws(&window, i)).collect();
+    let mut tracked = Tracked {
+        last_visited_ws: Some(ids[1]),
+        last_visited_pane_per_ws: HashMap::from([(ids[2], PaneId(3))]),
+        ..Tracked::default()
+    };
+    assert!(window.session.move_workspace(2, 0));
+    react(&mut window, &mut tracked, &Change::LayoutChanged, None);
+    assert_eq!(tracked.last_visited_ws, Some(ids[1]));
+    assert_eq!(
+        window.session.index_of(ids[1]),
+        Some(2),
+        "it is at another position now"
+    );
+    assert_eq!(
+        tracked.last_visited_pane_per_ws.get(&ids[2]),
+        Some(&PaneId(3))
     );
 }
 
@@ -314,13 +344,14 @@ fn only_the_asking_window_goes_to_a_pane_it_made() {
     assert_eq!(focused(&window), Some(PaneId(12)));
 }
 
-/// A new workspace is known to the window, with nothing visited in it yet.
+/// A new workspace changes nothing the window remembers: a memory is made, by identity, when the
+/// window first visits it.
 #[test]
-fn a_new_workspace_is_known_with_nothing_visited() {
+fn a_new_workspace_changes_no_memory() {
     let mut window = two_workspaces_of_two_columns();
+    let remembered = HashMap::from([(ws(&window, 0), PaneId(1)), (ws(&window, 1), PaneId(11))]);
     let mut tracked = Tracked {
-        last_visited_pane_per_ws: vec![Some(PaneId(1)), Some(PaneId(11))],
-        expose_cursor_per_ws: vec![None, Some(PaneId(12))],
+        last_visited_pane_per_ws: remembered.clone(),
         ..Tracked::default()
     };
     react(
@@ -329,11 +360,7 @@ fn a_new_workspace_is_known_with_nothing_visited() {
         &Change::WorkspaceAdded { index: 2 },
         None,
     );
-    assert_eq!(
-        tracked.last_visited_pane_per_ws,
-        [Some(PaneId(1)), Some(PaneId(11)), None]
-    );
-    assert_eq!(tracked.expose_cursor_per_ws, [None, Some(PaneId(12)), None]);
+    assert_eq!(tracked.last_visited_pane_per_ws, remembered);
 }
 
 /// A name that changed tells the window what shows names is out of date; nothing else does.

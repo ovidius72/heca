@@ -2,9 +2,17 @@
 
 use super::*;
 
+/// A store whose tree holds three workspaces, so a position names one.
+fn state_with_three_workspaces() -> SharedChromeState {
+    let s = state();
+    let session = heca_core::layout::testing::Windowed::with_shape(&[&[&[1]], &[&[2]], &[&[3]]]);
+    s.workspaces.tree_mut().sync_from_session(session.l());
+    s
+}
+
 #[test]
 fn toggle_ws_collapsed_flips() {
-    let s = state();
+    let s = state_with_three_workspaces();
     assert!(!s.workspaces.is_ws_collapsed(2));
     s.workspaces.toggle_ws_collapsed(2);
     assert!(s.workspaces.is_ws_collapsed(2));
@@ -14,12 +22,34 @@ fn toggle_ws_collapsed_flips() {
 
 #[test]
 fn set_ws_collapsed_is_idempotent() {
-    let s = state();
+    let s = state_with_three_workspaces();
     s.workspaces.set_ws_collapsed(1, true);
     s.workspaces.set_ws_collapsed(1, true);
     assert!(s.workspaces.is_ws_collapsed(1));
     s.workspaces.set_ws_collapsed(1, false);
     assert!(!s.workspaces.is_ws_collapsed(1));
+}
+
+/// **A fold stays on its workspace when the list is reordered.** It is kept by identity, so the
+/// workspace that moved is still the folded one at its new position, and the one that took its
+/// old position is not.
+#[test]
+fn a_fold_follows_its_workspace_when_the_list_is_reordered() {
+    let s = state();
+    let mut session =
+        heca_core::layout::testing::Windowed::with_shape(&[&[&[1]], &[&[2]], &[&[3]]]);
+    s.workspaces.tree_mut().sync_from_session(session.l());
+    s.workspaces.set_ws_collapsed(2, true);
+    assert!(session.session.move_workspace(2, 0));
+    s.workspaces.tree_mut().sync_from_session(session.l());
+    assert!(
+        s.workspaces.is_ws_collapsed(0),
+        "the moved workspace is still folded"
+    );
+    assert!(
+        !s.workspaces.is_ws_collapsed(2),
+        "the one now at its old place is not"
+    );
 }
 
 #[test]
