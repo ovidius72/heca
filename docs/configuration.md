@@ -113,99 +113,27 @@ answers a key, and worked examples. This page does not repeat it.
 
 ## Theme
 
-Built-in themes: `grid_tron`, `mocha` (dark), `latte` (light). Choose one with `theme = "<name>"`, where
-`<name>` is the **file name** without `.toml` — heca looks for `~/.config/heca/themes/<name>.toml` first
-(so a file named after a built-in theme replaces it), then the built-in themes. The `name` inside the
-file is only the theme's label.
+```toml
+theme = "mocha"   # grid_tron | mocha | latte | the file name of one of yours, without .toml
+```
 
-**Change only what you want — `inherit`.** A theme can start from another one and say only what it
-changes; everything else is the inherited theme's. The inherited theme can be a built-in one or one of
-yours, and may itself inherit:
+Colours live in the theme. A theme of your own can start from a bundled one and change only a few
+keys:
 
 ```toml
-# ~/.config/heca/themes/my-theme.toml — chosen with `theme = "my-theme"` in config.toml
-name = "My theme"
+# ~/.config/heca/themes/my-theme.toml — chosen with `theme = "my-theme"`
 inherit = "mocha"
-pane_border = "#ff7edb"         # a pane's frame        (unset: `border` at half strength)
-pane_active_border = "#36f9f6"  # the focused pane's    (unset: `accent`)
-float_pane_border = "#fede5d"   # floating panes' frame (earlier name: `float_accent`, still read)
+pane_border = "#ff7edb"         # a pane's frame
+pane_active_border = "#36f9f6"  # the focused pane's frame
 ```
 
-The panes' frames have their own colours so a theme can change them without touching `border` and
-`accent`, which every other border and highlight in heca uses.
+**[Theming](theming.md)** is the full guide: where heca looks for a theme, `inherit`, what happens
+when a theme cannot be read, and every key a theme can set.
 
-The keys are laid over the inherited theme one by one, the same merge that lays your `config.toml`
-over heca's defaults. If a theme file does not parse, inherits a theme that does not exist, or a chain
-of themes comes back on itself, heca says so at start-up (and after a reload) and shows the built-in
-theme of that name, else `grid_tron`.
-
-Border **colours** live only in the theme: the `[appearance]` keys `border_color` and
-`[appearance.pane] border_color` / `active_border_color` / `floating_border_color` are retired, and a
-config that still sets them is told to use the theme's `border` / `pane_border` /
-`pane_active_border` / `float_pane_border`.
-
-A whole theme of your own, from scratch, looks like this (`~/.config/heca/themes/mytheme.toml`):
-
-```toml
-name = "My Theme"
-background = "#1e1e2e"
-foreground = "#cdd6f4"
-border = "#313244"
-accent = "#89b4fa"
-# Fonts are decoupled from the color theme (they are system-local, not
-# theme-portable) — set them under [font] (see below), not here.
-border_radius = 6.0
-border_width = 1.0
-
-# Sidebar drag-and-drop colors
-sidebar_drag_ghost_bg = "#89b4faD9"     # Ghost label background (accent @ 85%)
-sidebar_drag_ghost_fg = "#ffffff"        # Ghost label text (white)
-sidebar_drag_source_bg = "#89b4fa26"     # Source item background (accent @ 15%)
-sidebar_drag_source_border = "#89b4fa"   # Source item border (accent)
-
-# Sidebar font sizes
-sidebar_label_font_size = 14.0    # Workspace/column/pane labels
-sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
-
-# Effect tokens (also overridable under [appearance])
-glow_size = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
-intensity = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only (NOT glow)
-
-# Overlay panels (dialogs, dropdowns, context menus, command palette)
-overlay_border_style = "bracketed"   # bracketed | bordered | none — the shared frame around an
-                                     # overlay panel. `bracketed` = accent corner reticle (default),
-                                     # `bordered` = plain edge, `none` = no frame. Each widget's own
-                                     # accent border/glow is separate and unaffected.
-
-# The two bars (px, clamped 16..=96) — only used while the bar is shown
-# top_bar_height    = 32.0   # the tab bar
-# bottom_bar_height = 24.0   # the status bar
-
-# The `prefix+/` picker's letters
-hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px. A letter is drawn
-                           # over whatever it points at, so it is not scaled by the size of that
-                           # thing — a header button and a whole pane wear the same letter.
-# hint_color = "#ffb86c"   # the letters' colour. Unset = the theme's own `hint_color`, which falls
-                           # back to the accent. The colour lives in the theme so it travels with a
-                           # palette; this overrides it for every theme you load.
-
-# Keyboard focus outline
-show_focus_border = true   # draw the focus ring at all
-# focus_ring = "#7fd3ff"   # focus-outline color; unset = the accent shifted toward `foreground`
-                           # (auto-brightens on dark themes, darkens on light themes). The
-                           # destructive/danger focus ring always derives the same way.
-
-# Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
-active_wash_alpha = 0.11          # Accent wash over the active workspace
-card_background_alpha = 0.02      # Resting background tint of each pane card
-drag_image_alpha = 0.6            # Opacity of the picture of a pane that follows the pointer while it is carried
-drag_image_scale = 0.5            # Its size next to the pane (1.0 = life size)
-
-[shadow]
-color = "#000000"
-alpha = 0.3
-blur = 8.0
-```
+`[appearance]` (below) sets per-user overrides of geometry and effects (border style, width,
+radius, `glow_size`, `intensity`, transparency), but not colours. The old border colour keys
+(`[appearance] border_color`, `[appearance.pane] border_color` / `active_border_color` /
+`floating_border_color`) are no longer read. heca says which theme key replaced each.
 
 ## Appearance & Frost (z=0 background layer)
 
@@ -227,6 +155,18 @@ background_blur          = 0    # 0..=100 — blur strength (0 = sharp gradient)
 background_transparency  = 0    # 0..=100 — 0 = opaque (default); >0 = translucent
 # background_gradient_top    = "#1e1e2e"   # optional; unset → theme.background
 # background_gradient_bottom = "#181825"   # optional; unset → derived darker shade
+
+# Overlay panels (dialogs, dropdowns, context menus, command palette)
+# overlay_border_style = "bracketed"   # bracketed | bordered | none. Unset = the theme's
+                                       # `overlay_frame`. Each widget's own border/glow is separate.
+
+# The two bars (px, clamped 16..=96), only used while the bar is shown
+# top_bar_height    = 32.0   # the tab bar
+# bottom_bar_height = 24.0   # the status bar
+
+# The `prefix+/` picker's letters
+hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px
+# hint_color = "#ffb86c"   # overrides the theme's `hint_color` for every theme you load
 
 [appearance.terminal]
 # Tiled panes: frost = z=0 showing through the translucent terminal surface.

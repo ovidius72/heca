@@ -596,7 +596,7 @@ hint_font_size = 12.0
 # border_radius : corner radius, px, inherited by surfaces.
 # Border COLOURS come from the theme (`border`; for panes `pane_border`, `pane_active_border`,
 # `float_pane_border`). To change them, make a theme of your own that inherits one — see
-# docs/configuration.md § Theme:
+# docs/theming.md:
 #   ~/.config/heca/themes/my-theme.toml:  inherit = "mocha"  and  pane_border = "#40e0ff"
 # border_width  = 1.0
 # border_radius = 12.0
