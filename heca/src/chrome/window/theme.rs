@@ -138,16 +138,15 @@ pub(crate) fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> 
 ///
 /// Sidebar shell backgrounds are driven separately so left/right sidebars can
 /// use distinct theme tokens without changing the inner chrome surface color.
-pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color, Color) {
+pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color) {
     let bar_bg = chrome_bar_color(state);
     let sidebar_bg = chrome_shell_surface_color(state);
-    let fg = state.theme.foreground;
-    (bar_bg, sidebar_bg, fg)
+    (bar_bg, sidebar_bg)
 }
 
 /// Bridge the loaded app theme into a GuiTheme for chrome widgets.
 pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
-    let (_, sidebar_bg, _) = chrome_colors(state);
+    let (_, sidebar_bg) = chrome_colors(state);
     let mut theme = app_theme_to_gui_theme(&state.theme, &state.font_config);
     // App-wide font zoom scales the chrome/UI font alongside the terminals, so the
     // sidebar/tabs/status bar grow/shrink together with the panes. Read at paint

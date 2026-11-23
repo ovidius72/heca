@@ -70,15 +70,11 @@ fn focus_and_pick(
         pass_box_down(body.as_mut());
     }
     let mut picked = KeyHint::new(body)
-        // Top-centre over a tall dock. Outside a render pass there is no theme to tint it with, and
-        // there is no keycap to draw either (no pick is open while a host reads metadata), so the
-        // default accent stands.
-        .placement(HintPlacement::TopCenter);
-    if let Some(theme) = ctx.theme() {
-        // The theme's `warning` tone, so a dock letter reads distinctly from a pane pick (accent)
-        // and a column pick (success).
-        picked = picked.color(theme.colors.warning);
-    }
+        // Top-centre over a tall dock.
+        .placement(HintPlacement::TopCenter)
+        // The `warning` tone, so a dock letter reads distinctly from a pane pick (accent) and a
+        // column pick (success) — a meaning, resolved against the theme when the letter is drawn.
+        .hint_tone(heca_grid_ui::Tone::Warning);
     if share > 0.0 {
         pass_box_down(&mut picked);
     }
@@ -357,7 +353,6 @@ pub(super) struct ChromeFrame<'a> {
     /// title as `title → leader`. `None` when independent.
     pub(super) follow_target: Option<&'a str>,
     pub(super) side_bg: Color,
-    pub(super) fg: Color,
 }
 
 /// A sidebar collapse toggle for the **top bar** (sidebar-fu-14): a small arrow
@@ -371,7 +366,6 @@ pub(super) fn sidebar_toggle_button(
     action_name: &str,
     shortcuts: &ActionShortcuts,
     catalog: &crate::actions::ActionCatalog,
-    color: Color,
 ) -> IconButton {
     // Label from the action descriptor (catalog-owned), never re-spelled here.
     let label = catalog.label(action_name).unwrap_or(action_name);
@@ -385,12 +379,16 @@ pub(super) fn sidebar_toggle_button(
     // once (left expanded and right collapsed are both `arrow_line_left`), at which point document
     // order decides which one wears the index. Either way the `prefix+/` letters moved on every
     // pick. The action name is stable through both states.
-    let button = IconButton::new(Icon::new(glyph).color(color))
-        .key(action_name)
-        .size(WidgetSize::Small)
-        // One gesture, named: a click and a `prefix+/` pick both run the action, and the chrome
-        // root's listener sends it as a gesture in the chrome — the button carries no emitter.
-        .on_press(crate::chrome::Intent::new(action_name));
+    // The quiet tone of a structural control, resolved against the theme when drawn.
+    let button = IconButton::new(heca_grid_ui::builders::ToneExt::content_tone(
+        Icon::new(glyph),
+        heca_grid_ui::Tone::Muted,
+    ))
+    .key(action_name)
+    .size(WidgetSize::Small)
+    // One gesture, named: a click and a `prefix+/` pick both run the action, and the chrome
+    // root's listener sends it as a gesture in the chrome — the button carries no emitter.
+    .on_press(crate::chrome::Intent::new(action_name));
     action_tooltip(button, action_name, label, shortcuts)
 }
 
@@ -416,7 +414,6 @@ fn chrome_root(
         title,
         follow_target,
         side_bg,
-        fg,
     } = *frame;
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
 
@@ -474,7 +471,8 @@ fn chrome_root(
     // already treats as "nothing to update").
     if status_bar_height > 0.0 {
         // The status label's text is bound so mode/focus changes update it in place.
-        let status_label = Label::new(status).color(fg);
+        // No colour of its own: the bar's text takes the theme's text colour where it is drawn.
+        let status_label = Label::new(status);
         let status_signal = status_label.text_signal();
         signals.status = Some(status_signal);
         root = root.child(
@@ -612,7 +610,7 @@ pub(crate) fn build_chrome_root(
     let scale = state.scale_factor as f32;
     let w = phys.width as f32 / scale;
     let h = phys.height as f32 / scale;
-    let (side_bg, _sidebar_bg, fg) = chrome_colors(state);
+    let (side_bg, _sidebar_bg) = chrome_colors(state);
     let theme = chrome_gui_theme(state);
     let status = chrome_status(state);
     let mut signals = ChromeSignals::default();
@@ -694,7 +692,6 @@ pub(crate) fn build_chrome_root(
             "sidebar_left",
             &state.action_shortcuts,
             &state.action_catalog,
-            theme.colors.muted,
         )
     });
     let right_toggle = Some({
@@ -708,7 +705,6 @@ pub(crate) fn build_chrome_root(
             "sidebar_right",
             &state.action_shortcuts,
             &state.action_catalog,
-            theme.colors.muted,
         )
     });
 
@@ -726,7 +722,6 @@ pub(crate) fn build_chrome_root(
                 .and_then(|id| state.windows.iter().find(|window| window.id == id))
                 .map(|window| window.title.as_str()),
             side_bg,
-            fg,
         },
         left_sidebar,
         right_sidebar,

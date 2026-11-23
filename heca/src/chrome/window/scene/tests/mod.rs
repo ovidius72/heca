@@ -42,14 +42,12 @@ fn the_sidebar_toggles_keep_their_identity_when_a_sidebar_is_toggled() {
                 "sidebar_left",
                 &shortcuts,
                 &catalog,
-                Color::rgb(255, 255, 255),
             ))
             .child(sidebar_toggle_button(
                 right_glyph,
                 "sidebar_right",
                 &shortcuts,
                 &catalog,
-                Color::rgb(255, 255, 255),
             ))
     };
 
@@ -85,7 +83,7 @@ fn the_sidebar_toggles_keep_their_identity_when_a_sidebar_is_toggled() {
 
 #[test]
 fn chrome_scene_emits_status_text() {
-    use heca_grid_ui::{Color, DrawCommand};
+    use heca_grid_ui::DrawCommand;
     let theme = GuiTheme::default();
     // No sidebar (collapsed) — just the status bar should produce text.
     let scene = super::chrome_scene(
@@ -98,7 +96,6 @@ fn chrome_scene_emits_status_text() {
             title: "~/projects/heca",
             follow_target: None,
             side_bg: theme.colors.background,
-            fg: Color::new(200, 200, 200, 255),
         },
         &theme,
         None,
@@ -108,6 +105,58 @@ fn chrome_scene_emits_status_text() {
     assert!(
         scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(..))),
         "scene should contain at least one Text draw command",
+    );
+}
+
+/// **The bar's words and the sidebar toggles take their colours from the theme they are painted
+/// with**, by meaning: the status text in the text colour, a toggle's arrow in the quiet `muted`
+/// tone. Nothing is copied in when the chrome is built.
+#[test]
+fn the_status_text_and_the_toggles_take_the_painting_themes_colours() {
+    use heca_grid_ui::DrawCommand;
+    let mut theme = GuiTheme::default();
+    theme.colors.foreground = heca_grid_ui::Color::rgb(0x12, 0x34, 0x56);
+    theme.colors.muted = heca_grid_ui::Color::rgb(0x65, 0x43, 0x21);
+    let status = "2 panes | foo | NORMAL";
+    let scene = super::chrome_scene(
+        &super::ChromeFrame {
+            w: 800.0,
+            h: 600.0,
+            tab_bar_height: 32.0,
+            status_bar_height: 24.0,
+            status,
+            title: "~/projects/heca",
+            follow_target: None,
+            side_bg: theme.colors.background,
+        },
+        &theme,
+        None,
+        None,
+    );
+    let status_colour = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Text(t) if t.text == status => Some(t.color),
+        _ => None,
+    });
+    assert_eq!(
+        status_colour,
+        Some(theme.colors.foreground),
+        "the status text"
+    );
+
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let shortcuts = crate::chrome::ActionShortcuts::default();
+    let mut toggle = Flex::row().child(sidebar_toggle_button(
+        Glyph::ArrowLineLeft,
+        "sidebar_left",
+        &shortcuts,
+        &catalog,
+    ));
+    let scene = crate::chrome::paint_chrome_root(&mut toggle, 100.0, 50.0, &theme);
+    assert!(
+        scene
+            .iter()
+            .any(|cmd| matches!(cmd, DrawCommand::Text(t) if t.color == theme.colors.muted)),
+        "the toggle's arrow is drawn in the theme's muted tone"
     );
 }
 
