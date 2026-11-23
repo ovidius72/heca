@@ -481,8 +481,7 @@ fn a_zoom_button_focuses_its_pane_then_zooms() {
         ws_idx: 0,
         col_idx: 0,
     };
-    let mut header = build_pane_header(&content, heca_grid_ui::Color::rgb(0, 0, 0), ctx)
-        .expect("a header with a button");
+    let mut header = build_pane_header(&content, ctx).expect("a header with a button");
     LayoutEngine::new().compute(&mut header, Size::new(600.0, 40.0));
     let key = crate::chrome::pane_control_key(PaneId(1), "zoom_column");
     let path = heca_grid_ui::path_with_key(&header, &key).expect("the zoom button is shown");
@@ -493,5 +492,47 @@ fn a_zoom_button_focuses_its_pane_then_zooms() {
     assert_eq!(
         sent[0].args.get("pane_id"),
         Some(&crate::chrome::PropValue::Int(1))
+    );
+}
+
+/// **The header band is the painting theme's bar colour** — derived from its background when the
+/// theme leaves it unset — read when drawn, so nothing hands the header a colour.
+#[test]
+fn the_header_band_is_the_painting_themes_bar_colour() {
+    use heca_grid_ui::{DrawCommand, LayoutEngine, Size};
+    let facts = facts_for("/tmp");
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let buttons = crate::chrome::panes::pane_items::PaneButtons::default();
+    let zoom = buttons.get("zoom").expect("heca ships zoom");
+    let content = PaneHeaderContent {
+        facts: &facts,
+        segments: &[],
+        chips: &crate::chrome::panes::pane_items::PaneChips::default(),
+        actions: &[zoom],
+        ws_idx: 0,
+        col_idx: 0,
+        zoomed: false,
+        floating: false,
+        shortcuts: &ActionShortcuts::default(),
+        catalog: &catalog,
+    };
+    let ctx = PaneHeaderCtx {
+        pane_id: PaneId(1),
+        ws_idx: 0,
+        col_idx: 0,
+    };
+    let mut header = build_pane_header(&content, ctx).expect("a header with a button");
+    LayoutEngine::new().compute(&mut header, Size::new(600.0, 40.0));
+    let mut theme = heca_grid_ui::theme::Theme::default();
+    theme.colors.background = heca_grid_ui::Color::rgb(0x40, 0x50, 0x60);
+    theme.colors.top_bottom_pane_background = None;
+    let mut scene = heca_grid_ui::Scene::new();
+    heca_grid_ui::paint_child(&header, &mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+    let band = theme.colors.effective_top_bottom_pane_background();
+    assert!(
+        scene
+            .iter()
+            .any(|c| matches!(c, DrawCommand::Rect(r) if r.fill == band)),
+        "the band is the painting theme's derived bar colour"
     );
 }

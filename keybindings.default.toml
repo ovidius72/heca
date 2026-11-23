@@ -139,6 +139,7 @@ pane_terminal_font_reset      = "prefix+Ctrl+Shift+0"  # The keyboard's terminal
 # ── Pane operations ──
 close = "prefix+x"   # Close active pane
 delete_current_column = "prefix+Shift+x"  # Delete the focused pane's whole column
+delete_current_workspace = "prefix+Ctrl+Shift+x"  # Delete the workspace you are on, after asking
 float = "prefix+f"   # Toggle pane floating
 
 # ── Quick select / swap ──
@@ -202,7 +203,8 @@ workspace_next = "prefix+Ctrl+n"
 
 # ── Focus toggle ──
 focus_toggle_local  = "prefix+i"        # Toggle last pane (same workspace)
-focus_toggle_global = "prefix+Shift+i"  # Toggle last pane (cross-workspace)
+focus_toggle_global = "prefix+Shift+i"  # Toggle last workspace
+focus_toggle_last   = "prefix+Ctrl+i"   # Toggle last pane, wherever it is
 
 # ── Workspace / naming ──
 create_workspace = "prefix+w"        # Create new workspace + pane
@@ -254,6 +256,9 @@ clear_selection      = "prefix+Shift+s"  # Clear selection; exit selection mode
 copy_selection       = "prefix+y"        # Copy selection to clipboard
 # Paste: Super+V (macOS Cmd+V), Ctrl+Shift+V (Linux/Windows), plus a prefix combo.
 paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
+# Search the terminal's scrollback: Super+F (macOS Cmd+F), Ctrl+Shift+F (Linux/Windows) — direct, no
+# mode needed; `/` does the same inside Selection mode.
+search_scrollback    = ["Super+f", "Ctrl+Shift+f"]
 
 # ── Scrollback (host terminal viewport) ──
 # All scrollback navigation lives inside Selection mode (entered via prefix+s):
@@ -266,7 +271,7 @@ paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
 #   v / Space     begin selection
 #   o             flip selection endpoint
 #   Shift+o       open the link under the caret
-#   /             search the scrollback (type query; Enter keeps, Esc cancels)
+#   /             search the scrollback (type the query; Enter / ↓ / Ctrl+j next, ↑ / Ctrl+k previous, Esc closes)
 #   n / Shift+n   jump to next / previous search match
 #   Esc           exit
 
@@ -509,6 +514,7 @@ dismiss       = "Escape"                    # Close / cancel the overlay
 edit_delete_back          = "Ctrl+h"                 # Input: delete one char before the caret
 edit_delete_to_line_start = "Ctrl+u"                 # Input: delete from the caret to line start
 edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole field (Cmd+a on macOS)
+clear_input               = ["Super+Shift+Backspace", "Ctrl+Shift+Backspace"]  # Input: empty the field wherever the caret is (Cmd+Shift+Backspace on macOS; Cmd+Backspace still deletes to the line start) — the keyboard twin of a clearable field's ×
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Custom modes — [[keys.mode]]

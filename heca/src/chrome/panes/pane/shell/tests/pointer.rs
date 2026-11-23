@@ -149,8 +149,7 @@ fn focusing_a_pane_does_not_change_its_identity() {
     inactive.active = false;
     let mut active = model(3);
     active.active = true;
-    active.border_color = [1.0, 0.0, 0.0, 1.0];
-    active.accent = [1.0, 0.0, 0.0, 1.0];
+    active.border_color = heca_grid_ui::Color::rgb(255, 0, 0);
 
     assert_eq!(
         inactive.key(),
@@ -186,7 +185,7 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
 
     let float = PaneShellModel {
         float: Some(crate::chrome::panes::pane::FloatLook {
-            background: [0.0, 0.0, 0.0, 1.0],
+            background: heca_grid_ui::Color::rgb(0, 0, 0),
             frost: 0.0,
         }),
         ..model(8)

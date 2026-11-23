@@ -121,6 +121,16 @@ pub trait LayoutExt: Component + Sized {
         });
         self
     }
+    /// **Cover the whole parent** — placed at its top-left content corner, as wide and tall as it,
+    /// out of the flow. A layer over the content: `ScrollRegion::pinned` gives its child this.
+    ///
+    /// ```ignore
+    /// Flex::column().child([content, Scrim::new().fill_parent()])
+    /// ```
+    fn fill_parent(mut self) -> Self {
+        self.authored_style_mut().layout.placement = Some(crate::style::Placement::FILL);
+        self
+    }
     /// Left outer margin only.
     fn margin_left(mut self, v: impl Into<crate::style::Length>) -> Self {
         self.authored_style_mut().layout.margin_left = Some(v.into());

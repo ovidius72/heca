@@ -201,11 +201,9 @@ fn slot(
     error: bool,
     state: Signal<ImageState>,
 ) -> crate::WidgetModel {
-    let slot = Visibility::new().visible(!error).child(
-        Flex::column()
-            .at_rect(0, 0, Length::FULL, Length::FULL)
-            .child(view.into_component()),
-    );
+    let slot = Visibility::new()
+        .visible(!error)
+        .child(Flex::column().fill_parent().child(view.into_component()));
     let visible = slot.visible_signal();
     create_effect(move |_| {
         let show = matches!(

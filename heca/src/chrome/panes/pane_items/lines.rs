@@ -43,6 +43,8 @@ pub(crate) struct LineCx<'a> {
     pub(crate) facts: Rc<dyn Fn() -> PaneFacts>,
     pub(crate) agent_statuses:
         heca_grid_ui::reactive::Signal<Rc<heca_config::settings::AgentStatuses>>,
+    pub(crate) agent_session_line:
+        heca_grid_ui::reactive::Signal<heca_config::appearance::AgentSessionLine>,
 }
 
 /// How a line is built for one pane.

@@ -8,7 +8,15 @@ pub fn handle_command_palette(
     action: &WmAction,
 ) -> crate::actions::ActionResult {
     let (mode, query) = match action {
-        WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
+        WmAction::CommandPalette {
+            ask: Some(action),
+            arguments,
+            ..
+        } => {
+            let given = crate::chrome::palette_arguments_given(arguments.as_deref());
+            return crate::chrome::ask_action_arguments(state, action, given);
+        }
+        WmAction::CommandPalette { mode, query, .. } => (mode.as_deref(), query.as_deref()),
         _ => (None, None),
     };
     crate::chrome::open_command_palette(state, mode, query, None);
@@ -50,6 +58,18 @@ pub fn handle_open_context_menu(
         anchor,
         crate::app::interaction::InteractionSource::Keyboard,
     );
+    Ok(())
+}
+
+/// **`install_command`** — put `heca` on the command line, and say where (and, when its folder is not
+/// on the `PATH`, the line to add).
+pub fn handle_install_command(
+    _state: &mut AppState,
+    _action: &WmAction,
+) -> crate::actions::ActionResult {
+    crate::app::install_command::install()?
+        .notification()
+        .send();
     Ok(())
 }
 

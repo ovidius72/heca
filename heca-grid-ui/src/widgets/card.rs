@@ -56,10 +56,11 @@ impl Component for Card {
             color: b.color,
             width: bw,
         });
-        if s.visual.fill.is_some() || border.is_some() || s.visual.glow.is_some() {
+        let fill = s.visual.fill_in(cx.theme());
+        if fill.is_some() || border.is_some() || s.visual.glow.is_some() {
             cx.rect(
                 self.base.bounds,
-                s.visual.fill.unwrap_or(Color::TRANSPARENT),
+                fill.unwrap_or(Color::TRANSPARENT),
                 border,
                 radius,
                 s.visual.glow,

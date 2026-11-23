@@ -289,3 +289,37 @@ fn a_described_node_stretches_to_its_parent_like_css() {
         "an explicit width is honoured, padding still taken off the child",
     );
 }
+
+/// **A described surface wears the panel look** through `elevation`, the same builder native
+/// code calls: painted, it casts a drop shadow and fills with the theme's surface colour.
+#[test]
+fn a_described_surface_reaches_the_panel_look() {
+    use heca_view::build::Style as _;
+    let theme = Theme::default();
+    let node = heca_view::build::Surface::new()
+        .elevation(heca_view::ViewElevation::Panel)
+        .width_pct(0.5)
+        .height_pct(0.5)
+        .into_node();
+    let mut widget = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default())
+        .expect("a described surface realizes");
+    heca_grid_ui::LayoutEngine::new()
+        .compute(widget.as_mut(), heca_grid_ui::Size::new(100.0, 100.0));
+    let mut scene = heca_grid_ui::Scene::new();
+    heca_grid_ui::paint_child(
+        widget.as_ref(),
+        &mut heca_grid_ui::PaintCx::new(&mut scene, &theme),
+    );
+    let rects: Vec<_> = scene
+        .iter()
+        .filter_map(|c| match c {
+            heca_grid_ui::DrawCommand::Rect(r) => Some(*r),
+            _ => None,
+        })
+        .collect();
+    assert!(rects.iter().any(|r| r.shadow.is_some()), "a drop shadow");
+    assert!(
+        rects.iter().any(|r| r.fill == theme.colors.surface),
+        "the theme's surface fill: {rects:?}"
+    );
+}

@@ -4,23 +4,15 @@
 //! read for the config, data and cache folders (it asks the system for them).
 #![cfg(unix)]
 
-use std::{
-    fs,
-    path::Path,
-    process::{Command, Output},
-};
+mod common;
+use std::{fs, path::Path, process::Output};
 
 use serde_json::{Value, json};
 
 fn invoke(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_heca"))
+    common::isolated_heca(root)
         .args(args)
-        .current_dir(root)
         .env("HOME", root)
-        .env("XDG_CONFIG_HOME", root.join("config"))
-        .env("XDG_DATA_HOME", root.join("data"))
-        .env("XDG_STATE_HOME", root.join("state"))
-        .env("XDG_CACHE_HOME", root.join("cache"))
         .env("CLAUDE_CONFIG_DIR", root.join("native/claude"))
         .env("CODEX_HOME", root.join("native/codex"))
         .env("PI_CODING_AGENT_DIR", root.join("native/pi"))

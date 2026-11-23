@@ -34,6 +34,13 @@ builder!(
     /// A small state dot.
     StatusDot => StatusDot
 );
+
+builder!(
+    /// **How many rows wanting attention are out of sight**, on the edges of a `Scroll` it is
+    /// pinned in — `Scroll::new().pinned(EdgeHint::new())`. A click reveals and activates the
+    /// nearest one.
+    EdgeHint => EdgeHint
+);
 impl StatusDot {
     pub fn status(self, status: crate::ViewDotStatus) -> Self {
         self.prop("status", status)
@@ -178,6 +185,10 @@ impl Badge {
 }
 
 impl Tag {
+    /// What the first segment says.
+    pub fn label(self, label: impl Into<String>) -> Self {
+        self.prop("label", crate::PropValue::Text(label.into()))
+    }
     /// Whether the text segment can shrink inside the available width.
     pub fn segment_shrink(self, shrink: bool) -> Self {
         self.prop("segment_shrink", shrink)

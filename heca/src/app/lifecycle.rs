@@ -197,6 +197,19 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         let _s = step("wait.tree_tick");
         state.window_root.tick(dt)
     };
+    // **A drag held past a widget's edge scrolls it**, every frame with the mouse still — a
+    // terminal's selection dragged above it scrolls the history. The widget does the scrolling;
+    // the host only gives the speed the user set.
+    if state.settings.auto_scroll_edge {
+        let speed = heca_grid_ui::EdgeScroll {
+            distance: state.settings.edge_scroll_distance,
+            speed: state.settings.edge_scroll_speed,
+        };
+        chrome_animating |= {
+            let _s = step("wait.edge_scroll_held");
+            heca_grid_ui::edge_scroll(&mut state.window_root, dt, speed)
+        };
+    }
     // The tree is the one truth about where the keyboard is; the store follows it.
     {
         let _s = step("wait.settle_focus");

@@ -134,6 +134,14 @@ impl Parent for Card {}
 impl Parent for Scroll {}
 impl Parent for Panel {}
 impl Parent for Surface {}
+
+impl Surface {
+    /// **Wear the panel look** — a menu's material: the theme's surface fill, corner radius, edge and
+    /// a drop shadow as deep as `elevation` says. Mirrors grid-ui `Surface::elevation`.
+    pub fn elevation(self, elevation: crate::ViewElevation) -> Self {
+        self.prop("elevation", elevation)
+    }
+}
 impl Parent for ItemGroup {}
 impl Parent for DockFrame {}
 impl Parent for Overlay {}
@@ -355,12 +363,17 @@ impl Overlay {
         self.prop("default_open", PropValue::Bool(on))
     }
     /// **Blur what is behind it.** The scrim's counterpart: a scrim tints what is underneath, a
-    /// frost takes its detail away, and a surface may want either, both or neither.
+    /// blur takes its detail away, and a surface may want either, both or neither.
     ///
     /// Strength is the theme's `overlay_frost_radius` — a described surface asks for the effect,
     /// never a number, so a theme that wants a flat backdrop answers for every surface at once.
-    pub fn frosted(self, on: bool) -> Self {
-        self.prop("frosted", PropValue::Bool(on))
+    pub fn blur(self, on: bool) -> Self {
+        self.prop("blur", PropValue::Bool(on))
+    }
+    /// **Whether the panel is drawn as a panel** (its own fill, border and shadow). Default `true`;
+    /// `false` puts the content straight on the backdrop — mirrors grid-ui `Overlay::decorated`.
+    pub fn decorated(self, on: bool) -> Self {
+        self.prop("decorated", PropValue::Bool(on))
     }
 }
 
@@ -383,6 +396,13 @@ impl MessageList {
 }
 
 impl Scroll {
+    /// **A child that stays put over the content** — not scrolled, out of its flow — such as an
+    /// `EdgeHint`. Written as the child's `slot: "pinned"`.
+    pub fn pinned(self, child: impl Into<ViewNode>) -> Self {
+        let child: ViewNode = child.into();
+        self.child(child.prop("slot", crate::PropValue::Text("pinned".into())))
+    }
+
     /// Follow appended content only while the reader is at the bottom (default false).
     pub fn follow_bottom(self, follow: bool) -> Self {
         self.prop("follow_bottom", follow)

@@ -14,7 +14,7 @@ fn a_frosted_pane_records_its_blur_before_its_own_drawing() {
     let mut pane = Pane::new()
         .width(200.0)
         .height(100.0)
-        .frosted(12.0)
+        .blur(12.0)
         .radius(6.0)
         .child(Flex::row().width(50.0).height(50.0));
     LayoutEngine::new().compute(&mut pane, Size::new(300.0, 300.0));

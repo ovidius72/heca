@@ -200,6 +200,8 @@ fn sample_node(kind: WidgetId) -> ViewNode {
         "scroll_bar" => node.prop("content_extent", 1000.0.into()).prop("viewport_extent", 100.0.into()).prop("offset", 50.0.into()).prop("height", 120.0.into()),
         "pane" | "focus_scope" | "chrome_region" | "keyed" => node
             .child(ViewNode::new("button").text("Content").on("press", Intent::new("noop"))),
+        // What it shows is its region's; alone it has no rows to count, so it is a bare node.
+        "edge_hint" => node,
         _ => panic!("missing behavioral sample for {kind}"),
     }
 }

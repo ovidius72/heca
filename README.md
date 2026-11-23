@@ -100,10 +100,20 @@ Ctrl+B → f   Toggle floating
 
 Close the window and heca keeps running in the background; run `heca` again to reattach.
 
+**macOS: "heca was prevented from modifying apps".** When a command run inside heca updates an app in
+`/Applications` — `brew upgrade` updating a cask, say — macOS names the terminal it ran in, which is
+heca, under *Privacy & Security → App Management*. heca changes nothing itself. Allow heca there if
+you update apps from its terminals, or run those updates from another terminal.
+
 ## Command line
 
 Every command answers before the window opens, so a script can ask heca without a display.
 `heca --help` always prints the complete, current list.
+
+**Opened from its icon, `heca` is not on your `PATH` yet.** Run *Install the heca Command* from the
+palette (`prefix+p`), or `install_command` from a key or `heca rpc`: on macOS and Linux it links the
+app's `heca` into `~/.local/bin` (and says the line to add if that folder is not on your `PATH`); on
+Windows it adds heca's folder to your user `PATH`. Then `heca` in a terminal opens in that folder.
 
 | Command | What it does | Documented in |
 | --- | --- | --- |

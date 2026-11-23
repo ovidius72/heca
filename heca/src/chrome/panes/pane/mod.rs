@@ -25,22 +25,12 @@ use heca_core::layout::PaneId;
 /// gathers, everything below takes plain data).
 pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellModel> {
     let frame_style = state.appearance.effective_pane_border_style();
-    let border = state
-        .appearance
-        .effective_pane_border_color(&state.theme)
-        .to_f32x4();
-    let active_border = state
-        .appearance
-        .effective_pane_active_border_color(&state.theme)
-        .to_f32x4();
-    let floating_border = state
-        .appearance
-        .effective_pane_floating_border_color(&state.theme)
-        .to_f32x4();
+    let border = state.theme.effective_pane_border();
+    let active_border = state.theme.effective_pane_active_border();
+    let floating_border = state.theme.float_pane_border;
     let border_width = state.appearance.effective_pane_border_width(&state.theme);
     let border_radius = state.appearance.effective_pane_border_radius(&state.theme);
     let content_inset = state.appearance.effective_pane_padding(&state.theme);
-    let accent = state.theme.accent.to_f32x4();
     let active_glow = (
         state.theme.active_glow_radius,
         state.theme.active_glow_strength,
@@ -49,7 +39,7 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
     // A float covers what is under it: it fills itself, or frosts what lies beneath when the
     // config asks for a see-through float with a blur.
     let float_look = crate::chrome::panes::pane::FloatLook {
-        background: state.theme.float_background.to_f32x4(),
+        background: state.theme.float_background,
         frost: if state.terminal_floating_surface_opacity() < 1.0 {
             state.appearance.terminal_floating_blur_radius()
         } else {
@@ -90,7 +80,6 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
                 border_width,
                 border_radius,
                 content_inset,
-                accent,
                 active_glow,
                 float: floating.contains(&pane_id).then_some(float_look),
                 move_modifier: state.settings.interactive_move_modifier,

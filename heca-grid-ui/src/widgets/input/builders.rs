@@ -1,5 +1,5 @@
 use super::*;
-use crate::builders::Parent;
+use crate::builders::{EventExt, Parent, PresenceExt, ToneExt, TooltipExt};
 
 #[heca_grid_ui_macros::props]
 impl Input {
@@ -32,6 +32,7 @@ impl Input {
             view,
             on_change: None,
             on_submit: None,
+            clear_requested: std::rc::Rc::new(std::cell::Cell::new(false)),
         }
     }
 
@@ -46,8 +47,15 @@ impl Input {
 
     /// Set the initial text (caret lands at the end).
     #[heca_grid_ui_macros::prop]
-    pub fn value(mut self, value: impl Into<String>) -> Self {
-        self.set_value(value);
+    pub fn value(mut self, value: impl crate::builders::IntoTextValue) -> Self {
+        // A `Signal<String>` becomes the field's own, so what is typed is written into it; a fixed
+        // or derived text is shown in it.
+        value.into_text_value().bind(&self.text);
+        let text = self.text.get_untracked();
+        self.cursor = text.chars().count();
+        self.anchor = None;
+        self.seen_text = text;
+        self.base.mark_needs_layout();
         self
     }
 
@@ -90,6 +98,40 @@ impl Input {
         self
     }
 
+    /// **An × at the field's right end that empties it** — shown while the field holds text, gone
+    /// when it is empty, with the [`IconButton`](crate::widgets::IconButton)'s hover from the theme.
+    /// A click empties the field and leaves the keyboard in it (the field
+    /// [keeps the keyboard](crate::component::Base::keeps_keyboard), so the × gets its click and
+    /// not the keyboard), and reports the change through
+    /// [`on_change`](Self::on_change) exactly as typing does. The keyboard twin is `clear_input` in
+    /// `[keys.widgets]` (`WidgetIntent::ClearInput`), which works on every field, clearable or not.
+    ///
+    /// ```ignore
+    /// Input::new().value(query).clearable(true).on_change(|a| …)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn clearable(mut self, clearable: bool) -> Self {
+        if !clearable {
+            return self;
+        }
+        let text = self.text;
+        let requested = self.clear_requested.clone();
+        self.base.style.layout.align = "center".into();
+        // The field keeps the keyboard: a press on the × clicks it and leaves the keyboard here.
+        self.base.keeps_keyboard = true;
+        self.base.children.push(crate::WidgetModel::new(
+            crate::widgets::IconButton::new(
+                crate::widgets::Icon::new(crate::widgets::Glyph::XCircle)
+                    .content_tone(crate::Tone::Muted),
+            )
+            .size(crate::style::WidgetSize::Small)
+            .tooltip("Clear")
+            .hidden(move || text.get().is_empty())
+            .on_click(move |_| requested.set(true)),
+        ));
+        self
+    }
+
     /// Handle the configurable `EditSubmit` intent. Emits `input-submit` with the full value.
     /// No handler means the intent bubbles to the enclosing component. No key is bound by default.
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
@@ -99,7 +141,7 @@ impl Input {
     }
 
     /// The text signal — bind UI to it reactively.
-    pub fn text(&self) -> Signal<String> {
+    pub fn text_signal(&self) -> Signal<String> {
         self.text
     }
 

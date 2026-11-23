@@ -34,6 +34,7 @@
 //! that is said out loud and dropped, never ignored quietly.
 
 mod action;
+pub(crate) mod app_icon;
 pub(crate) mod app_name;
 mod extension;
 mod layer;

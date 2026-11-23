@@ -12,6 +12,7 @@
 mod emit;
 mod layout;
 mod pipeline;
+mod presentation;
 mod queue;
 mod shape;
 mod style;

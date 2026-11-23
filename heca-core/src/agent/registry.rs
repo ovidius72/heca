@@ -78,11 +78,17 @@ pub(super) fn read_report(
     if report.driver != driver.id() || report.status.as_str().is_empty() {
         return Err(AgentError::Report(driver.id().to_owned()));
     }
+    stamp(driver, &mut report);
+    Ok(Some(report))
+}
+
+/// **What the driver says about every report of its own** — its display name and its mark — put on
+/// `report`, whoever made it: the agent, or heca at launch.
+pub(super) fn stamp(driver: &dyn AgentDriver, report: &mut AgentState) {
     report.name = driver.name().to_owned();
     if let Some(icon) = driver.icon() {
         report.icon = Some(icon);
     }
-    Ok(Some(report))
 }
 
 impl fmt::Debug for AgentDrivers {

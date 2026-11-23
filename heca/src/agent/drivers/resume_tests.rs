@@ -315,3 +315,42 @@ fn pi_continues_the_session_by_id_and_drops_messages_and_files() {
         assert_eq!(resumed("pi", &launch("pi", other), ID), None, "{other:?}");
     }
 }
+
+/// **A resumed launch says which conversation it continues** — read back exactly as heca writes it,
+/// for every built-in harness — so the conversation is kept from launch, even for a program that
+/// reports its identity only once a turn starts and is closed before one.
+#[test]
+fn every_harness_reads_back_the_conversation_its_resume_names() {
+    let cases = [
+        (
+            "claude",
+            launch("/usr/local/bin/claude", &["--model", "opus"]),
+        ),
+        ("codex", launch("/usr/local/bin/codex", &["-m", "gpt-5"])),
+        ("opencode", launch("/usr/local/bin/opencode", &[])),
+        ("pi", launch("/usr/local/bin/pi", &[])),
+    ];
+    let all = drivers();
+    for (id, original) in cases {
+        let driver = all.driver(id).unwrap();
+        let resumed = driver.resume(&original, "conv-42").expect("resumable");
+        assert_eq!(
+            driver.session_of(&resumed).as_deref(),
+            Some("conv-42"),
+            "{id}: {resumed:?}"
+        );
+        assert_eq!(
+            driver.session_of(&original),
+            None,
+            "{id}: a fresh start resumes nothing"
+        );
+    }
+    let claude = all.driver("claude").unwrap();
+    assert_eq!(
+        claude
+            .session_of(&launch("/usr/local/bin/claude", &["--resume=conv-7"]))
+            .as_deref(),
+        Some("conv-7"),
+        "the attached spelling"
+    );
+}

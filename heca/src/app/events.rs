@@ -318,6 +318,12 @@ pub(crate) fn handle_window_event(
         // a gesture the release never came back for — survives the cursor going somewhere else
         // entirely, which reads as a UI frozen mid-interaction.
         WindowEvent::CursorLeft { .. } => {
+            // **A drag a widget holds survives leaving the window**: the system keeps sending its
+            // moves and its release from outside, so a selection dragged below the window keeps
+            // scrolling. Only a pointer nothing holds is cancelled.
+            if heca_grid_ui::pointer_held(&state.window_root) {
+                return;
+            }
             // One walk is enough: `cancel_every_tree` already feeds the whole window tree,
             // and every surface is a node in it. This used to deliver the cancel to the front-most
             // modal first and then again with the tree, which is one event arriving twice.

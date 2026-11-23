@@ -77,6 +77,10 @@ impl DockView<'_> {
                 heca_grid_ui::widgets::ContextMenu::new(MENU_CONTAINER).child(menu)
             })
             .child(col)
+            // **A pane that wants attention out of sight is said on the edge** — a caret and the count — and a
+            // click brings it into view and activates it, as a click on its row does. Its row
+            // already flashes until someone looks; nothing else is declared.
+            .pinned(heca_grid_ui::widgets::EdgeHint::new())
     }
 }
 

@@ -20,6 +20,22 @@ use heca_grid_ui::{
 
 use crate::chrome::{PaneFacts, panes::pane_items::LineCx};
 
+/// Every tooltip's words in the tree under `node` — where a status's label now lives.
+fn tooltips(node: &dyn heca_grid_ui::Component) -> Vec<String> {
+    use heca_grid_ui::reactive::SignalGet;
+    let mut found: Vec<String> = node
+        .base()
+        .tooltip
+        .as_ref()
+        .map(|tip| tip.text.get_untracked())
+        .into_iter()
+        .collect();
+    for child in &node.base().children {
+        found.extend(tooltips(child.as_ref()));
+    }
+    found
+}
+
 #[test]
 fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
     use heca_grid_ui::widgets::Glyph;
@@ -48,13 +64,14 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
             theme: &theme,
             facts,
             agent_statuses: statuses,
+            agent_session_line: signal(Default::default()),
         }));
     for (state, label, glyph, color) in [
         ("working", "Working", Glyph::Lightning, theme.colors.accent),
         (
             "waiting_input",
             "Waiting…",
-            Glyph::ChatCircleDots,
+            Glyph::Hourglass,
             theme.colors.warning,
         ),
         (
@@ -74,13 +91,22 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
     ] {
         agent.update(|agent| agent.as_mut().unwrap().status = AgentStatus::new(state));
         let scene = crate::chrome::paint_chrome_root(&mut root, 640.0, 240.0, &theme);
-        for expected in [label.to_owned(), glyph.primary_char().unwrap().to_string()] {
-            assert!(
-                scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
-                if text.text == expected && text.color == color)),
-                "wrong icon/tone for {state}: {expected}"
-            );
-        }
+        assert!(
+            tooltips(&root).iter().any(|tip| tip == label),
+            "{state}: its label is the icon's tooltip"
+        );
+        assert!(
+            !scene
+                .iter()
+                .any(|cmd| matches!(cmd, DrawCommand::Text(text) if text.text == label)),
+            "{state}: the label is not written out"
+        );
+        let expected = glyph.primary_char().unwrap().to_string();
+        assert!(
+            scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
+            if text.text == expected && text.color == color)),
+            "wrong icon/tone for {state}: {expected}"
+        );
     }
     statuses.update(|statuses| {
         Rc::make_mut(statuses).insert(
@@ -95,8 +121,10 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
     });
     agent.update(|agent| agent.as_mut().unwrap().status = AgentStatus::new("custom_ready"));
     let scene = crate::chrome::paint_chrome_root(&mut root, 640.0, 240.0, &theme);
+    let ready = Glyph::CheckCircle.primary_char().unwrap().to_string();
     assert!(scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)
-        if text.text == "Ready" && text.color == theme.colors.success)));
+        if text.text == ready && text.color == theme.colors.success)));
+    assert!(tooltips(&root).iter().any(|tip| tip == "Ready"));
 }
 
 #[test]
@@ -120,6 +148,7 @@ fn the_line_follows_reports_and_config_without_a_rebuild() {
         theme: &theme,
         facts,
         agent_statuses: statuses,
+        agent_session_line: signal(Default::default()),
     });
     let mut root = Flex::column().width(Length::FULL).child(line);
     let draw = |root: &mut Flex| {
@@ -139,12 +168,20 @@ fn the_line_follows_reports_and_config_without_a_rebuild() {
     report.task = Some("Review parser".into());
     agent.set(Some(report));
     let text = draw(&mut root);
-    for expected in ["My program", "reviewing", "Review parser"] {
+    for expected in ["My program", "Review parser"] {
         assert!(
             text.iter().any(|text| text == expected),
             "missing {expected}: {text:?}"
         );
     }
+    assert!(
+        !text.iter().any(|text| text == "reviewing"),
+        "the status is not written out"
+    );
+    assert!(
+        tooltips(&root).iter().any(|tip| tip == "reviewing"),
+        "the status's words are its icon's tooltip"
+    );
     statuses.update(|statuses| {
         Rc::make_mut(statuses).insert(
             "reviewing".into(),
@@ -154,7 +191,11 @@ fn the_line_follows_reports_and_config_without_a_rebuild() {
             },
         );
     });
-    assert!(draw(&mut root).iter().any(|text| text == "Checking"));
+    draw(&mut root);
+    assert!(
+        tooltips(&root).iter().any(|tip| tip == "Checking"),
+        "a configured label replaces the status's words in its tooltip"
+    );
     agent.set(None);
     assert!(draw(&mut root).is_empty());
 }
@@ -184,6 +225,7 @@ fn long_reported_text_stays_inside_a_narrow_sidebar() {
         theme: &theme,
         facts,
         agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
+        agent_session_line: signal(Default::default()),
     });
     let mut root = Flex::column().width(Length::FULL).child(line);
     for width in [150.0, 240.0, 420.0] {
@@ -204,14 +246,19 @@ fn long_reported_text_stays_inside_a_narrow_sidebar() {
     }
 }
 
+/// **The model the agent answers with, else its name**, and the session line as
+/// `[appearance.sidebar] agent_session_line` says: by default only a title the agent reported that is
+/// not the pane's name already; `always` falls back to the pane's name; `never` hides it.
 #[test]
-fn the_identity_uses_reported_model_and_session_title_then_the_pane_name() {
+fn the_identity_is_the_model_else_the_name_and_the_session_line_follows_its_setting() {
+    use heca_config::appearance::AgentSessionLine;
     let theme = Theme::default();
     let agent = signal(Some(AgentState::new(
         "custom",
         "Program",
         AgentStatus::new("working"),
     )));
+    let line = signal(AgentSessionLine::Reported);
     let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || {
         PaneFacts::of(
             PaneId(1),
@@ -230,6 +277,7 @@ fn the_identity_uses_reported_model_and_session_title_then_the_pane_name() {
             theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
+            agent_session_line: line,
         }));
     let words = |root: &mut Flex| {
         crate::chrome::paint_chrome_root(root, 480.0, 240.0, &theme)
@@ -240,19 +288,46 @@ fn the_identity_uses_reported_model_and_session_title_then_the_pane_name() {
             })
             .collect::<Vec<_>>()
     };
-    assert!(words(&mut root).iter().any(|text| text == "My pane"));
+    let painted = words(&mut root);
+    assert!(
+        painted.iter().any(|text| text == "Program"),
+        "no model: the name"
+    );
+    assert!(
+        !painted.iter().any(|text| text == "My pane"),
+        "no reported title: the pane's name is not repeated"
+    );
+
     agent.update(|agent| {
         let agent = agent.as_mut().unwrap();
         agent.model = Some("Actual model".into());
         agent.session_title = Some("Actual session".into());
     });
     let painted = words(&mut root);
-    assert!(painted.iter().any(|text| text == "Actual model"));
-    assert!(painted.iter().any(|text| text == "Actual session"));
     assert!(
-        !painted
-            .iter()
-            .any(|text| text == "My pane" || text == "Program")
+        painted.iter().any(|text| text == "Actual model"),
+        "the model, once reported"
+    );
+    assert!(!painted.iter().any(|text| text == "Program"));
+    assert!(painted.iter().any(|text| text == "Actual session"));
+
+    agent.update(|agent| agent.as_mut().unwrap().session_title = Some("My pane".into()));
+    assert!(
+        !words(&mut root).iter().any(|text| text == "My pane"),
+        "a title that is the pane's name is not repeated"
+    );
+
+    agent.update(|agent| agent.as_mut().unwrap().session_title = None);
+    line.set(AgentSessionLine::Always);
+    assert!(
+        words(&mut root).iter().any(|text| text == "My pane"),
+        "always: the pane's name stands in"
+    );
+    line.set(AgentSessionLine::Never);
+    agent.update(|agent| agent.as_mut().unwrap().session_title = Some("Actual session".into()));
+    assert!(
+        !words(&mut root).iter().any(|text| text == "Actual session"),
+        "never: no session line"
     );
 }
 
@@ -288,6 +363,7 @@ fn arbitrary_driver_artwork_uses_the_shared_image_widget_and_clears_in_place() {
             theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
+            agent_session_line: signal(Default::default()),
         }));
     let images = |scene: &Scene| {
         scene.iter().filter(|cmd| matches!(cmd, DrawCommand::Host(host) if matches!(host.draw, HostDraw::Image { .. }))).count()
@@ -310,7 +386,11 @@ fn arbitrary_driver_artwork_uses_the_shared_image_widget_and_clears_in_place() {
                         })
                 };
                 let primary = text("External");
-                let status = text("Working");
+                let lightning = heca_grid_ui::widgets::Glyph::Lightning
+                    .primary_char()
+                    .unwrap()
+                    .to_string();
+                let status = text(&lightning);
                 let session = text("Session title");
                 assert!(
                     scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(text)

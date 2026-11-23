@@ -35,7 +35,7 @@
 //! query field. Those paths live in `geometry`, `paint` and `component`; mode declarations
 //! and named prefill live in `modes`.
 
-use crate::builders::{LayoutExt, Parent};
+use crate::builders::{FocusExt, LayoutExt, Parent};
 use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
@@ -143,7 +143,7 @@ impl CommandPalette {
         let placeholder = String::from("Type a command…");
         let query_field =
             Self::query_field(open, query_changed, String::new(), placeholder.clone());
-        let query = query_field.text();
+        let query = query_field.text_signal();
         base.children.push(crate::WidgetModel::new(query_field));
         Self {
             base,
@@ -180,13 +180,12 @@ impl CommandPalette {
         text: String,
         placeholder: String,
     ) -> Input {
-        let mut field = Input::new()
+        Input::new()
             .value(text)
             .placeholder(placeholder)
             .placeholder_on_focus(true)
-            .on_change(move |_| changed.set(true));
-        field.base_mut().follow_focus(open);
-        field
+            .follow_focus(open)
+            .on_change(move |_| changed.set(true))
     }
 
     fn sync_query(&mut self) {
@@ -216,7 +215,19 @@ impl CommandPalette {
         // `Signal<String>` already, so writing it re-marks that one label instead of rebuilding the
         // palette — which is what keeps a live list from flashing.
         self.title_text.push(title.text_signal());
-        let mut column = Flex::column().child(title);
+        // The first line: the title alone, or the title giving way to what the command puts after it.
+        let mut column = match &c.trailing {
+            Some(make) => Flex::column().child(
+                crate::widgets::Grid::new()
+                    .template_column("1fr auto")
+                    .width(crate::style::Length::FULL)
+                    .align("center")
+                    .gap(crate::style::Spacing::Sm)
+                    .child(title)
+                    .child(make()),
+            ),
+            None => Flex::column().child(title),
+        };
         self.desc_wrap.push(None);
         self.desc_marks.push(None);
         if let Some(desc) = &c.description {
@@ -270,7 +281,7 @@ impl CommandPalette {
             self.query_text(),
             self.placeholder.clone(),
         );
-        self.query = field.text();
+        self.query = field.text_signal();
         *self
             .base
             .children

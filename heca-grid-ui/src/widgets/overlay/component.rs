@@ -163,7 +163,7 @@ impl Component for Overlay {
         // It blurs what it occludes — the viewport when blocking, the panel alone when not —
         // mirroring `overlay_occludes`, so the frost and the input policy can never disagree about
         // this surface's reach.
-        if self.frosted {
+        if self.blur {
             let reach = match self.blocking {
                 true => self.scrim_rect(panel),
                 false => panel,
@@ -190,7 +190,9 @@ impl Component for Overlay {
                 // Lift the panel, fill it, stamp the shared bracket reticle (same
                 // visual language as Pane / DockFrame) — the base layer takes the
                 // chrome plain; specializations pass their own accents.
-                paint_panel_chrome(cx, panel, PanelChrome::default());
+                if self.decorated {
+                    paint_panel_chrome(cx, panel, PanelChrome::default());
+                }
 
                 // The panel's real children on top of the fill. A nested overlay
                 // painted in here records a DEEPER scene segment → composites above

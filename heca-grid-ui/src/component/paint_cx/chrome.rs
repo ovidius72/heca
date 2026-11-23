@@ -280,12 +280,13 @@ impl<'a> PaintCx<'a> {
     /// Paint the shared chrome for a component's base (background/border/glow).
     pub fn paint_base(&mut self, base: &Base) {
         let s = &base.style;
-        if s.visual.fill.is_none() && s.visual.border.is_none() && s.visual.glow.is_none() {
+        let fill = s.visual.fill_in(self.theme());
+        if fill.is_none() && s.visual.border.is_none() && s.visual.glow.is_none() {
             return;
         }
         self.rect(
             base.bounds,
-            s.visual.fill.unwrap_or(Color::TRANSPARENT),
+            fill.unwrap_or(Color::TRANSPARENT),
             s.visual.border,
             s.visual.radius,
             s.visual.glow,

@@ -108,6 +108,37 @@ impl Grammar {
         parts
     }
 
+    /// **The conversation `arguments` resume**, read the way [`resumed`](Self::resumed) writes it:
+    /// the value of the resume option (`--resume <id>`, `--resume=<id>`), or the word after the
+    /// resume subcommand (`resume <id>`). `None` when the launch resumes nothing.
+    pub(super) fn session(&self, arguments: &[OsString]) -> Option<String> {
+        let id = |word: &OsStr| {
+            let text = word.to_string_lossy();
+            (!text.is_empty() && !text.starts_with('-')).then(|| text.into_owned())
+        };
+        let parts = self.parts(arguments);
+        if self.resume.starts_with('-') {
+            parts.iter().find_map(|part| match part {
+                Part::Option { name, words } if name == self.resume => {
+                    let first = words.first()?.to_string_lossy().into_owned();
+                    match first.split_once('=') {
+                        Some((_, value)) => id(OsStr::new(value)),
+                        None => words.get(1).and_then(|value| id(value)),
+                    }
+                }
+                _ => None,
+            })
+        } else {
+            let mut words = parts.iter().filter_map(|part| match part {
+                Part::Word(word) => Some(word),
+                Part::Option { .. } => None,
+            });
+            (words.next()?.to_string_lossy() == self.resume)
+                .then(|| words.next().and_then(|word| id(word)))
+                .flatten()
+        }
+    }
+
     /// **`original`, continuing the program's conversation `session_id`** — or `None` when it is not
     /// a conversation that can be continued: a non-interactive run, another command, or an id that
     /// could be read as an option.

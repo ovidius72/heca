@@ -194,10 +194,17 @@ pub enum ChromeEvent {
     },
     /// **This window now shows another workspace** — `workspace` is its lasting key (`None` before
     /// the window knows its session). Raised once per change, from the one place the window's
-    /// active workspace is mirrored; [`StateView::active_workspace`](crate::host::StateView::active_workspace)
-    /// is the same value to bind to.
+    /// active workspace is mirrored; `cx.state().active_workspace()` is the same value to bind to.
     WorkspaceFocused {
         workspace: Option<crate::entry::service::WorkspaceKey>,
+    },
+    /// **`session.changed`** — a session was created, renamed, terminated, restarted or deleted: the
+    /// same event an extension's service hears on the server, heard in a window. `session` is the
+    /// session it happened to (as it was just before, for a deleted one);
+    /// `cx.state().sessions()` is the whole list after it.
+    SessionChanged {
+        kind: crate::entry::service::SessionChange,
+        session: crate::entry::service::SessionEntry,
     },
     /// A **container's** nested scroll area moved. Carries which one, because several can be
     /// mounted at once — including two of the same kind in different regions.
@@ -297,6 +304,7 @@ impl ChromeEvent {
             ChromeEvent::PaneExited { .. } => "pane.exited",
             ChromeEvent::WorkspaceCollapsedChanged { .. } => "workspace.collapsed.changed",
             ChromeEvent::WorkspaceFocused { .. } => "workspace.focused",
+            ChromeEvent::SessionChanged { .. } => "session.changed",
             ChromeEvent::ContainerScrollChanged { .. } => "container.scroll.changed",
             ChromeEvent::RegionVisibilityChanged { .. } => "chrome.region.visibility.changed",
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",

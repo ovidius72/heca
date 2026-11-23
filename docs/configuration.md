@@ -2,7 +2,10 @@
 
 heca loads config from `~/.config/heca/config.toml` (general settings) and
 `~/.config/heca/keybindings.toml` (keybindings) — `%APPDATA%\heca\…` on Windows.
-Both are optional and deep-merged over the built-in defaults, which live in two
+An `icon.png` in the same folder, also optional, is the app's icon while it runs (the window's on
+Windows and Linux, the Dock's on macOS) in place of heca's logo; the installed app's icon in the
+Finder or a launcher stays the package's.
+The two config files are optional and deep-merged over the built-in defaults, which live in two
 versioned, embedded files (the single source of truth — copy and edit them):
 
 - `config.default.toml` — default `[settings]`, `[appearance]`, `[font]`, `[program]`
@@ -84,6 +87,22 @@ Each command has a one-letter form. One letter, not two: `-la` would read as the
 everywhere else on the machine, and a flag that looks like a convention it does not follow is worse
 than no short form at all.
 
+**A key heca does not read is said, never ignored in silence.** When the configuration loads, each
+key one of your files sets that lands nowhere is reported with its file — a misspelling as unknown,
+and a name heca used to read with the one that replaced it:
+
+```text
+[heca] ~/.config/heca/config.toml: `settings.confirm_close_pane` is no longer read — write `confirm.close` instead
+[heca] ~/.config/heca/config.toml: `settings.notification_flsh` is not a setting heca knows — it is ignored
+```
+
+The window shows them too, as one notification at start-up and after each reload.
+`heca --show-config` lists the same lines at the end, as comments. Keys under `[extensions.<name>]`
+belong to that extension and an action's `args` are checked against the action, so neither is
+reported here. The old kebab-case spellings (`terminal-wheel-scroll-lines`, …), `prefix_key`,
+`command_type`, `icons`, `programs` (the table is `[program]`) and `[confirm] delete_pane` are no longer read:
+each is reported with its current name.
+
 `--describe-action` is the reference for an action's arguments — including which are optional and
 what values an enum accepts — because the declaration lives beside the parser, so the two cannot
 drift. `--help` is rendered from the same table that dispatches, so it cannot list a command that
@@ -94,68 +113,27 @@ answers a key, and worked examples. This page does not repeat it.
 
 ## Theme
 
-Built-in themes: `mocha` (dark), `latte` (light). Create custom themes in `~/.config/heca/themes/mytheme.toml`:
+```toml
+theme = "mocha"   # grid_tron | mocha | latte | the file name of one of yours, without .toml
+```
+
+Colours live in the theme. A theme of your own can start from a bundled one and change only a few
+keys:
 
 ```toml
-name = "My Theme"
-background = "#1e1e2e"
-foreground = "#cdd6f4"
-border = "#313244"
-accent = "#89b4fa"
-# Fonts are decoupled from the color theme (they are system-local, not
-# theme-portable) — set them under [font] (see below), not here.
-border_radius = 6.0
-border_width = 1.0
-
-# Sidebar drag-and-drop colors
-sidebar_drag_ghost_bg = "#89b4faD9"     # Ghost label background (accent @ 85%)
-sidebar_drag_ghost_fg = "#ffffff"        # Ghost label text (white)
-sidebar_drag_source_bg = "#89b4fa26"     # Source item background (accent @ 15%)
-sidebar_drag_source_border = "#89b4fa"   # Source item border (accent)
-
-# Sidebar font sizes
-sidebar_label_font_size = 14.0    # Workspace/column/pane labels
-sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
-
-# Effect tokens (also overridable under [appearance])
-glow_size = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
-intensity = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only (NOT glow)
-
-# Overlay panels (dialogs, dropdowns, context menus, command palette)
-overlay_border_style = "bracketed"   # bracketed | bordered | none — the shared frame around an
-                                     # overlay panel. `bracketed` = accent corner reticle (default),
-                                     # `bordered` = plain edge, `none` = no frame. Each widget's own
-                                     # accent border/glow is separate and unaffected.
-
-# The two bars (px, clamped 16..=96) — only used while the bar is shown
-# top_bar_height    = 32.0   # the tab bar
-# bottom_bar_height = 24.0   # the status bar
-
-# The `prefix+/` picker's letters
-hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px. A letter is drawn
-                           # over whatever it points at, so it is not scaled by the size of that
-                           # thing — a header button and a whole pane wear the same letter.
-# hint_color = "#ffb86c"   # the letters' colour. Unset = the theme's own `hint_color`, which falls
-                           # back to the accent. The colour lives in the theme so it travels with a
-                           # palette; this overrides it for every theme you load.
-
-# Keyboard focus outline
-show_focus_border = true   # draw the focus ring at all
-# focus_ring = "#7fd3ff"   # focus-outline color; unset = the accent shifted toward `foreground`
-                           # (auto-brightens on dark themes, darkens on light themes). The
-                           # destructive/danger focus ring always derives the same way.
-
-# Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
-active_wash_alpha = 0.11          # Accent wash over the active workspace
-card_background_alpha = 0.02      # Resting background tint of each pane card
-drag_image_alpha = 0.6            # Opacity of the picture of a pane that follows the pointer while it is carried
-drag_image_scale = 0.5            # Its size next to the pane (1.0 = life size)
-
-[shadow]
-color = "#000000"
-alpha = 0.3
-blur = 8.0
+# ~/.config/heca/themes/my-theme.toml — chosen with `theme = "my-theme"`
+inherit = "mocha"
+pane_border = "#ff7edb"         # a pane's frame
+pane_active_border = "#36f9f6"  # the focused pane's frame
 ```
+
+**[Theming](theming.md)** is the full guide: where heca looks for a theme, `inherit`, what happens
+when a theme cannot be read, and every key a theme can set.
+
+`[appearance]` (below) sets per-user overrides of geometry and effects (border style, width,
+radius, `glow_size`, `intensity`, transparency), but not colours. The old border colour keys
+(`[appearance] border_color`, `[appearance.pane] border_color` / `active_border_color` /
+`floating_border_color`) are no longer read. heca says which theme key replaced each.
 
 ## Appearance & Frost (z=0 background layer)
 
@@ -177,6 +155,18 @@ background_blur          = 0    # 0..=100 — blur strength (0 = sharp gradient)
 background_transparency  = 0    # 0..=100 — 0 = opaque (default); >0 = translucent
 # background_gradient_top    = "#1e1e2e"   # optional; unset → theme.background
 # background_gradient_bottom = "#181825"   # optional; unset → derived darker shade
+
+# Overlay panels (dialogs, dropdowns, context menus, command palette)
+# overlay_border_style = "bracketed"   # bracketed | bordered | none. Unset = the theme's
+                                       # `overlay_frame`. Each widget's own border/glow is separate.
+
+# The two bars (px, clamped 16..=96), only used while the bar is shown
+# top_bar_height    = 32.0   # the tab bar
+# bottom_bar_height = 24.0   # the status bar
+
+# The `prefix+/` picker's letters
+hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px
+# hint_color = "#ffb86c"   # overrides the theme's `hint_color` for every theme you load
 
 [appearance.terminal]
 # Tiled panes: frost = z=0 showing through the translucent terminal surface.
@@ -269,7 +259,6 @@ shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtim
 new_workspace_cwd = "~"       # Folder a new workspace's shell starts in: a path, "~" or "~/..."; missing → home
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
 pane_name_delay = 1000        # Display-name delay in milliseconds; 0 updates immediately
-# pane_show_cwd is now [appearance.expose] show_cwd (still read; see below)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Lines per wheel notch: history rows, and wheel steps sent to a program (Claude Code, vim)
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
@@ -340,8 +329,8 @@ apply on `prefix+Shift+r`.
 > `confirm_delete_workspace` flags — move any you had set into `[confirm]` as
 > `close` / `delete_column` / `delete_workspace`.
 >
-> The pane toggle was once `delete_pane`; it still works, but `close` is the name
-> now — one word for the action, its key, its label and its dialog. **Close** is
+> The pane toggle was once `delete_pane`; that name is no longer read (heca says so at load) —
+> `close` is the name — one word for the action, its key, its label and its dialog. **Close** is
 > for the pane you work in; **Delete** removes a container or session. Terminating
 > a session stops its processes but retains its definition.
 
@@ -634,12 +623,12 @@ width            = 300          # Sidebar width in px (clamped 160..=560)
 border_style     = "bordered"   # none | bordered | bracketed
 border_width     = 1.0          # frame width px; unset → global border_width
 border_radius    = 12.0         # corner radius px; unset → global/theme radius
-border_color     = "#40e0ff"    # bordered-frame color; unset → global border_color
+border_color     = "#40e0ff"    # bordered-frame color; unset → the theme's border
 background_color = "#0b0f14"     # shell fill; unset → theme sidebar surface
 ```
 
 With `border_style = "bordered"`, the frame is drawn at `border_width` in
-`border_color` (which falls back to the global `[appearance] border_color`). With
+`border_color` (which falls back to the theme's `border`). With
 `"bracketed"` it uses the theme accent corner-reticle, now sized by the same
 `border_width` + `border_radius`. `border_width = 0` removes the border.
 
@@ -680,14 +669,24 @@ A program built on heca can add its own buttons, named `<extension>.<short>` (fo
 your own list, only the names you list show, and heca tells you once when a button you have not
 listed is available. A name nothing provides is reported and skipped, with the nearest real one.
 
+**Workspace numbers in the sidebar** (`[appearance.sidebar] workspace_numbers`, default `true`):
+each workspace row shows its number before its name — 1 to 9, then `0` for the tenth, as on the
+keyboard. A key bound to `focus_workspace` takes `ws_idx`, which counts from 0: the workspace shown
+as 1 is `ws_idx = "0"`. `false` hides the numbers; a reload shows or hides them at once.
+
 **Lines under a pane's name in the sidebar** (`[appearance.sidebar] pane_lines`, default
 `["cwd", "git", "agent"]`): `cwd` is the working directory and `git` is the branch with change counts, shown
 only inside a repository. **A fresh install shows the folder line under each pane's name in the
 sidebar.** Which lines show is decided by this list alone. A program built
 on heca can add its own, named `<extension>.<short>`; the same rules apply as for buttons and chips.
 
-`agent` shows the reporting program's name, status and optional task. It hides itself in other panes.
-Its labels and glyphs come from `[settings.agents.statuses]`; unlisted status ids are shown as reported.
+`agent` shows the reporting program's icon, name, status and optional task — the name, never the
+model. It hides itself in other panes. The line under it is the program's session title,
+**`[appearance.sidebar] agent_session_line`**: `"reported"` (default) shows only a title the program
+sent, and only when it is not the pane's name already; `"always"` shows the title, or the pane's name
+when the program sent none; `"never"` hides it.
+The status is its glyph alone, in its tone; its label is the glyph's tooltip. Both come from
+`[settings.agents.statuses]`; an unlisted status id is its own tooltip.
 
 ## Agent status and sounds
 
@@ -756,7 +755,10 @@ inject native settings, hook definitions or plugin lists. Explicit install/updat
 only operations that change native configuration, preserving unrelated entries.
 The master `[settings.agents] enabled = false` disables all reporting setup. `max_report_bytes` limits each incoming report;
 `channel_capacity` limits queued reports and transitions, keeping the latest when full.
-`launch_timeout_ms` bounds the wait for per-run setup. Codex keeps its normal hook-trust review;
+`launch_timeout_ms` bounds the wait for per-run setup. `launched_status` (default `"waiting_input"`) is
+the status an agent shows the moment it starts, before its own first report — OpenCode and Codex
+report only once a turn starts, so without it their panes show no agent until then; empty waits for
+the agent. Codex keeps its normal hook-trust review;
 review its installed reporting hooks when prompted. Heca never bypasses that review.
 Native policy can disable user hooks, so installed files alone do not prove that reporting is active.
 See the [Claude hooks](https://code.claude.com/docs/en/hooks),
@@ -830,8 +832,7 @@ Volume is limited to `0.0`–`1.0`; the sound queue holds at least one entry.
 Supported sound files are WAV, Ogg Vorbis, MP3 and FLAC.
 
 **The exposé's folders** are `[appearance.expose] show_cwd` (on by default; `false` hides them). It replaces
-`[settings] pane_show_cwd`, which is still read while the new key is not written (once it is, it
-decides), with a one-time notice to move it; it no longer affects the sidebar.
+`[settings] pane_show_cwd`, which is no longer read; it does not affect the sidebar.
 
 ## Process Catalog
 

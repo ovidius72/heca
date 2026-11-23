@@ -54,7 +54,7 @@ pub struct PanelChrome {
 /// [`Tooltip`](crate::widgets::Tooltip) bubble, the same shadow is **larger than the surface
 /// casting it** — judged by eye as "too much". A transient hover bubble
 /// is not at dialog depth, so it does not take the dialog's shadow.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, heca_grid_ui_macros::PropName)]
 pub enum PanelElevation {
     /// A surface that owns the screen: [`Dialog`](crate::widgets::Dialog), a
     /// [`Select`](crate::widgets::Select) dropdown, [`ContextMenu`](crate::widgets::ContextMenu),

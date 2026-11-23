@@ -26,6 +26,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "float" => Some(WmAction::Float),
         "close" => Some(WmAction::ClosePane),
         "delete_current_column" => Some(WmAction::DeleteCurrentColumn),
+        "delete_current_workspace" => Some(WmAction::DeleteCurrentWorkspace),
         "hint_pick" => Some(WmAction::HintPick),
         "resize_increase" => Some(WmAction::ResizeIncrease),
         "resize_decrease" => Some(WmAction::ResizeDecrease),
@@ -104,6 +105,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "workspace_next" => Some(WmAction::WorkspaceNext),
         "focus_toggle_local" => Some(WmAction::FocusToggleLocal),
         "focus_toggle_global" => Some(WmAction::FocusToggleGlobal),
+        "focus_toggle_last" => Some(WmAction::FocusToggleLast),
         "workspace_prev" => Some(WmAction::WorkspacePrev),
         "create_workspace" => Some(WmAction::CreateWorkspace),
         "rename_workspace" => Some(WmAction::RenameWorkspace),
@@ -114,6 +116,8 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "command_palette" => Some(WmAction::CommandPalette {
             mode: None,
             query: None,
+            ask: None,
+            arguments: None,
         }),
         "close_overlay" => Some(WmAction::CloseOverlay { overlay: None }),
         "show_layer" => Some(WmAction::ShowLayer {
@@ -129,6 +133,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
             dock: None,
         }),
         "reload_config" => Some(WmAction::ReloadConfig),
+        "install_command" => Some(WmAction::InstallCommand),
         "notification_dismiss_all" => Some(WmAction::NotificationDismissAll),
         "notification_dismiss_last" => Some(WmAction::NotificationDismissLast),
         "notification_pick" => Some(WmAction::NotificationPick),
@@ -222,7 +227,9 @@ mod tests {
             action_from_name("command_palette"),
             Some(WmAction::CommandPalette {
                 mode: None,
-                query: None
+                query: None,
+                ask: None,
+                arguments: None
             })
         );
         // Font zoom — six names map to two variants with the right step + None pane.

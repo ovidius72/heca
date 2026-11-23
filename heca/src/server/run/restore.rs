@@ -151,6 +151,19 @@ impl ServerLoop {
     /// The final write, and no more after it: the sessions' processes end next, and what is left
     /// then must never replace what ran.
     pub(super) fn save_and_close_store(&mut self) {
+        // `HECA_LOG_SESSIONS=1`: what is written down for each terminal on the way out — the agent
+        // it reported (driver and conversation id), what it was launched with, and whether a
+        // program was running. What a restore can and cannot bring back is decided by this.
+        if std::env::var_os("HECA_LOG_SESSIONS").is_some() {
+            for session in &self.sessions {
+                for terminal in session.recorded_terminals() {
+                    eprintln!(
+                        "[sessions] saved {:?}: agent={:?} running={} launch={:?}",
+                        terminal.owner, terminal.agent, terminal.running, terminal.launch
+                    );
+                }
+            }
+        }
         self.save_now();
         self.store = None;
     }

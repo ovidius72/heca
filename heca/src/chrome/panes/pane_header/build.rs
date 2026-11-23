@@ -174,7 +174,6 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32) -> String 
 /// when there are neither segments-with-data nor actions.
 pub(crate) fn build_pane_header(
     content: &PaneHeaderContent,
-    band: heca_grid_ui::Color,
     ctx: PaneHeaderCtx,
 ) -> Option<Surface> {
     // The button set is a dynamic vector of descriptors (config-driven today,
@@ -313,7 +312,11 @@ pub(crate) fn build_pane_header(
     // purpose: it lays out, a `Surface` decorates.
     Some(
         Surface::new()
-            .background(band)
+            // The theme's bar colour by name, read when drawn — derived from the background when
+            // the theme leaves it unset, as everywhere else it is used.
+            .background(heca_grid_ui::style::Fill::theme(
+                "top_bottom_pane_background",
+            ))
             .width(Length::FULL)
             // **The strip's own inset, on both axes.** It replaces a hand-subtracted 6px margin
             // that the host used to take off the pane width before handing the bar a budget — the

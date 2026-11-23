@@ -26,23 +26,19 @@ pub(crate) fn combo_to_grid(
     Some((key, mods))
 }
 
-/// Build the **widget keymap** (`widget-keys-config`): the `[keys.widgets]` bindings resolved
-/// into a `heca_grid_ui::Keymap` (`key chord → WidgetIntent`), the single host-owned map every
-/// interactive widget/overlay consults. User bindings win when set (arrays replace wholesale),
-/// else the bundled default. These names are **not** `WmAction`s, so `build_keymap` skips them —
-/// they live only here and never hijack normal-mode input. `edit_*` entries are bound **first**
-/// so a focused `Input` wins the `Ctrl+h` overload (field-first). See `docs/widgets.md` + `docs/keybindings.md`.
-pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui::Keymap {
+/// **The widget vocabulary of `[keys.widgets]`**, name → intent, in binding order: `edit_*`
+/// first, so a focused `Input` wins the `Ctrl+h` overload (field-first). The one table both the
+/// keymap ([`build_widget_keymap`]) and the binding index ([`index_widget_keys`]) read.
+const WIDGET_KEYS: &[(&str, heca_grid_ui::WidgetIntent)] = {
     use heca_grid_ui::WidgetIntent;
-    let defaults = heca_config::theme::KeysConfig::default();
-    // Edit shortcuts bound before the nav overload (so `Ctrl+h` resolves EditDeleteBack first).
-    let entries = [
+    &[
         ("edit_delete_back", WidgetIntent::EditDeleteBack),
         (
             "edit_delete_to_line_start",
             WidgetIntent::EditDeleteToLineStart,
         ),
         ("edit_select_all", WidgetIntent::EditSelectAll),
+        ("clear_input", WidgetIntent::ClearInput),
         ("edit_submit", WidgetIntent::EditSubmit),
         ("item_previous", WidgetIntent::ItemPrevious),
         ("item_next", WidgetIntent::ItemNext),
@@ -56,23 +52,57 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
         ("find_previous", WidgetIntent::FindPrevious),
         ("activate", WidgetIntent::Activate),
         ("dismiss", WidgetIntent::Dismiss),
-    ];
-    let mut km = heca_grid_ui::Keymap::new();
-    for (name, intent) in entries {
+    ]
+};
+
+/// The layer the binding index records `[keys.widgets]` under.
+pub(crate) const WIDGET_LAYER: &str = "[keys.widgets]";
+
+/// Every `[keys.widgets]` binding as `(name, intent, key as written)` — the user's list for a
+/// name when they set one (arrays replace wholesale), else the bundled default.
+fn widget_bindings(
+    config: &heca_config::theme::Config,
+) -> Vec<(&'static str, heca_grid_ui::WidgetIntent, String)> {
+    let defaults = heca_config::theme::KeysConfig::default();
+    let mut out = Vec::new();
+    for &(name, intent) in WIDGET_KEYS {
         let value = config
             .keys
             .widgets
             .get(name)
             .or_else(|| defaults.widgets.get(name));
-        if let Some(value) = value {
-            for key_str in value.keys() {
-                if let Some((key, mods)) = combo_to_grid(&KeyCombo::parse(key_str.trim())) {
-                    km.bind(key, mods, intent);
-                }
-            }
+        for key in value.into_iter().flat_map(|value| value.keys()) {
+            out.push((name, intent, key.trim().to_string()));
+        }
+    }
+    out
+}
+
+/// Build the **widget keymap** (`widget-keys-config`): the `[keys.widgets]` bindings resolved
+/// into a `heca_grid_ui::Keymap` (`key chord → WidgetIntent`), the single host-owned map every
+/// interactive widget/overlay consults. These names are **not** `WmAction`s, so `build_keymap`
+/// skips them — they live only here and never hijack normal-mode input. See `docs/widgets.md` +
+/// `docs/keybindings.md`.
+pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui::Keymap {
+    let mut km = heca_grid_ui::Keymap::new();
+    for (_, intent, key) in widget_bindings(config) {
+        if let Some((key, mods)) = combo_to_grid(&KeyCombo::parse(&key)) {
+            km.bind(key, mods, intent);
         }
     }
     km
+}
+
+/// **Record the `[keys.widgets]` bindings in the binding index**, under [`WIDGET_LAYER`], so every
+/// surface that shows a key — a tooltip, the status line's prompt, the palette — can say which key
+/// moves through a list or closes a field (`menu_down`, `dismiss`) exactly as the user bound it.
+pub(crate) fn index_widget_keys(
+    config: &heca_config::theme::Config,
+    index: &mut crate::keymap::BindingIndex,
+) {
+    for (name, _, key) in widget_bindings(config) {
+        crate::keymap::index_binding(index, name, WIDGET_LAYER, &key);
+    }
 }
 
 #[cfg(test)]
@@ -193,5 +223,31 @@ mod tests {
                 "{name} must not be a WmAction (widget-keys-config is a separate map)",
             );
         }
+    }
+
+    /// **The shipped `clear_input` keys empty a field; Cmd+Backspace does not** — it stays the
+    /// field's own "delete to the line start".
+    #[test]
+    fn clear_input_is_on_the_shift_chords_and_cmd_backspace_stays_free() {
+        use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
+        let km = build_widget_keymap(&heca_config::theme::Config::default());
+        let chord = |meta, ctrl, shift| Modifiers {
+            meta,
+            ctrl,
+            shift,
+            ..Default::default()
+        };
+        for mods in [chord(true, false, true), chord(false, true, true)] {
+            assert!(
+                km.resolve(GridKey::Backspace, mods)
+                    .contains(&WidgetIntent::ClearInput),
+                "{mods:?}"
+            );
+        }
+        assert!(
+            !km.resolve(GridKey::Backspace, chord(true, false, false))
+                .contains(&WidgetIntent::ClearInput),
+            "Cmd+Backspace is not clear_input"
+        );
     }
 }

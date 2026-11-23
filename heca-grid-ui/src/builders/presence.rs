@@ -172,20 +172,8 @@ pub trait PresenceExt: Component + Sized {
     /// or a function reading signals is followed, and the widget's ink comes and goes with it.
     #[heca_grid_ui_macros::prop]
     fn visible(self, visible: impl IntoBoolValue) -> Self {
-        let visible = visible.into_bool_value();
-        let target = self.base().visible;
-        if visible.changes() {
-            // A paint property and already a signal: the value writes it directly.
-            crate::reactive::create_effect(move |_| {
-                let now = visible.now();
-                if crate::reactive::SignalGet::get_untracked(&target) != now {
-                    crate::reactive::SignalUpdate::set(&target, now);
-                    crate::component::request_frame();
-                }
-            });
-        } else {
-            crate::reactive::SignalUpdate::set(&target, visible.now());
-        }
+        // A paint property and already a signal: the value writes it directly.
+        visible.into_bool_value().show_in(self.base().visible);
         self
     }
 }
@@ -193,35 +181,8 @@ pub trait PresenceExt: Component + Sized {
 impl<T: Component + Sized> PresenceExt for T {}
 
 /// **A `bool` that may change** — what [`hidden`](PresenceExt::hidden) and
-/// [`visible`](PresenceExt::visible) take: a fixed `bool`, or a value read again whenever a signal
-/// it read changes.
-#[derive(Clone)]
-pub struct BoolValue(BoolSource);
-
-#[derive(Clone)]
-enum BoolSource {
-    Fixed(bool),
-    Live(std::rc::Rc<dyn Fn() -> bool>),
-}
-
-impl BoolValue {
-    /// The value now — tracked, when read inside an effect.
-    pub(crate) fn now(&self) -> bool {
-        match &self.0 {
-            BoolSource::Fixed(value) => *value,
-            BoolSource::Live(read) => read(),
-        }
-    }
-
-    /// Whether it can change, so there is something to follow.
-    fn changes(&self) -> bool {
-        matches!(self.0, BoolSource::Live(_))
-    }
-
-    fn live(read: impl Fn() -> bool + 'static) -> Self {
-        Self(BoolSource::Live(std::rc::Rc::new(read)))
-    }
-}
+/// [`visible`](PresenceExt::visible) take: the library's one fixed-or-live value, for a `bool`.
+pub type BoolValue = super::LiveValue<bool>;
 
 /// **What `.hidden(..)` and `.visible(..)` take**: a `bool`, a `Signal<bool>`, a `Memo<bool>` or a
 /// function returning one.
@@ -232,7 +193,7 @@ pub trait IntoBoolValue {
 
 impl IntoBoolValue for bool {
     fn into_bool_value(self) -> BoolValue {
-        BoolValue(BoolSource::Fixed(self))
+        BoolValue::fixed(self)
     }
 }
 

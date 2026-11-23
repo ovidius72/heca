@@ -51,7 +51,25 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
                 ArgKind::Text,
                 "Text to start the search with; omit to open empty.",
             ),
+            ArgDescriptor::optional(
+                "action",
+                ArgKind::Text,
+                "Ask, one step per argument, for what this action requires, then run it.",
+            ),
+            ArgDescriptor::optional(
+                "arguments",
+                ArgKind::Text,
+                "With `action`: the arguments already chosen, as name=value words.",
+            ),
         ],
+    },
+    ActionDescriptor {
+        name: "install_command",
+        side: Side::Client,
+        label: "Install the heca Command",
+        description: "Put `heca` on the command line, so it opens in the folder it is typed in.",
+        icon: Some(Glyph::Terminal),
+        args: &[],
     },
     ActionDescriptor {
         name: "reload_config",

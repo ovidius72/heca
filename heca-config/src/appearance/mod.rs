@@ -17,7 +17,7 @@ mod terminal;
 mod tests;
 
 pub use pane::{PaneAppearance, default_pane_title_actions, default_pane_title_segments};
-pub use sidebar::{SidebarAppearance, default_sidebar_pane_lines};
+pub use sidebar::{AgentSessionLine, SidebarAppearance, default_sidebar_pane_lines};
 pub use styles::{BorderStyle, HyperlinkStyle, ScrollbarVisibility, Vibrancy};
 pub use terminal::{TerminalAppearance, TerminalPadding};
 
@@ -218,11 +218,6 @@ pub struct AppearanceConfig {
     /// their own `border_width` is unset. `None` → the theme value.
     #[serde(default)]
     pub border_width: Option<f32>,
-    /// **Global** decorative border color — the `bordered` frame color inherited by
-    /// the chrome and surfaces when their own `border_color` is unset. `None` → the
-    /// theme's (subtle) border color. (The `bracketed` reticle uses the theme accent.)
-    #[serde(default)]
-    pub border_color: Option<Color>,
     /// **Global** corner radius (logical px) inherited by surfaces when their own
     /// `border_radius` is unset. `None` → the theme `border_radius`.
     #[serde(default)]
@@ -260,8 +255,8 @@ pub struct AppearanceConfig {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExposeAppearance {
     /// Show each pane's working directory (folder icon + home-relative path) on its card in the
-    /// exposé. On by default. It used to be `[settings] pane_show_cwd`, which is still read when
-    /// this one is not written; once it is written, this one decides.
+    /// exposé. On by default. (It used to be `[settings] pane_show_cwd`; that name is no longer read,
+    /// and the loader says so.)
     #[serde(default)]
     pub show_cwd: Option<bool>,
 }
@@ -284,7 +279,6 @@ impl Default for AppearanceConfig {
             show_focus_border: None,
             overlay_border_style: None,
             border_width: None,
-            border_color: None,
             border_radius: None,
             focus_border_width: None,
             top_bar_height: None,

@@ -142,3 +142,23 @@ pub fn app_code() -> Vec<(String, usize, String)> {
     }
     out
 }
+
+/// **The `heca` binary, sealed inside `root`** — its home, configuration, data, state, cache,
+/// runtime and temp folders all under it, so it reads none of the user's files and reaches no heca
+/// the user has running. The control socket lives in the runtime or temp folder: a test that left
+/// those out ran `install integration`'s reload against the user's real app.
+pub fn isolated_heca(root: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_heca"));
+    command
+        .env("HOME", root.join("home"))
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("XDG_DATA_HOME", root.join("data"))
+        .env("XDG_STATE_HOME", root.join("state"))
+        .env("XDG_CACHE_HOME", root.join("cache"))
+        .env("XDG_RUNTIME_DIR", root)
+        .env("TMPDIR", root)
+        .env("TMP", root)
+        .env("TEMP", root)
+        .current_dir(root);
+    command
+}

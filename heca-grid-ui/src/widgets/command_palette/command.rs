@@ -33,6 +33,8 @@ pub struct Command {
     /// a second spelling of the same thing. `None` means the default mode, which is what every
     /// command written before modes existed says.
     pub(super) mode: Option<String>,
+    /// What sits at the end of the row's first line, after the title — made each time the row is.
+    pub(super) trailing: Option<std::rc::Rc<dyn Fn() -> crate::WidgetModel>>,
     pub(super) on_run: Box<dyn Fn()>,
 }
 
@@ -54,6 +56,7 @@ impl Command {
             current: false,
             preselect: false,
             mode: None,
+            trailing: None,
             on_run: Box::new(on_run),
         }
     }
@@ -164,6 +167,22 @@ impl Command {
     #[heca_grid_ui_macros::prop]
     pub fn group(mut self, group: u16) -> Self {
         self.group = group;
+        self
+    }
+
+    /// **Something at the end of the row's first line**, after the title — a badge, a count, a
+    /// status; any widget. Handed as a way to **make** it, like a menu item's content, because a row
+    /// can be built more than once. The title gives way to it when the row is narrow.
+    ///
+    /// ```ignore
+    /// Command::new("work", run).trailing(|| Badge::accent("pro"))
+    /// ```
+    #[heca_grid_ui_macros::host_only("a function cannot cross as a static property")]
+    pub fn trailing<C: crate::builders::IntoComponent>(
+        mut self,
+        make: impl Fn() -> C + 'static,
+    ) -> Self {
+        self.trailing = Some(std::rc::Rc::new(move || make().into_component()));
         self
     }
 

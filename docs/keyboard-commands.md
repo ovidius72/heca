@@ -30,7 +30,8 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Workspace next | `Ctrl+N` | Switch to next workspace (down) |
 | Workspace prev | `Ctrl+P` | Switch to prev workspace (up) |
 | Focus toggle (local) | `i` | Toggle between last two panes in same workspace |
-| Focus toggle (global) | `Shift+I` | Toggle between last two panes globally |
+| Focus toggle (global) | `Shift+I` | Toggle between the current and the last-visited workspace |
+| Focus toggle (last) | `Ctrl+I` | Toggle between the current pane and the last one you were in, whichever workspace it is in (`focus_toggle_last`) |
 
 ## Pane Operations
 
@@ -260,7 +261,9 @@ Inside Selection mode:
 | `Shift+o` | Open the hyperlink under the caret |
 | `y` | Copy selection to clipboard |
 | `p` / `Super+v` / `Ctrl+Shift+v` | Paste the clipboard |
-| `/` | Search the scrollback — type the query (matches highlight live, the caret jumps to the nearest); `Enter` keeps the matches, `Esc` cancels |
+| `/` | Search the scrollback — type the query (matches highlight live, the caret jumps to the nearest); from the field `Enter`, `↓` or `Ctrl+j` go to the next match and `↑` or `Ctrl+k` to the previous one (the `[keys.widgets]` `activate` / `menu_down` / `menu_up` bindings), the bar's arrows do the same, the field's × or `Cmd+Shift+Backspace` / `Ctrl+Shift+Backspace` (`clear_input`) empties it, and `Esc` closes |
+
+Outside Selection mode the same search opens directly with `Super+F` (`Cmd+F` on macOS) or `Ctrl+Shift+F` (`search_scrollback`).
 | `n` / `Shift+n` | Jump to the next / previous search match (after a `/` search) |
 | `Esc` | Exit selection mode (snap to bottom + clear selection) |
 

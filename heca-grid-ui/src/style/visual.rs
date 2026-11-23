@@ -15,6 +15,13 @@ use super::*;
 #[serde(default)]
 pub struct Visual {
     pub fill: Option<Color>,
+    /// **A fill named by the theme colour it follows** (`"surface"`), set by
+    /// [`StyleExt::background`](crate::builders::StyleExt::background) with
+    /// [`Fill::theme`](crate::style::Fill::theme) and resolved at paint by
+    /// [`fill_in`](Self::fill_in), so it follows a theme reload with no rebuild. A description
+    /// names a token too, but resolves it when the tree is built, so this is not serialized.
+    #[serde(skip)]
+    pub fill_theme: Option<ThemeFill>,
     pub border: Option<Border>,
     pub glow: Option<Glow>,
     /// **The accent this widget and everything inside it paints its chrome with** — CSS's
@@ -57,6 +64,7 @@ impl Default for Visual {
     fn default() -> Self {
         Self {
             fill: None,
+            fill_theme: None,
             border: None,
             glow: None,
             accent: None,
@@ -67,5 +75,81 @@ impl Default for Visual {
             font_size: 0.0,
             font_scale: 1.0,
         }
+    }
+}
+
+impl Visual {
+    /// **The fill to paint with this frame**: the colour written, else the theme colour named,
+    /// else none. Every widget that paints its own fill reads it through here.
+    pub fn fill_in(&self, theme: &crate::theme::Theme) -> Option<Color> {
+        self.fill
+            .or_else(|| self.fill_theme.and_then(|fill| fill.resolve(theme)))
+    }
+}
+
+/// **What [`background`](crate::builders::StyleExt::background) paints**: a colour, or a theme
+/// colour by name — optionally at one of the theme's opacities — which follows the theme.
+///
+/// ```ignore
+/// Surface::new().background(Fill::theme("surface"))                        // follows the theme
+/// Surface::new().background(Fill::theme("background").alpha("scrim"))      // a theme veil
+/// Surface::new().background(Color::rgb(0x20, 0x20, 0x28))   // this colour, whatever the theme
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Fill {
+    /// This colour, whatever the theme.
+    Color(Color),
+    /// A colour of the theme, read when it is drawn — see [`ThemeFill`].
+    Theme(ThemeFill),
+}
+
+impl Fill {
+    /// **The theme's colour of this name**, read when it is drawn: a field of the theme
+    /// (`"surface"`, `"accent"`, `"border"`, …), and a colour the theme derives when it leaves it
+    /// unset (`"top_bottom_pane_background"`) answers with what it derives. A name that is not a
+    /// theme colour paints nothing. Add [`alpha`](ThemeFill::alpha) to draw it at one of the
+    /// theme's opacities.
+    pub const fn theme(name: &'static str) -> ThemeFill {
+        ThemeFill { name, alpha: None }
+    }
+}
+
+/// **A theme colour by name, at a theme opacity by name** — both read from the theme when drawn,
+/// so a theme reload repaints it. Made with [`Fill::theme`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThemeFill {
+    name: &'static str,
+    alpha: Option<&'static str>,
+}
+
+impl ThemeFill {
+    /// **Draw the colour at the theme's opacity of this name** — one of its interaction alphas
+    /// (`"scrim"`, `"row_hover_fill"`, …). A name that is not one paints nothing.
+    pub const fn alpha(self, name: &'static str) -> Self {
+        Self {
+            name: self.name,
+            alpha: Some(name),
+        }
+    }
+
+    /// The colour, from `theme` now.
+    pub fn resolve(&self, theme: &crate::theme::Theme) -> Option<Color> {
+        let colour = theme.colors.color_named(self.name)?;
+        match self.alpha {
+            None => Some(colour),
+            Some(alpha) => Some(colour.with_alpha(theme.colors.alpha_named(alpha)?)),
+        }
+    }
+}
+
+impl From<ThemeFill> for Fill {
+    fn from(fill: ThemeFill) -> Self {
+        Self::Theme(fill)
+    }
+}
+
+impl From<Color> for Fill {
+    fn from(colour: Color) -> Self {
+        Self::Color(colour)
     }
 }

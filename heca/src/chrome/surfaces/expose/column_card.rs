@@ -8,7 +8,6 @@
 use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::style::Spacing;
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, GridCell};
 
 use super::model::ExposeColumn;
@@ -24,7 +23,6 @@ pub(crate) struct ColumnCard<'a> {
     /// Where the cursor goes when one of these cards is deleted — asked per pane, while the row it
     /// belongs to is still whole.
     pub(crate) next_of: &'a dyn Fn(PaneId) -> Option<PaneId>,
-    pub(crate) theme: &'a GuiTheme,
     pub(crate) cb: &'a ExposeCallbacks,
 }
 
@@ -53,7 +51,6 @@ impl ColumnCard<'_> {
                 ws_idx: self.ws_idx,
                 col_idx: self.column.col_idx,
                 next: (self.next_of)(pane.pane_id),
-                theme: self.theme,
                 cb: self.cb,
             }
             .build();
@@ -73,12 +70,11 @@ mod tests {
     use super::*;
     use crate::chrome::surfaces::expose::model::ExposePane;
     use crate::chrome::surfaces::expose::pane_card::pane_key;
-    use crate::chrome::surfaces::expose::testing::{callbacks, card_of, lay_out, theme};
+    use crate::chrome::surfaces::expose::testing::{callbacks, card_of, lay_out};
     use heca_grid_ui::style::Length;
 
     fn column(heights: &[f64]) -> heca_grid_ui::WidgetModel {
         let (cb, _sink) = callbacks();
-        let theme = theme();
         let col = ExposeColumn {
             col_idx: 0,
             width: 400.0,
@@ -99,7 +95,6 @@ mod tests {
             ws_idx: 0,
             previous: None,
             next_of: &|_| None,
-            theme: &theme,
             cb: &cb,
         }
         .build();

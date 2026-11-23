@@ -13,6 +13,11 @@ pub fn load(name: &str) -> Theme {
     heca_theme::load_theme(name)
 }
 
+/// [`load`], and what was wrong with the theme — see [`heca_theme::load_theme_checked`].
+pub fn load_checked(name: &str) -> (Theme, Vec<String>) {
+    heca_theme::load_theme_checked(name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

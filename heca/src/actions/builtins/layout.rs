@@ -38,12 +38,12 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the workspace holding the column.",
             ),
             ArgDescriptor::required(
                 "col_idx",
-                ArgKind::Int,
+                ArgKind::Column,
                 "Index of the column to add the pane to.",
             ),
         ],
@@ -153,7 +153,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::ArrowLineLeft),
         args: &[ArgDescriptor::optional(
             "pane_id",
-            ArgKind::Int,
+            ArgKind::Pane,
             "The pane to move; omit for the focused one.",
         )],
     },
@@ -165,7 +165,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::ArrowLineRight),
         args: &[ArgDescriptor::optional(
             "pane_id",
-            ArgKind::Int,
+            ArgKind::Pane,
             "The pane to move; omit for the focused one.",
         )],
     },
@@ -179,10 +179,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the workspace holding the column.",
             ),
-            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to zoom."),
+            ArgDescriptor::required("col_idx", ArgKind::Column, "Index of the column to zoom."),
         ],
     },
     ActionDescriptor {
@@ -202,10 +202,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the workspace holding the column.",
             ),
-            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to delete."),
+            ArgDescriptor::required("col_idx", ArgKind::Column, "Index of the column to delete."),
         ],
     },
     ActionDescriptor {
@@ -284,10 +284,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Swap the positions of two panes.",
         icon: None,
         args: &[
-            ArgDescriptor::required("a_id", ArgKind::Int, "The first pane."),
+            ArgDescriptor::required("a_id", ArgKind::Pane, "The first pane."),
             ArgDescriptor::required(
                 "b_id",
-                ArgKind::Int,
+                ArgKind::Pane,
                 "The second pane, which takes the first one's place.",
             ),
         ],
@@ -299,10 +299,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Move a pane into another column of the current workspace.",
         icon: None,
         args: &[
-            ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
+            ArgDescriptor::required("pane_id", ArgKind::Pane, "The pane to move."),
             ArgDescriptor::required(
                 "target_col",
-                ArgKind::Int,
+                ArgKind::Column,
                 "Index of the column to move it into.",
             ),
         ],
@@ -314,10 +314,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Move a pane into another workspace.",
         icon: None,
         args: &[
-            ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
+            ArgDescriptor::required("pane_id", ArgKind::Pane, "The pane to move."),
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the destination workspace.",
             ),
         ],
@@ -329,13 +329,17 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Move a pane into a specific column of a specific workspace.",
         icon: None,
         args: &[
-            ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
+            ArgDescriptor::required("pane_id", ArgKind::Pane, "The pane to move."),
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the destination workspace.",
             ),
-            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the destination column."),
+            ArgDescriptor::required(
+                "col_idx",
+                ArgKind::Column,
+                "Index of the destination column.",
+            ),
         ],
     },
     ActionDescriptor {
@@ -345,15 +349,15 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Put a pane at an exact place: a row of a column, or a new column of its own.",
         icon: None,
         args: &[
-            ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to place."),
+            ArgDescriptor::required("pane_id", ArgKind::Pane, "The pane to place."),
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the destination workspace.",
             ),
             ArgDescriptor::required(
                 "col_idx",
-                ArgKind::Int,
+                ArgKind::Column,
                 "Index of the destination column (past the end = the end).",
             ),
             ArgDescriptor::optional(
@@ -372,16 +376,16 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "src_ws",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the workspace the column is in.",
             ),
-            ArgDescriptor::required("src_col", ArgKind::Int, "Index of the column to move."),
+            ArgDescriptor::required("src_col", ArgKind::Column, "Index of the column to move."),
             ArgDescriptor::required(
                 "dst_ws",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the destination workspace.",
             ),
-            ArgDescriptor::required("dst_idx", ArgKind::Int, "Position to insert it at."),
+            ArgDescriptor::required("dst_idx", ArgKind::Column, "Position to insert it at."),
             ArgDescriptor::optional(
                 "focus",
                 ArgKind::Bool,
@@ -396,10 +400,14 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Swap the positions of two columns.",
         icon: None,
         args: &[
-            ArgDescriptor::required("a_ws", ArgKind::Int, "Workspace of the first column."),
-            ArgDescriptor::required("a_col", ArgKind::Int, "Index of the first column."),
-            ArgDescriptor::required("b_ws", ArgKind::Int, "Workspace of the second column."),
-            ArgDescriptor::required("b_col", ArgKind::Int, "Index of the second column."),
+            ArgDescriptor::required("a_ws", ArgKind::Workspace, "Workspace of the first column."),
+            ArgDescriptor::required("a_col", ArgKind::Column, "Index of the first column."),
+            ArgDescriptor::required(
+                "b_ws",
+                ArgKind::Workspace,
+                "Workspace of the second column.",
+            ),
+            ArgDescriptor::required("b_col", ArgKind::Column, "Index of the second column."),
         ],
     },
     ActionDescriptor {
@@ -451,10 +459,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the workspace holding the column.",
             ),
-            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to rename."),
+            ArgDescriptor::required("col_idx", ArgKind::Column, "Index of the column to rename."),
             ArgDescriptor::required("name", ArgKind::Text, "The new name."),
         ],
     },
@@ -467,10 +475,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the workspace holding the column.",
             ),
-            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to rename."),
+            ArgDescriptor::required("col_idx", ArgKind::Column, "Index of the column to rename."),
         ],
     },
     ActionDescriptor {
@@ -480,7 +488,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Pull a pane out of wherever it is and into the focused column.",
         icon: None,
         args: &[
-            ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to take."),
+            ArgDescriptor::required("pane_id", ArgKind::Pane, "The pane to take."),
             ArgDescriptor::optional(
                 "focus_after",
                 ArgKind::Bool,
@@ -496,7 +504,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::FolderSimplePlus),
         args: &[ArgDescriptor::required(
             "ws_idx",
-            ArgKind::Int,
+            ArgKind::Workspace,
             "Index of the workspace to add the column to.",
         )],
     },
@@ -507,10 +515,10 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Move a column into another workspace.",
         icon: None,
         args: &[
-            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to move."),
+            ArgDescriptor::required("col_idx", ArgKind::Column, "Index of the column to move."),
             ArgDescriptor::required(
                 "ws_idx",
-                ArgKind::Int,
+                ArgKind::Workspace,
                 "Index of the destination workspace.",
             ),
             ArgDescriptor::optional(
@@ -527,7 +535,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         description: "Change one column's width by a fraction of the working width. The mouse divider drag and RPC use this; the keyboard resize acts on the focused column.",
         icon: None,
         args: &[
-            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to resize."),
+            ArgDescriptor::required("col_idx", ArgKind::Column, "Index of the column to resize."),
             ArgDescriptor::required(
                 "delta",
                 ArgKind::Float,
@@ -544,7 +552,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         args: &[
             ArgDescriptor::required(
                 "col_idx",
-                ArgKind::Int,
+                ArgKind::Column,
                 "Index of the column holding the pane.",
             ),
             ArgDescriptor::required(

@@ -339,6 +339,9 @@ enabled = true
 max_report_bytes = 65536
 channel_capacity = 256
 launch_timeout_ms = 5000
+# The status an agent shows the moment it starts, before its own first report. Empty: nothing until
+# the agent reports (OpenCode and Codex report only once a turn starts).
+launched_status = "waiting_input"
 
 [settings.agents.sounds]
 # Feedback volume and queue size. The shared enable switch is settings.notification_sound.
@@ -365,6 +368,8 @@ PostCompact = "working"
 SubagentStart = "subagent_running"
 SubagentStop = "working"
 Stop = "finished"
+# `/model`: the model it answers with from now on (`to_model`), shown at once. Typed at the prompt.
+PostModelSwitch = "waiting_input"
 
 [settings.agents.programs.codex]
 enabled = false
@@ -412,14 +417,15 @@ executables = ["opencode"]
 "permission.asked" = "waiting_permission"
 "permission.replied" = "working"
 
-# Status ids are open. Add your own label, glyph or sound file here. Colours follow the theme.
+# Status ids are open. Add your own label (the glyph's tooltip), glyph or sound file here. Colours
+# follow the theme.
 [settings.agents.statuses.working]
 label = "Working"
 icon = "lightning"
 tone = "accent"
 [settings.agents.statuses.waiting_input]
 label = "Waiting…"
-icon = "chat_circle_dots"
+icon = "hourglass"
 tone = "warning"
 sound = { source = "asset:attention" }
 [settings.agents.statuses.waiting_permission]
@@ -587,13 +593,12 @@ hint_font_size = 12.0
 #    unset; each then falls back to the theme) ──
 # border_width  : decorative border width, px. The app-wide BORDER control. The
 #                 chrome + every surface inherit it. 0 removes borders everywhere.
-# border_color  : the `bordered` frame color (chrome + surfaces). Set to e.g. the
-#                 accent for a bright, visible border. A `bracketed` reticle keeps
-#                 the theme accent unless its own surface sets border_color
-#                 (e.g. [appearance.sidebar] border_color).
 # border_radius : corner radius, px, inherited by surfaces.
+# Border COLOURS come from the theme (`border`; for panes `pane_border`, `pane_active_border`,
+# `float_pane_border`). To change them, make a theme of your own that inherits one — see
+# docs/theming.md:
+#   ~/.config/heca/themes/my-theme.toml:  inherit = "mocha"  and  pane_border = "#40e0ff"
 # border_width  = 1.0
-# border_color  = "#40e0ff"
 # border_radius = 12.0
 # Affordance outlines (keyboard focus ring + selected-item highlight) keep their
 # OWN width so they stay visible even with borders off (default 1.5).
@@ -670,10 +675,10 @@ search_current_match_alpha = 150
 # global [appearance] default → theme.
 # border_style : frame decoration. none | bordered | bracketed. Default "bordered".
 # border_width : frame width, px (0 = no border). Clamped [0, 10].
-# border_color : inactive/unfocused frame color.
 # border_radius: corner radius, px. Clamped [0, 20] (keeps the content clip gentle).
-# active_border_color   : focused-pane frame color (default theme accent).
-# floating_border_color : floating-pane frame color (default theme float accent).
+# The frame colours are the theme's: `pane_border` for a pane (unset: `border` at half
+# strength), `pane_active_border` for the pane with the keyboard (unset: `accent`),
+# `float_pane_border` for a floating pane.
 # gap     : gap between tiled panes, px (default 8.0). NOTE: when the pane border
 #           is visible (border_style != "none" and border_width > 0) the gap is
 #           floored at the border width, because adjacent panes each draw a full
@@ -683,10 +688,7 @@ search_current_match_alpha = 150
 # padding : content inset from the frame, px (default 4.0). Clamped [0, 20].
 # border_style          = "bordered"
 # border_width          = 2.0
-# border_color          = "#313244"
 # border_radius         = 20.0
-# active_border_color   = "#89b4fa"
-# floating_border_color = "#89b4fa"
 # gap                   = 8.0
 # padding               = 4.0
 # drag_label_size_factor = 0.25   # the name drawn over a dragged pane: share of its shorter side …
@@ -725,7 +727,7 @@ search_current_match_alpha = 150
 #                                   border_width + border_radius too).
 # border_width    : frame width, px. 0 removes the border. Clamped [0, 10].
 # border_color    : the frame color, for both styles. Unset → "bordered" takes the
-#                   global border_color, "bracketed" the theme accent.
+#                   theme's border, "bracketed" the theme accent.
 # border_radius   : corner radius, px. Clamped [0, 40].
 # background_color: shell fill (unset → theme sidebar surface). Transparency still
 #                   applies on top.
@@ -737,6 +739,10 @@ search_current_match_alpha = 150
 #                   e.g. "demo.status" (shown by default while this list is the default;
 #                   once you write your own list, only what you list shows). [] shows
 #                   the name alone. "agent" shows a reporting program's status and task.
+# agent_session_line: the line under an agent, with its session title.
+#                   "reported" = only a title the agent sent, when it is not the pane's
+#                   name already | "always" = the title, or the pane's name when the agent
+#                   sent none | "never".
 # border_style     = "bracketed"
 # border_width     = 1.0
 # border_color     = "#40e0ff"
@@ -745,6 +751,12 @@ search_current_match_alpha = 150
 # gap              = 12.0
 # width            = 300
 pane_lines = ["cwd", "git", "agent"]
+agent_session_line = "reported"
+# workspace_numbers: show each workspace's number before its name — 1 to 9, then 0 for the
+#                   tenth, as on the keyboard (a key bound to `focus_workspace` takes
+#                   `ws_idx`, which counts from 0: the workspace shown as 1 is ws_idx 0).
+#                   true (default) | false.
+workspace_numbers = true
 
 # Per-project settings: a `.heca/config.toml` in the folder heca was started in (or the nearest
 # parent that has a `.heca/` folder) is merged over this file key by key — any key it sets wins, and
@@ -756,8 +768,7 @@ pane_lines = ["cwd", "git", "agent"]
 # ─────────────────────────────────────────────────────────────────────────────
 # The exposé (prefix+Tab map of every pane).
 # show_cwd: show each pane's working directory (folder icon + path) on its card.
-#           On by default. Replaces `[settings] pane_show_cwd`, which is still read
-#           only while this key is not written.
+#           On by default. (Replaces `[settings] pane_show_cwd`, no longer read.)
 # show_cwd = true
 
 # ─────────────────────────────────────────────────────────────────────────────

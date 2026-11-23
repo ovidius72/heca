@@ -39,6 +39,7 @@ pub use chrome::{
     BuildCx, ChromeEvent, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution,
     Contribution, PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
+pub use chrome::{PaletteItem, PaletteRows};
 pub use components::FolderLine;
 pub use entry::{
     ActionCatalogSnapshot, ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError,
@@ -288,6 +289,8 @@ impl HecaApp {
             // After the plugins' keys are back, for the same reason the startup report waits for
             // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
+            notify_unread_keys();
+            notify_theme_problems(&self.app_config);
             state.theme = self.app_config.theme.clone();
             state.client.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
             // Appearance: opacity re-reads every frame, so updating the snapshot
@@ -394,6 +397,56 @@ impl HecaApp {
 /// Retry so clicking it clears the error and the retried reload raises a fresh card rather than
 /// mutating this one in place. Both share `dedup_key` so a fixed-then-reloaded config does not
 /// stack toasts.
+/// **Keys the user's files set that heca does not read**, as one card at start-up and after each
+/// reload — a retired name with the one that replaced it, a misspelling as unknown. The same list
+/// `heca --show-config` ends with; nothing is shown when every key was read.
+/// **What is wrong with the chosen theme**, as one card at start-up and after each reload — a file
+/// that does not parse, an `inherit` naming a theme that does not exist, a chain of themes that comes
+/// back on itself. heca then shows a bundled theme instead, so without this card the user would see
+/// the wrong colours and no reason.
+fn notify_theme_problems(app: &heca_config::loader::AppConfig) {
+    use crate::notification::Notification;
+    if app.theme_problems.is_empty() {
+        return;
+    }
+    Notification::warning(format!(
+        "The theme `{}` could not be read",
+        app.config.settings.theme
+    ))
+    .body(app.theme_problems.join("\n"))
+    .dedup_key("config-theme")
+    .originator()
+    .send();
+}
+
+fn notify_unread_keys() {
+    use crate::notification::Notification;
+    let unread = heca_config::loader::config_sources()
+        .map(|found| found.unread)
+        .unwrap_or_default();
+    if unread.is_empty() {
+        return;
+    }
+    let body = unread
+        .iter()
+        .map(|(path, key)| {
+            format!(
+                "{}: {key}",
+                path.file_name().map_or_else(
+                    || path.display().to_string(),
+                    |n| n.to_string_lossy().into_owned()
+                )
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Notification::warning("Some configuration keys are not read")
+        .body(body)
+        .dedup_key("config-unread")
+        .originator()
+        .send();
+}
+
 fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) {
     use crate::notification::{Notification, NotificationAction};
     match outcome {
@@ -487,6 +540,8 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             // Everything that can register has now registered — config, built-ins and every
             // mounted component — so this is the first moment the report can be complete.
             self.conflicts.report();
+            notify_unread_keys();
+            notify_theme_problems(&self.app_config);
             self.state = Some(state);
         }
     }
@@ -582,6 +637,44 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.window.request_redraw();
             } // Answered before the state guard above (it must reply even while starting).
         }
+    }
+}
+
+/// **The program heca runs as** — its name and, optionally, its icon — in THE SYNTAX:
+///
+/// ```ignore
+/// heca::App::new("Heca Pro").icon(include_bytes!("../assets/icon.png")).run();
+/// ```
+///
+/// `heca::run("heca")` is `App::new("heca").run()`. The icon is the window's (Windows, Linux) and
+/// the Dock's (macOS) while the program runs; without one, heca's own logo. A user's `icon.png`
+/// beside `config.toml` wins over both. The installed app's icon comes from its package.
+pub struct App {
+    name: String,
+    icon: Option<&'static [u8]>,
+}
+
+impl App {
+    /// A program called `name` — the window's title before a session, and the `{app}` of titles.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            icon: None,
+        }
+    }
+
+    /// Its icon: an encoded image (PNG), shown for the window and the Dock while it runs.
+    pub fn icon(mut self, png: &'static [u8]) -> Self {
+        self.icon = Some(png);
+        self
+    }
+
+    /// Run it — [`run`] with this name and icon.
+    pub fn run(self) {
+        if let Some(icon) = self.icon {
+            crate::entry::app_icon::set(icon);
+        }
+        run(self.name);
     }
 }
 

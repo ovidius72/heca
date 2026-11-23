@@ -52,6 +52,9 @@ named_set! {
         Key => "key",
         /// The wheel or trackpad scrolled over the node.
         Scroll => "scroll",
+        /// A drag started on the node is held past its edge — sent every frame the pointer stays
+        /// outside, so a list or a text view can scroll towards it and stretch its selection.
+        EdgeScroll => "edge_scroll",
         /// The node started being dragged.
         DragStart => "drag_start",
         /// The node is being dragged — sent at every pointer move.

@@ -94,6 +94,9 @@ impl AgentDriver for ConfiguredDriver {
     fn resume(&self, original: &ProcessLaunch, session_id: &str) -> Option<ProcessLaunch> {
         self.inner.resume(original, session_id)
     }
+    fn session_of(&self, launch: &ProcessLaunch) -> Option<String> {
+        self.inner.session_of(launch)
+    }
     fn read_status(&self, input: AgentInput<'_>) -> Result<Option<AgentState>, AgentError> {
         let Some(mut report) = self.inner.read_status(input)? else {
             return Ok(None);

@@ -91,6 +91,21 @@ impl IntoChildren for BoundChildren {
     }
 }
 
+impl IntoChildren for Option<BoundChildren> {
+    /// **An optional live list** — `.child(report.map(|signal| signal.map(build_line)))`. `None`
+    /// attaches nothing, the same rule as an optional widget, so a component with a list it may
+    /// not have never keeps an always-present empty signal just to have something to hand over.
+    fn into_children(self) -> Vec<crate::WidgetModel> {
+        Vec::new()
+    }
+
+    fn attach(self, base: &mut Base) {
+        if let Some(bound) = self {
+            bound.attach(base);
+        }
+    }
+}
+
 /// **`.map(make)` on a signal holding a list** — the children `make` builds, kept in step with it.
 pub trait MapChildren<T> {
     /// A child per item, made by `make`, following the list as it changes.
@@ -204,6 +219,29 @@ mod tests {
             "c and a are the same widgets, moved"
         );
         assert!(!kept(&root, 2), "d is new");
+    }
+
+    /// **An optional live list**: `Some` follows its value like any bound list, `None` attaches
+    /// nothing — and the children around it are untouched either way.
+    #[test]
+    fn an_optional_live_list_is_a_child_or_nothing() {
+        let source = signal(items(&["a"]));
+        let present: Option<Signal<Vec<String>>> = Some(source);
+        let absent: Option<Signal<Vec<String>>> = None;
+        let mut root = Flex::column()
+            .child(Label::new("head").key("head"))
+            .child(present.map(|list| list.map(|name: &String| row(name))))
+            .child(absent.map(|list| list.map(|name: &String| row(name))))
+            .child(Label::new("foot").key("foot"));
+        frame(&mut root);
+        assert_eq!(keys(&root), ["head", "a", "foot"]);
+        source.set(items(&["a", "b"]));
+        frame(&mut root);
+        assert_eq!(
+            keys(&root),
+            ["head", "a", "b", "foot"],
+            "the present one still follows its value"
+        );
     }
 
     /// **An item whose data changed is a new item.**

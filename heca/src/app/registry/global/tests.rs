@@ -247,7 +247,9 @@ fn default_pane_navigation_and_palette_bindings_are_separate() {
         keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("p")),
         Some(&WmAction::CommandPalette {
             mode: None,
-            query: None
+            query: None,
+            ask: None,
+            arguments: None
         })
     );
 }
@@ -263,6 +265,8 @@ fn default_session_palette_binding_uses_the_registered_action_and_hash_key() {
         let action = WmAction::CommandPalette {
             mode: Some(mode.into()),
             query: None,
+            ask: None,
+            arguments: None,
         };
         assert!(registry.has_handler(&action));
         assert_eq!(
@@ -280,6 +284,8 @@ fn default_session_palette_binding_uses_the_registered_action_and_hash_key() {
     let action = WmAction::CommandPalette {
         mode: Some("session".into()),
         query: None,
+        ask: None,
+        arguments: None,
     };
     assert_eq!(keymap.resolve_builtin(LEADER_LAYER, &hash), Some(&action));
     let catalog = crate::actions::ActionCatalog::with_builtins();
@@ -356,14 +362,18 @@ args = { mode = "pane" }
         keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("#")),
         Some(&WmAction::CommandPalette {
             mode: Some("pane".into()),
-            query: None
+            query: None,
+            ask: None,
+            arguments: None
         })
     );
     assert_eq!(
         keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse("Ctrl+o")),
         Some(&WmAction::CommandPalette {
             mode: Some("workspace".into()),
-            query: None
+            query: None,
+            ask: None,
+            arguments: None
         })
     );
     let config =
@@ -399,7 +409,9 @@ fn default_selection_bindings_resolve() {
         keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("p")),
         Some(&WmAction::CommandPalette {
             mode: None,
-            query: None
+            query: None,
+            ask: None,
+            arguments: None
         })
     );
 }

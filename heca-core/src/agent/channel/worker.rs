@@ -75,6 +75,9 @@ pub(super) fn run(
                 }
                 match launcher::prepare(&path, &drivers, &reporter, &mut watcher) {
                     Ok(Some(reader)) => {
+                        if let Some(started) = reader.launched(&reporter.launched_status) {
+                            inbox.push(started);
+                        }
                         readers.retain(|previous| {
                             if previous.driver.id() != reader.driver.id() {
                                 return true;

@@ -71,8 +71,8 @@ pub use animation::{
     smoothstep,
 };
 pub use builders::{
-    BoundChildren, DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MapChildren,
-    MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
+    BoundChildren, DragExt, EventExt, FlashExt, FocusExt, HintExt, IdentityExt, IntoTextValue,
+    LayoutExt, MapChildren, MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
 };
 pub use color::Color;
 pub use component::{
@@ -105,7 +105,10 @@ pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{
     child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut, path_with_key,
 };
-pub use pointer::{PointerState, clear_hover, dragged_kind, dragging, hit_test};
+pub use pointer::{
+    EdgeScroll, PointerState, clear_hover, dragged_kind, dragging, edge_scroll, hit_test,
+    pointer_held,
+};
 pub use scene::{
     BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, ImageAt, Scene, SurfaceAt,
     TextStyle,
@@ -115,8 +118,8 @@ pub mod props;
 pub use heca_grid_ui_macros::{PropName, prop, props};
 pub use prop::{PropInput, PropName, SetProp};
 pub use style::{
-    Align, Direction, FontWeight, GridCell, Justify, Layout, Length, LetterSpacing, LineHeight,
-    Spacing, Style, TextTransform, Track, Visual, WidgetSize,
+    Align, Direction, Fill, FontWeight, GridCell, Justify, Layout, Length, LetterSpacing,
+    LineHeight, Spacing, Style, TextTransform, ThemeFill, Track, Visual, WidgetSize,
 };
 pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use tone::Tone;
@@ -142,8 +145,9 @@ pub mod prelude {
         Animate, Animation, AnimationFrame, Fade, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     };
     pub use crate::builders::{
-        BoundChildren, DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MapChildren,
-        MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt, TooltipExt,
+        BoundChildren, DragExt, EventExt, FlashExt, FocusExt, HintExt, IdentityExt, IntoTextValue,
+        LayoutExt, MapChildren, MenuExt, Parent, PlaceExt, PresenceExt, StyleExt, ToneExt,
+        TooltipExt,
     };
     pub use crate::color::Color;
     pub use crate::component::{
@@ -160,8 +164,8 @@ pub mod prelude {
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::{TextAlign, TextStyle};
     pub use crate::style::{
-        Align, Direction, FontWeight, GridCell, Justify, Length, LetterSpacing, LineHeight,
-        Spacing, TextTransform, Track, WidgetSize,
+        Align, Direction, Fill, FontWeight, GridCell, Justify, Length, LetterSpacing, LineHeight,
+        Spacing, TextTransform, ThemeFill, Track, WidgetSize,
     };
     pub use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
     pub use crate::tone::Tone;

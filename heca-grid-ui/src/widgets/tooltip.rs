@@ -148,7 +148,7 @@ impl Tip {
     /// A tip whose words are a live signal.
     pub fn from_signal(text: Signal<String>) -> Self {
         let words = Label::new("")
-            .with_text_signal(text)
+            .text(text)
             .wrap(true)
             .preserve_whitespace(true);
         Self::holding(text, false, words.into_component())
@@ -226,7 +226,7 @@ impl Tip {
     }
 
     /// Whether there is anything to show: a widget, or words that are not empty.
-    fn says_something(&self) -> bool {
+    pub(crate) fn says_something(&self) -> bool {
         self.widget || !self.text.get_untracked().is_empty()
     }
 }

@@ -47,6 +47,8 @@ pub enum Glyph {
     Check,
     CheckCircle,
     ChatCircleDots,
+    /// An hourglass — "waiting for you", an agent that has finished its part and waits for input.
+    Hourglass,
     Lock,
     CaretRight,
     /// Left chevron — "collapse this row" / "out to the parent", the mirror of
@@ -134,6 +136,7 @@ impl Glyph {
             Glyph::Check => "check",
             Glyph::CheckCircle => "check_circle",
             Glyph::ChatCircleDots => "chat_circle_dots",
+            Glyph::Hourglass => "hourglass",
             Glyph::Lock => "lock",
             Glyph::CaretRight => "caret_right",
             Glyph::CaretLeft => "caret_left",
@@ -199,6 +202,7 @@ impl Glyph {
         Glyph::Check,
         Glyph::CheckCircle,
         Glyph::ChatCircleDots,
+        Glyph::Hourglass,
         Glyph::Lock,
         Glyph::CaretRight,
         Glyph::CaretLeft,
@@ -263,6 +267,7 @@ impl Glyph {
             Glyph::Check => 0xe182,
             Glyph::CheckCircle => 0xe184,
             Glyph::ChatCircleDots => 0xe16c,
+            Glyph::Hourglass => 0xe2b2,
             Glyph::Lock => 0xe2fa,
             Glyph::CaretRight => 0xe13a,
             Glyph::CaretLeft => 0xe138,
@@ -364,6 +369,20 @@ impl Icon {
         };
         icon.remeasure();
         icon
+    }
+
+    /// **The glyph to show** — a [`Glyph`], or one that changes (a `Signal<Glyph>`, a
+    /// `Memo<Glyph>`, a function reading signals), followed in place with no rebuild.
+    ///
+    /// ```ignore
+    /// Icon::new(Glyph::Circle).glyph(move || line().icon)
+    /// ```
+    #[heca_grid_ui_macros::host_only(
+        "a description names its glyph with the icon's `icon` property; a live glyph is a closure"
+    )]
+    pub fn glyph(self, glyph: impl crate::builders::IntoGlyphValue) -> Self {
+        glyph.into_glyph_value().show_in(self.glyph);
+        self
     }
 
     /// Handle to the icon's glyph signal so hosts can update it live.

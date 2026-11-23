@@ -88,9 +88,7 @@ impl Elapsed {
 
     /// **When it happened, as milliseconds since the Unix epoch** — the form a stored record
     /// carries.
-    #[heca_grid_ui_macros::host_only(
-        "a description's numbers travel as f32, which cannot hold an epoch time to the second"
-    )]
+    #[heca_grid_ui_macros::prop]
     pub fn at_millis(mut self, epoch_ms: u64) -> Self {
         self.at = on_clock(SystemTime::UNIX_EPOCH + Duration::from_millis(epoch_ms));
         self.write();

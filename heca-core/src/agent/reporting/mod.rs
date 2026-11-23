@@ -3,6 +3,7 @@
 mod command;
 mod records;
 mod server;
+mod sessions;
 
 use std::{
     collections::BTreeMap,
@@ -25,6 +26,9 @@ pub struct ReportingHelper {
     pub executable: PathBuf,
     /// Maximum bytes in an incoming request or an outgoing report.
     pub max_report_bytes: usize,
+    /// The status heca reports for an agent the moment it starts (`settings.agents.launched_status`);
+    /// empty reports nothing until the agent does.
+    pub launched_status: String,
 }
 
 impl ReportingHelper {

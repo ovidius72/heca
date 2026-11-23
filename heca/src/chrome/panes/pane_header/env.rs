@@ -12,7 +12,6 @@ use super::*;
 /// right now travels beside it, as the [`PaneHeaderInput`] the pane is handed.
 pub(crate) struct HeaderEnv {
     pub(super) theme: GuiTheme,
-    pub(super) band: heca_grid_ui::Color,
     pub(super) segment_names: Vec<String>,
     pub(super) action_names: Vec<String>,
     pub(super) chips: crate::chrome::panes::pane_items::PaneChips,
@@ -113,7 +112,7 @@ fn show_pane_header(
             ws_idx: input.ws_idx,
             col_idx: input.col_idx,
         };
-        let root = build_pane_header(&content, env.band, ctx)?;
+        let root = build_pane_header(&content, ctx)?;
         // The identity rule's warning half: each control carries a key naming which pane's
         // control it is, and this says so if that ever goes.
         crate::chrome::input::identity::report_ambiguous_widgets("pane-header", &root);

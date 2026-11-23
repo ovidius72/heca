@@ -81,7 +81,7 @@ pub(super) struct Content {
 impl Content {
     pub fn new(view: Rc<RefCell<View>>) -> Self {
         let label = Label::new("")
-            .with_text_signal(view.borrow().text)
+            .text(view.borrow().text)
             .wrap(true)
             .preserve_whitespace(true)
             .truncate(crate::Ellipsis::None);

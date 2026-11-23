@@ -236,6 +236,18 @@ pub struct Placement {
     pub height: Length,
 }
 
+impl Placement {
+    /// **The whole of the parent**: at its top-left content corner, as wide and tall as it. What a
+    /// layer over the content takes — a [`ScrollRegion::pinned`](crate::widgets::ScrollRegion::pinned)
+    /// child, an overlay's scrim.
+    pub const FILL: Placement = Placement {
+        left: Length::Px(0.0),
+        top: Length::Px(0.0),
+        width: Length::FULL,
+        height: Length::FULL,
+    };
+}
+
 #[cfg(test)]
 mod length_spellings {
     use super::*;

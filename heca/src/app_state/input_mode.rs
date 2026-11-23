@@ -163,8 +163,8 @@ pub enum InputMode {
         candidates: Vec<LinkHint>,
     },
     /// **A terminal's search field has the keyboard.** Typing goes into that terminal's own tree,
-    /// where its field edits the query and the search re-runs live; Enter keeps the matches (so
-    /// `n`/`N` navigate in selection mode), Esc cancels. The query lives in the terminal's field
+    /// where its field edits the query and the search re-runs live; the widget keys step through the
+    /// matches from the field (`activate`/`menu_down` next, `menu_up` previous), `dismiss` closes. The query lives in the terminal's field
     /// and the matches in the terminal that shows them, not here.
     ///
     /// The terminal is named only because pane trees are not part of the window's keyboard yet —

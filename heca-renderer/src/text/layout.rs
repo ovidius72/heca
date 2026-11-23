@@ -34,6 +34,8 @@ pub(super) struct PlacedGlyph {
     pub(super) w: f32,
     pub(super) h: f32,
     pub(super) uv: [f32; 4],
+    /// The glyph keeps its own colours (an emoji).
+    pub(super) own_colours: bool,
     /// Identity of the rasterized glyph, kept so a halo can ask the atlas for a
     /// **blurred** variant of this same glyph at emission time. The layout itself is
     /// cached independently of any glow, so the blur cannot be resolved earlier.
@@ -73,6 +75,8 @@ pub(super) struct RunGlyph {
     pub(super) w: f32,
     pub(super) h: f32,
     pub(super) uv: [f32; 4],
+    /// The glyph keeps its own colours (an emoji).
+    pub(super) own_colours: bool,
 }
 
 /// A shaped terminal run's cached layout: per-glyph cell-snapped placement plus

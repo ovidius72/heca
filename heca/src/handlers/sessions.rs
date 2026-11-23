@@ -157,6 +157,8 @@ pub(crate) fn session_choice(state: &mut AppState, reason: SessionChoice) {
             "select" => WmAction::CommandPalette {
                 mode: Some("session".into()),
                 query: None,
+                ask: None,
+                arguments: None,
             },
             "new" => WmAction::NewSession,
             _ => return,

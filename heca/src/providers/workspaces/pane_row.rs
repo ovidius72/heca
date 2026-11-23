@@ -164,6 +164,7 @@ impl<'a> PaneRow<'a> {
             theme,
             facts,
             agent_statuses: ws_state.agent_statuses,
+            agent_session_line: ws_state.agent_session_line,
         };
         let runtime_signals = seams.panes.signals(pane_id);
         let flash = runtime_signals.flash;

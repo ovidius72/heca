@@ -71,7 +71,7 @@ fn a_described_overlay_can_ask_for_the_frost_behind_it() {
 
     let mut backdrops = |frosted: bool| {
         let node = ViewNode::new(WidgetId::Overlay)
-            .prop("frosted", PropValue::Bool(frosted))
+            .prop("blur", PropValue::Bool(frosted))
             .prop("default_open", PropValue::Bool(true))
             .child(ViewNode::new(WidgetId::Label).text("MAP"));
         let mut w = realize(&node, &theme, &emit, &mut forms).expect("valid described test widget");

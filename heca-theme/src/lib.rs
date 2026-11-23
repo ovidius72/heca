@@ -11,10 +11,12 @@
 
 pub mod color;
 pub mod loader;
+pub mod merge;
 pub mod theme;
 
 pub use color::Color;
-pub use loader::{available_themes, config_dir, load_theme};
+pub use loader::{available_themes, config_dir, load_theme, load_theme_checked, user_dirs};
+pub use merge::deep_merge;
 pub use theme::{
     DialogStyle, FlashStyle, FrameStyle, GlowLevel, InputStyle, Intensity, Shadow, Theme,
 };

@@ -23,6 +23,10 @@ declare_settings! {
         pub channel_capacity: usize,
         /// Maximum wait for a program's per-invocation setup.
         pub launch_timeout_ms: u64,
+        /// **The status an agent shows the moment it starts**, before it reports anything itself —
+        /// so every agent has its line from launch, however late its own first report comes
+        /// (OpenCode and Codex say nothing until a turn starts). Empty shows nothing until it does.
+        pub launched_status: String,
         /// Built-in driver metadata and lifecycle-event mappings, keyed by driver id.
         pub programs: BTreeMap<String, AgentProgramConfig>,
         /// Open status vocabulary: plugins and projects may add more entries.

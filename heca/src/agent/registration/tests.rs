@@ -114,6 +114,7 @@ fn an_embedding_registers_a_driver_without_accessing_a_registry() {
             reporter: heca_core::agent::reporting::ReportingHelper {
                 executable: std::env::current_exe().unwrap(),
                 max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
+                launched_status: String::new(),
             },
             home: directory.path().to_owned(),
             directory: directory.path().join("integrations"),

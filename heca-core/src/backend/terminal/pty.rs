@@ -129,10 +129,14 @@ impl PtyHandle {
         cell_px: (f32, f32),
         wake: Option<WakeCallback>,
         process: &crate::backend::ProcessLaunch,
+        started_as: Option<&crate::backend::ProcessLaunch>,
     ) -> Result<Self, PtyError> {
         check_cwd(process.cwd.as_deref())?;
-        let mut command = CommandBuilder::new(&process.executable);
-        command.args(&process.arguments);
+        // What is run — `started_as` when the process goes through a launcher — while `process`
+        // stays what the pane records and saves.
+        let run = started_as.unwrap_or(process);
+        let mut command = CommandBuilder::new(&run.executable);
+        command.args(&run.arguments);
         if let Some(cwd) = &process.cwd {
             command.cwd(cwd);
         }
@@ -363,10 +367,6 @@ impl PtyHandle {
         master
             .resize(pty_size(cols, rows, cell_px))
             .map_err(|err| PtyError::new(PtyOperation::Resize, err))
-    }
-
-    pub(super) fn write_input(&self, data: &[u8]) -> std::io::Result<()> {
-        self.writer.write_bytes(data)
     }
 
     pub(super) fn try_read(&self) -> PtyRead {

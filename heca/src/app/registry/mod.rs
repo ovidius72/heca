@@ -53,6 +53,7 @@ pub fn build_keymaps(
     let mut flat = build_keymap(config, conflicts, &mut by_action);
     let (components, global_focus) = build_component_keymaps(config, conflicts, &mut by_action);
     bind_global_focus(&mut flat, &global_focus, conflicts, &mut by_action);
+    widgets::index_widget_keys(config, &mut by_action);
     crate::keymap::Keymaps {
         flat,
         modes,

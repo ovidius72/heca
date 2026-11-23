@@ -142,15 +142,11 @@ pub(crate) fn resolve_color(spec: &str, theme: &Theme) -> Option<String> {
     if spec.starts_with('#') {
         return Some(spec.to_string());
     }
-    let serde_json::Value::Object(tokens) = serde_json::to_value(&theme.colors).ok()? else {
-        return None;
-    };
-    match tokens.get(spec) {
-        // A colour token. Non-colour fields (`name`, the numeric geometry) either are not strings
-        // or do not parse as a colour, so they cannot be named by accident.
-        Some(serde_json::Value::String(hex)) if hex.starts_with('#') => Some(hex.clone()),
-        _ => None,
-    }
+    // The theme's own lookup, the one a native `Fill::theme(..)` reads at paint: one vocabulary.
+    theme
+        .colors
+        .color_named(spec)
+        .map(|colour| colour.to_string())
 }
 
 /// Feed a node's properties to a widget through its **generated** surface.

@@ -7,12 +7,12 @@ use heca_core::layout::Rectangle;
 use heca_grid_ui::{Point, Size};
 
 use super::input::{Search, TerminalInput};
-use super::search::{SearchBar, SearchSlot};
+use super::search::{SearchSlot, search_bar};
 use super::shared::Shared;
 use super::viewport::{Controls, IntentSlot};
 use heca_grid_ui::MenuExt;
 use heca_grid_ui::builders::{EventExt, LayoutExt};
-use heca_grid_ui::component::{Base, Component, GridKey, PaintCx, WidgetIntent};
+use heca_grid_ui::component::{Base, Component, PaintCx, WidgetIntent};
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::style::Length;
 
@@ -89,6 +89,7 @@ impl Terminal {
             view: Cell::new((0, 0)),
             link_modifier: Cell::new(heca_config::theme::ModifierKey::default()),
             node: Cell::new(0),
+            edge_rest: Cell::new(0.0),
         }))
     }
 
@@ -115,9 +116,7 @@ impl Terminal {
         // **So is its search**: the bar over the picture, drawn by the same walk, hearing the same
         // keyboard. Declared after the controls, so it is on top of them.
         base.children
-            .push(heca_grid_ui::WidgetModel::new(SearchBar::new(
-                shared.clone(),
-            )));
+            .push(heca_grid_ui::WidgetModel::new(search_bar(shared.clone())));
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
         let me = shared.clone();
@@ -146,12 +145,26 @@ impl Terminal {
                 if me.held_for_window(cx) {
                     return;
                 }
+                // **The terminal keeps the pointer until the button is up** — a selection dragged
+                // past its edge still hears every move and scrolls the history — without taking the
+                // press, which a window gesture may still claim.
+                if cx
+                    .pointer()
+                    .is_some_and(|p| p.button == heca_grid_ui::PointerButton::Left)
+                {
+                    cx.capture_pointer();
+                    me.edge_rest.set(0.0);
+                }
                 me.pointer(cx, |p, cell| TerminalInput::Press {
                     button: p.button,
                     cell,
                     modifiers: p.modifiers,
                 })
             }
+        })
+        .on_edge_scroll({
+            let me = me.clone();
+            move |cx| me.edge_scroll(cx)
         })
         .on(EventKind::PointerUp, {
             let me = me.clone();
@@ -265,22 +278,27 @@ impl Component for Terminal {
                 }
                 false
             }
-            // **While the keyboard is in the search field, the field's keys are not the program's.**
-            // What the field did not take bubbles here: Enter keeps the matches and gives the
-            // keyboard to the terminal, Escape dismisses the search, and nothing else is typed
-            // into the process behind the bar.
-            Event::TextInput(_) | Event::Key { .. } if self.keyboard_is_in_search() => {
-                if let Event::Key { key, pressed: true } = ev {
-                    match key {
-                        GridKey::Enter => self.base.focus(false),
-                        GridKey::Escape => {
-                            self.shared.search.close();
-                            self.shared.emit(TerminalInput::Search(Search::Close));
-                            self.base.focus(false);
-                        }
-                        _ => {}
-                    }
-                }
+            // **While the keyboard is in the search field, nothing reaches the program behind it.**
+            // Its text is the field's; a key the field did not take goes on to the widget
+            // vocabulary of `[keys.widgets]` — answered just below — and is never typed into the
+            // process. No key is named here: the user's bindings decide.
+            Event::TextInput(_) if self.keyboard_is_in_search() => true,
+            Event::Key { .. } if self.keyboard_is_in_search() => false,
+            // `activate` (Enter) and `menu_down` (↓, Ctrl+j) go to the next match, `menu_up` (↑,
+            // Ctrl+k) to the previous one — the keyboard stays in the field; `dismiss` (Escape)
+            // closes the search and gives the keyboard back to the terminal.
+            Event::Widget(WidgetIntent::Activate | WidgetIntent::MenuDown)
+                if self.keyboard_is_in_search() =>
+            {
+                self.shared.step(true)
+            }
+            Event::Widget(WidgetIntent::MenuUp) if self.keyboard_is_in_search() => {
+                self.shared.step(false)
+            }
+            Event::Widget(WidgetIntent::Dismiss) if self.keyboard_is_in_search() => {
+                self.shared.search.close();
+                self.shared.emit(TerminalInput::Search(Search::Close));
+                self.base.focus(false);
                 true
             }
             // **What a user binds to find answers here** — to whichever terminal holds the keyboard.

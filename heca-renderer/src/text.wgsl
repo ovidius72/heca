@@ -54,11 +54,13 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let cov = textureSample(text_texture, text_sampler, in.texcoord).r;
-    let a = in.color.a * cov;
+    // A glyph is white with its coverage as alpha, so the text's colour tints it; an emoji keeps its
+    // own colours and its quad carries white (AtlasGlyph::own_colours).
+    let texel = textureSample(text_texture, text_sampler, in.texcoord);
+    let a = in.color.a * texel.a;
     // Premultiplied-alpha blending is `dst = src.rgb + dst.rgb * (1 - src.a)`, so
     // emitting light with a zero alpha adds it without occluding anything behind —
     // which is what makes a halo tap read as glow rather than as a grey smear.
     let out_a = a * (1.0 - in.additive);
-    return vec4<f32>(srgb_to_linear(in.color.rgb) * a, out_a);
+    return vec4<f32>(srgb_to_linear(in.color.rgb * texel.rgb) * a, out_a);
 }

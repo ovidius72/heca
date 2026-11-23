@@ -33,6 +33,7 @@ impl ScrollRegion {
         base.style.layout.gap = Spacing::Md.into();
         Self {
             base,
+            pinned: 0,
             axes: ScrollAxes::default(),
             follow_bottom: false,
             previous_bottom: 0.0,
@@ -66,6 +67,25 @@ impl ScrollRegion {
     ///
     /// All three listeners are optional and none of them drive anything: a host that just wants a
     /// working scroll area attaches nothing at all and gets the wheel, the thumb, the track click
+    /// **A child that stays put over the content** — not scrolled, out of the content's flow, the
+    /// size of the region. What sits on the edges of a list rather than in it: an
+    /// [`EdgeHint`](crate::widgets::EdgeHint) saying how many rows wanting attention are out of sight,
+    /// a "back to top" button. It hears what is out of sight ([`Component::scroll_facts`]) and may ask
+    /// for a reveal ([`Component::take_reveal`]). It passes the pointer through where it draws nothing,
+    /// when it is a surface (`EdgeHint` is), so the rows under it stay clickable.
+    ///
+    /// ```ignore
+    /// ScrollRegion::new().child(rows).pinned(EdgeHint::new())
+    /// ```
+    #[heca_grid_ui_macros::host_only("a child: use `children`")]
+    pub fn pinned(mut self, child: impl crate::builders::IntoComponent) -> Self {
+        let mut child = child.into_component();
+        child.authored_style_mut().layout.placement = Some(crate::style::Placement::FILL);
+        self.base.children.push(child);
+        self.pinned += 1;
+        self
+    }
+
     /// and the click-and-hold regardless.
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_scroll_start(mut self, f: impl for<'a> Fn(ScrollInfo<'a>) + 'static) -> Self {

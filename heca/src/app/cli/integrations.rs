@@ -18,7 +18,26 @@ pub(super) fn apply(inv: &Invocation, operation: IntegrationOperation) -> Answer
     let status = service()?
         .apply(program(inv)?, operation)
         .map_err(|error| format!("integration: {error}\n"))?;
-    render(&status, inv.json)
+    // **A running heca takes the change at once**: installing switches the agent on in the config
+    // file, and a server that never re-reads it would give no pane the agent's launcher.
+    let reloaded = reload_running();
+    let mut answer = render(&status, inv.json)?;
+    if reloaded && !inv.json {
+        answer.push_str("The running heca re-read its settings.\n");
+    }
+    Ok(answer)
+}
+
+#[cfg(unix)]
+fn reload_running() -> bool {
+    crate::server::socket::reload_running()
+}
+
+// A Windows window runs its server in its own process (no background server to tell), and reads
+// the file when it starts.
+#[cfg(not(unix))]
+fn reload_running() -> bool {
+    false
 }
 
 pub(super) fn inspect(inv: &Invocation) -> Answer {

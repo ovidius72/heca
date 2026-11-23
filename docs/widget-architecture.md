@@ -59,7 +59,7 @@ adds no capability — it is ergonomics and type-safety over the same data, exac
 resolved by the host registry), `props` (scalars, semantic enums, and appearance — a colour is a hex literal or a
 theme token **name**, resolved by `realize` against the theme the tree is built with), `events`
 (`press` / `hint` / `change` / `toggle` / `action` / `dismiss`, and every native event by its native
-name — `double_click`, `right_click`, `pointer_enter`, `focus_gained`, `key`, `drag_start` … `drop` (a left click is `press`) —
+name — `double_click`, `right_click`, `pointer_enter`, `focus_gained`, `key`, `drag_start` … `drop`, `edge_scroll` (a left click is `press`) —
 → an `Intent` = action id + args, **never a closure**; one table in `heca-view-realize/src/events.rs`
 maps the names to the native events, read both ways so they cannot drift; a typed builder binds any
 of them with `.on(ViewEvent::RightClick, intent)`), and `children` (`Vec<ViewNode>`, recursive). This is what a WASM plugin ships

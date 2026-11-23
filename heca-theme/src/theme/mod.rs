@@ -13,6 +13,7 @@ mod effects;
 mod flash;
 mod input;
 mod interaction;
+mod named;
 
 pub use dialog::DialogStyle;
 pub use effects::{FrameStyle, GlowLevel, Intensity, Shadow};
@@ -36,6 +37,9 @@ const CONTROL_RADIUS_FRAC: f32 = 0.5;
 /// white/black).
 const FOCUS_RING_CONTRAST_FACTOR: f32 = 0.35;
 const SIDEBAR_BG_DARKEN_FACTOR: f32 = 0.05;
+/// How strongly a pane's frame shows [`Theme::border`] when the theme names no `pane_border`: half,
+/// so the frames around the panes sit quieter than the borders of the chrome.
+const PANE_BORDER_ALPHA: u8 = 128;
 const TOP_BOTTOM_PANE_BG_DARKEN_FACTOR: f32 = 0.10;
 /// How much the derived z=0 gradient *bottom* color darkens
 /// [`Theme::background`] toward black when `background_gradient_bottom` is unset
@@ -116,6 +120,9 @@ pub struct Theme {
     /// far smaller than a workspace frame, so a frame's tint vanishes on it. Both were tried on the
     /// map and both were wrong, in opposite directions. `None` derives it — see
     /// [`effective_card_previous_background`](Self::effective_card_previous_background).
+    ///
+    /// Derived from the **text** colour, not the accent: the current card wears the accent frame,
+    /// and an accent tint here — however faint — read as the same colour on the map.
     #[serde(default)]
     pub card_previous_background: Option<Color>,
     #[serde(default)]
@@ -140,6 +147,17 @@ pub struct Theme {
     pub right_sidebar_background: Option<Color>,
     #[serde(default)]
     pub top_bottom_pane_background: Option<Color>,
+
+    // ── Pane frames — separate from the general `border` and `accent`, so a theme can recolour
+    //    the panes' borders without touching every other border and accent in heca ──
+    /// The frame of a pane without the keyboard. `None` → [`Theme::border`] at half strength (see
+    /// [`Theme::effective_pane_border`]).
+    #[serde(default)]
+    pub pane_border: Option<Color>,
+    /// The frame of the pane with the keyboard. `None` → [`Theme::accent`] (see
+    /// [`Theme::effective_pane_active_border`]).
+    #[serde(default)]
+    pub pane_active_border: Option<Color>,
 
     // ── z=0 background gradient (compositor-blur refactor) ──
     /// Optional top color of the z=0 vertical gradient. `None` → falls back to
@@ -251,8 +269,10 @@ pub struct Theme {
     // ── Float pane colors ──
     #[serde(default = "default_float_bg")]
     pub float_background: Color,
-    #[serde(default = "default_float_accent")]
-    pub float_accent: Color,
+    /// The frame of every floating pane, active or not, so they read as their own layer.
+    /// `float_accent` is its earlier name, still read.
+    #[serde(default = "default_float_pane_border", alias = "float_accent")]
+    pub float_pane_border: Color,
     #[serde(default = "default_float_focus")]
     pub float_focus: Color,
 
@@ -339,8 +359,10 @@ impl Theme {
     /// [`card_previous_background`](Self::card_previous_background) for why a card has a scale of
     /// its own.
     pub fn effective_card_previous_background(&self) -> Color {
+        // Towards the text colour — a neutral lift — so it never shares the accent of the current
+        // card's frame.
         self.card_previous_background
-            .unwrap_or_else(|| self.surface.lerp(self.accent, CARD_PREVIOUS_LIFT))
+            .unwrap_or_else(|| self.surface.lerp(self.foreground, CARD_PREVIOUS_LIFT))
     }
 
     /// The workspace back-and-forth would return to, explicit or derived — fainter than the active
@@ -358,6 +380,18 @@ impl Theme {
 
     fn derived_darker_background(&self, t: f32) -> Color {
         self.background.lerp(Color::rgb(0, 0, 0), t.clamp(0.0, 1.0))
+    }
+
+    /// **The frame of a pane without the keyboard**: the theme's `pane_border`, else `border` at
+    /// half strength.
+    pub fn effective_pane_border(&self) -> Color {
+        self.pane_border
+            .unwrap_or_else(|| self.border.with_alpha(PANE_BORDER_ALPHA))
+    }
+
+    /// **The frame of the pane with the keyboard**: the theme's `pane_active_border`, else `accent`.
+    pub fn effective_pane_active_border(&self) -> Color {
+        self.pane_active_border.unwrap_or(self.accent)
     }
 
     pub fn effective_left_sidebar_background(&self) -> Color {

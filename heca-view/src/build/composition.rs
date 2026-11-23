@@ -34,9 +34,9 @@ impl Pane {
     pub fn border_style(self, style: ViewFrameStyle) -> Self {
         self.prop("border_style", style)
     }
-    /// Blur the content behind the pane by this logical radius.
-    pub fn frosted(self, radius: f32) -> Self {
-        self.prop("frosted", radius)
+    /// Blur the content behind the pane by this logical radius — mirrors grid-ui `Pane::blur`.
+    pub fn blur(self, radius: f32) -> Self {
+        self.prop("blur", radius)
     }
     /// Override the frame color with a theme token or literal.
     pub fn border_color(self, color: &str) -> Self {

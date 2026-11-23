@@ -1,4 +1,8 @@
-//! Glyph atlas: one shared R8 alpha texture holding rasterized glyph bitmaps.
+//! Glyph atlas: one shared RGBA texture holding rasterized glyph bitmaps.
+//!
+//! **A glyph is white with its coverage as alpha**, so the text's colour tints it in the shader; a
+//! glyph a font draws in **colour** (an emoji) keeps its own colours, and its quad is not tinted
+//! ([`AtlasGlyph::own_colours`]). One texture, one draw, either kind.
 //!
 //! The text renderer used to rasterize each **label** into its own GPU texture +
 //! bind group, keyed by the whole string. That made *new* text expensive (a texture
@@ -10,7 +14,7 @@
 use cosmic_text::{CacheKey, FontSystem, SwashCache};
 use std::collections::HashMap;
 
-/// Atlas texture side length (px). R8 → `SIZE²` bytes; 2048 ≈ 4 MB, thousands of
+/// Atlas texture side length (px). RGBA → `4·SIZE²` bytes; 2048 ≈ 16 MB, thousands of
 /// glyphs (a UI/editor uses a small, bounded glyph set per size).
 const SIZE: u32 = 2048;
 /// 1px gutter between glyphs so linear sampling never bleeds a neighbor.
@@ -27,6 +31,8 @@ pub struct AtlasGlyph {
     /// Bitmap size (physical px).
     pub width: u32,
     pub height: u32,
+    /// **The glyph has colours of its own** (an emoji): drawn as it is, not in the text's colour.
+    pub own_colours: bool,
 }
 
 /// Shared glyph atlas with a simple shelf packer.
@@ -56,7 +62,7 @@ impl Atlas {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -117,14 +123,22 @@ impl Atlas {
         key: CacheKey,
     ) -> Option<AtlasGlyph> {
         let img = swash.get_image(font_system, key).as_ref()?.clone();
-        self.upload(
+        let own_colours = matches!(img.content, cosmic_text::SwashContent::Color);
+        let texels = if own_colours {
+            std::borrow::Cow::Borrowed(img.data.as_slice())
+        } else {
+            std::borrow::Cow::Owned(white_with(&coverage_of(&img)))
+        };
+        let mut glyph = self.upload(
             queue,
-            &img.data,
+            &texels,
             img.placement.width,
             img.placement.height,
             img.placement.left,
             img.placement.top,
-        )
+        )?;
+        glyph.own_colours = own_colours;
+        Some(glyph)
     }
 
     /// A **blurred** copy of `key`'s coverage mask, for a glyph halo.
@@ -172,10 +186,10 @@ impl Atlas {
         if gw == 0 || gh == 0 {
             return None;
         }
-        let (buf, w, h, pad) = blur_mask(&img.data, gw, gh, sigma);
+        let (buf, w, h, pad) = blur_mask(&coverage_of(&img), gw, gh, sigma);
         self.upload(
             queue,
-            &buf,
+            &white_with(&buf),
             w,
             h,
             img.placement.left - pad as i32,
@@ -183,7 +197,7 @@ impl Atlas {
         )
     }
 
-    /// Shelf-allocate a `w×h` slot and upload `data` (one coverage byte per texel).
+    /// Shelf-allocate a `w×h` slot and upload `data` (four bytes per texel, RGBA).
     fn upload(
         &mut self,
         queue: &wgpu::Queue,
@@ -221,7 +235,7 @@ impl Atlas {
             data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(w),
+                bytes_per_row: Some(w * 4),
                 rows_per_image: Some(h),
             },
             wgpu::Extent3d {
@@ -245,8 +259,17 @@ impl Atlas {
             top,
             width: w,
             height: h,
+            own_colours: false,
         })
     }
+}
+
+/// **A coverage mask as white texels** — what the text's colour tints in the shader.
+fn white_with(coverage: &[u8]) -> Vec<u8> {
+    coverage
+        .iter()
+        .flat_map(|&alpha| [255, 255, 255, alpha])
+        .collect()
 }
 
 /// Blur buckets per pixel of sigma — how finely distinct halo radii are cached.
@@ -411,6 +434,78 @@ mod tests {
         assert!(
             wide > narrow,
             "sigma 4 padded {wide}, sigma 1 padded {narrow}"
+        );
+    }
+}
+
+/// **A glyph's coverage — one byte per pixel, what this atlas holds.**
+///
+/// Most glyphs already are a coverage mask. A glyph a font draws in colour — an emoji, which a symbol
+/// such as ⏺ falls back to when the terminal's own font lacks it — arrives as four bytes per pixel;
+/// read as a mask it filled its whole box, which is why it showed as a square. Its transparency is
+/// its shape, so that is what is kept: it is drawn in the text's colour, the right shape, until
+/// colour glyphs get an atlas of their own. A subpixel mask keeps its middle channel.
+fn coverage_of(img: &cosmic_text::SwashImage) -> std::borrow::Cow<'_, [u8]> {
+    use cosmic_text::SwashContent;
+    match img.content {
+        SwashContent::Mask => std::borrow::Cow::Borrowed(&img.data),
+        SwashContent::Color => std::borrow::Cow::Owned(
+            img.data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pixel| pixel[3])
+                .collect(),
+        ),
+        SwashContent::SubpixelMask => std::borrow::Cow::Owned(
+            img.data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pixel| pixel[1])
+                .collect(),
+        ),
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::coverage_of;
+    use cosmic_text::{SwashContent, SwashImage};
+
+    fn image(content: SwashContent, data: Vec<u8>) -> SwashImage {
+        let mut img = SwashImage::new();
+        img.content = content;
+        img.placement.width = 2;
+        img.placement.height = 1;
+        img.data = data;
+        img
+    }
+
+    /// **A colour glyph keeps its shape, not its box**: one byte per pixel from its transparency, so
+    /// an emoji fallback (⏺) is not drawn as a filled square.
+    #[test]
+    fn every_glyph_becomes_one_byte_of_coverage_per_pixel() {
+        let mask = image(SwashContent::Mask, vec![0, 200]);
+        assert_eq!(&*coverage_of(&mask), &[0, 200]);
+        let colour = image(SwashContent::Color, vec![255, 0, 0, 0, 10, 20, 30, 255]);
+        assert_eq!(
+            &*coverage_of(&colour),
+            &[0, 255],
+            "transparent where the emoji is not"
+        );
+        let subpixel = image(SwashContent::SubpixelMask, vec![1, 2, 3, 0, 4, 5, 6, 0]);
+        assert_eq!(&*coverage_of(&subpixel), &[2, 5]);
+    }
+}
+
+#[cfg(test)]
+mod colour_tests {
+    #[test]
+    fn a_coverage_mask_becomes_white_texels() {
+        assert_eq!(
+            super::white_with(&[0, 200]),
+            vec![255, 255, 255, 0, 255, 255, 255, 200]
         );
     }
 }

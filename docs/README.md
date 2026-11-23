@@ -10,6 +10,7 @@ Start with the [README](../README.md) to install heca and open it. Everything el
 | [Keyboard commands](keyboard-commands.md) | Every default key, the docks' keys, scrollback and selection, the command palette. |
 | [Sessions](sessions.md) | The background server, detach and reattach, following another window, saved sessions. |
 | [Configuration](configuration.md) | `config.toml`: per-project settings, theme, appearance, fonts, notifications, agent status, the program catalog. |
+| [Theming](theming.md) | Where heca finds a theme, `inherit` to change only part of one, and every key a theme can set. |
 | [Keybindings](keybindings.md) | How to bind a key: the five shapes, modes, surfaces, precedence. |
 | [Actions](actions.md) | How an action is dispatched, how to add one, and the interaction policy. |
 
