@@ -66,6 +66,11 @@ pub fn build_registry() -> ActionRegistry {
         WmActionKind::ReorderContainerAfter,
         handle_reorder_container_after,
     );
+    registry.register(
+        WmActionKind::ToggleContainerCollapsed,
+        handle_toggle_container_collapsed,
+    );
+    registry.register(WmActionKind::ResizeContainer, handle_resize_container);
     registry.register(WmActionKind::SetRegionVisible, handle_set_region_visible);
     registry.register(WmActionKind::RenamePane, handle_rename_pane);
     registry.register(WmActionKind::TerminalRename, handle_terminal_rename);

@@ -126,6 +126,7 @@ impl ChromeHost {
             id: id.clone(),
             provider,
             placement,
+            hand_share: None,
             handles: None,
             activated: false,
         };
@@ -327,6 +328,31 @@ impl ChromeHost {
             region,
         });
         Ok(())
+    }
+
+    /// **The docks of `region` in the order they are shown** (by their placed `order`, ties as
+    /// added), with their placed share.
+    pub fn shown(&self, region: RegionId) -> Vec<(String, Option<f32>)> {
+        let mut docks: Vec<_> = self.regions[region].contributions.iter().collect();
+        docks.sort_by_key(|m| m.placement.order.unwrap_or_default());
+        docks
+            .into_iter()
+            .map(|m| (m.id().to_string(), m.placement.flex))
+            .collect()
+    }
+
+    /// Give dock `id` this share of its region (CSS `flex`), as the user resized it — kept like a
+    /// hand move while the dock's own `[[docks]]` entry is unchanged, and **not** a change of
+    /// arrangement: the caller sets it on the drawn dock too, so nothing is rebuilt mid-drag.
+    pub fn set_share(&mut self, id: &str, flex: f32) {
+        if let Some(m) = self
+            .regions
+            .iter_mut()
+            .flat_map(|r| r.contributions.iter_mut())
+            .find(|m| m.id() == id)
+        {
+            m.hand_share = Some(flex);
+        }
     }
 
     /// Put `region`'s list in the order it is shown: by each dock's placed `order`, ties as they

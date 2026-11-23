@@ -276,6 +276,8 @@ impl ChromeHost {
             .find(|m| m.id() == id)
         {
             mounted.placement = placement;
+            // The entry changed, so what it says wins over a share the user gave by hand.
+            mounted.hand_share = None;
         }
     }
 

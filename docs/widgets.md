@@ -5410,7 +5410,7 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Badge`; a click on it never folds. With your own `.header` it is usually not needed — put the
   actions inside your header — but the two may be used together),
   `.collapsible(bool)` (default `true`; `false` keeps the body open, hides the chevron and a click
-  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿`, the reorder handle every reorderable list shares — set one only for a handle that means something else; takes an `Option`, and `None` keeps the glyph),
+  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿` — `DockFrame::GRIP`, the reorder handle every reorderable list shares; set one only for a handle that means something else; takes an `Option`, and `None` keeps the glyph), `.title_size(WidgetSize)` (the title row alone, text and padding — a row of a list nested in a dock reads smaller than the dock's header without shrinking what it holds),
   `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
@@ -8394,7 +8394,8 @@ Row::new()
 | `.draggable()` | It can be picked up, as whatever it is; every target takes it. A widget with no identity has nothing to say about what was picked up. |
 | `.draggable_as(kind)` | It can be picked up, and is a `kind` — a word its component chose (`"pane"`, `"column"`). Takes an `Option`: `None` leaves it as it was. |
 | `.draggable_when(rule)` | Only while `rule` holds for the modifiers when the drag would start (`\|m\| m.meta` is Cmd+drag). Asked once; a drag in flight never ends because a key came up. **Holding the key wins**: a source picked up by its rule beats the rows inside it, so Cmd+drag on a row inside a dock carries the dock. |
-| `.drag_by_handle()` | Picked up only by its handle — a widget inside it marked `.drag_handle()`. A press anywhere else in it starts no drag of it, so its content keeps its clicks. `DockFrame` does this with its grip. |
+| `.drag_by_handle(bool)` | Picked up by its handle — a widget inside it marked `.drag_handle()` — with no key needed; a press anywhere else in it starts no drag of it, so its content keeps its clicks. With `draggable_when` as well it is both: the handle picks it up with no key, the key held from anywhere. `DockFrame` does this with its grip (`DockFrame::GRIP`, the one reorder glyph). |
+| `.accepts_when(rule)` | Take a drop only from the sources `rule` allows, by the identity of what is carried — on top of the kinds. For a target that would do nothing with some of them (the space between two docks refuses the two it sits between). A refused source is never drawn on. |
 | `.drag_handle()` | This widget is a handle: a press on it picks up the nearest enclosing `drag_by_handle` widget. One that is not draggable leaves the handle doing nothing — it never reaches further out. |
 | `.drag_chip()` | Carry the small title chip under the pointer instead of a picture of the widget. |
 | `.drop_target()` | It takes drops, of anything. |
@@ -8438,6 +8439,12 @@ where it sits and carries a picture of itself under the pointer, as the browser 
 is (a terminal's surface included), in the top layer, at the theme's `drag_image_alpha`, shrunk by
 `drag_image_scale` toward the point that was grabbed. All colours derive from the theme's `accent`.
 A widget that draws its own feedback says so with `Component::paints_own_drag_feedback`.
+
+**Docks sharing a region (heca).** With more than one dock in a region each gets a header — `⠿`, its
+name and a fold caret at the end. The grip carries the dock with no key; a fold
+(`chrome.container.toggle_collapsed container_id=?`) leaves the header alone and the others share the
+room; the edge between two docks is a `Splitter` that sends `chrome.container.resize container_id=…
+by=<px>` while dragged. One dock alone owns its region and has no header.
 
 **Moving a dock (heca).** The seat heca puts round every dock is `draggable_as("dock")` with the
 window's move key (`settings.interactive_move_modifier`, the key that carries a pane) and

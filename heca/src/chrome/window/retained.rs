@@ -65,6 +65,15 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     state.layout().active_workspace_idx().hash(&mut hsh);
     // Which docks each region holds, in what order and how big: a move from any path rebuilds.
     state.chrome_host.arrangement(&mut hsh);
+    // A dock folded to its header takes a different share, so a fold rebuilds the region.
+    for region in crate::chrome::RegionId::ALL {
+        for mounted in state.chrome_host.contributions(region) {
+            state
+                .chrome_state
+                .is_container_collapsed(mounted.id())
+                .hash(&mut hsh);
+        }
+    }
     for ws in &state.chrome_state.workspaces.tree().workspaces {
         ws.ws_idx.hash(&mut hsh);
         ws.name.hash(&mut hsh);
