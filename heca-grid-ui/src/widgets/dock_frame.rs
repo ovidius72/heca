@@ -39,8 +39,9 @@ use crate::widgets::{Flex, Glyph, Grid, Icon, Item, Label, RegionMode};
 /// Chevron glyphs for expanded / collapsed states.
 const CHEVRON_OPEN: &str = "▾";
 const CHEVRON_CLOSED: &str = "▸";
-/// The grip glyph a [`Dock`](DockFrameVariant::Dock)'s title row shows by default — the dock-move
-/// handle. Another one is set with [`DockFrame::grip_glyph`].
+/// The grip glyph a [`Dock`](DockFrameVariant::Dock)'s title row shows by default — **the handle
+/// a row of a reorderable list is dragged by**, the same on every list so one gesture reads one
+/// way. Another one is set with [`DockFrame::grip_glyph`].
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
 const LEADING_GAP: Spacing = Spacing::Sm;
@@ -370,8 +371,8 @@ impl DockFrame {
         self
     }
 
-    /// **The glyph the grip shows** (default `⠿`, the dock-move handle). A frame that is a row of a
-    /// reorderable list sets its own — a reorder handle that does not read as "move this dock":
+    /// **The glyph the grip shows** (default `⠿`, the reorder handle every reorderable list shares —
+    /// workspaces, rooms). Set one only for a handle that genuinely means something else:
     ///
     /// ```ignore
     /// DockFrame::new("Lobby").grip_glyph("≡")

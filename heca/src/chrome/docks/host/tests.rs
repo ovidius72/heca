@@ -267,3 +267,43 @@ fn reorder_moves_across_regions_to_where_the_target_is() {
         "a missing target changes nothing"
     );
 }
+
+/// **A move the user makes wins over the order the docks were placed with.** A dock placed with
+/// `order = 1` under another is moved above it, and stays there: the region's order becomes the
+/// user's. Before and after are as the region is *shown*, which its `order` decides.
+#[test]
+fn a_users_reorder_wins_over_the_placed_order() {
+    use crate::chrome::docks::regions::DockPlacement;
+    let mut h = host();
+    for (id, order) in [("rooms", 1), ("ws", 0)] {
+        seat(
+            &mut h,
+            TestProvider::new(id, RegionSet::sidebars(), RegionId::LeftSidebar),
+        );
+        h.set_placement(
+            id,
+            DockPlacement {
+                flex: None,
+                order: Some(order.into()),
+            },
+        );
+    }
+    let shown = |h: &ChromeHost| -> Vec<String> {
+        let mut docks: Vec<_> = h
+            .contributions(RegionId::LeftSidebar)
+            .iter()
+            .map(|m| (m.placement().order.unwrap_or_default(), m.id().to_string()))
+            .collect();
+        docks.sort_by_key(|dock| dock.0);
+        docks.into_iter().map(|(_, id)| id).collect()
+    };
+    assert_eq!(shown(&h), ["ws", "rooms"], "placed: ws first, by order");
+    h.reorder("rooms", Some("ws")).unwrap();
+    assert_eq!(
+        shown(&h),
+        ["rooms", "ws"],
+        "moved above it, and the order follows"
+    );
+    h.reorder_after("rooms", "ws").unwrap();
+    assert_eq!(shown(&h), ["ws", "rooms"], "after it, as shown");
+}

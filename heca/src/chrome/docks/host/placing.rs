@@ -153,7 +153,7 @@ impl ChromeHost {
                 (Some(to), Some(at)) => {
                     self.set_placement(&id, placement);
                     if to != at
-                        && let Err(error) = self.move_container(&id, to)
+                        && let Err(error) = self.relocate(&id, to)
                     {
                         crate::chrome::input::identity::warn_author(format!(
                             "[heca] [[docks]] could not move '{id}' to '{}': {error}",
@@ -268,7 +268,7 @@ impl ChromeHost {
     }
 
     /// A seated dock's placement (share and order), replaced — a reload changed its entry.
-    fn set_placement(&mut self, id: &str, placement: DockPlacement) {
+    pub(super) fn set_placement(&mut self, id: &str, placement: DockPlacement) {
         if let Some(mounted) = self
             .regions
             .iter_mut()

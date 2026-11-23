@@ -5410,7 +5410,7 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Badge`; a click on it never folds. With your own `.header` it is usually not needed — put the
   actions inside your header — but the two may be used together),
   `.collapsible(bool)` (default `true`; `false` keeps the body open, hides the chevron and a click
-  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿`, the dock-move handle; a frame that is a row of a reorderable list sets its own, e.g. `"≡"`; takes an `Option`, and `None` keeps the glyph),
+  folds nothing), `.grip(bool)` (default `true`; a `Dock`'s grip — a `Section` has none), `.grip_glyph(text)` (default `⠿`, the reorder handle every reorderable list shares — set one only for a handle that means something else; takes an `Option`, and `None` keeps the glyph),
   `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
