@@ -383,3 +383,20 @@ fn a_described_toasts_unknown_slot_falls_back_to_the_body() {
         "an unknown slot should fall back to the body, not vanish",
     );
 }
+
+/// A described avatar shows the text's first letter, in the tone and ring its props name.
+#[test]
+fn avatar_shows_the_first_letter_from_its_text() {
+    let node = ViewNode::new(WidgetId::Avatar)
+        .text("bob")
+        .prop("tone", PropValue::Text("muted".into()))
+        .prop("ring", PropValue::Text("warning".into()));
+    let w = realize(
+        &node,
+        &Theme::default(),
+        &noop_emitter(),
+        &mut FormBindings::default(),
+    )
+    .expect("valid described test widget");
+    assert_eq!(w.text_summary().as_deref(), Some("B"));
+}

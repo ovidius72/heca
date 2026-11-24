@@ -6,6 +6,7 @@
 //! widgets (Button, Card, Hud, Gauge, Sidebar, Pane, …) arrive in Phase C.
 
 mod alert;
+mod avatar;
 mod badge;
 mod badge_button;
 mod button;
@@ -122,6 +123,7 @@ pub use row::{Row, RowVariant};
 pub use scroll_bar::ScrollBar;
 pub use scroll_region::{RevealAlign, ScrollAxes, ScrollInfo, ScrollRegion};
 mod edge_hint;
+pub use avatar::Avatar;
 pub use edge_hint::{EdgeHint, RevealEdge, ScrollFacts};
 pub use select::Select;
 pub use separator::{Orientation, Separator};

@@ -199,6 +199,10 @@ fn every_exported_component_has_a_plain_external_construction_and_composition_ex
         ))
         .child(widget!(Tile, Tile::new().title(Label::new("Tile"))))
         .child(widget!(
+            Avatar,
+            Avatar::new("Avatar").ring(heca_grid_ui::Tone::Warning)
+        ))
+        .child(widget!(
             Toast,
             Toast::new("Message").action(Button::new("Retry"))
         ))

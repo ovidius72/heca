@@ -373,6 +373,25 @@ impl Base {
         animating || tone_changed
     }
 
+    /// **Where this widget's content goes** — [`bounds`](Self::bounds) less its own padding on each
+    /// side, the CSS content box. A widget that draws its own content (a label's text) draws it
+    /// here: drawing into the whole box put a padded label's text against its left edge, so a
+    /// letter given room on both sides sat to one side of it.
+    pub fn content_rect(&self) -> Rectangle {
+        let b = self.bounds;
+        let l = &self.style.layout;
+        let font = self.font;
+        let (left, right) = (l.pad_left(font) as f64, l.pad_right(font) as f64);
+        let (top, bottom) = (l.pad_top(font) as f64, l.pad_bottom(font) as f64);
+        Rectangle::new(
+            Point::new(b.loc.x + left, b.loc.y + top),
+            Size::new(
+                (b.size.w - left - right).max(0.0),
+                (b.size.h - top - bottom).max(0.0),
+            ),
+        )
+    }
+
     pub fn highlight_rect(&self, inset: f64) -> Rectangle {
         let b = self.bounds;
         let l = &self.style.layout;

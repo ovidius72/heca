@@ -8,8 +8,11 @@ use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::Glow;
 use crate::style::Length;
 
-/// Dot diameter (logical px).
-const DOT_SIZE: f32 = 9.0;
+/// **Dot diameter, as a share of the text it sits with** — 9px at the default 15px font. A share of
+/// the font rather than a pixel count, so the dot follows a font change and a size variant: a
+/// caption-sized row (or an [`Avatar`](super::Avatar) badge) gets a smaller dot instead of one that
+/// covers what it marks.
+const DOT_EM: f32 = 0.6;
 /// Glow spread radius (px).
 const GLOW_RADIUS: f32 = 8.0;
 /// Glow intensity for active states.
@@ -54,8 +57,8 @@ impl StatusDot {
     /// A new dot with the given `status`.
     pub fn new(status: DotStatus) -> Self {
         let mut base = Base::new();
-        base.style.layout.width = Length::Px(DOT_SIZE);
-        base.style.layout.height = Length::Px(DOT_SIZE);
+        base.style.layout.width = Length::Em(DOT_EM);
+        base.style.layout.height = Length::Em(DOT_EM);
         // **It never gives way.** Everything shrinks by default, which is right for text and for a
         // card carrying a design width — and wrong for a pip: squeezing one axis of a circle does
         // not make it smaller, it flattens it, and a tight sidebar row left this drawn as a 3px

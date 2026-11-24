@@ -177,6 +177,9 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
         WidgetDefinition::new(WidgetId::Progress, display::progress)
             .names("Progress", "ProgressBar")
             .properties::<ProgressBar>(),
+        WidgetDefinition::new(WidgetId::Avatar, display::avatar)
+            .names("Avatar", "Avatar")
+            .properties::<heca_grid_ui::widgets::Avatar>(),
         WidgetDefinition::new(WidgetId::Tile, display::tile)
             .names("Tile", "Tile")
             .children(),

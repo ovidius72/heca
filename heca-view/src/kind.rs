@@ -122,4 +122,5 @@ builtin_shortcuts! {
     NfIcon => "nf_icon",
     ButtonGroup => "button_group",
     Tile => "tile",
+    Avatar => "avatar",
 }
