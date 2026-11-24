@@ -122,11 +122,20 @@
       "priority": 2,
       "shortName": "no-widget-or-composition-write",
       "title": "No widget or composition writes a position by hand — layout places everything",
-      "status": "planned",
+      "status": "in-progress",
       "description": "THE SYNTAX: never write a bound or a position by hand. Found on main 2026-11-24:\n\n- `shift_subtree` (moving children after layout) used by widgets: heca-grid-ui/src/widgets/tooltip.rs, toast/stack.rs, scroll_region/mod.rs + motion.rs, select/component.rs, overlay/mod.rs, context_menu/presenter.rs, flex/mod.rs. Its definition and the paint transform (lib.rs, component/tree.rs, component/paint_cx/transform.rs) are the framework side; scrolling offsets may legitimately stay a paint transform — decide per case and say why.\n- Bounds written by hand in the app: heca/src/providers/workspaces/column_group.rs:138, heca/src/chrome/panes/column/mod.rs:122.\n- `.at_rect(..)` in the app: chrome/panes/terminal/links.rs, terminal/viewport.rs, terminal/search/mod.rs, chrome/panes/column/shell.rs, chrome/surfaces/expose/workspace_row.rs.\n\nFix: placement is said as layout (Overlay position / anchor, grid tracks, flex, offsets as live values), so the framework computes it. A floating surface uses the overlay's placement; scrolling uses the scroll region's own offset.\n\nRisk: these are overlay / tooltip / toast / select / scroll — visual work; nothing ships without Antonio driving it in the GPU app.",
       "descriptionUpdatedAt": "2026-11-24T09:48:46.182Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "90012516-63fc-4fed-b48e-763698ba4d88",
+          "date": "2026-11-24T20:02:59.572Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -171,12 +180,17 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-11-24T20:02:59.572Z",
       "completedAt": "",
       "createdAt": "2026-11-24T09:48:45.965Z",
-      "updatedAt": "2026-11-24T09:48:45.965Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-11-24T20:02:59.572Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+          "createdAt": "2026-11-24T20:02:59.437Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d"
     },
     {
       "id": "d2132103-db56-44c5-a8ab-f02a8f7a4255",
@@ -590,7 +604,7 @@
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-24T19:34:51.071Z",
+  "updatedAt": "2026-11-24T20:02:59.572Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -609,7 +623,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
-      "createdAt": "2026-11-24T15:19:38.554Z"
+      "createdAt": "2026-11-24T20:02:59.437Z"
     }
   ]
 }
