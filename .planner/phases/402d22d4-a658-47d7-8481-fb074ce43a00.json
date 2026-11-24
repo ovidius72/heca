@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "Button::shortcut(char) → composed Icon(NfIcon ⌃)+Label(letter) trailing slot inside the button; Ctrl+<c> self-submit + FocusManager::deliver_accelerator. Blocked on viewnode-all-widgets (Button) + gridui-03 NerdFont.",
   "description": "Give a `Button` an explicit **accelerator** (`Ctrl+<letter>`) rendered **inside** the button as composed content, and wire it through the confirm/modal builders.\n\n## STATUS: UNBLOCKED on the Button side (2026-07-13)\nThe blocker is gone: `Button` now **composes its content from children** (commit `07d4c1a`, PR #237) — it holds an arbitrary child tree and the size variant + state color cascade into it. So the accelerator is just **another child**, exactly as the design demands. Still blocked on **NerdFont embedding** (`gridui-03`) for the glyph.\n\n## DESIGN LOCKED (user, rescued from the old root HANDOFF.md §2/§3b — do NOT relitigate)\n- **Trigger: `Ctrl+<letter>`.** Chosen because it works in **confirm AND form dialogs** — a bare letter would collide with typing in an `Input`.\n- **Rendered INSIDE the button**, as a **composed `Icon + Label`** child (the letter next to a control glyph). **NOT** hand-drawn `cx.icon`/`cx.text`, **NOT** placed adjacent to/outside the button. With the composition refactor landed, this is now natural: `.shortcut(c)` is **sugar that appends a child**, the same way `.icon(g)` prepends one.\n- **The Button self-submits on `Ctrl+<c>`**; a host helper (`FocusManager::deliver_accelerator`) routes the accelerator to the matching **non-focused** button (otherwise only the focused button could be triggered).\n- **`ModalAction.shortcut: Option<char>`**, set by the confirm builder. The **letter is semantic** — `n` = cancel/negative, `y` = confirm/positive — and must be assigned by the **caller/builder**, because a widget cannot infer that \"Cancel\" means \"No\".\n- **Glyph: NerdFont, NOT Phosphor.** `Glyph::CaretUp` (codepoint `0xe13c`) was added for this and the user judged Phosphor's caret **ugly**. It **stays in the enum** (user directive: *keep it, do not remove*) but the accelerator uses a NerdFont control glyph instead.\n\n## Work\n1. **`gridui-03` first** — embed NerdFont (`NfIcon` + curated `NfGlyph`): vendor \"Symbols Nerd Font Mono\", confirm the license, add a renderer font family/role.\n2. `Button::shortcut(char)` → appends a trailing composed child (`NfIcon(control) + Label(letter)`); the child inherits the button's state color + size variant for free (the composition foundations).\n3. `Ctrl+<c>` self-submit in `Button::event`; `FocusManager::deliver_accelerator(root, char)` to reach a non-focused button.\n4. `ModalAction.shortcut` + the confirm builder assigning `n`/`y`; `OverlayHost` passes it through when it builds the action buttons.\n5. Docs per AGENTS.md: exhaustive, **both audiences** (native builder + the `ViewNode` prop), + showcase demo.\n\n## Files\n`heca-grid-ui/src/widgets/button.rs`, `heca-grid-ui/src/focus.rs`, `heca-grid-ui/src/widgets/icon.rs` (NfIcon), `heca/src/chrome/overlay.rs` (`ModalSpec`/`ModalAction`), `heca/src/actions.rs` (confirm builder), `docs/widgets.md`, showcase.\n\n## Gates\nclippy 0; `cargo test -p heca-grid-ui -p heca`; showcase green; no `cargo fmt`; rust SKILL review; user tests before commit.",
+  "descriptionUpdatedAt": "2026-07-13T15:29:44.427Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -36,9 +37,10 @@
       "shortId": "5AU6N",
       "priority": 1,
       "shortName": "button-shortcut-api",
-      "title": "button-shortcut-1: Button::shortcut(char) + accelerator dispatch",
+      "title": "Button::shortcut(char) — the letter shown inside the button as a Keycap, and pressing it presses the button",
       "status": "planned",
-      "description": "`Button::shortcut(char)` → composed `Icon(NerdFont ⌃) + Label(letter)` trailing slot rendered **inside** the button (via the content-slot refactor from `viewnode-task-2`). `Ctrl+<c>` self-submit + `FocusManager::deliver_accelerator`.\n\nBLOCKED on:\n- `viewnode-task-2` (Button content-slot refactor — must land first).\n- ~~`gridui-03` `NfIcon`~~ — **unblocked 2026-07-30** (F003/P085/T358): `NfIcon` + `NfGlyph` + `FontRole::NerdFont` exist, and `NfGlyph::Control` is the ⌃ this task wanted. `Glyph::CaretUp` (0xe13c) stays in the enum but the accelerator uses NerdFont, as decided.\n\nFiles: `heca-grid-ui/src/widgets/button.rs` (shortcut API + trailing slot), `heca-grid-ui/src/component.rs` / `FocusManager` (`deliver_accelerator`).\n\nBehaviors to preserve: existing Button variants/sizes/labels unchanged; theme-driven styling; the accelerator is an additive trailing slot (empty by default → no layout shift). Update `docs/widgets.md` + showcase.\n\n**Reuse, do not re-derive:** a key token → glyph mapping already exists in one place (`heca/src/shortcut.rs::chord_caps` + `KEY_GLYPHS`), and the chip itself is `KeyCap` / `paint_keycap_nf`. A `Button::shortcut` that spells its own accelerator would be the second table.",
+      "description": "REWRITTEN 2026-11-24 after a review against main (Antonio approved). The old blockers (`viewnode-task-2` content slot, `NfIcon`, `FocusManager::deliver_accelerator`) are no longer the path.\n\n## Current state (verified 2026-11-24 on main)\n- The `Keycap` widget exists (T469), used by the palette's shortcut column (heca-grid-ui/src/widgets/command_palette/view.rs:186).\n- `Component::shortcut() -> Option<char>` exists (heca-grid-ui/src/component/behavior.rs:53) and its doc says a confirm Dialog fires the button whose `shortcut()` matches a typed letter — **but nothing implements it and nothing reads it.** It is a dead hook whose doc describes behaviour that does not exist.\n- `Button` (heca-grid-ui/src/widgets/button/builders.rs) has label, icon, variants — no shortcut builder and no trailing content.\n- Two key→glyph pieces exist side by side: heca/src/shortcut.rs `KEY_GLYPHS` + `chord_caps` → the app's own `KeyCap` type, and the library `Keycap` widget. Reuse one; do not add a third.\n\n## What to build\n`Button::new(\"Delete\").shortcut('y')` → the button shows its label and, after it, a `Keycap` with the letter (composed child, not painted text). While the button's dialog/surface has the keyboard and no text field holds focus, typing the letter presses the button — the same press as a click (its `on_click` / intent), routed by the framework in the DOM-shaped key path, not by a host list.\nEither make `Component::shortcut()` the real mechanism (Dialog or the focus scope reads it) or delete it in favour of the builder; never keep both.\nDefault: no shortcut, no layout change. Update docs/widgets.md (THE SYNTAX example) and the showcase.\n\n## Check\nTests: the keycap is a child of the button; the letter presses it; it does not fire while an Input has focus. Antonio eye-checks the look.",
+      "descriptionUpdatedAt": "2026-11-24T09:34:06.457Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -46,10 +48,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-13T15:30:01.843Z",
-      "updatedAt": "2026-07-30T12:01:56.375Z"
+      "updatedAt": "2026-11-24T09:34:06.456Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "760365ea-80cb-4b5c-99de-ffe1b63f8eb3",
@@ -58,9 +64,10 @@
       "shortId": "RP42W",
       "priority": 2,
       "shortName": "modal-shortcut-prop",
-      "title": "button-shortcut-2: ModalAction.shortcut prop in confirm builder",
+      "title": "Confirm dialogs give their buttons letters: y proceeds, n cancels (uses T273)",
       "status": "planned",
-      "description": "`ModalAction.shortcut` prop set by the confirm builder: `n` = cancel, `y` = proceed (so confirm dialogs get in-button accelerator letters for free once `button-shortcut-1` lands).\n\nFiles: confirm-dialog builder (`heca/src/chrome/...`), `ModalAction`/`ViewNode` prop wiring.\n\nBehaviors to preserve: confirm dialog semantics (Delete Pane? / Delete &lt;custom&gt?; verb \"Delete\"; disabled-OK-when-empty guard stays); the shortcut is additive metadata the Button reads to render its trailing accelerator slot. Update `docs/widgets.md`.",
+      "description": "REWRITTEN 2026-11-24 after a review against main (Antonio approved). Depends on P074/T273 (Button::shortcut).\n\n## Current state (verified 2026-11-24 on main)\n- Confirm dialogs are built from `ModalAction { id, label, danger, disable_when_empty }` (heca/src/chrome/surfaces/overlay/spec.rs:54) by heca/src/handlers/confirm.rs and the overlay host. No shortcut field.\n- The library `Dialog` takes `.action(button)` (heca-grid-ui/src/widgets/dialog/builders.rs:160) and already presses the primary action on Enter (DialogPanel, T469).\n\n## What to build\nA confirm's proceed button gets `y`, its cancel button `n`, through `Button::shortcut` (T273) — set once where the confirm is built, not per caller. Rename and other dialogs with a text field get none (the letter would be typed into the field). Keep: the verb (\"Delete\"), the danger tint, the disabled-while-empty guard. Update docs.\n\n## Check\nAntonio: a delete-pane confirm shows y / n keycaps; y deletes, n cancels; a rename dialog shows none.",
+      "descriptionUpdatedAt": "2026-11-24T09:34:10.670Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -68,16 +75,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-13T15:30:01.845Z",
-      "updatedAt": "2026-07-13T15:30:01.845Z"
+      "updatedAt": "2026-11-24T09:34:10.668Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-13T15:29:44.427Z",
-  "updatedAt": "2026-07-30T12:01:56.375Z",
+  "updatedAt": "2026-11-24T09:34:10.668Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": [
@@ -89,5 +101,6 @@
       "title": "draft → planned",
       "description": ""
     }
-  ]
+  ],
+  "sessionInfo": []
 }

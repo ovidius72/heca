@@ -36,11 +36,20 @@
       "priority": 3,
       "shortName": "focus-pane-number",
       "title": "FocusPaneByNumber action and chord binding",
-      "status": "planned",
+      "status": "canceled",
       "description": "Azione e chord binding per focus via numero pane.\n\n## Detail carried over from the old backlog file, now a historical archive\n- [ ] **app-task-15** — Add `WmAction::FocusPaneByNumber { ws: usize, pane: usize }` + handler + chord binding (`prefix+<ws-digit>+<pane-digit>`).\n  Follow \"Adding New Actions\" checklist.\n  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca-config/src/theme.rs`",
       "descriptionUpdatedAt": "2026-11-17T15:10:55.281Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "23665a24-7fc0-45d5-ba1b-990002d2a19d-check-001-planned-canceled",
+          "date": "2026-11-24T09:32:11.343Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Superseded (review 2026-11-24, Antonio approved closing): panes are reached by their pick letters (P054/T178 universal KeyHint, T451 the Pane owns its letter) and workspaces by their numbers (workspace_frame.rs shows workspace_number). A prefix+ws-digit+pane-digit chord is a second path to the same target.",
+          "description": "Superseded (review 2026-11-24, Antonio approved closing): panes are reached by their pick letters (P054/T178 universal KeyHint, T451 the Pane owns its letter) and workspaces by their numbers (workspace_frame.rs shows workspace_number). A prefix+ws-digit+pane-digit chord is a second path to the same target."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -51,7 +60,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-11-17T15:10:55.279Z",
+      "updatedAt": "2026-11-24T09:32:11.343Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -63,11 +72,20 @@
       "priority": 2,
       "shortName": "pane-number-display",
       "title": "Pane number display on sidebar cards",
-      "status": "planned",
+      "status": "canceled",
       "description": "Mostrare il numero pane sulle card della sidebar.",
       "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b2606b81-2852-4155-bc32-4fd825883c0e-check-001-planned-canceled",
+          "date": "2026-11-24T09:32:12.677Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Superseded (review 2026-11-24, Antonio approved closing): pane numbers were replaced by pick letters owned by the Pane (T451) and shown by the universal KeyHint (T178); the sidebar shows workspace numbers already.",
+          "description": "Superseded (review 2026-11-24, Antonio approved closing): pane numbers were replaced by pick letters owned by the Pane (T451) and shown by the universal KeyHint (T178); the sidebar shows workspace numbers already."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -78,7 +96,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-24T09:32:12.677Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -90,11 +108,20 @@
       "priority": 1,
       "shortName": "pane-number-compute",
       "title": "Pane number computation per workspace",
-      "status": "planned",
+      "status": "canceled",
       "description": "Calcolare numbering stabile per workspace.",
       "descriptionUpdatedAt": "2026-07-01T18:14:28.688Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "ea18b000-2176-4a9c-a8c5-b1afbb558043-check-001-planned-canceled",
+          "date": "2026-11-24T09:32:13.759Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Superseded (review 2026-11-24, Antonio approved closing): no pane numbering is needed — panes are identified by pick letters (T451/T178).",
+          "description": "Superseded (review 2026-11-24, Antonio approved closing): no pane numbering is needed — panes are identified by pick letters (T451/T178)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -105,13 +132,13 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-11-24T09:32:13.759Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-17T15:10:55.279Z",
+  "updatedAt": "2026-11-24T09:32:13.759Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -124,6 +151,14 @@
       "fromStatus": "draft",
       "toStatus": "planned",
       "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "8d3582eb-b3ac-4a30-bea2-66b64f2c3d18",
+      "date": "2026-11-24T09:32:13.796Z",
+      "fromStatus": "planned",
+      "toStatus": "rejected",
+      "title": "planned → rejected",
       "description": ""
     }
   ],

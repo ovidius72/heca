@@ -37,11 +37,20 @@
       "priority": 1,
       "shortName": "verify-nerdfont-license",
       "title": "Verify Nerd Font license",
-      "status": "planned",
-      "description": "Verificare la licenza della font usata per i glyph Nerd Font.\n\n## Answered (2026-07-30, F003/P085/T358)\n\nThe Nerd Font the app uses for glyphs is the one it **already ships**: `heca-renderer/assets/MapleMonoNormal-NF-Regular.ttf` (+ the Bold face), embedded as the default terminal face long before this phase. Its licence sits beside it — `heca-renderer/assets/MAPLE-OFL.txt`, **SIL Open Font License 1.1**, which permits embedding and redistribution in a binary.\n\nSo there is nothing to re-verify unless a **second**, different Nerd Font is introduced — which T090 deliberately avoided by reusing this one.",
-      "descriptionUpdatedAt": "2026-07-01T18:13:27.646Z",
+      "status": "done",
+      "description": "Verificare la licenza della font usata per i glyph Nerd Font.\n\n## Answered (2026-07-30, F003/P085/T358)\n\nThe Nerd Font the app uses for glyphs is the one it **already ships**: `heca-renderer/assets/MapleMonoNormal-NF-Regular.ttf` (+ the Bold face), embedded as the default terminal face long before this phase. Its licence sits beside it — `heca-renderer/assets/MAPLE-OFL.txt`, **SIL Open Font License 1.1**, which permits embedding and redistribution in a binary.\n\nSo there is nothing to re-verify unless a **second**, different Nerd Font is introduced — which T090 deliberately avoided by reusing this one.\n\n---\n**Completion summary:**\nClosed in review 2026-11-24 (Antonio approved). The answer was already recorded in this task on 2026-07-30 (F003/P085/T358): the Nerd Font glyphs come from the font heca already ships, heca-renderer/assets/MapleMonoNormal-NF-Regular.ttf (+ Bold), embedded as the default terminal face. No code change; verification is that recorded check, not re-run today.",
+      "descriptionUpdatedAt": "2026-11-24T09:32:28.562Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2ee3156d-4dea-4801-8292-529e65b60821-check-001-planned-done",
+          "date": "2026-11-24T09:32:28.561Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Closed in review 2026-11-24 (Antonio approved). The answer was already recorded in this task on 2026-07-30 (F003/P085/T358): the Nerd Font glyphs come from the font heca already ships, heca-renderer/assets/MapleMonoNormal-NF-Regular.ttf (+ Bold), embedded as the default terminal face. No code change; verification is that recorded check, not re-run today."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -49,10 +58,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-24T09:32:28.561Z",
+      "completedAt": "2026-11-24T09:32:28.561Z",
       "createdAt": "2026-07-01T18:13:27.646Z",
-      "updatedAt": "2026-07-30T12:01:29.950Z",
+      "updatedAt": "2026-11-24T09:32:28.561Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -157,7 +166,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-17T15:11:36.376Z",
+  "updatedAt": "2026-11-24T09:32:28.561Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

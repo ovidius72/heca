@@ -10,7 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Ottimizzazione render su scene damage-aware e scissor union.",
-  "description": "\n\n═══ DETAIL RESCUED FROM PLAN.md (2026-07-26, before that file was deleted) ═══\nAnalysed 2026-06-22. Re-verify the file references before building.\n\nWHY IT DOES NOT WORK TODAY\n`heca-renderer`'s `composite.rs` keeps a PERSISTENT scene texture precisely so a frame can\nre-render only the changed region (scissored) and let unchanged pixels survive — cheap idle and\nanimation frames (a cursor blink, a hover glow) instead of repainting the whole UI 60 times a\nsecond. That is a real battery and heat win, especially for an idle terminal.\n\nIT IS NOT REALISED: `render_frame` clears the whole scene every frame and redraws every pane in\nfull, so there is nothing preserved to build on.\n\nWHAT WAS REMOVED AND WHY\nThe chrome-level `ChromeDamageMode` (Full / Tracked / ForceFullOnNextRequest) was the app-side gate\nfor this. Layered over an unconditional per-frame clear it only ever DROPPED chrome content, which\nshowed up as a dark \"re-render flash\" on the split button's press animation. Fixed 2026-06-22 by\nmaking chrome always full-repaint (`render.rs`, `damage: None`) and REMOVING the dead\n`ChromeDamageMode` machinery — it was unsound as built. Do not resurrect it as-is.\n\nTHE FOUR STEPS TO ACTUALLY LAND IT\n1. Stop the unconditional per-frame scene clear.\n2. Make PANES damage-aware — only re-render changed pane regions. Chrome alone is not enough.\n3. Scissor the clear and each renderer to the union damage rect against the preserved scene.\n4. Re-introduce an app-side damage gate, designed against the above rather than layered on top.\n\nRenderer-level `GridRenderer::set_damage` and the compositor's preserved scene already exist to\nbuild on.\n\nRISK: rendering correctness — transparent-pane double-blend, stale pixels. GPU ordering is not\nunit-tested, so this MUST be verified by running the app, not by a green suite.\n\nRELATED: the reactive-store work noted that feeding signal changes into the\n`needs_paint`/`collect_damage` path is \"the deep part of the work\". Same problem, same place.\n",
+  "description": "REWRITTEN 2026-11-24 after a review against main (Antonio approved). Goal unchanged: an idle or lightly animating window repaints only what changed, not the whole UI every frame (battery and heat, above all for an idle terminal).\n\n## Current state (verified 2026-11-24 on main)\n- The renderers already accept a region to repaint: `GridRenderer::set_damage` (heca-renderer/src/grid/mod.rs:301) and `TextRenderer::set_damage` (heca-renderer/src/text/mod.rs:118); `flush_scene` passes `opts.damage` to both (heca/src/app/scene_flush.rs:91-101).\n- It is never used: every caller passes `damage: None` (heca/src/app/frame/mod.rs:167 `Frame::pass`, heca/src/app/frame/host_work.rs:58), and the comment at frame/mod.rs:159 says why — the scene texture is cleared every frame (`Frame::clear_and_background`, heca/src/app/frame/draw.rs:10) and panes redraw in full, so a partial repaint would leave bare background (the dark flash seen on the split button's press, 2026-06-22).\n- heca-renderer/src/composite.rs keeps a persistent scene texture — the base this needs.\n- Frames are already skipped when nothing asked for one (`state.needs_redraw`, frame/mod.rs:81) since T562 (idle CPU), so the win left is in frames that DO run but change a small area (cursor blink, hover glow, one pane's output).\n- The old `ChromeDamageMode` was removed as unsound; do not bring it back as it was.\n\n## Order of the work\n1. T148 — stop clearing the whole scene every frame; keep the preserved scene.\n2. T142 — know what changed: each pane and the chrome report the area they changed this frame.\n3. T151 — clear and draw only inside the union of those areas.\n4. T157 — turn it on: pass the union to `set_damage` instead of `None`; full repaint on resize, theme change, transparency change and first frame.\n5. T154 — verify: no flash, no stale pixels, and a measured drop in GPU time on an idle blinking cursor.",
+  "descriptionUpdatedAt": "2026-11-24T09:34:35.425Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -38,7 +39,8 @@
       "shortName": "pane-damage-render",
       "title": "Pane rendering from damage signals",
       "status": "planned",
-      "description": "Render dei pane guidato dai damage signals.",
+      "description": "REWRITTEN 2026-11-24 (Antonio approved). Step 2 of P041 — read the phase description first.\n\nEvery frame must know WHICH area changed. Today the frame only knows that something asked for a redraw (`state.needs_redraw`, heca/src/app/frame/mod.rs:81). Most of the pieces already exist (verified 2026-11-24):\n- Terminal panes: `client.terminal_view` returns a `TerminalDamage` with the snapshot (heca/src/app/terminal_render/mod.rs:55); it is `Full` or row ranges (heca-renderer/src/terminal/render.rs:70 `render_snapshot_damage`, :181 `dirty_rows`); viewport motion forces `Full` (heca-core/src/backend/terminal/engine/mod.rs:155).\n- Widgets: the library already collects the area of every widget flagged `needs_paint` (`collect_damage`, using `Component::damage_bounds`, heca-grid-ui/src/component/behavior.rs:397; overridden by tooltip and context menu, which paint outside their bounds).\n\nWhat is left: join the two into one changed area per frame (pane rows turned into window rectangles, plus the widgets' areas), in one place — not a list a new widget must remember to join. Moving or resizing anything means a full repaint.",
+      "descriptionUpdatedAt": "2026-11-24T09:35:21.941Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -46,10 +48,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
+      "updatedAt": "2026-11-24T09:35:21.939Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "73442037-1a7c-42d9-959f-eaa8dc4b3769",
@@ -60,7 +66,8 @@
       "shortName": "stop-perframe-clear",
       "title": "Stop unconditional per-frame clear",
       "status": "planned",
-      "description": "Evitare il clear totale per ogni frame.",
+      "description": "REWRITTEN 2026-11-24 (Antonio approved). Step 1 of P041 — read the phase description first.\n\nToday `Frame::clear_and_background` (heca/src/app/frame/draw.rs:10) clears the whole scene texture every frame (transparent or opaque per config), so nothing survives from the last frame. Make the clear keep the preserved scene (heca-renderer/src/composite.rs) and clear only when the whole frame is repainted (first frame, resize, theme / transparency change) or, after T151, only inside the changed area.\n\nKeep: transparent windows still show the frosted background in empty areas; opaque stays as today. Until T157 turns on partial repaint the full repaint must look exactly the same (no visible change).",
+      "descriptionUpdatedAt": "2026-11-24T09:34:43.072Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -68,10 +75,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
+      "updatedAt": "2026-11-24T09:34:43.070Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "93b4880a-4007-442f-9071-1fdf789aaabf",
@@ -82,7 +93,8 @@
       "shortName": "scissor-damage-union",
       "title": "Scissor union damage rect rendering",
       "status": "planned",
-      "description": "Usare union dei damage rect con scissor.",
+      "description": "REWRITTEN 2026-11-24 (Antonio approved). Step 3 of P041 — read the phase description first.\n\nWith the scene preserved (T148) and the changed areas known (T142), clear and draw only inside their union: one rectangle (the bounding box of all changed areas) is enough to start; several rectangles only if measuring shows the union is often much larger than the change. The renderers already take the area (`set_damage`, heca-renderer/src/grid/mod.rs:301 and text/mod.rs:118); the clear and the pane passes must use the same area.",
+      "descriptionUpdatedAt": "2026-11-24T09:34:48.511Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -90,10 +102,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
+      "updatedAt": "2026-11-24T09:34:48.509Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "9de9b934-dcec-4aa2-b52a-e3e8b114159c",
@@ -104,7 +120,8 @@
       "shortName": "verify-damage-rendering",
       "title": "Verify rendering with damage optimization",
       "status": "planned",
-      "description": "Verifica funzionale delle ottimizzazioni damage-aware.",
+      "description": "REWRITTEN 2026-11-24 (Antonio approved). Step 5 of P041 — read the phase description first.\n\nVerify by running, then by eye:\n- Measure GPU time per frame with an idle blinking cursor and with a hover glow, before and after; report the numbers.\n- No dark flash on the split button's press (the defect that removed the old attempt, 2026-06-22), no stale pixels after closing a tooltip, toast, palette or menu, after a pane scrolls, and with a transparent window.\n- Antonio eye-checks the same list in the GPU app.",
+      "descriptionUpdatedAt": "2026-11-24T09:34:53.159Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -112,10 +129,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
+      "updatedAt": "2026-11-24T09:34:53.157Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "bf8c3c21-d2b1-4b76-a8eb-ac84e9553470",
@@ -126,7 +147,8 @@
       "shortName": "damage-gate-renderer",
       "title": "Damage gate via GridRenderer set_damage",
       "status": "planned",
-      "description": "Gate damage-aware lato renderer.",
+      "description": "REWRITTEN 2026-11-24 (Antonio approved). Step 4 of P041 — read the phase description first.\n\nTurn it on: `Frame::pass` (heca/src/app/frame/mod.rs:165) and host_work.rs:58 pass the frame's changed area instead of `damage: None`, and the comment at frame/mod.rs:159 is rewritten to say what is true then. A full repaint stays the rule for the first frame, a resize, a theme / transparency change, and any frame where the change is not known. One switch decides this, in one place — not a mode checked by callers (the removed `ChromeDamageMode` was that mistake).",
+      "descriptionUpdatedAt": "2026-11-24T09:34:51.005Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -134,16 +156,32 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
+      "updatedAt": "2026-11-24T09:34:51.003Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.466Z",
+  "updatedAt": "2026-11-24T09:35:21.939Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "7a40d4d9-7e89-4a46-b7cb-8dde3eaa9bdf",
+      "date": "2026-11-24T09:34:43.101Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

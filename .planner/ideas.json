@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 33,
+  "nextIdeaNumber": 34,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -17,9 +17,14 @@
       "shortId": "VECMD",
       "title": "Auto Update",
       "description": "add an autoupdate command heca --update that download the lastes version",
-      "promotion": null,
+      "promotion": {
+        "targetType": "phase",
+        "targetId": "38d24dde-8ed2-4a69-9610-8793059a43e3",
+        "targetRef": "P112(F010)",
+        "promotedAt": "2026-11-24T09:17:24.227Z"
+      },
       "createdAt": "2026-09-17T19:28:41.211Z",
-      "updatedAt": "2026-09-17T19:28:41.211Z"
+      "updatedAt": "2026-11-24T09:17:24.227Z"
     },
     {
       "id": "edb813cc-8597-4144-b46b-6b6261f444ae",
@@ -186,10 +191,10 @@
       "number": 25,
       "shortId": "AX9KY",
       "title": "Package managers: Homebrew, maybe AUR, maybe winget or Chocolatey",
-      "description": "From Antonio, 2026-11-18, while planning the first release workflow (phase \"Build and release\" in F010). After the GitHub Release with zips and installers exists: publish heca through package managers — Homebrew (macOS, and Linux), maybe AUR (Arch Linux), maybe winget or Chocolatey (Windows). Each would consume the release's artifacts on every tag. Not approved work; to discuss when the release workflow is in use. Related: signing/notarization (also deferred) affects Homebrew casks and winget.",
+      "description": "From Antonio, 2026-11-18, while planning the first release workflow (phase \"Build and release\" in F010). After the GitHub Release with zips and installers exists: publish heca through package managers — Homebrew (macOS, and Linux), maybe AUR (Arch Linux), maybe winget or Chocolatey (Windows). Each would consume the release's artifacts on every tag. Not approved work; to discuss when the release workflow is in use. Related: signing/notarization (also deferred) affects Homebrew casks and winget.\n\n2026-11-24: automatic updates are P112(F010). It already carries this idea's one rule for installed copies: a heca installed by a package manager does not replace itself — the update only shows the package manager's command. Publishing to the package managers stays this idea.",
       "promotion": null,
       "createdAt": "2026-11-18T18:40:55.649Z",
-      "updatedAt": "2026-11-18T18:40:55.649Z"
+      "updatedAt": "2026-11-24T09:17:30.048Z"
     },
     {
       "id": "952c36e0-3740-4406-a915-77aaa5f7f059",
@@ -250,6 +255,16 @@
       "promotion": null,
       "createdAt": "2026-11-22T20:17:47.248Z",
       "updatedAt": "2026-11-22T20:17:47.248Z"
+    },
+    {
+      "id": "a36bd013-5ffe-4d7f-8045-f0acaece4f15",
+      "number": 33,
+      "shortId": "YFYMV",
+      "title": "Code signing and notarization of heca's releases (macOS, Windows)",
+      "description": "From Antonio, 2026-11-24. P110(F010) \"Build and release\" left code signing and notarization out \"as an idea\", but no idea existed — it was only mentioned inside I025. This is that idea.\n\nWHAT IT IS\n- Code signing: a certificate Apple or Microsoft gives the developer; the system then knows who made the program.\n- Notarization (macOS only): the app is sent to Apple, which checks and approves it.\n\nWHY IT MATTERS\nWithout them, a downloaded heca is met by macOS Gatekeeper (\"heca cannot be opened because the developer cannot be verified\" — open via right-click → Open or System Settings) and by Windows SmartScreen (\"Windows protected your PC\"). Costs: an Apple Developer account and a Windows code-signing certificate.\n\nRELATED\n- P112(F010) Automatic updates: an update downloaded by the app itself on macOS may be blocked by Gatekeeper while heca is not notarized — P112 lists it as something to check. P112's own update signature (heca's update key, verifying the download) is separate from this.\n- I025 (package managers): Homebrew casks and winget also care about signing.\n- Where it would go: .github/workflows/release.yml (cargo-packager build steps), secrets for the certificates.\n\nNot approved work; to decide when Antonio chooses to get the certificates.",
+      "promotion": null,
+      "createdAt": "2026-11-24T09:19:29.917Z",
+      "updatedAt": "2026-11-24T09:19:29.917Z"
     }
   ]
 }

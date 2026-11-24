@@ -47,10 +47,10 @@
       "shortId": "C7EGH",
       "priority": 1,
       "shortName": "column-pick-keycaps",
-      "title": "Column-level pick keycaps",
+      "title": "A column can be picked by letter as the thing an action acts on (swap / move a whole column)",
       "status": "planned",
-      "description": "Supporto per pick keycaps a livello colonna.\n\n## Detail carried over from the old backlog file, now a historical archive\n- [ ] **app-task-30** — F4.4 column-level pick keycaps: pane pick keycaps already work; columns have no\n  pick candidates today, so this needs NEW candidate computation in `heca/src/app/input.rs`, then project\n  the candidates onto a per-column hint signal each frame. `KeyHint` stays universal — do NOT make it\n  column-specific (memory `grid-ui-keyhint-universal`).\n  NOTE (2026-06-23): the per-column `KeyHint` + candidate infra now exists (`ChromeSignals.col_hint`,\n  `WorkspacesContainerState.col_pick_candidates`, built in `app-12`). This task is now just adding the\n  *column-as-pick-target* candidate computation for move/swap/take that act ON a column.\n  Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`",
-      "descriptionUpdatedAt": "2026-11-17T15:11:38.537Z",
+      "description": "REWRITTEN 2026-11-24 after a review against main (Antonio approved). The old text (app-task-30: \"columns have no pick candidates\", `ChromeSignals.col_hint`, `WorkspacesContainerState.col_pick_candidates`, heca/src/app/input.rs) is out of date.\n\n## Current state (verified 2026-11-24 on main)\n- A column can already be picked by letter as a DESTINATION: action `move_pane_to_column_pick` (heca/src/actions/builtins/layout.rs:228) opens `InputMode::ColumnPick { candidates: Vec<(char, ColumnPickTarget)>, pane_id }` (heca/src/app_state/input_mode.rs:153), handled by `handle_move_pane_to_column_pick` (heca/src/handlers/pick/mod.rs:280); candidates come from `collect_column_candidates` (heca/src/app/selection.rs:99).\n- The per-widget hint signals (`col_hint` and the others) are gone: letters are offered by ownership in heca/src/chrome/hint/ (by key, or by path for the universal picker).\n- Column actions exist but take indices only: `move_column`, `swap_columns`, `move_column_to_workspace` (heca/src/input/build/layout.rs:41-57). No way to pick \"this column\" by letter for them.\n\n## What is left\nLet the user pick a column by letter as the SUBJECT of an action: swap two columns, move a column to another place or workspace. The user presses the key, every column shows a letter, types one, then (for swap/move) picks the second target.\n\n## Rule for building it\nDo NOT add another `InputMode` variant. P094(F011)/T457 replaces the closed pick modes with one picker that yields the chosen target; build this on that picker (or together with it). A column pick is a KeyHintGroup over the column widgets, its continuation is the caller's.\n\n## Check\nAntonio drives: key → letters on every column → pick → columns swap/move; Esc cancels; works the same as pane picks in look and placement.",
+      "descriptionUpdatedAt": "2026-11-24T09:33:49.541Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -63,7 +63,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-11-17T15:11:38.530Z",
+      "updatedAt": "2026-11-24T09:33:49.539Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -306,10 +306,10 @@
       "shortId": "NRWXF",
       "priority": 8,
       "shortName": "a-dock-can-be-moved-between-si",
-      "title": "A dock can be moved between sidebars by mouse, and where it sits is saved across runs",
+      "title": "Where the user puts a dock is saved across runs, and can be reset",
       "status": "planned",
-      "description": "Asked for by Antonio, 2026-09-30, after trying the outside-program example (F012/T520, heca/examples/heca_plus.rs): the added \"Notes\" dock could not be moved to the other sidebar by dragging, and a move would not survive a restart anyway.\n\n## What is true today\n- A dock is seated where the code says. `regions(\"sidebar.left\").append(dock)` (heca/src/chrome/regions.rs) is queued and applied once at startup by `ChromeHost::mount_pending` (heca/src/chrome/host.rs ~259). Placement is kept in memory only: `ChromeHost::placement` (host.rs ~300) and `move_container` (~309). docs/chrome-and-ui.md:786 already lists \"Container placement persistence [ ]  # plugin-07 (in-memory today)\".\n- A move exists as an action, `chrome.container.move_to_region` (heca/src/actions/builtins/chrome.rs:128; handler in heca/src/handlers/docks.rs), so it is reachable by key and RPC. It is NOT reachable by mouse: the drag identities are a closed set — pane, column, workspace (heca/src/chrome/drag.rs `ChromeDragItem`) — and a dock has no drag handle or drop target.\n- The only config that touches placement is `[settings] show_left_sidebar` / `show_right_sidebar` (hide a whole side).\n- A test already states the in-memory rule: `a_dock_the_user_moved_stays_where_they_put_it` (heca/src/chrome/host.rs, region_list_tests).\n- (2026-11-19) The files moved since this was written: regions is heca/src/chrome/docks/regions.rs (`pub fn regions`, ~51); re-check host.rs / drag.rs paths before starting.\n\n## Wanted\n1. **Mouse move.** Dragging a dock's title row to the other sidebar (and to a position among that sidebar's docks) moves it. It must dispatch the existing `chrome.container.move_to_region` / reorder action through the registry, not mutate the host — one door for mouse, key and RPC (AGENTS § 2). A dock added by another crate (heca::regions) must be draggable with nothing written by its author (Rule Zero, AGENTS § 0d: a component owns its own input).\n2. **Save the user's placement.** Which region each dock is in, and its order, survives a restart. The user's saved placement wins over the default. Reuse the search-history persistence pattern (heca/src/search_state.rs, T386): data_dir path, schema version, atomic write, saves when a revision changes, never fails on a missing or bad file (a first run and a broken file behave the same).\n3. **Keyed by the dock's mount id** (the name `regions(..)` seats it under, e.g. \"workspaces.right\", \"notes\"). Edge cases: a saved dock no longer added by any code is ignored, not resurrected; a dock added for the first time uses its default; a saved region the dock no longer supports falls back to the default; two placements of one dock keep separate entries.\n4. **Reset.** The user can put everything back to the defaults (action / config), so a wrong move is never permanent.\n5. **The first-run region comes from the user's config, not the extension's code** (asked by heca-pro for its rooms dock, heca-pro T015, 2026-11-19; Antonio approved; heca-pro waits on this task). Today an extension seats its dock with `heca::regions(\"sidebar.right\").append(dock)`, so where an extension dock first appears is fixed in the extension's code. The extension gives only the dock (and at most a fallback); the user's config says which region and position it starts in, keyed by the mount id. Order of precedence: saved placement (2) → config default (this point) → the code's fallback. Reset (4) goes back to the config default. Keep `regions(..).append/prepend` working as the fallback (decision 15ec67fc: heca-pro's surface stays compatible). Document the config key in config.default.toml and docs/configuration.md.\n\n## Later fit\nAfter F012/P104 (server/client split) placement is a per-window client setting (which docks are shown and where is per window, F012 decision \"Two windows on one session…\"); keep the saved file's shape ready for that (do not store it inside session state).\n\n## Not in this task\nAdding docks from another crate (F012/T520 — done there); pane header buttons (F012/T520 step 3).",
-      "descriptionUpdatedAt": "2026-11-19T11:16:11.552Z",
+      "description": "REWRITTEN 2026-11-24 after a review against main (Antonio approved). Points 1 (mouse move) and 5 (first region from config) of the original request are already built; what is left is saving and reset.\n\n## Already built (verified 2026-11-24 on main)\n- **Mouse move (old point 1).** Every dock has a header with a grip (P079(F004)/T574, PR #356). Dropping a dock beside another dock, in the gap between two, or into an empty region dispatches the existing container action — `ReorderContainerBefore` / `ReorderContainerAfter` / `MoveContainerToRegion` — from heca/src/chrome/docks/drop.rs `dock_drop_action`. One door for mouse, key and RPC.\n- **First region from the user's config (old point 5).** `[[docks]] name / id / location / order / flex` (heca-config/src/docks.rs) decides where each dock goes; `ChromeHost::mount_pending` (heca/src/chrome/docks/host/placing.rs:91) applies it over what the code says; `regions(..).append/prepend` stays the fallback.\n- A hand move is kept in memory while the dock's `[[docks]]` entry is unchanged (test `a_dock_the_user_moved_stays_where_they_put_it`, heca/src/chrome/docks/host/region_list_tests.rs:60; `set_share` heca/src/chrome/docks/host/mod.rs:344 for the size).\n\n## What is left\n1. **Save the user's placement** — region, order and share of each dock — so it survives a restart. Reuse the one machine-written state helper: `heca_config::state_file::{data_path, write_json}` (as search-history.json and announced.json do): a schema version, atomic write, saved when the arrangement changes, never fails on a missing or broken file.\n2. **Keyed by the dock's identity** (`name` + `id`, the same pair `[[docks]]` uses). A saved dock no code adds any more is ignored; a new dock uses its default; a saved region the dock no longer supports falls back to the default.\n3. **Order of precedence:** saved placement → `[[docks]]` → the code's `regions(..)`.\n4. **Reset:** an action (and RPC) puts every dock back to `[[docks]]` / code defaults.\n5. Later fit: after F012/P104 placement is per window; keep the file's shape ready for that, not inside session state.\n\n## Check\nTests: move → reload-equivalent restart → dock is where it was put; default wins only when nothing is saved; broken file = first run. Antonio drives it in the GPU app.",
+      "descriptionUpdatedAt": "2026-11-24T09:33:58.944Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -328,24 +328,24 @@
           "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-001-drag-a-dock-s-title-row-to-the-other-sidebar-a-position-dispatches-the-existing-move-action-works-for-a-dock-another-crate-added",
           "number": 1,
           "title": "Drag a dock's title row to the other sidebar / a position; dispatches the existing move action; works for a dock another crate added",
-          "checked": false
+          "checked": true
         },
         {
-          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-002-save-placement-region-order-per-mount-id-to-the-data-dir-reusing-the-search-state-rs-pattern",
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-002-save-placement-region-order-share-per-dock-identity-to-the-data-dir-with-heca-config-state-file",
           "number": 2,
-          "title": "Save placement (region + order per mount id) to the data dir, reusing the search_state.rs pattern",
+          "title": "Save placement (region + order + share per dock identity) to the data dir with heca_config::state_file",
           "checked": false
         },
         {
-          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-003-saved-placement-wins-over-regions-defaults-unknown-unsupported-and-new-docks-handled",
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-003-saved-placement-wins-over-docks-and-regions-defaults-unknown-unsupported-and-new-docks-handled",
           "number": 3,
-          "title": "Saved placement wins over regions(..) defaults; unknown, unsupported and new docks handled",
+          "title": "Saved placement wins over [[docks]] and regions(..) defaults; unknown, unsupported and new docks handled",
           "checked": false
         },
         {
-          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-004-reset-to-the-code-defaults-action-rpc",
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-004-reset-to-the-defaults-action-rpc",
           "number": 4,
-          "title": "Reset to the code defaults (action + RPC)",
+          "title": "Reset to the defaults (action + RPC)",
           "checked": false
         },
         {
@@ -361,9 +361,9 @@
           "checked": false
         },
         {
-          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-007-point-5-first-region-from-config-docks-mount-id-region-decision-943527d4-is-built-under-p110-f010-t567-checklist-c32-for-heca-pro-tick-here-when-it-lands",
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-007-first-region-from-config-docks-location-heca-config-src-docks-rs-built",
           "number": 7,
-          "title": "Point 5 (first region from config `[docks] <mount id> = \"<region>\"`, decision 943527d4) is built under P110(F010)/T567 checklist C32 for heca-pro; tick here when it lands",
+          "title": "First region from config: [[docks]] location (heca-config/src/docks.rs) — built",
           "checked": true
         }
       ],
@@ -374,7 +374,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-09-30T09:14:17.217Z",
-      "updatedAt": "2026-11-20T19:21:25.783Z",
+      "updatedAt": "2026-11-24T09:34:28.339Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -624,11 +624,20 @@
       "priority": 13,
       "shortName": "drag-preview-built-from-widget",
       "title": "Drag preview built from widgets, not drawn by hand",
-      "status": "planned",
+      "status": "canceled",
       "description": "heca/src/mouse/render.rs is 286 lines of raw-renderer drawing for the drag preview: literal colours, a 0.6 advance, a 24px strip, 0.2/0.6 shares, and column/pane geometry computed inline. It is called from app/render.rs (~:903-904). Replace it with three widgets placed in the window root: a ghost of the dragged pane, an insert marker, and a swap highlight. Colours come from the theme, sizes are shares and Spacing steps, and the geometry (where a drop lands) moves into the layout in heca-core. Then delete the two render.rs lines and mouse/render.rs. Timing: its own PR right after stream1's render.rs scene-flush rewrite (feat/t449-scene-order-flush) merges, and before P104 step 2b. Antonio checks it by eye: dragging a pane between columns and onto another pane. Found by stream2 during T537.",
       "descriptionUpdatedAt": "2026-10-02T13:24:40.247Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "11fe81da-b310-4338-9b8f-d8c706807f2e-check-001-planned-canceled",
+          "date": "2026-11-24T09:32:14.924Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Superseded (review 2026-11-24, Antonio approved closing): heca/src/mouse/render.rs no longer exists; the drag ghost and insertion line are owned by the framework since P079(F004)/T396.",
+          "description": "Superseded (review 2026-11-24, Antonio approved closing): heca/src/mouse/render.rs no longer exists; the drag ghost and insertion line are owned by the framework since P079(F004)/T396."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -639,7 +648,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-02T13:24:40.197Z",
-      "updatedAt": "2026-10-02T13:24:40.197Z",
+      "updatedAt": "2026-11-24T09:32:14.924Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -742,7 +751,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-23T13:45:28.850Z",
+  "updatedAt": "2026-11-24T09:34:28.339Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,

@@ -35,11 +35,20 @@
       "priority": 1,
       "shortName": "swap-param-delegation",
       "title": "Swap param delegation",
-      "status": "planned",
+      "status": "canceled",
       "description": "APERTO — punto 3 della lista finale di `redo-mouse.md` (file cancellato 2026-07-14; contenuto verificato e migrato qui).\nTesto originale: \"Fix `handle_swap_param` for true cross-workspace swap or keep one-way move\".\n\n## STATO (verificato 2026-07-14)\n- `heca/src/handlers.rs:385` — `handle_swap_param(state, action)` destruttura `WmAction::Swap { a_id, b_id }`.\n- `AGENTS.md`, § \"Remaining in original refactoring plan\", lo elenca ANCORA come aperto: \"**Phase 3.2: `handle_swap_param()` still needs delegation to shared helpers (partial progress)**\".\n- Gli helper condivisi vivono in `heca/src/app/pane_ops.rs` (`find_pane_indices_in_workspace`, `insert_pane_at_position`, …) e in `heca/src/app/mutations.rs` (`after_layout_change`).\n\n## DECISIONE DA PRENDERE (è il cuore del task)\nDelle due, una — e va DECISA, non lasciata ambigua:\n(a) **swap cross-workspace VERO**: due pane in workspace diversi si scambiano di posto (ognuna finisce nello slot dell'altra);\n(b) **one-way move**: si ammette solo lo spostamento in una direzione, e lo swap cross-workspace viene esplicitamente NON supportato (e documentato come tale).\nOggi il comportamento è ambiguo/parziale: è questa ambiguità il bug.\n\n## LAVORO\n1. Decidere (a) o (b) con l'utente.\n2. Delegare `handle_swap_param` agli helper condivisi invece di ri-derivare indici/inserimenti a mano (è il debito che AGENTS segnala).\n3. ⚠️ ATTENZIONE, invariante: NON perdere pane. Vale la stessa lezione del task `sidebar-drop-loses-panes` (app-10): rimuovere una pane PRIMA di sapere dove reinserirla, ignorando il `Result` dell'insert, la fa sparire. Risolvere/validare la destinazione PRIMA di rimuovere, oppure take-or-restore.\n4. Test: swap same-workspace (regressione), swap cross-workspace (o rifiuto esplicito se (b)), conteggio pane SEMPRE conservato, indici stale dopo rimozione.\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`; l'azione resta raggiungibile da tastiera + mouse/UI + RPC (P2).",
       "descriptionUpdatedAt": "2026-07-14T18:13:22.014Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "345b6fe4-0f6d-4279-8dfb-aab4fd30a00a-check-001-planned-canceled",
+          "date": "2026-11-24T09:32:16.532Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Superseded (review 2026-11-24, Antonio approved closing): handle_swap_param no longer exists; swap is WmAction::Swap (heca/src/input/action.rs:123, built in input/build/layout.rs:18) handled through handlers/move_swap.rs. If a cross-workspace swap turns out missing when used, it is a new defect report.",
+          "description": "Superseded (review 2026-11-24, Antonio approved closing): handle_swap_param no longer exists; swap is WmAction::Swap (heca/src/input/action.rs:123, built in input/build/layout.rs:18) handled through handlers/move_swap.rs. If a cross-workspace swap turns out missing when used, it is a new defect report."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -50,7 +59,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-14T18:13:22.014Z",
-      "updatedAt": "2026-07-14T18:13:22.014Z",
+      "updatedAt": "2026-11-24T09:32:16.532Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -83,7 +92,7 @@
     }
   ],
   "createdAt": "2026-07-14T18:13:04.164Z",
-  "updatedAt": "2026-10-19T16:18:49.154Z",
+  "updatedAt": "2026-11-24T09:32:16.532Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
