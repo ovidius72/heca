@@ -67,13 +67,13 @@ impl Component for Overlay {
     }
 
     fn advance_focus(&mut self, forward: bool) {
-        if let Some(panel) = self.base.children.first_mut() {
+        if let Some(panel) = self.base.child_in_area(super::PANEL_AREA) {
             self.focus.advance(panel.as_mut(), forward);
         }
     }
 
     fn focus_first_quiet(&mut self) {
-        if let Some(panel) = self.base.children.first_mut() {
+        if let Some(panel) = self.base.child_in_area(super::PANEL_AREA) {
             self.focus.focus_first_quiet(panel.as_mut());
         }
     }

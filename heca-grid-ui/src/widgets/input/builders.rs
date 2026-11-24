@@ -1,5 +1,29 @@
 use super::*;
-use crate::builders::{EventExt, Parent, PresenceExt, ToneExt, TooltipExt};
+use crate::builders::{EventExt, Parent, PlaceExt, PresenceExt, ToneExt, TooltipExt};
+
+/// The input's scrolling part, found by name: it holds the text and moves it.
+pub(super) const REGION_AREA: &str = "region";
+
+/// **The scrolling part around the text** — one line that scrolls sideways, or a growing block that
+/// scrolls down when `multiline` — with the view following its offsets.
+fn text_region(
+    view: &std::rc::Rc<std::cell::RefCell<content::View>>,
+    multiline: bool,
+) -> crate::WidgetModel {
+    let region = if multiline {
+        crate::ScrollRegion::new()
+    } else {
+        crate::ScrollRegion::new().horizontal()
+    };
+    let region = region.padding_y("none");
+    view.borrow_mut().offset_x = region.scroll_offset_x();
+    view.borrow_mut().offset_y = region.scroll_offset();
+    crate::WidgetModel::new(
+        region
+            .child(content::Content::new(view.clone()))
+            .area(REGION_AREA),
+    )
+}
 
 #[heca_grid_ui_macros::props]
 impl Input {
@@ -13,14 +37,7 @@ impl Input {
             text,
             placeholder,
         )));
-        let content = content::Content::new(view.clone());
-        let region = crate::ScrollRegion::new()
-            .horizontal()
-            .padding_y("none")
-            .child(content);
-        view.borrow_mut().offset_x = region.scroll_offset_x();
-        view.borrow_mut().offset_y = region.scroll_offset();
-        base.children.push(crate::WidgetModel::new(region));
+        base.children.push(text_region(&view, false));
         Self {
             base,
             text,
@@ -187,17 +204,7 @@ impl Input {
     pub fn multiline(mut self, multiline: bool) -> Self {
         self.multiline = multiline;
         self.base.children.clear();
-        let region = if multiline {
-            crate::ScrollRegion::new()
-        } else {
-            crate::ScrollRegion::new().horizontal()
-        };
-        let region = region.padding_y("none");
-        self.view.borrow_mut().offset_x = region.scroll_offset_x();
-        self.view.borrow_mut().offset_y = region.scroll_offset();
-        self.base.children.push(crate::WidgetModel::new(
-            region.child(content::Content::new(self.view.clone())),
-        ));
+        self.base.children.push(text_region(&self.view, multiline));
         self
     }
 

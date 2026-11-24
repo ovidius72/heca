@@ -10,6 +10,14 @@ impl Base {
             .find(|child| child.base().grid_area.as_deref() == Some(name))
     }
 
+    /// [`child_in_area`](Self::child_in_area) to read — for what only looks at a part, such as
+    /// painting or hit-testing.
+    pub(crate) fn child_area(&self, name: &str) -> Option<&crate::WidgetModel> {
+        self.children
+            .iter()
+            .find(|child| child.base().grid_area.as_deref() == Some(name))
+    }
+
     /// **Does this widget declare anything the pointer could mean on it?** A handler, a focus
     /// stop, a drag or drop role, a cursor, a tooltip, a menu, a hint, or something painted (fill,
     /// border, glow). A box with none of these is layout only: where no child is, nothing is under

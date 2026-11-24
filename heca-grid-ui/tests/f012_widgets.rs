@@ -120,6 +120,31 @@ fn a_message_feed_appends_wrapped_entries_without_replacing_old_widgets() {
     assert!(entries[1].base().bounds.size.h > entries[0].base().bounds.size.h);
 }
 
+/// **The list's gap is the space between its entries** — set on the list, it reaches the part
+/// that holds them, and `none` leaves no space at all.
+#[test]
+fn a_message_lists_gap_spaces_its_entries() {
+    let space_between = |gap: &str| {
+        let mut list = MessageList::new()
+            .width(160.0)
+            .height(200.0)
+            .gap(gap)
+            .message("one")
+            .message("two");
+        layout(&mut list, &Theme::default());
+        list.tick(0.0);
+        layout(&mut list, &Theme::default());
+        let entries = &list.base().children[0].base().children;
+        let (a, b) = (entries[0].base().bounds, entries[1].base().bounds);
+        b.loc.y - (a.loc.y + a.size.h)
+    };
+    assert!(space_between("none").abs() < 0.5, "no gap: entries touch");
+    assert!(
+        space_between("lg") > space_between("sm"),
+        "a larger gap spaces them further"
+    );
+}
+
 #[test]
 fn nested_trees_share_space_and_leave_controls_in_the_dispatch_tree() {
     let clicked = signal(false);

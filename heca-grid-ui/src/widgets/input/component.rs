@@ -52,9 +52,12 @@ impl Component for Input {
             1
         };
         let automatic_height = self.base.style.layout.height == Length::Auto;
-        let region = self.base.children[0].base_mut();
-        region.style.layout.max_height =
-            automatic_height.then_some(Length::Px(self.base.font * MONO_LINE_RATIO * lines as f32));
+        let max_height = Length::Px(self.base.font * MONO_LINE_RATIO * lines as f32);
+        let Some(region) = self.base.child_in_area(super::builders::REGION_AREA) else {
+            return;
+        };
+        let region = region.base_mut();
+        region.style.layout.max_height = automatic_height.then_some(max_height);
         region.style.layout.flex_grow = 1.0;
         region.style.layout.width = Length::Percent(1.0);
     }
@@ -139,11 +142,7 @@ impl Component for Input {
             Event::PointerDown(p) => {
                 self.blink_origin = crate::clock::now();
                 self.anchor = None;
-                self.cursor = self.view.borrow().index_at(
-                    p.pos,
-                    self.base.children[0].base().bounds.loc,
-                    true,
-                );
+                self.cursor = self.view.borrow().index_at(p.pos, self.text_origin(), true);
                 Handled::Yes
             }
             Event::DoubleClick(p) => {
@@ -151,7 +150,7 @@ impl Component for Input {
                 let idx = self
                     .view
                     .borrow()
-                    .index_at(p.pos, self.base.children[0].base().bounds.loc, false)
+                    .index_at(p.pos, self.text_origin(), false)
                     .min(chars.len().saturating_sub(1));
                 let (s, e) = word_bounds(&chars, idx);
                 self.anchor = (e > s).then_some(s);
@@ -167,11 +166,7 @@ impl Component for Input {
             Event::TripleClick(p) => {
                 // The fourth click and beyond: deselect, caret where the pointer is.
                 self.anchor = None;
-                self.cursor = self.view.borrow().index_at(
-                    p.pos,
-                    self.base.children[0].base().bounds.loc,
-                    true,
-                );
+                self.cursor = self.view.borrow().index_at(p.pos, self.text_origin(), true);
                 Handled::Yes
             }
             // Typed text, IME commits and pastes: one event, whatever produced them. The field no
@@ -256,5 +251,15 @@ impl Component for Input {
             self.base.input_style.blink_period.max(f32::MIN_POSITIVE) - phase
         };
         crate::component::soonest_redraw(tip, Some(caret))
+    }
+}
+
+impl Input {
+    /// Where the text starts on screen — the top-left of its scrolling part, which the pointer's
+    /// position is read against.
+    fn text_origin(&self) -> Point {
+        self.base
+            .child_area(super::builders::REGION_AREA)
+            .map_or(self.base.bounds.loc, |region| region.base().bounds.loc)
     }
 }

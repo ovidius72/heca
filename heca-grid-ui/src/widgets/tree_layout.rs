@@ -1,6 +1,6 @@
 //! A parent above equally shared branches. Grid and Flex own all node sizing.
 
-use crate::builders::IntoComponent;
+use crate::builders::{IntoComponent, PlaceExt};
 use crate::scene::{ArrowHeads, LineCmd};
 use crate::{Base, Component, Flex, Grid, LayoutExt, PaintCx, Parent, Point};
 
@@ -31,6 +31,11 @@ pub struct TreeLayout {
     base: Base,
 }
 
+/// The tree's own parts, found by name: the grid, the parent above, and the row of branches.
+const GRID_AREA: &str = "tree";
+const PARENT_AREA: &str = "parent";
+const BRANCHES_AREA: &str = "branches";
+
 #[heca_grid_ui_macros::props]
 impl TreeLayout {
     /// Place `parent` above an initially empty row of branches. Content supplies its own controls.
@@ -38,8 +43,14 @@ impl TreeLayout {
         let grid = Grid::new()
             .template_row("auto auto")
             .template_column("1fr")
-            .child(Flex::row().justify("center").child(parent.into_component()))
-            .child(Flex::row().gap("md").align("start"));
+            .child(
+                Flex::row()
+                    .justify("center")
+                    .child(parent.into_component())
+                    .area(PARENT_AREA),
+            )
+            .child(Flex::row().gap("md").align("start").area(BRANCHES_AREA))
+            .area(GRID_AREA);
         let mut base = Base::container();
         base.style.layout.gap = "lg".into();
         base.children.push(crate::WidgetModel::new(grid));
@@ -54,11 +65,26 @@ impl TreeLayout {
             .flex(1.0)
             .min_width(0.0)
             .child(child.into_component());
-        self.base.children[0].base_mut().children[1]
-            .base_mut()
-            .children
-            .push(crate::WidgetModel::new(branch));
+        if let Some(branches) = self.branches_mut() {
+            branches.children.push(crate::WidgetModel::new(branch));
+        }
         self
+    }
+
+    fn grid(&self) -> Option<&Base> {
+        self.base.child_area(GRID_AREA).map(|grid| grid.base())
+    }
+
+    fn grid_mut(&mut self) -> Option<&mut Base> {
+        self.base
+            .child_in_area(GRID_AREA)
+            .map(|grid| grid.base_mut())
+    }
+
+    fn branches_mut(&mut self) -> Option<&mut Base> {
+        self.grid_mut()?
+            .child_in_area(BRANCHES_AREA)
+            .map(|branches| branches.base_mut())
     }
 }
 
@@ -71,24 +97,28 @@ impl Component for TreeLayout {
     }
     fn remeasure(&mut self) {
         let gap = self.base.style.layout.gap;
-        let grid = self.base.children[0].base_mut();
-        grid.style.layout.gap = if grid.children[1].base().children.is_empty() {
-            "none".into()
-        } else {
-            gap
-        };
+        let Some(grid) = self.grid_mut() else { return };
+        let no_branches = grid
+            .child_area(BRANCHES_AREA)
+            .is_none_or(|branches| branches.base().children.is_empty());
+        grid.style.layout.gap = if no_branches { "none".into() } else { gap };
     }
     fn paint(&self, cx: &mut PaintCx) {
-        let grid = self.base.children[0].base();
-        let parent = grid.children[0].base().bounds;
+        for child in &self.base.children {
+            crate::component::paint_child(child.as_ref(), cx);
+        }
+        let Some(grid) = self.grid() else { return };
+        let (Some(parent), Some(branches)) =
+            (grid.child_area(PARENT_AREA), grid.child_area(BRANCHES_AREA))
+        else {
+            return;
+        };
+        let parent = parent.base().bounds;
         let start = Point::new(
             parent.loc.x + parent.size.w / 2.0,
             parent.loc.y + parent.size.h,
         );
-        for child in &self.base.children {
-            crate::component::paint_child(child.as_ref(), cx);
-        }
-        for branch in &grid.children[1].base().children {
+        for branch in &branches.base().children {
             let b = branch.base().bounds;
             let end = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y);
             let middle = (start.y + end.y) / 2.0;

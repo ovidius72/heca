@@ -9,7 +9,7 @@
 //! border width and colors all from the [`Theme`](crate::theme::Theme) — nothing
 //! hardcoded); the slots draw themselves, so it stays composable and neutral.
 
-use crate::builders::{LayoutExt, Parent};
+use crate::builders::{LayoutExt, Parent, PlaceExt};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet};
@@ -36,6 +36,9 @@ const DIVIDER_INSET_FRAC: f64 = 0.18;
 /// corner radius follows the theme, never hardcoded. A modest, rounded-rect look
 /// (not a full capsule).
 const RADIUS_MUL: f32 = 1.0;
+
+/// The first segment, found by name — the one [`Tag::leading`] puts its slot in.
+const FIRST_SEGMENT_AREA: &str = "first";
 
 /// A small labeled chip of one or more segments.
 pub struct Tag {
@@ -71,8 +74,9 @@ impl Tag {
         let label = label.font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
         // A segment cut by a narrow chip offers its whole text on hover: its label does that.
-        base.children
-            .push(crate::WidgetModel::new(segment().child(label)));
+        base.children.push(crate::WidgetModel::new(
+            segment().child(label).area(FIRST_SEGMENT_AREA),
+        ));
         Self {
             base,
             color: None,
@@ -84,10 +88,9 @@ impl Tag {
     /// [`Icon`](super::Icon).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading(mut self, c: impl crate::builders::IntoComponent) -> Self {
-        self.base.children[0]
-            .base_mut()
-            .children
-            .insert(0, c.into_component());
+        if let Some(first) = self.base.child_in_area(FIRST_SEGMENT_AREA) {
+            first.base_mut().children.insert(0, c.into_component());
+        }
         self
     }
 
