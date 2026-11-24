@@ -344,6 +344,15 @@ impl ChromeHost {
     /// Give dock `id` this share of its region (CSS `flex`), as the user resized it — kept like a
     /// hand move while the dock's own `[[docks]]` entry is unchanged, and **not** a change of
     /// arrangement: the caller sets it on the drawn dock too, so nothing is rebuilt mid-drag.
+    /// The share the user gave dock `id` by hand ([`set_share`](Self::set_share)), if any.
+    pub fn hand_share(&self, id: &str) -> Option<f32> {
+        self.regions
+            .iter()
+            .flat_map(|r| r.contributions.iter())
+            .find(|m| m.id() == id)
+            .and_then(|m| m.hand_share())
+    }
+
     pub fn set_share(&mut self, id: &str, flex: f32) {
         if let Some(m) = self
             .regions

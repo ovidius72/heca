@@ -275,3 +275,40 @@ fn an_explicit_zero_minimum_still_lets_a_child_shrink() {
         "each takes its half though its content is taller: {rows:?}"
     );
 }
+
+/// **Parts are a ratio, so a child alone with a part below one still takes all the room** — and
+/// two children whose parts add up to less than one share all of it in their proportion. (CSS hands
+/// out only that fraction of the free space: a dock left at 0.6 when its neighbour folded filled
+/// 60% of the sidebar.)
+#[test]
+fn parts_that_add_up_to_less_than_one_still_share_all_the_room() {
+    use heca_grid_ui::builders::{LayoutExt, Parent};
+    use heca_grid_ui::widgets::Flex;
+    use heca_grid_ui::{LayoutEngine, Size};
+
+    let heights = |parts: &[f32]| {
+        let mut column = Flex::column()
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0));
+        for p in parts {
+            column = column.child(Flex::column().flex(*p));
+        }
+        let mut root = heca_grid_ui::WidgetModel::new(column);
+        LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 400.0));
+        root.base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect::<Vec<_>>()
+    };
+    let alone = heights(&[0.6]);
+    assert!(
+        (alone[0] - 400.0).abs() < 1.0,
+        "alone it fills the column: {alone:?}"
+    );
+    let pair = heights(&[0.2, 0.6]);
+    assert!(
+        (pair[0] - 100.0).abs() < 1.0 && (pair[1] - 300.0).abs() < 1.0,
+        "1 : 3 of all of it: {pair:?}"
+    );
+}
