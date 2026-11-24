@@ -445,11 +445,28 @@
       "priority": 0,
       "shortName": "a-flex-child-never-shrinks-bel",
       "title": "A flex child never shrinks below its content — the automatic minimum, as CSS min-height:auto",
-      "status": "planned",
-      "description": "Reported by heca-pro-dev 2026-11-24 while testing heca-pro's rooms dock; Antonio approved, to do next with F013's work.\n\n## The defect\nA child can end up smaller than its content, so text overlaps with no warning.\nCase: a Row holding a Flex::column with two children — a Grid (name line) with `.flex(1.0)` and a report line under it. The grid starts from height 0, gets less than its content, and the report line is drawn over the name. Measured: name at y=3 h=19, report at y=12. heca-pro worked around it (no `flex` on that grid; test heca-pro-components/src/member/tests.rs `the_report_line_sits_below_the_name`); the trap stays open for everyone else.\n\n## Cause (verified 2026-11-24)\nheca-grid-ui/src/layout/build.rs:125-129: for a flex child with `parts > 0`, layout sets `flex_basis = 0`, **`min_height = min_height.or(Some(Px(0.0)))`** and `flex_shrink = 1`. The forced `min_height = 0` removes the content minimum. CSS gives a flex item `min-height: auto` (main axis), so it never shrinks below its content's minimum size.\n\n## Fix\nIn the layout, once: a flex child's minimum along the main axis is its content's minimum unless the author set one explicitly (`.min_height(..)` / `.min_width(..)`, including 0). No component author has to know the trap. Check the other axis/direction (a row's main axis is width), Grid children (skipped today, `in_a_grid`), and every place that relied on the 0 minimum to let a share shrink (docks, sidebars, pane columns, ScrollRegion content) — those must say `min_height(0)` explicitly or keep working through their own overflow.\n\n## Check\nA test with the reported shape (name grid with `.flex(1.0)` above a report line) asserting the report line starts below the name; a test that an explicit `min_height(0)` still lets a share shrink; sabotage both. Whole heca-grid-ui + heca suites; Antonio's eye check over sidebar docks, panes and dialogs (layout is visual).",
-      "descriptionUpdatedAt": "2026-11-24T14:45:08.086Z",
+      "status": "done",
+      "description": "Reported by heca-pro-dev 2026-11-24 while testing heca-pro's rooms dock; Antonio approved, to do next with F013's work.\n\n## The defect\nA child can end up smaller than its content, so text overlaps with no warning.\nCase: a Row holding a Flex::column with two children — a Grid (name line) with `.flex(1.0)` and a report line under it. The grid starts from height 0, gets less than its content, and the report line is drawn over the name. Measured: name at y=3 h=19, report at y=12. heca-pro worked around it (no `flex` on that grid; test heca-pro-components/src/member/tests.rs `the_report_line_sits_below_the_name`); the trap stays open for everyone else.\n\n## Cause (verified 2026-11-24)\nheca-grid-ui/src/layout/build.rs:125-129: for a flex child with `parts > 0`, layout sets `flex_basis = 0`, **`min_height = min_height.or(Some(Px(0.0)))`** and `flex_shrink = 1`. The forced `min_height = 0` removes the content minimum. CSS gives a flex item `min-height: auto` (main axis), so it never shrinks below its content's minimum size.\n\n## Fix\nIn the layout, once: a flex child's minimum along the main axis is its content's minimum unless the author set one explicitly (`.min_height(..)` / `.min_width(..)`, including 0). No component author has to know the trap. Check the other axis/direction (a row's main axis is width), Grid children (skipped today, `in_a_grid`), and every place that relied on the 0 minimum to let a share shrink (docks, sidebars, pane columns, ScrollRegion content) — those must say `min_height(0)` explicitly or keep working through their own overflow.\n\n## Check\nA test with the reported shape (name grid with `.flex(1.0)` above a report line) asserting the report line starts below the name; a test that an explicit `min_height(0)` still lets a share shrink; sabotage both. Whole heca-grid-ui + heca suites; Antonio's eye check over sidebar docks, panes and dialogs (layout is visual).\n\n---\n**Completion summary:**\nShipped in PR #363 (branch feat/t587-flex-content-minimum), two commits; CI green on Windows, macOS, Linux.\n\n7ee25ceb — T587. Decided with Antonio 2026-11-24 after measuring: CSS's automatic minimum applied where it does not break docks. `.flex(n)` no longer forces min_height 0 (heca-grid-ui/src/layout/build.rs), and a grid's UNWRITTEN tracks are `fr(1)` (minimum = content, heca-grid-ui/src/style/layout.rs to_taffy_grid). A WRITTEN `1fr` stays `minmax(0, 1fr)` (style/grid.rs Track::Fr): applying CSS there too made the first of two docks take 956px of 900 even with a scrolling body (dock_body test) — CSS does the same, sidebars in CSS use minmax(0,1fr). The real cause of heca-pro's overlap was both: the one-column grid's implicit row had minimum 0 AND `.flex` forced min_height 0. docs/layout.md table updated.\n\n5a7f3023 — found during the eye check, Antonio asked to fix at once in this branch: (1) dock resize fell behind the pointer — handlers/docks/mod.rs handle_resize_container read heights from the screen each step while several steps run before a layout; now starts from the hand shares the last step wrote (ChromeHost::hand_share added, current_heights/heights_from_shares/resized_shares pure fns, handlers/docks/resize_tests.rs). (2) a lone open dock (neighbour folded) filled only its share fraction — build.rs scales flex parts that sum below 1 to sum 1.\n\nVerification: new tests sabotaged (fr_share: a_child_that_does_not_scroll_never_gets_less_than_its_content, a_scrolling_child_keeps_its_parts_however_much_it_holds, an_explicit_zero_minimum_still_lets_a_child_shrink, parts_that_add_up_to_less_than_one_still_share_all_the_room; resize_tests x3); a_grid_with_no_template test changed to content that fits (old one encoded minimum 0). Layout timing measured: <1 ms per pass on main and branch alike. heca-grid-ui + heca + heca-view-realize green; clippy macOS + Windows clean. Antonio's eye check: docks, panes, dialogs, palette as before; resize follows the pointer; lone dock fills.\n\nKnown: with the glow theme a dock shows two borders (seen during T580's check), not investigated.",
+      "descriptionUpdatedAt": "2026-11-24T17:52:13.106Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5eeefaab-a465-4471-b990-6661ac2c9a80",
+          "date": "2026-11-24T15:19:38.685Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-002-in-progress-done",
+          "date": "2026-11-24T17:52:13.104Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped in PR #363 (branch feat/t587-flex-content-minimum), two commits; CI green on Windows, macOS, Linux.\n\n7ee25ceb — T587. Decided with Antonio 2026-11-24 after measuring: CSS's automatic minimum applied where it does not break docks. `.flex(n)` no longer forces min_height 0 (heca-grid-ui/src/layout/build.rs), and a grid's UNWRITTEN tracks are `fr(1)` (minimum = content, heca-grid-ui/src/style/layout.rs to_taffy_grid). A WRITTEN `1fr` stays `minmax(0, 1fr)` (style/grid.rs Track::Fr): applying CSS there too made the first of two docks take 956px of 900 even with a scrolling body (dock_body test) — CSS does the same, sidebars in CSS use minmax(0,1fr). The real cause of heca-pro's overlap was both: the one-column grid's implicit row had minimum 0 AND `.flex` forced min_height 0. docs/layout.md table updated.\n\n5a7f3023 — found during the eye check, Antonio asked to fix at once in this branch: (1) dock resize fell behind the pointer — handlers/docks/mod.rs handle_resize_container read heights from the screen each step while several steps run before a layout; now starts from the hand shares the last step wrote (ChromeHost::hand_share added, current_heights/heights_from_shares/resized_shares pure fns, handlers/docks/resize_tests.rs). (2) a lone open dock (neighbour folded) filled only its share fraction — build.rs scales flex parts that sum below 1 to sum 1.\n\nVerification: new tests sabotaged (fr_share: a_child_that_does_not_scroll_never_gets_less_than_its_content, a_scrolling_child_keeps_its_parts_however_much_it_holds, an_explicit_zero_minimum_still_lets_a_child_shrink, parts_that_add_up_to_less_than_one_still_share_all_the_room; resize_tests x3); a_grid_with_no_template test changed to content that fits (old one encoded minimum 0). Layout timing measured: <1 ms per pass on main and branch alike. heca-grid-ui + heca + heca-view-realize green; clippy macOS + Windows clean. Antonio's eye check: docks, panes, dialogs, palette as before; resize follows the pointer; lone dock fills.\n\nKnown: with the glow theme a dock shows two borders (seen during T580's check), not investigated."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -457,47 +474,52 @@
           "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-001-main-axis-automatic-minimum-for-flex-children-in-layout-build-rs-explicit-min-wins",
           "number": 1,
           "title": "Main-axis automatic minimum for flex children in layout/build.rs; explicit min wins",
-          "checked": false
+          "checked": true
         },
         {
           "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-002-audit-what-relied-on-the-0-minimum-make-it-explicit-where-a-share-must-shrink",
           "number": 2,
           "title": "Audit what relied on the 0 minimum; make it explicit where a share must shrink",
-          "checked": false
+          "checked": true
         },
         {
           "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-003-tests-the-reported-shape-explicit-0-still-shrinks-sabotaged",
           "number": 3,
           "title": "Tests: the reported shape, explicit 0 still shrinks (sabotaged)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-004-docs-docs-layout-md-trap-list-clippy-macos-windows-ci-three-platforms",
           "number": 4,
           "title": "Docs (docs/layout.md trap list), clippy macOS + Windows, CI three platforms",
-          "checked": false
+          "checked": true
         },
         {
           "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-005-antonio-eye-check",
           "number": 5,
           "title": "Antonio eye check",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-24T15:19:38.685Z",
+      "completedAt": "2026-11-24T17:52:13.104Z",
       "createdAt": "2026-11-24T14:45:07.865Z",
-      "updatedAt": "2026-11-24T14:45:19.546Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-24T17:52:13.104Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+          "createdAt": "2026-11-24T15:19:38.554Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-24T14:58:06.094Z",
+  "updatedAt": "2026-11-24T17:52:13.104Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -516,7 +538,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
-      "createdAt": "2026-11-24T14:04:14.351Z"
+      "createdAt": "2026-11-24T15:19:38.554Z"
     }
   ]
 }
