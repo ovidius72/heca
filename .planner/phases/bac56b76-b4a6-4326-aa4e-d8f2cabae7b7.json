@@ -29,7 +29,8 @@
     "6004ccef-51cc-4ffd-adbd-ae01242eb678",
     "f8dc8970-3ca3-48b9-8e5f-93471476a10b",
     "f40866fe-5311-451f-be73-73303541f969",
-    "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0"
+    "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0",
+    "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2"
   ],
   "tasks": [
     {
@@ -40,11 +41,28 @@
       "priority": 1,
       "shortName": "no-widget-or-composition-finds",
       "title": "No widget or composition finds a child by its position",
-      "status": "planned",
-      "description": "THE SYNTAX: never find a child by its position (`children[0]`). Counted on main 2026-11-24 (non-test code):\n\nWidgets: tree_layout.rs (6), tile.rs (4), input/content.rs (4), input/component.rs (4), resizable/mod.rs (3), message_list.rs (2), flex/mod.rs (2), flex/clip.rs (1), tag.rs (1) — all under heca-grid-ui/src/widgets/.\nApp: heca/src/components/folder_line.rs (8), chrome/input/dispatch.rs (3), entry/layer.rs (2), providers/workspaces/row_lines.rs (1), providers/workspaces/pane_row.rs (1), chrome/window/realize.rs (1), chrome/surfaces/expose/pane_card.rs (1).\n\nFramework code that walks the tree by design is NOT in scope — check each and say so: heca-grid-ui/src/reconcile.rs (12), focus/fallback.rs (3), drag/resolve.rs (2), nav/collect.rs, nav/ambiguity.rs, builders/children.rs.\n\nFix: a widget that needs one of its parts holds it by name (a field or a keyed child the widget itself declared), or the part reads a live value instead of being reached into. When the same need shows up in several widgets, the library gets the builder once (Rule Zero), not a copy per widget.\n\nCheck: tests per widget touched (sabotaged); the look stays identical; one eye-check pass by Antonio over sidebar, input, tree and message list.",
-      "descriptionUpdatedAt": "2026-11-24T09:48:39.432Z",
+      "status": "done",
+      "description": "THE SYNTAX: never find a child by its position (`children[0]`). Counted on main 2026-11-24 (non-test code):\n\nWidgets: tree_layout.rs (6), tile.rs (4), input/content.rs (4), input/component.rs (4), resizable/mod.rs (3), message_list.rs (2), flex/mod.rs (2), flex/clip.rs (1), tag.rs (1) — all under heca-grid-ui/src/widgets/.\nApp: heca/src/components/folder_line.rs (8), chrome/input/dispatch.rs (3), entry/layer.rs (2), providers/workspaces/row_lines.rs (1), providers/workspaces/pane_row.rs (1), chrome/window/realize.rs (1), chrome/surfaces/expose/pane_card.rs (1).\n\nFramework code that walks the tree by design is NOT in scope — check each and say so: heca-grid-ui/src/reconcile.rs (12), focus/fallback.rs (3), drag/resolve.rs (2), nav/collect.rs, nav/ambiguity.rs, builders/children.rs.\n\nFix: a widget that needs one of its parts holds it by name (a field or a keyed child the widget itself declared), or the part reads a live value instead of being reached into. When the same need shows up in several widgets, the library gets the builder once (Rule Zero), not a copy per widget.\n\nCheck: tests per widget touched (sabotaged); the look stays identical; one eye-check pass by Antonio over sidebar, input, tree and message list.\n\n---\n**Completion summary:**\nShipped on branch feat/t580-no-child-by-position, commit a336bc72, PR opened 2026-11-24 (not merged yet).\n\nCorrection to the task's own count: the original list counted test code. Real code had 28 positional child lookups in 12 files (library only, plus one in the app); every app site in the description (folder_line, dispatch, layer, workspaces rows, realize, pane_card) and tile/flex were inside tests. Framework walkers (reconcile, focus, nav, drag) had none in real code.\n\nDone: TreeLayout, Input (content + component), Resizable, MessageList, Tag (leading), Overlay (panel), ButtonGroup (overflow ⋮) name their parts with a grid area and use child_in_area / the new read-only twin child_area (heca-grid-ui/src/component/base/methods.rs). App: heca/src/chrome/window/scene/mod.rs with_header passes the share to the body before composing. Input's scrolling part built once (input/builders.rs text_region). Kept on purpose: Tag::segment_shrink (acts on the segment just added) and ButtonGroup pairing buttons with entries by index; flex/clip.rs:33 is test code.\n\nVerification: each named lookup sabotaged; seven new tests for the eight uncovered ones (f012_widgets a_message_lists_gap_spaces_its_entries; resizable content_with_its_own_height_fills_the_dragged_height, a_custom_grip_draws_its_glyph + content-fill assertion; input a_sized_inputs_text_is_drawn_at_the_inputs_font, a_click_is_read_from_where_the_text_starts; button_group the_overflow_button_takes_the_groups_variant; scene docks a_headed_docks_body_fills_its_share). heca-grid-ui + heca + heca-view-realize: 2847 passed, 0 failed; clippy clean macOS + Windows. Antonio's eye check passed (with a no-glow theme).\n\nOpen questions not decided (asked Antonio, no answer yet): Tag::append_to_segment(idx) is a public API taking a position; ButtonGroup index pairing; ~25 test lines that read children by position. Seen during the check: with the glow theme a dock shows two borders (rounded ring over a square one) — not known whether main does the same; not filed.",
+      "descriptionUpdatedAt": "2026-11-24T14:58:06.097Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b2e1c778-883d-408d-8bde-33f789a82923",
+          "date": "2026-11-24T14:04:14.477Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-002-in-progress-done",
+          "date": "2026-11-24T14:58:06.094Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped on branch feat/t580-no-child-by-position, commit a336bc72, PR opened 2026-11-24 (not merged yet).\n\nCorrection to the task's own count: the original list counted test code. Real code had 28 positional child lookups in 12 files (library only, plus one in the app); every app site in the description (folder_line, dispatch, layer, workspaces rows, realize, pane_card) and tile/flex were inside tests. Framework walkers (reconcile, focus, nav, drag) had none in real code.\n\nDone: TreeLayout, Input (content + component), Resizable, MessageList, Tag (leading), Overlay (panel), ButtonGroup (overflow ⋮) name their parts with a grid area and use child_in_area / the new read-only twin child_area (heca-grid-ui/src/component/base/methods.rs). App: heca/src/chrome/window/scene/mod.rs with_header passes the share to the body before composing. Input's scrolling part built once (input/builders.rs text_region). Kept on purpose: Tag::segment_shrink (acts on the segment just added) and ButtonGroup pairing buttons with entries by index; flex/clip.rs:33 is test code.\n\nVerification: each named lookup sabotaged; seven new tests for the eight uncovered ones (f012_widgets a_message_lists_gap_spaces_its_entries; resizable content_with_its_own_height_fills_the_dragged_height, a_custom_grip_draws_its_glyph + content-fill assertion; input a_sized_inputs_text_is_drawn_at_the_inputs_font, a_click_is_read_from_where_the_text_starts; button_group the_overflow_button_takes_the_groups_variant; scene docks a_headed_docks_body_fills_its_share). heca-grid-ui + heca + heca-view-realize: 2847 passed, 0 failed; clippy clean macOS + Windows. Antonio's eye check passed (with a no-glow theme).\n\nOpen questions not decided (asked Antonio, no answer yet): Tag::append_to_segment(idx) is a public API taking a position; ButtonGroup index pairing; ~25 test lines that read children by position. Seen during the check: with the glow theme a dock shows two borders (rounded ring over a square one) — not known whether main does the same; not filed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -52,42 +70,47 @@
           "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-001-library-widgets-tree-layout-tile-input-resizable-message-list-flex-tag",
           "number": 1,
           "title": "Library widgets: tree_layout, tile, input, resizable, message_list, flex, tag",
-          "checked": false
+          "checked": true
         },
         {
           "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-002-app-folder-line-chrome-input-dispatch-entry-layer-workspaces-rows-realize-expose-pane-card",
           "number": 2,
           "title": "App: folder_line, chrome/input/dispatch, entry/layer, workspaces rows, realize, expose pane_card",
-          "checked": false
+          "checked": true
         },
         {
           "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-003-framework-tree-walkers-reviewed-and-listed-as-in-or-out-of-scope",
           "number": 3,
           "title": "Framework tree walkers reviewed and listed as in or out of scope",
-          "checked": false
+          "checked": true
         },
         {
           "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-004-tests-sabotaged-docs-widgets-md",
           "number": 4,
           "title": "Tests (sabotaged) + docs/widgets.md",
-          "checked": false
+          "checked": true
         },
         {
           "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-005-antonio-eye-check",
           "number": 5,
           "title": "Antonio eye check",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-24T14:04:14.477Z",
+      "completedAt": "2026-11-24T14:58:06.094Z",
       "createdAt": "2026-11-24T09:48:39.310Z",
-      "updatedAt": "2026-11-24T09:48:39.310Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-24T14:58:06.094Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+          "createdAt": "2026-11-24T14:04:14.351Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -413,15 +436,87 @@
       "updatedAt": "2026-11-24T09:49:09.630Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 587,
+      "shortId": "9D4EW",
+      "priority": 0,
+      "shortName": "a-flex-child-never-shrinks-bel",
+      "title": "A flex child never shrinks below its content — the automatic minimum, as CSS min-height:auto",
+      "status": "planned",
+      "description": "Reported by heca-pro-dev 2026-11-24 while testing heca-pro's rooms dock; Antonio approved, to do next with F013's work.\n\n## The defect\nA child can end up smaller than its content, so text overlaps with no warning.\nCase: a Row holding a Flex::column with two children — a Grid (name line) with `.flex(1.0)` and a report line under it. The grid starts from height 0, gets less than its content, and the report line is drawn over the name. Measured: name at y=3 h=19, report at y=12. heca-pro worked around it (no `flex` on that grid; test heca-pro-components/src/member/tests.rs `the_report_line_sits_below_the_name`); the trap stays open for everyone else.\n\n## Cause (verified 2026-11-24)\nheca-grid-ui/src/layout/build.rs:125-129: for a flex child with `parts > 0`, layout sets `flex_basis = 0`, **`min_height = min_height.or(Some(Px(0.0)))`** and `flex_shrink = 1`. The forced `min_height = 0` removes the content minimum. CSS gives a flex item `min-height: auto` (main axis), so it never shrinks below its content's minimum size.\n\n## Fix\nIn the layout, once: a flex child's minimum along the main axis is its content's minimum unless the author set one explicitly (`.min_height(..)` / `.min_width(..)`, including 0). No component author has to know the trap. Check the other axis/direction (a row's main axis is width), Grid children (skipped today, `in_a_grid`), and every place that relied on the 0 minimum to let a share shrink (docks, sidebars, pane columns, ScrollRegion content) — those must say `min_height(0)` explicitly or keep working through their own overflow.\n\n## Check\nA test with the reported shape (name grid with `.flex(1.0)` above a report line) asserting the report line starts below the name; a test that an explicit `min_height(0)` still lets a share shrink; sabotage both. Whole heca-grid-ui + heca suites; Antonio's eye check over sidebar docks, panes and dialogs (layout is visual).",
+      "descriptionUpdatedAt": "2026-11-24T14:45:08.086Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-001-main-axis-automatic-minimum-for-flex-children-in-layout-build-rs-explicit-min-wins",
+          "number": 1,
+          "title": "Main-axis automatic minimum for flex children in layout/build.rs; explicit min wins",
+          "checked": false
+        },
+        {
+          "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-002-audit-what-relied-on-the-0-minimum-make-it-explicit-where-a-share-must-shrink",
+          "number": 2,
+          "title": "Audit what relied on the 0 minimum; make it explicit where a share must shrink",
+          "checked": false
+        },
+        {
+          "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-003-tests-the-reported-shape-explicit-0-still-shrinks-sabotaged",
+          "number": 3,
+          "title": "Tests: the reported shape, explicit 0 still shrinks (sabotaged)",
+          "checked": false
+        },
+        {
+          "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-004-docs-docs-layout-md-trap-list-clippy-macos-windows-ci-three-platforms",
+          "number": 4,
+          "title": "Docs (docs/layout.md trap list), clippy macOS + Windows, CI three platforms",
+          "checked": false
+        },
+        {
+          "id": "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2-check-005-antonio-eye-check",
+          "number": 5,
+          "title": "Antonio eye check",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T14:45:07.865Z",
+      "updatedAt": "2026-11-24T14:45:19.546Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-24T09:49:09.630Z",
+  "updatedAt": "2026-11-24T14:58:06.094Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
-  "sessionInfo": []
+  "statusLog": [
+    {
+      "id": "30b48fff-5a5d-48a8-935a-318df912cb85",
+      "date": "2026-11-24T14:04:14.679Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+      "createdAt": "2026-11-24T14:04:14.351Z"
+    }
+  ]
 }

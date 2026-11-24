@@ -668,9 +668,9 @@
       "priority": 8,
       "shortName": "minimum-window-size-heca-s-win",
       "title": "Minimum window size: heca's window cannot be made smaller than 640×400 (configurable)",
-      "status": "in-progress",
-      "description": "Agreed with Antonio 2026-11-24, after a screenshot of a Rename Pane dialog in a tiny window: below a certain size nothing has room (the dialog was taller than the window, so its field sat on top of its buttons). The window gets a minimum size, so the layout never has to work in a space too small for a dialog or the palette.\n\nSTATE TODAY\n- The window is created in heca/src/app/startup.rs:215 with `.with_inner_size(LogicalSize::new(settings.window_width, settings.window_height))`; there is no minimum, so the OS lets it shrink to almost nothing.\n- `window_width` / `window_height` are `SettingsConfig` fields (heca-config/src/settings/mod.rs:82-83) with defaults in config.default.toml:100-101 (1280 × 800).\n- Config reload: heca/src/lib.rs:238 (`reload_config`).\n\nTO BUILD\n1. Two settings beside the existing ones: `window_min_width = 640`, `window_min_height = 400` in `[settings]` of config.default.toml (with a comment), as `SettingsConfig` fields (heca-config/src/settings/mod.rs), in logical pixels like window_width/height.\n2. The window is created with `.with_min_inner_size(LogicalSize::new(min_w, min_h))` next to `.with_inner_size` (startup.rs:215); the starting size is never smaller than the minimum.\n3. On config reload (lib.rs:238) the window's minimum follows the new values (`window.set_min_inner_size(..)`), for every window heca has open.\n4. docs/configuration.md: the two settings, next to window_width/height.\n\nEDGE CASES\n- A minimum larger than the screen: the OS caps it; nothing to do beyond not failing.\n- 0 or a value smaller than a sensible floor in the user's config: 0 means no minimum (winit's None), so a user can turn it off.\n- A starting size below the minimum (window_width = 300): start at the minimum.\n- HiDPI: logical pixels, so the minimum is the same physical size on every scale.\n\nVERIFY\n- A test that the settings parse with their defaults and that 0 means none (heca-config tests).\n- Antonio's eye check: the window stops shrinking at 640×400; a reload with other values changes the stop.\n- Clippy on macOS and Windows.",
-      "descriptionUpdatedAt": "2026-11-24T09:16:53.817Z",
+      "status": "done",
+      "description": "Agreed with Antonio 2026-11-24, after a screenshot of a Rename Pane dialog in a tiny window: below a certain size nothing has room (the dialog was taller than the window, so its field sat on top of its buttons). The window gets a minimum size, so the layout never has to work in a space too small for a dialog or the palette.\n\nSTATE TODAY\n- The window is created in heca/src/app/startup.rs:215 with `.with_inner_size(LogicalSize::new(settings.window_width, settings.window_height))`; there is no minimum, so the OS lets it shrink to almost nothing.\n- `window_width` / `window_height` are `SettingsConfig` fields (heca-config/src/settings/mod.rs:82-83) with defaults in config.default.toml:100-101 (1280 × 800).\n- Config reload: heca/src/lib.rs:238 (`reload_config`).\n\nTO BUILD\n1. Two settings beside the existing ones: `window_min_width = 640`, `window_min_height = 400` in `[settings]` of config.default.toml (with a comment), as `SettingsConfig` fields (heca-config/src/settings/mod.rs), in logical pixels like window_width/height.\n2. The window is created with `.with_min_inner_size(LogicalSize::new(min_w, min_h))` next to `.with_inner_size` (startup.rs:215); the starting size is never smaller than the minimum.\n3. On config reload (lib.rs:238) the window's minimum follows the new values (`window.set_min_inner_size(..)`), for every window heca has open.\n4. docs/configuration.md: the two settings, next to window_width/height.\n\nEDGE CASES\n- A minimum larger than the screen: the OS caps it; nothing to do beyond not failing.\n- 0 or a value smaller than a sensible floor in the user's config: 0 means no minimum (winit's None), so a user can turn it off.\n- A starting size below the minimum (window_width = 300): start at the minimum.\n- HiDPI: logical pixels, so the minimum is the same physical size on every scale.\n\nVERIFY\n- A test that the settings parse with their defaults and that 0 means none (heca-config tests).\n- Antonio's eye check: the window stops shrinking at 640×400; a reload with other values changes the stop.\n- Clippy on macOS and Windows.\n\n---\n**Completion summary:**\nShipped in PR #361 (merged into main by Antonio 2026-11-24), commit 84e38894.\n\nWhat the user sees: the window cannot be made smaller than [settings] window_min_width × window_min_height (640 × 400 by default, logical pixels); 0 on a side lifts the limit on that side; the window never opens below the minimum; a config reload applies new values at once.\n\nCode: SettingsConfig.window_min_width / window_min_height + window_min_size() / window_start_size() (heca-config/src/settings/mod.rs), defaults in config.default.toml; startup::apply_window_min_size (heca/src/app/startup.rs) is the one place that sets it — called when the window opens and from reload_config (heca/src/lib.rs). docs/configuration.md updated.\n\nVerification: test the_window_has_a_minimum_size_and_never_opens_below_it (heca-config/src/settings/tests.rs), checked by two sabotages; cargo test -p heca -p heca-config green (1748 passed); clippy clean macOS + Windows; CI green on Windows, macOS, Linux; Antonio tried it in the app: \"funziona\".\n\nRemaining: P050(F006)/T490 (terminal squeezed by the sidebars when the window narrows) is only half covered by this — the window has a floor now, the terminal's own minimum is still T490's.",
+      "descriptionUpdatedAt": "2026-11-24T14:03:59.110Z",
       "notes": "",
       "statusLog": [
         {
@@ -680,6 +680,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "e00dfdb7-fd89-49bf-9b4f-2ecb022f9bbf-check-002-in-progress-done",
+          "date": "2026-11-24T14:03:59.108Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped in PR #361 (merged into main by Antonio 2026-11-24), commit 84e38894.\n\nWhat the user sees: the window cannot be made smaller than [settings] window_min_width × window_min_height (640 × 400 by default, logical pixels); 0 on a side lifts the limit on that side; the window never opens below the minimum; a config reload applies new values at once.\n\nCode: SettingsConfig.window_min_width / window_min_height + window_min_size() / window_start_size() (heca-config/src/settings/mod.rs), defaults in config.default.toml; startup::apply_window_min_size (heca/src/app/startup.rs) is the one place that sets it — called when the window opens and from reload_config (heca/src/lib.rs). docs/configuration.md updated.\n\nVerification: test the_window_has_a_minimum_size_and_never_opens_below_it (heca-config/src/settings/tests.rs), checked by two sabotages; cargo test -p heca -p heca-config green (1748 passed); clippy clean macOS + Windows; CI green on Windows, macOS, Linux; Antonio tried it in the app: \"funziona\".\n\nRemaining: P050(F006)/T490 (terminal squeezed by the sidebars when the window narrows) is only half covered by this — the window has a floor now, the terminal's own minimum is still T490's."
         }
       ],
       "decisions": [],
@@ -715,20 +723,20 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-11-24T13:38:07.009Z",
-      "completedAt": "",
+      "completedAt": "2026-11-24T14:03:59.108Z",
       "createdAt": "2026-11-24T09:16:53.617Z",
-      "updatedAt": "2026-11-24T13:52:28.686Z",
+      "updatedAt": "2026-11-24T14:03:59.108Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
           "createdAt": "2026-11-24T13:38:06.877Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d"
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-30T13:27:19.410Z",
-  "updatedAt": "2026-11-24T13:52:28.686Z",
+  "updatedAt": "2026-11-24T14:03:59.108Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -741,6 +749,14 @@
       "fromStatus": "draft",
       "toStatus": "in-progress",
       "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "8e6b0b82-8eed-47eb-b1d5-1ddf88af3dda",
+      "date": "2026-11-24T14:03:59.147Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],
