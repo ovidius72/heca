@@ -337,9 +337,11 @@ fn a_started_program_starts_in_the_folder_its_cwd_names() {
         "\"git\": the repository's top folder"
     );
     assert_eq!(started_in(Some("~")), dirs::home_dir(), "\"~\"");
+    // Absolute on every system: `/tmp` is not, on Windows (no drive letter).
+    let absolute = std::env::temp_dir();
     assert_eq!(
-        started_in(Some("/tmp")),
-        Some(std::path::PathBuf::from("/tmp")),
+        started_in(absolute.to_str()),
+        Some(absolute.clone()),
         "an absolute path"
     );
     assert_eq!(
