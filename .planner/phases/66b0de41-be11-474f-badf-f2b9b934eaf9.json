@@ -587,24 +587,77 @@
       "shortId": "ZZ7BT",
       "priority": 7,
       "shortName": "custom-key-command",
-      "title": "custom key commands",
-      "status": "planned",
-      "description": "currently heca can run programs with the following config items:\n[[keys.command]]\nkeys = \"prefix+alt+v\"\ncommand = \"nvim\"\nkind = \"terminal\"\nfloat = true\nclose_pane = true\n\nwe need a way to tell the path the program should open from.\ne.g. \"cwd\" // open from the pane of the pane the bindigns was called (if available)\n path = \"cwd\" | \"~\" |  \"/\" | \"/my-path\"\ndefault if not provided ~\n\ndiscuss before implementing",
-      "descriptionUpdatedAt": "2026-11-23T16:49:38.211Z",
+      "title": "[[keys.command]] cwd — the folder a key-launched program starts in: pane (default), git, ~, a path, relative to the pane",
+      "status": "done",
+      "description": "Asked by Antonio (original note kept at the end). Design agreed with Antonio 2026-11-24.\n\n## Current state (verified 2026-11-24 on main)\n- `WmAction::SpawnCommand` already has `cwd: Option<String>` (heca/src/input/action.rs:417-423), settable from RPC / `[[keys.bind]]` args (`spawn_command`, heca/src/input/build/terminal.rs:95).\n- `[[keys.command]]` (`CommandKeybindConfig`, heca-config/src/keys.rs:117) has no folder field; the global keymap always passes `cwd: None` (heca/src/app/registry/global/mod.rs:87), so the program starts in heca's own process folder.\n- The server starts it in heca/src/server/handlers/terminal.rs `spawn_command` (`cwd.as_deref().map(PathBuf::from)`); `Terminals::cwd_of(pane)` (heca/src/server/terminals.rs) knows a pane's current folder; `sessions::resolve_folder` reads `~` (used by `new_workspace_cwd`).\n\n## Decided\n```toml\n[[keys.command]]\nkeys    = \"prefix+alt+v\"\ncommand = \"nvim\"\ncwd     = \"pane\"   # \"pane\" (default) | \"git\" | \"~\" | \"~/x\" | \"/abs\" | \"relative/to/pane\"\n```\n- Name `cwd` — the same name the action and RPC already use.\n- `\"pane\"` (DEFAULT when not written): the current folder of the pane the key was pressed from.\n- `\"git\"`: the root of the git repository the pane's folder is in.\n- `\"~\"`, `\"~/x\"`, `\"/abs\"`: as written.\n- A relative path is read from the pane's folder.\n- When there is no pane or its folder is unknown, \"pane\" / relative fall back to `~`; \"git\" outside a repository falls back to the pane's folder.\n- Resolved in ONE place — the server, when the program starts — so the same values work from a key, `[[keys.bind]]` and RPC.\n- A folder that does not exist: as today, \"Couldn't run …\" notice, no empty pane.\n\n## Original note\ncurrently heca can run programs with [[keys.command]] keys/command/kind/float/close_pane. We need a way to tell the path the program should open from, e.g. \"cwd\" (open from the pane the binding was called from, if available), path = \"cwd\" | \"~\" | \"/\" | \"/my-path\". Discuss before implementing.\n\n---\n**Completion summary:**\nShipped on branch feat/t577-command-cwd, commit 3bc943fe (PR opened after this).\n\nWhat the user sees: [[keys.command]] takes `cwd` — \"pane\" (default: the folder of the pane the key was pressed in), \"git\" (top folder of that pane's repository), \"~\", \"~/x\", an absolute path, or a path read from the pane's folder. No known pane folder → home; \"git\" outside a repository → the pane's folder. A missing folder keeps today's \"Couldn't run …\" notice. Behaviour change: an unset cwd used to start in heca's own process folder; it now starts in the pane's folder, also for spawn_command from [[keys.bind]] and RPC.\n\nCode: one resolver `command_folder` + `CWD_PANE` / `CWD_GIT` in heca/src/server/handlers/terminal.rs, used by `spawn_command`; `ServerCx::asker_folder` (heca/src/server/cx.rs) now shared by splits (handlers/add.rs) and commands; `git_monitor::repo_root` (heca/src/app/git_monitor.rs) shared with the git monitor's own snapshot; `CommandKeybindConfig.cwd` (heca-config/src/keys.rs) passed by the global keymap (app/registry/global/mod.rs); action arg description (actions/builtins/system.rs) and the `SpawnCommand.cwd` doc (input/action.rs).\n\nVerification: tests a_started_program_starts_in_the_folder_its_cwd_names, a_started_programs_folder_falls_back_to_home_and_to_the_pane (server/handlers/terminal_tests.rs) and a_key_commands_cwd_reaches_its_action (app/registry/global/tests.rs), each checked by sabotage; full `cargo test -p heca` and `-p heca-config` green; clippy macOS and Windows (xwin) clean. Antonio tried it in the app on 2026-11-24: \"funziona\".\n\nDocs: docs/keybindings.md (table + example), docs/actions.md, keybindings.default.toml comment and example.\n\nNot done: the task was built in the main folder on a branch instead of a worktree (process note, no code impact).",
+      "descriptionUpdatedAt": "2026-11-24T12:46:41.169Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "043e74d8-04a7-4aeb-8de6-5ebe1124d82e",
+          "date": "2026-11-24T11:12:21.662Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "88c97619-9771-4cad-94cd-d77e07ef79a5-check-002-in-progress-done",
+          "date": "2026-11-24T12:46:41.167Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped on branch feat/t577-command-cwd, commit 3bc943fe (PR opened after this).\n\nWhat the user sees: [[keys.command]] takes `cwd` — \"pane\" (default: the folder of the pane the key was pressed in), \"git\" (top folder of that pane's repository), \"~\", \"~/x\", an absolute path, or a path read from the pane's folder. No known pane folder → home; \"git\" outside a repository → the pane's folder. A missing folder keeps today's \"Couldn't run …\" notice. Behaviour change: an unset cwd used to start in heca's own process folder; it now starts in the pane's folder, also for spawn_command from [[keys.bind]] and RPC.\n\nCode: one resolver `command_folder` + `CWD_PANE` / `CWD_GIT` in heca/src/server/handlers/terminal.rs, used by `spawn_command`; `ServerCx::asker_folder` (heca/src/server/cx.rs) now shared by splits (handlers/add.rs) and commands; `git_monitor::repo_root` (heca/src/app/git_monitor.rs) shared with the git monitor's own snapshot; `CommandKeybindConfig.cwd` (heca-config/src/keys.rs) passed by the global keymap (app/registry/global/mod.rs); action arg description (actions/builtins/system.rs) and the `SpawnCommand.cwd` doc (input/action.rs).\n\nVerification: tests a_started_program_starts_in_the_folder_its_cwd_names, a_started_programs_folder_falls_back_to_home_and_to_the_pane (server/handlers/terminal_tests.rs) and a_key_commands_cwd_reaches_its_action (app/registry/global/tests.rs), each checked by sabotage; full `cargo test -p heca` and `-p heca-config` green; clippy macOS and Windows (xwin) clean. Antonio tried it in the app on 2026-11-24: \"funziona\".\n\nDocs: docs/keybindings.md (table + example), docs/actions.md, keybindings.default.toml comment and example.\n\nNot done: the task was built in the main folder on a branch instead of a worktree (process note, no code impact)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "88c97619-9771-4cad-94cd-d77e07ef79a5-check-001-commandkeybindconfig-cwd-default-pane-config-default-toml-comment-global-keymap-passes-it",
+          "number": 1,
+          "title": "CommandKeybindConfig.cwd (default \"pane\") + config.default.toml comment; global keymap passes it",
+          "checked": true
+        },
+        {
+          "id": "88c97619-9771-4cad-94cd-d77e07ef79a5-check-002-server-resolves-cwd-in-one-place-pane-git-absolute-relative-to-pane-with-fallbacks",
+          "number": 2,
+          "title": "Server resolves cwd in one place: pane / git / ~ / absolute / relative-to-pane, with fallbacks",
+          "checked": true
+        },
+        {
+          "id": "88c97619-9771-4cad-94cd-d77e07ef79a5-check-003-same-values-work-from-keys-bind-spawn-command-and-rpc",
+          "number": 3,
+          "title": "Same values work from [[keys.bind]] spawn_command and RPC",
+          "checked": true
+        },
+        {
+          "id": "88c97619-9771-4cad-94cd-d77e07ef79a5-check-004-tests-sabotaged-each-value-each-fallback",
+          "number": 4,
+          "title": "Tests (sabotaged): each value, each fallback",
+          "checked": true
+        },
+        {
+          "id": "88c97619-9771-4cad-94cd-d77e07ef79a5-check-005-docs-keybindings-md-docs-actions-md-clippy-macos-windows-antonio-s-check",
+          "number": 5,
+          "title": "docs/keybindings.md + docs/actions.md; clippy macOS + Windows; Antonio's check",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-24T11:12:21.662Z",
+      "completedAt": "2026-11-24T12:46:41.167Z",
       "createdAt": "2026-11-23T16:43:46.286Z",
-      "updatedAt": "2026-11-23T16:49:38.210Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-24T12:46:41.167Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+          "createdAt": "2026-11-24T11:12:21.473Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -661,7 +714,7 @@
     }
   ],
   "createdAt": "2026-07-30T13:27:19.410Z",
-  "updatedAt": "2026-11-24T09:16:53.617Z",
+  "updatedAt": "2026-11-24T12:46:41.167Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -680,7 +733,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
-      "createdAt": "2026-11-23T16:08:45.816Z"
+      "createdAt": "2026-11-24T11:12:21.473Z"
     },
     {
       "sessionId": "mcp-process:b7a69b51-6533-46c6-bb57-f2f155f42398",
