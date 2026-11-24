@@ -539,4 +539,9 @@ pub struct Base {
     /// The changing value [`hidden`](crate::builders::PresenceExt::hidden) follows, if it was given
     /// one: applied by the layout pass, because `display: none` is a layout property.
     pub(crate) hidden_value: Option<crate::builders::BoolValue>,
+    /// Sizes that follow a value (`width(move || …)`), applied by every layout pass.
+    pub(crate) size_values: Vec<(
+        crate::builders::SizeField,
+        crate::builders::LiveValue<crate::style::Length>,
+    )>,
 }

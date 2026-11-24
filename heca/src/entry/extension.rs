@@ -190,18 +190,33 @@ impl Extension {
         }
     }
 
-    /// **Add to the rows of a palette mode** — `"session"` (the `#` list) today. What it returns says
-    /// how: [`to_raw`](crate::PaletteRows::to_raw) for native code (a widget),
-    /// [`to_description`](crate::PaletteRows::to_description) for a plugin (a description heca
-    /// realizes). *Client side.*
+    /// **A list of the palette** — a list of your own, or one that exists (heca's are `command`,
+    /// `pane`, `workspace`, `session`, `follow`, `notification`) to add to its rows. *Client side.*
     ///
     /// ```ignore
+    /// let demo = heca::extension("demo");
+    /// demo.palette_list("containers")
+    ///     .sigil('%')
+    ///     .placeholder("Search containers")
+    ///     .items(move || containers().into_iter().map(|c| {
+    ///         PaletteItem::new(c.name()).on_choose(Intent::new("demo.attach").arg("id", c.id()))
+    ///     }).collect())
+    ///     .render_item(|item, row| row.trailing(Badge::new("up")));
+    ///
     /// let pro = heca::extension("heca-pro");
-    /// pro.palette("session").to_raw(move |item| {
-    ///     let session = item.session()?;
-    ///     rooms.with(|r| r.is_pro(session.key())).then(|| Badge::accent("pro"))
+    /// pro.palette_list("session").render_item(|item, row| match item.session() {
+    ///     Some(s) if is_pro(s) => row.trailing(Badge::accent("pro")),
+    ///     _ => row,
     /// });
     /// ```
+    ///
+    /// See [`PaletteList`](crate::PaletteList).
+    pub fn palette_list(&self, name: &str) -> crate::PaletteList {
+        crate::PaletteList::new(name)
+    }
+
+    /// Deprecated: [`palette_list`](Self::palette_list)`(mode).render_item(..)`.
+    #[deprecated(note = "use `palette_list(mode).render_item(|item, row| row.trailing(..))`")]
     pub fn palette(&self, mode: &str) -> crate::PaletteRows {
         crate::PaletteRows::new(mode)
     }

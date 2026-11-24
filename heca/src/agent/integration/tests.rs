@@ -106,6 +106,7 @@ fn fixture(root: &Path, version: &str) -> Integrations {
                 executable: std::env::current_exe().unwrap(),
                 max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
                 launched_status: String::new(),
+                hook_launcher: None,
             },
             home: root.to_owned(),
             directory: root.join("heca-data/integrations"),
@@ -312,6 +313,25 @@ fn a_second_operation_cannot_enter_while_the_installer_is_locked() {
             .is_err()
     );
     assert!(!root.path().join("native/report.js").exists());
+}
+
+/// **A lock held for an instant is waited out** — a process started elsewhere in heca holds a copy
+/// of it until its program starts, and an installation at that moment must not be refused as if
+/// another installation were running.
+#[test]
+fn a_lock_held_for_an_instant_is_waited_out() {
+    let root = tempfile::tempdir().unwrap();
+    let service = fixture(root.path(), "1");
+    let held = service.lock().unwrap();
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drop(held);
+    });
+    service
+        .apply("demo.agent", IntegrationOperation::Install)
+        .expect("the installation waited for the instant to pass");
+    release.join().unwrap();
+    assert!(root.path().join("native/report.js").exists());
 }
 
 #[cfg(unix)]

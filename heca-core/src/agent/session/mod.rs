@@ -92,6 +92,7 @@ impl AgentSession {
             executable: options.launcher.clone(),
             max_report_bytes: options.max_report_bytes,
             launched_status: options.launched_status.clone(),
+            hook_launcher: None,
         };
         if options.drivers.iter().next().is_none() {
             self.channel = None;

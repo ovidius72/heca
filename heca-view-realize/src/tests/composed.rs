@@ -278,3 +278,108 @@ fn a_described_splitter_reports_its_drag_as_an_intent_with_the_distance() {
         "a vertical edge moves left and right"
     );
 }
+
+/// **A described overlay asks for the top placement by name** — `"position": "top"` puts the
+/// panel in the upper part of the window, as `Overlay::position(OverlayPosition::Top)` does natively,
+/// and an unknown or missing value keeps it centred.
+#[test]
+fn a_described_overlay_sits_at_the_top_when_it_says_so() {
+    use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Size, Theme};
+
+    let viewport = Size::new(900.0, 600.0);
+    let panel_top = |position: Option<&str>| {
+        let mut node = described_confirm();
+        if let Some(position) = position {
+            node = node.prop("position", PropValue::Text(position.into()));
+        }
+        let theme = Theme::default();
+        let mut w = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default())
+            .expect("valid described test widget");
+        w.show();
+        LayoutEngine::new().compute(w.as_mut(), viewport);
+        // The first paint tells the overlay the window's size; the next layout places by it.
+        let mut scene = Scene::new();
+        heca_grid_ui::paint_child(
+            w.as_ref(),
+            &mut PaintCx::new(&mut scene, &theme).with_viewport(viewport),
+        );
+        LayoutEngine::new().compute(w.as_mut(), viewport);
+        w.base().children[0].base().bounds.loc.y
+    };
+    let centred = panel_top(None);
+    let top = panel_top(Some("top"));
+    assert!(
+        top < centred,
+        "top ({top}) sits above the centred panel ({centred})"
+    );
+    assert_eq!(
+        panel_top(Some("sideways")),
+        centred,
+        "an unknown value keeps it centred"
+    );
+}
+
+/// **A described list builds only what is on screen, and speaks in intents** — three hundred
+/// described labels, a screenful realized; the arrows send `move` and Enter sends `activate`, each
+/// with the item's position as `index`, as a plugin binds them.
+#[test]
+fn a_described_list_builds_what_is_on_screen_and_reports_moves_and_choices() {
+    use heca_grid_ui::{Event, LayoutEngine, Length, Size, Theme, WidgetIntent};
+    use heca_view::build::{Parent as _, Style as _};
+
+    fn rooms_built(c: &dyn Component) -> usize {
+        let own = usize::from(c.text_summary().is_some_and(|t| t.starts_with("Room")));
+        own + c
+            .base()
+            .children
+            .iter()
+            .map(|ch| rooms_built(ch.as_ref()))
+            .sum::<usize>()
+    }
+
+    let mut list = heca_view::build::List::new()
+        .selected(0)
+        .on_move(Intent::new("rooms.move"))
+        .on_activate(Intent::new("rooms.join"));
+    for i in 0..300 {
+        list = list.child(heca_view::build::Label::new(format!("Room {i:03}")));
+    }
+    let node = list.into_node();
+    let (emit, sent) = recording_emitter();
+    let mut w = realize(
+        &node,
+        &Theme::default(),
+        &emit,
+        &mut FormBindings::default(),
+    )
+    .expect("a described list realizes");
+    let viewport = Size::new(400.0, 300.0);
+    // As a container would size it: the window's height.
+    w.base_mut().style.layout.height = Length::FULL;
+    w.base().focus(false);
+    let frame = |w: &mut heca_grid_ui::WidgetModel| {
+        w.tick(0.016);
+        LayoutEngine::new().compute(w.as_mut(), viewport);
+    };
+    for _ in 0..3 {
+        frame(&mut w);
+    }
+    let labels = rooms_built(w.as_ref());
+    assert!(labels > 0 && labels < 60, "{labels} of 300 items realized");
+
+    heca_grid_ui::dispatch(w.as_mut(), &Event::Widget(WidgetIntent::MenuDown));
+    frame(&mut w);
+    heca_grid_ui::dispatch(w.as_mut(), &Event::Widget(WidgetIntent::Activate));
+    let sent = sent.borrow();
+    let index = |i: &Intent| i.args.get("index").cloned();
+    assert_eq!(
+        sent.iter().map(|i| i.action.as_str()).collect::<Vec<_>>(),
+        ["rooms.move", "rooms.join"]
+    );
+    assert_eq!(
+        index(&sent[0]),
+        Some(PropValue::Int(1)),
+        "moved to the second item"
+    );
+    assert_eq!(index(&sent[1]), Some(PropValue::Int(1)), "and chose it");
+}

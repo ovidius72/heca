@@ -95,6 +95,17 @@ pub(super) fn edge_hint(
     ))
 }
 
+pub(super) fn keycap(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    Ok(heca_grid_ui::WidgetModel::new(with_props(
+        Keycap::new(text_of(node)),
+        node,
+        cx.theme(),
+    )))
+}
+
 pub(super) fn status_dot(
     node: &ViewNode,
     cx: &mut RealizeCx<'_>,

@@ -15,7 +15,7 @@ pub trait HintExt: Component + Sized {
     ///
     /// let open = signal(false);
     /// let picker = KeyHintGroup::new(Flex::column())
-    ///     .open_when(open)
+    ///     .open(open)
     ///     .on_action("mypanel.pick", move || open.set(true));
     /// ```
     ///

@@ -201,6 +201,7 @@ fn installer(directory: &std::path::Path, drivers: AgentDrivers) -> Integrations
                 executable: std::env::current_exe().unwrap(),
                 max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
                 launched_status: String::new(),
+                hook_launcher: None,
             },
             home: directory.into(),
             directory: directory.join("heca-data"),

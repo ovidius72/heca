@@ -165,7 +165,7 @@ pub fn handle_notification_dismiss_last(
 }
 
 /// Toggle the scoped picker over the visible toast actions/×, in addition to (never instead
-/// of) their global `prefix+/` letters. `KeyHintGroup::open_when` reads this signal directly.
+/// of) their global `prefix+/` letters. `KeyHintGroup::open` reads this signal directly.
 pub fn handle_notification_pick(
     state: &mut AppState,
     _action: &WmAction,

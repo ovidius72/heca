@@ -159,6 +159,17 @@ pub(crate) fn apply(base: &mut Base) {
     }
 }
 
+/// **Put every followed range in the whole tree in step** — what the router runs before it
+/// delivers an event, so an event never arrives at a tree whose children are a frame behind their
+/// values. A palette opened and typed into before the next frame has its field already; without
+/// this the first letters went to a field that did not exist yet.
+pub(crate) fn apply_tree(node: &mut dyn crate::component::Component) {
+    apply(node.base_mut());
+    for child in node.base_mut().children.iter_mut() {
+        apply_tree(child.as_mut());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

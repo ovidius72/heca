@@ -5,6 +5,7 @@
 
 mod drivers;
 pub mod integration;
+pub(crate) mod launcher;
 mod registration;
 pub(crate) mod sounds;
 
@@ -23,11 +24,20 @@ pub fn integrations(
     config: &heca_config::settings::AgentsConfig,
 ) -> std::io::Result<integration::Integrations> {
     let missing = || std::io::Error::other("cannot locate the user's Heca integration directories");
+    // What an integration stores is the launcher, never this build's own path — see `launcher`.
+    // On Windows the hooks run the launcher and the MCP server keeps the executable.
+    let launcher = launcher::refresh()?;
+    let (executable, hook_launcher) = if cfg!(windows) {
+        (std::env::current_exe()?, Some(launcher))
+    } else {
+        (launcher, None)
+    };
     let context = IntegrationContext {
         reporter: ReportingHelper {
-            executable: std::env::current_exe()?,
+            executable,
             max_report_bytes: config.max_report_bytes,
             launched_status: config.launched_status.clone(),
+            hook_launcher,
         },
         home: dirs::home_dir().ok_or_else(missing)?,
         directory: heca_config::state_file::data_path("integrations").ok_or_else(missing)?,

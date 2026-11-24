@@ -19,12 +19,12 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
 - [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[what every widget gets](#what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Animations](#animations--how-a-surface-arrives-and-leaves)**, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
-  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`TreeLayout`](#treelayout), [`MessageList`](#messagelist), [`Resizable`](#resizable), [`Line`](#line), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
+  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`TreeLayout`](#treelayout), [`MessageList`](#messagelist), [`Resizable`](#resizable), [`Line`](#line), [`ScrollRegion`](#scrollregion), [`List`](#list), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label), [`Caption`](#caption), [`Elapsed`](#elapsed)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
-  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Image` / `Svg`](#image), [`Tag`](#tag)
+  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Image` / `Svg`](#image), [`Tag`](#tag), [`Keycap`](#keycap)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there), [Cursor](#cursor--what-the-pointer-looks-like-over-a-widget)
-  - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Overlays: [Opening and closing a surface — `.open`](#opening-and-closing-a-surface--open), [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
 - [Providers and regions](#providers-and-regions) — add, remove and order docks; placement identity; native/plugin availability
@@ -2764,6 +2764,80 @@ inside its parent, so they work on a flex child too (there, `align_self` is the 
 child rather than in a table on the parent, which keeps `ViewNode`'s shape flat — no second child
 vector, nothing to keep in sync with the children.
 
+### List
+
+**A long list that builds only what is on screen**, with a selection the arrows and `Ctrl+j` /
+`Ctrl+k` move and Enter or a click chooses — React Native's `FlatList`, Flutter's
+`ListView.builder`, SwiftUI's `List`. Three hundred items open as fast as twelve: only the items in
+view and four beyond each edge are built, and scrolling builds the ones coming into view and drops
+the ones leaving it.
+
+```rust
+use heca_grid_ui::prelude::*;
+use heca_grid_ui::widgets::{Label, List};
+
+let rooms = signal(vec!["lobby".to_string(), "kitchen".to_string()]);
+let selected = signal(Some(0));
+List::new(rooms)
+    .render_item(|room, _index| Label::new(room.clone()))   // any widget: a Grid, a Card, yours
+    .selected(selected)                                     // the row the keyboard is on
+    .on_choose(|index| println!("chose {index}"))           // Enter, or a click
+    .border_width(1.0)                                      // a flat line, as a pane's frame
+```
+
+- **Construct**: `List::new(items: Signal<Vec<T>>)`, `T: Clone + PartialEq`. An item equal to one
+  already built keeps its widget.
+- **`render_item(|item, index| …)`** — the widget for one item, **any widget**. Called only for the
+  items in view and a few beyond each edge, so it must not count on being called for every item.
+  Required: without it the list shows nothing.
+- **`selected(Signal<Option<usize>>)`** — the selected position, in your signal; unset, the list
+  keeps its own (`selected_signal()` returns it). The arrows and `Ctrl+j` / `Ctrl+k` (`menu_down` /
+  `menu_up` in `[keys.widgets]`) move it and bring the row into view, even one that was not built;
+  pointing at a row selects it without scrolling; writing the signal selects that row and brings it
+  into view.
+- **`on_choose(|index| …)`** — what choosing a row does: Enter on the selected row (`activate` in
+  `[keys.widgets]`), or a click.
+- **`border_width(f32)`** — the width of the selected row's outline, the same builder
+  `Row::border_width` is; unset, the theme's glowing ring.
+- **`visible_items(n)`** — how many items it shows before it scrolls: its height is that many of its
+  items, measured, so rows of any height show exactly `n`. A count or a value that changes
+  (`Signal<usize>`, a function). Before anything is measured it builds exactly those items, so the
+  first frame is already as tall as the list will be.
+- **Owns**: which items are built, the room standing in for the others (their height estimated from
+  the items built so far, so the scroll bar and the scroll range are those of the whole list), the
+  scrolling (a `ScrollRegion` inside), the selection's look and the hover (a `Row` round each item),
+  and the keys. `render_item` draws the item and nothing else.
+- **Its height comes from its container**, like any scrolling box, or from `visible_items(n)`: a list
+  as tall as its content shows everything and so builds everything. Give it a height, a
+  `max_height`, a share of a column, or a number of items.
+- **Keys reach it** when the keyboard is in it, or when they bubble through it. A surface whose
+  keyboard is on a field beside the list (the command palette's query) writes the selection signal
+  itself, and the list follows.
+
+**Described** — a plugin's items are the list's **children**, any kind, realized only as they come
+into view; `activate` carries the chosen item's position and `move` the newly selected one, each as
+`index`:
+
+```rust
+use heca_view::build::*;
+use heca_view::Intent;
+
+List::new()
+    .selected(0)
+    .on_activate(Intent::new("rooms.join"))
+    .on_move(Intent::new("rooms.move"))
+    .child(Label::new("lobby"))
+    .child(Label::new("kitchen"));
+```
+```jsonc
+{ "kind": "list", "props": { "selected": 0, "border_width": 1 },
+  "events": { "activate": { "action": "rooms.join" } },
+  "children": [ { "kind": "label", "text": "lobby" }, { "kind": "label", "text": "kitchen" } ] }
+```
+
+A named field inside an item built later reports to no form. Used by the
+[`CommandPalette`](#commandpalette) for its results.
+
 ### ScrollRegion
 
 **Pinned children — what sits on the edges of a list, not in it.** `.pinned(child)` puts a child
@@ -3913,7 +3987,9 @@ mouse/keyboard selection + editing model. Focusable. The field carries the faint
 rest glow (`interaction.control_rest_glow`).
 
 - **Construct**: `Input::new()`.
-- **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.font_size(f32)` (else inherits;
+- **Builders**: `.value(text)` (initial), `.placeholder(text)` — a fixed text or one that changes (a
+  `Signal<String>`, a `Memo`, a closure via `TextValue`), which the field follows with nothing
+  rebuilt: `Input::new().placeholder(mode)` and later `mode.set("Search panes".into())` —, `.font_size(f32)` (else inherits;
   field height tracks the font), `.on_change(impl Fn(Action))`, `.clearable(bool)` (default
   `false`). Plus the shared `LayoutExt`:
   `.disabled(bool)` (dims + inert + unfocusable), `.tab_index(i32)`, `.width/.height`.
@@ -4417,8 +4493,16 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
 
 - **Construct**: `Row::new()`. Add content with `.child(...)`.
 - **Builders**: `.on_click(|ev| ..)` / `.on_press(Intent)` (also makes it focusable), `.active(bool)`,
-  `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
-  more strongly than the quiet `active` outline; a row can show one, the other, or both),
+  `.nav_selected(..)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
+  more strongly than the quiet `active` outline; a row can show one, the other, or both. It takes
+  a `bool` or a value that changes, followed in place: a list whose keyboard selection moves hands
+  each row `move || selected.get() == Some(index)`, and the row draws the outline and scrolls
+  itself into view when the selection reaches it),
+  `.border_width(f32)` (the width of that outline, the same builder `Pane::border_width` is.
+  Unset — the default — it is the theme's glowing ring, bold enough to stand apart from a filled
+  `active` row beside it, as in the workspaces dock. Set, it is a flat line of that width over the
+  selection's fill, with no glow, for a list where the selection is the only thing marked — the
+  command palette's rows are `Row::new().border_width(1.0)`. Native only, like the pane's),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
   `.previous(bool)` (last-focused row, using the theme's `previous_background` at its configured
   opacity; the current row's `active` style wins), `.previous_tint(Color)` (override that color),
@@ -5297,6 +5381,39 @@ LandingSlot::new().edge(true).line(EdgeLine::Upright(0.0)).accepting("pane").key
 Host-only: `.reach` and `.line` are positions the host's layout works out each frame, not values a
 description carries.
 
+### Keycap
+
+**One key, drawn as a chip.** A shortcut is a row of them, laid out by the engine like any other
+children, so nothing measures or positions a chip by hand. The chip itself — its size for the text,
+its two looks, the glyph's contrast with its fill — is `KeyCap`'s, the same drawing the picker's
+letters use, so a key in a palette row and a letter over a pane are one look.
+
+- **Construct**: `Keycap::new(key)` — a text (`"K"`, `"Esc"`, `"F5"`) or a Nerd Font key glyph
+  (`NfGlyph::Command`, `NfGlyph::Shift`, the arrows), which is drawn in its own face.
+- **Builders**: `.variant(KeycapVariant)` — `Filled` (default: a solid glowing chip, legible over
+  anything) or `Bordered` (a quiet outlined chip for a key on a panel of its own: a palette row, a
+  menu). Plus the shared `LayoutExt` — `.size(WidgetSize)` makes the chip and its letter smaller or
+  larger, because the chip is measured from the font it inherits.
+- **Reads**: `.cap()` — the key it shows.
+- **Owns**: its size (from its key and its font; it never shrinks in a squeezed row — the text beside
+  it gives way) and its paint. The caller picks the key and the look, nothing else.
+
+```rust
+use heca_grid_ui::widgets::{Flex, Keycap, KeycapVariant, NfGlyph};
+
+let shortcut = Flex::row()
+    .gap(Spacing::Xs)
+    .child([Keycap::new(NfGlyph::Command), Keycap::new("K")]);
+let quiet = Keycap::new("Esc").variant(KeycapVariant::Bordered);
+```
+
+**Declarative**: kind `Keycap` (`"keycap"`), the key in `text`, the look in the `variant` prop
+(`"filled"` | `"bordered"`). SDK: `heca_view::build::Keycap::new("K").variant(ViewKeycapVariant::Bordered)`.
+
+```json
+{ "kind": "Keycap", "text": "K", "props": { "variant": "bordered" } }
+```
+
 ### Tag
 
 Every text segment reveals its full value in a tooltip, including after live updates.
@@ -6010,13 +6127,14 @@ that filter applied; a plugin's is the same behaviour scoped to its own panel.
 - **Construct**: `KeyHintGroup::new(child)` — a widget or a
   subtree built dynamically 
 - **Builders**:
-  - `.opens_on("mypanel.pick")` — **the verb that opens it**, and the whole of what a picker costs
-    its author. The widget owns its open signal, holds the keyboard while it is up, and declares the
-    name; config binds the key to that name (`[[keys.surface]]`). Reach past it only when the host
-    already has the state — when something *other* than this verb also opens the picker.
-  - `.open_when(Signal<bool>)` — the **host-owned** open state, for that case. Host-only. Binding it
-    also makes the group hold focus while open: holding focus *is* taking the keyboard, so there is
-    no gate to write and nothing to decline.
+  - `.open("mypanel.pick")` — **the action that opens it**, and the whole of what a picker costs
+    its author. The widget owns its open state, holds the keyboard while it is up, and declares the
+    name; config binds the key to that name (`[[keys.surface]]`), RPC and plugins call it by name.
+    This is the [one `.open(..)` every surface takes](#opening-and-closing-a-surface--open).
+  - `.open(Signal<bool>)` — the same builder given **your** state instead, for when something *other*
+    than one action opens the picker: it is open exactly while the signal is `true`, and writes it
+    `false` when it closes. Either way the group holds focus while open — holding focus *is* taking
+    the keyboard, so there is no gate to write and nothing to decline.
   - `.letters(impl IntoIterator<Item = char>)` — **the letters this picker hands out, in order.**
     Defaults to `DEFAULT_LETTERS`. Host-only (an app's choice of alphabet, not data a described tree
     carries).
@@ -6054,7 +6172,7 @@ let picker = KeyHintGroup::new(
         .child(Item::new("one").on_click(|_| choose(1)))
         .child(Item::new("two").on_click(|_| choose(2))),
 )
-.opens_on("mypanel.pick")          // config binds the key to this name
+.open("mypanel.pick")              // config binds the key to this name
 .letters("asdfghjkl".chars());     // optional — home row only, for a small panel
 ```
 
@@ -6066,7 +6184,7 @@ key through `[[keys.surface]]` on the name it declares:
 
 ```json
 { "kind": "KeyHintGroup",
-  "props": { "opens_on": "mypanel.pick" },
+  "props": { "open": "mypanel.pick" },
   "children": [
     { "kind": "Row", "events": { "hint": { "action": "docker.restart", "args": { "id": { "text": "web" } } } } }
   ] }
@@ -6105,14 +6223,14 @@ Row::new().on_hint(go_to(id))
 // the ⊠ — only a picker that asked for "close"
 IconButton::new(Icon::new(Glyph::X)).on_hint(remove(id)).hint_scope(["close"])
 
-KeyHintGroup::new(cards).opens_on("map.jump")                  // letters the cards
-KeyHintGroup::new(cards).opens_on("map.close").scope("close")  // letters the ⊠s
+KeyHintGroup::new(cards).open("map.jump")                  // letters the cards
+KeyHintGroup::new(cards).open("map.close").scope("close")  // letters the ⊠s
 ```
 
 Described, the same thing:
 
 ```json
-{ "kind": "KeyHintGroup", "props": { "opens_on": "map.close", "scope": "close" },
+{ "kind": "KeyHintGroup", "props": { "open": "map.close", "scope": "close" },
   "children": [ { "kind": "IconButton",
                   "props": { "hint_scope": ["close"] },
                   "events": { "hint": { "action": "card.remove" } } } ] }
@@ -6297,7 +6415,23 @@ Flex::column().child(shown.map(|view| &view.rooms, RoomRow::new))
 - The children sit **directly in the container**, in the place `.child(..)` was called — between the
   children written before and after it — so a `Flex` gap, a `Grid` track and a hint letter treat them
   like any other child.
-- The frame after the value changes shows it: the container asks for its own layout pass.
+- The frame after the value changes shows it: the container asks for its own layout pass. **An
+  event does not wait for that frame**: the router puts every followed range in step before it
+  delivers anything, so a key typed right after a value changed reaches the children that value
+  describes.
+- **A part that exists only while something is true** is the same door with a list of at most one
+  item — React's `{open && <Panel/>}`:
+  ```rust
+  base.child(BoundChildren::new(
+      move || if open.get() { vec![()] } else { Vec::new() },
+      move |_| panel(),
+  ))
+  ```
+  The part is built when the value turns true and dropped when it turns false, so it is handed
+  nothing to tell it whether it is shown. What must survive the part going away belongs to
+  whoever holds the value. Building it again costs what building it costs — every label is
+  measured again — so a large part that opens often (a palette) is better built once and shown
+  by its `open` instead.
 - Host-only: it holds closures and reads signals, which a described tree cannot carry. A plugin's
   counterpart is per-mount values (F003/T360).
 
@@ -6540,6 +6674,63 @@ row.child(action_tooltip(KeyHint::new(button).on_hint(hint), "close", "Close", &
   buttons (zoom/float) emit a `FocusPane` first, exactly like the click. Full app-side
   rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
+### Opening and closing a surface — `.open`
+
+**Every surface that comes and goes is opened the same way**: [`Overlay`](#overlay),
+[`Dialog`](#dialog), [`KeyHintGroup`](#keyhintgroup) and the [`CommandPalette`](#commandpalette)
+each take **one** builder, `.open(..)`, given one of two things:
+
+```rust
+// 1. YOUR state — a Signal<bool>. The surface is up exactly while it is true, and writes it
+//    false when it closes itself, so the holder always knows.
+let editing = signal(false);
+Overlay::new().panel(body).open(editing);
+editing.set(true);                                  // it appears
+
+// 2. The NAME of the action that opens it. The surface keeps its own state.
+KeyHintGroup::new(cards).open("map.jump");          // a key, RPC, a plugin opens it by name
+Dialog::new("Close pane?").body(..).open("pane.confirm_close");
+```
+
+**When to use which**
+
+| you have | write | who can open it |
+| --- | --- | --- |
+| the state already, in native code (a mode, a flag something else also writes) | `.open(signal)` | whoever writes the signal |
+| nothing — the surface should just open on a key or a call | `.open("panel.name")` | a key bound to the name in `[[keys.surface]]`, `heca rpc panel.name`, a plugin dispatching `Intent::new("panel.name")` |
+| a description (a plugin, RPC, config) | `"open": "panel.name"` in the node's props | the same |
+
+A plugin and a script cannot hold a Rust signal, which is why the name form exists: it is the only
+door they have, and it opens exactly the same surface a native caller opens with a signal.
+
+**A closed surface still answers its opening action — and only that.** Actions are looked up in
+what is on screen, and a closed surface is not; its opening action is the exception, because that
+is exactly when it is needed. Every other verb it declares (`on_action`), and everything inside it,
+stays out of reach until it is open. So the surface must stay in the tree while closed — which an
+`Overlay` does by design: it keeps its box, hidden, so it can be shown again without a rebuild.
+
+**Closing needs no name.** Every open surface closes the same ways, with nothing to declare:
+
+- its **dismiss key** — `dismiss` in `[keys.widgets]`, `Escape` by default;
+- a **choice** (a palette row, a picker letter, a dialog button) or a **click outside** (a blocking
+  surface with `on_outside_click`);
+- `close_overlay` — the action that closes the surface in front, from a key or over RPC.
+
+A surface opened by a signal writes the signal `false` on each of these, so the state never lies.
+
+**Showing it from code you hold.** A host or a composing widget that holds the widget itself uses
+the commands every `Component` has — `show()`, `close()`, `toggle()` — or a
+[`SurfaceHandle`](#overlay) (`overlay.handle()`) it can keep anywhere. These are **commands**
+(do it now); `.open(..)` is a **property** (what opens it), written once when the tree is built.
+
+**Starting open.** `.default_open(true)` builds a surface already up, with no arrival played — the
+build-time state, separate from what opens it later.
+
+**Why one builder.** These were three names — `open_when(signal)`, `opens_on("name")` and a
+`open_signal()` to read — each on some surfaces and not others. One builder that takes either form
+is one thing to learn, and a surface cannot open by a name differently from another: the rule lives
+once, in the library (`heca_grid_ui::builders::Open`).
+
 ### Overlay
 
 The **base overlay surface** every overlay widget shares: a
@@ -6548,7 +6739,8 @@ overlay chrome — optional dimming scrim, drop shadow, theme surface fill, and 
 reticle. **Blocking is a property of this layer, not a per-widget reimplementation**: a
 *blocking* overlay (default) paints the scrim and swallows outside input (modal); a
 non-blocking one lets outside input fall through (light-dismiss). **Positioning lives here once**:
-`Center` taffy-centers the panel on the viewport (so every descendant gets true bounds), and
+`Center` taffy-centers the panel on the viewport (so every descendant gets true bounds), `Top`
+sets it in the upper part of the window (a command palette), and
 `Anchored` hangs it off a trigger rect for dropdowns/popovers. The placement math and the panel
 chrome are also exposed as **free functions** ([`place_anchored_on`](#overlay),
 [`place_at_point`](#overlay), [`paint_panel_chrome`](#overlay)) so a widget that cannot hand its
@@ -6569,8 +6761,9 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
 - **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
   scrim, outside input falls through), `.blur(bool)` (default `false` — see *The blurred
   backdrop* below), `.decorated(bool)` (default `true` — see *A panel, or content on the
-  backdrop* below), `.opened(bool)` (the **initial** state — see *Showing and
-  hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
+  backdrop* below), `.open(signal | "action")` (what opens it — see
+  [Opening and closing a surface](#opening-and-closing-a-surface--open)), `.default_open(bool)` (the
+  **initial** state — see *Showing and hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
 
 #### A panel, or content on the backdrop — `.decorated(bool)`
@@ -6623,9 +6816,21 @@ Overlay::new().blocking(true).blur(true).panel(map)   // the exposé's backdrop
 
 A blurred surface therefore needs **nothing** from whoever places it: no registration, no host pass
 keyed on it, no declaration outside the tree.
+- **The panel never needs more room than the window has**: its minimum and maximum width and
+  height, in any unit, are narrowed to the room inside the overlay's margin — CSS would write
+  `min(22em, 100%)` — and given back when the window grows. Every panel gets it: a dialog's `22em`
+  floor in a narrow window, a palette, a plugin's described surface.
+- **The arrows across a row of buttons** — `.item_keys(true)`: `item_next` / `item_previous` in
+  `[keys.widgets]` move the keyboard through the panel as Tab does. Off by default, so a panel whose
+  arrows mean something else (a list, a field) keeps them. A [`Dialog`](#dialog) turns it on.
+  Described: `"item_keys": true`.
 - **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
   `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
-  [`Dialog`](#dialog) case) or `OverlayPosition::Anchored { anchor, gap }` (dropdown/popover:
+  [`Dialog`](#dialog) case), `OverlayPosition::Top` (centred across, its top edge at
+  `TOP_POSITION_FRAC` of the window's height — 12% — so a list that grows downward has room below
+  it; in a short window it moves up only as far as it must to keep the overlay's
+  `VIEWPORT_MARGIN` under it, and never above that margin either; the math is the free function
+  `place_top(panel, viewport)`), or `OverlayPosition::Anchored { anchor, gap }` (dropdown/popover:
   below the trigger rect, flipped above when there's no room, left-edge aligned, clamped into the
   viewport). `.anchored(rect)` is sugar for the anchored mode with the default gap
   (`DEFAULT_ANCHOR_GAP`); `.set_anchor(rect)` re-anchors in place (a host following a moved
@@ -6662,6 +6867,16 @@ keyed on it, no declaration outside the tree.
   ```
   **One builder, both authors** — a description names the same animation, because `Animation`'s
   variants *are* the vocabulary:
+  A description chooses between the two placements that need no host data — `"position":
+  `"center"` (the default) or `"top"`; an anchored placement carries a trigger rect the host
+  computes, so it is native only. Any other value is reported and the panel stays centred.
+  ```rust
+  Overlay::new().panel(list).position(OverlayPosition::Top)   // native
+  build::Overlay::new().position("top").child(list)           // the typed SDK (heca-view)
+  ```
+  ```jsonc
+  { "kind": "overlay", "props": { "position": "top" }, "children": [ … ] }
+  ```
   ```jsonc
   { "kind": "overlay",
     "props": { "blocking": true, "open": true, "animation": "zoom_fade" },
@@ -6676,7 +6891,7 @@ keyed on it, no declaration outside the tree.
   **Input follows open; painting follows the gesture.** A leaving surface holds no input — it is
   not focusable, occludes nothing and hit-tests to nothing — while it keeps being drawn. (Counting a
   dissolving map as coverage refused every act on the pane it exists to let you choose.)
-- **Showing and hiding**: `open()` / `hide()` / `toggle()` — on the widget, and on `Component` so a
+- **Showing and hiding**: `show()` / `close()` / `toggle()` — on the widget, and on `Component` so a
   host can drive one it only holds as `WidgetModel`. All three are safe at any time: opening
   something already up is not an arrival, and one already on its way out is not resurrected (those
   rules live in `Presence`, so no caller repeats them).
@@ -6684,12 +6899,12 @@ keyed on it, no declaration outside the tree.
   let mut o = Overlay::new().panel(body);                       // no animation — that is fine
   let mut o = Overlay::new().panel(body).animation(Animation::ZoomFade);
 
-  o.open();     // animation declared? it plays. None? it is simply up.
-  o.hide();     // animation declared? the exit begins, and it stays on screen, inert, until the
+  o.show();     // animation declared? it plays. None? it is simply up.
+  o.close();    // animation declared? the exit begins, and it stays on screen, inert, until the
                 // gesture has played out. None? it is gone now.
   o.toggle();
   ```
-  `.opened(bool)` is the **build-time** state: a surface born open is already there and plays no
+  `.default_open(bool)` is the **build-time** state: a surface born open is already there and plays no
   arrival. `open_signal()` is the same fact as a signal, which is how a *composing* widget drives it
   ([`Dialog`](#dialog)'s buttons flip it); `Overlay::tick` follows the signal, so a flip is an
   arrival or a dismissal exactly as the verbs are.
@@ -6705,20 +6920,22 @@ keyed on it, no declaration outside the tree.
      signal replaces a value, never a child. `register` is the only part that touches `AppState`; it
      gathers the session and calls `expose::map(..)`, which builds the `Overlay` — that returned
      `WidgetModel` is the layer's **root**.
-  3. Then `LayerRegistry::show(id)` marks the layer visible and calls `l.root_mut().open()` — the
-     `Overlay` from step 2. `hide(id)` calls `root.hide()` and keeps the layer mounted while
+  3. Then `LayerRegistry::show(id)` marks the layer visible and calls `l.root_mut().show()` — the
+     `Overlay` from step 2. `hide(id)` calls `root.close()` and keeps the layer mounted while
      `is_leaving()`.
   4. A rebuild *while it is up* hands the old tree's `Presence` to the new one, so an arrival
      already played does not play again and one still in flight carries on.
 
   A surface that is **not** a layer — a popover inside a page — is driven directly: hold it (or its
-  `open_signal`) and call `open()` / `hide()` / `toggle()` yourself.
+  `open_signal`) and call `show()` / `close()` / `toggle()` yourself — or give it `.open(signal)`
+  and write the signal.
 - **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
   layout); `.presence()` / `.presence_mut()` (`Component`) — the surface's arrival and exit as one
   value, which is how a host carries a gesture across a **rebuild**: swap the `Presence` into the
   fresh tree and an arrival already played does not play again, while one still in flight carries on.
 - **Declarative kind**: `WidgetId::Overlay`. Its `children` are the panel — one child *is* the
-  panel, several are stacked into one. Props: `blocking`, `open`, `animation`. Placement is
+  panel, several are stacked into one. Props: `blocking`, `open` (the name of the action that opens
+  it), `default_open`, `animation`. Placement is
   host-only (an anchored overlay carries a host-computed trigger rect).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
   `overlay_occludes` = whole viewport when blocking, else the panel rect.
@@ -6774,7 +6991,7 @@ keyed on it, no declaration outside the tree.
 let overlay = Overlay::new()
     .panel(realized_panel)                        // opaque tree from realize(...)
     .on_outside_click(move || emit(close_intent)) // host's overlay-close path
-    .open(true);
+    .default_open(true);
 let visible = overlay.open_signal();
 ```
 
@@ -6801,7 +7018,7 @@ let popover = Overlay::new()
     .anchored(trigger.base().bounds)       // below the trigger, flip above, clamp on-screen
     .panel(Card::new().padding(10.0).child(Label::new("Popover body")))
     .on_outside_click(move || close())     // light-dismiss
-    .open(true);
+    .default_open(true);
 
 // Re-anchor in place when the trigger moves (scroll, resize) — no rebuild:
 // popover.set_anchor(trigger.base().bounds);
@@ -6914,13 +7131,18 @@ universal hint picker (`prefix+/`), standard focus traversal, and pointer routin
 this is what makes an overlay's buttons hintable.
 
 Same overlay contract as [`Select`](#select): `overlay_active` + `focusable` only while open, so the host
-routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree.
+routes input here first. **The keyboard and the pointer are the composed `Overlay`'s** — Tab, the arrows
+across the buttons (`Overlay::item_keys`), Esc (`on_dismiss`), a press outside (`on_outside_click`) and
+the panel kept inside the window; the dialog adds one thing only a dialog knows: Enter, when nothing
+focused took it, presses the primary (first) action. The panel is **built the first time it is
+needed** (the first layout, event or question about the keyboard), once every builder has run, and
+nothing is reached into after.
 `Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal
 is a callback the host points at its overlay-close path (e.g. emit `CloseOverlay`).
 
 **Nav keys are host-configured, except the universal focus primitive (`widget-keys-config`).**
-**Tab / Shift+Tab always move focus** within the modal (classic, always-on, via the embedded
-`FocusManager` — not a rebindable binding). Beyond that the dialog's button row is a **horizontal**
+**Tab / Shift+Tab always move focus** within the modal (classic, always-on, the overlay's — not a
+rebindable binding). Beyond that the dialog's button row is a **horizontal**
 focus strip, so configurable traversal / submit / cancel arrive as the semantic
 `Event::Widget(WidgetIntent::{ItemPrevious, ItemNext, Activate, Dismiss})`. The **host** resolves
 these from `[keys.widgets]` and only sends them after a raw key was **not** consumed by a focused
@@ -6970,8 +7192,9 @@ the dialog) and `Activate` commits its row.
   An empty title leaves no title row, and absent body/actions leave no empty tracks or gaps.
 - **Builders**: `.danger(bool)` (a destructive question — the body's text takes the theme's danger colour; title and buttons keep theirs), `.dismissible(bool)` (default `true`; `false` = forced-decision — `Dismiss`/scrim
   swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on `WidgetIntent::Dismiss` / scrim),
-  `.open(bool)`
-  (focuses the first focusable — a text field body if present, so the user types immediately;
+  `.open(signal | "action")` (what opens it — see
+  [Opening and closing a surface](#opening-and-closing-a-surface--open)), `.default_open(bool)`
+  (starts open; focuses the first focusable — a text field body if present, so the user types immediately;
   otherwise the first button as a safe default), and `.body(..)` also takes a realized body
   from a mapper (e.g. `realize`).
 - **Default width**: content-sized panels have a preferred **22em** baseline
@@ -7005,7 +7228,7 @@ let dialog = Dialog::new("Delete pane?")
     .action(KeyHint::new(Button::secondary("Cancel").on_click(cancel)).on_hint(cancel_hint))
     .action(KeyHint::new(Button::destructive("Delete").on_click(delete)).on_hint(delete_hint))
     .on_dismiss(move || emit(close))
-    .open(true);
+    .default_open(true);
 ```
 
 > **Self-contained** — the host does nothing modal-specific. While a `Dialog` is up the host just
@@ -7102,6 +7325,18 @@ children. `SearchModel` owns matching, ranking and history. Choosing a row runs 
 closes the palette. Each mode has its own search scope; a leading sigil selects that mode and is
 removed before matching or recording a search.
 
+**The panel is built once and kept.** The palette holds `open` (its own, or yours through
+`.open(signal)`), and its panel — an `Overlay` at the top of the window over the query field and the
+rows — is built on that signal, so it is up exactly while it is true and dissolves in and out
+quickly (`Animation::Fade`). Kept rather than built on each opening, because building it again
+measured every row's text again and the panel was slow to appear. The panel is built the **first
+time it is needed** — the first layout, the first event or the first question about the keyboard —
+once every builder has run, so `.open(signal)` is simply what it is built on: nothing is built twice
+or reached into to change it. Its width and the number of rows it shows follow the palette's size
+(`width(..)` and `List::visible_items(..)` that follow a value). An event arriving
+right after it opens still finds the field: the router puts children that follow a value in step
+before it delivers, as the layout pass does.
+
 Opening or relaying out the palette beneath a stationary pointer preserves its initial or
 keyboard selection. Hover refresh is not movement; actual pointer movement still selects a row,
 and clicking still activates it. Hosts use the shared raw `Recheck` event after tree changes,
@@ -7160,12 +7395,17 @@ words and optional shared memory.
 
 **Something after a row's title** — `.trailing(|| widget)`: a badge, a count, a status, drawn on the
 title's line, right of it; the title is cut to make room on a narrow panel. Given as a way to make it,
-because a row can be built more than once. In heca, extensions and plugins add to a mode's rows with
-`extension.palette("session").to_raw(..)` / `.to_description(..)`, which arrive here — see
-[`extending-heca.md` → Sessions and their projects](extending-heca.md#sessions-and-their-projects).
+because a row can be built more than once. In heca, extensions and plugins add to a list's rows with
+`extension.palette_list("session").render_item(|item, row| row.trailing(..))`, which arrives here —
+see [`extending-heca.md` → The palette's lists](extending-heca.md#the-palettes-lists).
+
+**A row of its own** — `.content(|| widget)`: shown instead of the palette's row (icon, title,
+description, keys); the selection, the hover and the choice stay the palette's, and the label is
+still what is matched. Given as a way to make it, for the same reason.
 
 ```rust
 Command::new("work", run).trailing(|| Badge::accent("pro"))
+Command::new("crimson", run).content(|| Flex::row().child([swatch, Label::new("crimson")]))
 ```
 
 #### Native composition

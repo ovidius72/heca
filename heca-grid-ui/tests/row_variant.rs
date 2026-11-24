@@ -91,3 +91,17 @@ fn a_variant_brings_its_air_and_a_later_padding_wins() {
     );
     assert_eq!(overridden, filled, "a padding set after the variant wins");
 }
+
+/// **A row follows "am I the selected one" in place** — a list hands each row a live value once,
+/// and moving the selection restyles the rows with nothing pushed into them and nothing rebuilt.
+#[test]
+fn a_row_follows_a_live_active_value() {
+    let selected = signal(Some(1usize));
+    let row = |index: usize| Row::new().active(move || selected.get() == Some(index));
+    let (first, second) = (row(0), row(1));
+    assert!(!first.state().get_untracked());
+    assert!(second.state().get_untracked());
+    selected.set(Some(0));
+    assert!(first.state().get_untracked(), "the selection moved to it");
+    assert!(!second.state().get_untracked(), "and away from this one");
+}

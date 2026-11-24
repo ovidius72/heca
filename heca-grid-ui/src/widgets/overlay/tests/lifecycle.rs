@@ -177,6 +177,64 @@ fn a_handle_shows_and_closes_a_surface_from_anywhere() {
     assert!(h.is_open(), "and toggle is the same door");
 }
 
+/// **A surface opens on the name of an action** — the form a key, RPC and a plugin can use, since
+/// none of them can hold a signal. Running the action opens it; closing it needs no name.
+#[test]
+fn a_surface_opens_when_the_action_it_names_runs() {
+    let o = Overlay::new()
+        .panel(Flex::column().child(Label::new("body")))
+        .open("notes.show");
+    assert!(!o.handle().is_open());
+    assert!(
+        crate::fire_action(&o, "notes.show"),
+        "the surface declares the action"
+    );
+    assert!(o.handle().is_open(), "running it opens the surface");
+    o.handle().close();
+    assert!(!o.handle().is_open());
+}
+
+/// **A closed surface answers only its opening action** — every other verb it declares, and
+/// everything inside it, stays out of reach until it is open, as before.
+#[test]
+fn a_closed_surface_answers_only_its_opening_action() {
+    use crate::builders::EventExt;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let ran = Rc::new(Cell::new(false));
+    let seen = ran.clone();
+    let o = Overlay::new()
+        .panel(Flex::column().child(Label::new("body")))
+        .open("notes.show")
+        .on_action("notes.clear", move || seen.set(true));
+    assert!(
+        !crate::fire_action(&o, "notes.clear"),
+        "closed: its other verbs are unreachable"
+    );
+    assert!(!ran.get());
+    assert_eq!(
+        crate::hint::collect_actions(&o),
+        vec!["notes.show".to_string()]
+    );
+    assert!(crate::fire_action(&o, "notes.show"));
+}
+
+/// **A surface given your signal writes it back when it closes itself**, so the state you hold is
+/// never stale — the dismiss key, a choice or a click outside all close through `close()`.
+#[test]
+fn a_surface_that_closes_itself_writes_your_signal_false() {
+    use crate::reactive::{SignalGet, SignalUpdate, signal};
+
+    let editing = signal(true);
+    let mut o = Overlay::new()
+        .panel(Flex::column().child(Label::new("body")))
+        .open(editing);
+    editing.set(true);
+    o.close();
+    assert!(!editing.get_untracked(), "closing wrote your signal false");
+}
+
 /// **A surface follows a signal you already hold** — the door state binding needs.
 ///
 /// It owned a signal and lent it out, so a caller could drive *its* state but never hand it
@@ -188,7 +246,7 @@ fn a_surface_follows_a_signal_of_your_own() {
     let editing = signal(false);
     let o = Overlay::new()
         .panel(Flex::column().child(Label::new("body")))
-        .open_when(editing);
+        .open(editing);
 
     assert!(!o.handle().is_open());
     editing.set(true);

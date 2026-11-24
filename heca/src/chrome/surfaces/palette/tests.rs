@@ -126,13 +126,10 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
         last_focused: None,
         last_visited: None,
     };
-    let mut declared = modes::MODES.to_vec();
-    declared.push(modes::Mode {
-        sigil: '%',
-        scope: "custom",
-        search_description: false,
-        on_enter: None,
-        rows: |sources| {
+    lists::clear_for_tests();
+    lists::PaletteList::new("custom")
+        .sigil('%')
+        .host_rows(|sources| {
             workspace_entries(sources.layout, None)
                 .into_iter()
                 .map(|mut row| {
@@ -140,15 +137,13 @@ fn adding_one_mode_declares_its_rows_and_both_ways_to_open_it() {
                     row
                 })
                 .collect()
-        },
-    });
+        });
     for named in [false, true] {
         let ran = Rc::new(RefCell::new(String::new()));
         let (palette, rows) = modes::populate(
             CommandPalette::new(),
-            &declared,
             &sources,
-            |row| {
+            &|row: &PaletteEntry, _: &str| {
                 let ran = ran.clone();
                 let id = row.id.clone();
                 Command::new(row.label.clone(), move || *ran.borrow_mut() = id.clone())

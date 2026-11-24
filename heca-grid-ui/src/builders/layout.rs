@@ -251,13 +251,14 @@ pub trait LayoutExt: Component + Sized {
     /// **Setting neither width nor height already fills the parent** across the cross axis, exactly
     /// as CSS `align-items: stretch` does — so `.width(Length::FULL)` on a child that fills says
     /// nothing, and is better left off.
-    fn width(mut self, w: impl Into<Length>) -> Self {
-        self.authored_style_mut().layout.width = w.into();
+    fn width(mut self, value: impl crate::builders::IntoLengthValue) -> Self {
+        crate::builders::set_size(&mut self, crate::builders::SizeField::Width, value);
         self
     }
-    /// Height along the main/cross axis — the same spellings as [`width`](LayoutExt::width).
-    fn height(mut self, h: impl Into<Length>) -> Self {
-        self.authored_style_mut().layout.height = h.into();
+    /// Height along the main/cross axis — the same spellings as [`width`](LayoutExt::width),
+    /// fixed or following a value.
+    fn height(mut self, value: impl crate::builders::IntoLengthValue) -> Self {
+        crate::builders::set_size(&mut self, crate::builders::SizeField::Height, value);
         self
     }
     /// Flex grow factor (share of remaining space).
@@ -296,8 +297,8 @@ pub trait LayoutExt: Component + Sized {
 
     /// Ceiling for the height — a box that may not grow past it however tall its content is.
     /// Same spellings as [`width`](LayoutExt::width).
-    fn max_height(mut self, h: impl Into<Length>) -> Self {
-        self.authored_style_mut().layout.max_height = Some(h.into());
+    fn max_height(mut self, value: impl crate::builders::IntoLengthValue) -> Self {
+        crate::builders::set_size(&mut self, crate::builders::SizeField::MaxHeight, value);
         self
     }
 
@@ -307,8 +308,8 @@ pub trait LayoutExt: Component + Sized {
     /// ceiling so one long row does not stretch it across the screen. Past the ceiling the content
     /// is the child's problem — a [`Label`](crate::widgets::Label) with
     /// [`truncate`](crate::widgets::Label::truncate) cuts, anything else overflows.
-    fn max_width(mut self, w: impl Into<Length>) -> Self {
-        self.authored_style_mut().layout.max_width = Some(w.into());
+    fn max_width(mut self, value: impl crate::builders::IntoLengthValue) -> Self {
+        crate::builders::set_size(&mut self, crate::builders::SizeField::MaxWidth, value);
         self
     }
 

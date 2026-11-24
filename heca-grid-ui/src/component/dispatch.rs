@@ -28,6 +28,9 @@ pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
 /// list does over time. Now there is no list.
 pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
     new_click();
+    // Children that follow a value are put in step first, as the layout pass does, so an event
+    // reaches the tree its values describe — not the one from the last frame.
+    crate::builders::apply_bound_tree(node);
     // **What is held down is remembered here, once.** It is an announcement about the device, so it
     // is recorded before it is passed on and everything else reads it from
     // [`event::modifiers`](crate::event::modifiers) — instead of each widget keeping a private copy

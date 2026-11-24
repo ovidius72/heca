@@ -298,9 +298,8 @@ mod tests {
         let chosen: Rc<RefCell<Vec<String>>> = Default::default();
         let (palette, _) = modes::populate(
             CommandPalette::new(),
-            modes::MODES,
             &sources,
-            |row| {
+            &|row: &PaletteEntry, _: &str| {
                 let chosen = chosen.clone();
                 let id = row.id.clone();
                 row_command(row, 0, move || chosen.borrow_mut().push(id.clone()))

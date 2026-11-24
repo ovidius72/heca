@@ -1,12 +1,33 @@
-//! The builder API: how a [`Dialog`] is assembled — title, body, action buttons,
-//! dismissal and open policy — and the body-shaping helpers those builders use.
+//! The builder API: how a [`Dialog`] is assembled — title, body, action buttons, dismissal and
+//! open policy — and how its panel is composed from them the first time it is needed.
+
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use super::*;
 use crate::builders::{IntoChildren, Parent, PlaceExt, PresenceExt as _};
 use crate::component::Component;
-use crate::reactive::{Signal, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Length, Track};
-use crate::widgets::{Flex, Grid, Label, Overlay, Surface};
+use crate::widgets::{Flex, Grid, Label, Overlay};
+
+/// What a dialog does when it is asked to go away — shared by its builder and its overlay.
+pub(super) type DismissFn = Rc<RefCell<Option<Box<dyn Fn()>>>>;
+
+/// What the panel is built from — gathered by the builders, read once when it is built.
+#[derive(Default)]
+pub(super) struct Spec {
+    pub(super) title: String,
+    pub(super) body: Vec<crate::WidgetModel>,
+    pub(super) actions: Vec<crate::WidgetModel>,
+    pub(super) danger: bool,
+    pub(super) default_action: Option<String>,
+    /// The flag the dialog is up by — its own, or the caller's from `open(signal)`.
+    pub(super) open: Option<Signal<bool>>,
+    /// The panel's style as the caller wrote it — kept current by the dialog on every layout, read
+    /// by the panel as it lays itself out.
+    pub(super) panel_style: Rc<RefCell<crate::style::Style>>,
+}
 
 #[heca_grid_ui_macros::props]
 impl Dialog {
@@ -19,50 +40,24 @@ impl Dialog {
     /// Content-sized panels start at a preferred `22em` width, grow for larger content,
     /// and give way to the viewport cap. [`panel_size`](Dialog::panel_size) overrides it.
     pub fn new(title: impl Into<String>) -> Self {
-        let title = title.into();
-        let mut layout = Grid::new()
-            .template_column("1fr")
-            .grow(1.0)
-            .min_height(0.0)
-            .gap(DIALOG_GAP)
-            .area(LAYOUT_AREA);
-        if !title.is_empty() {
-            layout = layout
-                .template_row("auto")
-                .template_area(TITLE_AREA)
-                .child(Label::new(title).area(TITLE_AREA));
-        }
-        // Surface owns the panel box; Grid arranges its content inside that box.
-        let panel = Surface::new().padding(DIALOG_PAD).child(layout);
-        let authored_style = panel.base().style;
-
-        // The base Overlay owns the layer presentation: blocking (scrim + swallow),
-        // viewport centering, drop shadow, panel fill, bracket reticle. Its open
-        // signal IS the dialog's open signal.
-        // **A dialog locks because it is a dialog.** It is asking a question, so nothing behind it
-        // is reachable until you answer — the caller never says so, and cannot get it wrong. A
-        // modeless one (find/replace, a properties panel) turns it off with `.lock(false)`.
         // Root: a full-size passthrough so the overlay child fills the viewport.
         let mut base = Base::viewport_layer();
-
-        // **One flag, handed down.** The dialog is up when `Base::open` says so — the flag every
-        // component carries — and the overlay it composes *follows* that same signal rather than
-        // owning one of its own. This single line is what used to be five forwarded methods: show,
-        // close and the gesture all work on the dialog because they work on every component, and
-        // the surface underneath simply agrees.
-        let overlay = Overlay::new()
-            .blocking(true)
-            .lock(true)
-            .panel(panel)
-            .open_when(base.open);
-        base.children.push(crate::WidgetModel::new(overlay));
-
+        let spec = Rc::new(RefCell::new(Spec {
+            title: title.into(),
+            open: Some(base.open),
+            ..Spec::default()
+        }));
+        let dismissible = Rc::new(Cell::new(true));
+        let on_dismiss: DismissFn = Rc::new(RefCell::new(None));
+        let mut authored_style = crate::style::Style::default();
+        authored_style.layout.padding = DIALOG_PAD.into();
+        Self::attach_panel(&mut base, &spec, &dismissible, &on_dismiss);
         Self {
             base,
             authored_style,
-            dismissible: true,
-            on_dismiss: None,
-            danger: false,
+            spec,
+            dismissible,
+            on_dismiss,
         }
     }
 
@@ -102,33 +97,12 @@ impl Dialog {
     /// Append one or many body components, independently of action-builder order.
     /// Nested Flex/Grid layouts remain ordinary children; none is inferred to be a header.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn child(mut self, children: impl IntoChildren) -> Self {
+    pub fn child(self, children: impl IntoChildren) -> Self {
         let mut children = children.into_children();
-        if children.is_empty() {
-            return self;
-        }
         for child in &mut children {
             Self::fit_body(child.as_mut());
         }
-        if self.part_mut(BODY_AREA).is_none() {
-            let body = Flex::column().gap(DIALOG_GAP).area(BODY_AREA);
-            let layout = self.layout_mut().base_mut();
-            let before_actions = layout
-                .children
-                .iter()
-                .position(|part| part.base().grid_area.as_deref() == Some(ACTIONS_AREA))
-                .unwrap_or(layout.children.len());
-            layout
-                .children
-                .insert(before_actions, crate::WidgetModel::new(body));
-        }
-        self.part_mut(BODY_AREA)
-            .expect("the body was just created")
-            .base_mut()
-            .children
-            .extend(children);
-        self.tone_body();
-        self.sync_template();
+        self.spec.borrow_mut().body.extend(children);
         self
     }
 
@@ -145,24 +119,11 @@ impl Dialog {
     /// inside it without a colour of its own follows. The title and the buttons keep theirs — a
     /// destructive button already says so through its own variant.
     ///
-    /// Order-free with [`body`](Dialog::body): whichever comes second applies it.
+    /// Order-free with [`body`](Dialog::body).
     #[heca_grid_ui_macros::prop]
-    pub fn danger(mut self, on: bool) -> Self {
-        self.danger = on;
-        self.tone_body();
+    pub fn danger(self, on: bool) -> Self {
+        self.spec.borrow_mut().danger = on;
         self
-    }
-
-    /// Put the danger tone on the body, when there is one and the dialog is destructive. Never
-    /// clears a tone: a body that set its own keeps it when the dialog is not destructive.
-    fn tone_body(&mut self) {
-        if self.danger
-            && let Some(body) = self.part_mut(BODY_AREA)
-        {
-            for child in &mut body.base_mut().children {
-                child.base_mut().style.visual.content_tone = Some(crate::Tone::Danger);
-            }
-        }
     }
 
     /// Make the body behave the way a dialog body always should, so no caller has
@@ -177,15 +138,8 @@ impl Dialog {
     /// With an unsized panel there is no leftover space, so this changes nothing.
     ///
     /// It also gives the body a default **gap between its children** so a dialog's
-    /// fields breathe whether or not the body scrolls — the same spacing a
-    /// [`ScrollRegion`](crate::widgets::ScrollRegion) body already applies to itself, now
-    /// applied to a plain container body too, so the modal is consistent either
-    /// way. (A label + its control should be grouped into one tight unit, e.g. a
-    /// `Field`, so this larger gap falls *between* fields, never between a label
-    /// and its own input.)
-    ///
-    /// Only defaults are filled in: an explicit width / grow / gap the caller set
-    /// is respected.
+    /// fields breathe whether or not the body scrolls. Only defaults are filled in: an explicit
+    /// width / grow / gap the caller set is respected.
     fn fit_body(body: &mut dyn Component) {
         let style = &mut body.base_mut().style.layout;
         if style.width == Length::Auto {
@@ -201,26 +155,10 @@ impl Dialog {
 
     /// Append an action **button** (a real [`Button`](crate::widgets::Button) the caller has already
     /// wired with its `on_click` + hint target). Buttons live in a right-aligned row along
-    /// the panel bottom, in call order.
+    /// the panel bottom, in call order; the first is the **primary** one Enter presses.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn action(mut self, button: impl crate::builders::IntoComponent) -> Self {
-        if self.part_mut(ACTIONS_AREA).is_none() {
-            // Lazily create the right-aligned action row on first use.
-            let row = Flex::row()
-                .gap(DIALOG_BTN_GAP)
-                .justify("end")
-                .area(ACTIONS_AREA);
-            self.layout_mut()
-                .base_mut()
-                .children
-                .push(crate::WidgetModel::new(row));
-        }
-        self.part_mut(ACTIONS_AREA)
-            .expect("the action row was just created")
-            .base_mut()
-            .children
-            .push(button.into_component());
-        self.sync_template();
+    pub fn action(self, button: impl crate::builders::IntoComponent) -> Self {
+        self.spec.borrow_mut().actions.push(button.into_component());
         self
     }
 
@@ -234,79 +172,56 @@ impl Dialog {
     /// ```
     ///
     /// The author's call, and only the author's: which button is safe is a fact about *this*
-    /// question, not something a framework can infer. Unset, nothing is focused — a deliberate
-    /// choice a dialog can keep making.
+    /// question, not something a framework can infer. Unset, nothing is focused.
     ///
-    /// It delegates to [`Overlay::default_focus`], so a dialog and a surface **composed** from an
-    /// overlay place the keyboard by the same rule rather than two that drift.
+    /// It is the composed [`Overlay`]'s [`default_focus`](Overlay::default_focus), so a dialog and
+    /// a surface **composed** from an overlay place the keyboard by the same rule.
     #[heca_grid_ui_macros::prop]
-    pub fn default_action(mut self, key: impl Into<String>) -> Self {
-        let key = key.into();
-        // The composed `Overlay` is this dialog's only child, and it is what holds the keyboard.
-        self.base.children[0].set_default_focus(&key);
+    pub fn default_action(self, key: impl Into<String>) -> Self {
+        self.spec.borrow_mut().default_action = Some(key.into());
         self
     }
 
-    /// `false` forces an explicit choice — Esc / scrim are swallowed without dismissing.
-    /// Pair with a cancel button so there's always a non-destructive way out.
+    /// `false` forces an explicit choice — a press outside is swallowed without dismissing (Esc
+    /// still cancels). Pair with a cancel button so there's always a non-destructive way out.
     #[heca_grid_ui_macros::prop]
-    pub fn dismissible(mut self, on: bool) -> Self {
-        self.dismissible = on;
+    pub fn dismissible(self, on: bool) -> Self {
+        self.dismissible.set(on);
         self
     }
 
-    /// Set the callback fired when Esc or a scrim click requests dismissal (respecting
+    /// Set the callback fired when Esc or a press outside requests dismissal (respecting
     /// [`dismissible`](Dialog::dismissible)). The host wires this to its overlay-close path.
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
-    pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_dismiss = Some(Box::new(f));
+    pub fn on_dismiss(self, f: impl Fn() + 'static) -> Self {
+        *self.on_dismiss.borrow_mut() = Some(Box::new(f));
         self
     }
 
-    /// Set the initial open state (focusing the first focusable — the safe default when the
-    /// caller orders `[Cancel, …, Confirm]`).
+    /// Set the initial open state. A dialog born open puts the keyboard on its first control,
+    /// without the ring — so Enter works at once, and the ring waits for keyboard navigation.
     #[heca_grid_ui_macros::prop]
     pub fn default_open(mut self, open: bool) -> Self {
         self.base.open.set(open);
-        // **Its own gesture adopts the state too**, not just the flag. Setting only the flag left
-        // the two disagreeing for a frame — the flag said up, the component's own record said
-        // closed — so anything asking whether it was up (a host driving the layer stack, an exit
-        // still playing) got the wrong answer until the first tick caught it up.
-        //
-        // Its own, and not the composed overlay's: arriving and leaving belong to every component
-        // now, so a caller holding a `Dialog` asks the `Dialog`, and the surface underneath
-        // follows the one flag it was handed.
+        // **Its own gesture adopts the state too**, not just the flag: anything asking whether it
+        // is up gets the right answer before the first tick.
         self.base.presence.assume_open(open);
-        if open {
-            // Focus the safe-default (first) button so Enter works — but WITHOUT the ring; it
-            // appears only once the user navigates by keyboard (focus-visible).
-            self.base.children[0].focus_first_quiet();
-        }
         self
     }
 
-    /// The open-state signal — the host binds this to show/hide the dialog.
-    /// **Follow a signal of your own** — the dialog is up exactly when it is true.
+    /// **What opens this dialog** — a signal of your own, or the name of an action that opens it.
     ///
     /// ```ignore
     /// let confirming = signal(false);
-    /// let d = Dialog::new("Close pane?").body(..).action(..).open_when(confirming);
+    /// let d = Dialog::new("Close pane?").body(..).action(..).open(confirming);
     /// confirming.set(true);   // it appears
     /// ```
     ///
-    /// Delegates to the composed [`Overlay`], which holds the state.
-    #[heca_grid_ui_macros::host_only(
-        "a live signal; a description carries a starting value, `open`"
-    )]
-    pub fn open_when(mut self, open: Signal<bool>) -> Self {
-        let overlay = std::mem::replace(
-            &mut self.base.children[0],
-            crate::WidgetModel::new(Flex::column()),
-        );
-        self.base.children[0] = overlay;
-        self.base.open = open;
-        self.base.children[0].follow_open(open);
-        self
+    /// See [`IntoOpen`](crate::builders::IntoOpen).
+    #[heca_grid_ui_macros::prop]
+    pub fn open(self, by: impl crate::builders::IntoOpen) -> Self {
+        let own = self.base.open;
+        by.into_open().apply(own, Self::follow_open, self)
     }
 
     /// **A handle to show and close this dialog from anywhere** — copyable, so it goes into any
@@ -323,44 +238,136 @@ impl Dialog {
     pub fn open_signal(&self) -> Signal<bool> {
         self.base.open
     }
+}
 
-    /// The panel container (the composed [`Overlay`]'s single child), mutably.
-    fn panel_mut(&mut self) -> &mut Base {
-        self.base.children[0].base_mut().children[0].base_mut()
+impl Dialog {
+    /// Follow `open`: the dialog's flag, and what its panel is built on.
+    fn follow_open(mut self, open: Signal<bool>) -> Self {
+        self.base.open = open;
+        self.spec.borrow_mut().open = Some(open);
+        self
     }
 
-    /// Search only this panel's parts: a nested dialog may use the same area names.
-    pub(super) fn part_mut(&mut self, name: &str) -> Option<&mut crate::WidgetModel> {
-        self.layout_mut().base_mut().child_in_area(name)
+    /// The caller's panel style, handed to the panel — run on every layout, before the panel lays
+    /// itself out, so a size given at any point is the one it is laid out at.
+    pub(super) fn share_panel_style(&self) {
+        let spec = self.spec.borrow();
+        if *spec.panel_style.borrow() != self.authored_style {
+            *spec.panel_style.borrow_mut() = self.authored_style;
+        }
     }
 
-    fn layout_mut(&mut self) -> &mut crate::WidgetModel {
-        self.panel_mut()
-            .child_in_area(LAYOUT_AREA)
-            .expect("the panel owns its layout")
+    /// **The dialog's one child, its overlay and panel — built the first time it is needed** (the
+    /// first layout, event or question about the keyboard), once every builder has run, from what
+    /// they gathered. The same door as any child that follows a value: a list of one.
+    fn attach_panel(
+        base: &mut Base,
+        spec: &Rc<RefCell<Spec>>,
+        dismissible: &Rc<Cell<bool>>,
+        on_dismiss: &DismissFn,
+    ) {
+        let (spec, dismissible, on_dismiss) =
+            (spec.clone(), dismissible.clone(), on_dismiss.clone());
+        crate::builders::IntoChildren::attach(
+            crate::builders::BoundChildren::new(
+                || vec![()],
+                move |_| build(&mut spec.borrow_mut(), &dismissible, &on_dismiss),
+            ),
+            base,
+        );
     }
+}
 
-    /// Rebuild the template during construction, retaining the panel's Base and live children.
-    /// Absent parts contribute neither a row nor a gap; body content takes the remaining space.
-    fn sync_template(&mut self) {
-        let slot = self.layout_mut();
-        let mut rows = Vec::new();
-        let mut areas = Vec::new();
-        for part in &slot.base().children {
-            if let Some(name) = &part.base().grid_area {
-                rows.push(if name == BODY_AREA {
-                    Track::Fr(1.0)
-                } else {
-                    Track::Auto
-                });
-                areas.push(name.clone());
+/// **Compose the dialog**: the overlay that owns the layer and the keyboard, over the panel.
+fn build(spec: &mut Spec, dismissible: &Rc<Cell<bool>>, on_dismiss: &DismissFn) -> Overlay {
+    let open = spec.open.expect("a dialog always has the flag it is up by");
+    let mut rows = Vec::new();
+    let mut areas = Vec::new();
+    let mut parts: Vec<crate::WidgetModel> = Vec::new();
+    if !spec.title.is_empty() {
+        rows.push(Track::Auto);
+        areas.push(TITLE_AREA.to_string());
+        parts.push(crate::WidgetModel::new(
+            Label::new(std::mem::take(&mut spec.title)).area(TITLE_AREA),
+        ));
+    }
+    if !spec.body.is_empty() {
+        let mut body = std::mem::take(&mut spec.body);
+        if spec.danger {
+            for child in &mut body {
+                child.base_mut().style.visual.content_tone = Some(crate::Tone::Danger);
             }
         }
-        let mut panel = Grid::new()
-            .template_column("1fr")
-            .template_row(rows)
-            .template_area(areas);
-        std::mem::swap(panel.base_mut(), slot.base_mut());
-        *slot = crate::WidgetModel::new(panel);
+        rows.push(Track::Fr(1.0));
+        areas.push(BODY_AREA.to_string());
+        parts.push(crate::WidgetModel::new(
+            Flex::column().gap(DIALOG_GAP).area(BODY_AREA).child(body),
+        ));
     }
+    if !spec.actions.is_empty() {
+        rows.push(Track::Auto);
+        areas.push(ACTIONS_AREA.to_string());
+        parts.push(crate::WidgetModel::new(
+            Flex::row()
+                .gap(DIALOG_BTN_GAP)
+                .justify("end")
+                .area(ACTIONS_AREA)
+                .child(std::mem::take(&mut spec.actions)),
+        ));
+    }
+    let layout = Grid::new()
+        .template_column("1fr")
+        .template_row(rows)
+        .template_area(areas)
+        .grow(1.0)
+        .min_height(0.0)
+        .gap(DIALOG_GAP)
+        .area(LAYOUT_AREA)
+        .child(parts);
+    let (fire, fire_outside) = {
+        let (esc, outside, dismissible) =
+            (on_dismiss.clone(), on_dismiss.clone(), dismissible.clone());
+        (
+            move || {
+                if let Some(f) = &*esc.borrow() {
+                    f();
+                }
+            },
+            move || {
+                if dismissible.get()
+                    && let Some(f) = &*outside.borrow()
+                {
+                    f();
+                }
+            },
+        )
+    };
+    // **A dialog locks because it is a dialog.** It is asking a question, so nothing behind it is
+    // reachable until you answer — the caller never says so, and cannot get it wrong.
+    let mut overlay = Overlay::new()
+        .blocking(true)
+        .lock(true)
+        // Its controls are a row of buttons: the arrows across it move the keyboard.
+        .item_keys(true)
+        .panel(component::DialogPanel::new(
+            layout,
+            spec.panel_style.clone(),
+        ))
+        .on_dismiss(fire)
+        .on_outside_click(fire_outside)
+        .open(open);
+    let named = spec.default_action.take();
+    if let Some(key) = &named {
+        overlay = overlay.default_focus(key.clone());
+    }
+    if open.get_untracked() {
+        // **Built already open, it is already up** — the overlay sees no opening to place the
+        // keyboard at, so it is placed now, by the rule an opening follows: on the control the
+        // dialog named, or on the first one without the ring, so Enter works at once.
+        match named {
+            Some(_) => overlay.place_default_focus(),
+            None => Component::focus_first_quiet(&mut overlay),
+        }
+    }
+    overlay
 }

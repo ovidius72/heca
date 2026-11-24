@@ -2,7 +2,7 @@ use super::*;
 
 /// **A surface that names itself is reachable by that name**. ⚠️ Ran red first.
 ///
-/// The third of the three doors — `default_open` for the starting value, `open_when` for state you
+/// The third of the three doors — `default_open` for the starting value, `open` for state you
 /// hold, and *point at it by name* — was never connected to anything. A widget's `key` is the name
 /// the component chose about itself, but nothing read it when the surface was seated, and worse,
 /// seating **overwrote** it with the host's internal slot. So

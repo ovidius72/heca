@@ -22,6 +22,10 @@ use heca_core::layout::{Point, Rectangle, Size};
 pub enum OverlayPosition {
     /// Fill the viewport and center the panel (modal default).
     Center,
+    /// **Centred across, in the upper part of the window** — the panel's top edge at
+    /// [`TOP_POSITION_FRAC`] of the window's height, so a list that grows downward has room below
+    /// it: a command palette. Still clamped into the window, so a short window keeps it whole.
+    Top,
     /// Anchor the panel to a trigger rect (dropdown/popover): below, flipped
     /// above when no room, left-edge aligned, clamped into the viewport.
     Anchored {
@@ -30,6 +34,29 @@ pub enum OverlayPosition {
         /// Gap between the anchor edge and the panel.
         gap: f64,
     },
+}
+
+/// Where a [`Top`](OverlayPosition::Top) panel's top edge sits, as a share of the window's height.
+pub const TOP_POSITION_FRAC: f64 = 0.12;
+
+/// **The panel's place for [`Top`](OverlayPosition::Top)**: where layout centred it across, its top
+/// at [`TOP_POSITION_FRAC`] of the viewport's height, moved up only as far as it must to keep the
+/// overlay's margin ([`VIEWPORT_MARGIN`](super::VIEWPORT_MARGIN)) under it — the same air every
+/// overlay keeps from the window's edge, so a top panel never rests on the bottom edge.
+///
+/// Before the viewport is known (the first layout, before the first paint) it is infinite, and the
+/// panel stays where layout put it — the same guard every other placement here has.
+pub fn place_top(current: Rectangle, viewport: Size) -> Rectangle {
+    if !viewport.h.is_finite() {
+        return current;
+    }
+    let margin = f64::from(super::VIEWPORT_MARGIN);
+    let wanted = viewport.h * TOP_POSITION_FRAC;
+    let lowest = viewport.h - margin - current.size.h;
+    Rectangle::new(
+        Point::new(current.loc.x, wanted.min(lowest).max(margin)),
+        current.size,
+    )
 }
 
 /// Default gap between an anchored panel and its trigger (logical px).
@@ -611,6 +638,41 @@ mod tests {
             r.loc.x,
             400.0 + (40.0 - 80.0) / 2.0,
             "centred and left negative — an infinite axis disables the clamp"
+        );
+    }
+}
+
+#[cfg(test)]
+mod top_tests {
+    use super::{TOP_POSITION_FRAC, place_top};
+    use heca_core::layout::{Point, Rectangle, Size};
+
+    /// **A top panel sits in the upper part of the window**, centred across where layout put it —
+    /// and in a window too short for that, moves up just enough to end inside it.
+    #[test]
+    fn a_top_panel_sits_high_and_never_runs_off_a_short_window() {
+        let panel = Rectangle::new(Point::new(290.0, 200.0), Size::new(700.0, 300.0));
+        let tall = place_top(panel, Size::new(1280.0, 800.0));
+        assert_eq!(tall.loc, Point::new(290.0, 800.0 * TOP_POSITION_FRAC));
+        assert_eq!(tall.size, panel.size);
+
+        let unknown = place_top(panel, Size::new(f64::INFINITY, f64::INFINITY));
+        assert_eq!(
+            unknown, panel,
+            "before the window is known, it stays where layout put it"
+        );
+
+        let margin = f64::from(crate::widgets::overlay::VIEWPORT_MARGIN);
+        let short = place_top(panel, Size::new(1280.0, 360.0));
+        assert_eq!(
+            short.loc.y + short.size.h,
+            360.0 - margin,
+            "moved up to keep the overlay's margin under it"
+        );
+        let tiny = place_top(panel, Size::new(1280.0, 320.0));
+        assert_eq!(
+            tiny.loc.y, margin,
+            "never above the margin at the top either"
         );
     }
 }

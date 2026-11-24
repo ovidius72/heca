@@ -104,6 +104,8 @@ builtin_shortcuts! {
     Toggle => "toggle",
     Checkbox => "checkbox",
     StatusDot => "status_dot",
+    Keycap => "keycap",
+    List => "list",
     EdgeHint => "edge_hint",
     Gauge => "gauge",
     ScrollBar => "scroll_bar",

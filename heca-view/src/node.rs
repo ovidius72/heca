@@ -121,7 +121,7 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetI
 /// | `ItemGroup` | `text` (header), `expanded` (Bool) + children (the rows) | `toggle` (carries the new `expanded`) |
 /// | `MarkerGroup` | `active` (Bool), `nav_selected` (Bool) + children | — (an indicator) |
 /// | `Grid` | `columns` / `rows` / `areas` (List of CSS-like strings); per-**child**: `area`, or `col`/`row`/`col_span`/`row_span` | — |
-/// | `KeyHintGroup` | `opens_on` (the **verb** that opens the picker) + children | — |
+/// | `KeyHintGroup` | `open` (the **action** that opens the picker) + children | — |
 ///
 /// Every kind also takes a **`hint`** event (what a `prefix+/` pick does to it) and an **`actions`**
 /// map (verbs it answers to by name) — both universal, both read once for every kind.

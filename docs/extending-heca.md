@@ -161,7 +161,7 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | a terminal | `demo.terminal("s")` | client | the terminal `demo.s` in any tree you build (a dock, an overlay): `.command(..)`, `.cwd(..)`, `.title(..)`; the same name is the same running process, and closing the dock never ends it |
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
-| something at the end of palette rows | `demo.palette("session").to_raw(f)` / `.to_description(f)` | client | `f(&PaletteItem) -> Option<widget>` (native) or `Option<ViewNode>` (a plugin, realized by heca); see [Sessions and their projects](#sessions-and-their-projects) |
+| a list of the palette, or something added to one of heca's lists | `demo.palette_list("containers").sigil('%').items(..).render_item(..)` | client | items are `PaletteItem`s (title, description, icon, keys, `on_choose(Intent)`); `render_item(\|item, row\| row.trailing(..))` adds to the row (a widget, or a description from a plugin); heca's lists are `command`, `pane`, `workspace`, `session`, `follow`, `notification`; see [The palette's lists](#the-palettes-lists) |
 | a service | `demo.service("s", factory)` | server | something that lives inside the server, once; see [A service inside the server](#a-service-inside-the-server) |
 | a listener | `service.on("session.changed", \|svc, cx, ev\| …)` | server | THE EVENTS on a service; see [Sessions and their projects](#sessions-and-their-projects) |
 | a folder line | `heca::FolderLine::new().path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
@@ -777,20 +777,16 @@ let sessions = cx.state().sessions();
 Flex::column().child(sessions.map(SessionRow::new))
 ```
 
-**Something of yours at the end of a palette row.** For a palette mode (`"session"`, the `#` list,
-today), register what to show after a row's title — a widget from native code, or a description
-from a plugin, which heca realizes into the same widget. Several extensions' pieces sit side by side
-in the order they registered; a function that has nothing to say returns `None`:
+**Something of yours at the end of a session row** — the session list is one of the palette's
+lists, so it is [`palette_list("session").render_item(..)`](#the-palettes-lists):
 
 ```rust
 let pro = heca::extension("heca-pro");
-pro.palette("session").to_raw(move |item| {
-    let session = item.session()?;
-    rooms.with(|r| r.is_pro(session.key())).then(|| Badge::accent("pro"))
-});
-// the same as data — what a plugin sends; native code may use it too
-pro.palette("session").to_description(|item| {
-    item.session().map(|_| heca_view::build::Badge::new("pro").variant(heca_view::ViewBadgeVariant::Accent).into())
+pro.palette_list("session").render_item(move |item, row| {
+    match item.session().filter(|s| rooms.with(|r| r.is_pro(s.key()))) {
+        Some(_) => row.trailing(Badge::accent("pro")),
+        None => row,
+    }
 });
 ```
 
@@ -828,3 +824,52 @@ path.set(new_folder);           // in place, no rebuild
 
 `heca/src/entry/` (the doors), `heca/src/chrome/panes/pane_items/` (buttons, chips, lines and the listing
 rules they share), `heca/src/lib.rs` (what is public).
+
+## The palette's lists
+
+The palette is a set of **lists**, each opened by a character typed first (its *sigil*): heca's own
+are `command` (`:`, the default), `pane` (`@`), `workspace` (`$`), `session` (`#`), `follow` (`~`)
+and `notification` (`!`). An extension adds a list of its own, or adds to one that exists, through
+the one door heca's own lists use — `palette_list(name)`. *Client side.*
+
+```rust
+let demo = heca::extension("demo");
+demo.palette_list("demo.containers")
+    .sigil('%')
+    .placeholder("Search containers")
+    .search_descriptions(true)
+    .items(move || containers().into_iter().map(|c| {
+        PaletteItem::new(c.name())
+            .description(c.image())
+            .icon(Glyph::Terminal)
+            .keys("prefix+shift+c")
+            .on_choose(Intent::new("demo.attach").arg("id", PropValue::Text(c.id())))
+    }).collect())
+    .render_item(|item, row| row.trailing(Badge::new("up")));
+```
+
+- **A list is named**, and every call on the same name adds to the same list, from any extension and
+  in any order. Name yours after your extension (`"demo.containers"`). `sigil`, `placeholder`,
+  `search_descriptions` and `items` say what the list is; the last call wins.
+- **`items`** takes a list, a function returning one, or a signal holding one, read each time the
+  palette opens. An item is a `PaletteItem`: a title (what is matched as you type), a description,
+  an icon, its bindings (`keys`, written as in `keybindings.toml`), and what choosing it sends —
+  always an `Intent`, so a choice passes the same action gate (policy, confirmation) every other act
+  does.
+- **`render_item(|item, row| …)`** shows an item: it gets the item and the palette's standard row
+  (icon, title with the match drawn, description, keys) and returns the row. `row.trailing(widget)`
+  puts something at the end of the title's line; `PaletteRow::custom(widget)` is a row of your own.
+  Each `render_item` on a list receives the row the one before returned, so several extensions'
+  additions add up, in registration order.
+- **Opening a list** is the palette's own action: `command_palette mode=demo.containers` (a key, RPC,
+  a script) opens the palette on it.
+- heca's lists keep their order and their rows whoever names them first; adding to one
+  (`palette_list("session").render_item(..)`) changes only its rows.
+
+**A plugin** writes the same calls with data: its items are `PaletteItem`s and its choices
+`Intent`s already; what it adds to a row is a description — `row.trailing_described(node)`,
+`PaletteRow::custom_described(node)` — realized by heca into the same widget.
+
+`palette(mode).to_raw(..)` / `.to_description(..)` are the earlier spelling of
+`palette_list(mode).render_item(|item, row| row.trailing(..))` and still work, deprecated.
+

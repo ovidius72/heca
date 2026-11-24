@@ -12,7 +12,8 @@ pub(super) struct View {
     pub focused: bool,
     pub caret: bool,
     pub multiline: bool,
-    pub placeholder: String,
+    /// The field's placeholder text — its own label shows it, following it as it changes.
+    pub placeholder: Signal<String>,
     pub placeholder_on_focus: bool,
     pub width: f64,
     pub font: f32,
@@ -21,7 +22,7 @@ pub(super) struct View {
     pub offset_y: Signal<f32>,
 }
 impl View {
-    pub fn new(text: Signal<String>) -> Self {
+    pub fn new(text: Signal<String>, placeholder: Signal<String>) -> Self {
         Self {
             text,
             cursor: 0,
@@ -29,7 +30,7 @@ impl View {
             focused: false,
             caret: false,
             multiline: false,
-            placeholder: String::new(),
+            placeholder,
             placeholder_on_focus: false,
             width: 0.0,
             offset_x: signal(0.0),
@@ -87,7 +88,7 @@ impl Content {
             .truncate(crate::Ellipsis::None);
         let wrap = label.wrap_signal();
         let mut base = Base::container();
-        let placeholder = Label::new("");
+        let placeholder = Label::new("").text(view.borrow().placeholder);
         let grid = Grid::new()
             .template_row("auto")
             .template_column("1fr")
@@ -112,7 +113,6 @@ impl Component for Content {
         let view = self.view.borrow();
         let text = view.text.get_untracked();
         let placeholder = text.is_empty() && (!view.focused || view.placeholder_on_focus);
-        self.base.children[0].base().children[1].set_text(view.placeholder.clone());
         self.base.style.layout.min_width = Some(Length::Percent(1.0));
         self.base.style.layout.width = if view.multiline {
             Length::Percent(1.0)

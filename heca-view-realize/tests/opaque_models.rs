@@ -99,7 +99,9 @@ fn specialized_slots_accept_a_realized_tree_without_author_conversions() {
         .append_to_segment(1, dynamic_button())
         .segment_label_with(Label::new("Last"), dynamic_button());
     assert_eq!(tag.base().children.len(), 3);
-    let dialog = Dialog::new("Question").action(dynamic_button());
+    let mut dialog = Dialog::new("Question").action(dynamic_button());
+    // Its panel is built the first time it is needed — the first layout, as in a window.
+    heca_grid_ui::LayoutEngine::new().compute(&mut dialog, heca_grid_ui::Size::new(800.0, 600.0));
     assert!(heca_grid_ui::area(&dialog, "dialog-actions").is_some());
     let cards = CardGrid::new().row(Vec::new(), dynamic_button());
     assert_eq!(cards.base().children.len(), 1);

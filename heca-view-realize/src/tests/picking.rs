@@ -179,7 +179,7 @@ fn a_plugin_can_own_a_picker_from_the_sdk() {
 
     let (emit, fired) = recording_emitter();
     let node: ViewNode = build::KeyHintGroup::new()
-        .opens_on("mypanel.pick")
+        .open("mypanel.pick")
         .child(build::Row::new().on_hint(Intent::new("docker.restart")))
         .into();
 

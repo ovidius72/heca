@@ -349,7 +349,7 @@ pub(crate) fn apply_common_props(
 
     // **Which pickers this target answers to** — read for every kind, like the placement above.
     // A described surface gets two verbs over one tree exactly as a native one does; without it a
-    // plugin could own a picker (`opens_on`) but not say what it letters, so it would letter
+    // plugin could own a picker (`open`) but not say what it letters, so it would letter
     // everything beneath it.
     if let Some(PropValue::List(list)) = node.props.get("hint_scope") {
         let scopes: Vec<String> = list
@@ -400,6 +400,7 @@ pub(crate) fn apply_common_props(
             .push(heca_grid_ui::DeclaredAction {
                 name: name.clone(),
                 run: Box::new(move || emit(run.clone())),
+                while_closed: false,
             });
     }
 }

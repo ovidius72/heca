@@ -23,7 +23,9 @@ fn open_dialog_with_flag() -> (Dialog, Rc<Cell<bool>>) {
 
 #[test]
 fn structure_is_overlay_holding_panel_with_title_body_and_action_row() {
-    let d = open_dialog();
+    let mut d = open_dialog();
+    // The panel is built the first time it is needed — the first layout, as in a window.
+    crate::LayoutEngine::new().compute(&mut d, Size::new(800.0, 600.0));
     // One child: the composed base Overlay (the blocking layer).
     assert_eq!(d.base().children.len(), 1);
     let overlay = &d.base().children[0];
@@ -469,6 +471,7 @@ fn enter_on_a_focused_cancel_presses_cancel_not_ok() {
                 .on_click(move |_| c.set(true)),
         )
         .default_open(true);
+    crate::LayoutEngine::new().compute(&mut d, Size::new(800.0, 600.0));
     crate::nav::node_with_key_mut(&mut d, "cancel")
         .expect("the Cancel button is in the dialog")
         .base()

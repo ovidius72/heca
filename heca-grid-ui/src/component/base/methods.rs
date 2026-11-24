@@ -157,6 +157,7 @@ impl Base {
             needs_layout: Cell::new(false),
             bound: Vec::new(),
             hidden_value: None,
+            size_values: Vec::new(),
         }
     }
 

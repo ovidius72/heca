@@ -122,17 +122,21 @@ P022/T075; these are the shapes it carries.)
   what happened (`created` · `renamed` · `terminated` · `restarted` · `deleted`) and the session:
   its key (lasting), name, folder, state, and how many windows show it and agents run in it. The
   whole list is plain data, so a plugin's panel lists sessions as any list.
-- **Something at the end of a palette row.** For a palette mode (`"session"`, the `#` list,
-  today) a plugin answers, per row, with a **description** — `palette("session").to_description(..)`
-  — or nothing. heca realizes it into the same widget a native extension's `to_raw` gives; several
-  contributions sit side by side in registration order:
+- **A list of the palette, or something added to one.** `plugin.palette_list("demo.rooms")` with
+  `sigil`, `placeholder` and `items` (data: title, description, icon, keys, and an `Intent` for the
+  choice) is a list of the palette; `render_item(|item, row| …)` runs inside the plugin and adds a
+  **description** to the row, which heca realizes into the same widget a native extension's gives.
+  Adding to heca's own session rows is the same call on `"session"`:
 
   ```rust
-  plugin.palette("session").to_description(|item| {
-      let session = item.session()?;
-      is_mine(session.key()).then(|| build::Badge::new("pro").variant(heca_view::ViewBadgeVariant::Accent).into())
+  plugin.palette_list("session").render_item(|item, row| match item.session() {
+      Some(s) if is_mine(s.key()) => row.trailing_described(
+          build::Badge::new("pro").variant(heca_view::ViewBadgeVariant::Accent).into(),
+      ),
+      _ => row,
   });
   ```
+  Full reference: [`extending-heca.md` → The palette's lists](extending-heca.md#the-palettes-lists).
 - **"More below that wants you."** A plugin's list pins an `edge_hint` in its `scroll`
   (`slot: "pinned"`): rows with a repeating flash out of sight are counted on the edges, and a click
   goes to the nearest. Nothing else is written; see
@@ -152,7 +156,8 @@ P022/T075; these are the shapes it carries.)
 
 What stays native-only, because it is a closure (R4): `capture_pointer` / `on_edge_scroll` and a
 `Command::trailing` maker. A plugin gets the behaviour from the widgets that own it (a described
-`Terminal` selects past its edge) and adds to palette rows through `to_description`.
+`Terminal` selects past its edge) and adds to palette rows through `render_item` with
+`trailing_described`.
 
 ### What is missing, and where it is tracked
 

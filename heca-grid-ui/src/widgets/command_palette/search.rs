@@ -76,16 +76,14 @@ impl CommandPalette {
             return;
         }
         self.selected = (self.selected + 1).min(n - 1);
-        self.follow_selection();
-        self.sync_wrap();
+        self.sync_view();
     }
 
     /// Move the selection up (Ctrl+K / ↑).
     pub fn select_prev(&mut self) {
         self.sync_query();
         self.selected = self.selected.saturating_sub(1);
-        self.follow_selection();
-        self.sync_wrap();
+        self.sync_view();
     }
 
     /// Run the selected command (fires its callback) and close.
@@ -108,13 +106,25 @@ impl CommandPalette {
         self.close();
     }
 
-    /// Reflow the selected description and cut every other row's description.
-    pub(super) fn sync_wrap(&mut self) {
-        let selected = self.results().get(self.selected).map(|m| m.index);
-        for (i, wrap) in self.desc_wrap.iter().enumerate() {
-            if let Some(wrap) = wrap {
-                wrap.set(Some(i) == selected);
-            }
+    /// **Put the view in step with the results and the selection** — the rows shown, in rank
+    /// order, and which command is selected. The rows follow both by themselves: a row comes and
+    /// goes with its command, restyles when the selection reaches or leaves it, and reflows its
+    /// description while it is the selected one.
+    pub(super) fn sync_view(&mut self) {
+        let results = self.results();
+        let generation = self.generation;
+        let shown: Vec<(u64, usize)> = results.iter().map(|r| (generation, r.index)).collect();
+        if self.shown.get_untracked() != shown {
+            self.shown.set(shown);
+        }
+        let selected = results.get(self.selected).map(|r| r.index);
+        if self.selected_command.get_untracked() != selected {
+            self.selected_command.set(selected);
+        }
+        // The list's selection is the same row, by position: it draws it and brings it into view.
+        let position = (!results.is_empty()).then_some(self.selected);
+        if self.list_selected.get_untracked() != position {
+            self.list_selected.set(position);
         }
     }
 
@@ -138,9 +148,8 @@ impl CommandPalette {
         else {
             return;
         };
+        // The preselected row can rank anywhere; the list brings it into view when it opens on it.
         self.selected = at;
-        // The preselected row can rank anywhere, so the list may have to open scrolled to reach it.
-        self.follow_selection();
     }
 
     /// Move the match marks onto the title labels that matched.
@@ -160,16 +169,23 @@ impl CommandPalette {
         }
     }
 
+    /// Close it. The reset that closing means runs here and on the closing edge (`tick`), whichever
+    /// way it closed.
     pub(super) fn close(&mut self) {
+        self.open.set(false);
+        self.reset();
+    }
+
+    /// **What closing means**: forget the query, the selection and which mode was announced.
+    pub(super) fn reset(&mut self) {
         *self.entered.borrow_mut() = None;
         self.mode_enter
             .iter()
             .for_each(|enter| enter.announced.set(false));
         self.named_prefill = None;
-        self.open.set(false);
         self.query.set(String::new());
         self.selected = 0;
-        self.scroll = 0;
+        self.was_open = false;
     }
 
     /// The user typed: reset the filter/selection, move the marks with it, and **leave the history
@@ -193,9 +209,8 @@ impl CommandPalette {
         self.refresh_source();
         self.named_prefill = None;
         self.selected = 0;
-        self.scroll = 0;
         self.sync_marks();
-        self.sync_wrap();
+        self.sync_view();
         self.announce_mode();
     }
 }
