@@ -190,3 +190,32 @@ fn column_focus_reads_last_and_row_and_defaults_to_last() {
     assert_eq!(read("column_focus = \"row\"").ok(), Some(ColumnFocus::Row));
     assert!(read("column_focus = \"diagonal\"").is_err());
 }
+
+/// **The window has a minimum size, 640 × 400 by default**: `0` on a side lifts the limit on that
+/// side, both at `0` means none, and the window never opens below the minimum.
+#[test]
+fn the_window_has_a_minimum_size_and_never_opens_below_it() {
+    let settings = SettingsConfig::default();
+    assert_eq!(
+        settings.window_min_size(),
+        Some((640, 400)),
+        "the shipped minimum"
+    );
+
+    let none: SettingsConfig =
+        toml::from_str("window_min_width = 0\nwindow_min_height = 0").unwrap();
+    assert_eq!(none.window_min_size(), None, "0 × 0: no minimum");
+    let one_side: SettingsConfig = toml::from_str("window_min_width = 0").unwrap();
+    assert_eq!(
+        one_side.window_min_size(),
+        Some((0, 400)),
+        "0 lifts one side only"
+    );
+
+    let small: SettingsConfig = toml::from_str("window_width = 300\nwindow_height = 900").unwrap();
+    assert_eq!(
+        small.window_start_size(),
+        (640, 900),
+        "opens at the minimum, never below"
+    );
+}

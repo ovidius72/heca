@@ -301,6 +301,10 @@ impl HecaApp {
             state.appearance = self.app_config.config.appearance.clone();
             crate::chrome::window::theme::apply_widget_settings(&state.appearance);
             state.settings = crate::app_state::WindowSettings::from_config(&self.app_config);
+            crate::app::startup::apply_window_min_size(
+                state.window.as_ref(),
+                &self.app_config.config.settings,
+            );
             crate::chrome::panes::pane_items::report_pane_items(state);
             // The layout's own options, by the one mapping startup uses too.
             state
