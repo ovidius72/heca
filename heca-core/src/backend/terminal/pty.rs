@@ -235,6 +235,7 @@ impl PtyHandle {
         launch: crate::backend::ProcessLaunch,
         wake_on_output: Option<WakeCallback>,
     ) -> Result<Self, PtyError> {
+        strip_host_only(&mut cmd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         // A shell with no locale miscounts every non-ASCII character in its prompt — see `locale`.
@@ -799,5 +800,44 @@ mod tests {
             );
             assert!(argv(&cmd).ends_with(&["-ic".to_string(), "lazygit".to_string()]));
         }
+    }
+}
+
+/// The environment variables no program in a pane inherits, as the host named them.
+static HOST_ONLY_ENV: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
+/// Remove from `cmd` what belongs to the host and to no program it starts (`keep_from_panes`) —
+/// inherited or set, it is gone.
+fn strip_host_only(cmd: &mut CommandBuilder) {
+    for name in HOST_ONLY_ENV.get().into_iter().flatten() {
+        cmd.env_remove(name);
+    }
+}
+
+/// **Keep these variables from every program started in a pane** — the host's own settings (where
+/// its config and data live), which a program, or a heca started inside a pane, must not see. Said
+/// once, as the host starts; the names are the host's, this only removes them.
+pub fn keep_from_panes(names: &[&str]) {
+    let _ = HOST_ONLY_ENV.set(names.iter().map(|name| name.to_string()).collect());
+}
+
+#[cfg(test)]
+mod host_only_tests {
+    use super::*;
+
+    /// **What the host keeps from panes never reaches a program in one** — inherited from the host's
+    /// own environment or set on the way, it is removed; everything else passes through.
+    #[test]
+    fn what_the_host_keeps_from_panes_never_reaches_a_program() {
+        keep_from_panes(&["HECA_T588_HOST_ONLY"]);
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.env("HECA_T588_HOST_ONLY", "/tmp/somewhere");
+        cmd.env("HECA_T588_PASSES", "1");
+        strip_host_only(&mut cmd);
+        assert_eq!(cmd.get_env("HECA_T588_HOST_ONLY"), None, "removed");
+        assert!(
+            cmd.get_env("HECA_T588_PASSES").is_some(),
+            "the rest passes through"
+        );
     }
 }

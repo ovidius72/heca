@@ -691,6 +691,9 @@ impl App {
 /// window's title before it attaches to a session, and the `{app}` of the title formats.
 pub fn run(app_name: impl Into<String>) {
     crate::entry::app_name::set(app_name.into());
+    // Where this heca's config and data live is this heca's own setting: no program in a pane, and
+    // no heca started inside one, inherits it.
+    heca_core::backend::terminal::keep_from_panes(heca_config::state_file::HOST_ONLY_ENV);
     if let Some(result) = heca_core::agent::launcher::run_if_requested() {
         let code = result.unwrap_or_else(|error| {
             eprintln!("[heca] agent launch: {error}");
