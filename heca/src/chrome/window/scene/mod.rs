@@ -316,14 +316,13 @@ fn with_header(body: WidgetModel, id: &str, title: &str, folded: bool, parts: f3
         .child(Label::new(DockFrame::GRIP).drag_handle())
         .child(Label::new(title).grow(1.0))
         .child(Icon::new(caret));
-    let column = Flex::column().child(header).child(body);
     // Pass the share down through the column, so the body fills what the dock was given.
-    let mut column = WidgetModel::new(column);
+    if parts > 0.0 {
+        pass_box_down(body.as_mut());
+    }
+    let mut column = WidgetModel::new(Flex::column().child(header).child(body));
     if parts > 0.0 {
         pass_box_down(column.as_mut());
-        if let Some(body) = column.base_mut().children.last_mut() {
-            pass_box_down(body.as_mut());
-        }
     }
     column
 }

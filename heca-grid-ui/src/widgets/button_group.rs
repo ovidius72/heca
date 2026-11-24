@@ -20,7 +20,7 @@
 //! the one path every way of pressing a button goes through. Not a copy of the handler, and not a second
 //! handler on the group: the same one, so the visible button and the menu row cannot drift.
 
-use crate::builders::{EventExt, LayoutExt, StyleExt, TooltipExt};
+use crate::builders::{EventExt, LayoutExt, PlaceExt, StyleExt, TooltipExt};
 use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::SignalGet;
 use crate::style::{Align, Direction, Justify};
@@ -28,6 +28,9 @@ use crate::widgets::button::ButtonVariant;
 use crate::widgets::{Button, ContextMenu, Glyph, Menu, MenuItem};
 use std::cell::Cell;
 use std::rc::Rc;
+
+/// The ⋮ that opens the buttons that did not fit, found by name — it comes after them.
+const OVERFLOW_AREA: &str = "overflow";
 
 /// **How much of each button is shown**, before the group has to give any of them up.
 ///
@@ -231,8 +234,7 @@ impl ButtonGroup {
         // anything — so setting the variant only on later children left it the odd one out: a
         // `Primary` button among ghosts, drawing its glyph in the accent, which a pane dims when it
         // is not the active one. Its dots were invisible on every inactive pane.
-        let count = self.entries.len();
-        if let Some(t) = self.base.children.get_mut(count) {
+        if let Some(t) = self.base.child_in_area(OVERFLOW_AREA) {
             t.set_variant(variant);
         }
         self
@@ -321,7 +323,7 @@ impl Component for ButtonGroup {
         if count == 0 {
             return;
         }
-        if let Some(trigger) = self.base.children.last()
+        if let Some(trigger) = self.base.child_area(OVERFLOW_AREA)
             && !trigger.base().style.layout.hidden
             && trigger.base().bounds.size.w > 0.0
         {
@@ -552,15 +554,16 @@ impl ButtonGroup {
         });
         // Nothing is declared about picking it. It is a button: a letter reaches it for that
         // reason alone, and picking it runs this same click.
-        self.base.children.push(crate::WidgetModel::new(trigger));
+        self.base
+            .children
+            .push(crate::WidgetModel::new(trigger.area(OVERFLOW_AREA)));
     }
 
     fn set_trigger(&mut self, needed: bool) {
-        let count = self.entries.len();
         // **Whatever went into the menu, the menu says so** — refreshed here rather than rebuilt
         // with the ⋮, so the widget itself is only ever made once.
         *self.menu.borrow_mut() = self.overflow_menu();
-        if let Some(t) = self.strip_mut().base_mut().children.get_mut(count) {
+        if let Some(t) = self.base.child_in_area(OVERFLOW_AREA) {
             t.base_mut().set_hidden(!needed);
         }
     }

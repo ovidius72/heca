@@ -351,3 +351,38 @@ fn a_menu_row_presses_the_collapsed_button() {
     parent.tick(0.0);
     assert_eq!(closed.get(), 1, "the collapsed button's own click ran");
 }
+
+/// **The ⋮ takes the group's variant too** — it is built before the group is told one, so a variant
+/// set only on the buttons left it drawn in the default style.
+#[test]
+fn the_overflow_button_takes_the_groups_variant() {
+    use heca_grid_ui::ButtonVariant;
+    use heca_grid_ui::{DrawCommand, Theme};
+    // What is drawn inside the ⋮ (the group's last child), in `variant`.
+    let drawn_in_the_overflow = |variant: ButtonVariant| {
+        let parent = lay(group().variant(variant), 40.0);
+        let group = row(&parent);
+        let trigger = group.base().children.last().unwrap().base().bounds;
+        assert!(trigger.size.w > 0.0, "the ⋮ is shown");
+        let inside = |r: &heca_grid_ui::Rectangle| {
+            let (x, y) = (r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0);
+            x >= trigger.loc.x
+                && x <= trigger.loc.x + trigger.size.w
+                && y >= trigger.loc.y
+                && y <= trigger.loc.y + trigger.size.h
+        };
+        common::paint(&parent, &Theme::default())
+            .iter()
+            .filter_map(|draw| match draw {
+                DrawCommand::Rect(r) if inside(&r.rect) => Some(format!("{:?}", r.fill)),
+                DrawCommand::Text(t) if inside(&t.rect) => Some(format!("{:?}", t.color)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_ne!(
+        drawn_in_the_overflow(ButtonVariant::Primary),
+        drawn_in_the_overflow(ButtonVariant::Ghost),
+        "the ⋮ is drawn in the variant the group was given"
+    );
+}

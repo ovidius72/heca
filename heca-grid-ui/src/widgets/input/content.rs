@@ -74,6 +74,13 @@ impl View {
     }
 }
 
+/// The content's parts, found by name: the text stack (the value and the placeholder over it)
+/// and the caret beside it.
+pub(super) const TEXT_AREA: &str = "text";
+const VALUE_AREA: &str = "value";
+const PLACEHOLDER_AREA: &str = "placeholder";
+const CARET_AREA: &str = "caret";
+
 pub(super) struct Content {
     base: Base,
     view: Rc<RefCell<View>>,
@@ -92,13 +99,17 @@ impl Content {
         let grid = Grid::new()
             .template_row("auto")
             .template_column("1fr")
-            .child(label.row(1).column(1))
-            .child(placeholder.row(1).column(1));
+            .child(label.row(1).column(1).area(VALUE_AREA))
+            .child(placeholder.row(1).column(1).area(PLACEHOLDER_AREA))
+            .area(TEXT_AREA);
         base.children.push(crate::WidgetModel::new(grid));
-        base.children.push(crate::WidgetModel::new(Caret {
-            base: Base::new(),
-            view: view.clone(),
-        }));
+        base.children.push(crate::WidgetModel::new(
+            Caret {
+                base: Base::new(),
+                view: view.clone(),
+            }
+            .area(CARET_AREA),
+        ));
         Self { base, view, wrap }
     }
 }
@@ -124,7 +135,11 @@ impl Component for Content {
         if self.wrap.get_untracked() != view.multiline {
             self.wrap.set(view.multiline);
         }
-        for label in &mut self.base.children[0].base_mut().children {
+        let labels = self
+            .base
+            .child_in_area(TEXT_AREA)
+            .map(|text| &mut text.base_mut().children);
+        for label in labels.into_iter().flatten() {
             // Explicit font sizes are already resolved; applying the size variant again
             // makes the glyphs disagree with the caret and selection geometry.
             label.base_mut().style.visual.font_size = view.font;
@@ -136,13 +151,16 @@ impl Component for Content {
         let (row, column) = view.position(view.cursor);
         let cell = (view.font * MONO_ADVANCE_RATIO) as f64;
         let line = (view.font * MONO_LINE_RATIO) as f64;
-        self.base.children[1].base_mut().bounds = Rectangle::new(
+        let at = Rectangle::new(
             Point::new(
                 self.base.bounds.loc.x + column as f64 * cell,
                 self.base.bounds.loc.y + row as f64 * line,
             ),
             Size::new(view.caret_width as f64, line),
         );
+        if let Some(caret) = self.base.child_in_area(CARET_AREA) {
+            caret.base_mut().bounds = at;
+        }
     }
     fn paint(&self, cx: &mut PaintCx) {
         let view = self.view.borrow();
@@ -172,14 +190,14 @@ impl Component for Content {
         }
         let placeholder =
             view.text.get_untracked().is_empty() && (!view.focused || view.placeholder_on_focus);
-        self.base.children[0].base().children[0]
-            .base()
-            .visible
-            .set(!placeholder);
-        self.base.children[0].base().children[1]
-            .base()
-            .visible
-            .set(placeholder);
+        if let Some(text) = self.base.child_area(TEXT_AREA) {
+            let text = text.base();
+            for (area, shown) in [(VALUE_AREA, !placeholder), (PLACEHOLDER_AREA, placeholder)] {
+                if let Some(part) = text.child_area(area) {
+                    part.base().visible.set(shown);
+                }
+            }
+        }
         drop(view);
         for child in &self.base.children {
             crate::component::paint_child(child.as_ref(), cx);

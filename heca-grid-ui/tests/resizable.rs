@@ -1,7 +1,7 @@
 mod common;
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{LayoutEngine, Point, Resizable, Size};
+use heca_grid_ui::{DrawCommand, LayoutEngine, Point, Resizable, Size};
 
 fn layout(widget: &mut dyn Component) {
     LayoutEngine::new()
@@ -93,6 +93,11 @@ fn resizing_respects_both_limits_and_keeps_the_editor_and_scrollbar_alive() {
     );
     drag(&mut widget, 400.0);
     assert_eq!(widget.base().bounds.size.h, 160.0);
+    assert_eq!(
+        widget.base().children[0].base().bounds.size.h,
+        160.0,
+        "the content fills the height the grip chose"
+    );
     drag(&mut widget, -400.0);
     assert_eq!(widget.base().bounds.size.h, 70.0);
     let input = widget.base().children[0].base();
@@ -145,4 +150,47 @@ fn pressing_the_grip_hands_focus_to_the_editor_instead_of_an_unrelated_control()
     common::type_text(&mut root, "editor");
     assert_eq!(text.get_untracked(), "editor");
     assert!(!root.base().children[1].base().focused.get_untracked());
+}
+
+/// **`grip(glyph)` draws that glyph in the corner** instead of the default strokes.
+#[test]
+fn a_custom_grip_draws_its_glyph() {
+    let glyph = Glyph::DotsThreeVertical;
+    let mut widget = Resizable::new(Input::new().multiline(true))
+        .grip(glyph)
+        .width(220.0);
+    layout(&mut widget);
+    let wanted = glyph
+        .primary_char()
+        .expect("the glyph has a character")
+        .to_string();
+    let scene = common::paint(&widget, &Theme::default());
+    assert!(
+        scene
+            .iter()
+            .any(|draw| matches!(draw, DrawCommand::Text(t) if t.text == wanted)),
+        "the custom grip is painted"
+    );
+}
+
+/// **Content with a height of its own still fills the height the grip chose** — before a drag it
+/// keeps its own height, after one it takes the box's.
+#[test]
+fn content_with_its_own_height_fills_the_dragged_height() {
+    let mut widget = Resizable::new(Input::new().multiline(true).height(40.0))
+        .width(220.0)
+        .max_height(200.0);
+    layout(&mut widget);
+    assert_eq!(
+        widget.base().children[0].base().bounds.size.h,
+        40.0,
+        "its own height first"
+    );
+    drag(&mut widget, 100.0);
+    let (box_h, content_h) = (
+        widget.base().bounds.size.h,
+        widget.base().children[0].base().bounds.size.h,
+    );
+    assert!(box_h > 40.0, "the drag made the box taller");
+    assert_eq!(content_h, box_h, "the content fills it");
 }
