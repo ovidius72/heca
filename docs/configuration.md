@@ -16,6 +16,26 @@ its own there; an extension may ship its own defaults for them and for its keys,
 heca's defaults and your files, so you change them here the same way (`--show-config` names them
 "(defaults of extension <name>)"). See [An extension's own defaults](extending-heca.md#an-extensions-own-defaults).
 
+## Where heca keeps its config and its data
+
+heca reads its config from `~/.config/heca/` and writes what it remembers (search history, sessions,
+the running server's files) to the platform's data folder — `~/Library/Application Support/heca/` on
+macOS, `~/.local/share/heca/` on Linux. Two environment variables move them, without touching
+`HOME`:
+
+| Variable | Moves |
+|---|---|
+| `HECA_CONFIG_DIR` | the config folder (`config.toml`, `themes/`, …) |
+| `HECA_DATA_DIR` | the data folder — and the running server's socket goes there too, so a heca started this way runs a server of its own and never joins yours |
+
+```sh
+HECA_CONFIG_DIR=/tmp/test/config HECA_DATA_DIR=/tmp/test/data heca
+```
+
+A test run keeps your real `HOME`, so the programs it starts in panes find your logins and caches.
+Neither variable is passed on to programs in panes: a heca started inside a pane uses the normal
+folders.
+
 ## Per-project settings
 
 A `.heca/config.toml` in the folder heca was started in (or the nearest parent that has a `.heca/`

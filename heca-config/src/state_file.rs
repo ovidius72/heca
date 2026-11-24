@@ -16,11 +16,41 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// Where heca keeps state called `file` — `~/.local/share/heca/<file>` on Linux,
-/// `~/Library/Application Support/heca/<file>` on macOS. `None` when the platform has no answer, in
+/// **The environment variable that moves heca's data folder** — set, heca writes its state there
+/// instead of the platform's data folder, and HOME stays what it is (a test run keeps the user's
+/// real environment for the programs it starts). Not passed on to programs in panes.
+pub const DATA_DIR_ENV: &str = "HECA_DATA_DIR";
+
+/// The same for the config folder (`crate::loader::config_dir`).
+pub const CONFIG_DIR_ENV: &str = "HECA_CONFIG_DIR";
+
+/// **The variables that belong to this heca and to no program it starts** — removed from every
+/// pane's environment, so a heca started inside a pane uses the normal folders.
+pub const HOST_ONLY_ENV: &[&str] = &[CONFIG_DIR_ENV, DATA_DIR_ENV];
+
+/// A folder named by environment variable `name`, when it is set and not empty.
+pub fn folder_from_env(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+/// **heca's data folder** — `HECA_DATA_DIR` when set, else `~/.local/share/heca` on Linux and
+/// `~/Library/Application Support/heca` on macOS. `None` when the platform has no answer.
+pub fn data_dir() -> Option<PathBuf> {
+    data_dir_given(folder_from_env(DATA_DIR_ENV))
+}
+
+/// [`data_dir`] with the variable's value given, so it can be tested without touching the
+/// process's environment.
+fn data_dir_given(from_env: Option<PathBuf>) -> Option<PathBuf> {
+    from_env.or_else(|| dirs::data_dir().map(|d| d.join("heca")))
+}
+
+/// Where heca keeps state called `file`, in [`data_dir`]. `None` when there is no data folder, in
 /// which case the state lives in memory only and nothing panics.
 pub fn data_path(file: &str) -> Option<PathBuf> {
-    dirs::data_dir().map(|d| d.join("heca").join(file))
+    data_dir().map(|d| d.join(file))
 }
 
 /// Write `value` as JSON at `path`, atomically.
@@ -123,5 +153,39 @@ mod tests {
         });
         let bytes = std::fs::read(path).unwrap();
         assert!(bytes == vec![b'a'; 131072] || bytes == vec![b'b'; 131072]);
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::*;
+
+    /// **`HECA_DATA_DIR` moves the data folder, and only when it says something** — set, every
+    /// state file goes there; unset (or empty), the platform's data folder stays.
+    #[test]
+    fn the_data_folder_follows_its_variable() {
+        let moved = PathBuf::from("/tmp/heca-test-data");
+        assert_eq!(data_dir_given(Some(moved.clone())), Some(moved));
+        assert_eq!(
+            data_dir_given(None),
+            dirs::data_dir().map(|d| d.join("heca")),
+            "unset: the platform's folder"
+        );
+        assert_eq!(
+            std::env::var_os("HECA_T588_NEVER_SET").map(PathBuf::from),
+            None
+        );
+        assert_eq!(
+            folder_from_env("HECA_T588_NEVER_SET"),
+            None,
+            "an unset variable names nothing"
+        );
+    }
+
+    /// The variables that move the folders are the ones kept from programs in panes.
+    #[test]
+    fn the_folder_variables_are_kept_from_panes() {
+        assert!(HOST_ONLY_ENV.contains(&DATA_DIR_ENV));
+        assert!(HOST_ONLY_ENV.contains(&CONFIG_DIR_ENV));
     }
 }

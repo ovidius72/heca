@@ -28,7 +28,7 @@ mod size;
 mod tests;
 
 pub use launch::{ShellIntegrationAssets, TerminalBackendOptions};
-pub use pty::PtyError;
+pub use pty::{PtyError, keep_from_panes};
 
 use crate::runtime::PaneRuntime;
 use engine::TerminalEngine;
