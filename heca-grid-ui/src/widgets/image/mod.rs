@@ -73,6 +73,21 @@ impl Image {
         }
     }
 
+    /// **The picture follows a value the host keeps** — `read` is run again whenever a signal it
+    /// reads changes, and the image loads what it gives, in place (a logo that arrives later, a
+    /// photo that changes). The same door [`Tag::label`](super::Tag::label) takes for a changing
+    /// text, so nobody copies one signal into another by hand.
+    ///
+    /// ```ignore
+    /// let logo = signal(ImageSource::file("a.svg"));
+    /// Image::from_source(logo.get_untracked()).source_from(move || logo.get())
+    /// ```
+    #[heca_grid_ui_macros::host_only("follows a host-owned value, which static data cannot drive")]
+    pub fn source_from(self, read: impl Fn() -> ImageSource + 'static) -> Self {
+        crate::builders::LiveValue::live(read).show_in(self.source);
+        self
+    }
+
     /// Replace the source with a local filename.
     #[heca_grid_ui_macros::prop]
     pub fn source(self, path: impl Into<String>) -> Self {
@@ -264,5 +279,24 @@ impl Component for Picture {
                 .unwrap_or(cx.theme().colors.foreground);
             cx.image(self.base.bounds, image, self.fit.get_untracked(), color);
         }
+    }
+}
+
+#[cfg(test)]
+mod source_from_tests {
+    use super::*;
+    use crate::reactive::{SignalGet, SignalUpdate, signal};
+
+    /// The image's source follows the value it was given, as the value changes.
+    #[test]
+    fn the_source_follows_the_value_it_was_given() {
+        let shown = signal(ImageSource::bytes(b"<svg/>".to_vec()));
+        let image = Image::from_bytes(&[][..]).source_from(move || shown.get());
+        assert_eq!(image.source_signal().get_untracked(), shown.get_untracked());
+        shown.set(ImageSource::file("logo.svg"));
+        assert_eq!(
+            image.source_signal().get_untracked(),
+            ImageSource::file("logo.svg")
+        );
     }
 }

@@ -37,7 +37,7 @@ use crate::builders::{LayoutExt, Parent, PlaceExt, PresenceExt, StyleExt};
 use crate::component::{Base, Component, PaintCx, area, paint_child};
 use crate::font::MONO_LINE_RATIO;
 use crate::image::ImageSource;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
 use crate::style::Length;
 use crate::widgets::{Flex, Image, Label};
@@ -49,6 +49,8 @@ const PICTURE: &str = "picture";
 /// A letter or a picture on a coloured box, with an optional ring — see the module docs.
 pub struct Avatar {
     base: Base,
+    /// The name the letter is taken from.
+    name: String,
     /// The fill's tone, resolved against the theme at paint.
     tone: Tone,
     /// The ring's tone; `None` draws no ring. A signal, so a host changes it in place.
@@ -68,6 +70,7 @@ impl Avatar {
             .push(crate::WidgetModel::new(parts(name.as_ref(), picture)));
         Self {
             base,
+            name: name.as_ref().to_owned(),
             tone: Tone::Accent,
             ring: signal(None),
             picture,
@@ -110,10 +113,10 @@ impl Avatar {
     /// **Drive the picture from an image the host keeps** — `None` shows the letter again. The tile
     /// changes in place as the signal does; nothing is rebuilt.
     #[heca_grid_ui_macros::host_only("binds a host-owned signal, which static data cannot drive")]
-    pub fn picture_signal(self, picture: Signal<Option<ImageSource>>) -> Self {
-        // The tile's own signal follows the host's, so the parts it was built with keep working.
-        let own = self.picture;
-        create_effect(move |_| own.set(picture.get()));
+    pub fn picture_signal(mut self, picture: Signal<Option<ImageSource>>) -> Self {
+        // The parts are made for this signal: the letter and the picture read it directly.
+        self.picture = picture;
+        self.base.children = vec![crate::WidgetModel::new(parts(&self.name, picture))];
         self
     }
 }
@@ -128,15 +131,8 @@ impl Avatar {
 /// a name (its area), so it is found by name, never by position.
 fn parts(name: &str, picture: Signal<Option<ImageSource>>) -> Flex {
     let side = Length::Em(MONO_LINE_RATIO);
-    let image = Image::from_source(ImageSource::bytes(Vec::new()))
-        .width(side)
-        .height(side);
-    let source = image.source_signal();
-    create_effect(move |_| {
-        if let Some(shown) = picture.get() {
-            source.set(shown);
-        }
-    });
+    // Nothing to load while there is no picture; the part is hidden then.
+    let nothing = || ImageSource::bytes(Vec::new());
     Flex::row()
         .align("center")
         .justify("center")
@@ -149,7 +145,14 @@ fn parts(name: &str, picture: Signal<Option<ImageSource>>) -> Flex {
                 .area(LETTER)
                 .hidden(move || picture.get().is_some()),
         )
-        .child(image.area(PICTURE).hidden(move || picture.get().is_none()))
+        .child(
+            Image::from_source(nothing())
+                .source_from(move || picture.get().unwrap_or_else(nothing))
+                .width(side)
+                .height(side)
+                .area(PICTURE)
+                .hidden(move || picture.get().is_none()),
+        )
 }
 
 /// The first letter of a name, upper-cased.

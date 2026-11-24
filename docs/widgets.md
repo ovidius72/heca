@@ -5277,8 +5277,17 @@ background jobs can use a captured `FrameWake`. Multiple windows keep their own 
 
 `state_signal()` exposes `ImageState::Loading`, `Ready { width, height }` or `Failed(message)` on the
 UI thread. Missing files, unsupported/corrupt data and decoding errors fail the image request, not the
-application. The source signal accepts a new `image::ImageSource` in place and the widget handles the
-new request and relayout. Live consumers of an unchanged source share decoded data. Cached requests
+application. **A picture that follows a value** is said with `.source_from(|| ..)`: the closure is run
+again whenever a signal it reads changes, and the image loads what it gives, in place — the same door
+`Tag::label` takes for a changing text, so a caller never copies one signal into another by hand:
+
+```rust,ignore
+let logo = signal(None::<ImageSource>);          // later: logo.set(Some(ImageSource::file(path)))
+Image::from_bytes(&[][..]).source_from(move || logo.get().unwrap_or_else(|| ImageSource::bytes(Vec::new())))
+```
+
+`source_signal()` still hands out the signal itself, and the widget handles a new request and relayout
+whichever way the source changes. Live consumers of an unchanged source share decoded data. Cached requests
 are released when their consumers disappear; files are snapshots, not live filesystem watches.
 
 ```rust,ignore
