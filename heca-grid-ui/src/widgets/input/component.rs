@@ -41,7 +41,6 @@ impl Component for Input {
         view.focused = focused;
         view.caret = self.caret_visible();
         view.multiline = self.multiline;
-        view.placeholder.clone_from(&self.placeholder);
         view.placeholder_on_focus = self.placeholder_on_focus;
         view.font = self.base.font;
         view.caret_width = self.base.input_style.caret_width.max(0.0);

@@ -56,6 +56,7 @@ impl LayoutEngine {
         // had nothing left to re-resolve.
         crate::builders::apply_bound(c.base_mut());
         c.base_mut().apply_hidden_value();
+        crate::builders::apply_size_values(c);
         c.remeasure();
         let mut style = c.taffy_style();
         // **A wrapper lays its child out as the child's parent would.** A transparent wrapper

@@ -10,31 +10,18 @@
 //! [`overlay_active`](crate::component::Component::overlay_active) + [`focusable`](crate::component::Component::focusable) while
 //! open, so the host routes input here first.
 //!
-//! **Nav keys are host-configured** (`widget-keys-config`) except the universal focus primitive.
-//! **Tab / Shift+Tab always move focus** within the modal — classic, always-on behaviour handled
-//! by the embedded [`FocusManager`](crate::focus::FocusManager), not a rebindable binding. Beyond
-//! that the dialog carries no literal keys: its button row is a **horizontal** focus strip, so
-//! configurable traversal arrives as the semantic [`Event::Widget`](crate::component::Event::Widget) intents
-//! `ItemPrevious`/`ItemNext`; `Activate` submits the primary action and `Dismiss` cancels. The
-//! host resolves these from the configurable `[keys.widgets]` `item_previous` / `item_next` /
-//! `activate` / `dismiss` bindings (defaults: ←/→, vim `Ctrl+h`/`Ctrl+l`, Enter, Esc). The
-//! `Edit*` intents (and any vertical `Menu*`) and a raw [`Event::Key`](crate::component::Event::Key) are delivered
-//! **field-first**: the focused
-//! widget (e.g. an [`Input`](super::Input)) consumes its own typing/editing first via the
-//! embedded [`FocusManager`](crate::focus::FocusManager); only unconsumed intents move focus.
-//! `Activate` fires the primary action (its `on_click`); `Dismiss` (or a
-//! scrim click) fires the [`on_dismiss`](Dialog::on_dismiss) callback (there are no result
-//! closures baked in; a button's own `on_click` carries the action, and dismissal is a callback
-//! the host points at its own overlay-close path).
-//!
-//! **Presentation is composed, not owned:** the `Dialog` mounts a base
-//! [`Overlay`](crate::widgets::Overlay) (blocking layer — scrim, drop shadow, panel fill, bracket
-//! reticle, viewport centering) and puts its padded `[title, body?, action-row?]` panel inside
-//! it. The `Overlay` owns the layer chrome and geometry; the `Dialog` owns the content and the
-//! behaviour (focus trap, keyboard, dismissal policy) and intercepts events before the
-//! `Overlay`'s standalone handling would run. Centering is real layout (the overlay fills the
-//! viewport and centers the panel by taffy), so every descendant gets true bounds (which the
-//! hint picker and pointer hit-testing need).
+//! **Composed, not hand-run.** The `Dialog` is a blocking [`Overlay`](crate::widgets::Overlay)
+//! over a padded panel of `[title, body?, action-row?]`, built the first time it is needed — the
+//! first layout, event or question about the keyboard — once every builder has run, and never
+//! reached into after. The overlay owns the layer and the keyboard: the scrim, the chrome, the
+//! centering, the panel kept inside the window, Tab, the arrows across the buttons
+//! ([`item_keys`](crate::widgets::Overlay::item_keys)), Esc (the dialog's
+//! [`on_dismiss`](Dialog::on_dismiss)) and a press outside (the same, when
+//! [`dismissible`](Dialog::dismissible)). The panel adds what only a dialog knows: Enter, when
+//! nothing focused took it, presses the primary (first) action. The keys are the configurable
+//! `[keys.widgets]` `item_previous` / `item_next` / `activate` / `dismiss` (defaults ←/→,
+//! `Ctrl+h`/`Ctrl+l`, Enter, Esc), delivered field-first: a focused [`Input`](super::Input) types
+//! and moves its caret before the dialog hears what it declined.
 
 use crate::builders::{IntoChildren, LayoutExt, Parent};
 use crate::component::Base;
@@ -68,27 +55,35 @@ const LAYOUT_AREA: &str = "dialog-layout";
 
 /// A centered overlay panel over a scrim, holding real child components.
 ///
-/// Structure: the `Dialog` base is a full-viewport passthrough whose single child is a
-/// **blocking [`Overlay`](crate::widgets::Overlay)** (scrim + chrome + centering), whose single child
-/// is the **panel** — a padded Surface containing a Grid of named title, body and action areas.
-/// The action row is a
-/// right-aligned [`Flex`](crate::widgets::Flex) row of the caller's [`Button`](super::Button)s.
+/// Structure: a full-viewport passthrough whose one child — built the first time it is needed,
+/// once every builder has run — is a **blocking [`Overlay`](crate::widgets::Overlay)** (scrim,
+/// chrome, centering, the keyboard: Tab, the arrows across the buttons, Esc, a press outside) over
+/// the **panel**: a padded box holding a Grid of named title, body and action areas. The action row
+/// is a right-aligned [`Flex`](crate::widgets::Flex) row of the caller's
+/// [`Button`](super::Button)s. Nothing is reached into after it is built.
 pub struct Dialog {
     base: Base,
-    /// Caller-owned panel style, retained separately from resolved viewport constraints.
+    /// Caller-owned panel style (`panel_size`, `panel_max_width`), handed to the panel when built.
     authored_style: crate::style::Style,
-    /// When `false`, Esc / scrim clicks are swallowed but don't dismiss — a forced-decision
-    /// dialog (the user must pick a button). Default `true`.
-    dismissible: bool,
-
-    /// Fired when Esc or a scrim click requests dismissal (only if `dismissible`). The host
-    /// points this at its overlay-close path (e.g. emit `CloseOverlay`).
-    on_dismiss: Option<Box<dyn Fn()>>,
-    /// Set by [`danger`](Dialog::danger).
-    danger: bool,
+    /// What the panel is built from.
+    spec: std::rc::Rc<std::cell::RefCell<builders::Spec>>,
+    /// When `false`, a press outside is swallowed but does not dismiss — a forced-decision dialog
+    /// (the user must pick a button; Esc still cancels). Default `true`.
+    dismissible: std::rc::Rc<std::cell::Cell<bool>>,
+    /// Fired when Esc or (if `dismissible`) a press outside requests dismissal. The host points
+    /// this at its overlay-close path (e.g. emit `CloseOverlay`).
+    on_dismiss: builders::DismissFn,
 }
 
-impl LayoutExt for Dialog {}
+/// The layout builders size the **panel** (`width`, `height`, `max_width`, …) — except the size
+/// variant, which stays on the dialog itself so the overlay and the panel inherit it, as every
+/// widget's children inherit theirs.
+impl LayoutExt for Dialog {
+    fn size(mut self, size: crate::style::WidgetSize) -> Self {
+        self.base.style.layout.set_size(size);
+        self
+    }
+}
 
 impl Parent for Dialog {
     fn child(self, children: impl IntoChildren) -> Self {

@@ -32,10 +32,12 @@ mod item;
 mod item_group;
 pub(crate) mod key_hint;
 mod key_hint_group;
+mod keycap;
 mod keyed;
 mod label;
 mod landing_slot;
 mod line;
+mod list;
 mod marker_group;
 mod message_list;
 mod nf_icon;
@@ -93,8 +95,10 @@ pub use key_hint::{
     paint_keycap, paint_keycap_nf,
 };
 pub use key_hint_group::{DEFAULT_LETTERS, KeyHintGroup};
+pub use keycap::Keycap;
 pub use keyed::Keyed;
 pub use label::{Ellipsis, Label};
+pub use list::List;
 pub use svg::Svg;
 mod caption;
 pub use caption::Caption;

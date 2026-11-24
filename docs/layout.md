@@ -266,6 +266,16 @@ nothing; deleting such a call is a judgement about its parent, not a mechanical 
 
 Named fractions: `Length::FULL`, `HALF`, `THIRD`, `QUARTER`.
 
+**A size that changes is followed, not rebuilt.** `width`, `height`, `max_width` and `max_height`
+also take a `Signal<Length>`, a `Memo<Length>` or a function reading signals; the next layout lays
+the box out at the new value, nothing rebuilt — the same as `.hidden(..)` takes a value that changes:
+
+```rust
+Flex::column().width(move || Length::Px(panel_width(size.get())))   // follows `size`
+```
+
+Given a fixed value afterwards, it stops following.
+
 Font-relative lengths remain authored as `em` across font changes and serialization. The SDK
 accepts the same spelling: `heca_view::build::VStack::new().min_width("22em")` (with its `Style`
 trait imported); a JSON description uses `"min_width": "22em"`. Dimensions, min/max limits,

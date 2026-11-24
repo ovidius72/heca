@@ -121,6 +121,15 @@ fn every_exported_component_has_a_plain_external_construction_and_composition_ex
         ))
         .child(widget!(KeyHint, KeyHint::new(Button::new("Pick"))))
         .child(widget!(
+            List,
+            List::new(signal(vec!["lobby".to_string()]))
+                .render_item(|room, _| Label::new(room.clone()))
+        ))
+        .child(widget!(
+            Keycap,
+            Keycap::new("K").variant(KeycapVariant::Bordered)
+        ))
+        .child(widget!(
             KeyHintGroup,
             KeyHintGroup::new(Button::new("Pick"))
         ))

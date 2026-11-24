@@ -22,7 +22,7 @@ impl Overlay {
     ///
     /// There are two ways in and they must not each carry their own version of what opening means:
     /// a caller says [`show`](Overlay::show), or the open flag is simply set — by
-    /// [`SurfaceHandle`], by [`open_when`](Overlay::open_when), by a host binding its own state.
+    /// [`SurfaceHandle`], by [`open`](Overlay::open), by a host binding its own state.
     /// Reacting in the verb alone is what left the second way half-done: the arrival played,
     /// because [`tick`](Component::tick) follows the flag every frame, but the keyboard was never
     /// put where the surface said, because that lived in `show` and nothing else called it. A
@@ -46,7 +46,7 @@ impl Overlay {
     /// `focused` signal by hand leaves the manager's own position unset, so the next Tab is spent
     /// moving to the first control instead of the next one and the first press appears to do
     /// nothing.
-    fn place_default_focus(&mut self) {
+    pub(crate) fn place_default_focus(&mut self) {
         let Some(name) = self.default_focus.clone() else {
             return;
         };

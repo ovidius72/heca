@@ -721,6 +721,16 @@ modified integration files; an interrupted write is recovered before another ins
 Uninstall removes owned files and registrations, restores native feature settings, and disables the
 program in Heca. No installation server or separate download is required.
 
+**What an integration stores is a launcher, never a build's own path.** The hooks and the MCP
+server it registers run `heca-report` in heca's data folder (`integrations/`), a small script that
+runs the heca started last and does nothing when that heca is gone. Each heca that starts points it
+at itself, so removing a build — a development build in a worktree — never breaks an agent's hooks
+(it used to: every hook failed with exit 127 until the integration was installed again), and the next
+heca to start makes them report again. On Windows the hooks run `heca-report.cmd`; the MCP server keeps
+the executable's own path, because a stdio server cannot be a `.cmd` (it would need `cmd /c`, which is
+reported to break the server's pipes). An integration installed before this stores the old path:
+`heca update integration <program>` rewrites it.
+
 The first `install integration <program>` enables that program's reporting. Updating or installing
 it again preserves any later choice to disable it. This setting controls reporting to Heca, not
 whether the agent program can run. The master reporting switch and the sound switch are separate.

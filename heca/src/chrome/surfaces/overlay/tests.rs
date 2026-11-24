@@ -237,6 +237,8 @@ fn each_action_button_declares_the_submit_its_click_would_fire() {
         &mut FormBindings::default(),
     )
     .expect("valid modal fixture");
+    // Letters are collected from the laid-out tree, as in a window.
+    heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(800.0, 600.0));
 
     let targets = heca_grid_ui::collect_hints(root.as_ref());
     assert_eq!(targets.len(), 2, "two actions → two pick targets");
@@ -281,7 +283,7 @@ fn a_modal_button_is_one_pick_target_not_two() {
     let id = OverlayId(crate::chrome::LayerRegistry::default().reserve_id());
     let shortcuts = crate::chrome::ActionShortcuts::default();
     let emit = noop_emit();
-    let root = build_modal_root(
+    let mut root = build_modal_root(
         &spec,
         id,
         &heca_grid_ui::Theme::default(),
@@ -290,6 +292,8 @@ fn a_modal_button_is_one_pick_target_not_two() {
         &mut FormBindings::default(),
     )
     .expect("valid modal fixture");
+    // Letters are collected from the laid-out tree, as in a window.
+    heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(800.0, 600.0));
 
     let targets = heca_grid_ui::collect_hints(root.as_ref());
     assert_eq!(

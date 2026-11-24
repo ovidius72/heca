@@ -85,6 +85,36 @@ fn input_placeholder_shows_only_when_empty_and_unfocused() {
     assert_eq!(texts(&filled), vec!["ZED".to_string()]);
 }
 
+/// **A placeholder that follows a value** changes with it, with nothing rebuilt — what a search
+/// field whose hint names what it searches (the palette's modes) needs.
+#[test]
+fn a_placeholder_follows_the_value_it_was_given() {
+    let theme = Theme::default();
+    let texts = |input: &Input| -> Vec<String> {
+        common::paint(input, &theme)
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let hint = signal("Search commands".to_string());
+    let mut input = Input::new().placeholder(hint);
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    assert_eq!(texts(&input), vec!["Search commands".to_string()]);
+    assert_eq!(input.placeholder_str(), "Search commands");
+
+    hint.set("Search panes".to_string());
+    input.tick(0.0);
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    assert_eq!(
+        texts(&input),
+        vec!["Search panes".to_string()],
+        "the same field, a new hint"
+    );
+}
+
 #[test]
 fn input_click_cycle_selects_word_then_all_then_clears() {
     let mut input = Input::new().value("alpha beta gamma");

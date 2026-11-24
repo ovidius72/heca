@@ -165,6 +165,8 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
 
     Some(match text.as_str() {
         "bool" => quote!(value.as_bool()),
+        // A fixed or live flag (`IntoBoolValue`): static data always brings a bool, the fixed half.
+        t if t.contains("IntoBoolValue") => quote!(value.as_bool()),
         "f32" => quote!(value.as_f32()),
         // Every number is read at full precision and narrowed by `PropInput` itself, once.
         "f64" => quote!(value.as_f64()),
@@ -176,7 +178,9 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
         // text (`IntoTextValue`): static data always brings a string, which is the fixed half.
         t if t.contains("Into<String>")
             || t.contains("IntoName")
-            || t.contains("IntoTextValue") =>
+            || t.contains("IntoTextValue")
+            // What opens a surface: from static data, the name of the action that opens it.
+            || t.contains("IntoOpen") =>
         {
             quote!(value.as_text().map(::std::string::ToString::to_string))
         }

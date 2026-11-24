@@ -281,6 +281,7 @@ pub trait EventExt: Component + Sized {
         self.base_mut().actions.push(crate::hint::DeclaredAction {
             name: name.into(),
             run: Box::new(f),
+            while_closed: false,
         });
         self
     }

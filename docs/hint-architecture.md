@@ -375,7 +375,7 @@ KeyHintGroup::new(
         .child(Row::new().child(Label::new("one")).on_hint(|| choose(1)))
         .child(Row::new().child(Label::new("two")).on_hint(|| choose(2))),
 )
-.opens_on("mypanel.pick")   // config binds the key: [[keys.surface]] name = "mypanel"
+.open("mypanel.pick")   // config binds the key: [[keys.surface]] name = "mypanel"
 ```
 
 **Its children declare their own picks. Do not wrap them.** The group is the picker; the rows are
@@ -528,10 +528,10 @@ and `change` already use. Both converge on `Base::hint`: one door, no second pat
 F003/P082/T436.** Otherwise a plugin can contribute *targets* but still cannot own a *picker* — the
 gap just closed for native code and left open for everyone else.
 
-**What it landed as.** The picker's three native parts — a signal, `open_when` binding it, and an
-`on_action` closure that flips it — are one builder, `KeyHintGroup::opens_on("mypanel.pick")`. That
+**What it landed as.** The picker's three native parts — a signal, `open` binding it, and an
+`on_action` closure that flips it — are one builder, `KeyHintGroup::open("mypanel.pick")`. That
 is what made it declarable at all: static data can carry a *name*, and could never have carried the
-other two. The exposé says the same line now (`.opens_on(PICK_ACTION)`), so the described picker is
+other two. The exposé says the same line now (`.open(PICK_ACTION)`), so the described picker is
 the native one rather than a copy of it, and the rule that an open picker holds the keyboard lives
 inside the widget instead of at each call site.
 

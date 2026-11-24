@@ -29,6 +29,11 @@ pub struct ReportingHelper {
     /// The status heca reports for an agent the moment it starts (`settings.agents.launched_status`);
     /// empty reports nothing until the agent does.
     pub launched_status: String,
+    /// **What an installed lifecycle hook runs, when not [`executable`](Self::executable)** — a
+    /// launcher that does not disappear with a build. `None` runs `executable`. Separate because on
+    /// Windows a hook can run a `.cmd` launcher and a stdio MCP server cannot, so there the server
+    /// keeps the executable.
+    pub hook_launcher: Option<PathBuf>,
 }
 
 impl ReportingHelper {
@@ -52,7 +57,15 @@ impl ReportingHelper {
     /// It is inactive without this driver's current Heca reporting environment. It emits no
     /// hook output and never changes the native program's permission decision.
     pub fn command_hook(&self, driver: &str, event: &str) -> Result<String, AgentError> {
-        let executable = self.executable()?;
+        let executable = match &self.hook_launcher {
+            Some(launcher) => {
+                self.executable()?;
+                launcher
+                    .to_str()
+                    .ok_or_else(|| AgentError::Report("hook launcher must be UTF-8".into()))?
+            }
+            None => self.executable()?,
+        };
         Ok([
             executable,
             FLAG,
@@ -137,4 +150,39 @@ pub(crate) fn run(arguments: Vec<std::ffi::OsString>) -> Result<i32, AgentError>
         }
     }
     Ok(0)
+}
+
+#[cfg(test)]
+mod launcher_tests {
+    use super::*;
+
+    fn helper(hook_launcher: Option<PathBuf>) -> ReportingHelper {
+        ReportingHelper {
+            executable: PathBuf::from("/opt/heca/bin/heca"),
+            max_report_bytes: 1024,
+            launched_status: String::new(),
+            hook_launcher,
+        }
+    }
+
+    /// **A hook runs the launcher when there is one, the MCP server the executable** — the split
+    /// Windows needs, where a hook can run a `.cmd` launcher and a stdio server cannot.
+    #[test]
+    fn a_hook_runs_the_launcher_and_the_server_the_executable() {
+        let launcher = PathBuf::from("/data/heca/integrations/heca-report.cmd");
+        let both = helper(Some(launcher));
+        let hook = both.command_hook("claude", "Stop").unwrap();
+        assert!(
+            hook.starts_with("'/data/heca/integrations/heca-report.cmd' "),
+            "{hook}"
+        );
+        let server = both.mcp_server(None, &BTreeMap::new()).unwrap();
+        assert_eq!(server["command"], "/opt/heca/bin/heca");
+
+        let plain = helper(None).command_hook("claude", "Stop").unwrap();
+        assert!(
+            plain.starts_with("'/opt/heca/bin/heca' "),
+            "no launcher: the executable, {plain}"
+        );
+    }
 }

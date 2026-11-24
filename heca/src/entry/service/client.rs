@@ -114,7 +114,9 @@ impl<S: Service, C: Clone + 'static> Typed<S, C> {
 impl<S: Service, C: Clone + 'static> Entry for Typed<S, C> {
     fn reset(&self) {
         self.held.set(None);
-        self.state.value.set(self.initial.clone());
+        // An extension's state need not be comparable, so it is replaced in place and told always.
+        let initial = self.initial.clone();
+        self.state.value.update(|value| *value = initial);
     }
 
     fn apply(&self, update: ServiceUpdate) -> Applied {
@@ -131,7 +133,7 @@ impl<S: Service, C: Clone + 'static> Entry for Typed<S, C> {
                 Ok(snapshot) => {
                     let mut fresh = self.initial.clone();
                     (self.apply)(&mut fresh, Update::Snapshot(snapshot));
-                    self.state.value.set(fresh);
+                    self.state.value.update(|value| *value = fresh);
                     self.held.set(Some((update.server_epoch, update.revision)));
                 }
                 Err(error) => {

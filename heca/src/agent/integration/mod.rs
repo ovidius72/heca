@@ -286,12 +286,32 @@ impl Integrations {
             options.mode(0o600);
         }
         let file = options.open(path)?;
-        file.try_lock().map_err(|error| {
-            io::Error::other(format!("another integration operation is running: {error}"))
-        })?;
-        Ok(file)
+        // **A lock held for an instant is not another installation.** A process started anywhere in
+        // heca (a terminal opening) holds a copy of every open file until its program starts —
+        // this lock included — so the first attempt can find it taken by nothing at all. Waiting a
+        // moment tells that apart from another installation, which holds it for the whole operation.
+        let deadline = std::time::Instant::now() + LOCK_PATIENCE;
+        loop {
+            match file.try_lock() {
+                Ok(()) => return Ok(file),
+                Err(_) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(LOCK_RETRY);
+                }
+                Err(error) => {
+                    return Err(io::Error::other(format!(
+                        "another integration operation is running: {error}"
+                    )));
+                }
+            }
+        }
     }
 }
+
+/// How long taking the install lock waits for it to come free before saying another installation
+/// holds it — well past a process start's instant, well short of anything a person would notice.
+const LOCK_PATIENCE: std::time::Duration = std::time::Duration::from_secs(2);
+/// How often it looks again while waiting.
+const LOCK_RETRY: std::time::Duration = std::time::Duration::from_millis(10);
 
 fn fingerprint(bundle: &AgentIntegration) -> io::Result<String> {
     Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(bundle)?)))

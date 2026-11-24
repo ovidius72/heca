@@ -159,7 +159,7 @@ fn following_your_signal_rebinds_the_keyboard_to_it() {
     let editing = signal(false);
     let o = Overlay::new()
         .panel(Flex::column().child(Label::new("body")))
-        .open_when(editing);
+        .open(editing);
 
     editing.set(true);
     assert!(
@@ -171,7 +171,7 @@ fn following_your_signal_rebinds_the_keyboard_to_it() {
 /// **Opening by flag puts the keyboard where opening by call does.** ⚠️ Ran red against its own bug.
 ///
 /// There are two ways a surface goes up — a caller says [`Overlay::show`], or the open flag is
-/// simply set (a [`SurfaceHandle`], [`open_when`](Overlay::open_when), a host binding its own
+/// simply set (a [`SurfaceHandle`], [`open`](Overlay::open), a host binding its own
 /// state) — and only the first used to place the keyboard, because placing it lived inside the
 /// verb. The arrival played either way, so the second looked right and was deaf: it came up with
 /// the keyboard on nothing, and the first Tab was spent travelling to the control the surface had
@@ -231,7 +231,7 @@ fn following_your_own_signal_also_places_the_keyboard() {
                 .child(Button::new("Cancel"))
                 .child(Button::new("Delete")),
         )
-        .open_when(editing);
+        .open(editing);
 
     editing.set(true);
     o.tick(0.016);

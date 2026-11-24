@@ -381,7 +381,7 @@ pub struct AppState {
     /// `[settings.notification_system] max_lines`, re-applied on reload. Read by the mounted
     /// `ToastStack` when it builds each card.
     pub notification_max_lines: heca_grid_ui::reactive::Signal<usize>,
-    /// Whether the scoped `notification.pick` picker is open. `KeyHintGroup::open_when` on the
+    /// Whether the scoped `notification.pick` picker is open. `KeyHintGroup::open` on the
     /// toast surface reads this directly. In addition to global `prefix+/`, not instead.
     pub notification_pick_open: heca_grid_ui::reactive::Signal<bool>,
 }

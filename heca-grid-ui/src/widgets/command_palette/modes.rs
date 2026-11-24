@@ -36,7 +36,7 @@ impl CommandPalette {
         }
         self.sync_marks();
         self.sync_initial_selection();
-        self.sync_wrap();
+        self.sync_view();
         self
     }
 

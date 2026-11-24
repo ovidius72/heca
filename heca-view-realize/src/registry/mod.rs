@@ -392,6 +392,31 @@ impl WidgetRegistry {
     }
 }
 
+/// **Builds a described child after the realize that made its parent** — see [`RealizeCx::later`].
+pub struct Later {
+    registry: WidgetRegistry,
+    owner: Option<String>,
+    theme: Theme,
+    emit: IntentEmitter,
+    path: Vec<usize>,
+}
+
+impl Later {
+    /// Build `node` as the realize that made this would have.
+    pub fn build(&self, node: &ViewNode) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+        let mut forms = FormBindings::default();
+        let mut cx = RealizeCx {
+            registry: &self.registry,
+            owner: self.owner.as_deref(),
+            theme: &self.theme,
+            emit: &self.emit,
+            forms: &mut forms,
+            path: self.path.clone(),
+        };
+        cx.build(node)
+    }
+}
+
 /// Services a factory receives from its host; recursion keeps one registry and error path.
 pub struct RealizeCx<'a> {
     registry: &'a WidgetRegistry,
@@ -418,6 +443,20 @@ impl RealizeCx<'_> {
         node: &ViewNode,
     ) -> Result<T, RealizeError> {
         state::read(node, self.theme)
+    }
+
+    /// **What builds a described child later** — for a widget that builds its children only when
+    /// they are needed (a [`List`](heca_grid_ui::widgets::List) builds the items coming into
+    /// view). It holds this realize's registry, owner, theme and emitter, so a child built later is
+    /// built exactly as one built now. A named field inside one reports to no form.
+    pub fn later(&self) -> Later {
+        Later {
+            registry: self.registry.clone(),
+            owner: self.owner.map(str::to_string),
+            theme: self.theme.clone(),
+            emit: self.emit.clone(),
+            path: self.path.clone(),
+        }
     }
 
     fn build(&mut self, node: &ViewNode) -> Result<heca_grid_ui::WidgetModel, RealizeError> {

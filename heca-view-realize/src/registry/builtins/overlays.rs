@@ -14,6 +14,15 @@ pub(super) fn overlay(
             _ => attach_children(heca_grid_ui::WidgetModel::new(Flex::column()), node, cx)?,
         };
         let mut overlay = with_props(Overlay::new().panel(panel), node, theme);
+        // Where the panel goes: `"center"` (the default) or `"top"`. An anchored placement needs a
+        // trigger rect the host computes, so a description cannot ask for one.
+        match node.props.get("position").and_then(PropValue::as_text) {
+            Some("top") => overlay = overlay.position(heca_grid_ui::widgets::OverlayPosition::Top),
+            Some("center") | None => {}
+            Some(other) => eprintln!(
+                "[heca] an overlay's position is \"center\" or \"top\", not {other:?}: centered"
+            ),
+        }
         // **What the dismiss key means, declared like any other behaviour.** The overlay has
         // always held the keys; it answers this one, and this is the
         // described spelling — so a plugin's surface closes on Escape by saying what closing
@@ -36,7 +45,17 @@ pub(super) fn key_hint_group(
             1 => cx.child(node, 0)?,
             _ => attach_children(heca_grid_ui::WidgetModel::new(Flex::column()), node, cx)?,
         };
-        heca_grid_ui::WidgetModel::new(with_props(KeyHintGroup::new(subtree), node, theme))
+        let mut group = with_props(KeyHintGroup::new(subtree), node, theme);
+        // `opens_on` is the earlier name of `open`: a description written with it still opens its
+        // picker, and is told the new name.
+        if let Some(action) = node.props.get("opens_on").and_then(PropValue::as_text)
+            && !node.props.contains_key("open")
+        {
+            #[cfg(debug_assertions)]
+            eprintln!("[heca] realize: KeyHintGroup `opens_on` is now `open` — {action:?}");
+            group = group.open(action);
+        }
+        heca_grid_ui::WidgetModel::new(group)
     })
 }
 

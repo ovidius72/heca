@@ -22,6 +22,10 @@ impl Dialog {
     pub fn opened(self, open: bool) -> Self {
         self.prop("opened", open)
     }
+    /// **The action that opens this dialog** — a key bound to the name, RPC or a plugin opens it.
+    pub fn open(self, action: impl Into<String>) -> Self {
+        self.prop("open", crate::PropValue::Text(action.into()))
+    }
     pub fn default_open(self, open: bool) -> Self {
         self.prop("default_open", open)
     }
@@ -58,6 +62,11 @@ impl CommandPalette {
     }
     pub fn opened(self, open: bool) -> Self {
         self.prop("opened", open)
+    }
+    /// **The action that opens the palette** — a key bound to the name, RPC or a plugin opens it.
+    /// The same `open` every surface that comes and goes takes (natively it also takes a signal).
+    pub fn open(self, action: impl Into<String>) -> Self {
+        self.prop("open", crate::PropValue::Text(action.into()))
     }
     pub fn default_open(self, open: bool) -> Self {
         self.prop("default_open", open)

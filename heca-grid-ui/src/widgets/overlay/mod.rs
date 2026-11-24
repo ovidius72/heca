@@ -39,8 +39,8 @@ mod place;
 
 pub use chrome::{PanelChrome, PanelElevation, paint_panel_chrome};
 pub use place::{
-    AnchorSide, BesideSide, DEFAULT_ANCHOR_GAP, OverlayPosition, place_anchored, place_anchored_on,
-    place_at_point, place_beside,
+    AnchorSide, BesideSide, DEFAULT_ANCHOR_GAP, OverlayPosition, TOP_POSITION_FRAC, place_anchored,
+    place_anchored_on, place_at_point, place_beside, place_top,
 };
 
 use crate::animation::Animation;
@@ -138,6 +138,12 @@ pub struct Overlay {
     /// Fired when a press lands outside the panel — the standalone dismissal
     /// hook (a composing widget usually implements its own policy instead).
     on_outside_click: Option<Box<dyn Fn()>>,
+    /// Whether `item_next` / `item_previous` move the keyboard through the panel as Tab does.
+    item_keys: bool,
+    /// The panel's own minimum and maximum width and height, as written, and what the overlay last
+    /// narrowed them to — so the room growing again gives them back, and limits the panel changes
+    /// itself are taken as its new ones.
+    panel_limits: Option<(PanelLimits, PanelLimits)>,
     /// **What the dismiss key means to this surface**, when it means anything.
     ///
     /// An open overlay already holds the keyboard (it follows `open`), so the key arrives here
@@ -172,6 +178,18 @@ pub struct Overlay {
     viewport: Cell<Size>,
 }
 
+impl Overlay {
+    /// Follow `open`: up exactly while it is true, its keyboard following it.
+    fn follow_open(mut self, open: Signal<bool>) -> Self {
+        self.base.open = open;
+        self.base.follow_focus_modal(open);
+        self.base
+            .presence
+            .assume_open(crate::reactive::SignalGet::get_untracked(&open));
+        self
+    }
+}
+
 #[heca_grid_ui_macros::props]
 impl Overlay {
     /// A new (closed) blocking overlay with an empty panel slot.
@@ -203,6 +221,8 @@ impl Overlay {
             blur: false,
             decorated: true,
             on_outside_click: None,
+            item_keys: false,
+            panel_limits: None,
             on_dismiss: None,
             focus: crate::focus::FocusManager::new(),
             default_focus: None,
@@ -221,6 +241,8 @@ impl Overlay {
     pub fn panel(mut self, panel: impl crate::builders::IntoComponent) -> Self {
         self.base.children.clear();
         self.base.children.push(panel.into_component());
+        // A new panel brings its own limits.
+        self.panel_limits = None;
         self.apply_panel_size();
         self
     }
@@ -334,10 +356,11 @@ impl Overlay {
         self
     }
 
-    /// Set the panel placement (default [`OverlayPosition::Center`]).
+    /// Set the panel placement (default [`OverlayPosition::Center`]). A description says
+    /// `"position": "center"` or `"top"`; an anchored placement is native only.
     #[heca_grid_ui_macros::host_only(
         "an anchored placement carries a host-computed trigger rect, which static data cannot \
-         supply; a description gets the centered placement"
+         supply; a description names \"center\" or \"top\" through realize"
     )]
     pub fn position(mut self, position: OverlayPosition) -> Self {
         self.position = position;
@@ -374,9 +397,11 @@ impl Overlay {
     /// use). Idempotent: the target is absolute, so re-running never compounds.
     /// A no-op in [`Center`](OverlayPosition::Center) mode (taffy centers there).
     fn place_panel(&mut self) {
-        let OverlayPosition::Anchored { anchor, gap } = self.position else {
+        if self.position == OverlayPosition::Center {
             return;
-        };
+        }
+        let viewport = self.viewport.get();
+        let position = self.position;
         let Some(child) = self.base.children.first_mut() else {
             return;
         };
@@ -384,7 +409,21 @@ impl Overlay {
         if current.size == Size::new(0.0, 0.0) {
             return; // Not laid out yet — nothing to place.
         }
-        let target = place_anchored(anchor, current.size, self.viewport.get(), gap);
+        let target = match position {
+            OverlayPosition::Anchored { anchor, gap } => {
+                place_anchored(anchor, current.size, viewport, gap)
+            }
+            // The layer fills the window, so its own box is the window — known at layout, the
+            // frame the panel is born in, rather than after a first paint (which drew a newly built
+            // panel centred for one frame and then jumped it up).
+            OverlayPosition::Top => {
+                let area = self.base.bounds;
+                let mut placed = place::place_top(current, area.size);
+                placed.loc.y += area.loc.y;
+                placed
+            }
+            OverlayPosition::Center => return,
+        };
         let dx = target.loc.x - current.loc.x;
         let dy = target.loc.y - current.loc.y;
         if dx != 0.0 || dy != 0.0 {
@@ -395,7 +434,7 @@ impl Overlay {
 
     /// **Whether it starts up.** A surface *born* open is already there and plays no arrival.
     ///
-    /// To follow state you already hold, use [`open_when`](Overlay::open_when) instead — this one
+    /// To follow state you already hold, use [`open`](Overlay::open) instead — this one
     /// is a starting value, which is all a description can carry.
     ///
     /// Order-independent: `.default_open(true).animation(..)` and `.animation(..).default_open(true)` are the
@@ -407,13 +446,19 @@ impl Overlay {
         self
     }
 
-    /// **Follow a signal of your own** — the surface is up exactly when it is true.
+    /// **What opens this surface** — a signal of your own, or the name of an action that opens it.
     ///
     /// ```ignore
     /// let editing = signal(false);
-    /// Overlay::new().panel(body).open_when(editing);
-    /// editing.set(true);      // it appears
+    /// Overlay::new().panel(body).open(editing);        // up exactly while `editing` is true
+    /// editing.set(true);                               // it appears
+    ///
+    /// Overlay::new().panel(body).open("notes.show");   // a key, RPC or a plugin opens it
     /// ```
+    ///
+    /// A description says `"open": "notes.show"` (and `opened` for whether it starts up). Closing
+    /// needs no name: the dismiss key, a choice, a click outside, or `close_overlay`. See
+    /// [`IntoOpen`](crate::builders::IntoOpen).
     ///
     /// This is the direction that was missing. The widget owned a signal and lent it out through
     /// [`open_signal`](Overlay::open_signal), so a caller could drive *its* state but never hand it
@@ -422,16 +467,10 @@ impl Overlay {
     /// The overlay's keyboard follows whichever signal is in force — that is the whole of how keys
     /// reach a panel — so adopting yours re-points it rather than leaving it following a signal
     /// nobody writes any more.
-    #[heca_grid_ui_macros::host_only(
-        "a live signal; a description carries a starting value, `opened`"
-    )]
-    pub fn open_when(mut self, open: Signal<bool>) -> Self {
-        self.base.open = open;
-        self.base.follow_focus_modal(open);
-        self.base
-            .presence
-            .assume_open(crate::reactive::SignalGet::get_untracked(&open));
-        self
+    #[heca_grid_ui_macros::prop]
+    pub fn open(self, by: impl crate::builders::IntoOpen) -> Self {
+        let own = self.base.open;
+        by.into_open().apply(own, Self::follow_open, self)
     }
 
     /// **Which control the keyboard starts on**, by the name that control goes by.
@@ -450,6 +489,20 @@ impl Overlay {
     #[heca_grid_ui_macros::prop]
     pub fn default_focus(mut self, name: impl Into<String>) -> Self {
         self.default_focus = Some(name.into());
+        self
+    }
+
+    /// **The arrows across the panel move the keyboard, as Tab does** — `item_next` /
+    /// `item_previous` in `[keys.widgets]` (←/→ and `Ctrl+l`/`Ctrl+h` by default). For a panel whose
+    /// controls are a row of buttons (a dialog's actions); off by default, so a panel whose arrows
+    /// mean something else (a list, a field) keeps them.
+    ///
+    /// ```ignore
+    /// Overlay::new().item_keys(true).panel(Flex::row().child([cancel, confirm]))
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn item_keys(mut self, on: bool) -> Self {
+        self.item_keys = on;
         self
     }
 
@@ -481,10 +534,6 @@ impl Overlay {
         self
     }
 
-    /// Called when a press lands **outside** the panel (standalone use; a
-    /// composing widget usually intercepts the press and applies its own
-    /// dismissal policy instead).
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     /// **What the dismiss key does to this surface.**
     ///
     /// ```ignore
@@ -500,6 +549,8 @@ impl Overlay {
         self
     }
 
+    /// **What a press outside the panel does** — on the scrim of a blocking layer, or beside a
+    /// light one. A composed dialog points it at its dismissal.
     #[heca_grid_ui_macros::host_only("a callback, not a scalar")]
     pub fn on_outside_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_outside_click = Some(Box::new(f));
@@ -533,7 +584,7 @@ impl Overlay {
     fn scale_origin(&self) -> Point {
         let r = match self.position {
             OverlayPosition::Center => self.base.bounds,
-            OverlayPosition::Anchored { .. } => self.panel_bounds(),
+            OverlayPosition::Anchored { .. } | OverlayPosition::Top => self.panel_bounds(),
         };
         Point::new(r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0)
     }
@@ -549,3 +600,79 @@ impl LayoutExt for Overlay {}
 
 #[cfg(test)]
 mod tests;
+
+/// A panel's minimum and maximum width and height as its author wrote them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PanelLimits {
+    min_width: Option<Length>,
+    max_width: Option<Length>,
+    min_height: Option<Length>,
+    max_height: Option<Length>,
+}
+
+impl Overlay {
+    /// **The panel never needs more room than the overlay has** — its minimum and maximum width and
+    /// height, in any unit, are narrowed to the room inside the overlay's margin; a panel that asks
+    /// for less keeps what it asked for. CSS would write `min(22em, 100%)`; taffy cannot, so the
+    /// overlay does it here, once, for every panel — a dialog's, a palette's, a plugin's.
+    ///
+    /// The author's limits are kept aside and narrowed from each time, so a window growing again
+    /// gives the panel back what it asked for. Returns whether the panel changed.
+    fn fit_panel_to_room(&mut self) -> bool {
+        let room_w = (self.base.bounds.size.w as f32
+            - self.base.style.layout.pad_left(self.base.font)
+            - self.base.style.layout.pad_right(self.base.font))
+        .max(0.0);
+        let room_h = (self.base.bounds.size.h as f32
+            - self.base.style.layout.pad_top(self.base.font)
+            - self.base.style.layout.pad_bottom(self.base.font))
+        .max(0.0);
+        if room_w <= 0.0 || room_h <= 0.0 {
+            return false;
+        }
+        let Some(panel) = self.base.children.first_mut() else {
+            return false;
+        };
+        let font = panel.base().font;
+        let layout = &mut panel.base_mut().style.layout;
+        let now = PanelLimits {
+            min_width: layout.min_width,
+            max_width: layout.max_width,
+            min_height: layout.min_height,
+            max_height: layout.max_height,
+        };
+        // What the author wrote: kept from before, unless the panel's limits are no longer the ones
+        // this last wrote — then the panel changed them itself, and those are the author's now.
+        let authored = match self.panel_limits {
+            Some((authored, fitted)) if fitted == now => authored,
+            _ => now,
+        };
+        let px = |length: Length, room: f32| match length {
+            Length::Em(em) => Some(em * font),
+            Length::Px(px) => Some(px),
+            Length::Percent(fraction) => Some(room * fraction),
+            Length::Auto => None,
+        };
+        let narrow = |length: Option<Length>, room: f32| {
+            length.map(|length| match px(length, room) {
+                Some(value) if value > room => Length::Px(room),
+                _ => length,
+            })
+        };
+        let fitted = PanelLimits {
+            min_width: narrow(authored.min_width, room_w),
+            max_width: narrow(authored.max_width, room_w),
+            min_height: narrow(authored.min_height, room_h),
+            max_height: narrow(authored.max_height, room_h),
+        };
+        self.panel_limits = Some((authored, fitted));
+        if now == fitted {
+            return false;
+        }
+        layout.min_width = fitted.min_width;
+        layout.max_width = fitted.max_width;
+        layout.min_height = fitted.min_height;
+        layout.max_height = fitted.max_height;
+        true
+    }
+}

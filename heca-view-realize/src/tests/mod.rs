@@ -136,6 +136,7 @@ fn sample_node(kind: WidgetId) -> ViewNode {
         | "badge"
         | "badge_button"
         | "tag"
+        | "keycap"
         | "alert"
         | "toast"
         | "input"
@@ -189,7 +190,7 @@ fn sample_node(kind: WidgetId) -> ViewNode {
         // A picker: its children are what it letters, and one of them must be pickable for
         // the picker to be worth anything — so the sample carries a hint, not a press.
         "key_hint_group" => node
-            .prop("opens_on", PropValue::Text("sample.pick".into()))
+            .prop("open", PropValue::Text("sample.pick".into()))
             .child(
                 ViewNode::new("label")
                     .text("target")
@@ -202,6 +203,10 @@ fn sample_node(kind: WidgetId) -> ViewNode {
             .child(ViewNode::new("button").text("Content").on("press", Intent::new("noop"))),
         // What it shows is its region's; alone it has no rows to count, so it is a bare node.
         "edge_hint" => node,
+        // Its items are its children, and one is something to press — a list of rows to choose.
+        "list" => node
+            .prop("height", PropValue::Float(120.0))
+            .child(ViewNode::new("button").text("Content").on("press", Intent::new("noop"))),
         _ => panic!("missing behavioral sample for {kind}"),
     }
 }

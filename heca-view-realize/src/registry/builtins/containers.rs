@@ -219,3 +219,53 @@ pub(super) fn dock_frame(
         heca_grid_ui::WidgetModel::new(dock)
     })
 }
+
+/// **A described list** — its children are the items, built only when they come into view: each is
+/// realized then, by the same registry, owner, theme and emitter as everything else here. A choice
+/// sends `activate` and a selection that moved sends `move`, each with the item's position as
+/// `index`.
+pub(super) fn list(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect, signal};
+    use heca_grid_ui::widgets::List;
+
+    let items: Vec<ViewNode> = node.children.clone();
+    let positions = signal((0..items.len()).collect::<Vec<usize>>());
+    let later = cx.later();
+    let kind = node.kind.clone();
+    let mut list = List::new(positions).render_item(move |&at, _| {
+        later.build(&items[at]).unwrap_or_else(|error| {
+            eprintln!("[heca] a {kind} item could not be built: {error}");
+            heca_grid_ui::WidgetModel::new(Flex::row())
+        })
+    });
+    if let Some(at) = node.props.get("selected").and_then(PropValue::as_float) {
+        list.selected_signal()
+            .set((at >= 0.0).then_some(at as usize));
+    }
+    let emit = cx.emit().clone();
+    if let Some(intent) = node.events.get(ViewEvent::Activate.name()) {
+        let (intent, emit) = (intent.clone(), emit.clone());
+        list =
+            list.on_choose(move |at| emit(intent.clone().arg("index", PropValue::Int(at as i64))));
+    }
+    if let Some(intent) = node.events.get(ViewEvent::Move.name()) {
+        let (intent, selected) = (intent.clone(), list.selected_signal());
+        create_effect(move |before: Option<()>| {
+            let now = selected.get();
+            // The selection it starts with (the first run) is not a move.
+            if before.is_some()
+                && let Some(at) = now
+            {
+                emit(intent.clone().arg("index", PropValue::Int(at as i64)));
+            }
+        });
+    }
+    Ok(heca_grid_ui::WidgetModel::new(with_props(
+        list,
+        node,
+        cx.theme(),
+    )))
+}

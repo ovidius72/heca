@@ -25,6 +25,7 @@ with_event!(
     Toast { on_action => Action, on_dismiss => Dismiss }
     Overlay { on_dismiss => Dismiss }
     CardGrid { on_activate => Activate, on_move => Move, on_dismiss => Dismiss }
+    List { on_activate => Activate, on_move => Move }
 );
 
 with_text!(

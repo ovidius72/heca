@@ -34,7 +34,7 @@
 //!         .child(Row::new().child(Label::new("one")).on_hint(|| choose(1)))
 //!         .child(Row::new().child(Label::new("two")).on_hint(|| choose(2))),
 //! )
-//! .opens_on("mypanel.pick");   // config binds the key: [[keys.surface]] name = "mypanel"
+//! .open("mypanel.pick");   // config binds the key: [[keys.surface]] name = "mypanel"
 //! ```
 //!
 //! ⚠️ **A row says its own pick — do not wrap it in a [`KeyHint`](super::KeyHint).** `on_hint`,
@@ -51,7 +51,7 @@
 //!
 //! ```json
 //! { "kind": "KeyHintGroup",
-//!   "props": { "opens_on": "mypanel.pick" },
+//!   "props": { "open": "mypanel.pick" },
 //!   "children": [ { "kind": "Row", "events": { "hint": { "action": "docker.restart" } } } ] }
 //! ```
 
@@ -99,7 +99,7 @@ pub struct KeyHintGroup {
 
 #[heca_grid_ui_macros::props]
 impl KeyHintGroup {
-    /// Wrap `child`. Name the verb that opens it with [`opens_on`](KeyHintGroup::opens_on).
+    /// Wrap `child`. Say what opens it with [`open`](KeyHintGroup::open).
     pub fn new(child: impl crate::builders::IntoComponent) -> Self {
         Self::wrap(child.into_component())
     }
@@ -123,17 +123,29 @@ impl KeyHintGroup {
         }
     }
 
-    /// Bind the **host-owned** open signal. Set it from an action — which is how a surface gives
-    /// its picker a binding without any widget naming a key.
-    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
-    pub fn open_when(mut self, open: Signal<bool>) -> Self {
-        self.seen = open.get_untracked();
-        self.open = open;
-        // **Holding focus is the whole of taking the keyboard.** Keys are delivered down the focus
-        // owner's chain, so an open picker is on the path and a closed one is not. There is no
-        // gate to write and nothing to decline.
-        self.base.follow_focus_modal(open);
-        self
+    /// **What opens this picker** — your `Signal<bool>`, or the name of the action that opens it:
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::{Flex, KeyHintGroup};
+    ///
+    /// let picker = KeyHintGroup::new(Flex::column()).open("mypanel.pick");
+    /// ```
+    ///
+    /// ```toml
+    /// [[keys.surface]]
+    /// name = "mypanel"
+    /// pick = "s"          # -> mypanel.pick
+    /// ```
+    ///
+    /// **The widget names the verb; config names the key** — the same division
+    /// [`on_action`](crate::builders::EventExt::on_action) states. A description says
+    /// `"open": "mypanel.pick"`. With a signal instead, the picker is open exactly while it is
+    /// `true` and writes it `false` when it closes. See [`IntoOpen`](crate::builders::IntoOpen).
+    #[heca_grid_ui_macros::prop]
+    pub fn open(self, by: impl crate::builders::IntoOpen) -> Self {
+        let own = self.open;
+        by.into_open().apply(own, Self::follow_open, self)
     }
 
     /// **The letters this picker hands out, in order.** Defaults to [`DEFAULT_LETTERS`].
@@ -160,38 +172,6 @@ impl KeyHintGroup {
         self
     }
 
-    /// **The verb that opens this picker** — the one line a picker costs.
-    ///
-    /// ```
-    /// use heca_grid_ui::prelude::*;
-    /// use heca_grid_ui::widgets::{Flex, KeyHintGroup};
-    ///
-    /// let picker = KeyHintGroup::new(Flex::column()).opens_on("mypanel.pick");
-    /// ```
-    ///
-    /// ```toml
-    /// [[keys.surface]]
-    /// name = "mypanel"
-    /// pick = "s"          # -> mypanel.pick
-    /// ```
-    ///
-    /// **The widget names the verb; config names the key** — the same division
-    /// [`on_action`](crate::builders::EventExt::on_action) states, and the reason this is not a
-    /// key builder. It *is* `open_when` + `on_action` over the picker's own signal, said once here
-    /// rather than at every call site: a caller that assembles those three parts owns the rule that
-    /// an open picker holds the keyboard, and there is no signal to assemble from a description at
-    /// all.
-    ///
-    /// Reach for [`open_when`](KeyHintGroup::open_when) instead only when the host already has the
-    /// state — when something *other* than this verb also opens it.
-    #[heca_grid_ui_macros::prop]
-    pub fn opens_on(self, action: impl Into<String>) -> Self {
-        use crate::builders::EventExt as _;
-        let open = self.open;
-        self.open_when(open)
-            .on_action(action, move || open.set(true))
-    }
-
     /// **Which scope this picker letters.** Unset — the default — means the ordinary set: every
     /// target that named no scope, which is how every picker that exists today behaves.
     ///
@@ -201,8 +181,8 @@ impl KeyHintGroup {
     /// handing out twice as many, half of which do the other thing.
     ///
     /// ```ignore
-    /// KeyHintGroup::new(cards).opens_on("map.jump")                    // the cards
-    /// KeyHintGroup::new(cards).opens_on("map.close").scope("close")    // their ⊠ icons
+    /// KeyHintGroup::new(cards).open("map.jump")                    // the cards
+    /// KeyHintGroup::new(cards).open("map.close").scope("close")    // their ⊠ icons
     /// ```
     ///
     /// A picker whose scope matches nothing shows **no letters**, rather than falling back to
@@ -283,6 +263,19 @@ impl KeyHintGroup {
         Some(node)
     }
 }
+impl KeyHintGroup {
+    /// Follow `open`: show the letters and hold the keyboard while it is true.
+    fn follow_open(mut self, open: Signal<bool>) -> Self {
+        self.seen = open.get_untracked();
+        self.open = open;
+        // **Holding focus is the whole of taking the keyboard.** Keys are delivered down the focus
+        // owner's chain, so an open picker is on the path and a closed one is not. There is no
+        // gate to write and nothing to decline.
+        self.base.follow_focus_modal(open);
+        self
+    }
+}
+
 impl Component for KeyHintGroup {
     fn base(&self) -> &Base {
         &self.base
@@ -382,8 +375,8 @@ mod tests {
             KeyHint::new(Row::new().child(Label::new(format!("row {id}"))))
                 .on_hint(move || picks.borrow_mut().push(id))
         };
-        let g = KeyHintGroup::new(Flex::column().child(row(1)).child(row(2)).child(row(3)))
-            .open_when(open);
+        let g =
+            KeyHintGroup::new(Flex::column().child(row(1)).child(row(2)).child(row(3))).open(open);
         (g, picks)
     }
 
@@ -537,7 +530,7 @@ mod tests {
     /// **The verb opens it, and the widget owns both halves**.
     ///
     /// This is the whole of what a picker costs its author: one string. The parts it replaces — a
-    /// signal, `open_when`, and an `on_action` closure that flips it — are three things a
+    /// signal, `open`, and an `on_action` closure that flips it — are three things a
     /// description cannot carry and a plugin cannot write, which is why heca could have a picker
     /// and nobody else could.
     #[test]
@@ -549,7 +542,7 @@ mod tests {
                 .on_hint(move || picks.borrow_mut().push(id))
         };
         let mut g =
-            KeyHintGroup::new(Flex::column().child(row(1)).child(row(2))).opens_on("mypanel.pick");
+            KeyHintGroup::new(Flex::column().child(row(1)).child(row(2))).open("mypanel.pick");
 
         assert!(!g.is_open(), "closed until its verb is run");
         assert!(
@@ -575,10 +568,10 @@ mod tests {
     }
 
     /// **An open picker holds the keyboard**, and that rule lives in the widget rather than at the
-    /// call site — `opens_on` is `open_when` + `on_action`, so it cannot be assembled half-right.
+    /// call site — `open("name")` is the state and its action together, so it cannot be assembled half-right.
     #[test]
     fn the_declared_verb_also_takes_the_keyboard() {
-        let g = KeyHintGroup::new(Flex::column()).opens_on("mypanel.pick");
+        let g = KeyHintGroup::new(Flex::column()).open("mypanel.pick");
         assert!(!crate::holds_keyboard(&g), "closed, focus is elsewhere");
         assert!(crate::fire_action(&g, "mypanel.pick"));
         assert!(
@@ -610,7 +603,7 @@ mod tests {
         let region = ScrollRegion::new().width(200.0).height(100.0).child(rows);
 
         let open = signal(false);
-        let mut g = KeyHintGroup::new(region).open_when(open);
+        let mut g = KeyHintGroup::new(region).open(open);
         LayoutEngine::new().compute(&mut g, CoreSize::new(200.0, 100.0));
 
         let all = g.targets().len();

@@ -5,10 +5,10 @@ use heca_grid_ui::builders::IdentityExt;
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
 use heca_grid_ui::{
     Action, Alert, Badge, BadgeButton, Button, Card, Checkbox, Choice, DockFrame, Flex, Gauge,
-    Glyph, Icon, IconButton, Image, Input, Item, ItemGroup, KeyHintGroup, Label, LandingSlot,
-    MarkerGroup, NfGlyph, NfIcon, Overlay, Panel, ProgressBar, RailCell, Row as GridRow,
-    ScrollRegion, Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Toast,
-    Toggle,
+    Glyph, Icon, IconButton, Image, Input, Item, ItemGroup, KeyHintGroup, Keycap, Label,
+    LandingSlot, MarkerGroup, NfGlyph, NfIcon, Overlay, Panel, ProgressBar, RailCell,
+    Row as GridRow, ScrollRegion, Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs,
+    Tag, Toast, Toggle,
 };
 use heca_view::{PropValue, ViewEvent, ViewNode, WidgetId};
 
@@ -108,6 +108,11 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
             .names("KeyHintGroup", "KeyHintGroup")
             .properties::<KeyHintGroup>()
             .children(),
+        WidgetDefinition::new(WidgetId::List, containers::list)
+            .names("List", "List")
+            .properties::<heca_grid_ui::widgets::List<usize>>()
+            .children()
+            .events(&[ViewEvent::Activate, ViewEvent::Move]),
         WidgetDefinition::new(WidgetId::Scroll, containers::scroll)
             .names("Scroll", "ScrollRegion")
             .properties::<ScrollRegion>()
@@ -148,6 +153,9 @@ pub(super) fn register(registry: &mut WidgetRegistry) -> Result<(), RealizeError
             .names("Alert", "Alert")
             .properties::<Alert>(),
         WidgetDefinition::new(WidgetId::EdgeHint, display::edge_hint).names("EdgeHint", "EdgeHint"),
+        WidgetDefinition::new(WidgetId::Keycap, display::keycap)
+            .names("Keycap", "Keycap")
+            .properties::<Keycap>(),
         WidgetDefinition::new(WidgetId::StatusDot, display::status_dot)
             .names("StatusDot", "StatusDot")
             .properties::<StatusDot>()
