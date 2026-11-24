@@ -72,8 +72,9 @@ pub struct Input {
     base: Base,
     /// The current text, exposed reactively via [`text`](Input::text).
     text: Signal<String>,
-    /// Shown (muted) when empty and unfocused.
-    placeholder: String,
+    /// Shown (muted) when empty and unfocused — a value that may change, which the field's own
+    /// placeholder label follows (see [`placeholder`](Input::placeholder)).
+    placeholder: Signal<String>,
     placeholder_on_focus: bool,
     seen_text: String,
     /// Caret position as a char index in `0..=text.chars().count()` (the moving

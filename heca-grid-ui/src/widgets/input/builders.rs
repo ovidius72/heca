@@ -8,7 +8,11 @@ impl Input {
         let mut base = Base::container();
         base.focusable = true;
         let text = signal(String::new());
-        let view = std::rc::Rc::new(std::cell::RefCell::new(content::View::new(text)));
+        let placeholder = signal(String::new());
+        let view = std::rc::Rc::new(std::cell::RefCell::new(content::View::new(
+            text,
+            placeholder,
+        )));
         let content = content::Content::new(view.clone());
         let region = crate::ScrollRegion::new()
             .horizontal()
@@ -20,7 +24,7 @@ impl Input {
         Self {
             base,
             text,
-            placeholder: String::new(),
+            placeholder,
             placeholder_on_focus: false,
             seen_text: String::new(),
             cursor: 0,
@@ -71,15 +75,23 @@ impl Input {
         self.base.mark_needs_layout();
     }
 
-    /// The placeholder text as set (empty when unset).
-    pub fn placeholder_str(&self) -> &str {
-        &self.placeholder
+    /// The placeholder text shown now (empty when unset).
+    pub fn placeholder_str(&self) -> String {
+        self.placeholder.get_untracked()
     }
 
-    /// Set the placeholder shown while empty and unfocused.
+    /// **The placeholder shown while empty and unfocused** — a fixed text, or one that changes
+    /// (a `Signal<String>`, a `Memo`, a closure through [`TextValue`](crate::builders::TextValue)),
+    /// which the field follows with nothing rebuilt: a search field whose hint names what it
+    /// searches changes the hint, not the field.
+    ///
+    /// ```ignore
+    /// let mode = signal("Search commands".to_string());
+    /// Input::new().placeholder(mode)     // later: mode.set("Search panes".into())
+    /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.placeholder = placeholder.into();
+    pub fn placeholder(self, placeholder: impl crate::builders::IntoTextValue) -> Self {
+        placeholder.into_text_value().show_in(self.placeholder);
         self
     }
 

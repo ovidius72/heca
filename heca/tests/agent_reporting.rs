@@ -19,6 +19,7 @@ fn helper(root: &std::path::Path, name: &str, active: bool) -> Child {
         executable: env!("CARGO_BIN_EXE_heca").into(),
         max_report_bytes: heca_config::settings::AgentsConfig::default().max_report_bytes,
         launched_status: String::new(),
+        hook_launcher: None,
     }
     .mcp_server(active.then_some(endpoint.as_path()), &reports)
     .unwrap();
@@ -109,6 +110,7 @@ fn installed_command_hooks_forward_native_metadata_through_the_actual_host() {
         executable,
         max_report_bytes: config.max_report_bytes,
         launched_status: String::new(),
+        hook_launcher: None,
     };
     let installer = integrations_in(
         &config,

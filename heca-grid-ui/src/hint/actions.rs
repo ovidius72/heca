@@ -12,6 +12,11 @@ pub struct DeclaredAction {
     /// What it does. A closure, because this side of the boundary is native; the declarative path
     /// maps the same name to an `Intent`.
     pub run: Box<dyn Fn()>,
+    /// **Answered even while its widget is closed.** A surface's own opening action
+    /// (`.open("name")`) must reach a surface that is not on screen — that is when it is needed —
+    /// while every other verb of a closed surface stays unreachable, as before. Set by
+    /// [`Open`](crate::builders::Open); `false` for everything declared with `on_action`.
+    pub while_closed: bool,
 }
 
 impl std::fmt::Debug for DeclaredAction {
@@ -33,10 +38,18 @@ pub fn collect_actions(root: &dyn Component) -> Vec<String> {
 }
 
 fn actions_into(node: &dyn Component, out: &mut Vec<String>) {
-    if skip(node) {
+    let closed = skip(node);
+    out.extend(
+        node.base()
+            .actions
+            .iter()
+            .filter(|a| !closed || a.while_closed)
+            .map(|a| a.name.clone()),
+    );
+    // Nothing inside a closed widget can act.
+    if closed {
         return;
     }
-    out.extend(node.base().actions.iter().map(|a| a.name.clone()));
     for child in &node.base().children {
         actions_into(child.as_ref(), out);
     }
@@ -48,13 +61,22 @@ fn actions_into(node: &dyn Component, out: &mut Vec<String>) {
 /// the tree is rebuilt between a binding being read and the key being pressed. The first
 /// declaration in document order wins, so a nested surface's verb shadows an outer one's of the
 /// same name, which is the same nearest-declaration rule menus and keys already follow.
+///
+/// A closed widget answers only the actions it declared to be reachable while closed — a surface's
+/// own opening action — and nothing inside it is asked.
 pub fn fire_action(root: &dyn Component, name: &str) -> bool {
-    if skip(root) {
-        return false;
-    }
-    if let Some(action) = root.base().actions.iter().find(|a| a.name == name) {
+    let closed = skip(root);
+    if let Some(action) = root
+        .base()
+        .actions
+        .iter()
+        .find(|a| a.name == name && (!closed || a.while_closed))
+    {
         (action.run)();
         return true;
+    }
+    if closed {
+        return false;
     }
     root.base()
         .children

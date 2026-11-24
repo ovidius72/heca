@@ -1,5 +1,8 @@
-//! Component lifecycle and input handling.
+//! **What the palette does with input** — the keyboard's verbs (move, choose, complete, recall,
+//! dismiss) and what a pointer did to a row. Nothing here draws, measures or hit-tests: the
+//! composed view (`view`) does all of that, and each row reports its own pointer.
 
+use super::view::Pick;
 use super::*;
 
 impl Component for CommandPalette {
@@ -10,137 +13,90 @@ impl Component for CommandPalette {
         &mut self.base
     }
 
-    fn focusable(&self) -> bool {
-        self.is_open()
-    }
-
+    // **What a host asks of a layer in front**, answered from whether it is open — the overlay
+    // inside does the covering, the scrim and the keyboard; these only report it.
     fn overlay_active(&self) -> bool {
         self.is_open()
     }
-
-    /// On screen only while open: closed, its rows are still children, and gone to every walk.
+    /// On screen while open, **and while its panel is still dissolving after it closed** — closed
+    /// alone, the walk would stop drawing it and the panel's exit would never be seen.
     fn is_shown(&self) -> bool {
-        self.base.visible.get_untracked() && !self.base.style.layout.hidden && self.is_open()
+        self.base.visible.get_untracked() && (self.is_open() || self.panel_shown())
+    }
+    /// **Its arrival and exit are its panel's** — the palette itself has no animation, so a host
+    /// asking whether it is still leaving (to keep its layer drawn) is answered by the panel that is.
+    ///
+    /// Before its panel is built (it is, the first time it is needed), the palette's own.
+    fn presence(&self) -> Option<&crate::animation::Presence> {
+        self.base
+            .children
+            .iter()
+            .find_map(|panel| panel.presence())
+            .or(Some(&self.base.presence))
     }
 
-    /// An open palette grabs input for the whole viewport (typing, nav, outside
-    /// click = dismiss), so every point is occluded while open — a host must not
-    /// synthesize a page-level action (e.g. open a context menu) under it.
-    fn overlay_occludes(&self, _pos: Point) -> bool {
+    fn presence_mut(&mut self) -> Option<&mut crate::animation::Presence> {
+        if self.base.children.is_empty() {
+            return Some(&mut self.base.presence);
+        }
+        self.base
+            .children
+            .iter_mut()
+            .find_map(|panel| panel.presence_mut())
+    }
+
+    /// **Closing starts the panel's exit, now** — a host closes a surface and asks at once whether
+    /// it is still leaving; the panel must already be on its way out by then, or the layer is
+    /// dropped mid-dissolve and the palette vanishes with a cut.
+    fn close(&mut self) {
+        self.open.set(false);
+        // Its own state too: before the panel is built, that is the palette's arrival and exit.
+        self.base.presence.leave();
+        for panel in self.base.children.iter_mut() {
+            panel.close();
+        }
+    }
+
+    fn overlay_occludes(&self, _pos: heca_core::layout::Point) -> bool {
         self.is_open()
     }
 
-    fn paint(&self, cx: &mut PaintCx) {
-        self.paint_palette(cx);
-    }
-
-    /// **A layer is not scrolled into view.** `Base::focused` says this widget holds the keyboard
-    /// while it is open, and `wants_visible` defaults to exactly that — so an enclosing
-    /// `ScrollRegion` would scroll the page to wherever this widget's layout node happens to sit,
-    /// every frame it is open. A layer draws over the page; the page does not come to it.
-    fn wants_visible(&self) -> bool {
-        false
-    }
-
-    /// Lay the row text out at **the width it will be drawn at**, in a column.
-    ///
-    /// This is what makes a description wrap correctly: the engine measures each text child against
-    /// this width, so the line count it reports is the line count that will be painted. The viewport
-    /// is the one cached at the last paint, so the very first frame falls back to the size variant's
-    /// nominal width and settles on the next — the same one-frame settle `Select` documents for its
-    /// measured rows.
     fn remeasure(&mut self) {
-        // Reflow the selected row **before** the children are measured. `build` calls this on a node
-        // and only then descends into its children, so a wrap flipped here is the wrap they measure
-        // with — flipping it after layout would show the previous selection's shape for a frame.
         self.sync_query();
-        self.sync_wrap();
-        let viewport = self.base.viewport;
-        if viewport.w > 0.0 && viewport.h > 0.0 && viewport.w.is_finite() && viewport.h.is_finite()
-        {
-            self.viewport.set(viewport);
-        }
-        // The palette **fills the viewport**, like every other layer root, so `on_layout` can read
-        // its own size and learn the viewport from the layout pass rather than waiting for a paint.
-        self.base.style.layout.direction = Direction::Column;
-        self.base.style.layout.width = Length::Percent(1.0);
-        self.base.style.layout.height = Length::Percent(1.0);
-        // The text children carry the width instead: the engine measures each against the width it
-        // will be drawn at, so the line count it reports is the line count that gets painted.
-        let w = self.text_w() as f32;
-        for child in self.base.children.iter_mut().take(self.commands.len()) {
-            child.base_mut().style.layout.width = Length::Px(w);
-        }
-        let query_width = (self.panel_w() - 2.0 * PAD).max(0.0) as f32;
-        let query_height = (self.line_h() + 2.0 * self.query_padding()) as f32;
-        let query = self
-            .base
-            .children
-            .last_mut()
-            .expect("query child")
-            .base_mut();
-        query.style.layout.width = Length::Px(query_width);
-        query.style.layout.height = Length::Px(query_height);
+        self.sync_view();
     }
 
-    fn taffy_style(&self) -> taffy::Style {
-        self.base.style.layout.to_taffy(self.base.font)
-    }
-
-    /// Layout just reset every row to its natural position and size: re-read the measured heights
-    /// from it, then place the rows into the panel again.
-    fn on_layout(&mut self) {
-        // **The viewport the engine was told to compute against**, which it records on every node
-        // (`Base::viewport`) — known one whole frame earlier than the paint that used to be the
-        // only source. Without it the first frame after the palette opens places its rows against a
-        // fallback panel and the text lands off the panel.
+    fn tick(&mut self, dt: f32) -> bool {
+        // **Closing resets it, whichever way it closed** — its dismiss key, a choice, a click
+        // outside, a host writing the signal: one edge, so no path forgets the reset.
         //
-        // It used to read its OWN bounds, on the assumption "the root fills the viewport". That
-        // holds when the palette is mounted as a full-size layer, as the app mounts it, and not
-        // when a host puts it in a column of overlays, as the showcase does — there its bounds are
-        // whatever the flex gave it, the panel is computed against the wrong box, and every row's
-        // text lands 76px above the row it belongs to while the icons and keycaps (painted from the
-        // panel, not placed) stay put. A widget must not infer the viewport from where it happens
-        // to be mounted; the framework already records it.
-        let size = self.base.viewport;
-        if size.w > 0.0 && size.h > 0.0 && size.w.is_finite() && size.h.is_finite() {
-            self.viewport.set(size);
+        // The panel ticks first, so a dismissal written since the last frame has already started
+        // its exit by the time anything here asks whether it is on screen.
+        // The panel put in step first (built, the first time), as layout, events and focus do.
+        crate::builders::apply_bound(&mut self.base);
+        let mut animating = false;
+        for child in self.base.children.iter_mut() {
+            animating |= child.tick(dt);
         }
-        self.natural_h = self
-            .base
-            .children
-            .iter()
-            .map(|c| c.base().bounds.size.h)
-            .collect();
-        self.place_rows();
-        let (_, target, _) = self.layout(&self.results());
-        let query = self.base.children.last_mut().expect("query child").as_mut();
-        let current = query.base().bounds;
-        crate::component::shift_subtree(
-            query,
-            target.loc.x - current.loc.x,
-            target.loc.y - current.loc.y,
-        );
+        let open = self.is_open();
+        if self.was_open && !open {
+            self.reset();
+        }
+        self.was_open = open;
+        if open {
+            self.sync_query();
+            self.follow_pointed();
+            self.take_pick();
+        }
+        animating
     }
 
-    /// The palette paints its panel on the overlay layer, not at its layout `bounds`.
-    fn damage_bounds(&self) -> Rectangle {
-        if self.is_open() {
-            self.panel.get()
-        } else {
-            // Closed, it damages like any other widget — its own box plus its bubble, which draws
-            // on the overlay layer outside that box.
-            crate::widgets::tooltip::damage(&self.base)
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        // A click on a row bubbles here after the row recorded it: act on it now, not a frame late.
+        if self.is_open() && matches!(ev, Event::Click(_)) && self.take_pick() {
+            return Handled::Yes;
         }
-    }
-
-    /// Its **input** surface is the panel while open, and nothing while closed.
-    fn hit_bounds(&self) -> Option<Rectangle> {
-        if self.is_open() {
-            Some(self.panel.get())
-        } else {
-            None
-        }
+        Handled::No
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
@@ -166,6 +122,15 @@ impl Component for CommandPalette {
                 Handled::Yes
             }
             Event::Widget(WidgetIntent::Complete) => self.complete_selected(),
+            // **Tab completes before it traverses.** The keymap offers a plain key raw first, and
+            // the overlay the palette sits in takes a raw Tab to move focus — so `complete = "Tab"`
+            // would never reach the palette. A selected row with a completion takes it here;
+            // anything else passes on to the overlay's traversal, as the config promises
+            // ("complete a selected suggestion; otherwise normal focus traversal").
+            Event::Key {
+                key: crate::component::GridKey::Tab,
+                pressed: true,
+            } if !crate::event::modifiers().shift => self.complete_selected(),
             Event::Widget(
                 intent @ (WidgetIntent::MenuHistoryUp | WidgetIntent::MenuHistoryDown),
             ) => {
@@ -180,48 +145,33 @@ impl Component for CommandPalette {
                 }
                 Handled::Yes
             }
-            Event::PointerDownOutside(_) => {
-                self.dismiss();
-                Handled::No
-            }
             _ => Handled::No,
         }
     }
+}
 
-    // The query consumes its own presses and edits. Only unhandled row input bubbles here.
-    fn on_event(&mut self, ev: &Event) -> Handled {
-        if !self.is_open() {
-            return Handled::No;
+impl CommandPalette {
+    /// **A row the pointer moved onto is the selected one** — the list selected it by position.
+    fn follow_pointed(&mut self) {
+        if let Some(at) = self.list_selected.get_untracked()
+            && at != self.selected
+        {
+            self.selected = at;
+            self.sync_view();
         }
-        match ev {
-            Event::PointerMove(p) => {
-                let results = self.results();
-                let (panel, _, list_top) = self.layout(&results);
-                let selected = self
-                    .row_rects(&results, panel, list_top)
-                    .into_iter()
-                    .find_map(|(index, row)| row.contains(p.pos).then_some(index));
-                if let Some(selected) = selected
-                    && selected != self.selected
-                {
-                    self.selected = selected;
-                    self.sync_wrap();
-                }
-                Handled::Yes
-            }
-            Event::PointerDown(p) => {
-                let results = self.results();
-                let (panel, _, list_top) = self.layout(&results);
-                for (index, row) in self.row_rects(&results, panel, list_top) {
-                    if row.contains(p.pos) {
-                        self.selected = index;
-                        self.run_selected();
-                        break;
-                    }
-                }
-                Handled::Yes
-            }
-            _ => Handled::No,
+    }
+
+    /// **Run the row the pointer chose** since the last look. `true` when there was something to act on.
+    fn take_pick(&mut self) -> bool {
+        let Some(pick) = self.picks.take() else {
+            return false;
+        };
+        let Pick::Choose(index) = pick;
+        if let Some(at) = self.results().iter().position(|r| r.index == index) {
+            self.selected = at;
+            self.sync_view();
+            self.run_selected();
         }
+        true
     }
 }

@@ -39,7 +39,7 @@ pub use chrome::{
     BuildCx, ChromeEvent, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution,
     Contribution, PlaceDock, RegionId, RegionSet, fires, picks, regions,
 };
-pub use chrome::{PaletteItem, PaletteRows};
+pub use chrome::{IntoPaletteItems, PaletteItem, PaletteList, PaletteRow, PaletteRows};
 pub use components::FolderLine;
 pub use entry::{
     ActionCatalogSnapshot, ActionCx, ActionRequest, ActionResult, Extension, ExtensionConfigError,
@@ -700,6 +700,11 @@ pub fn run(app_name: impl Into<String>) {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if crate::app::cli::run_if_requested(&args) {
         return;
+    }
+    // **The launcher the agents' integrations run now runs this heca** — so a hook installed from a
+    // build that has since gone works again the moment any heca opens. See `agent::launcher`.
+    if let Err(error) = crate::agent::launcher::refresh() {
+        eprintln!("[heca] could not point the agent launcher at this heca: {error}");
     }
     let event_loop = EventLoop::<AppEvent>::with_user_event()
         .build()

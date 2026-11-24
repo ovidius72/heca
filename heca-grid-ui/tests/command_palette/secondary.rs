@@ -133,11 +133,11 @@ fn opening_in_the_mode_announces_it_whichever_order_the_builders_ran_in() {
     }
 }
 
-/// **A selected row's second line is readable, and in the theme's colours.** `muted` is nearly the
-/// selection fill, so the selected row's description and detail are drawn in the foreground the title
-/// uses, at the overlay hint alpha; every other row keeps `muted`.
+/// **A row's second line is muted, selected or not** — the description and the detail are drawn in
+/// the theme's `muted` on every row; the selection is the row's fill and outline, not a change of
+/// ink. (The hand-drawn palette once brightened the selected row's second line.)
 #[test]
-fn the_selected_rows_secondary_text_uses_the_selected_ink_and_the_others_stay_muted() {
+fn every_rows_secondary_text_stays_muted_selected_or_not() {
     let mut theme = Theme::default();
     // Distinct, so a colour taken from the wrong token cannot pass by coincidence.
     theme.colors.muted = heca_grid_ui::Color::rgb(10, 20, 30);
@@ -154,48 +154,35 @@ fn the_selected_rows_secondary_text_uses_the_selected_ink_and_the_others_stay_mu
                 .detail("second detail"),
         )
         .default_open(true);
-    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
-    let scene = common::paint_in(&p, &theme, Size::new(1200.0, 800.0));
-    let colour = |text: &str| {
-        common::texts(&scene)
-            .into_iter()
-            .find(|t| t.text == text)
-            .unwrap_or_else(|| panic!("{text} is painted"))
-            .color
+    let viewport = Size::new(1200.0, 800.0);
+    let colours = |p: &mut CommandPalette| {
+        LayoutEngine::new().compute(p, viewport);
+        let scene = common::paint_in(p, &theme, viewport);
+        [
+            "first description",
+            "first detail",
+            "second description",
+            "second detail",
+        ]
+        .map(|text| {
+            common::texts(&scene)
+                .into_iter()
+                .find(|t| t.text == text)
+                .unwrap_or_else(|| panic!("{text} is painted"))
+                .color
+        })
     };
-    let selected_ink = theme
-        .colors
-        .foreground
-        .with_alpha(theme.colors.interaction.menu_shortcut);
-    for text in ["first description", "first detail"] {
-        assert_eq!(
-            colour(text),
-            selected_ink,
-            "{text}: the selected row (the first)"
-        );
-    }
-    for text in ["second description", "second detail"] {
-        assert_eq!(
-            colour(text),
-            theme.colors.muted,
-            "{text}: an unselected row"
-        );
-    }
-    assert_ne!(colour("first description"), colour("second description"));
-
-    // Moving the selection moves the ink with it.
+    assert_eq!(
+        colours(&mut p),
+        [theme.colors.muted; 4],
+        "the first row selected"
+    );
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuDown));
-    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
-    let scene = common::paint_in(&p, &theme, Size::new(1200.0, 800.0));
-    let after = |text: &str| {
-        common::texts(&scene)
-            .into_iter()
-            .find(|t| t.text == text)
-            .unwrap()
-            .color
-    };
-    assert_eq!(after("second description"), selected_ink);
-    assert_eq!(after("first description"), theme.colors.muted);
+    assert_eq!(
+        colours(&mut p),
+        [theme.colors.muted; 4],
+        "the second row selected"
+    );
 }
 
 /// **A row can carry something after its title** — drawn on the title's line, to its right, inside

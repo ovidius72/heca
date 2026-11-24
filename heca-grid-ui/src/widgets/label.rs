@@ -223,9 +223,13 @@ impl Label {
     ///
     /// Mutually exclusive with `truncate`: a label either cuts or reflows, and the last of the two
     /// setters called wins.
+    ///
+    /// A `bool`, or a value that changes (a `Signal<bool>`, a function reading signals) which the
+    /// label follows in place — a list reflows only its selected row with
+    /// `.wrap(move || selected.get() == Some(index))`.
     #[heca_grid_ui_macros::prop]
-    pub fn wrap(mut self, wrap: bool) -> Self {
-        self.wrap.set(wrap);
+    pub fn wrap(mut self, wrap: impl crate::builders::IntoBoolValue) -> Self {
+        wrap.into_bool_value().show_in(self.wrap);
         // Shrinkable either way: a label that cannot be handed less than its natural width neither
         // wraps nor cuts, because there is never less width to work in.
         self.base.style.layout.flex_shrink = Some(1.0);
@@ -284,9 +288,12 @@ impl Label {
     /// ignored — a caller's indices and a signal-driven text can disagree for a frame.
     ///
     /// Empty (the default) means the label paints exactly one text run, as it always has.
+    ///
+    /// Fixed (`[0, 1, 6]`, a `Vec`) or live (a `Signal<Vec<usize>>`, a function reading signals),
+    /// followed in place — a search list re-marks its rows on every keystroke with nothing rebuilt.
     #[heca_grid_ui_macros::host_only("a list of indices, not a scalar")]
-    pub fn marks(self, indices: impl IntoIterator<Item = usize>) -> Self {
-        self.marks.set(indices.into_iter().collect());
+    pub fn marks(self, indices: impl crate::builders::IntoMarks) -> Self {
+        indices.into_marks().show_in(self.marks);
         self
     }
 

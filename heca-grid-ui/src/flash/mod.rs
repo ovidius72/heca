@@ -16,7 +16,7 @@ enum Playback {
     Repeat { duration: Option<Duration> },
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Request {
     started: Instant,
     tone: Tone,
@@ -29,7 +29,7 @@ struct Request {
 /// says its timing is. `until` is the end of a whole cycle past `at`: a flash nobody paints any more
 /// (its row scrolled away, its pane in another workspace, the sidebar hidden) is not on screen, and a
 /// wake that is only ever overdue would wake the host again the moment it went back to sleep.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Booked {
     at: Instant,
     until: Instant,

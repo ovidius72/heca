@@ -55,6 +55,24 @@ builder!(
 );
 
 builder!(
+    /// **A long list that builds only what is on screen**, with a selection the arrows and
+    /// `Ctrl+j`/`Ctrl+k` move and Enter or a click chooses. Its children are the items, any kind;
+    /// `on_activate` gets the chosen item's position as `index`, `on_move` the newly selected one.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// let rooms = List::new()
+    ///     .selected(0)
+    ///     .on_activate(Intent::new("rooms.join"))
+    ///     .child(Label::new("lobby"))
+    ///     .child(Label::new("kitchen"));
+    /// ```
+    List => List
+);
+
+builder!(
     /// A titled panel: heading, a rule under it, then body.
     Panel => Panel
 );
@@ -95,8 +113,8 @@ builder!(
     /// **A picker over its own children.** Open it and everything pickable beneath wears a letter;
     /// typing one runs that node's `hint`. A transparent wrapper the rest of the time.
     ///
-    /// [`opens_on`](KeyHintGroup::opens_on) is the whole of it — see there for why a picker needs
-    /// no key of its own and no state from the host.
+    /// [`open`](KeyHintGroup::open) is the whole of it — see there for why a picker needs no key of
+    /// its own and no state from the host.
     KeyHintGroup => KeyHintGroup
 );
 
@@ -131,6 +149,7 @@ impl Resizable {
     }
 }
 impl Parent for Card {}
+impl Parent for List {}
 impl Parent for Scroll {}
 impl Parent for Panel {}
 impl Parent for Surface {}
@@ -271,14 +290,15 @@ impl MarkerGroup {
 }
 
 impl KeyHintGroup {
-    /// **The verb that opens this picker** — one string, and the picker is yours.
+    /// **The action that opens this picker** — one string, and the picker is yours. The same
+    /// `open` every surface that comes and goes takes (natively it also takes a signal).
     ///
     /// ```
     /// use heca_view::build::*;
     /// use heca_view::Intent;
     ///
     /// let panel = KeyHintGroup::new()
-    ///     .opens_on("mypanel.pick")
+    ///     .open("mypanel.pick")
     ///     .child(Row::new().on_hint(Intent::new("docker.restart")));
     /// ```
     ///
@@ -289,11 +309,11 @@ impl KeyHintGroup {
     /// ```
     ///
     /// A picker is otherwise the one thing a description could not have: natively it is a signal,
-    /// an `open_when` binding it and an `on_action` closure that flips it — three things static
+    /// an `open` binding it and an `on_action` closure that flips it — three things static
     /// data cannot carry. The widget owns all three behind this name, so a described picker is the
     /// native one and not a cut-down copy.
-    pub fn opens_on(self, action: impl Into<String>) -> Self {
-        self.prop("opens_on", PropValue::Text(action.into()))
+    pub fn open(self, action: impl Into<String>) -> Self {
+        self.prop("open", PropValue::Text(action.into()))
     }
 
     /// **Which set of targets this picker letters.** Unset — the default — means the ordinary
@@ -306,8 +326,8 @@ impl KeyHintGroup {
     /// use heca_view::Intent;
     ///
     /// // Two pickers over the same cards. The first letters the cards, the second only the ⊠s.
-    /// let jump  = KeyHintGroup::new().opens_on("map.jump");
-    /// let close = KeyHintGroup::new().opens_on("map.close").scope("close");
+    /// let jump  = KeyHintGroup::new().open("map.jump");
+    /// let close = KeyHintGroup::new().open("map.close").scope("close");
     /// ```
     ///
     /// A picker whose scope matches nothing shows **no letters** rather than falling back to
@@ -326,6 +346,12 @@ impl Panel {
 }
 
 impl Overlay {
+    /// **The action that opens this surface** — a key bound to the name, RPC or a plugin opens it.
+    /// The same `open` every surface that comes and goes takes (natively it also takes a signal).
+    pub fn open(self, action: impl Into<String>) -> Self {
+        self.prop("open", PropValue::Text(action.into()))
+    }
+
     /// **Which control the keyboard starts on**, named by its `key`.
     ///
     /// ```
@@ -351,13 +377,29 @@ impl Overlay {
     pub fn animation(self, animation: ViewAnimation) -> Self {
         self.prop("animation", animation)
     }
+    /// **Where the panel goes**: `"center"` (the default) or `"top"` — centred across, in the upper
+    /// part of the window, so a list that grows downward has room (a command palette).
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    ///
+    /// let finder = Overlay::new().position("top").child(Label::new("…"));
+    /// ```
+    pub fn position(self, position: &str) -> Self {
+        self.prop("position", PropValue::Text(position.to_string()))
+    }
+    /// **The arrows across the panel move the keyboard, as Tab does** — for a panel whose controls
+    /// are a row of buttons. Off by default.
+    pub fn item_keys(self, on: bool) -> Self {
+        self.prop("item_keys", PropValue::Bool(on))
+    }
     /// Modal (the default): a dimming scrim, and outside input swallowed. Off, outside input falls
     /// through to the page — a light-dismiss popover.
     pub fn blocking(self, on: bool) -> Self {
         self.prop("blocking", PropValue::Bool(on))
     }
     /// Whether it starts up. The starting value only — to follow state you hold, the host binds a
-    /// signal with `open_when`. A surface **born** open is already there and plays no arrival; one
+    /// signal with `open`. A surface **born** open is already there and plays no arrival; one
     /// that *becomes* open arrives.
     pub fn default_open(self, on: bool) -> Self {
         self.prop("default_open", PropValue::Bool(on))
@@ -374,6 +416,17 @@ impl Overlay {
     /// `false` puts the content straight on the backdrop — mirrors grid-ui `Overlay::decorated`.
     pub fn decorated(self, on: bool) -> Self {
         self.prop("decorated", PropValue::Bool(on))
+    }
+}
+
+impl List {
+    /// The item selected to begin with, by position.
+    pub fn selected(self, index: usize) -> Self {
+        self.prop("selected", PropValue::Int(index as i64))
+    }
+    /// The width of the selected item's outline; unset, the theme's ring.
+    pub fn border_width(self, width: f64) -> Self {
+        self.prop("border_width", PropValue::Float(width))
     }
 }
 

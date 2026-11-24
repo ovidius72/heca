@@ -47,7 +47,18 @@ fn keycap_size_cells(font: f32, cells: usize) -> Size {
 
 /// Visual style of a keycap chip painted by [`paint_keycap`]. The caller picks a
 /// semantic variant; [`paint_keycap`] owns the styling (all values from the theme).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    heca_grid_ui_macros::PropName,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum KeycapVariant {
     /// Solid glowing chip — opaque base + accent tint + dark glyph. The default
     /// hint/pick look, stamped over arbitrary content (terminal hyperlink spans,

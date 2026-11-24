@@ -110,6 +110,15 @@ value_set! {
 }
 
 value_set! {
+    /// A keycap chip's look — mirrors grid-ui `KeycapVariant`: `Filled` (a solid glowing chip,
+    /// legible over anything) or `Bordered` (a quiet outlined chip on a panel of its own).
+    pub enum ViewKeycapVariant {
+        Filled => "filled",
+        Bordered => "bordered",
+    }
+}
+
+value_set! {
     /// **What a keycap means** — mirrors grid-ui `HintTone`. The theme picks the colour, so a letter
     /// follows a theme reload and a plugin never writes a hex.
     ///

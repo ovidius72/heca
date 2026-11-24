@@ -32,6 +32,9 @@ pub(crate) use settle::{focus_on_press, holder_path, settle};
 /// has ticked, so what it reads between events (which surface holds the keyboard, which ring to
 /// draw) is current too. Idempotent, and cheap when nothing is pending.
 pub fn settle_focus(root: &mut dyn Component) {
+    // Children that follow a value are put in step first, as the layout pass and the router do, so
+    // a surface whose panel is built on its first use holds the keyboard from the moment it is up.
+    crate::builders::apply_bound_tree(root);
     settle(root);
 }
 

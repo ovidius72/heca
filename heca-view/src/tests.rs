@@ -292,6 +292,7 @@ fn a_value_sets_name_matches_how_it_serializes() {
     check(ViewLabelSide::ALL, ViewLabelSide::name);
     check(ViewTooltipSide::ALL, ViewTooltipSide::name);
     check(ViewHintPlacement::ALL, ViewHintPlacement::name);
+    check(ViewKeycapVariant::ALL, ViewKeycapVariant::name);
     check(ViewNfGlyph::ALL, ViewNfGlyph::name);
     check(ViewDisplay::ALL, ViewDisplay::name);
     check(ViewSpacing::ALL, ViewSpacing::name);

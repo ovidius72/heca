@@ -31,7 +31,7 @@ use crate::input::WmAction;
 
 mod actions;
 mod arguments;
-mod extras;
+mod lists;
 mod model;
 mod modes;
 mod notifications;
@@ -39,7 +39,7 @@ mod sessions;
 mod targets;
 mod windows;
 pub(crate) use arguments::{ask_action_arguments, palette_arguments_given};
-pub use extras::{PaletteItem, PaletteRows};
+pub use lists::{IntoPaletteItems, PaletteItem, PaletteList, PaletteRow, PaletteRows};
 pub(crate) use modes::MODE_NOTIFICATION;
 pub(crate) use sessions::open_session_folder;
 
@@ -110,10 +110,7 @@ pub(crate) fn open_command_palette(
     });
     // What was typed is carried over only if it was typed in the notifications mode; a palette that
     // was in some other mode when the answer came (the key was pressed over it) opens in the mode.
-    let sigil = modes::MODES
-        .iter()
-        .find(|mode| mode.scope == modes::MODE_NOTIFICATION)
-        .map(|mode| mode.sigil);
+    let sigil = lists::find(modes::MODE_NOTIFICATION).and_then(|list| list.sigil);
     let carried = replaced
         .as_ref()
         .map(|up| up.query.get_untracked())
@@ -224,7 +221,7 @@ fn standard_palette(
 ) -> (CommandPalette, Vec<PaletteEntry>) {
     let owners = owners(state);
     let palette = CommandPalette::new()
-        .placeholder("Type a command…")
+        .placeholder(DEFAULT_PLACEHOLDER)
         .search(search_model(
             state,
             modes::MODE_COMMAND,
@@ -243,26 +240,23 @@ fn standard_palette(
     );
     let notification_rows =
         notifications::entries(answered.as_deref().unwrap_or_default(), unix_now());
-    // **What extensions add at the end of a row**, by row id — read where a row becomes a command.
+    // **What `render_item` makes of a row** — heca's lists and an extension's alike.
     let realize = {
         let theme = crate::chrome::chrome_gui_theme(state);
         let sink = emit.intent_sink();
         std::rc::Rc::new(move |node: &heca_view::ViewNode| {
             crate::chrome::realize(node, &theme, &sink, &mut Default::default()).ok()
-        }) as extras::Realize
+        }) as lists::Realize
     };
-    let trailing: std::collections::HashMap<
-        String,
-        std::rc::Rc<dyn Fn() -> heca_grid_ui::WidgetModel>,
-    > = state
+    // A session row says which session it stands for, for an extension adding to it.
+    let sessions: std::collections::HashMap<String, crate::entry::service::SessionEntry> = state
         .client
         .sessions
         .iter()
         .filter_map(|info| {
-            let item = extras::PaletteItem::Session(crate::entry::service::SessionEntry::of(info)?);
             Some((
                 format!("session:{}", info.id.0),
-                extras::trailing_for(item, realize.clone())?,
+                crate::entry::service::SessionEntry::of(info)?,
             ))
         })
         .collect();
@@ -283,27 +277,48 @@ fn standard_palette(
             .and_then(|ws| state.session.index_of(ws)),
     };
     let enter = entering(emit, answered.is_some());
-    modes::populate(
-        palette,
-        modes::MODES,
-        &sources,
-        |row| {
-            let command = row_command(
-                row,
-                group_of(row, &owners),
-                id.submitter(row.id.clone(), emit),
-            );
-            match trailing.get(&row.id) {
-                Some(make) => {
-                    let make = make.clone();
-                    command.trailing(move || make())
-                }
-                None => command,
-            }
-        },
-        enter,
-    )
+    let command = |row: &PaletteEntry, list: &str| {
+        let command = row_command(
+            row,
+            group_of(row, &owners),
+            id.submitter(row.id.clone(), emit),
+        );
+        let item = lists::PaletteItem::of_entry(row.clone(), sessions.get(&row.id).cloned());
+        let rendered = lists::rendered(list, item, realize.clone());
+        let command = match rendered.trailing {
+            Some(make) => command.trailing(move || make()),
+            None => command,
+        };
+        match rendered.custom {
+            Some(make) => command.content(move || make()),
+            None => command,
+        }
+    };
+    let (palette, rows) = modes::populate(palette, &sources, &command, enter);
+    (with_placeholders(palette), rows)
 }
+
+/// **The empty field says what the list shown is for** — a list's `placeholder` while its sigil
+/// leads the query, the palette's own otherwise.
+fn with_placeholders(palette: CommandPalette) -> CommandPalette {
+    let own: Vec<(char, String)> = lists::declared()
+        .into_iter()
+        .filter_map(|list| Some((list.sigil?, list.placeholder?)))
+        .collect();
+    if own.is_empty() {
+        return palette;
+    }
+    let query = palette.query_signal();
+    palette.placeholder(move || {
+        let first = query.get().chars().next();
+        own.iter()
+            .find(|(sigil, _)| Some(*sigil) == first)
+            .map_or_else(|| DEFAULT_PLACEHOLDER.to_string(), |(_, text)| text.clone())
+    })
+}
+
+/// What the empty field says outside any list that names its own.
+const DEFAULT_PLACEHOLDER: &str = "Type a command…";
 
 /// What the palette shows for one row, whichever mode it is in — the one place a [`PaletteEntry`]
 /// becomes a [`Command`]. `on_run` is what choosing it does.

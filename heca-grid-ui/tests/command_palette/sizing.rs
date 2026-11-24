@@ -86,10 +86,10 @@ fn command_palette_describes_a_command_on_a_second_line() {
     );
 }
 
-/// **An action bound three times draws three rows of caps**, and every row of the list reserves the
-/// same width for them — so the chips form a column instead of tracking each label's length.
+/// **An action bound three times draws its bindings side by side**, at the row's right edge, and the
+/// text beside them stops before the first cap — so text and chips never overlap.
 #[test]
-fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
+fn command_palette_sets_a_rows_bindings_side_by_side_at_its_right_edge() {
     use heca_grid_ui::widgets::{KeyCap, NfGlyph};
     use heca_grid_ui::{Command, CommandPalette};
     let theme = Theme::default();
@@ -129,29 +129,31 @@ fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
         .collect();
     rows.sort_by(|a, b| a.partial_cmp(b).unwrap());
     rows.dedup();
-    assert!(
-        rows.len() >= 3,
-        "three bindings ⇒ three stacked rows of caps, got rows at {rows:?}",
+    assert_eq!(
+        rows.len(),
+        1,
+        "three short bindings fit side by side on one line, got rows at {rows:?}",
     );
-    // The label of the *second* command must stop before the column the caps occupy, or text and
-    // chips would overlap on a narrow row.
+    // The row's own title stops before its caps, or text and chips would overlap on a narrow row. A
+    // row with no bindings gives its text the whole width, so only the row's own caps count.
     let leftmost_chip = chips.iter().map(|r| r.loc.x).fold(f64::MAX, f64::min);
     let label = scene
         .iter()
         .find_map(|c| match c {
-            DrawCommand::Text(t) if t.text == "Reload Config" => Some(t.rect),
+            DrawCommand::Text(t) if t.text == "Focus Dock" => Some(t.rect),
             _ => None,
         })
-        .expect("the second command is painted");
+        .expect("the bound command is painted");
     assert!(
         label.loc.x + label.size.w <= leftmost_chip,
-        "the label box ({}) runs into the reserved shortcut column ({leftmost_chip})",
+        "the title box ({}) runs into its own shortcuts ({leftmost_chip})",
         label.loc.x + label.size.w,
     );
 }
 
-/// **A row is as tall as its own content.** One action bound three times must not charge every
-/// other row for three lines — that is a hundred rows of empty space for one command's sake.
+/// **A row bound to many keys stays a line or two tall.** Its bindings wrap onto another line only
+/// when they do not fit, instead of taking a line each — ten one-key bindings (`1` … `0`) once made
+/// a row ten caps tall.
 #[test]
 fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
     use heca_grid_ui::widgets::KeyCap;
@@ -160,11 +162,12 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
     let cap = |s: &str| KeyCap::Text(s.to_string());
     let mut p = CommandPalette::new()
         .command(
-            Command::new("Paste Clipboard", || {})
-                .description("Paste the clipboard.")
-                .keys([cap("⌘"), cap("v")])
-                .keys([cap("^"), cap("⇧"), cap("v")])
-                .keys([cap("λ"), cap("⇧"), cap("p")]),
+            ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+                .into_iter()
+                .fold(
+                    Command::new("Paste Clipboard", || {}).description("Paste the clipboard."),
+                    |c, k| c.keys([cap(k)]),
+                ),
         )
         .command(Command::new("Close Pane", || {}).description("Close the focused pane."))
         .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
@@ -181,13 +184,12 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
             })
             .unwrap_or_else(|| panic!("{text} is painted"))
     };
-    // The three-binding row is tall; the two plain rows after it are not — so the gap between the
-    // two plain rows is strictly smaller than the gap the tall one takes.
+    // The row of ten bindings is at most twice as tall as a plain one: its caps took a line or two.
     let tall_gap = label_y("Close Pane") - label_y("Paste Clipboard");
     let plain_gap = label_y("Reload Config") - label_y("Close Pane");
     assert!(
-        plain_gap < tall_gap,
-        "a row with no bindings ({plain_gap}px) must be shorter than one with three ({tall_gap}px)",
+        tall_gap <= 2.0 * plain_gap,
+        "ten bindings made the row {tall_gap}px tall against {plain_gap}px for a plain one",
     );
 }
 
@@ -203,7 +205,9 @@ fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
     use heca_grid_ui::{Command, CommandPalette};
     let theme = Theme::default();
     let long = "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.";
-    let other = "Re-read config.toml and apply every change without restarting the compositor.";
+    // Longer than any row is wide, so its cut is forced even in a row with no shortcuts.
+    let other = "Re-read config.toml and apply every change without restarting the compositor, \
+                 the panes, the docks, the themes, the fonts or anything else that is running.";
     let mut p = CommandPalette::new()
         .command(
             Command::new("Focus Dock", || {})
@@ -259,36 +263,6 @@ fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
     assert!(
         cut_rect.loc.y > lowest_selected_line,
         "the row below starts under the whole reflowed block, not under its first line",
-    );
-}
-
-/// **The icon column is reserved for every row.** A list where some commands carry a glyph and some
-/// do not must still read as one column of text — indenting only the iconed rows left the others
-/// starting at the panel edge.
-#[test]
-fn command_palette_reserves_the_icon_column_even_for_a_command_without_one() {
-    use heca_grid_ui::{Command, CommandPalette, Glyph};
-    let theme = Theme::default();
-    let mut p = CommandPalette::new()
-        .command(Command::new("With Icon", || {}).icon(Glyph::Search))
-        .command(Command::new("Without Icon", || {}))
-        .default_open(true);
-
-    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
-    let scene = common::paint_in(&p, &theme, Size::new(1200.0, 800.0));
-    let x_of = |text: &str| {
-        scene
-            .iter()
-            .find_map(|c| match c {
-                DrawCommand::Text(t) if t.text == text => Some(t.rect.loc.x),
-                _ => None,
-            })
-            .unwrap_or_else(|| panic!("{text} is painted"))
-    };
-    assert_eq!(
-        x_of("With Icon"),
-        x_of("Without Icon"),
-        "both labels start in the same column, icon or no icon",
     );
 }
 
@@ -368,39 +342,71 @@ fn the_palette_never_runs_off_a_short_window() {
     }
     let mut p = p.default_open(true);
 
-    // The room kept clear beneath the panel, as a fraction of the window height — wider than the
-    // gap at its sides, since a bottom edge resting on a pane boundary still reads as touching.
-    const MIN_GAP_FRAC: f64 = 0.08;
+    // The overlay keeps this much air from every edge of the window, the bottom included.
+    let margin = f64::from(heca_grid_ui::widgets::overlay::VIEWPORT_MARGIN);
     for w in [1280.0, 900.0] {
         for h in 260..=1000 {
             let viewport = Size::new(w, f64::from(h));
+            // Layout, a paint (which tells the overlay the window's size), and layout again.
             LayoutEngine::new().compute(&mut p, viewport);
-            let scene = common::paint_in(&p, &theme, viewport);
-            // The panel is the tallest painted rect that is not the full-viewport scrim.
-            let bottoms: Vec<f64> = scene
-                .iter()
-                .filter_map(|c| match c {
-                    DrawCommand::Rect(r) if r.rect.size.w < viewport.w => {
-                        Some(r.rect.loc.y + r.rect.size.h)
-                    }
-                    _ => None,
-                })
-                .collect();
+            let _ = common::paint_in(&p, &theme, viewport);
+            LayoutEngine::new().compute(&mut p, viewport);
+            let panel = p.base().children[0].base().children[0].base().bounds;
+            let gap = viewport.h - (panel.loc.y + panel.size.h);
             assert!(
-                !bottoms.is_empty(),
-                "at {}x{} nothing painted a panel rect to measure a bottom from",
+                gap >= margin - 0.5 && panel.loc.y >= margin - 0.5,
+                "at {}x{} the panel spans {}..{}px, closer than the {margin}px margin to an edge",
                 viewport.w,
                 viewport.h,
-            );
-            let bottom = bottoms.into_iter().fold(0.0f64, f64::max);
-            let gap = viewport.h - bottom;
-            let want = viewport.h * MIN_GAP_FRAC;
-            assert!(
-                gap >= want - 0.5,
-                "at {}x{} the panel reached {bottom}px, leaving {gap}px under it — it needs {want}px",
-                viewport.w,
-                viewport.h,
+                panel.loc.y,
+                panel.loc.y + panel.size.h,
             );
         }
+    }
+}
+
+/// **A palette opens where it stays** — on the first frame, before anything is painted, its panel
+/// is already in the upper part of the window. A panel placed only after a first paint was drawn
+/// centred for a frame and then jumped up, which read as the palette bouncing in from below.
+#[test]
+fn a_palette_opens_at_the_top_on_its_first_frame() {
+    use heca_grid_ui::widgets::overlay::TOP_POSITION_FRAC;
+    use heca_grid_ui::{Command, CommandPalette};
+    let viewport = Size::new(1280.0, 800.0);
+    let mut p = CommandPalette::new().command(Command::new("Close pane", || {}));
+    heca_grid_ui::reactive::SignalUpdate::set(&p.open_signal(), true);
+    LayoutEngine::new().compute(&mut p, viewport);
+    let panel = p.base().children[0].base().children[0].base().bounds;
+    assert_eq!(
+        panel.loc.y,
+        viewport.h * TOP_POSITION_FRAC,
+        "the first layout already puts the panel at the top"
+    );
+}
+
+/// **A long palette ends at about 60% of the window's height**, at any window height — past that its
+/// list scrolls.
+#[test]
+fn a_long_palette_ends_at_about_sixty_percent_of_the_window() {
+    use heca_grid_ui::{Command, CommandPalette};
+    let mut p = CommandPalette::new();
+    for i in 0..300 {
+        p = p.command(Command::new(format!("Command {i}"), || {}).description("does things"));
+    }
+    let mut p = p.default_open(true);
+    for h in [600.0, 900.0, 1400.0] {
+        let viewport = Size::new(1400.0, h);
+        for _ in 0..4 {
+            p.tick(0.016);
+            LayoutEngine::new().compute(&mut p, viewport);
+            let _ = common::paint_in(&p, &Theme::default(), viewport);
+        }
+        let panel = p.base().children[0].base().children[0].base().bounds;
+        let bottom = (panel.loc.y + panel.size.h) / h;
+        assert!(
+            (0.58..0.63).contains(&bottom),
+            "in a window {h} tall the panel ends at {:.0}%",
+            bottom * 100.0
+        );
     }
 }

@@ -35,6 +35,17 @@ builder!(
     StatusDot => StatusDot
 );
 
+builder_text!(
+    /// **One key, drawn as a chip** — `Keycap::new("K")`. A shortcut is a row of them.
+    Keycap => Keycap
+);
+impl Keycap {
+    /// The chip's look: `Filled` (the default) or `Bordered`.
+    pub fn variant(self, variant: crate::ViewKeycapVariant) -> Self {
+        self.prop("variant", variant)
+    }
+}
+
 builder!(
     /// **How many rows wanting attention are out of sight**, on the edges of a `Scroll` it is
     /// pinned in — `Scroll::new().pinned(EdgeHint::new())`. A click reveals and activates the

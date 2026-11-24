@@ -33,6 +33,11 @@ impl Component for Overlay {
     /// trigger rect (idempotent — see `place_panel`).
     /// [`Center`](OverlayPosition::Center) mode keeps taffy's centering untouched.
     fn on_layout(&mut self) {
+        // A panel narrowed to the room lays out again at its new limits, the next pass.
+        if self.fit_panel_to_room() {
+            self.base.mark_needs_layout();
+            crate::component::request_frame();
+        }
         self.place_panel();
     }
 
@@ -245,6 +250,14 @@ impl Component for Overlay {
             } => {
                 let forward = !crate::event::modifiers().shift;
                 Component::advance_focus(self, forward);
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::ItemNext) if self.item_keys => {
+                Component::advance_focus(self, true);
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::ItemPrevious) if self.item_keys => {
+                Component::advance_focus(self, false);
                 Handled::Yes
             }
             Event::Widget(WidgetIntent::Dismiss) => match &self.on_dismiss {

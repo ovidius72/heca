@@ -79,11 +79,11 @@ pub(crate) use surfaces::overlay::{
     ModalAction, ModalResult, ModalSpec, OverlayHost, collect_form as collect_overlay_form,
     content_covered, discard_overlays, open_modal, resolve as resolve_overlay, top_modal,
 };
+pub use surfaces::palette::{IntoPaletteItems, PaletteItem, PaletteList, PaletteRow, PaletteRows};
 pub(crate) use surfaces::palette::{
     MODE_NOTIFICATION, OpenPalette, ask_action_arguments, open_command_palette,
     open_session_folder, palette_arguments_given,
 };
-pub use surfaces::palette::{PaletteItem, PaletteRows};
 
 // ── window ──
 pub use window::division::ChromeConfig;

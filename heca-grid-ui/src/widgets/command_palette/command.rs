@@ -19,9 +19,8 @@ pub struct Command {
     pub(super) description_path: bool,
     pub(super) detail: Option<String>,
     pub(super) icon: Option<Glyph>,
-    /// One entry per **binding**, each a chord of caps (`[λ] [⇧] [e]`). Several bindings stack, one
-    /// per line — an action bound twice really is bound twice, and joining them into `"λ h / λ ←"`
-    /// was both wider than the label and impossible to draw as chips.
+    /// One entry per **binding**, each a chord of caps (`[λ] [⇧] [e]`). Several bindings sit side by
+    /// side and wrap when they do not fit — an action bound twice really is bound twice.
     pub(super) chords: Vec<Vec<KeyCap>>,
     /// Is this the row the user is already on? Drawn in the accent so it can be found at a glance.
     /// Distinct from the *selection*, which is where the keyboard is right now.
@@ -35,6 +34,8 @@ pub struct Command {
     pub(super) mode: Option<String>,
     /// What sits at the end of the row's first line, after the title — made each time the row is.
     pub(super) trailing: Option<std::rc::Rc<dyn Fn() -> crate::WidgetModel>>,
+    /// What the row shows instead of the palette's own (icon, title, description, keys), when set.
+    pub(super) content: Option<std::rc::Rc<dyn Fn() -> crate::WidgetModel>>,
     pub(super) on_run: Box<dyn Fn()>,
 }
 
@@ -57,6 +58,7 @@ impl Command {
             preselect: false,
             mode: None,
             trailing: None,
+            content: None,
             on_run: Box::new(on_run),
         }
     }
@@ -186,6 +188,24 @@ impl Command {
         self
     }
 
+    /// **What the row shows instead of the palette's own** — any widget, in place of the icon, the
+    /// title, the description and the keys; the row's selection, hover and choice stay the list's.
+    /// Handed as a way to **make** it, as [`trailing`](Self::trailing) is, because a row can be built
+    /// more than once. The label is still what is matched and ranked; drawing the match is the
+    /// content's own business.
+    ///
+    /// ```ignore
+    /// Command::new("crimson", run).content(|| Flex::row().child([swatch("#dc143c"), Label::new("crimson")]))
+    /// ```
+    #[heca_grid_ui_macros::host_only("a function cannot cross as a static property")]
+    pub fn content<C: crate::builders::IntoComponent>(
+        mut self,
+        make: impl Fn() -> C + 'static,
+    ) -> Self {
+        self.content = Some(std::rc::Rc::new(move || make().into_component()));
+        self
+    }
+
     /// An optional leading icon.
     #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
@@ -194,10 +214,10 @@ impl Command {
     }
 
     /// Add one **binding**, as the caps of its chord — `[Text("λ"), Nf(Shift), Text("e")]` draws
-    /// `[λ] [⇧] [e]`, right-aligned in the list's reserved shortcut column.
+    /// `[λ] [⇧] [e]` at the right edge of the row.
     ///
-    /// Call it once per binding: a second call stacks a second row of chips under the first, rather
-    /// than replacing it or running the two together on one line.
+    /// Call it once per binding: the bindings sit side by side, a chord's caps kept together, and
+    /// wrap onto another line only when they do not fit.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar")]
     pub fn keys(mut self, chord: impl IntoIterator<Item = KeyCap>) -> Self {
         let chord: Vec<KeyCap> = chord.into_iter().collect();

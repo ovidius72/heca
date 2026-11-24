@@ -94,7 +94,7 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
     // callbacks only name their action.
     let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
         KeyHintGroup::new(stack)
-            .open_when(state.notification_pick_open)
+            .open(state.notification_pick_open)
             .on_dispatch(move |intent| emit.fire_intent(intent)),
     );
     // **It says what it is, like every other surface** — and what it says is "nothing".

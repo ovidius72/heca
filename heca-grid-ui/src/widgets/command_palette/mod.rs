@@ -31,38 +31,28 @@
 //! action as an `Intent`; the native host supplies live rows and callbacks. The complete
 //! native and declarative examples and API tables are in `docs/widgets.md`.
 //!
-//! The existing drawing code still positions the panel and forwards input to an off-tree
-//! query field. Those paths live in `geometry`, `paint` and `component`; mode declarations
-//! and named prefill live in `modes`.
+//! **It is composed, not drawn**: an [`Overlay`] holds the query field over a scrolling list of
+//! rows that follow the ranked results — see `view`. Nothing in the palette positions, measures or
+//! hit-tests; mode declarations and named prefill live in `modes`.
 
-use crate::builders::{FocusExt, LayoutExt, Parent};
-use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
-use crate::font::MONO_LINE_RATIO;
+use crate::builders::LayoutExt;
+use crate::component::{Base, Component, Event, Handled, WidgetIntent};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::Glow;
 use crate::search::{Ranked, SearchAction, SearchModel};
-use crate::style::WidgetSize;
-use crate::style::{Direction, Length};
-use crate::widgets::{
-    Ellipsis, Flex, Glyph, Input, KeyCap, KeycapVariant, Label, PanelChrome, PanelElevation,
-    paint_panel_chrome,
-};
-use heca_core::layout::{Point, Rectangle, Size};
-use std::cell::Cell;
+use crate::style::{Length, WidgetSize};
+use crate::widgets::{Glyph, KeyCap};
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 mod command;
 mod component;
-mod geometry;
 mod metrics;
 mod modes;
-mod paint;
-#[cfg(test)]
-mod pointer_tests;
 mod search;
 mod source;
+mod view;
 
 pub use command::Command;
-use metrics::*;
 
 /// A fuzzy command launcher.
 pub struct CommandPalette {
@@ -78,29 +68,33 @@ pub struct CommandPalette {
     /// Builder input kept until a named mode can be resolved. The query field
     /// remains the sole mode selector; editing or replacing it clears this input.
     named_prefill: Option<(String, String)>,
-    /// The value of the query Input, which lives after the result rows in `Base.children`.
+    /// The value of the query [`Input`].
     query: Signal<String>,
     /// A typed edit asks the palette to reset ranking/history before its next read or action.
     query_changed: Signal<bool>,
+    /// The selected row, as a position in the ranked results.
     selected: usize,
-    scroll: usize,
-    placeholder: String,
+    /// The query field's placeholder — the field follows it.
+    placeholder: Signal<String>,
     /// How roomy the panel is — width and row count, never font. Set from the app's
-    /// `[settings] command_palette_size`.
-    panel_size: WidgetSize,
+    /// `[settings] command_palette_size`; the panel's body and list read it for their own size.
+    panel_size: Signal<WidgetSize>,
     open: Signal<bool>,
+    /// Whether it was open at the last tick, so closing — by any path — resets it once.
+    was_open: bool,
     on_dismiss: Option<Box<dyn Fn()>>,
-    viewport: Cell<Size>,
-    /// Panel rect cached at paint, so the caret blink can damage just the panel
-    /// (the palette paints on the overlay layer, away from its layout `bounds`).
-    panel: Cell<Rectangle>,
-    /// Each row's **measured** height, captured post-layout while the children are still at their
-    /// natural, engine-computed sizes — the same trick [`Select`](super::Select) uses.
-    ///
-    /// This is what makes a wrapping description reflow the list: the palette no longer computes a
-    /// row's height from a line count, it reads what the engine measured, so a description that
-    /// wrapped onto three lines moves the rows below it without a line of arithmetic here.
-    natural_h: Vec<f64>,
+    /// What each row shows, by command index — read by the view to build a row.
+    rows: Rc<RefCell<Vec<view::RowData>>>,
+    /// The commands shown, in rank order, for the view's rows to follow.
+    shown: Signal<Vec<(u64, usize)>>,
+    /// Bumped when a live source replaces the commands, so the rows are made again.
+    generation: u64,
+    /// The selected command, by index — what each row's "am I selected" reads.
+    selected_command: Signal<Option<usize>>,
+    /// The selected row by position — the list's selection, which the pointer moves too.
+    list_selected: Signal<Option<usize>>,
+    /// What a pointer did to a row since the last tick.
+    picks: Rc<Cell<Option<view::Pick>>>,
     /// Matching, ranking by past use, and the query history — **embedded, not implemented**. Every
     /// call below delegates; this widget owns no matcher and walks no history.
     search: SearchModel,
@@ -111,11 +105,6 @@ pub struct CommandPalette {
     /// to follow something live (a pane's process, a rename). Writing one is a text swap on that
     /// label alone; the palette reads them back when it ranks, so what is matched is what is shown.
     title_text: Vec<Signal<String>>,
-    /// The wrap signal of each row's description, where it has one. **Only the selected row's
-    /// description reflows**; the rest are cut to one line, which is what keeps the list from
-    /// exploding to three lines a row and is why this is per-row state rather than a build-time
-    /// property.
-    desc_wrap: Vec<Option<Signal<bool>>>,
     /// The marks signal of each row's description label, where it has one — what shows the query's
     /// match **in the description** for a mode that matches it
     /// ([`match_description_in`](Self::match_description_in)).
@@ -126,25 +115,42 @@ pub struct CommandPalette {
     mode_enter: Vec<modes::ModeEnter>,
     /// The scope the open palette was last seen in, so entering is announced once, not on every key.
     entered: std::cell::RefCell<Option<String>>,
+    /// What the panel is built from.
+    view: Rc<RefCell<view::ViewState>>,
 }
 
 #[heca_grid_ui_macros::props]
 impl CommandPalette {
     /// A new, empty (closed) palette.
     pub fn new() -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
+        // It fills whatever holds it; the overlay inside centres the panel in the viewport.
+        base.style.layout.width = Length::FULL;
+        base.style.layout.height = Length::FULL;
         let open = base.open;
-        // The palette owns modal containment; its child Input owns the keyboard.
-        base.follow_focus_modal(open);
-        // **A palette locks because it is a palette.** It has the keyboard for its query line,
-        // and nothing behind it should be acted on while you are typing into it.
-        base.lock = true;
         let query_changed = signal(false);
-        let placeholder = String::from("Type a command…");
-        let query_field =
-            Self::query_field(open, query_changed, String::new(), placeholder.clone());
-        let query = query_field.text_signal();
-        base.children.push(crate::WidgetModel::new(query_field));
+        let placeholder = signal(String::from("Type a command…"));
+        let query = signal(String::new());
+        let rows = Rc::new(RefCell::new(Vec::new()));
+        let shown = signal(Vec::new());
+        let selected_command = signal(None);
+        let list_selected = signal(None);
+        let picks = Rc::new(Cell::new(None));
+        let panel_size = signal(WidgetSize::Normal);
+        let view = view::ViewState {
+            rows: rows.clone(),
+            results: shown,
+            selected: selected_command,
+            list_selected,
+            picks: picks.clone(),
+            size: panel_size,
+            open,
+            query,
+            query_changed,
+            placeholder,
+        };
+        let view = Rc::new(RefCell::new(view));
+        Self::attach_panel(&mut base, &view);
         Self {
             base,
             commands: Vec::new(),
@@ -154,38 +160,26 @@ impl CommandPalette {
             query,
             query_changed,
             selected: 0,
-            scroll: 0,
             placeholder,
-            panel_size: WidgetSize::Normal,
+            panel_size,
             open,
+            was_open: false,
             on_dismiss: None,
-            viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
-            panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
+            rows,
+            shown,
+            generation: 0,
+            selected_command,
+            list_selected,
+            picks,
             search: SearchModel::detached("command"),
-            natural_h: Vec::new(),
             title_marks: Vec::new(),
             title_text: Vec::new(),
-            desc_wrap: Vec::new(),
             desc_marks: Vec::new(),
             describe_scopes: Vec::new(),
             mode_enter: Vec::new(),
             entered: Default::default(),
+            view,
         }
-    }
-
-    /// Build the one query control; all editing stays in Input.
-    fn query_field(
-        open: Signal<bool>,
-        changed: Signal<bool>,
-        text: String,
-        placeholder: String,
-    ) -> Input {
-        Input::new()
-            .value(text)
-            .placeholder(placeholder)
-            .placeholder_on_focus(true)
-            .follow_focus(open)
-            .on_change(move |_| changed.set(true))
     }
 
     fn sync_query(&mut self) {
@@ -197,11 +191,10 @@ impl CommandPalette {
 
     /// Add a command.
     ///
-    /// Its text becomes **real children** — a title [`Label`] and, when the command has one, a
-    /// description `Label` — so the cut, the reflow and the match marks are the label's properties
-    /// rather than three things painted by hand here. The icon, the keycap chips and the selection
-    /// chrome stay drawn by the palette: the chips already go through the shared keycap primitive,
-    /// and the rest is panel chrome, not text.
+    /// Its row is composed, like everything else in the palette: an [`Icon`](crate::widgets::Icon),
+    /// a title [`Label`](crate::widgets::Label) and a description `Label` (the cut, the reflow and
+    /// the match marks are theirs), its bindings as [`Keycap`](crate::widgets::Keycap)s, and the
+    /// selection is the [`List`](crate::widgets::List)'s. Only the rows on screen are built.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn command(mut self, c: Command) -> Self {
         self.push_command(c);
@@ -209,53 +202,24 @@ impl CommandPalette {
     }
 
     fn push_command(&mut self, c: Command) {
-        let title = Label::new(c.label.clone()).truncate(Ellipsis::End);
-        self.title_marks.push(title.marks_signal());
-        // The row's text signal, kept so a host can rename a row **in place**. The label is a
-        // `Signal<String>` already, so writing it re-marks that one label instead of rebuilding the
-        // palette — which is what keeps a live list from flashing.
-        self.title_text.push(title.text_signal());
-        // The first line: the title alone, or the title giving way to what the command puts after it.
-        let mut column = match &c.trailing {
-            Some(make) => Flex::column().child(
-                crate::widgets::Grid::new()
-                    .template_column("1fr auto")
-                    .width(crate::style::Length::FULL)
-                    .align("center")
-                    .gap(crate::style::Spacing::Sm)
-                    .child(title)
-                    .child(make()),
-            ),
-            None => Flex::column().child(title),
-        };
-        self.desc_wrap.push(None);
-        self.desc_marks.push(None);
-        if let Some(desc) = &c.description {
-            // Cut by default, reflowed while selected — `sync_wrap` flips it. Because the height is
-            // measured, the reflow moves every row below it.
-            let d = Label::new(desc.clone())
-                .truncate(if c.description_path {
-                    Ellipsis::Start
-                } else {
-                    Ellipsis::End
-                })
-                .wrap(false);
-            if !c.description_path {
-                *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
-            }
-            *self.desc_marks.last_mut().expect("just pushed") = Some(d.marks_signal());
-            column = column.child(d);
-        }
-        if let Some(detail) = &c.detail {
-            column = column.child(
-                Label::new(detail.clone())
-                    .truncate(Ellipsis::End)
-                    .wrap(false),
-            );
-        }
-        self.base
-            .children
-            .insert(self.commands.len(), crate::WidgetModel::new(column));
+        let title = signal(c.label.clone());
+        let title_marks = signal(Vec::new());
+        let description_marks = signal(Vec::new());
+        self.title_text.push(title);
+        self.title_marks.push(title_marks);
+        self.desc_marks
+            .push(c.description.is_some().then_some(description_marks));
+        self.rows.borrow_mut().push(view::RowData {
+            title,
+            title_marks,
+            description: c.description.clone().map(|text| (text, c.description_path)),
+            description_marks,
+            detail: c.detail.clone(),
+            icon: c.icon,
+            chords: c.chords.clone(),
+            trailing: c.trailing.clone(),
+            content: c.content.clone(),
+        });
         self.commands.push(c);
     }
     /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
@@ -266,28 +230,28 @@ impl CommandPalette {
     /// Whatever the variant, the panel never exceeds `PANEL_VIEWPORT_FRAC` of the window, so a
     /// small screen is safe by construction.
     #[heca_grid_ui_macros::prop]
-    pub fn panel_size(mut self, size: WidgetSize) -> Self {
-        self.panel_size = size;
+    pub fn panel_size(self, size: WidgetSize) -> Self {
+        self.panel_size.set(size);
         self
     }
 
-    /// Set the empty-query placeholder text.
+    /// **The empty-query placeholder** — a fixed text, or one that changes (a `Signal<String>`, a
+    /// function reading signals), which the query field follows with nothing rebuilt: a palette
+    /// whose hint names the list it is in changes the hint, not the field.
     #[heca_grid_ui_macros::prop]
-    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
-        self.placeholder = text.into();
-        let field = Self::query_field(
-            self.open,
-            self.query_changed,
-            self.query_text(),
-            self.placeholder.clone(),
-        );
-        self.query = field.text_signal();
-        *self
-            .base
-            .children
-            .last_mut()
-            .expect("palette owns a query child") = crate::WidgetModel::new(field);
+    pub fn placeholder(self, text: impl crate::builders::IntoTextValue) -> Self {
+        text.into_text_value().show_in(self.placeholder);
         self
+    }
+
+    /// **What opens the palette** — your `Signal<bool>`, or the name of the action that opens it
+    /// (`.open("palette.open")`: a key, RPC, a plugin). It closes itself on its dismiss key, a
+    /// choice or a click outside, and writes your signal `false` when it does. The same `.open`
+    /// every surface takes — see [`IntoOpen`](crate::builders::IntoOpen).
+    #[heca_grid_ui_macros::prop]
+    pub fn open(self, by: impl crate::builders::IntoOpen) -> Self {
+        let own = self.open;
+        by.into_open().apply(own, Self::follow_open, self)
     }
 
     /// Open with the query already filled in — including its sigil, which is how a caller opens the
@@ -305,7 +269,7 @@ impl CommandPalette {
         // the wrong list once.
         self.sync_marks();
         self.sync_initial_selection();
-        self.sync_wrap();
+        self.sync_view();
         self.announce_mode();
         self
     }
@@ -318,7 +282,7 @@ impl CommandPalette {
         // place the selection on whichever row asked to start there.
         self.sync_marks();
         self.sync_initial_selection();
-        self.sync_wrap();
+        self.sync_view();
         self.announce_mode();
         self
     }
@@ -384,9 +348,36 @@ impl CommandPalette {
         self.open.get_untracked()
     }
 
+    /// Whether its panel is on screen — open, or still dissolving after it closed.
+    fn panel_shown(&self) -> bool {
+        self.base.children.iter().any(|panel| panel.is_shown())
+    }
+
     /// The current query text (read from the [`Input`]).
     fn query_text(&self) -> String {
         self.query.get_untracked()
+    }
+}
+
+impl CommandPalette {
+    /// Follow `open`: the panel is built on it, so it is up exactly while it is true.
+    fn follow_open(mut self, open: Signal<bool>) -> Self {
+        self.open = open;
+        self.base.open = open;
+        self.view.borrow_mut().open = open;
+        self
+    }
+
+    /// **The palette's one child, its panel — built the first time it is needed**: the first
+    /// layout, or the first event, whichever comes first, when every builder has run. So the panel
+    /// is built once, on the `open` the palette ended up following, and nothing is built again or
+    /// reached into to change it. (The same door as any child that follows a value: a list of one.)
+    fn attach_panel(base: &mut Base, view: &Rc<RefCell<view::ViewState>>) {
+        let view = view.clone();
+        crate::builders::IntoChildren::attach(
+            crate::builders::BoundChildren::new(|| vec![()], move |_| view::view(&view.borrow())),
+            base,
+        );
     }
 }
 

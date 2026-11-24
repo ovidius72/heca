@@ -122,6 +122,8 @@ pub struct Row {
     /// [`reveal_when`](Row::reveal_when).
     reveal: Option<Signal<bool>>,
     marker: ActiveMarker,
+    /// The selection outline's width, when set; `None` draws the theme's glowing ring.
+    border_width: Option<f32>,
     flash: Flash,
     /// Override for the hover/active highlight color. Otherwise selection follows the theme's
     /// selected background and accent border; hover follows the row's background.
@@ -156,6 +158,7 @@ impl Row {
             // sidebar) it came out as two lines side by side. A caller that genuinely wants one
             // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
+            border_width: None,
             flash: Flash::new(),
             highlight: None,
             previous_tint: None,
@@ -240,10 +243,17 @@ impl Row {
         self
     }
 
-    /// Set the active (selected) state.
+    /// **Whether this row is the selected one** — a `bool`, or a value that changes (a
+    /// `Signal<bool>`, a `Memo<bool>`, a function reading signals), which the row follows in place.
+    /// A list hands each row "am I the selected one" once, and moving the selection restyles the
+    /// rows with nothing pushed into them and nothing rebuilt:
+    ///
+    /// ```ignore
+    /// Row::new().active(move || selected.get() == Some(index))
+    /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn active(self, active: bool) -> Self {
-        self.active.set(active);
+    pub fn active(self, active: impl crate::builders::IntoBoolValue) -> Self {
+        active.into_bool_value().show_in(self.active);
         self
     }
 
@@ -251,6 +261,20 @@ impl Row {
     #[heca_grid_ui_macros::prop]
     pub fn marker(mut self, marker: ActiveMarker) -> Self {
         self.marker = marker;
+        self
+    }
+
+    /// **The width of the outline the selected row draws** ([`nav_selected`](Row::nav_selected)),
+    /// the same builder [`Pane::border_width`](crate::widgets::Pane::border_width) is.
+    ///
+    /// Unset (the default), the outline is the theme's glowing ring, bold enough to stand apart
+    /// from a filled "active" row beside it (the workspaces dock). Set, it is a flat line of that
+    /// width over the selection's fill, with no glow — for a list where the selection is the only
+    /// thing marked, so the row reads as highlighted, not boxed (the command palette:
+    /// `Row::new().border_width(1.0)`).
+    #[heca_grid_ui_macros::host_only("unsupported argument type (impl Into<Option<f32>>)")]
+    pub fn border_width(mut self, width: impl Into<Option<f32>>) -> Self {
+        self.border_width = width.into();
         self
     }
 
@@ -280,9 +304,13 @@ impl Row {
     /// Set the sidebar-nav **cursor** state — a hollow outline shown distinctly
     /// from the filled `active` pill (e.g. the workspaces sidebar highlights the
     /// nav cursor while the real focused pane keeps its pill).
+    ///
+    /// A `bool`, or a value that changes, followed in place — a list whose keyboard cursor moves
+    /// hands each row `move || cursor.get() == Some(index)`, and the row draws the outline and
+    /// scrolls itself into view when the cursor reaches it.
     #[heca_grid_ui_macros::prop]
-    pub fn nav_selected(self, on: bool) -> Self {
-        self.nav.set(on);
+    pub fn nav_selected(self, on: impl crate::builders::IntoBoolValue) -> Self {
+        on.into_bool_value().show_in(self.nav);
         self
     }
 
@@ -446,20 +474,35 @@ impl Component for Row {
         //
         // Drawn ALWAYS when nav — even on the active row — for the same reason.
         if self.nav.get_untracked() {
-            cx.rect(
-                sel,
-                accent.with_alpha(0),
-                Some(Border {
-                    color: accent.with_alpha(ia.nav_outline),
-                    width: (sel_border_w * 1.5).max(2.0),
-                }),
-                sel_radius,
-                Some(Glow {
-                    color: glow_c,
-                    radius: 8.0,
-                    intensity: 0.28,
-                }),
-            );
+            match self.border_width {
+                // The theme's ring, drawn over whatever the row already shows.
+                None => cx.rect(
+                    sel,
+                    accent.with_alpha(0),
+                    Some(Border {
+                        color: accent.with_alpha(ia.nav_outline),
+                        width: (sel_border_w * 1.5).max(2.0),
+                    }),
+                    sel_radius,
+                    Some(Glow {
+                        color: glow_c,
+                        radius: 8.0,
+                        intensity: 0.28,
+                    }),
+                ),
+                // A flat line of the given width at half the ring's strength, over the selection's
+                // fill: the selection is the only thing marked.
+                Some(width) => cx.rect(
+                    sel,
+                    selected_bg.with_alpha(ia.row_active_fill),
+                    Some(Border {
+                        color: accent.with_alpha(ia.nav_outline / 2),
+                        width,
+                    }),
+                    sel_radius,
+                    None,
+                ),
+            }
         }
 
         // Active indicator.

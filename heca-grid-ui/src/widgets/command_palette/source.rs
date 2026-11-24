@@ -33,17 +33,13 @@ impl CommandPalette {
             return;
         };
         let rows = source(&self.query_text());
-        let input = self.base.children.pop();
-        self.base.children.clear();
         self.commands.clear();
+        self.rows.borrow_mut().clear();
         self.title_marks.clear();
         self.title_text.clear();
-        self.desc_wrap.clear();
         self.desc_marks.clear();
-        self.natural_h.clear();
-        if let Some(input) = input {
-            self.base.children.push(input);
-        }
+        // New commands under the same indices: the rows are made again, not kept.
+        self.generation += 1;
         for row in rows {
             self.push_command(row);
         }
