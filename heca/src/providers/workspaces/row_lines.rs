@@ -20,7 +20,7 @@ use crate::chrome::panes::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLi
 
 /// The built-in lines; configuration chooses their order and visibility.
 pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
-    let own = |name: &str, build: fn(&LineCx<'_>) -> heca_grid_ui::WidgetModel| PaneLineDef {
+    let own = |name: &str, build: fn(&LineCx) -> heca_grid_ui::WidgetModel| PaneLineDef {
         name: name.to_string(),
         build: Rc::new(build),
         from_extension: false,
@@ -38,7 +38,7 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
 /// shares (`components::FolderLine`). Shown while the pane has a directory, read inside this line's own
 /// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
 /// pane_lines`, and nothing else.
-fn cwd_line(cx: &LineCx<'_>) -> crate::components::FolderLine {
+fn cwd_line(cx: &LineCx) -> crate::components::FolderLine {
     let facts = cx.facts.clone();
     // Cut to a home-relative form here, at the binding, so there is one spelling of "where this
     // pane is". No directory is an empty path, which hides the line.
@@ -56,7 +56,7 @@ fn cwd_line(cx: &LineCx<'_>) -> crate::components::FolderLine {
 
 /// **The git state**: branch (cut for a narrow sidebar, the full name on hover) and the counts of
 /// added, modified and deleted files. Absent outside a repository; a count of nothing is absent.
-fn git_line(cx: &LineCx<'_>) -> Visibility {
+fn git_line(cx: &LineCx) -> Visibility {
     use crate::chrome::panes::pane_header::{git_added, git_branch, git_deleted, git_modified};
     // The pane's git state, read once per change and shared by every part of the row below.
     let facts = cx.facts.clone();
@@ -116,7 +116,7 @@ fn git_line(cx: &LineCx<'_>) -> Visibility {
 /// **A line another crate added**: an icon and some text, shown while `produce` has something to
 /// say for the pane. It runs again when the pane's facts change — that is what the subscription is.
 pub(crate) fn text_line(produce: Rc<ProduceLine>) -> Rc<BuildLine> {
-    Rc::new(move |cx: &LineCx<'_>| {
+    Rc::new(move |cx: &LineCx| {
         let facts = cx.facts.clone();
         let produce = produce.clone();
         // What the line says for the pane now, read once per change and shared by its parts.
@@ -157,7 +157,6 @@ mod tests {
     /// rebuild: the line subscribed to the pane's facts when it was built, and rewrites itself.
     #[test]
     fn an_added_line_follows_its_panes_facts_and_hides_when_it_has_nothing_to_say() {
-        let theme = heca_grid_ui::theme::Theme::default();
         let title = signal(String::from("plain"));
         let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || {
             PaneFacts::of(
@@ -172,7 +171,6 @@ mod tests {
             (f.title == "agent").then(|| PaneLine::new(Glyph::Terminal, format!("is {}", f.title)))
         }));
         let line = build(&LineCx {
-            theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,
@@ -227,7 +225,6 @@ mod tests {
             )
         });
         let line = git_line(&LineCx {
-            theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,
@@ -287,7 +284,6 @@ mod tests {
     #[test]
     fn the_git_row_takes_its_colours_from_the_theme_it_is_painted_with() {
         use heca_core::runtime::{GitInfo, PaneRuntime};
-        let built_with = heca_grid_ui::theme::Theme::default();
         let mut painted_with = heca_grid_ui::theme::Theme::default();
         painted_with.colors.foreground = heca_grid_ui::Color::rgb(0x10, 0x20, 0x30);
         painted_with.colors.success = heca_grid_ui::Color::rgb(0x11, 0x22, 0x33);
@@ -313,7 +309,6 @@ mod tests {
             )
         });
         let line = git_line(&LineCx {
-            theme: &built_with,
             facts,
             agent_statuses: signal(Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,

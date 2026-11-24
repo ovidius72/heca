@@ -61,7 +61,6 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
     let mut root = Flex::column()
         .width(Length::FULL)
         .child(super::build(&LineCx {
-            theme: &theme,
             facts,
             agent_statuses: statuses,
             agent_session_line: signal(Default::default()),
@@ -145,7 +144,6 @@ fn the_line_follows_reports_and_config_without_a_rebuild() {
         )
     });
     let line = super::build(&LineCx {
-        theme: &theme,
         facts,
         agent_statuses: statuses,
         agent_session_line: signal(Default::default()),
@@ -222,7 +220,6 @@ fn long_reported_text_stays_inside_a_narrow_sidebar() {
         )
     });
     let line = super::build(&LineCx {
-        theme: &theme,
         facts,
         agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
         agent_session_line: signal(Default::default()),
@@ -274,7 +271,6 @@ fn the_identity_is_the_model_else_the_name_and_the_session_line_follows_its_sett
     let mut root = Flex::column()
         .width(Length::FULL)
         .child(super::build(&LineCx {
-            theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
             agent_session_line: line,
@@ -360,7 +356,6 @@ fn arbitrary_driver_artwork_uses_the_shared_image_widget_and_clears_in_place() {
     let mut root = Flex::column()
         .width(Length::FULL)
         .child(super::build(&LineCx {
-            theme: &theme,
             facts,
             agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
             agent_session_line: signal(Default::default()),
