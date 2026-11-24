@@ -30,7 +30,8 @@
     "f8dc8970-3ca3-48b9-8e5f-93471476a10b",
     "f40866fe-5311-451f-be73-73303541f969",
     "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0",
-    "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2"
+    "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2",
+    "3f13b3ed-604d-444a-906e-2df3f42fee7a"
   ],
   "tasks": [
     {
@@ -516,10 +517,80 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 589,
+      "shortId": "FQ9N8",
+      "priority": 8,
+      "shortName": "sidebar-pane-views-compact-nor",
+      "title": "Sidebar pane views — compact / normal / extended lists, a current-pane list, switched by an action and remembered",
+      "status": "planned",
+      "description": "Asked by Antonio 2026-11-24 (shape and names his; screenshot: extended = title + cwd + git + agent, normal = title + cwd + git, compact = title + cwd).\n\n## Config — [appearance.sidebar]\n```toml\npane_view          = \"extended\"                          # the view heca starts in: compact | normal | extended\npane_compact_view  = [\"cwd\", \"agent\"]\npane_normal_view   = [\"git\", \"cwd\", \"agent\"]\npane_extended_view = [\"title\", \"git\", \"cwd\", \"agent\"]\npane_current_view  = [\"title\", \"git\", \"cwd\", \"agent\"]    # the current pane's lines; unset = follows the active view\n```\n- Each view is a list of line names, in the order written. Names: \"title\", \"cwd\", \"git\", \"agent\", and lines added by programs built on heca (e.g. \"demo.status\").\n- **\"title\" becomes a line** like the others: the pane's name with its icon. The status dot (green pip) follows the title line; in a view without \"title\" it goes on the first line (Antonio: \"prima riga se fattibile\").\n- Replaces today's `pane_lines` (heca-config/src/appearance/sidebar.rs:36, config.default.toml:750): retired with the usual notice for keys heca no longer reads (heca-config/src/loader/unread.rs).\n\n## Switching\n- An action, through the ActionRegistry, keybinding registry and RPC as always: set a view by name (argument) AND cycle to the next one. In the command palette with a label.\n- The change is an event (`sidebar.pane_view.changed`, THE EVENTS) so plugins and the scripts' stream hear it.\n\n## Remembered\n- The chosen view is saved with `heca_config::state_file` (data folder, JSON, versioned, atomic; same helper as search-history.json / announced.json, and T528 for dock placement). At start the saved view wins, else `pane_view`. A config reload whose `pane_view` changed resets to it (as a sidebar's visibility, T532). Confirm this precedence with Antonio before building.\n\n## How (current state, verified 2026-11-24)\nheca/src/providers/workspaces/pane_row.rs:146-186 builds the row as a `Tile` (status, icon, title, suffix) and appends one line per `ws_state.pane_lines()` entry; every line is a `Visibility` that decides for itself, and the row knows if it is `active`. So a view is: which named lines are visible, read live from one signal (active view + current-pane list), no sidebar rebuild. The title moving into the line list means Tile's title/status slots become driven by the list (the dot on the title line, else the first line).\n\n## Check\nTests (sabotaged): each view shows its lines in order; the current pane uses pane_current_view, unset follows; no title → dot on first line; action set/cycle + event; saved view restored, config reload resets. docs/configuration.md + config.default.toml. Clippy macOS + Windows, CI. Antonio's eye check of the three views and the current pane.",
+      "descriptionUpdatedAt": "2026-11-24T19:34:51.139Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-001-config-pane-view-four-view-lists-pane-lines-retired-with-a-notice",
+          "number": 1,
+          "title": "Config: pane_view + four view lists; pane_lines retired with a notice",
+          "checked": false
+        },
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-002-title-as-a-line-status-dot-on-the-title-line-else-the-first-line",
+          "number": 2,
+          "title": "\"title\" as a line; status dot on the title line, else the first line",
+          "checked": false
+        },
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-003-rows-read-the-active-view-live-no-rebuild-current-pane-uses-pane-current-view-or-follows",
+          "number": 3,
+          "title": "Rows read the active view live (no rebuild); current pane uses pane_current_view or follows",
+          "checked": false
+        },
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-004-action-set-by-name-cycle-via-actionregistry-keybinding-palette-rpc-sidebar-pane-view-changed-event",
+          "number": 4,
+          "title": "Action (set by name + cycle) via ActionRegistry, keybinding, palette, RPC; sidebar.pane_view.changed event",
+          "checked": false
+        },
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-005-saved-view-via-state-file-precedence-saved-config-reload-of-a-changed-pane-view-resets-confirm-with-antonio",
+          "number": 5,
+          "title": "Saved view via state_file; precedence saved > config, reload of a changed pane_view resets (confirm with Antonio)",
+          "checked": false
+        },
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-006-tests-sabotaged-docs-clippy-macos-windows-ci",
+          "number": 6,
+          "title": "Tests (sabotaged), docs, clippy macOS + Windows, CI",
+          "checked": false
+        },
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-007-antonio-eye-check",
+          "number": 7,
+          "title": "Antonio eye check",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T19:34:51.071Z",
+      "updatedAt": "2026-11-24T19:34:51.071Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-24T17:52:13.104Z",
+  "updatedAt": "2026-11-24T19:34:51.071Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

@@ -173,11 +173,20 @@
       "priority": 0,
       "shortName": "heca-s-config-and-data-folders",
       "title": "heca's config and data folders can be pointed elsewhere without changing HOME — HECA_CONFIG_DIR / HECA_DATA_DIR",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Reported by heca-pro-dev 2026-11-24; Antonio approved, to do next.\n\n## The problem\nThere is no way to point heca at a different config/data folder without changing HOME. Test runs set HOME to a scratch folder to keep the user's heca config untouched; programs started in panes inherit that HOME, so Claude Code cannot find the user's login and asks to sign in, and builds run with that HOME re-download the Rust toolchain and the cargo cache.\n\n## State today (verified 2026-11-24)\n- Data: `heca_config::state_file::data_path` (heca-config/src/state_file.rs:22) is `dirs::data_dir().join(\"heca\")` — nothing overrides it. Every machine-written file goes through it (search history, announced, servers, integrations).\n- Config: the loader (heca-config/src/loader/mod.rs) finds the config folder from the home/config dir; no override found. heca reads only HECA_AGENT_*, HECA_LOG_*, HECA_FRAME_* and similar.\n\n## To build\n- `HECA_CONFIG_DIR` and `HECA_DATA_DIR` (environment variables): when set, heca reads its config from / writes its data to that folder instead of the default. Resolved in ONE place each (the config-folder function and `data_path`), so every reader follows.\n- Decide with Antonio whether command-line flags (`--config-dir` / `--data-dir`) are wanted too; if so they set the same one value.\n- Programs started in panes keep the user's real environment (HOME untouched); decide whether the HECA_* override is passed on to child processes (a nested heca should probably not inherit it).\n- Server and client processes agree on the folder (the server socket/identity files live in the data folder).\n\n## Check\nTests: with the variable set, data_path and the config folder point there; unset, defaults unchanged (sabotaged). docs/configuration.md. Clippy macOS + Windows, CI three platforms. Antonio's check: a test run with HECA_* set leaves the real config untouched and Claude Code in a pane stays signed in.",
       "descriptionUpdatedAt": "2026-11-24T14:45:16.207Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "301e97d4-1810-4b23-bba7-8b96033761b5",
+          "date": "2026-11-24T19:18:26.037Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -216,16 +225,21 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-11-24T19:18:26.037Z",
       "completedAt": "",
       "createdAt": "2026-11-24T14:45:15.985Z",
-      "updatedAt": "2026-11-24T14:45:20.309Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-11-24T19:18:26.037Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+          "createdAt": "2026-11-24T19:18:25.816Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-11-24T14:45:20.309Z",
+  "updatedAt": "2026-11-24T19:18:26.037Z",
   "handoff": "# Handoff — session shutdown (quit)\n\nCreated at: 2026-10-09T10:37:12.582Z\nUpdated at: 2026-10-09T10:37:12.582Z\nReason: session shutdown (quit)\n\n## Progress snapshot\n- Features: 3/12 done, 6 active\n- Phases: 41/101 done, 12 active/discovery\n- Tasks: 303/523 done, 1 active\n\n## Current focus\n- Feature: `2809a7a4-6d53-4a58-b776-bac164bb5d03` — 🛠️ App / Chrome Features (in-progress)\n- Phase: `c192c5ca-f6ac-493a-bd8d-d95117c430aa` — app-10: Sidebar/chrome leftovers (in-progress)\n- Task: `11fe81da-b310-4338-9b8f-d8c706807f2e` — Drag preview built from widgets, not drawn by hand (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase c192c5ca-f6ac-493a-bd8d-d95117c430aa)\n- 📋 `5503d97c-da4a-4569-bcec-898bf81fb651` — Column-level pick keycaps (planned)\n- ✅ `2732d77c-f84e-4faa-a521-1e3a63ccdfc9` — Drop onto workspace for pane drags (done)\n- ✅ `865e1d62-8cef-40e8-bd4e-dc0c0723f993` — F4.4 widget migration leftovers (done)\n- 📋 `4676e673-bde6-4d6c-9ec6-56bdf362e77e` — Sidebar drop loses panes (planned)\n- 📋 `e3bbfb84-499b-4e9f-b00f-26685378c24d` — Sidebar cwd appears late (planned)\n- ✅ `56193253-82c2-4a4e-9f0c-91c902660e9b` — Sidebar peek action (done)\n- 📋 `e995dbdc-c15b-4d59-87c5-a16f9a3e77f3` — All text the user sees comes from a per-language file — an app-wide text system, actions first (planned)\n- 📋 `9d54e52e-d5e6-45d7-b388-6ed3d826f541` — A dock can be moved between sidebars by mouse, and where it sits is saved across runs (planned)\n- 📋 `250975ab-4f70-411e-91f4-ae13749a51b5` — [appearance.sidebar] border_color is honoured — for every border style, bracketed included (planned)\n- ✅ `22954d40-be08-40c9-bcad-a49dc8a84c4f` — A sidebar's visibility is one state: config sets where it starts, the toggle flips it, reload resets it (done)\n- ✅ `ddbbcbb1-e15d-4716-b56d-6e0faff941b3` — No literal sizes in app UI code: spacing steps, theme tokens for small text and tooltip delay, app look constants moved to theme/config (done)\n- 📋 `58fe571d-661f-4bf7-9b2f-0bdd5126b66d` — Every built-in action knows its catalog name, so confirm and the rest look it up like any named action (planned)\n- 📋 `11fe81da-b310-4338-9b8f-d8c706807f2e` — Drag preview built from widgets, not drawn by hand (planned)\n\n## How to resume\n1. Open task 11fe81da-b310-4338-9b8f-d8c706807f2e (Drag preview built from widgets, not drawn by hand).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start 11fe81da-b310-4338-9b8f-d8c706807f2e (or call task_start).\n4. Continue with the next activity: F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/c192c5ca-f6ac-493a-bd8d-d95117c430aa.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n- Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.\n- F003/P011/T012 (126d0855) is still `blocked`, and its reason needs RE-CHECKING rather than planning around: the 'no chrome surface mounts a ScrollRegion' claim was verified 2026-07-17, and the 2026-07-26 sidebar scroll work may already have discharged it. Its horizontal trigger was settled 2026-07-27 as prefix+Shift+Home/End/PageUp/PageDown — the same four keys as vertical, Shift for the other axis.\n- Unblocked by T009, neither started: F003/P001/T006 (generate widget definitions for JS/Python from `WidgetKind::ALL`, which is a closed list with a coverage guard already walking it) and F003/P011/T006 (the typed builder SDK can now genuinely re-export the model). Also worth checking whether F003/P017/T003's generated property tables are reusable outside the app — they are the natural source for those generated definitions.\n\n## Recent activity\n- 2026-09-05T21:15:13.811Z [task_status] bad40d02-be41-4f23-8acc-903c18c40e68: Task bad40d02-be41-4f23-8acc-903c18c40e68 → in-progress\n- 2026-09-04T10:03:13.339Z [task_created] 3a5ca1f3-f626-49d0-b4a0-033f0b64924e: Task created: Notification Text should not be truncated (phase 03b297bb-a915-4712-a6b4-dc688dc7ddc5)\n- 2026-09-01T15:38:54.250Z [task_updated] deef08b2-b838-428d-afce-2151533b5dd4: Task updated: Dismiss All Notifications\n- 2026-09-01T15:38:41.174Z [task_created] deef08b2-b838-428d-afce-2151533b5dd4: Task created: Dismiss All Notifications (phase 03b297bb-a915-4712-a6b4-dc688dc7ddc5)\n- 2026-07-29T17:49:33.150Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:32.498Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:31.702Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:21.833Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
   "handoffUpdatedAt": "2026-10-09T10:37:12.613Z",
   "handoffAudit": null,
@@ -267,5 +281,10 @@
       "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+      "createdAt": "2026-11-24T19:18:25.816Z"
+    }
+  ]
 }
