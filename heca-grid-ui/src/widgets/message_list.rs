@@ -1,6 +1,6 @@
 //! A growing list of composed entries. ScrollRegion owns the viewport and following the bottom.
 
-use crate::builders::IntoComponent;
+use crate::builders::{IntoComponent, PlaceExt};
 use crate::{Base, Component, Label, LayoutExt, PaintCx, ScrollRegion};
 use std::{cell::RefCell, rc::Rc};
 
@@ -45,6 +45,9 @@ impl MessageFeed {
 ///     .prop("visible_lines", PropValue::Int(6))
 ///     .child(ViewNode::new(WidgetId::Label).text("First entry"));
 /// ```
+/// The list's scrolling part, found by name: it holds the entries.
+const SCROLL_AREA: &str = "scroll";
+
 pub struct MessageList {
     base: Base,
     feed: MessageFeed,
@@ -61,7 +64,8 @@ impl MessageList {
             ScrollRegion::new()
                 .follow_bottom(true)
                 .width("100%")
-                .height("100%"),
+                .height("100%")
+                .area(SCROLL_AREA),
         ));
         Self {
             base,
@@ -118,7 +122,10 @@ impl Component for MessageList {
         layout.to_taffy(self.base.font)
     }
     fn remeasure(&mut self) {
-        self.base.children[0].base_mut().style.layout.gap = self.base.style.layout.gap;
+        let gap = self.base.style.layout.gap;
+        if let Some(scroll) = self.base.child_in_area(SCROLL_AREA) {
+            scroll.base_mut().style.layout.gap = gap;
+        }
         self.append_pending();
     }
     fn tick(&mut self, dt: f32) -> bool {
@@ -139,10 +146,13 @@ impl Component for MessageList {
 impl MessageList {
     fn append_pending(&mut self) {
         let entries: Vec<_> = self.feed.0.borrow_mut().drain(..).collect();
-        if !entries.is_empty() {
-            self.base.children[0].base_mut().children.extend(entries);
-            self.base.mark_needs_layout();
+        if entries.is_empty() {
+            return;
         }
+        if let Some(scroll) = self.base.child_in_area(SCROLL_AREA) {
+            scroll.base_mut().children.extend(entries);
+        }
+        self.base.mark_needs_layout();
     }
 }
 impl LayoutExt for MessageList {}

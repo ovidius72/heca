@@ -784,3 +784,42 @@ fn a_clearable_fields_cross_lights_up_under_the_pointer() {
         "hovered the × paints a frame: {rest} at rest, {hovered} hovered"
     );
 }
+
+/// **A sized input draws its text at its own font**, once — the size variant is not applied a
+/// second time to the text, which would put the glyphs out of step with the caret.
+#[test]
+fn a_sized_inputs_text_is_drawn_at_the_inputs_font() {
+    let mut input = Input::new()
+        .value("abc")
+        .font_size(20.0)
+        .size(heca_grid_ui::WidgetSize::Small);
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    let font = input.base().font;
+    let scene = common::paint(&input, &Theme::default());
+    let drawn = scene.iter().find_map(|draw| match draw {
+        DrawCommand::Text(t) if t.text == "abc" => Some(t.size),
+        _ => None,
+    });
+    assert_eq!(drawn, Some(font));
+}
+
+/// **A click is read from where the text starts**, not from the input's outer edge — with padding
+/// around the text, a click just inside the text's first character puts the caret before it.
+#[test]
+fn a_click_is_read_from_where_the_text_starts() {
+    let mut input = Input::new().value("abcdef").padding("xl");
+    give_keyboard(&mut input);
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 80.0));
+    let text = input.base().children[0].base().bounds;
+    assert!(
+        text.loc.x > input.base().bounds.loc.x,
+        "the padding moves the text in"
+    );
+    click_at(
+        &mut input,
+        Point::new(text.loc.x + 0.5, text.loc.y + text.size.h / 2.0),
+        PointerButton::Left,
+    );
+    type_text(&mut input, "X");
+    assert_eq!(input.value_str(), "Xabcdef");
+}

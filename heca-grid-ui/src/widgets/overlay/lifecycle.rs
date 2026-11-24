@@ -50,7 +50,7 @@ impl Overlay {
         let Some(name) = self.default_focus.clone() else {
             return;
         };
-        if let Some(panel) = self.base.children.first_mut() {
+        if let Some(panel) = self.base.child_in_area(super::PANEL_AREA) {
             self.focus.focus_named(panel.as_mut(), &name);
         }
     }

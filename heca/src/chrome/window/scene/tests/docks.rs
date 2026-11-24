@@ -335,3 +335,44 @@ fn the_sidebar_border_colour_from_config_reaches_the_frame() {
         "unset, the accent"
     );
 }
+
+/// **A dock with a header still fills the share it was given** — the share is passed to the
+/// column and to the body inside it, so the body grows into the room; with no share, neither grows.
+#[test]
+fn a_headed_docks_body_fills_its_share() {
+    use heca_grid_ui::Flex;
+    let flex_of = |node: &dyn heca_grid_ui::Component| node.base().style.layout.flex;
+    let shared = with_header(
+        WidgetModel::new(Flex::column()),
+        "notes",
+        "Notes",
+        false,
+        2.0,
+    );
+    let body = shared.base().children.last().expect("the body");
+    assert_eq!(
+        flex_of(shared.as_ref()),
+        Some(1.0),
+        "the column takes the share"
+    );
+    assert_eq!(
+        flex_of(body.as_ref()),
+        Some(1.0),
+        "and passes it to the body"
+    );
+
+    let natural = with_header(
+        WidgetModel::new(Flex::column()),
+        "notes",
+        "Notes",
+        false,
+        0.0,
+    );
+    let body = natural.base().children.last().expect("the body");
+    assert_eq!(
+        flex_of(natural.as_ref()),
+        None,
+        "no share: the column is content-sized"
+    );
+    assert_eq!(flex_of(body.as_ref()), None, "and so is the body");
+}

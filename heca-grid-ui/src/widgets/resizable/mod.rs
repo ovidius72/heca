@@ -30,6 +30,11 @@ mod grip;
 ///     .prop("max_height", PropValue::Float(240.0))
 ///     .child(ViewNode::new(WidgetId::Input).prop("multiline", PropValue::Bool(true)));
 /// ```
+/// The parts, found by name: the content, the corner handle, and the grip drawn in the handle.
+const CONTENT_AREA: &str = "content";
+const HANDLE_AREA: &str = "handle";
+const GRIP_AREA: &str = "grip";
+
 pub struct Resizable {
     grid: Grid,
     requested: Rc<Cell<Option<f32>>>,
@@ -56,7 +61,7 @@ impl Resizable {
             .padding("xs")
             .align_self("end")
             .justify_self("end")
-            .child(grip::CornerGrip::new().row(1).column(1))
+            .child(grip::CornerGrip::new().row(1).column(1).area(GRIP_AREA))
             .child(
                 Splitter::horizontal()
                     .grab("none")
@@ -72,11 +77,11 @@ impl Resizable {
         let grid = Grid::new()
             .template_column("1fr")
             .template_row("auto")
-            .template_area(["content"])
-            .keyboard_to("content")
+            .template_area([CONTENT_AREA])
+            .keyboard_to(CONTENT_AREA)
             .align_self("start")
-            .child(content.area("content"))
-            .child(handle.row(1).column(1));
+            .child(content.area(CONTENT_AREA))
+            .child(handle.row(1).column(1).area(HANDLE_AREA));
         Self {
             grid,
             requested,
@@ -90,13 +95,22 @@ impl Resizable {
     /// Replace the default diagonal corner strokes with an icon. Colors and size follow the theme.
     #[heca_grid_ui_macros::prop]
     pub fn grip(mut self, glyph: Glyph) -> Self {
-        self.grid.base_mut().children[1].base_mut().children[0] =
-            crate::WidgetModel::new(Icon::new(glyph).row(1).column(1));
+        let grip = self
+            .grid
+            .base_mut()
+            .child_in_area(HANDLE_AREA)
+            .and_then(|handle| handle.base_mut().child_in_area(GRIP_AREA));
+        if let Some(grip) = grip {
+            *grip = crate::WidgetModel::new(Icon::new(glyph).row(1).column(1).area(GRIP_AREA));
+        }
         self
     }
 
     fn content_minimum(&self) -> f32 {
-        match self.base().children[0].taffy_style().min_size.height {
+        let Some(content) = self.base().child_area(CONTENT_AREA) else {
+            return 0.0;
+        };
+        match content.taffy_style().min_size.height {
             taffy::Dimension::Length(height) => height.max(0.0),
             _ => 0.0,
         }
@@ -136,7 +150,9 @@ impl Component for Resizable {
         } else {
             self.content_height
         };
-        self.base_mut().children[0].base_mut().style.layout.height = height;
+        if let Some(content) = self.base_mut().child_in_area(CONTENT_AREA) {
+            content.base_mut().style.layout.height = height;
+        }
     }
     fn on_layout(&mut self) {
         // Children now have their resolved theme metrics. Settle a changed floor before painting.

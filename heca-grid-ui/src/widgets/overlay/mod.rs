@@ -44,7 +44,7 @@ pub use place::{
 };
 
 use crate::animation::Animation;
-use crate::builders::LayoutExt;
+use crate::builders::{LayoutExt, PlaceExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, shift_subtree};
 use crate::event::WidgetIntent;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
@@ -63,6 +63,8 @@ use std::cell::Cell;
 pub const VIEWPORT_MARGIN: f32 = 24.0;
 /// How far a blocking scrim reaches before a viewport has been cached (logical px).
 const SCRIM_REACH: f64 = 1.0e9;
+/// The overlay's one part, found by name: the panel it centers and decorates.
+pub(crate) const PANEL_AREA: &str = "panel";
 
 /// The base overlay surface: a viewport-filling, centering layer that paints a panel (its single
 /// child) with the shared overlay chrome — optional scrim, drop shadow, theme surface fill, and the
@@ -240,7 +242,9 @@ impl Overlay {
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn panel(mut self, panel: impl crate::builders::IntoComponent) -> Self {
         self.base.children.clear();
-        self.base.children.push(panel.into_component());
+        self.base
+            .children
+            .push(panel.into_component().area(PANEL_AREA));
         // A new panel brings its own limits.
         self.panel_limits = None;
         self.apply_panel_size();
@@ -290,7 +294,7 @@ impl Overlay {
     /// by the screen edge on both sides — a dialog must never be bigger than the
     /// thing it is centered in.
     fn apply_panel_size(&mut self) {
-        let Some(panel) = self.base.children.first_mut() else {
+        let Some(panel) = self.base.child_in_area(PANEL_AREA) else {
             return;
         };
         let style = &mut panel.base_mut().style.layout;
@@ -402,7 +406,8 @@ impl Overlay {
         }
         let viewport = self.viewport.get();
         let position = self.position;
-        let Some(child) = self.base.children.first_mut() else {
+        let area = self.base.bounds;
+        let Some(child) = self.base.child_in_area(PANEL_AREA) else {
             return;
         };
         let current = child.base().bounds;
@@ -417,7 +422,6 @@ impl Overlay {
             // frame the panel is born in, rather than after a first paint (which drew a newly built
             // panel centred for one frame and then jumped it up).
             OverlayPosition::Top => {
-                let area = self.base.bounds;
                 let mut placed = place::place_top(current, area.size);
                 placed.loc.y += area.loc.y;
                 placed
@@ -560,8 +564,7 @@ impl Overlay {
     /// The panel's laid-out bounds (valid after layout; zero before).
     pub fn panel_bounds(&self) -> Rectangle {
         self.base
-            .children
-            .first()
+            .child_area(PANEL_AREA)
             .map(|c| c.base().bounds)
             .unwrap_or_else(|| Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0)))
     }
@@ -630,7 +633,7 @@ impl Overlay {
         if room_w <= 0.0 || room_h <= 0.0 {
             return false;
         }
-        let Some(panel) = self.base.children.first_mut() else {
+        let Some(panel) = self.base.child_in_area(PANEL_AREA) else {
             return false;
         };
         let font = panel.base().font;
