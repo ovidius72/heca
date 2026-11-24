@@ -1,0 +1,427 @@
+{
+  "id": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+  "featureId": "c341a6ae-446f-44d5-80fd-d115272a2b68",
+  "number": 113,
+  "shortId": "DLMSL",
+  "priority": 1,
+  "slug": "f013-leftovers-the-last-code-that-does-not-follow-the-syntax",
+  "title": "F013 leftovers — the last code that does not follow THE SYNTAX",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Seven cleanups found in the 2026-11-24 review: children by position, hand positions, child-in-constructor wrappers, chrome side signals, literal numbers, the terminal's own size write, stale docs.",
+  "description": "Created 2026-11-24 with Antonio's approval, from a review of F013's accepted decisions against main (c2768ec4). F013 had no phases; this phase holds what is still open. Estimate given to Antonio: 13–20 agent hours plus about 4 eye checks.\n\n## Already done (not in this phase)\nDeclarative child lists (T569); Input placeholder/value following a value; described events beyond press/change/toggle; command palette and Dialog composed (P087(F011)/T469); live width/height/max sizes (`LiveValue`, `IntoLengthValue`, `Base.size_values`).\n\n## Left out on purpose\nMoving docks from the `Provider` trait (heca/src/providers/mod.rs:61) to components, and get / at_index on the regions queue (heca/src/chrome/docks/regions.rs, thread_local) — Antonio, 2026-11-24: \"il 7 lo lasciamo com'è\".\n\n## Tasks\n1. Children taken by position → named / declared children.\n2. Positions written by hand (shift_subtree in widgets, at_rect and bounds writes in the app) → layout does it.\n3. Wrappers that take their child in the constructor → `.child(..)`.\n4. `ChromeSignals` / `chrome_signature` side signals → events and live values.\n5. Literal numbers: glow values, BAR_W / CHECK_SIZE / RAIL_ICON_SIZE, `Icon::size(px)` → theme tokens / shares.\n6. The terminal component writes its own 100% width/height.\n7. AGENTS.md and docs/widget-architecture.md teach the imperative state write.\n\n## Rules for every task\nTHE SYNTAX (CLAUDE.md). Cleanup never changes the look: any visible change is a proposal to Antonio first. Fixes go in the library where no caller has to know. Every new test is checked by sabotage. Visual work needs Antonio's eye check before commit. Update docs/widgets.md and in-file comments for every widget touched.",
+  "descriptionUpdatedAt": "2026-11-24T09:48:30.463Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "033cc80e-bb66-49e5-aea1-9af9620019ee",
+    "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a",
+    "d2132103-db56-44c5-a8ab-f02a8f7a4255",
+    "6004ccef-51cc-4ffd-adbd-ae01242eb678",
+    "f8dc8970-3ca3-48b9-8e5f-93471476a10b",
+    "f40866fe-5311-451f-be73-73303541f969",
+    "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0"
+  ],
+  "tasks": [
+    {
+      "id": "033cc80e-bb66-49e5-aea1-9af9620019ee",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 580,
+      "shortId": "5RT4U",
+      "priority": 1,
+      "shortName": "no-widget-or-composition-finds",
+      "title": "No widget or composition finds a child by its position",
+      "status": "planned",
+      "description": "THE SYNTAX: never find a child by its position (`children[0]`). Counted on main 2026-11-24 (non-test code):\n\nWidgets: tree_layout.rs (6), tile.rs (4), input/content.rs (4), input/component.rs (4), resizable/mod.rs (3), message_list.rs (2), flex/mod.rs (2), flex/clip.rs (1), tag.rs (1) — all under heca-grid-ui/src/widgets/.\nApp: heca/src/components/folder_line.rs (8), chrome/input/dispatch.rs (3), entry/layer.rs (2), providers/workspaces/row_lines.rs (1), providers/workspaces/pane_row.rs (1), chrome/window/realize.rs (1), chrome/surfaces/expose/pane_card.rs (1).\n\nFramework code that walks the tree by design is NOT in scope — check each and say so: heca-grid-ui/src/reconcile.rs (12), focus/fallback.rs (3), drag/resolve.rs (2), nav/collect.rs, nav/ambiguity.rs, builders/children.rs.\n\nFix: a widget that needs one of its parts holds it by name (a field or a keyed child the widget itself declared), or the part reads a live value instead of being reached into. When the same need shows up in several widgets, the library gets the builder once (Rule Zero), not a copy per widget.\n\nCheck: tests per widget touched (sabotaged); the look stays identical; one eye-check pass by Antonio over sidebar, input, tree and message list.",
+      "descriptionUpdatedAt": "2026-11-24T09:48:39.432Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-001-library-widgets-tree-layout-tile-input-resizable-message-list-flex-tag",
+          "number": 1,
+          "title": "Library widgets: tree_layout, tile, input, resizable, message_list, flex, tag",
+          "checked": false
+        },
+        {
+          "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-002-app-folder-line-chrome-input-dispatch-entry-layer-workspaces-rows-realize-expose-pane-card",
+          "number": 2,
+          "title": "App: folder_line, chrome/input/dispatch, entry/layer, workspaces rows, realize, expose pane_card",
+          "checked": false
+        },
+        {
+          "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-003-framework-tree-walkers-reviewed-and-listed-as-in-or-out-of-scope",
+          "number": 3,
+          "title": "Framework tree walkers reviewed and listed as in or out of scope",
+          "checked": false
+        },
+        {
+          "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-004-tests-sabotaged-docs-widgets-md",
+          "number": 4,
+          "title": "Tests (sabotaged) + docs/widgets.md",
+          "checked": false
+        },
+        {
+          "id": "033cc80e-bb66-49e5-aea1-9af9620019ee-check-005-antonio-eye-check",
+          "number": 5,
+          "title": "Antonio eye check",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T09:48:39.310Z",
+      "updatedAt": "2026-11-24T09:48:39.310Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 581,
+      "shortId": "VH7JN",
+      "priority": 2,
+      "shortName": "no-widget-or-composition-write",
+      "title": "No widget or composition writes a position by hand — layout places everything",
+      "status": "planned",
+      "description": "THE SYNTAX: never write a bound or a position by hand. Found on main 2026-11-24:\n\n- `shift_subtree` (moving children after layout) used by widgets: heca-grid-ui/src/widgets/tooltip.rs, toast/stack.rs, scroll_region/mod.rs + motion.rs, select/component.rs, overlay/mod.rs, context_menu/presenter.rs, flex/mod.rs. Its definition and the paint transform (lib.rs, component/tree.rs, component/paint_cx/transform.rs) are the framework side; scrolling offsets may legitimately stay a paint transform — decide per case and say why.\n- Bounds written by hand in the app: heca/src/providers/workspaces/column_group.rs:138, heca/src/chrome/panes/column/mod.rs:122.\n- `.at_rect(..)` in the app: chrome/panes/terminal/links.rs, terminal/viewport.rs, terminal/search/mod.rs, chrome/panes/column/shell.rs, chrome/surfaces/expose/workspace_row.rs.\n\nFix: placement is said as layout (Overlay position / anchor, grid tracks, flex, offsets as live values), so the framework computes it. A floating surface uses the overlay's placement; scrolling uses the scroll region's own offset.\n\nRisk: these are overlay / tooltip / toast / select / scroll — visual work; nothing ships without Antonio driving it in the GPU app.",
+      "descriptionUpdatedAt": "2026-11-24T09:48:46.182Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-001-overlay-family-widgets-tooltip-toast-stack-select-overlay-context-menu",
+          "number": 1,
+          "title": "Overlay-family widgets: tooltip, toast stack, select, overlay, context menu",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-002-scroll-region-and-flex-decide-paint-transform-vs-layout-per-case",
+          "number": 2,
+          "title": "Scroll region and flex: decide paint transform vs layout, per case",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-003-app-bounds-writes-column-group-column-mod",
+          "number": 3,
+          "title": "App bounds writes: column_group, column/mod",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-004-app-at-rect-uses-terminal-links-viewport-search-column-shell-expose-workspace-row",
+          "number": 4,
+          "title": "App at_rect uses: terminal links/viewport/search, column shell, expose workspace_row",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-005-tests-sabotaged-docs",
+          "number": 5,
+          "title": "Tests (sabotaged) + docs",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-006-antonio-eye-check-tooltip-toast-select-menu-palette-scroll",
+          "number": 6,
+          "title": "Antonio eye check: tooltip, toast, select, menu, palette, scroll",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T09:48:45.965Z",
+      "updatedAt": "2026-11-24T09:48:45.965Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "d2132103-db56-44c5-a8ab-f02a8f7a4255",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 582,
+      "shortId": "DPFPT",
+      "priority": 3,
+      "shortName": "wrappers-take-their-child-with",
+      "title": "Wrappers take their child with .child(..), not in the constructor",
+      "status": "planned",
+      "description": "THE SYNTAX: `Component::new().prop(..).child(..)`. Four wrappers still take the child in `new`:\n- `KeyHint::new(child)` heca-grid-ui/src/widgets/key_hint/mod.rs:61\n- `KeyHintGroup::new(child)` key_hint/mod.rs:103\n- `FocusScope::new(child)` heca-grid-ui/src/widgets/focus_scope (mod.rs:53)\n- `Tooltip::new(child, text)` heca-grid-ui/src/widgets/tooltip.rs:476\n\nFix: `new()` takes the wrapper's own properties only (Tooltip: the text), the child comes through `.child(..)` like every container. Update every call site (app, showcase, examples, the described / plugin form if it mirrors the constructor). This changes a public API that heca-pro may use: check heca-pro's uses and tell Antonio before merging.\n\nCheck: build + tests; no look change.",
+      "descriptionUpdatedAt": "2026-11-24T09:48:50.659Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d2132103-db56-44c5-a8ab-f02a8f7a4255-check-001-keyhint-keyhintgroup-focusscope-tooltip-new-child",
+          "number": 1,
+          "title": "KeyHint, KeyHintGroup, FocusScope, Tooltip: new() + .child(..)",
+          "checked": false
+        },
+        {
+          "id": "d2132103-db56-44c5-a8ab-f02a8f7a4255-check-002-every-call-site-app-showcase-examples-described-form",
+          "number": 2,
+          "title": "Every call site: app, showcase, examples, described form",
+          "checked": false
+        },
+        {
+          "id": "d2132103-db56-44c5-a8ab-f02a8f7a4255-check-003-check-heca-pro-uses-tell-antonio",
+          "number": 3,
+          "title": "Check heca-pro uses; tell Antonio",
+          "checked": false
+        },
+        {
+          "id": "d2132103-db56-44c5-a8ab-f02a8f7a4255-check-004-docs-widgets-md-examples-in-the-syntax",
+          "number": 4,
+          "title": "Docs/widgets.md examples in THE SYNTAX",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T09:48:50.536Z",
+      "updatedAt": "2026-11-24T09:48:50.536Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "6004ccef-51cc-4ffd-adbd-ae01242eb678",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 583,
+      "shortId": "3FH5Q",
+      "priority": 4,
+      "shortName": "the-chrome-s-side-signals-chro",
+      "title": "The chrome's side signals (ChromeSignals, chrome_signature) are replaced by events and live values",
+      "status": "planned",
+      "description": "THE EVENTS: a state change is heard with `cx.on(\"name\", ..)`, never a dedicated signal bundle. `ChromeSignals` (heca/src/chrome/window/signals.rs:26) and `chrome_signature` (heca/src/chrome/window/retained.rs:38, a hash deciding when the chrome rebuilds) are still used — 34 uses in: lib.rs, app/frame/panes.rs, providers/mod.rs, providers/workspaces/pane_row.rs + seams.rs, chrome/mod.rs, chrome/input/dispatch.rs, chrome/state/workspaces.rs, chrome/window/{theme, retained, scene/mod, signals}.rs, chrome/docks/contribution.rs, handlers/docks/mod.rs.\n\nFix: each value a widget shows is a live value it reads (it updates itself), and each change a component reacts to is an event raised from one place (contract: P054(F006) \"Pane runtime state\", section 0.1). The rebuild-by-signature goes away where a live value or keyed children make the rebuild unnecessary; what still needs a rebuild says so through the same event. Do not touch the dock `Provider` API (left out, see the phase).\n\nCheck: tests; sidebar, pane rows and bars update exactly as today (Antonio eye check: rename, cwd change, agent status, workspace switch).",
+      "descriptionUpdatedAt": "2026-11-24T09:48:56.944Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6004ccef-51cc-4ffd-adbd-ae01242eb678-check-001-map-every-chromesignals-field-to-its-live-value-or-event",
+          "number": 1,
+          "title": "Map every ChromeSignals field to its live value or event",
+          "checked": false
+        },
+        {
+          "id": "6004ccef-51cc-4ffd-adbd-ae01242eb678-check-002-replace-uses-then-delete-chromesignals",
+          "number": 2,
+          "title": "Replace uses, then delete ChromeSignals",
+          "checked": false
+        },
+        {
+          "id": "6004ccef-51cc-4ffd-adbd-ae01242eb678-check-003-remove-chrome-signature-rebuilds-made-unnecessary-keep-what-is-needed-via-events",
+          "number": 3,
+          "title": "Remove chrome_signature rebuilds made unnecessary; keep what is needed via events",
+          "checked": false
+        },
+        {
+          "id": "6004ccef-51cc-4ffd-adbd-ae01242eb678-check-004-tests-sabotaged",
+          "number": 4,
+          "title": "Tests (sabotaged)",
+          "checked": false
+        },
+        {
+          "id": "6004ccef-51cc-4ffd-adbd-ae01242eb678-check-005-antonio-eye-check",
+          "number": 5,
+          "title": "Antonio eye check",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T09:48:56.852Z",
+      "updatedAt": "2026-11-24T09:48:56.852Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f8dc8970-3ca3-48b9-8e5f-93471476a10b",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 584,
+      "shortId": "4C7TE",
+      "priority": 5,
+      "shortName": "no-literal-sizes-in-widgets-gl",
+      "title": "No literal sizes in widgets: glow values, bar widths, check and rail icon sizes, Icon::size(px)",
+      "status": "planned",
+      "description": "THE SYNTAX: never a number in the code. Found on main 2026-11-24:\n- Glow `radius:` / `intensity:` literals in heca-grid-ui/src/widgets: row.rs (4), gauge.rs (2), dock_frame.rs (2), spinner.rs (2), context_menu/presenter.rs (2), scroll_bar.rs, scroll_region/component.rs, key_hint/keycap.rs (1 each). Other widgets (button, badge_button, toggle, checkbox, badge, tabs) have glow numbers in other forms — sweep them too.\n- Constants: `BAR_W` alert.rs:16, marker_group.rs:37 (+ `BAR_W_HOVER` :39), row.rs:35; `CHECK_SIZE` row.rs:39; `RAIL_ICON_SIZE` dock_frame.rs:64.\n- `Icon::size(px: f32)` heca-grid-ui/src/widgets/icon.rs:400 — a size in pixels as API.\n\nFix: glow strengths and bar widths come from the theme (one token per meaning, shared by every widget that means it); icon size is said relative to the text (em / a theme step), so `Icon::size` takes that, not pixels. The look must stay identical (cleanup never changes the look): the tokens' defaults are today's numbers.\n\nCheck: tests; Antonio eye check that nothing moved or changed glow.",
+      "descriptionUpdatedAt": "2026-11-24T09:49:03.402Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f8dc8970-3ca3-48b9-8e5f-93471476a10b-check-001-theme-tokens-for-glow-strengths-used-by-every-widget",
+          "number": 1,
+          "title": "Theme tokens for glow strengths, used by every widget",
+          "checked": false
+        },
+        {
+          "id": "f8dc8970-3ca3-48b9-8e5f-93471476a10b-check-002-theme-tokens-for-accent-bar-widths-and-check-size",
+          "number": 2,
+          "title": "Theme tokens for accent bar widths and check size",
+          "checked": false
+        },
+        {
+          "id": "f8dc8970-3ca3-48b9-8e5f-93471476a10b-check-003-icon-size-relative-to-text-icon-size-api-changed-call-sites",
+          "number": 3,
+          "title": "Icon size relative to text; Icon::size API changed + call sites",
+          "checked": false
+        },
+        {
+          "id": "f8dc8970-3ca3-48b9-8e5f-93471476a10b-check-004-rail-icon-size-from-the-same-icon-size",
+          "number": 4,
+          "title": "RAIL_ICON_SIZE from the same icon size",
+          "checked": false
+        },
+        {
+          "id": "f8dc8970-3ca3-48b9-8e5f-93471476a10b-check-005-docs-antonio-eye-check-identical-look",
+          "number": 5,
+          "title": "Docs + Antonio eye check (identical look)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T09:49:03.283Z",
+      "updatedAt": "2026-11-24T09:49:03.283Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f40866fe-5311-451f-be73-73303541f969",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 585,
+      "shortId": "HEYAR",
+      "priority": 6,
+      "shortName": "the-terminal-component-stops-w",
+      "title": "The Terminal component stops writing its own width and height",
+      "status": "planned",
+      "description": "heca/src/chrome/panes/terminal/component/mod.rs:103-104 writes `base.style.layout.width = Length::Percent(1.0)` and `height = Length::Percent(1.0)` — a hand style write inside the component. The terminal should take the size its place gives it, like every component; if \"fill the parent\" is a default it is the component's default declared through its builders (or the parent's track), not a style write. Check every place a Terminal is put (pane shell, floating pane, overlay) still fills its box. Small task; tests + a quick look.",
+      "descriptionUpdatedAt": "2026-11-24T09:49:06.894Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f40866fe-5311-451f-be73-73303541f969-check-001-remove-the-style-writes-fill-comes-from-the-place-or-a-declared-default",
+          "number": 1,
+          "title": "Remove the style writes; fill comes from the place or a declared default",
+          "checked": false
+        },
+        {
+          "id": "f40866fe-5311-451f-be73-73303541f969-check-002-every-placement-still-fills-tiled-floating-overlay",
+          "number": 2,
+          "title": "Every placement still fills: tiled, floating, overlay",
+          "checked": false
+        },
+        {
+          "id": "f40866fe-5311-451f-be73-73303541f969-check-003-test-sabotaged",
+          "number": 3,
+          "title": "Test (sabotaged)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T09:49:06.782Z",
+      "updatedAt": "2026-11-24T09:49:06.782Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 586,
+      "shortId": "QALUN",
+      "priority": 7,
+      "shortName": "the-guides-stop-teaching-the-i",
+      "title": "The guides stop teaching the imperative state write",
+      "status": "planned",
+      "description": "AGENTS.md:1433 and docs/widget-architecture.md:128-129 still show `row.state().set(..)` and `text_signal().set(..)` — writing a widget's state from outside — as the way to change a widget. The rule now is that a widget reads a live value it was given (`.prop(signal)`) and acts through `ev.dispatch(Intent)`. Rewrite both examples in THE SYNTAX, and sweep docs/ for the same pattern elsewhere. Do it last in the phase, so the examples match the code the other tasks leave.",
+      "descriptionUpdatedAt": "2026-11-24T09:49:09.748Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0-check-001-agents-md-1433-rewritten",
+          "number": 1,
+          "title": "AGENTS.md:1433 rewritten",
+          "checked": false
+        },
+        {
+          "id": "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0-check-002-docs-widget-architecture-md-128-129-rewritten",
+          "number": 2,
+          "title": "docs/widget-architecture.md:128-129 rewritten",
+          "checked": false
+        },
+        {
+          "id": "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0-check-003-sweep-docs-for-the-same-pattern",
+          "number": 3,
+          "title": "Sweep docs/ for the same pattern",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T09:49:09.630Z",
+      "updatedAt": "2026-11-24T09:49:09.630Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-11-24T09:48:30.358Z",
+  "updatedAt": "2026-11-24T09:49:09.630Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

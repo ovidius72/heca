@@ -119,7 +119,9 @@
       "acceptedAt": "2026-11-20T19:34:56.336Z"
     }
   ],
-  "phaseIds": [],
+  "phaseIds": [
+    "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7"
+  ],
   "dependsOn": [],
   "statusLog": [],
   "createdAt": "2026-11-18T18:34:46.404Z",
