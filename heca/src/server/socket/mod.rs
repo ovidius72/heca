@@ -28,10 +28,22 @@ pub(crate) use runtime::RuntimeListener;
 /// the platform gives no writable answer — the socket is then simply not served and heca still runs
 /// standalone.
 fn runtime_dir() -> Option<PathBuf> {
-    let base = dirs::runtime_dir().unwrap_or_else(std::env::temp_dir);
-    let dir = base.join("heca");
+    use heca_config::state_file::{DATA_DIR_ENV, folder_from_env};
+    let dir = socket_folder(folder_from_env(DATA_DIR_ENV));
     super::private_fs::private_folder(&dir).ok()?;
     Some(dir)
+}
+
+/// **The folder the socket lives in.** A heca pointed at a data folder of its own
+/// (`HECA_DATA_DIR`) runs a server of its own: its socket lives in that folder, so a test run never
+/// joins the user's server and its sessions. Otherwise the runtime folder.
+fn socket_folder(own_data: Option<PathBuf>) -> PathBuf {
+    match own_data {
+        Some(data) => data.join("run"),
+        None => dirs::runtime_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("heca"),
+    }
 }
 
 /// Where the server listens and a client connects. One socket for now; sessions give it a name
@@ -266,6 +278,26 @@ mod tests {
             path.ends_with("heca/default.sock"),
             "got: {}",
             path.display()
+        );
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::socket_folder;
+    use std::path::PathBuf;
+
+    /// **A heca with a data folder of its own listens there** — so it never joins the user's
+    /// server; without one, the shared runtime folder.
+    #[test]
+    fn a_heca_with_its_own_data_folder_has_its_own_socket() {
+        let data = PathBuf::from("/tmp/heca-test-data");
+        assert_eq!(socket_folder(Some(data.clone())), data.join("run"));
+        assert_eq!(
+            socket_folder(None),
+            dirs::runtime_dir()
+                .unwrap_or_else(std::env::temp_dir)
+                .join("heca")
         );
     }
 }
