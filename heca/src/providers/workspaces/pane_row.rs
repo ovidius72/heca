@@ -72,7 +72,6 @@ impl<'a> PaneRow<'a> {
             pane,
             column_of_pane,
         } = self;
-        let theme = seams.theme;
         let ws_state = seams.ws_state;
         let active = seams.active_pane == Some(pane.pane_id);
         let pane_id = pane.pane_id;
@@ -161,7 +160,6 @@ impl<'a> PaneRow<'a> {
             })
         };
         let line_cx = LineCx {
-            theme,
             facts,
             agent_statuses: ws_state.agent_statuses,
             agent_session_line: ws_state.agent_session_line,
