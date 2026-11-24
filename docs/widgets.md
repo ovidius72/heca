@@ -4704,18 +4704,19 @@ doing, the **picture** what it is (a program's logo, a person's photo).
 | `.tone(Tone)` | the fill, a theme tone (`Accent`, `Muted`, `Warning`, `Success`, `Danger`) | `Accent` |
 | `.ring(Tone)` | an edge round the tile in that tone, as wide as the theme's border | no ring |
 | `.ring_signal(Signal<Option<Tone>>)` | drive the ring from a tone the host keeps; `None` takes it away. Changes in place, nothing rebuilt | — |
-| `.picture(path)` | a picture instead of the letter: an image file, as tall as the text (`1em`) | the letter |
+| `.picture(path)` | a picture instead of the letter: an image file, filling the tile as the letter does | the letter |
 | `.picture_signal(Signal<Option<ImageSource>>)` | drive the picture from an image the host keeps; `None` shows the letter again. Changes in place, nothing rebuilt | — |
 | `.size(WidgetSize)` | the shared size variant; the letter and picture follow it | `Normal` |
 
-**How it is built** (THE SYNTAX): a `Grid` with two named areas, `letter` and `picture`, one shown at a
-time — a hidden part takes no room, so the tile is always as big as what it shows. Its parts are found
-by name, never by position.
+**How it is built** (THE SYNTAX): two named parts, `letter` and `picture`, in a centring `Flex` row, one
+shown at a time — a hidden part takes no room. Each is a square as big as a line of text, so the tile is
+the same size with the letter or a picture, and a picture fills it. Its parts are found by name, never by
+position. (A `Grid` with two `auto` columns is avoided on purpose: free space can leak into one of them.)
 
 **What it owns:** the box — fill and ring are theme tones, the corner radius (`control_radius()`) and
 ring width are the theme's, all read at paint, so a theme reload restyles it — the letter, written in
 the theme's colour for the fill (`theme.colors.on(fill)`, as a filled `Button` writes its label) so it
-reads on any fill, and the picture's size. **What you own:** the tones you pick and the signals you
+reads on any fill, and its size. **What you own:** the tones you pick and the signals you
 hand in. Its accessible name is the letter.
 
 **Native:**

@@ -23,8 +23,8 @@
 //!
 //! **What it owns:** the box — fill and ring are theme tones, the corner radius and ring width are
 //! the theme's, all read at paint, so a theme reload restyles it; the letter, written in the
-//! theme's colour for that fill (`on(..)`) so it reads on any fill; and the picture, as tall as the
-//! text. **What the caller owns:** the tones it picks and the signals it hands in — a ring or a
+//! theme's colour for that fill (`on(..)`) so it reads on any fill; and the size: a square as big as
+//! a line of text, the same with the letter or a picture. **What the caller owns:** the tones it picks and the signals it hands in — a ring or a
 //! picture signal changes the tile in place, with no rebuild.
 //!
 //! Why this is a widget: heca-pro drew this tile by hand for its rooms and members (a `Surface` with
@@ -35,12 +35,14 @@ use crate::FontWeight;
 use crate::Tone;
 use crate::builders::{LayoutExt, Parent, PlaceExt, PresenceExt, StyleExt};
 use crate::component::{Base, Component, PaintCx, area, paint_child};
+use crate::font::MONO_LINE_RATIO;
 use crate::image::ImageSource;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
-use crate::style::Spacing;
-use crate::widgets::{Grid, Image, Label};
+use crate::scene::TextAlign;
+use crate::style::Length;
+use crate::widgets::{Flex, Image, Label};
 
-/// The tile's two parts, each in its own area, one shown at a time: the letter, or the picture.
+/// The tile's two parts, each with its own name, one shown at a time: the letter, or the picture.
 const LETTER: &str = "letter";
 const PICTURE: &str = "picture";
 
@@ -96,7 +98,8 @@ impl Avatar {
         self
     }
 
-    /// **A picture instead of the letter** — an image file (a logo, a photo), as tall as the text.
+    /// **A picture instead of the letter** — an image file (a logo, a photo), filling the tile as the
+    /// letter does.
     /// Default: the letter.
     #[heca_grid_ui_macros::prop]
     pub fn picture(self, path: impl Into<String>) -> Self {
@@ -115,35 +118,38 @@ impl Avatar {
     }
 }
 
-/// **The two parts, in their named areas**: the letter, shown while there is no picture, and the
-/// picture, shown while there is one. A part that is hidden takes no room, so the tile is always as
-/// big as what it shows.
-fn parts(name: &str, picture: Signal<Option<ImageSource>>) -> Grid {
+/// **The two parts**: the letter, shown while there is no picture, and the picture, shown while
+/// there is one. Each is a square as big as a line of text ([`MONO_LINE_RATIO`] em), so the tile is
+/// the same size whichever it shows, and a picture fills it as the letter does.
+///
+/// They sit in a centring `Flex` row, not a `Grid`: one is always hidden and takes no room, so the
+/// row holds exactly what is shown. Two `auto` grid columns side by side let free space leak into
+/// one of them, which widened the tile and pushed the picture to one side. Each part still carries
+/// a name (its area), so it is found by name, never by position.
+fn parts(name: &str, picture: Signal<Option<ImageSource>>) -> Flex {
+    let side = Length::Em(MONO_LINE_RATIO);
     let image = Image::from_source(ImageSource::bytes(Vec::new()))
-        .width("1em")
-        .height("1em");
+        .width(side)
+        .height(side);
     let source = image.source_signal();
     create_effect(move |_| {
         if let Some(shown) = picture.get() {
             source.set(shown);
         }
     });
-    Grid::new()
-        .template_area([format!("{LETTER} {PICTURE}")])
+    Flex::row()
         .align("center")
+        .justify("center")
         .child(
             Label::new(initial(name))
                 .font_weight(FontWeight::Bold)
-                .padding_x(Spacing::Xs)
+                .align(TextAlign::Center)
+                // At least a square: a label sizes itself to its text, so its width is a floor.
+                .min_width(side)
                 .area(LETTER)
                 .hidden(move || picture.get().is_some()),
         )
-        .child(
-            image
-                .padding(Spacing::Xs)
-                .area(PICTURE)
-                .hidden(move || picture.get().is_none()),
-        )
+        .child(image.area(PICTURE).hidden(move || picture.get().is_none()))
 }
 
 /// The first letter of a name, upper-cased.
@@ -265,6 +271,27 @@ mod tests {
         picture.set(None);
         LayoutEngine::new().compute(&mut root, Size::new(300.0, 40.0));
         assert!(shown(&root, LETTER), "the letter again");
+    }
+
+    /// The tile is the same size with its letter and with a picture — a square as big as a line of
+    /// text — so a logo arriving neither widens the tile nor sits in a corner of it.
+    #[test]
+    fn the_tile_is_the_same_square_with_a_letter_or_a_picture() {
+        let picture = signal(None);
+        let mut root = laid(Avatar::new("bob").picture_signal(picture));
+        let tile = |root: &Flex| area(root, "avatar").expect("the avatar").base().bounds;
+        let with_letter = tile(&root);
+        picture.set(Some(ImageSource::bytes(b"<svg/>".to_vec())));
+        LayoutEngine::new().compute(&mut root, Size::new(300.0, 40.0));
+        let with_picture = tile(&root);
+        assert_eq!(with_letter.size, with_picture.size, "same size either way");
+        // A square to the pixel: a label rounds its line to whole pixels, an `em` length does not.
+        assert!(
+            (with_letter.size.w - with_letter.size.h).abs() <= 1.0,
+            "a square: {with_letter:?}"
+        );
+        let shown = area(&root, PICTURE).expect("the picture").base().bounds;
+        assert_eq!(shown.size, with_picture.size, "the picture fills the tile");
     }
 
     /// The tile is as big as its letter, the letter in its middle.
