@@ -317,7 +317,7 @@ pub fn handle_resize_container(
     let height = |id: &str| {
         heca_grid_ui::node_with_key(&state.window_root, id).map(|seat| seat.base().bounds.size.h)
     };
-    // The open docks of the region, as shown, with their heights.
+    // The open docks of the region, as shown, with their heights on screen.
     let open: Vec<(String, f64)> = state
         .chrome_host
         .shown(region)
@@ -328,37 +328,77 @@ pub fn handle_resize_container(
     let Some(at) = open.iter().position(|(id, _)| id == container_id) else {
         return Ok(());
     };
-    // **`by` moves an edge, as for panes**: the one below the dock, or the one above when it is the
-    // last — so a positive `by` (down) grows the dock above an edge and shrinks the one below it.
-    let (other, by) = if at + 1 < open.len() {
-        (at + 1, *by)
-    } else if at > 0 {
-        (at - 1, -*by)
-    } else {
+    // **Where the docks are now** — from the shares the last step wrote, when every open dock has
+    // one, not from the screen: a drag sends one step per pointer move, several run before the next
+    // layout, and each read from the screen started from the same old heights and undid the step
+    // before it, so the edge fell behind the pointer. The screen gives only the total, which a drag
+    // does not change.
+    let on_screen: Vec<f64> = open.iter().map(|(_, h)| *h).collect();
+    let shares: Option<Vec<f32>> = open
+        .iter()
+        .map(|(id, _)| state.chrome_host.hand_share(id))
+        .collect();
+    let heights = current_heights(shares, on_screen);
+    let floor = f64::from(state.app_ui_font_size()) * MIN_DOCK_LINES;
+    let Some(shares) = resized_shares(&heights, at, *by, floor) else {
         return Ok(());
     };
-    let total: f64 = open.iter().map(|(_, h)| h).sum();
-    if total <= 0.0 {
-        return Ok(());
-    }
-    let floor = f64::from(state.app_ui_font_size()) * MIN_DOCK_LINES;
-    let mut heights: Vec<f64> = open.iter().map(|(_, h)| *h).collect();
-    let pair = heights[at] + heights[other];
-    let grown = (heights[at] + by).clamp(floor.min(pair / 2.0), (pair - floor).max(pair / 2.0));
-    heights[at] = grown;
-    heights[other] = pair - grown;
-    // Shares that average one, so a dock added later at its default share sits among them. Set on
-    // the host (for every rebuild) and on the drawn dock itself, so the region is not rebuilt and a
-    // drag of the edge goes on under the pointer.
-    let count = heights.len() as f64;
-    for ((id, _), h) in open.iter().zip(&heights) {
-        let share = (h / total * count) as f32;
+    // Set on the host (for every rebuild) and on the drawn dock itself, so the region is not
+    // rebuilt and a drag of the edge goes on under the pointer.
+    for ((id, _), share) in open.iter().zip(shares) {
         state.chrome_host.set_share(id, share);
         if let Some(seat) = heca_grid_ui::node_with_key_mut(&mut state.window_root, id) {
             seat.base_mut().style.layout.flex = Some(share);
         }
     }
     Ok(())
+}
+
+/// **Where the docks are now**: the heights the shares last written give the docks' total on
+/// screen, when every open dock has one; the screen's own heights before the first step.
+fn current_heights(shares: Option<Vec<f32>>, on_screen: Vec<f64>) -> Vec<f64> {
+    match shares {
+        Some(shares) if shares.len() == on_screen.len() => {
+            heights_from_shares(&shares, on_screen.iter().sum())
+        }
+        _ => on_screen,
+    }
+}
+
+/// The heights `shares` give `total` pixels — each dock its share of the sum.
+fn heights_from_shares(shares: &[f32], total: f64) -> Vec<f64> {
+    let sum: f64 = shares.iter().map(|s| f64::from(*s)).sum();
+    if sum <= 0.0 {
+        return vec![total / shares.len().max(1) as f64; shares.len()];
+    }
+    shares.iter().map(|s| f64::from(*s) / sum * total).collect()
+}
+
+/// **The shares after the edge of dock `at` moves `by` pixels**, from the docks' `heights`.
+///
+/// `by` moves an edge, as for panes: the one below the dock, or the one above when it is the last —
+/// so a positive `by` (down) grows the dock above an edge and shrinks the one below it. The two
+/// neighbours trade `by`, neither going below `floor`. The shares average one, so a dock added later
+/// at its default share sits among them. `None` when there is no edge to move.
+fn resized_shares(heights: &[f64], at: usize, by: f64, floor: f64) -> Option<Vec<f32>> {
+    let (other, by) = if at + 1 < heights.len() {
+        (at + 1, by)
+    } else if at > 0 {
+        (at - 1, -by)
+    } else {
+        return None;
+    };
+    let total: f64 = heights.iter().sum();
+    if total <= 0.0 {
+        return None;
+    }
+    let mut heights = heights.to_vec();
+    let pair = heights[at] + heights[other];
+    let grown = (heights[at] + by).clamp(floor.min(pair / 2.0), (pair - floor).max(pair / 2.0));
+    heights[at] = grown;
+    heights[other] = pair - grown;
+    let count = heights.len() as f64;
+    Some(heights.iter().map(|h| (h / total * count) as f32).collect())
 }
 
 /// Show / hide / toggle a chrome region — the runtime side of `[settings] show_*`.
@@ -406,3 +446,5 @@ pub fn handle_layer_visibility(
 
 #[cfg(test)]
 mod dock_focus_tests;
+#[cfg(test)]
+mod resize_tests;

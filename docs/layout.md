@@ -350,7 +350,7 @@ Flex::column()
 
 | written | means |
 |---|---|
-| `.flex(1.0)` beside `.flex(3.0)` | a quarter and three quarters — **whatever each holds** |
+| `.flex(1.0)` beside `.flex(3.0)` | a quarter and three quarters — whatever each holds **if it scrolls**; a child that does not scroll never gets less than its content (CSS `min-height: auto`), so its text is never drawn over by the next one. Say `.min_height(0.0)` to let it be squeezed anyway |
 | `.flex(0.0)` | as big as its content, no part of the rest (CSS `flex: none`) |
 | nothing | its own size — the parent gives it no part |
 

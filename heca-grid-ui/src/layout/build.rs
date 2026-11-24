@@ -106,9 +106,14 @@ impl LayoutEngine {
         // only free space, so a column of grown children collapses to its content instead of
         // dividing itself.
         //
-        // Only the minimum HEIGHT is zeroed here. The minimum width needs nothing: every child of a
-        // non-viewport container already gets `min_width: 0` (the two rules in `style.rs`), which is
-        // what lets a row of parts split evenly whatever each holds —
+        // **The minimum HEIGHT is left to the content, as CSS's `min-height: auto`**: a child never
+        // gets less than its content, so text is never squeezed under the line below it (a name
+        // grid with `.flex(1.0)` above a report line drew the report over the name). A child whose
+        // content scrolls has a minimum of zero of its own (a scroll region says so), so docks still
+        // divide a column by their parts however long their lists are; an author who wants a share
+        // to shrink below its content says `min_height(0)`. The minimum width is different: every
+        // child of a non-viewport container gets `min_width: 0` (the two rules in `style.rs`), so a
+        // row of parts splits evenly and text truncates —
         // `flex_parts_split_a_row_whatever_each_child_holds` holds it.
         //
         // Resolved here, against the parent, because a caller cannot know which kind of parent will
@@ -116,16 +121,32 @@ impl LayoutEngine {
         // in a grid cell, which drew a whole container as its title row and nothing else.
         let in_a_grid = c.grid_template().is_some();
         let child_count = c.base().children.len();
+        // **Parts are a ratio between the children, not a fraction of the room.** CSS gives out only
+        // that fraction of the free space when the grow factors add up to less than one, so a lone
+        // dock left at share 0.6 (its neighbour folded) filled 60% of the sidebar and left the rest
+        // empty. Parts that add up to less than one are scaled to add up to one, so what they share
+        // is always all of it, in the proportions they said.
+        let total_parts: f32 = c
+            .base()
+            .children
+            .iter()
+            .filter_map(|k| k.base().style.layout.flex)
+            .filter(|parts| *parts > 0.0)
+            .sum();
+        let scale = if total_parts > 0.0 && total_parts < 1.0 {
+            1.0 / total_parts
+        } else {
+            1.0
+        };
         for i in 0..child_count {
             let s = &mut c.base_mut().children[i].base_mut().style.layout;
             let Some(parts) = s.flex else { continue };
             if in_a_grid {
                 continue;
             }
-            s.flex_grow = parts;
+            s.flex_grow = parts * scale;
             if parts > 0.0 {
                 s.flex_basis = Some(crate::style::Length::Px(0.0));
-                s.min_height = s.min_height.or(Some(crate::style::Length::Px(0.0)));
                 s.flex_shrink = s.flex_shrink.or(Some(1.0));
             }
         }
