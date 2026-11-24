@@ -7,7 +7,7 @@ use heca_grid_ui::style::{FontWeight, Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Flex, Glyph, Grid, Icon, Label, Visibility};
 use heca_grid_ui::{
     Image, Tone,
-    builders::{LayoutExt, Parent, PlaceExt, ToneExt, TooltipExt},
+    builders::{LayoutExt, Parent, PlaceExt, PresenceExt, ToneExt, TooltipExt},
 };
 
 use super::pane_row::{META_INDENT, set_if_changed};
@@ -16,7 +16,7 @@ use crate::chrome::panes::pane_items::LineCx;
 use crate::components::PaneName;
 use heca_config::appearance::AgentSessionLine;
 
-pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
+pub(super) fn build(cx: &LineCx) -> Visibility {
     let initial = (cx.facts)();
     let primary = text(FontWeight::Bold);
     let primary_text = primary.text_signal();
@@ -31,20 +31,27 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
     let task = Visibility::new().visible(false).child(task);
     let task_visible = task.visible_signal();
 
-    // Image owns decoding, load errors and fitting. The row only supplies driver metadata.
-    let fallback = Icon::new(initial.icon);
-    let fallback_glyph = fallback.glyph_signal();
+    // Image owns decoding, load errors and fitting. The row only supplies driver metadata — and
+    // every part follows the pane's facts by itself, through its builders: the logo the agent sends
+    // (or the program's glyph while there is none, or when it cannot be drawn), as tall as the text.
+    let facts = cx.facts.clone();
+    let logo_of = move || facts().agent.and_then(|agent| agent.icon);
+    let (has_logo, no_logo) = (logo_of.clone(), logo_of.clone());
+    let facts = cx.facts.clone();
+    let program_glyph = move || facts().icon;
     let logo = Image::from_bytes(&[][..])
-        .width(cx.theme.font_size)
-        .height(cx.theme.font_size)
-        .fallback(fallback);
-    let logo_source = logo.source_signal();
-    let logo = Visibility::new().visible(false).child(logo);
-    let logo_visible = logo.visible_signal();
-    let generic = Icon::new(initial.icon);
-    let generic_glyph = generic.glyph_signal();
-    let generic = Visibility::new().visible(true).child(generic);
-    let generic_visible = generic.visible_signal();
+        .source_from(move || {
+            logo_of()
+                .map(image_source)
+                .unwrap_or_else(|| ImageSource::bytes(Vec::new()))
+        })
+        .width("1em")
+        .height("1em")
+        .fallback(Icon::new(initial.icon).glyph(program_glyph.clone()))
+        .hidden(move || no_logo().is_none());
+    let generic = Icon::new(initial.icon)
+        .glyph(program_glyph)
+        .hidden(move || has_logo().is_some());
     let indicator = Icon::new(Glyph::Circle);
     let status_glyph = indicator.glyph_signal();
     let status_tone = signal(None);
@@ -97,17 +104,6 @@ pub(super) fn build(cx: &LineCx<'_>) -> Visibility {
                 .and_then(|p| p.tone.as_deref())
                 .and_then(Tone::from_prop_name),
         );
-        set_if_changed(fallback_glyph, facts.icon);
-        set_if_changed(generic_glyph, facts.icon);
-        set_if_changed(logo_visible, agent.icon.is_some());
-        set_if_changed(generic_visible, agent.icon.is_none());
-        if let Some(icon) = agent.icon {
-            let source = match icon {
-                AgentIcon::File(path) => ImageSource::file(path),
-                AgentIcon::Svg(svg) => ImageSource::bytes(svg.into_bytes()),
-            };
-            set_if_changed(logo_source, source);
-        }
         // **The model the agent answers with, else its name.** Every built-in agent now keeps its
         // model current: Codex names it on each event, and Claude's is read from its conversation
         // log at each event (`reporting::command::last_model`). One that names none shows its name.
@@ -146,3 +142,11 @@ fn text(weight: FontWeight) -> Label {
 
 #[cfg(test)]
 mod tests;
+
+/// What the image widget loads for an agent's icon.
+fn image_source(icon: AgentIcon) -> ImageSource {
+    match icon {
+        AgentIcon::File(path) => ImageSource::file(path),
+        AgentIcon::Svg(svg) => ImageSource::bytes(svg.into_bytes()),
+    }
+}

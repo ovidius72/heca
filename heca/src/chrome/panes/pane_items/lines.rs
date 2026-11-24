@@ -12,7 +12,6 @@
 
 use std::rc::Rc;
 
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::Glyph;
 
 use super::PaneFacts;
@@ -38,8 +37,7 @@ impl PaneLine {
 
 /// **What a line is built from**: the theme, and the pane's facts (a function, because it is read
 /// inside the line's own subscription — reading it is what makes the line follow the pane).
-pub(crate) struct LineCx<'a> {
-    pub(crate) theme: &'a GuiTheme,
+pub(crate) struct LineCx {
     pub(crate) facts: Rc<dyn Fn() -> PaneFacts>,
     pub(crate) agent_statuses:
         heca_grid_ui::reactive::Signal<Rc<heca_config::settings::AgentStatuses>>,
@@ -48,7 +46,7 @@ pub(crate) struct LineCx<'a> {
 }
 
 /// How a line is built for one pane.
-pub(crate) type BuildLine = dyn Fn(&LineCx<'_>) -> heca_grid_ui::WidgetModel;
+pub(crate) type BuildLine = dyn Fn(&LineCx) -> heca_grid_ui::WidgetModel;
 
 /// One line, by name.
 pub(crate) struct PaneLineDef {
