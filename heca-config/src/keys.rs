@@ -130,6 +130,11 @@ pub struct CommandKeybindConfig {
     pub keep_on_error: bool,
     #[serde(default)]
     pub keep_on_success: bool,
+    /// The folder the program starts in: `"pane"` (the folder of the pane the key was pressed
+    /// from), `"git"` (the top folder of that pane's repository), `"~"`, `"~/..."`, an absolute
+    /// path, or a path read from the pane's folder. Unset: `"pane"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
 }
 
 fn default_command_kind() -> String {
