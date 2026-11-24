@@ -1,5 +1,6 @@
 //! Assemble the catalog and its shared controls. Each demo lives beside this module.
 use super::*;
+mod avatar;
 mod border_controls;
 mod button;
 mod button_overflow;
@@ -462,6 +463,9 @@ pub(super) fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // Display widgets: status dot + badges across variants.
         .child(caption("StatusDot · Badge"))
         .child(statusdot_badge::build(&cx))
+        // A letter on a coloured box, with an optional ring and a mark on its corner.
+        .child(caption("Avatar"))
+        .child(avatar::build(&cx))
         // Tags (G8): metadata chips that can carry a leading icon and multiple
         // segments (a status-bar pill). Quieter than a Badge; hue configurable.
         .child(caption("Tag"))

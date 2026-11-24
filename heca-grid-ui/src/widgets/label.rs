@@ -377,7 +377,7 @@ impl Label {
     /// construction, and a reflow carries each to the line its character landed on.
     fn drawn_indexed(&self) -> Vec<Vec<(char, Option<usize>)>> {
         let text = self.shown_text();
-        let cells = mono_cells(self.base.bounds.size.w, self.cell());
+        let cells = mono_cells(self.base.content_rect().size.w, self.cell());
         if self.wrap.get_untracked() {
             return (if self.preserve_whitespace {
                 crate::font::wrap_preserved(&text, cells, self.max_lines.get_untracked())
@@ -578,7 +578,8 @@ impl Label {
     /// rule spanning the tallest box. A single-line label returns one rect covering its whole
     /// height — unchanged from before wrapping existed.
     fn run_rects(&self) -> Vec<Rectangle> {
-        let bounds = self.base.bounds;
+        // The content box: the text goes inside the label's own padding.
+        let bounds = self.base.content_rect();
         // A wrapped label's box is N lines tall, so a run is one line; a plain label's run is its
         // whole box, which is what keeps a stretched single-line label centring as it always did.
         let line_h = if self.wrap.get_untracked() {
@@ -736,7 +737,8 @@ impl Component for Label {
             .italic(self.italic.get_untracked())
             .letter_spacing(self.letter_spacing.em());
         let lines = self.drawn_indexed();
-        let bounds = self.base.bounds;
+        // The content box: the text goes inside the label's own padding.
+        let bounds = self.base.content_rect();
         let runs = self.run_rects();
         let mark_color = self.mark_color.unwrap_or_else(|| cx.accent());
         let marks = self.marks.get_untracked();
@@ -836,3 +838,36 @@ impl Component for Label {
 // Gives `Label` the shared builders — notably `size` (the size variant) and
 // width/height — even though it has no children.
 impl LayoutExt for Label {}
+
+#[cfg(test)]
+mod padding_tests {
+    use super::*;
+    use crate::Parent;
+    use crate::builders::LayoutExt;
+    use crate::style::Spacing;
+    use crate::widgets::Flex;
+    use crate::{LayoutEngine, Size};
+
+    /// A padded label draws its text inside its padding: a letter given room on both sides sits in
+    /// the middle of its box, not against the left edge.
+    #[test]
+    fn a_padded_label_draws_its_text_inside_the_padding() {
+        let mut root = Flex::row()
+            .width(200.0)
+            .height(40.0)
+            .child(Label::new("B").padding_x(Spacing::Xs));
+        LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+        let label = &root.base().children[0];
+        let (bounds, content) = (label.base().bounds, label.base().content_rect());
+        assert!(
+            content.loc.x > bounds.loc.x,
+            "the padding is left free: {content:?} in {bounds:?}"
+        );
+        let left = content.loc.x - bounds.loc.x;
+        let right = (bounds.loc.x + bounds.size.w) - (content.loc.x + content.size.w);
+        assert!(
+            (left - right).abs() < 0.5,
+            "even on both sides: {left} / {right}"
+        );
+    }
+}

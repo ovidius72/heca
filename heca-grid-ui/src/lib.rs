@@ -125,17 +125,17 @@ pub use style::{
 pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use tone::Tone;
 pub use widgets::{
-    ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonVariant,
-    Caption, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog,
-    DockFrame, DockFrameVariant, DotStatus, Elapsed, ElapsedFormat, Ellipsis, Flex, FocusScope,
-    Gauge, Glyph, Grid, HintPlacement, Icon, IconButton, Image, ImageFit, ImageState, Input, Item,
-    ItemGroup, KeyCap, KeyHint, KeyHintGroup, Keycap, KeycapVariant, Label, LabelSide, LandingSlot,
-    Line, MarkerGroup, MessageFeed, MessageList, NfGlyph, NfIcon, Orientation, Overlay,
-    OverlayPosition, Pane, Panel, ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row,
-    RowVariant, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
-    Splitter, StatusDot, Surface, Svg, Tabs, Tag, Tile, Toast, ToastAction, ToastPosition,
-    ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, TreeLayout, Visibility,
-    container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
+    ActiveMarker, Alert, AlertVariant, Avatar, Badge, BadgeButton, BadgeVariant, Button,
+    ButtonVariant, Caption, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette,
+    Container, Dialog, DockFrame, DockFrameVariant, DotStatus, Elapsed, ElapsedFormat, Ellipsis,
+    Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton, Image, ImageFit,
+    ImageState, Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, Keycap, KeycapVariant,
+    Label, LabelSide, LandingSlot, Line, MarkerGroup, MessageFeed, MessageList, NfGlyph, NfIcon,
+    Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar, RailCell, RegionMode,
+    Resizable, RevealAlign, Row, RowVariant, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion,
+    Select, Separator, Spinner, Splitter, StatusDot, Surface, Svg, Tabs, Tag, Tile, Toast,
+    ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
+    TreeLayout, Visibility, container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
 
 /// Common imports for building UIs.
@@ -171,11 +171,11 @@ pub mod prelude {
     pub use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
     pub use crate::tone::Tone;
     pub use crate::widgets::{
-        ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonGroup,
-        ButtonVariant, Caption, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette,
-        Container, ContextMenu, Dialog, DockFrame, DockFrameVariant, DotStatus, Elapsed,
-        ElapsedFormat, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon,
-        IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Keycap, Label, LabelSide,
+        ActiveMarker, Alert, AlertVariant, Avatar, Badge, BadgeButton, BadgeVariant, Button,
+        ButtonGroup, ButtonVariant, Caption, Card, Checkbox, Choice, ChromeRegion, Command,
+        CommandPalette, Container, ContextMenu, Dialog, DockFrame, DockFrameVariant, DotStatus,
+        Elapsed, ElapsedFormat, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement,
+        Icon, IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Keycap, Label, LabelSide,
         LandingSlot, Line, MarkerGroup, MenuEntry, MenuItem, MessageFeed, MessageList, NfGlyph,
         NfIcon, Orientation, Pane, ProgressBar, RailCell, RegionMode, Resizable, RevealAlign, Row,
         RowVariant, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,

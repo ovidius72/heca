@@ -161,6 +161,17 @@ pub(super) fn progress(
     )))
 }
 
+pub(super) fn avatar(
+    node: &ViewNode,
+    cx: &mut RealizeCx<'_>,
+) -> Result<heca_grid_ui::WidgetModel, RealizeError> {
+    Ok(heca_grid_ui::WidgetModel::new(with_props(
+        heca_grid_ui::widgets::Avatar::new(text_of(node)),
+        node,
+        cx.theme(),
+    )))
+}
+
 pub(super) fn tile(
     node: &ViewNode,
     cx: &mut RealizeCx<'_>,
