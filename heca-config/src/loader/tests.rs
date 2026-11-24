@@ -555,3 +555,17 @@ fn a_config_without_extension_tables_serializes_without_one() {
     let text = toml::to_string(&Config::default()).unwrap();
     assert!(!text.contains("extensions"), "{text}");
 }
+
+/// **`HECA_CONFIG_DIR` moves the config folder** — set, config.toml and the themes are read from
+/// there; unset, the platform's config folder stays.
+#[test]
+fn the_config_folder_follows_its_variable() {
+    let moved = std::path::PathBuf::from("/tmp/heca-test-config");
+    assert_eq!(super::config_dir_given(Some(moved.clone())), moved);
+    assert_eq!(
+        super::config_dir_given(None),
+        dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("heca")
+    );
+}

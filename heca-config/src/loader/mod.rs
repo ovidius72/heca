@@ -463,10 +463,22 @@ fn validate_config(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
+/// **heca's config folder** — `HECA_CONFIG_DIR` when set, else `heca` in the platform's config
+/// folder (`~/.config/heca`).
 pub fn config_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("heca")
+    config_dir_given(crate::state_file::folder_from_env(
+        crate::state_file::CONFIG_DIR_ENV,
+    ))
+}
+
+/// [`config_dir`] with the variable's value given, so it can be tested without touching the
+/// process's environment.
+pub(crate) fn config_dir_given(from_env: Option<PathBuf>) -> PathBuf {
+    from_env.unwrap_or_else(|| {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("heca")
+    })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
