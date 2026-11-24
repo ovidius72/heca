@@ -506,9 +506,12 @@ impl Layout {
         // `auto`, which sizes to its content. So a grid templated down one axis drew its contents
         // at their natural width and left the rest of the box empty, which is not what anyone means
         // by templating the rows. The implicit track takes the room instead, on whichever axis was
-        // left unsaid.
-        use taffy::style_helpers::{fr, length, minmax};
-        let fill = minmax(length(0.0_f32), fr(1.0_f32));
+        // left unsaid — and, as CSS's `1fr`, never less than its content, so a one-column grid
+        // holding a line of text keeps that line's height when its parent shares room out. (A
+        // fraction the author WRITES is `minmax(0, <n>fr)`, see `Track::Fr`: a template is how
+        // docks divide a sidebar whatever each holds.)
+        use taffy::style_helpers::fr;
+        let fill = fr(1.0_f32);
         if columns.is_empty() {
             s.grid_auto_columns = vec![fill];
         }

@@ -106,9 +106,14 @@ impl LayoutEngine {
         // only free space, so a column of grown children collapses to its content instead of
         // dividing itself.
         //
-        // Only the minimum HEIGHT is zeroed here. The minimum width needs nothing: every child of a
-        // non-viewport container already gets `min_width: 0` (the two rules in `style.rs`), which is
-        // what lets a row of parts split evenly whatever each holds —
+        // **The minimum HEIGHT is left to the content, as CSS's `min-height: auto`**: a child never
+        // gets less than its content, so text is never squeezed under the line below it (a name
+        // grid with `.flex(1.0)` above a report line drew the report over the name). A child whose
+        // content scrolls has a minimum of zero of its own (a scroll region says so), so docks still
+        // divide a column by their parts however long their lists are; an author who wants a share
+        // to shrink below its content says `min_height(0)`. The minimum width is different: every
+        // child of a non-viewport container gets `min_width: 0` (the two rules in `style.rs`), so a
+        // row of parts splits evenly and text truncates —
         // `flex_parts_split_a_row_whatever_each_child_holds` holds it.
         //
         // Resolved here, against the parent, because a caller cannot know which kind of parent will
@@ -125,7 +130,6 @@ impl LayoutEngine {
             s.flex_grow = parts;
             if parts > 0.0 {
                 s.flex_basis = Some(crate::style::Length::Px(0.0));
-                s.min_height = s.min_height.or(Some(crate::style::Length::Px(0.0)));
                 s.flex_shrink = s.flex_shrink.or(Some(1.0));
             }
         }
