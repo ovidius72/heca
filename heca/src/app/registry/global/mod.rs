@@ -84,7 +84,7 @@ pub fn build_keymap(
                 keep_on_error: cmd_cfg.keep_on_error,
                 keep_on_success: cmd_cfg.keep_on_success,
             },
-            cwd: None,
+            cwd: cmd_cfg.cwd.clone(),
         });
         let trimmed = cmd_cfg.key.trim();
         let written = Written {

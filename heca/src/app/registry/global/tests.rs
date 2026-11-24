@@ -26,6 +26,7 @@ fn a_users_command_binding_does_not_delete_the_default_ones() {
         close_pane: false,
         keep_on_error: false,
         keep_on_success: false,
+        cwd: None,
     };
 
     let mut defaults = vec![shipped("prefix+g", "lazygit"), shipped("prefix+t", "btm")];
@@ -414,4 +415,31 @@ fn default_selection_bindings_resolve() {
             arguments: None
         })
     );
+}
+
+/// **A `[[keys.command]]` says where its program starts** — its `cwd` reaches the action as
+/// written, and an entry without one leaves it unset (the server reads unset as the pane's folder).
+#[test]
+fn a_key_commands_cwd_reaches_its_action() {
+    use crate::keymap::LEADER_LAYER;
+    let config = heca_config::loader::config_from_layers(
+        r##"
+[[keys.command]]
+keys = "prefix+F7"
+command = "lazygit"
+cwd = "git"
+
+[[keys.command]]
+keys = "prefix+F8"
+command = "htop"
+"##,
+    )
+    .unwrap();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+    let cwd_of = |key: &str| match keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse(key)) {
+        Some(WmAction::SpawnCommand { cwd, .. }) => cwd.clone(),
+        other => panic!("{key} is not a command: {other:?}"),
+    };
+    assert_eq!(cwd_of("F7"), Some("git".to_string()));
+    assert_eq!(cwd_of("F8"), None);
 }

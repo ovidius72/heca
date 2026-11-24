@@ -48,6 +48,21 @@ trait GitProvider {
     fn inspect(&self, cwd: &Path) -> Inspection;
 }
 
+/// **The top folder of the git repository `cwd` is in** — the work tree a checkout shows, or the
+/// folder that holds the repository when there is none. `None` outside a repository.
+pub(crate) fn repo_root(cwd: &Path) -> Option<PathBuf> {
+    git2::Repository::discover(cwd)
+        .ok()
+        .map(|repo| root_of(&repo))
+}
+
+fn root_of(repo: &git2::Repository) -> PathBuf {
+    repo.workdir()
+        .map(Path::to_path_buf)
+        .or_else(|| repo.path().parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| repo.path().to_path_buf())
+}
+
 /// The git work itself — run on [`BackgroundGit`]'s worker, never on the loop.
 struct Git2Provider;
 
@@ -56,11 +71,7 @@ impl Git2Provider {
         use git2::{BranchType, Repository, Status, StatusOptions};
 
         let repo = Repository::discover(cwd).ok()?;
-        let repo_root = repo
-            .workdir()
-            .map(Path::to_path_buf)
-            .or_else(|| repo.path().parent().map(Path::to_path_buf))
-            .unwrap_or_else(|| repo.path().to_path_buf());
+        let repo_root = root_of(&repo);
 
         let head = repo.head().ok();
         let branch = head

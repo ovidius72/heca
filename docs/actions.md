@@ -323,7 +323,7 @@ For the full policy table (all six policy categories) and how to classify a new 
 > never fires, so copying one of these produces a key that silently does nothing.
 >
 > What exists today is **`spawn_command`** (`command`, `kind`, `float`, `close_pane`,
-> `keep_on_error`, `keep_on_success`) and **`[[keys.command]]`** — see
+> `keep_on_error`, `keep_on_success`, `cwd`) and **`[[keys.command]]`** — see
 > [Keybindings that carry arguments](keybindings.md#2-a-key-that-carries-arguments--keysbind). This section is
 > kept as the agreed design for the sized, multi-kind spawn.
 

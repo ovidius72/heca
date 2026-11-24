@@ -38,6 +38,28 @@ close_pane = true         # close the pane when lazygit exits
 succeeds — useful when you want to read what it printed. Each overrides `close_pane` for that exit
 outcome.
 
+`cwd` is the folder the program starts in:
+
+| `cwd` | Starts in |
+|---|---|
+| not written, or `"pane"` | the folder of the pane you pressed the key in |
+| `"git"` | the top folder of that pane's git repository (the pane's folder outside a repository) |
+| `"~"`, `"~/notes"` | your home folder, or a folder in it |
+| `"/my/path"` | that folder |
+| `"../docs"`, `"src"` | that path, read from the pane's folder |
+
+When the pane's folder is not known, your home folder stands in for it. A folder that does not
+exist is an error: the program does not start and heca says why. The same values work for the
+`spawn_command` action's `cwd` argument, from `[[keys.bind]]` and from `heca rpc`.
+
+```toml
+[[keys.command]]
+keys    = "prefix+g"
+command = "lazygit"
+float   = true
+cwd     = "git"     # lazygit at the top of the repository, wherever you are in it
+```
+
 More examples:
 
 ```toml

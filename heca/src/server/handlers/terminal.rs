@@ -2,13 +2,39 @@
 //! terminal, a terminal ended. Each names its terminal by the store's one rule
 //! ([`BackendStore::target`](crate::app::backend_store::BackendStore::target)).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use heca_core::layout::{Pane, PaneId};
 
 use crate::app::backend_store::{Program, TerminalSpec, TerminalTarget};
 use crate::input::{SpawnKind, WmAction};
 use crate::server::{Change, ServerCx};
+
+/// The `cwd` that means the folder of the pane the program was started from — also what an unset
+/// `cwd` means.
+pub(crate) const CWD_PANE: &str = "pane";
+/// The `cwd` that means the top folder of the git repository that pane is in.
+pub(crate) const CWD_GIT: &str = "git";
+
+/// **The folder a started program starts in**, from what the user wrote as `cwd` — in
+/// `[[keys.command]]`, a `spawn_command` binding or an RPC call alike — and `pane`, the folder of
+/// the pane it was started from, if one is known:
+///
+/// - unset, empty or `"pane"` — `pane`;
+/// - `"git"` — the top folder of the repository `pane` is in, or `pane` itself outside one;
+/// - `"~"`, `"~/…"`, an absolute path — that folder;
+/// - any other path — read from `pane`.
+///
+/// With no `pane` known, the home folder stands in for it. `None` only when even that is unknown,
+/// and the program then starts where a program starts by default.
+pub(crate) fn command_folder(cwd: Option<&str>, pane: Option<&Path>) -> Option<PathBuf> {
+    let base = pane.map(Path::to_path_buf).or_else(dirs::home_dir)?;
+    match cwd.map(str::trim) {
+        None | Some("") | Some(CWD_PANE) => Some(base),
+        Some(CWD_GIT) => Some(crate::app::git_monitor::repo_root(&base).unwrap_or(base)),
+        Some(path) => crate::server::sessions::resolve_folder(Some(path), &base).ok(),
+    }
+}
 
 /// Run a command in a new pane — floating in the middle of the asker's area, or in a column right
 /// of the asker's. The process starts first: a command that cannot start leaves no empty pane, and
@@ -28,10 +54,11 @@ pub(super) fn spawn_command(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Cha
         eprintln!("[heca] spawn kind '{kind:?}' not yet implemented");
         return Vec::new();
     }
+    let folder = command_folder(cwd.as_deref(), cx.asker_folder().as_deref());
     let pane = PaneId(cx.layout.next_id());
     let spec = TerminalSpec {
         program: Program::Command(command.clone()),
-        cwd: cwd.as_deref().map(PathBuf::from),
+        cwd: folder,
         grid: cx.asker.grid(),
     };
     if let Err(e) = cx.terminals.start(pane, spec, cx.asker.cell) {
