@@ -419,7 +419,8 @@ pub enum WmAction {
         kind: SpawnKind,
         float: bool,
         close_policy: PaneClosePolicy,
-        /// The folder to start in; `None` is heca's own.
+        /// The folder to start in, as the user wrote it — read by the server's `command_folder`
+        /// (`"pane"`, `"git"`, `"~"`, a path); `None` is the folder of the pane it was started from.
         cwd: Option<String>,
     },
 

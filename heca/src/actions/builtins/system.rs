@@ -122,7 +122,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ArgDescriptor::optional(
                 "cwd",
                 ArgKind::Text,
-                "The folder to start in. Default: heca's own. A folder that does not exist is an error.",
+                "The folder to start in: \"pane\" (the folder of the pane it was started from — the default), \"git\" (that pane's repository top folder), \"~\", \"~/...\", an absolute path, or a path read from the pane's folder. A folder that does not exist is an error.",
             ),
             ArgDescriptor::optional(
                 "close_pane",

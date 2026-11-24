@@ -467,6 +467,9 @@ args   = { name = "heca.expose" }
 # Launch a program on a key. `kind = "terminal"` runs it inside a pane;
 # `float = true` opens it floating; `close_pane = true` closes the pane on exit;
 # `keep_on_error` / `keep_on_success` keep the pane open after the program ends.
+# `cwd` is the folder it starts in: "pane" (the folder of the pane you pressed the key in — the
+# default), "git" (the top folder of that pane's git repository), "~", "~/...", an absolute path,
+# or a path read from the pane's folder ("../docs").
 # Merged by `keys`, like every other binding list: yours override the default for the same combo and
 # leave the rest alone. `Alt+…` combos work — the key is read off the keyboard, so macOS's Option
 # rewriting the character (Option+L types `¬`) does not stop a binding matching.
@@ -475,6 +478,7 @@ args   = { name = "heca.expose" }
 # command = "lazygit"
 # float = true
 # close_pane = true
+# cwd = "git"
 #
 # [[keys.command]]
 # keys = "Alt+Enter"

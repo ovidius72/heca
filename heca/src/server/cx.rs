@@ -71,6 +71,15 @@ pub(crate) struct ServerCx<'a> {
 }
 
 impl ServerCx<'_> {
+    /// **The folder the asker is in** — the one its focused pane's program reports now. `None`
+    /// when no pane is focused or its folder is not known. What a pane made from a pane, and a
+    /// program started from a key, start from.
+    pub(crate) fn asker_folder(&self) -> Option<std::path::PathBuf> {
+        self.asker
+            .focused_pane
+            .and_then(|pane| self.terminals.cwd_of(pane))
+    }
+
     /// Change the columns of the workspace the asker is in, with no view, and report each effect
     /// as a fact for the window to show. Says nothing when nothing changed.
     pub(crate) fn change_asker_columns(

@@ -148,12 +148,17 @@ fn a_new_workspace_comes_with_a_pane_and_a_shell() {
 }
 
 fn spawn(float: bool) -> WmAction {
+    spawn_in(float, None)
+}
+
+/// `htop` started with `cwd` as the user wrote it.
+fn spawn_in(float: bool, cwd: Option<&str>) -> WmAction {
     WmAction::SpawnCommand {
         command: "htop".into(),
         kind: SpawnKind::Terminal,
         float,
         close_policy: Default::default(),
-        cwd: None,
+        cwd: cwd.map(str::to_string),
     }
 }
 
@@ -249,39 +254,43 @@ fn a_closed_pane_has_its_process_ended() {
     );
 }
 
+/// A server whose asking pane (pane 1, in column 0) reports that its program is in `folder`, and
+/// the folder a pane made by `action` from there started in.
+fn started_from_pane_in(folder: &std::path::Path, action: WmAction) -> Option<std::path::PathBuf> {
+    use crate::app::backend_store::{Program, TerminalOwner, TerminalSpec};
+    let (mut server, mut w) = (server(), two_workspaces_of_two_columns());
+    let mut asker = heca_core::backend::FakeBackend::new(80, 24);
+    asker.set_runtime(heca_core::runtime::PaneRuntime {
+        cwd: Some(folder.to_path_buf()),
+        ..Default::default()
+    });
+    let spec = TerminalSpec {
+        program: Program::Shell,
+        cwd: None,
+        grid: (80, 24),
+    };
+    server
+        .backends
+        .ensure(TerminalOwner::Pane(PaneId(1)), spec, move |_| {
+            Ok(Box::new(asker))
+        })
+        .unwrap();
+    w.ws().scroll_mut().activate_column(0);
+    let pane = made(&run_on(&mut server, &mut w, Some(PaneId(1)), action)).expect("a pane");
+    let id = server.backends.identity_of(pane).expect("its terminal");
+    server
+        .backends
+        .spec_of(id)
+        .and_then(|spec| spec.cwd.clone())
+}
+
 /// **A pane made from a pane starts where that pane is**: the new shell opens in the folder the
 /// asker's focused pane reports — for a split, a pane under it, a new column. A new workspace is
 /// not made from a pane, so it starts in `[settings] new_workspace_cwd` (the test server's is `~`).
 #[test]
 fn a_pane_made_from_a_pane_starts_in_that_panes_folder() {
-    use crate::app::backend_store::{Program, TerminalOwner, TerminalSpec};
     let folder = std::env::temp_dir();
-    let started_in = |action: WmAction| {
-        let (mut server, mut w) = (server(), two_workspaces_of_two_columns());
-        let mut asker = heca_core::backend::FakeBackend::new(80, 24);
-        asker.set_runtime(heca_core::runtime::PaneRuntime {
-            cwd: Some(folder.clone()),
-            ..Default::default()
-        });
-        let spec = TerminalSpec {
-            program: Program::Shell,
-            cwd: None,
-            grid: (80, 24),
-        };
-        server
-            .backends
-            .ensure(TerminalOwner::Pane(PaneId(1)), spec, move |_| {
-                Ok(Box::new(asker))
-            })
-            .unwrap();
-        w.ws().scroll_mut().activate_column(0);
-        let pane = made(&run_on(&mut server, &mut w, Some(PaneId(1)), action)).expect("a pane");
-        let id = server.backends.identity_of(pane).expect("its terminal");
-        server
-            .backends
-            .spec_of(id)
-            .and_then(|spec| spec.cwd.clone())
-    };
+    let started_in = |action| started_from_pane_in(&folder, action);
     assert_eq!(
         started_in(WmAction::SplitHorizontal),
         Some(folder.clone()),
@@ -301,6 +310,69 @@ fn a_pane_made_from_a_pane_starts_in_that_panes_folder() {
         started_in(WmAction::CreateWorkspace),
         dirs::home_dir(),
         "a new workspace: `~`, the home folder"
+    );
+}
+
+/// **A program started from a key starts in the folder its `cwd` names** — the pane it was started
+/// from when nothing is written, and every other value read the one way, from that pane.
+#[test]
+fn a_started_program_starts_in_the_folder_its_cwd_names() {
+    let folder = tempfile::tempdir().unwrap();
+    let pane = folder.path().join("project/src");
+    std::fs::create_dir_all(&pane).unwrap();
+    git2::Repository::init(folder.path().join("project")).unwrap();
+    let with_cwd = |cwd: Option<&str>| spawn_in(false, cwd);
+    let started_in = |cwd| started_from_pane_in(&pane, with_cwd(cwd));
+    let canonical = |p: Option<std::path::PathBuf>| p.map(|p| p.canonicalize().unwrap());
+
+    assert_eq!(
+        started_in(None),
+        Some(pane.clone()),
+        "nothing written: the pane's folder"
+    );
+    assert_eq!(started_in(Some("pane")), Some(pane.clone()), "\"pane\"");
+    assert_eq!(
+        canonical(started_in(Some("git"))),
+        canonical(Some(folder.path().join("project"))),
+        "\"git\": the repository's top folder"
+    );
+    assert_eq!(started_in(Some("~")), dirs::home_dir(), "\"~\"");
+    // Absolute on every system: `/tmp` is not, on Windows (no drive letter).
+    let absolute = std::env::temp_dir();
+    assert_eq!(
+        started_in(absolute.to_str()),
+        Some(absolute.clone()),
+        "an absolute path"
+    );
+    assert_eq!(
+        started_in(Some("../docs")),
+        Some(pane.join("../docs")),
+        "a relative path: read from the pane's folder"
+    );
+}
+
+/// **When the pane's folder is not known, the home folder stands in for it**, and `"git"` outside
+/// a repository is the pane's folder itself.
+#[test]
+fn a_started_programs_folder_falls_back_to_home_and_to_the_pane() {
+    use super::terminal::command_folder;
+    let home = dirs::home_dir();
+    assert_eq!(command_folder(None, None), home, "no pane: home");
+    assert_eq!(
+        command_folder(Some("git"), None).is_some(),
+        home.is_some(),
+        "no pane, git"
+    );
+    assert_eq!(
+        command_folder(Some("src"), None),
+        home.as_ref().map(|h| h.join("src")),
+        "no pane, relative: from home"
+    );
+    let outside = tempfile::tempdir().unwrap();
+    assert_eq!(
+        command_folder(Some("git"), Some(outside.path())),
+        Some(outside.path().to_path_buf()),
+        "git outside a repository: the pane's folder"
     );
 }
 
