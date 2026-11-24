@@ -81,6 +81,11 @@ declare_settings! {
         pub notification_quiet_exit_codes: Vec<i32>,
         pub window_width: u32,
         pub window_height: u32,
+        /// **The smallest the window can be made**, in logical pixels, so a dialog or the palette
+        /// always has room. `0` on a side = no limit on that side. See
+        /// [`window_min_size`](SettingsConfig::window_min_size).
+        pub window_min_width: u32,
+        pub window_min_height: u32,
         /// Optional terminal default foreground override from `config.toml`.
         pub terminal_foreground: Option<Color>,
         /// Optional terminal default background override from `config.toml`.
@@ -222,5 +227,22 @@ declare_settings! {
         pub services: ServicesConfig,
         // Destructive-action confirmation moved to the generic `[confirm]` table
         // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
+    }
+}
+
+impl SettingsConfig {
+    /// **The window's minimum size** (width, height) in logical pixels — `None` when neither side
+    /// has one. A side at `0` has no limit.
+    pub fn window_min_size(&self) -> Option<(u32, u32)> {
+        let min = (self.window_min_width, self.window_min_height);
+        (min != (0, 0)).then_some(min)
+    }
+
+    /// **The size the window opens at**: `window_width` × `window_height`, never below the minimum.
+    pub fn window_start_size(&self) -> (u32, u32) {
+        (
+            self.window_width.max(self.window_min_width),
+            self.window_height.max(self.window_min_height),
+        )
     }
 }

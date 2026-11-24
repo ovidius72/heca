@@ -246,6 +246,8 @@ it; a tooltip that sets its own delay in code keeps it. A reload (`prefix+Shift+
 [settings]
 window_width = 1280           # Initial window width
 window_height = 800           # Initial window height
+window_min_width = 640        # The window cannot be made narrower than this (0 = no limit)
+window_min_height = 400       # ... nor shorter than this (0 = no limit); it also never opens smaller
 mouse = true                  # Enable mouse interactions
 focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges

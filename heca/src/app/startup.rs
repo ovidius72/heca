@@ -74,6 +74,18 @@ pub(crate) fn layout_options_from(
     }
 }
 
+/// **How small the window may be made** — `[settings] window_min_width` / `window_min_height`.
+/// The one place it is set: when the window opens and on every config reload.
+pub(crate) fn apply_window_min_size(
+    window: &Window,
+    settings: &heca_config::settings::SettingsConfig,
+) {
+    let min = settings
+        .window_min_size()
+        .map(|(width, height)| winit::dpi::LogicalSize::new(width as f64, height as f64));
+    window.set_min_inner_size(min);
+}
+
 pub(crate) fn apply_window_vibrancy(
     window: &Window,
     appearance: &heca_config::appearance::AppearanceConfig,
@@ -212,16 +224,17 @@ pub(crate) async fn init_state(
     let window_attrs = Window::default_attributes()
         .with_title(crate::entry::app_name::get())
         .with_window_icon(crate::entry::app_icon::window_icon())
-        .with_inner_size(winit::dpi::LogicalSize::new(
-            app_config.config.settings.window_width as f64,
-            app_config.config.settings.window_height as f64,
-        ))
+        .with_inner_size({
+            let (width, height) = app_config.config.settings.window_start_size();
+            winit::dpi::LogicalSize::new(width as f64, height as f64)
+        })
         .with_transparent(appearance.is_transparent());
     let window = Arc::new(
         event_loop
             .create_window(window_attrs)
             .expect("Failed to create window"),
     );
+    apply_window_min_size(window.as_ref(), &app_config.config.settings);
     apply_window_vibrancy(window.as_ref(), &appearance);
     #[cfg(target_os = "macos")]
     crate::entry::app_icon::show_in_dock();
