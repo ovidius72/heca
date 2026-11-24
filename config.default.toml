@@ -100,6 +100,12 @@ mouse = true
 window_width = 1280
 window_height = 800
 
+# The smallest the window can be made, in logical pixels, so dialogs and the
+# palette always have room. The window also never opens smaller than this.
+# 0 on a side means no limit on that side.
+window_min_width = 640
+window_min_height = 400
+
 # Auto-scroll the workspace view when the pointer nears the left/right edge.
 auto_scroll_edge = true
 # How close (px) the pointer must come to the content area's edge, while dragging a pane,
