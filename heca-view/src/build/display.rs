@@ -25,6 +25,32 @@ builder_text!(
 );
 impl super::Parent for Tag {}
 
+builder_text!(
+    /// **A letter on a coloured box** — the first letter of the text, or a picture, with an
+    /// optional ring. Mirrors grid-ui `Avatar`.
+    ///
+    /// ```ignore
+    /// Avatar::new("bob").tone("muted").ring("warning")
+    /// Avatar::new("claude").picture("icons/claude.svg")
+    /// ```
+    Avatar => Avatar
+);
+
+impl Avatar {
+    /// The fill's tone: `accent`, `muted`, `warning`, `success` or `danger`. Default: `accent`.
+    pub fn tone(self, tone: &str) -> Self {
+        self.prop("tone", PropValue::Text(tone.to_string()))
+    }
+    /// A ring round the tile, in a tone (the same names). Default: none.
+    pub fn ring(self, tone: &str) -> Self {
+        self.prop("ring", PropValue::Text(tone.to_string()))
+    }
+    /// A picture instead of the letter: an image file. Default: the letter.
+    pub fn picture(self, path: &str) -> Self {
+        self.prop("picture", PropValue::Text(path.to_string()))
+    }
+}
+
 builder!(
     /// An icon.
     Icon => Icon

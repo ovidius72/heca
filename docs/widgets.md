@@ -22,7 +22,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`TreeLayout`](#treelayout), [`MessageList`](#messagelist), [`Resizable`](#resizable), [`Line`](#line), [`ScrollRegion`](#scrollregion), [`List`](#list), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label), [`Caption`](#caption), [`Elapsed`](#elapsed)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
-  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Image` / `Svg`](#image), [`Tag`](#tag), [`Keycap`](#keycap)
+  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Avatar`](#avatar), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Image` / `Svg`](#image), [`Tag`](#tag), [`Keycap`](#keycap)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there), [Cursor](#cursor--what-the-pointer-looks-like-over-a-widget)
   - Overlays: [Opening and closing a surface — `.open`](#opening-and-closing-a-surface--open), [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
@@ -4682,6 +4682,66 @@ Row::new().on_press(Intent::new("docker.open")).child(
 Slots: `status`, `icon`, `title`, `suffix`; anything else (or nothing) is a line. No properties of its
 own — it is all children. heca's sidebar pane row and the showcase's PANES dock both mount it, so the
 two cannot drift (F003/P082/T491).
+
+### Avatar
+
+**A small tile that stands for someone or something** — a name's first letter, or a picture, on a
+coloured box, with an optional ring round it. What a list shows for a person, a room, a project or a
+program; it knows nothing about any of them.
+
+```text
+ ┏━━━┓
+ ┃ B ┃      ← the letter (or a picture) on the fill; the ring is the box's edge
+ ┗━━━┛
+```
+
+The caller gives it meaning: the **fill** can say what kind of thing it is, the **ring** how it is
+doing, the **picture** what it is (a program's logo, a person's photo).
+
+| builder | what it does | default |
+|---|---|---|
+| `Avatar::new(name)` | the tile for `name`: its first letter, upper-cased. An empty name shows an empty tile | — |
+| `.tone(Tone)` | the fill, a theme tone (`Accent`, `Muted`, `Warning`, `Success`, `Danger`) | `Accent` |
+| `.ring(Tone)` | an edge round the tile in that tone, as wide as the theme's border | no ring |
+| `.ring_signal(Signal<Option<Tone>>)` | drive the ring from a tone the host keeps; `None` takes it away. Changes in place, nothing rebuilt | — |
+| `.picture(path)` | a picture instead of the letter: an image file, as tall as the text (`1em`) | the letter |
+| `.picture_signal(Signal<Option<ImageSource>>)` | drive the picture from an image the host keeps; `None` shows the letter again. Changes in place, nothing rebuilt | — |
+| `.size(WidgetSize)` | the shared size variant; the letter and picture follow it | `Normal` |
+
+**How it is built** (THE SYNTAX): a `Grid` with two named areas, `letter` and `picture`, one shown at a
+time — a hidden part takes no room, so the tile is always as big as what it shows. Its parts are found
+by name, never by position.
+
+**What it owns:** the box — fill and ring are theme tones, the corner radius (`control_radius()`) and
+ring width are the theme's, all read at paint, so a theme reload restyles it — the letter, written in
+the theme's colour for the fill (`theme.colors.on(fill)`, as a filled `Button` writes its label) so it
+reads on any fill, and the picture's size. **What you own:** the tones you pick and the signals you
+hand in. Its accessible name is the letter.
+
+**Native:**
+
+```rust
+let doing = signal(Some(Tone::Warning));     // keep it; `doing.set(Some(Tone::Success))` later
+let logo = signal(None);                     // keep it; `logo.set(Some(ImageSource::file(path)))` later
+Avatar::new("bob")
+    .tone(Tone::Muted)
+    .ring_signal(doing)
+    .picture_signal(logo)
+    .size(WidgetSize::Caption)
+```
+
+**Declarative** (`WidgetId::Avatar`) — the text is the name; `tone` and `ring` are tone names
+(`accent`, `muted`, `warning`, `success`, `danger`); `picture` is an image file. No children.
+
+```rust
+use heca_view::build::*;
+
+Avatar::new("bob").tone("muted").ring("warning")
+Avatar::new("claude").picture("icons/claude.svg")
+```
+
+Props `realize` reads: `text` (the name), `tone`, `ring`, `picture`, `size`. Showcase: "Avatar", under
+"StatusDot · Badge".
 
 ### ScrollBar
 

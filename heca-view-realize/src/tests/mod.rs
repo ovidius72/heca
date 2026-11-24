@@ -154,6 +154,8 @@ fn sample_node(kind: WidgetId) -> ViewNode {
         "nf_icon" => node.prop("glyph", PropValue::Text("command".into())),
         // Its children are buttons and nothing else, and each needs the pair the group reads:
         // the words for its menu row and hover bubble, the icon for when there is no room.
+        // A letter on its tile.
+        "avatar" => node.text("avatar"),
         "tile" => node.child(
             ViewNode::new("label")
                 .text("title")

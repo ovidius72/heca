@@ -503,7 +503,7 @@ are already 16 and they are being deleted.
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
     `DockFrame`, `MarkerGroup`, `ChromeRegion`, `RailCell`, `KeyHint`, `FocusScope`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
-    `Label`, `Input` (single- or multi-line), `Line`, `TreeLayout`, `MessageList`, `Resizable`, `Select`, `Choice`, `Tile`, `Overlay`, `Dialog`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
+    `Label`, `Input` (single- or multi-line), `Line`, `TreeLayout`, `MessageList`, `Resizable`, `Select`, `Choice`, `Tile`, `Avatar`, `Overlay`, `Dialog`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
     (There is **no `Modal` widget** — it was deleted; `Overlay` is the base overlay layer
     (blocking = a layer property) and `Dialog` — which composes it — is the confirm/modal widget;
     the app builds one from a `ModalSpec` via `OverlayHost::open_modal`. The app-side `ModalSpec` /
