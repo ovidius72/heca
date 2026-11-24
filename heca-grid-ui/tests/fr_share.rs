@@ -55,7 +55,8 @@ fn a_fraction_holds_its_share_however_tall_its_content() {
 
 /// **A grid with no template needs none.** Two children, nothing declared, and
 /// each should get an equal half of the box — the implicit tracks do it, so nothing has to count the
-/// children to write a template for them.
+/// children to write a template for them. (Each holds less than half: an implicit track is never
+/// smaller than its content, so one holding more than half would take what it needs.)
 #[test]
 fn a_grid_with_no_template_splits_its_children_evenly() {
     use heca_grid_ui::builders::{LayoutExt, Parent};
@@ -73,7 +74,7 @@ fn a_grid_with_no_template_splits_its_children_evenly() {
         Grid::new()
             .height(heca_grid_ui::Length::Percent(1.0))
             .width(heca_grid_ui::Length::Percent(1.0))
-            .child([tall(9), tall(1)]),
+            .child([tall(4), tall(1)]),
     );
     LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 900.0));
 
@@ -169,5 +170,145 @@ fn flex_parts_split_a_row_whatever_each_child_holds() {
     assert!(
         (cols[1].1 - 300.0).abs() < 1.0,
         "the other gets three parts: {cols:?}"
+    );
+}
+
+/// **A child that scrolls still takes its parts, however much it holds** — like CSS, a scrolling
+/// box's automatic minimum is zero, so a dock with a long list divides a sidebar 1 : 3 like any
+/// other.
+#[test]
+fn a_scrolling_child_keeps_its_parts_however_much_it_holds() {
+    use heca_grid_ui::builders::{LayoutExt, Parent};
+    use heca_grid_ui::widgets::{Flex, ScrollRegion};
+    use heca_grid_ui::{LayoutEngine, Size};
+
+    let list = |rows: usize| {
+        let mut f = Flex::column();
+        for _ in 0..rows {
+            f = f.child(Flex::column().height(100.0));
+        }
+        ScrollRegion::new().child(f)
+    };
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
+        Flex::column()
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0))
+            .child([list(30).flex(1.0), list(1).flex(3.0)]),
+    );
+    LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 400.0));
+    let rows: Vec<f64> = root
+        .base()
+        .children
+        .iter()
+        .map(|c| c.base().bounds.size.h)
+        .collect();
+    // About one part each way — never its 3000px of content. (A scroll region keeps its own
+    // padding, as CSS keeps a box's padding, so "one part" is a few pixels more than 100.)
+    assert!(
+        rows[0] < 120.0,
+        "the long list keeps about one part: {rows:?}"
+    );
+    assert!(rows[1] > 280.0, "the short one gets about three: {rows:?}");
+}
+
+/// **A child that does not scroll never gets less than its content** — CSS's `min-height: auto`.
+/// The reported shape: a name line that takes the column's parts, above a line that reports on
+/// it; the report must start below the name, never over it.
+#[test]
+fn a_child_that_does_not_scroll_never_gets_less_than_its_content() {
+    use heca_grid_ui::builders::{LayoutExt, Parent};
+    use heca_grid_ui::widgets::{Flex, Grid, Label};
+    use heca_grid_ui::{LayoutEngine, Size};
+
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
+        Flex::row().child(
+            Flex::column()
+                .child(
+                    Grid::new()
+                        .template_column("1fr")
+                        .child(Label::new("bob"))
+                        .flex(1.0),
+                )
+                .child(Label::new("Waiting… 32m")),
+        ),
+    );
+    LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 400.0));
+    let column = root.base().children[0].base();
+    let (name, report) = (
+        column.children[0].base().bounds,
+        column.children[1].base().bounds,
+    );
+    assert!(name.size.h > 0.0, "the name has its height: {name:?}");
+    assert!(
+        report.loc.y >= name.loc.y + name.size.h - 0.5,
+        "the report starts below the name: name {name:?}, report {report:?}"
+    );
+}
+
+/// **An explicit minimum still wins** — a child that says `min_height(0)` can be squeezed, as the
+/// author asked.
+#[test]
+fn an_explicit_zero_minimum_still_lets_a_child_shrink() {
+    use heca_grid_ui::builders::{LayoutExt, Parent};
+    use heca_grid_ui::widgets::Flex;
+    use heca_grid_ui::{LayoutEngine, Size};
+
+    let tall = || Flex::column().child(Flex::column().height(500.0));
+    let mut root: heca_grid_ui::WidgetModel = heca_grid_ui::WidgetModel::new(
+        Flex::column()
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0))
+            .child([
+                tall().flex(1.0).min_height(0.0),
+                tall().flex(1.0).min_height(0.0),
+            ]),
+    );
+    LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 400.0));
+    let rows: Vec<f64> = root
+        .base()
+        .children
+        .iter()
+        .map(|c| c.base().bounds.size.h)
+        .collect();
+    assert!(
+        rows.iter().all(|h| (h - 200.0).abs() < 1.0),
+        "each takes its half though its content is taller: {rows:?}"
+    );
+}
+
+/// **Parts are a ratio, so a child alone with a part below one still takes all the room** — and
+/// two children whose parts add up to less than one share all of it in their proportion. (CSS hands
+/// out only that fraction of the free space: a dock left at 0.6 when its neighbour folded filled
+/// 60% of the sidebar.)
+#[test]
+fn parts_that_add_up_to_less_than_one_still_share_all_the_room() {
+    use heca_grid_ui::builders::{LayoutExt, Parent};
+    use heca_grid_ui::widgets::Flex;
+    use heca_grid_ui::{LayoutEngine, Size};
+
+    let heights = |parts: &[f32]| {
+        let mut column = Flex::column()
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0));
+        for p in parts {
+            column = column.child(Flex::column().flex(*p));
+        }
+        let mut root = heca_grid_ui::WidgetModel::new(column);
+        LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 400.0));
+        root.base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect::<Vec<_>>()
+    };
+    let alone = heights(&[0.6]);
+    assert!(
+        (alone[0] - 400.0).abs() < 1.0,
+        "alone it fills the column: {alone:?}"
+    );
+    let pair = heights(&[0.2, 0.6]);
+    assert!(
+        (pair[0] - 100.0).abs() < 1.0 && (pair[1] - 300.0).abs() < 1.0,
+        "1 : 3 of all of it: {pair:?}"
     );
 }
