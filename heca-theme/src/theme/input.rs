@@ -17,6 +17,10 @@ pub struct InputStyle {
     pub glow_radius: f32,
     /// Maximum visible lines before a multi-line field scrolls.
     pub max_lines: usize,
+    /// How many suggestions a field shows under its caret (`Input::suggest`); typing narrows them.
+    pub suggestions: usize,
+    /// The narrowest the suggestion list is, in logical pixels; a longer item widens it.
+    pub suggestions_width: f32,
 }
 impl Default for InputStyle {
     fn default() -> Self {
@@ -27,6 +31,8 @@ impl Default for InputStyle {
             blink_period: 1.0,
             glow_radius: 12.0,
             max_lines: 6,
+            suggestions: 8,
+            suggestions_width: 220.0,
         }
     }
 }

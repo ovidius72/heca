@@ -244,6 +244,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `wants_visible(&self) -> bool` | `focused` | `true` when an enclosing [`ScrollRegion`](#scrollregion) should **keep this widget in view**. See [following the cursor](#following-the-cursor). |
 | `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
 | `on_layout(&mut self)` | no-op | Called post-order once this node's (and its descendants') bounds are freshly computed. Override to **place** children the engine could not put where they are drawn — a [`ScrollRegion`](#scrollregion) re-bakes its scroll offset, a [`Select`](#select) re-places its option rows into the overlay panel. Bounds are natural again on entry, so the widget re-derives its shift from scratch instead of compounding it. |
+| `on_placed(&mut self)` | no-op | **Everything is in its final place on screen.** Called once per layout, after the whole tree is laid out, parent before children. A layout has two steps: every widget is placed inside its parent (`on_layout` runs here), then a parent may still move all its children at once — a [`ScrollRegion`](#scrollregion) shifts its content by how far it is scrolled. So `on_layout` knows where a widget is inside its parent; `on_placed` knows where it is on screen. Almost no widget needs it: a `Label`, a `Button`, a `Flex` never look at it. It is for something that sits at an exact point of the screen — a panel under a field's caret, flipped above when the window has no room — which, placed in `on_layout`, was moved a second time by the scrolled page around it. To put a panel next to something, use an anchored [`Overlay`](#overlay): it uses this itself, so you write nothing. Do not change sizes here — layout is over. Used today by `Overlay` (anchored panels) and `Input` (where the caret is, for its suggestion list). |
 | `on_focus(&mut self, visible: bool)` | set `focused`/`focus_visible` | Gained focus. |
 | `on_blur(&mut self)` | clear them | Lost focus. |
 | `tick(&mut self, dt: f32) -> bool` | recurse to children | Advance animations; `true` ⇒ animating. |
@@ -692,6 +693,10 @@ Every sizing builder takes `impl Into<Length>`, so a size is written the way it 
 | `"auto"` | sized by content and flex rules |
 | `Length::FULL` / `HALF` / `THIRD` / `QUARTER` | the same fractions, with no number to mistype |
 | *nothing* | fills the parent across the cross axis — CSS `align-items: stretch` |
+
+Every size builder — `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height` —
+takes these spellings **or a value that changes** (a `Signal<Length>`, a `Memo`, a function
+reading signals), followed by the next layout: `.min_width(narrowest)`.
 
 **There is exactly one parser** (`Length: FromStr`), and `Deserialize` calls it — so a call site,
 a plugin's description, an RPC message and `config.toml` can never come to disagree about what
@@ -4128,6 +4133,41 @@ let composer = ViewNode::new(WidgetId::Input)
     .on("submit", Intent::new("chat.send"));
 ```
 
+#### Suggestions under the caret
+
+`.suggest(trigger, items, row, insert)` turns a word that starts with `trigger` into a pick list: type
+`@` at the start of a word and the matching `items` open under the caret, narrowed by fuzzy search as
+the word grows (`@bo` keeps `bob` and `bobby`). The field owns everything about it — the trigger, the
+list, the keys and the replacement — so the caller writes one line.
+
+| Part | Meaning |
+|---|---|
+| `trigger: char` | The character that opens the list, at the start of the text or after whitespace (`mail@x` is an address, not a mention) |
+| `items` | A fixed `Vec<T>` or one that changes — a `Signal<Vec<T>>`, a `Memo`, a function reading signals (`IntoSuggestions`) — followed while the list is open |
+| `row: Fn(&T) -> component` | How an item's row looks: any composed widgets |
+| `insert: Fn(&T) -> String` | The text that replaces the word when the item is chosen, trigger included (`"@bob "`); the search matches against it, the trigger left off |
+
+While the list is open it answers the list intents, from whatever keys `[keys.widgets]` binds:
+`menu_up` / `menu_down` (the arrows, Ctrl+k / Ctrl+j) move the choice, going round at either end;
+`activate` / `complete` (Enter, Tab) put it in place of the word — Enter does not add a new line
+then; `dismiss` (Escape) closes the list until a different word is typed. The field gives up its own
+use of those plain keys (caret, new line, focus) only while the list is open. A click on an item
+chooses it. With no match the list is not shown. How many items show at once is the theme's
+`[input].suggestions` (default 8); the list is at least `[input].suggestions_width` wide (default
+220) and grows for a longer item. The chosen item is lit by a fill alone, `[interaction].nav_fill`.
+The list is an anchored [`Overlay`](#overlay) that leaves the keyboard in the field
+(`.keyboard(false)`, `.anchored_to(caret)`): it hangs under the caret, opens above it when the window
+has no room below, stays inside the window, and is drawn above the page.
+
+```rust
+use heca_grid_ui::{Input, Label};
+let composer = Input::new()
+    .multiline(true)
+    .suggest('@', members, |m: &Member| Label::new(&m.handle), |m| format!("@{} ", m.handle));
+```
+
+`suggest` is host-only: its parts are functions, which a description cannot carry.
+
 **Theme settings.** `[input]` in a colour-theme file contains `width` (240 logical px), `padding`
 (10 logical px, size-scaled), `caret_width` (1.5 logical px), `blink_period` (1 second; non-positive
 means steady), `glow_radius` (12 logical px), and `max_lines` (6). These are shared defaults, never
@@ -4504,6 +4544,9 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
   `active` row beside it, as in the workspaces dock. Set, it is a flat line of that width over the
   selection's fill, with no glow, for a list where the selection is the only thing marked — the
   command palette's rows are `Row::new().border_width(1.0)`. Native only, like the pane's),
+  `.cursor_fill(bool)` (the cursor is marked by a fill alone — no outline, no glow — at the theme's
+  `[interaction].nav_fill`, strong enough to read on its own: a short pick list where the cursor
+  is the only thing marked, such as a field's suggestion list),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
   `.previous(bool)` (last-focused row, using the theme's `previous_background` at its configured
   opacity; the current row's `active` style wins), `.previous_tint(Color)` (override that color),
@@ -6765,6 +6808,7 @@ Dialog::new("Close pane?").body(..).open("pane.confirm_close");
 | you have | write | who can open it |
 | --- | --- | --- |
 | the state already, in native code (a mode, a flag something else also writes) | `.open(signal)` | whoever writes the signal |
+| a condition on other state, in native code (up while a word is typed and something matches) | `.open(move \|\| …)` or `.open(memo)` | nobody writes it: the surface follows the value, and closing itself holds until the value changes |
 | nothing — the surface should just open on a key or a call | `.open("panel.name")` | a key bound to the name in `[[keys.surface]]`, `heca rpc panel.name`, a plugin dispatching `Intent::new("panel.name")` |
 | a description (a plugin, RPC, config) | `"open": "panel.name"` in the node's props | the same |
 
@@ -6904,7 +6948,18 @@ keyed on it, no declaration outside the tree.
   (`DEFAULT_ANCHOR_GAP`); `.set_anchor(rect)` re-anchors in place (a host following a moved
   trigger). Anchored placement is baked into the panel child's bounds on layout (the subtree-shift
   trick — so paint and hit-testing follow), and it is idempotent. Pair an anchored overlay with
-  `.blocking(false)` for a light-dismiss popover. The placement math is the free function
+  `.blocking(false)` for a light-dismiss popover. `.anchored_to(signal)` takes the trigger's rect
+  as a `Signal<Rectangle>` and follows it as it moves (a field's caret). An anchored layer wraps its
+  panel instead of filling what holds it, so it can sit **inside any widget** — a field, a select —
+  and its panel is placed against the window, not squeezed into that widget's box.
+- **Keyboard** — `.keyboard(bool)`, default `true`: opening takes the keyboard (and gives it back on
+  close) and Tab stays inside the panel — a dialog, a menu, a palette. `false` is for a panel shown
+  beside a control that keeps the keyboard — a field's suggestion list while you go on typing:
+  the keyboard stays where it is and Tab passes on.
+
+  ```rust
+  Overlay::new().blocking(false).keyboard(false).anchored_to(caret).open(up).panel(list)
+  ``` The placement math is the free function
   `place_anchored(anchor, panel, viewport, gap) -> Rectangle` — the single authority for
   rect-anchored (dropdown) flip/clamp placement. Its sibling
   `place_at_point(anchor, panel, viewport, inset, centered) -> Rectangle` is the authority for

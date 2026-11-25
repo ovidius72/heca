@@ -54,7 +54,58 @@ impl Input {
             on_change: None,
             on_submit: None,
             clear_requested: std::rc::Rc::new(std::cell::Cell::new(false)),
+            suggest: None,
         }
+    }
+
+    /// **Suggestions under the caret.** Typing `trigger` at the start of a word opens a list of
+    /// `items` under the caret, narrowed by fuzzy search as the word grows; each is drawn by `row`
+    /// and, when chosen, `insert` gives the text that replaces the word (trigger included). While
+    /// the list is open it answers the list intents, from whatever keys they are bound to: up /
+    /// down (the arrows, Ctrl+k / Ctrl+j) move through it, `activate` / `complete` (Enter, Tab)
+    /// choose, `dismiss` (Escape) closes it until the word changes; a click on an item chooses it.
+    /// How many show at once and how narrow it may be are the theme's (`input_style.suggestions`,
+    /// `input_style.suggestions_width`).
+    ///
+    /// `items` is a fixed list or one that changes (a `Signal`, a `Memo`, a function reading
+    /// signals), followed while the list is open.
+    ///
+    /// ```ignore
+    /// Input::new()
+    ///     .multiline(true)
+    ///     .suggest('@', members, |m| Label::new(&m.handle), |m| format!("@{} ", m.handle))
+    /// ```
+    #[heca_grid_ui_macros::host_only("closures cannot cross as static properties")]
+    pub fn suggest<T: 'static, C: crate::builders::IntoComponent + 'static>(
+        mut self,
+        trigger: char,
+        items: impl crate::builders::IntoSuggestions<T>,
+        row: impl Fn(&T) -> C + 'static,
+        insert: impl Fn(&T) -> String + 'static,
+    ) -> Self {
+        let items = items.into_suggestions();
+        let (row, insert) = (std::rc::Rc::new(row), std::rc::Rc::new(insert));
+        let source: std::rc::Rc<dyn Fn() -> Vec<suggest::Candidate>> =
+            std::rc::Rc::new(move || {
+                items()
+                    .into_iter()
+                    .map(|item| {
+                        let item = std::rc::Rc::new(item);
+                        let text = insert(&item);
+                        let row = row.clone();
+                        suggest::Candidate {
+                            insert: text,
+                            row: std::rc::Rc::new(move || row(&item).into_component()),
+                        }
+                    })
+                    .collect()
+            });
+        let suggest = suggest::Suggest::new(trigger, source);
+        self.base
+            .children
+            .push(crate::WidgetModel::new(suggest.list()));
+        self.suggest = Some(suggest);
+        self
     }
 
     /// Explicit font size — overrides the inherited theme font.

@@ -108,6 +108,13 @@ impl Base {
         self.follow(source, true);
     }
 
+    /// **Stop following.** The widget's keyboard is its own again — for a surface that turns out not
+    /// to take the keyboard after all (`Overlay::keyboard(false)`).
+    pub(crate) fn stop_focus_follow(&mut self) {
+        self.focus_door.follows.set(None);
+        self.focus_door.followed.set(false);
+    }
+
     fn follow(&mut self, signal: Signal<bool>, modal: bool) {
         let door = &self.focus_door;
         door.follows.set(Some(Follow { signal, modal }));

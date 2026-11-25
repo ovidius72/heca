@@ -194,7 +194,7 @@ Each group is a table. Set only the keys you want; the rest keep their defaults 
 
 | group | keys |
 | --- | --- |
-| `[interaction]` | opacities (`0`–`255`) of interaction states: `toggle_on_fill`, `control_hover_fill`, `control_hover_border`, `control_active_fill`, `control_active_border`, `control_rest_border`, `control_rest_glow`, `row_hover_fill`, `row_active_fill`, `row_active_border`, `row_active_tint`, `row_hover_tint`, `nav_outline`, `nav_wash`, `badge_fill`, `tag_fill`, `tag_border`, `toast_tint`, `outline_rest`, `outline_hover`, `selection`, `hilite`, `scrim`, `keycap`, `panel_border`, `panel_row_border`, `panel_row_fill`, `tooltip_border`, `menu_shortcut`, `menu_shortcut_dim`, `thumb_rest`, `thumb_hover`, `unlit` |
+| `[interaction]` | opacities (`0`–`255`) of interaction states: `toggle_on_fill`, `control_hover_fill`, `control_hover_border`, `control_active_fill`, `control_active_border`, `control_rest_border`, `control_rest_glow`, `row_hover_fill`, `row_active_fill`, `row_active_border`, `row_active_tint`, `row_hover_tint`, `nav_outline`, `nav_wash`, `nav_fill`, `badge_fill`, `tag_fill`, `tag_border`, `toast_tint`, `outline_rest`, `outline_hover`, `selection`, `hilite`, `scrim`, `keycap`, `panel_border`, `panel_row_border`, `panel_row_fill`, `tooltip_border`, `menu_shortcut`, `menu_shortcut_dim`, `thumb_rest`, `thumb_hover`, `unlit` |
 | `[input]` | text fields: `width`, `padding`, `caret_width`, `blink_period`, `glow_radius`, `max_lines` |
 | `[dialog]` | `max_width_em`, the readable width of a dialog |
 | `[flash]` | the flash that marks a change: `enabled`, `duration_s`, `pause_s`, `pulses`, `frames_per_second`, `border_width_em`, `border_alpha`, `fill_alpha`, `glow_radius_em`, `glow_strength` |

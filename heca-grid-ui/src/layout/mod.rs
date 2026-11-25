@@ -23,6 +23,30 @@ use measure::measure_content;
 use std::collections::HashSet;
 use taffy::prelude::*;
 
+thread_local! {
+    /// The room the last layout was given — the window, for a host that lays out its window.
+    static VIEWPORT: std::cell::Cell<Size> =
+        const { std::cell::Cell::new(Size::new(f64::INFINITY, f64::INFINITY)) };
+}
+
+/// **Tell every widget its place is final** — [`Component::on_placed`], parent before children,
+/// once a layout has finished and every ancestor is done moving its children.
+fn placed(widget: &mut dyn Component) {
+    widget.on_placed();
+    for child in widget.base_mut().children.iter_mut() {
+        placed(child.as_mut());
+    }
+}
+
+/// **The window's size, known at layout** — the room the host gave the last
+/// [`LayoutEngine::compute`]. A widget that places something against the window (a panel hung from
+/// its trigger, flipped above when there is no room below) reads it here while it lays out, so the
+/// panel is right the first time it opens — not after a paint has told it how big the window is.
+/// Infinite before the first layout.
+pub fn viewport() -> Size {
+    VIEWPORT.with(std::cell::Cell::get)
+}
+
 /// Default base font (logical px) when the host doesn't set one — matches the
 /// default theme's `font_size`.
 pub(crate) const DEFAULT_BASE_FONT: f32 = 15.0;
@@ -155,6 +179,7 @@ impl LayoutEngine {
     /// Lay out `root` within `available` (logical pixels) and write the computed
     /// absolute bounds into every component's `Base.bounds`.
     pub fn compute(&mut self, root: &mut dyn Component, available: Size) {
+        VIEWPORT.with(|viewport| viewport.set(available));
         let retained = root
             .base()
             .layout_cache
@@ -166,6 +191,9 @@ impl LayoutEngine {
         self.tree_id = id;
         self.live = live;
         let laid_out = self.settle(root, available);
+        if laid_out {
+            placed(root);
+        }
         let kept = std::mem::replace(&mut self.tree, TaffyTree::new());
         let live = std::mem::take(&mut self.live);
         // A pass that failed leaves nothing worth keeping: the next one starts the tree afresh.

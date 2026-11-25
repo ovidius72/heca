@@ -60,6 +60,12 @@ impl Component for Input {
         region.style.layout.max_height = automatic_height.then_some(max_height);
         region.style.layout.flex_grow = 1.0;
         region.style.layout.width = Length::Percent(1.0);
+        drop(view);
+        self.hand_down_suggestion_style();
+    }
+
+    fn on_placed(&mut self) {
+        self.hand_down_caret();
     }
     fn paint(&self, cx: &mut PaintCx) {
         let focused = self.base.focused.get_untracked();
@@ -120,7 +126,25 @@ impl Component for Input {
             self.base.mark_needs_layout();
             return Handled::Yes;
         }
+        // A suggestion row was clicked: its click bubbles here, and its item goes in.
+        if let Some(insert) = self.suggest.as_ref().and_then(|s| s.picked.get_untracked()) {
+            let suggest = self.suggest.as_ref().expect("picked from it");
+            suggest.picked.set(None);
+            if let Some(index) = suggest.index_of(&insert) {
+                self.choose_suggestion(index);
+            }
+            self.follow_suggestions();
+            self.base.mark_needs_layout();
+            return Handled::Yes;
+        }
         let handled = match ev {
+            // The open suggestion list has the keys it uses, and a press on one of its rows.
+            Event::Key { key, pressed: true } if self.yields_to_suggestions(*key) => {
+                return Handled::No;
+            }
+            Event::Widget(intent) if self.suggestion_intent(*intent) == Handled::Yes => {
+                Handled::Yes
+            }
             Event::Widget(WidgetIntent::EditSubmit) => {
                 if let Some(submit) = &self.on_submit {
                     submit(Action::value(
@@ -204,6 +228,7 @@ impl Component for Input {
             _ => Handled::No,
         };
         if handled == Handled::Yes {
+            self.follow_suggestions();
             self.base.mark_needs_layout();
         }
         handled
@@ -255,6 +280,127 @@ impl Component for Input {
 }
 
 impl Input {
+    /// **Hand the suggestion list the field's theme values** before layout — how many items, how
+    /// narrow — since they change its size.
+    fn hand_down_suggestion_style(&mut self) {
+        let Some(suggest) = &self.suggest else {
+            return;
+        };
+        let style = self.base.input_style;
+        let limit = style.suggestions.max(1);
+        if suggest.limit.get_untracked() != limit {
+            suggest.limit.set(limit);
+        }
+        let width = Length::Px(style.suggestions_width.max(0.0));
+        if suggest.width.get_untracked() != width {
+            suggest.width.set(width);
+        }
+    }
+
+    /// **Tell the suggestion list where the caret is on screen**, once layout has finished and the
+    /// field is where it will be drawn: the text's start, plus the caret's row and column, less how
+    /// far the text has scrolled. Whether the list is up, and where it goes — below, or above when
+    /// there is no room — is the list's own.
+    fn hand_down_caret(&mut self) {
+        let Some(suggest) = &self.suggest else {
+            return;
+        };
+        let caret = {
+            let view = self.view.borrow();
+            let (row, column) = view.position(self.cursor);
+            let cell = f64::from(view.font * MONO_ADVANCE_RATIO);
+            let line = f64::from(view.font * MONO_LINE_RATIO);
+            let origin = self.text_origin();
+            Rectangle::new(
+                Point::new(
+                    origin.x + column as f64 * cell - f64::from(view.offset_x.get_untracked()),
+                    origin.y + row as f64 * line - f64::from(view.offset_y.get_untracked()),
+                ),
+                Size::new(cell, line),
+            )
+        };
+        if suggest.caret.get_untracked() != caret {
+            suggest.caret.set(caret);
+        }
+    }
+
+    /// Whether the suggestion list is open with something in it.
+    fn suggesting(&self) -> bool {
+        self.suggest
+            .as_ref()
+            .is_some_and(|suggest| suggest.is_open())
+    }
+
+    /// **The field's own keys the open list needs**: the arrows, Enter, Tab and Escape would move
+    /// the caret, add a line, move focus or leave — while the list is open the field declines them,
+    /// so the keymap turns them into the list's intents (below) the way it does for any list.
+    fn yields_to_suggestions(&self, key: GridKey) -> bool {
+        let plain = {
+            let m = crate::event::modifiers();
+            !(m.ctrl || m.meta || m.alt || m.shift)
+        };
+        plain
+            && self.suggesting()
+            && matches!(
+                key,
+                GridKey::ArrowUp
+                    | GridKey::ArrowDown
+                    | GridKey::Enter
+                    | GridKey::Tab
+                    | GridKey::Escape
+            )
+    }
+
+    /// **The open list answers the list intents**, whatever keys the user bound to them: up and
+    /// down (`menu_up` / `menu_down` — the arrows, Ctrl+k / Ctrl+j) move the choice, `activate` and
+    /// `complete` (Enter, Tab) put it in, `dismiss` (Escape) closes the list.
+    fn suggestion_intent(&mut self, intent: WidgetIntent) -> Handled {
+        if !self.suggesting() {
+            return Handled::No;
+        }
+        let Some(suggest) = self.suggest.as_mut() else {
+            return Handled::No;
+        };
+        match intent {
+            WidgetIntent::MenuDown => suggest.step(true),
+            WidgetIntent::MenuUp => suggest.step(false),
+            WidgetIntent::Dismiss => suggest.dismiss(),
+            WidgetIntent::Activate | WidgetIntent::Complete => {
+                let chosen = suggest.selected.get_untracked();
+                self.choose_suggestion(chosen);
+            }
+            _ => return Handled::No,
+        }
+        Handled::Yes
+    }
+
+    /// **Put suggestion `index` in place of the open word** and close the list.
+    fn choose_suggestion(&mut self, index: usize) {
+        let Some((range, text)) = self
+            .suggest
+            .as_ref()
+            .and_then(|suggest| suggest.replacement(index, self.cursor))
+        else {
+            return;
+        };
+        let mut chars = self.chars_vec();
+        let range = range.start.min(chars.len())..range.end.min(chars.len());
+        self.anchor = None;
+        self.cursor = range.start + text.chars().count();
+        chars.splice(range, text.chars());
+        self.commit(chars.into_iter().collect());
+    }
+
+    /// The suggestions follow the caret after anything that moved it or changed the text.
+    fn follow_suggestions(&mut self) {
+        let chars = self.chars_vec();
+        let selecting = self.selection().is_some();
+        let caret = self.cursor;
+        if let Some(suggest) = self.suggest.as_mut() {
+            suggest.follow(&chars, caret, selecting);
+        }
+    }
+
     /// Where the text starts on screen — the top-left of its scrolling part, which the pointer's
     /// position is read against.
     fn text_origin(&self) -> Point {

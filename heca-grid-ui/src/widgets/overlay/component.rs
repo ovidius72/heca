@@ -28,17 +28,27 @@ impl Component for Overlay {
         self.base.visible.get_untracked() && !self.base.style.layout.hidden && self.is_present()
     }
 
-    /// Layout just reset the panel to its taffy-computed position; in
-    /// [`Anchored`](OverlayPosition::Anchored) mode, re-place it against the
-    /// trigger rect (idempotent — see `place_panel`).
-    /// [`Center`](OverlayPosition::Center) mode keeps taffy's centering untouched.
+    /// Layout just reset the panel to its taffy-computed position. A panel narrowed to the room it
+    /// has asks for another pass; a top panel is placed against its own box.
     fn on_layout(&mut self) {
-        // A panel narrowed to the room lays out again at its new limits, the next pass.
-        if self.fit_panel_to_room() {
+        // A panel narrowed to the room lays out again at its new limits, the next pass. An anchored
+        // panel has no room of its own to fit — it is placed against the window.
+        if !matches!(self.position, OverlayPosition::Anchored { .. }) && self.fit_panel_to_room() {
             self.base.mark_needs_layout();
             crate::component::request_frame();
         }
-        self.place_panel();
+        if self.position == OverlayPosition::Top {
+            self.place_panel();
+        }
+    }
+
+    /// **An anchored panel is placed once everything has its final place on screen** — after a
+    /// scrolled page around it has moved its content — so it lands at its trigger, flipped above
+    /// when the window has no room below (idempotent — see `place_panel`).
+    fn on_placed(&mut self) {
+        if matches!(self.position, OverlayPosition::Anchored { .. }) {
+            self.place_panel();
+        }
     }
 
     /// **A layer is not scrolled into view.** `Base::focused` says this widget holds the keyboard
@@ -247,16 +257,16 @@ impl Component for Overlay {
             Event::Key {
                 key: crate::component::GridKey::Tab,
                 pressed: true,
-            } => {
+            } if self.keyboard => {
                 let forward = !crate::event::modifiers().shift;
                 Component::advance_focus(self, forward);
                 Handled::Yes
             }
-            Event::Widget(WidgetIntent::ItemNext) if self.item_keys => {
+            Event::Widget(WidgetIntent::ItemNext) if self.item_keys && self.keyboard => {
                 Component::advance_focus(self, true);
                 Handled::Yes
             }
-            Event::Widget(WidgetIntent::ItemPrevious) if self.item_keys => {
+            Event::Widget(WidgetIntent::ItemPrevious) if self.item_keys && self.keyboard => {
                 Component::advance_focus(self, false);
                 Handled::Yes
             }

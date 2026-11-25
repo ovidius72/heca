@@ -133,9 +133,9 @@ impl GpuState {
     /// first (an `Input`'s typing / caret / Backspace), then the semantic `WidgetIntent`(s); the
     /// focused widget consumes whichever it understands — an `Input` takes the `Edit*` shortcut, a
     /// `Tabs` takes the horizontal `Item*` nav (so a shared `Ctrl+h` disambiguates by focus).
-    pub(crate) fn route_focused_key(&mut self, press: &heca_grid_ui::KeyPress) {
+    pub(crate) fn route_focused_key(&mut self, press: &heca_grid_ui::KeyPress) -> Handled {
         let keymap = self.keymap.clone();
-        keymap.deliver_press(press, |ev| self.focus.deliver_event(&mut self.ui, ev));
+        keymap.deliver_press(press, |ev| self.focus.deliver_event(&mut self.ui, ev))
     }
 
     /// A key pressed while in zoom mode. The mode stays active (so you can keep

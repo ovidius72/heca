@@ -196,13 +196,22 @@ impl ApplicationHandler for App {
                             text: event.text.as_ref().map(|t| t.to_string()),
                             mods: state.grid_mods(),
                         }) => {}
-                        // Ctrl+K opens the command palette (a host-bound chord).
+                        // The keys this host also uses reach the focused widget first — an open
+                        // suggestion list takes Tab to complete, Escape to close and Ctrl+K to move
+                        // up — and only a key it leaves does the host's job: Ctrl+K opens the
+                        // command palette, Tab / Shift+Tab move keyboard focus across buttons,
+                        // Escape clears focus and cancels an open rail pick.
+                        GridKey::Tab | GridKey::Escape | GridKey::Char('k')
+                            if (gk != GridKey::Char('k') || state.ctrl)
+                                && state.route_focused_key(&heca_grid_ui::KeyPress {
+                                    key: gk,
+                                    text: None,
+                                    mods: state.grid_mods(),
+                                }) == Handled::Yes => {}
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
                         }
-                        // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
-                        // Escape clears focus and cancels an open rail pick.
                         GridKey::Escape => {
                             state.set_rail_pick(false);
                             state.focus.clear(&mut state.ui);
@@ -285,7 +294,7 @@ impl ApplicationHandler for App {
                                 text: event.text.as_ref().map(|t| t.to_string()),
                                 mods: state.grid_mods(),
                             };
-                            state.route_focused_key(&press);
+                            let _ = state.route_focused_key(&press);
                         }
                     }
                     state.layout_dirty = true; // a key can change content/size
