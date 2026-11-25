@@ -31,7 +31,8 @@
     "f40866fe-5311-451f-be73-73303541f969",
     "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0",
     "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2",
-    "3f13b3ed-604d-444a-906e-2df3f42fee7a"
+    "3f13b3ed-604d-444a-906e-2df3f42fee7a",
+    "143d3ef3-7818-4af4-a361-113c5baa6ed4"
   ],
   "tasks": [
     {
@@ -121,10 +122,10 @@
       "shortId": "VH7JN",
       "priority": 2,
       "shortName": "no-widget-or-composition-write",
-      "title": "No widget or composition writes a position by hand — layout places everything",
+      "title": "Hand positions, frame cost and input latency — layout places everything; no wasted frames; keys, output and the wheel feel immediate",
       "status": "in-progress",
-      "description": "THE SYNTAX: never write a bound or a position by hand. Found on main 2026-11-24:\n\n- `shift_subtree` (moving children after layout) used by widgets: heca-grid-ui/src/widgets/tooltip.rs, toast/stack.rs, scroll_region/mod.rs + motion.rs, select/component.rs, overlay/mod.rs, context_menu/presenter.rs, flex/mod.rs. Its definition and the paint transform (lib.rs, component/tree.rs, component/paint_cx/transform.rs) are the framework side; scrolling offsets may legitimately stay a paint transform — decide per case and say why.\n- Bounds written by hand in the app: heca/src/providers/workspaces/column_group.rs:138, heca/src/chrome/panes/column/mod.rs:122.\n- `.at_rect(..)` in the app: chrome/panes/terminal/links.rs, terminal/viewport.rs, terminal/search/mod.rs, chrome/panes/column/shell.rs, chrome/surfaces/expose/workspace_row.rs.\n\nFix: placement is said as layout (Overlay position / anchor, grid tracks, flex, offsets as live values), so the framework computes it. A floating surface uses the overlay's placement; scrolling uses the scroll region's own offset.\n\nRisk: these are overlay / tooltip / toast / select / scroll — visual work; nothing ships without Antonio driving it in the GPU app.",
-      "descriptionUpdatedAt": "2026-11-24T09:48:46.182Z",
+      "description": "Scope widened by Antonio 2026-11-25 (\"fai tutte e mettile in T581, dove sposti tutta T590; fai il task intero senza fermarti se non per dubbi forti\"). T590 (heca-pro's performance measurements) is merged here verbatim (section C) and closed.\n\n## A. Hand positions (the original T581, plan agreed 2026-11-24)\n- Floating placement in ONE library function: Overlay (Top/Anchored), Tooltip, ContextMenu presenter and ToastStack each shift their panel after layout with their own copy of the maths (shift_subtree in overlay/mod.rs, tooltip.rs, context_menu/presenter.rs, toast/stack.rs). One shared \"place this floating box here\" for all four.\n- Select's open list: rows placed by hand (`y += row_h`, select/component.rs option_targets) → a real column in the panel, like List in the palette.\n- Flex baseline alignment (flex/mod.rs shifts children): try the layout engine's baseline alignment; keep only if identical.\n- Stay, with the reason written in code: ScrollRegion's scroll offset (scrolling is a paint offset, as in CSS) and the app's 5 at_rect uses (terminal link letters, search bar, panes in columns, exposé cards — positions only the model knows; at_rect is the declarative position:absolute).\n- Not defects: column_group.rs:138 and column/mod.rs:122 bounds writes are test code.\n\n## B. Input latency and wasted frames (measured 2026-11-25, release build, HECA_LAG_LOG; ~6 min of real work)\n- Server typed → program output: median 6 ms, p90 15 ms (rare 0.6–4.5 s stalls = slow programs). The lag is not born there.\n- Window key → first frame: median 14 ms, p90 19, p99 45, max 65. A frame costs ~13 ms of which ~10 is `frame.open` = `get_current_texture` waiting for a drawable (AutoVsync, desired_maximum_frame_latency 2, heca-renderer/src/gpu.rs:66). Every frame repaints the whole window (18–22 render passes).\n- Who asks for frames (HECA_FRAME_REASONS): 836 `event TerminalInput` (a frame on every key, before the echo exists), 484 backend_data, 312 marked, 137 `event RequestRedraw`.\nFixes, all in this task:\n1. No frame on typed input: draw when the echo arrives or the window really changed.\n2. One frame queued to the screen instead of two (desired_maximum_frame_latency 1).\n3. Toast countdown bar updated a few times a second on a timed wake (like Elapsed), not every frame (from C).\n4. Damage-region rendering — draw only what changed (P041(F006): stop the per-frame clear, panes report damage, scissor the union, enable via set_damage; heca/src/app/frame/mod.rs:159-167, scene_flush.rs, renderer set_damage exists unused).\n5. Coalesce notifications: many in a few seconds become one (\"50 new messages\") (from C).\n6. Toast takes its parts by position (ICON, COLUMN, DISMISS indices) → named parts, as T580 did elsewhere (from C).\n\n## D. Mouse wheel in the terminal (Antonio 2026-11-25)\nSlow turns barely scroll, and when they do the steps do not match the turn. A small turn should move a little, a bigger/faster turn more — lines scrolled proportional to the turn's speed. Current: heca/src/app/terminal_host/wheel.rs (WheelRemainders keeps fractions; each notch = terminal_wheel_scroll_lines lines; pixels counted in cells). Measure first what the device reports (LineDelta vs PixelDelta, sizes, rate) with the lag log, then make the line count proportional (acceleration by speed), for host scrollback and for programs alike.\n\n## C. T590 — heca-pro's measurements (verbatim, moved from P113(F013)/T590)\nHeca pro found this problems:\nInvestigate.\nHo i risultati delle tre misure (30 secondi ciascuna, build di debug).\n| Caso | Fotogrammi | CPU della finestra | Chi li chiede |\n| A. A riposo | ~40 | quasi sempre 0%, due picchi (33%, 21%) | il puntatore (pointer/mod.rs:638, cambi di \"hover\") |\n| B. 50 stanze, un messaggio ciascuna | ~2250 (75 al secondo) | ~103% fisso | le notifiche: 12146 richieste dalla barra del conto alla rovescia di Toast |\n| C. Terminale con ~100 righe al secondo | ~945 (~31 al secondo) | 57% per 16 secondi, poi ~9% | l'output del terminale (backend_data) |\nIl widget che passa da nascosto a visibile è Toast (toast/mod.rs:73): ogni notifica, quando viene costruita, nasconde i suoi spazi vuoti (icona, azione). Sono 140 cambi per circa 50 notifiche. Non è un ciclo che si ripete all'infinito: avviene una volta per notifica.\nCosa ne ricavo:\n1. Il problema vero sono le notifiche. Ognuna tiene il disegno a 60 fotogrammi al secondo finché la sua barra non si svuota, e con 50 messaggi si susseguono senza fine. E ogni fotogramma ridisegna tutta la finestra: sidebar, pane, barre di scorrimento.\n   - Correzione in Toast: la barra si aggiorna con un risveglio a tempo, poche volte al secondo, come fa già Elapsed, invece di animare a ogni fotogramma.\n   - Correzione di comportamento: 50 messaggi in pochi secondi diventano una notifica sola (\"50 nuovi messaggi\"), invece di 50.\n2. Il terminale: 31 fotogrammi al secondo per 100 righe al secondo è ragionevole, ma il 57% di CPU in debug è tanto. Manca il dato su quanto costa ogni fotogramma e se ridisegna tutta la finestra o solo il terminale. Va rimisurato con HECA_FRAME_TIMES e in release. Il calo al 9% dopo 16 secondi non lo so spiegare ancora.\n3. A riposo va bene: quasi zero, con qualche fotogramma solo per cambi di \"hover\".\n4. Un difetto trovato strada facendo: Toast prende le sue parti per posizione (ICON, COLUMN, DISMISS come indici dentro children). È proprio quello che T580 ha tolto dagli altri widget, e Toast è rimasto indietro.\nLe stampe DIAG sono ancora nella mia copia di heca. Le prove sono spente.\n\n## Also in this worktree\nThe sidebar's workspace number drawn in the theme accent (Antonio: \"orange o accent\"), heca/src/providers/workspaces/workspace_frame.rs — done, test updated and sabotaged.\n\n## Check\nEach fix: test sabotaged where testable; before/after numbers from the lag log (key→screen, frames per keystroke, frame cost, wheel lines per turn). Clippy macOS + Windows, CI. Antonio's eye check: typing, tooltips, menus, toasts, select, palette, scrolling, the wheel.",
+      "descriptionUpdatedAt": "2026-11-25T00:35:45.916Z",
       "notes": "",
       "statusLog": [
         {
@@ -140,39 +141,87 @@
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-001-overlay-family-widgets-tooltip-toast-stack-select-overlay-context-menu",
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-001-a1-floating-placement-in-one-library-function-overlay-tooltip-contextmenu-toast",
           "number": 1,
-          "title": "Overlay-family widgets: tooltip, toast stack, select, overlay, context menu",
+          "title": "A1 Floating placement in one library function (Overlay, Tooltip, ContextMenu, Toast)",
           "checked": false
         },
         {
-          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-002-scroll-region-and-flex-decide-paint-transform-vs-layout-per-case",
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-002-a2-select-s-open-list-as-a-real-column",
           "number": 2,
-          "title": "Scroll region and flex: decide paint transform vs layout, per case",
+          "title": "A2 Select's open list as a real column",
           "checked": false
         },
         {
-          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-003-app-bounds-writes-column-group-column-mod",
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-003-a3-flex-baseline-layout-engine-or-keep-with-the-reason",
           "number": 3,
-          "title": "App bounds writes: column_group, column/mod",
-          "checked": false
+          "title": "A3 Flex baseline: layout engine or keep, with the reason",
+          "checked": true
         },
         {
-          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-004-app-at-rect-uses-terminal-links-viewport-search-column-shell-expose-workspace-row",
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-004-a4-scrollregion-offset-and-app-at-rect-the-reason-written-in-code",
           "number": 4,
-          "title": "App at_rect uses: terminal links/viewport/search, column shell, expose workspace_row",
-          "checked": false
+          "title": "A4 ScrollRegion offset and app at_rect: the reason written in code",
+          "checked": true
         },
         {
-          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-005-tests-sabotaged-docs",
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-005-b1-no-frame-on-typed-input",
           "number": 5,
-          "title": "Tests (sabotaged) + docs",
+          "title": "B1 No frame on typed input",
           "checked": false
         },
         {
-          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-006-antonio-eye-check-tooltip-toast-select-menu-palette-scroll",
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-006-b2-one-frame-queued-to-the-screen",
           "number": 6,
-          "title": "Antonio eye check: tooltip, toast, select, menu, palette, scroll",
+          "title": "B2 One frame queued to the screen",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-007-b3-toast-countdown-on-a-timed-wake",
+          "number": 7,
+          "title": "B3 Toast countdown on a timed wake",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-008-b4-damage-region-rendering-p041",
+          "number": 8,
+          "title": "B4 Damage-region rendering (P041)",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-009-b5-coalesce-notifications",
+          "number": 9,
+          "title": "B5 Coalesce notifications",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-010-b6-toast-parts-by-name",
+          "number": 10,
+          "title": "B6 Toast parts by name",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-011-d-wheel-lines-proportional-to-the-turn-s-speed-measure-first",
+          "number": 11,
+          "title": "D Wheel lines proportional to the turn's speed (measure first)",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-012-before-after-numbers-from-the-lag-log",
+          "number": 12,
+          "title": "Before/after numbers from the lag log",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-013-tests-sabotaged-clippy-macos-windows-ci",
+          "number": 13,
+          "title": "Tests (sabotaged), clippy macOS + Windows, CI",
+          "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-014-antonio-eye-check",
+          "number": 14,
+          "title": "Antonio eye check",
           "checked": false
         }
       ],
@@ -183,7 +232,7 @@
       "startedAt": "2026-11-24T20:02:59.572Z",
       "completedAt": "",
       "createdAt": "2026-11-24T09:48:45.965Z",
-      "updatedAt": "2026-11-24T20:02:59.572Z",
+      "updatedAt": "2026-11-25T08:41:54.212Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
@@ -601,10 +650,46 @@
       "updatedAt": "2026-11-24T19:34:51.071Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "143d3ef3-7818-4af4-a361-113c5baa6ed4",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 590,
+      "shortId": "J8H2Y",
+      "priority": 9,
+      "shortName": "perfomance-issue",
+      "title": "perfomance issue",
+      "status": "canceled",
+      "description": "Heca pro found this problems:\nInvestigate.\nHo i risultati delle tre misure (30 secondi ciascuna, build di debug).\n\n┌────────────────────────────────────────┬───────────────────────┬────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────┐\n│                  Caso                  │      Fotogrammi       │           CPU della finestra           │                               Chi li chiede                                │\n├────────────────────────────────────────┼───────────────────────┼────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤\n│ A. A riposo                            │ ~40                   │ quasi sempre 0%, due picchi (33%, 21%) │ il puntatore (pointer/mod.rs:638, cambi di \"hover\")                        │\n├────────────────────────────────────────┼───────────────────────┼────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤\n│ B. 50 stanze, un messaggio ciascuna    │ ~2250 (75 al secondo) │ ~103% fisso                            │ le notifiche: 12146 richieste dalla barra del conto alla rovescia di Toast │\n├────────────────────────────────────────┼───────────────────────┼────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤\n│ C. Terminale con ~100 righe al secondo │ ~945 (~31 al secondo) │ 57% per 16 secondi, poi ~9%            │ l'output del terminale (backend_data)                                      │\n└────────────────────────────────────────┴───────────────────────┴────────────────────────────────────────┴────────────────────────────────────────────────────────────────────────────┘\n\nIl widget che passa da nascosto a visibile è Toast (toast/mod.rs:73): ogni notifica, quando viene costruita, nasconde i suoi spazi vuoti (icona, azione). Sono 140 cambi per circa 50 notifiche. Non è un ciclo che si ripete all'infinito: avviene una volta per notifica.\n\nCosa ne ricavo:\n1. Il problema vero sono le notifiche. Ognuna tiene il disegno a 60 fotogrammi al secondo finché la sua barra non si svuota, e con 50 messaggi si susseguono senza fine. E ogni fotogramma ridisegna tutta la finestra: sidebar, pane, barre di scorrimento.\n   - Correzione in Toast: la barra si aggiorna con un risveglio a tempo, poche volte al secondo, come fa già Elapsed, invece di animare a ogni fotogramma.\n   - Correzione di comportamento: 50 messaggi in pochi secondi diventano una notifica sola (\"50 nuovi messaggi\"), invece di 50.\n2. Il terminale: 31 fotogrammi al secondo per 100 righe al secondo è ragionevole, ma il 57% di CPU in debug è tanto. Manca il dato su quanto costa ogni fotogramma e se ridisegna tutta la finestra o solo il terminale. Va rimisurato con HECA_FRAME_TIMES e in release. Il calo al 9% dopo 16 secondi non lo so spiegare ancora.\n3. A riposo va bene: quasi zero, con qualche fotogramma solo per cambi di \"hover\".\n4. Un difetto trovato strada facendo: Toast prende le sue parti per posizione (ICON, COLUMN, DISMISS come indici dentro children). È proprio quello che T580 ha tolto dagli altri widget, e Toast è rimasto indietro.\n\nLe stampe DIAG sono ancora nella mia copia di heca. Le prove sono spente.",
+      "descriptionUpdatedAt": "2026-11-24T23:12:47.348Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "143d3ef3-7818-4af4-a361-113c5baa6ed4-check-001-planned-canceled",
+          "date": "2026-11-25T00:35:47.598Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Merged into P113(F013)/T581 by Antonio's decision 2026-11-25 (\"sposti tutta T590 in T581\"): the full text of T590 is copied verbatim into T581 section C, and its fixes (toast countdown on a timed wake, notification coalescing, Toast parts by name, re-measure in release) are T581 checklist items B3, B5, B6 and the lag-log numbers.",
+          "description": "Merged into P113(F013)/T581 by Antonio's decision 2026-11-25 (\"sposti tutta T590 in T581\"): the full text of T590 is copied verbatim into T581 section C, and its fixes (toast countdown on a timed wake, notification coalescing, Toast parts by name, re-measure in release) are T581 checklist items B3, B5, B6 and the lag-log numbers."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T23:12:47.234Z",
+      "updatedAt": "2026-11-25T00:35:47.598Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-24T20:02:59.572Z",
+  "updatedAt": "2026-11-25T08:41:54.212Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

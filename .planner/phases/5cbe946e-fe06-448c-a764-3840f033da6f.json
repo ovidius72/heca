@@ -48,7 +48,8 @@
     "df083f77-b084-42d5-b7f7-51924d8b11d2",
     "01ea2d3f-f50d-4fdb-b38a-edacfa979d87",
     "2131024e-11f3-47cb-a244-6575acb4e29f",
-    "4ae352d9-a69b-48df-9d25-76e16d195ef6"
+    "4ae352d9-a69b-48df-9d25-76e16d195ef6",
+    "fe372012-780e-4cd1-8ffc-f12232a65549"
   ],
   "tasks": [
     {
@@ -888,10 +889,92 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "fe372012-780e-4cd1-8ffc-f12232a65549",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 591,
+      "shortId": "TH27Y",
+      "priority": 10,
+      "shortName": "a-window-and-the-server-agree",
+      "title": "The server restarts cleanly after an update — version told with a restart button, every stop logged, agents never forgotten, resumed programs show their folder",
+      "status": "planned",
+      "description": "Asked by Antonio 2026-11-25, after updating to v0.1.0-3 and finding the running server was the one started on 2026-11-21 18:23 from the old /Applications/heca.app (pid 78381): the new window talked to the old server without knowing. Items 5–7 added the same night (Antonio: \"1 sì, 2 sì, 3 sì\", \"T591\"), from what the restarts showed.\n\n## Current state (verified 2026-11-25)\n- heca/src/server/socket/connect.rs:20-45 `connect`: if the socket answers, the window connects and uses that server; only when it is missing does it start `current_exe --server`.\n- **Correction:** a check already exists — heca/src/server/socket/runtime.rs:188: when the attach answer is not `ATTACH_ACCEPTED` (another protocol), the window refuses and tells the user to run `heca --kill-server` by hand. It compares the protocol, not the build: a new build with the same protocol connects to an old server silently (that is what happened with v0.1.0-3).\n- After an update every server-side behaviour (terminals, spawn_command cwd T577, agent channel, typed-text path…) stays the old one until `heca --kill-server` (CLI catalog heca/src/app/cli/catalog.rs:105); the app in /Applications has no `heca` on PATH unless `install_command` was run. The action was renamed `kill-server` → `kill_server` between versions: a new `--kill-server` may not stop an old server (Antonio saw it not stop).\n\n## To build\n1. On connect, window and server tell each other their version (package version plus a build identity, so two builds of the same version are told apart).\n2. A mismatch is a notification in the window: \"The server is version X, this window is Y\", with a **Restart the server** action; it says open terminals close and workspaces/panes come back (P105). Replaces the hand-run instruction in runtime.rs:188.\n3. Restart = stop the old server cleanly (sessions saved), start this window's executable as the server, reconnect. Works against an older server too (the kill action's old name).\n4. The same check visible to scripts (`heca rpc`) and as an event.\n5. **Every stop is written to the server's log, with who asked** — `kill_server` from a window (which client, which session), from RPC/`--kill-server`, `RuntimeHandle::stop`, the inbox disconnecting. On 2026-11-25 the restored server exited with code 0 a few seconds after resuming agents, several times, and nothing said why (heca.log held only a harmless \"connection: Broken pipe\"). Stop points: heca/src/server/run/mod.rs:392 (window action), run/rpc.rs:139 (RPC), runtime/mod.rs (Event::Stop, stopped flag, Disconnected, wants_shutdown).\n6. **`resume_harness = false` must not forget the agents.** With it off, the restored server re-saved heca.sessions.json without the recorded agents (driver + session id): turning it back on brought nothing back. Off must only mean \"start a shell instead\"; the record stays (heca/src/server/session/relaunch.rs, persist).\n7. **A resumed program shows its folder.** On macOS a pane's folder comes only from the shell (OSC 7); reading a process's cwd is a TODO (heca-core/src/backend/terminal/process.rs:111). A program the server relaunches directly (claude/codex resume, spawn_command) has no shell → no folder and no git line in the sidebar. Seed the pane's folder with the folder the program was started in (the recorded spec cwd) until the program reports another. (Reading the process cwd via proc_pidinfo can follow later.)\nNot in scope (Antonio): restarting automatically without asking.\n\n## Check\nTests (sabotaged): matching versions → nothing; different → notification with the action; the action restarts and reconnects; each stop path writes its line; resume_harness off keeps the agent record; a relaunched program's pane has its folder. Clippy macOS + Windows, CI. Antonio's check: update, see the notice, restart, terminals back; a restored agent pane shows folder and git.",
+      "descriptionUpdatedAt": "2026-11-25T00:17:40.500Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-001-version-build-identity-exchanged-on-connect",
+          "number": 1,
+          "title": "Version + build identity exchanged on connect",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-002-mismatch-notification-with-a-restart-the-server-action-explains-what-closes-and-what-comes-back",
+          "number": 2,
+          "title": "Mismatch notification with a Restart the server action (explains what closes and what comes back)",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-003-restart-old-server-saves-and-stops-old-kill-name-too-this-executable-starts-as-the-server-window-reconnects",
+          "number": 3,
+          "title": "Restart: old server saves and stops (old kill name too), this executable starts as the server, window reconnects",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-004-visible-to-heca-rpc-and-as-an-event",
+          "number": 4,
+          "title": "Visible to heca rpc and as an event",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-005-every-server-stop-logged-with-who-asked-window-rpc-handle-stop-inbox",
+          "number": 5,
+          "title": "Every server stop logged with who asked (window, RPC, handle stop, inbox)",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-006-resume-harness-false-keeps-the-recorded-agents",
+          "number": 6,
+          "title": "resume_harness = false keeps the recorded agents",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-007-relaunched-programs-get-their-start-folder-folder-git-lines-show",
+          "number": 7,
+          "title": "Relaunched programs get their start folder (folder + git lines show)",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-008-tests-sabotaged-clippy-macos-windows-ci",
+          "number": 8,
+          "title": "Tests (sabotaged), clippy macOS + Windows, CI",
+          "checked": false
+        },
+        {
+          "id": "fe372012-780e-4cd1-8ffc-f12232a65549-check-009-antonio-s-check",
+          "number": 9,
+          "title": "Antonio's check",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-24T23:20:30.195Z",
+      "updatedAt": "2026-11-25T00:17:40.497Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:22.414Z",
-  "updatedAt": "2026-11-15T08:34:12.666Z",
+  "updatedAt": "2026-11-25T00:17:40.497Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-10-27T19:18:34.860Z",
   "handoffAudit": {
@@ -1163,6 +1246,14 @@
       "fromStatus": "in-progress",
       "toStatus": "done",
       "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "95563418-72ad-463b-a40f-32f4b3d92b35",
+      "date": "2026-11-25T00:17:40.539Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
       "description": ""
     }
   ],
