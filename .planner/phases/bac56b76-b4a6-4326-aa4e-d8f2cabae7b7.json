@@ -223,6 +223,18 @@
           "number": 14,
           "title": "Antonio eye check",
           "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-015-e-one-clock-heca-grid-ui-clock-moved-to-heca-core-clock-layout-animations-flash-hover-and-input-caret-read-it-clock-since-replaces-instant-elapsed-lint-heca-core-tests-one-clock-rs-flaky-macos-test-reported-by-t567",
+          "number": 15,
+          "title": "E One clock: heca_grid_ui::clock moved to heca_core::clock; layout animations, flash, hover and Input caret read it (clock::since replaces Instant::elapsed); lint heca-core/tests/one_clock.rs (flaky macOS test reported by T567)",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-016-b2-result-one-frame-queued-measured-worse-key-character-median-26-7-ms-vs-15-5-ms-with-two-claude-code-typing-reverted-to-two-with-the-reason-in-gpu-rs",
+          "number": 16,
+          "title": "B2 result: one frame queued measured worse (key→character median 26.7 ms vs 15.5 ms with two, Claude Code typing) — reverted to two, with the reason in gpu.rs",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -232,7 +244,7 @@
       "startedAt": "2026-11-24T20:02:59.572Z",
       "completedAt": "",
       "createdAt": "2026-11-24T09:48:45.965Z",
-      "updatedAt": "2026-11-25T08:41:54.212Z",
+      "updatedAt": "2026-11-25T11:02:13.538Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
@@ -689,7 +701,7 @@
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-25T08:41:54.212Z",
+  "updatedAt": "2026-11-25T11:02:13.538Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
