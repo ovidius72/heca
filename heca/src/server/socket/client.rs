@@ -16,8 +16,9 @@
 //!
 //! # fn main() -> std::io::Result<()> {
 //! let path = std::path::Path::new("/tmp/heca-test/server.sock");
-//! let answer = heca::socket::request(path, "list_sessions")?;
-//! let mut window = heca::socket::Attached::open(path, &ConnectionConfig::default())?;
+//! let limits = ConnectionConfig::default();
+//! let answer = heca::socket::request(path, "list_sessions", &limits)?;
+//! let mut window = heca::socket::Attached::open(path, &limits)?;
 //! window.send(&serde_json::json!({"AttachTo": {"name": "probe"}}))?;
 //! let first = window.receive()?;
 //! # let _ = (answer, first);
@@ -34,9 +35,11 @@ use serde_json::Value;
 
 use super::local::UnixStream;
 
-/// **Run one action line on the server at `path`** and return its answer, as `heca rpc` does.
-pub fn request(path: &Path, line: &str) -> io::Result<String> {
-    super::request_to(path, line)
+/// **Run one action line on the server at `path`** and return its answer, as `heca rpc` does —
+/// waiting no longer than `limits` says. The limits are the caller's, as for [`Attached::open`]:
+/// nothing is read from the user's configuration.
+pub fn request(path: &Path, line: &str, limits: &ConnectionConfig) -> io::Result<String> {
+    super::request_within(path, line, limits)
 }
 
 /// **An attached connection to a heca server** — the protocol a window speaks, opened with the

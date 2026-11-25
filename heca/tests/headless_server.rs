@@ -1417,7 +1417,8 @@ fn the_public_socket_client_attaches_and_runs_an_action_line() {
         .expect("the server answers the attach");
     assert!(attached.get("Attached").is_some(), "{attached}");
     let sessions: Value =
-        serde_json::from_str(&heca::socket::request(&path, "list_sessions").unwrap()).unwrap();
+        serde_json::from_str(&heca::socket::request(&path, "list_sessions", &limits).unwrap())
+            .unwrap();
     assert!(sessions.is_array() || sessions.is_object(), "{sessions}");
 }
 
