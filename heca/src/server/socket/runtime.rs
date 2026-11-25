@@ -173,6 +173,31 @@ fn read_line(stream: &mut UnixStream, limit: usize) -> io::Result<Vec<u8>> {
     }
 }
 
+/// **Open an attach connection**: say which protocol this heca speaks and hear the server accept
+/// it. The one place the preface is written from the client side — heca's own window and every
+/// outside client ([`super::client::Attached`]) go through it, so none can fall behind a version.
+/// `Err` with [`io::ErrorKind::Unsupported`] when the server speaks another version.
+pub(super) fn attach_preamble(
+    stream: &mut UnixStream,
+    config: &ConnectionConfig,
+) -> io::Result<()> {
+    let timeout = Some(Duration::from_millis(config.request_timeout_ms.get()));
+    stream.set_write_timeout(timeout)?;
+    stream.set_read_timeout(timeout)?;
+    stream.write_all(ATTACH_PREFACE)?;
+    let answer = read_line(stream, config.max_frame_bytes.get())?;
+    if answer != ATTACH_ACCEPTED {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!(
+                "the heca server speaks another version: {}",
+                String::from_utf8_lossy(answer.trim_ascii_end())
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl SocketClient {
     pub(crate) fn connect(
         path: &Path,
@@ -180,12 +205,10 @@ impl SocketClient {
         wake: ServerWaker,
     ) -> io::Result<Self> {
         let mut stream = UnixStream::connect(path)?;
-        let timeout = Some(Duration::from_millis(config.request_timeout_ms.get()));
-        stream.set_write_timeout(timeout)?;
-        stream.set_read_timeout(timeout)?;
-        stream.write_all(ATTACH_PREFACE)?;
-        let answer = read_line(&mut stream, config.max_frame_bytes.get())?;
-        if answer != ATTACH_ACCEPTED {
+        if let Err(error) = attach_preamble(&mut stream, &config) {
+            if error.kind() != io::ErrorKind::Unsupported {
+                return Err(error);
+            }
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "The heca server already running is another version of heca, so this window cannot \

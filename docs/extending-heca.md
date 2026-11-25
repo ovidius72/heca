@@ -166,6 +166,7 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 | a service | `demo.service("s", factory)` | server | something that lives inside the server, once; see [A service inside the server](#a-service-inside-the-server) |
 | a listener | `service.on("session.changed", \|svc, cx, ev\| …)` | server | THE EVENTS on a service; see [Sessions and their projects](#sessions-and-their-projects) |
 | a folder line | `heca::FolderLine::new().path(p)` | client | the line heca shows a pane's directory with — see [Sessions and their projects](#sessions-and-their-projects) |
+| a client of a running server (a test, a probe, a tool) | `heca::socket::request(path, line, &limits)`; `heca::socket::Attached::open(path, &limits)` then `.send(..)` / `.receive()` | outside | the same code heca's window and `heca rpc` run, so it moves with the protocol version; never write the attach preface or the frames by hand |
 | a terminal agent driver | `demo.agent_driver(MyDriver::new())` | terminal owner | implements `heca::agent::AgentDriver`; scoped as `demo.<driver id>` and used by the same launch/report path as built-in drivers |
 
 Dock and layer factories return ordinary components. For a dock, implement
