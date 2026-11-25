@@ -123,6 +123,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "show_layer" => Some(WmAction::ShowLayer {
             name: None,
             dock: None,
+            arguments: Vec::new(),
         }),
         "hide_layer" => Some(WmAction::HideLayer {
             name: None,
@@ -131,6 +132,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "toggle_layer" => Some(WmAction::ToggleLayer {
             name: None,
             dock: None,
+            arguments: Vec::new(),
         }),
         "reload_config" => Some(WmAction::ReloadConfig),
         "install_command" => Some(WmAction::InstallCommand),
