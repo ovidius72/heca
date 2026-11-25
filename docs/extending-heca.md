@@ -68,6 +68,7 @@ creation or lifetime behavior:
 | `demo.terminal("shell")` | **get or create** the named terminal declaration; repeated calls return handles sharing that terminal's session |
 | `demo.action("build")…run(handler)` | register a named action and its handler; it does not retrieve an existing widget or execute the action |
 | `demo.layer("console").view(build)` | register a named surface builder; the host calls the builder again when rebuilding that surface, rather than retaining one cached widget tree |
+| `demo.layer("chat").arg("room", ArgKind::Text, true, "…").view(build)` | a layer that shows one of many things takes arguments; `cx.arg("room")` reads them as it builds |
 | `demo.defaults(config, keys)` | ship the extension's own `config.default.toml` and `keybindings.default.toml` — see [An extension's own defaults](#an-extensions-own-defaults) |
 
 For terminals, the first call creates the declaration and the returned component handle; the host
@@ -156,7 +157,7 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
 |---|---|---|---|
 | a dock | `heca::regions("sidebar.left").append(dock)` | client | a `Provider`; placed by the user like any dock |
 | an action | `demo.action("s")…run(f)` | server | policy defaults to `AlwaysAllowed` (refused while a floating pane is active); say `.policy(..)` otherwise; `.destructive()` asks first |
-| an overlay | `demo.layer("s").view(f)` | client | opened with `toggle_layer name=demo.s` from a key, menu, palette or RPC; built again each time it opens |
+| an overlay | `demo.layer("s").view(f)` | client | opened with `toggle_layer name=demo.s` from a key, menu, palette or RPC; built again each time it opens. One that shows one of many things declares its arguments (`.arg("room", ArgKind::Text, true, "…")`) and reads them with `cx.arg("room")`; `toggle_layer name=demo.s room=auth` passes them. A missing required argument, or one it does not take, refuses the action with a sentence. The last arguments are kept for rebuilds, and a toggle given other arguments shows them instead of hiding |
 | a pane header button | `demo.pane_button("s")` | client | runs the action `demo.s`; icon, words, tooltip and danger come from it; if it declares an integer `pane` argument (`heca::PANE_ARG`) it receives the pane's id |
 | a terminal | `demo.terminal("s")` | client | the terminal `demo.s` in any tree you build (a dock, an overlay): `.command(..)`, `.cwd(..)`, `.title(..)`; the same name is the same running process, and closing the dock never ends it |
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |

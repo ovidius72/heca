@@ -413,19 +413,47 @@ pub fn handle_set_region_visible(
     Ok(())
 }
 
+/// **Whether a layer action leaves the layer up.** Show shows and hide hides. A toggle hides a
+/// visible layer — unless it was given arguments other than the ones the layer is showing: then it
+/// shows those (a room's chat open on one room, asked for another, moves to it rather than closing).
+fn layer_shows(
+    asked: Option<bool>,
+    given: &[(String, String)],
+    shown_with: &[(String, String)],
+    visible: bool,
+) -> bool {
+    asked.unwrap_or(!visible || (!given.is_empty() && given != shown_with))
+}
+
 pub fn handle_layer_visibility(
     state: &mut AppState,
     action: &WmAction,
 ) -> crate::actions::ActionResult {
-    let (name, show) = match action {
-        WmAction::ShowLayer { name, .. } => (name, Some(true)),
-        WmAction::HideLayer { name, .. } => (name, Some(false)),
-        WmAction::ToggleLayer { name, .. } => (name, None),
+    let (name, show, arguments) = match action {
+        WmAction::ShowLayer {
+            name, arguments, ..
+        } => (name, Some(true), arguments.as_slice()),
+        WmAction::HideLayer { name, .. } => (name, Some(false), [].as_slice()),
+        WmAction::ToggleLayer {
+            name, arguments, ..
+        } => (name, None, arguments.as_slice()),
         _ => return Ok(()),
     };
     let Some(name) = name.as_deref() else {
         return Ok(());
     };
+    // **A layer's own arguments** say what it shows. Checked first, so a missing room or a typo is a
+    // sentence back to whoever asked, not an empty surface. None given keeps what it showed last.
+    let shown_with = state.added_layers.shown_with(name).to_vec();
+    if show != Some(false) {
+        let given_or_kept = if arguments.is_empty() {
+            shown_with.clone()
+        } else {
+            arguments.to_vec()
+        };
+        state.added_layers.check(name, &given_or_kept)?;
+        state.added_layers.remember(name, &given_or_kept);
+    }
     // **Rebuild before showing.** A layer's content is structural — panes open, workspaces come and
     // go — and a signal replaces a prop, never a child. So shape follows a re-registration, and the
     // moment a layer is asked for is the moment its shape must be current. Without this the exposé
@@ -436,12 +464,46 @@ pub fn handle_layer_visibility(
     let Some(id) = state.layers.by_name(name) else {
         return Ok(());
     };
-    let show = show.unwrap_or(!state.layers.is_visible_named(&state.window_root, name));
+    let visible = state.layers.is_visible_named(&state.window_root, name);
+    let show = layer_shows(show, arguments, &shown_with, visible);
     match show {
         true => state.layers.show(&mut state.window_root, id),
         false => state.layers.hide(&mut state.window_root, id),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod layer_shows_tests {
+    use super::layer_shows;
+
+    fn room(name: &str) -> Vec<(String, String)> {
+        vec![("room".to_string(), name.to_string())]
+    }
+
+    /// **Show shows, hide hides; a toggle hides a visible layer unless it is asked for something
+    /// else** — a chat open on one room, toggled for another, moves to it instead of closing.
+    #[test]
+    fn a_toggle_with_other_arguments_shows_them_instead_of_hiding() {
+        assert!(layer_shows(Some(true), &[], &[], true));
+        assert!(!layer_shows(Some(false), &room("a"), &room("a"), true));
+        assert!(
+            layer_shows(None, &[], &[], false),
+            "hidden: a toggle shows it"
+        );
+        assert!(
+            !layer_shows(None, &[], &room("a"), true),
+            "visible, nothing asked: hides"
+        );
+        assert!(
+            !layer_shows(None, &room("a"), &room("a"), true),
+            "the same room: hides"
+        );
+        assert!(
+            layer_shows(None, &room("b"), &room("a"), true),
+            "another room: shows it"
+        );
+    }
 }
 
 #[cfg(test)]
