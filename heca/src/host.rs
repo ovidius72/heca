@@ -156,6 +156,15 @@ impl<'a> StateView<'a> {
         self.state.panes.runtime(pane)
     }
 
+    /// **The flash a pane's attention plays** — the same handle the pane's own row is bound to.
+    /// Bind another widget to it (`.flash(handle)`) and it flashes with the pane: in the status's
+    /// tone, for as long as heca's feedback settings say, cleared when the pane is visited — all
+    /// decided once, by heca. A row elsewhere (a room member bound to the pane) never plays a flash
+    /// of its own.
+    pub fn pane_flash(&self, pane: PaneId) -> heca_grid_ui::FlashHandle {
+        self.state.panes.signals(pane).flash
+    }
+
     /// Convenience: a pane's current [`ProcessStatus`] (`None` if unknown).
     pub fn pane_status(&self, pane: PaneId) -> Option<ProcessStatus> {
         self.state.panes.runtime(pane).map(|r| r.status)

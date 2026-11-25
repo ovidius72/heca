@@ -17,15 +17,16 @@
 //!     .ring(Tone::Warning)                     // an edge in a tone of its own
 //!     .size(WidgetSize::Caption)               // the letter and picture follow the size variant
 //!
-//! let logo = signal(None);                     // later: logo.set(Some(ImageSource::file(path)))
-//! Avatar::new("claude").picture_signal(logo)   // the picture when there is one, else the letter
+//! Avatar::new("claude")
+//!     .picture(logo)                           // a Signal or Memo: the picture when there is one
+//!     .ring(doing)                             // a Signal or Memo: follows it, in place
 //! ```
 //!
 //! **What it owns:** the box — fill and ring are theme tones, the corner radius and ring width are
 //! the theme's, all read at paint, so a theme reload restyles it; the letter, written in the
 //! theme's colour for that fill (`on(..)`) so it reads on any fill; and the size: a square as big as
 //! a line of text, the same with the letter or a picture. **What the caller owns:** the tones it picks and the signals it hands in — a ring or a
-//! picture signal changes the tile in place, with no rebuild.
+//! picture that follows a value changes the tile in place, with no rebuild.
 //!
 //! Why this is a widget: heca-pro drew this tile by hand for its rooms and members (a `Surface` with
 //! a fill, a radius and a padding at the call site). A tile with a letter is not about rooms, so it
@@ -34,11 +35,11 @@
 use crate::FontWeight;
 use crate::Tone;
 use crate::builders::{LayoutExt, Parent, PlaceExt, PresenceExt, StyleExt};
+use crate::color::Color;
 use crate::component::{Base, Component, PaintCx, area, paint_child};
 use crate::font::MONO_LINE_RATIO;
 use crate::image::ImageSource;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::TextAlign;
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::style::Length;
 use crate::widgets::{Flex, Image, Label};
 
@@ -49,8 +50,6 @@ const PICTURE: &str = "picture";
 /// A letter or a picture on a coloured box, with an optional ring — see the module docs.
 pub struct Avatar {
     base: Base,
-    /// The name the letter is taken from.
-    name: String,
     /// The fill's tone, resolved against the theme at paint.
     tone: Tone,
     /// The ring's tone; `None` draws no ring. A signal, so a host changes it in place.
@@ -68,13 +67,21 @@ impl Avatar {
         let mut base = Base::container();
         base.children
             .push(crate::WidgetModel::new(parts(name.as_ref(), picture)));
+        // **It never gives way**, like a `StatusDot`: squeezing a tile only crushes its letter, and
+        // it is already the smallest thing on a row. Text beside it is what cuts.
+        // **A square as big as a line of text**, whatever it shows: the letter sits in the middle
+        // and a picture fills it, so neither a loaded image's own size nor a larger font can make
+        // the tile claim more room than it draws.
+        let side = Length::Em(MONO_LINE_RATIO);
         Self {
             base,
-            name: name.as_ref().to_owned(),
             tone: Tone::Accent,
             ring: signal(None),
             picture,
         }
+        .width(side)
+        .height(side)
+        .shrink(0.0)
     }
 
     /// **The fill**, in a theme tone — resolved at paint, so a theme reload restyles it. Use it for
@@ -86,70 +93,60 @@ impl Avatar {
     }
 
     /// **A ring round the tile**, in a theme tone — the box's edge, as wide as the theme's border.
-    /// Use it for a second fact the fill does not carry (how the thing is doing). Default: no ring.
+    /// Use it for a second fact the fill does not carry (how the thing is doing). Takes a tone, or
+    /// `None` for no ring, fixed or live (a `Signal`, a `Memo`): a live one changes the ring in
+    /// place. Default: no ring.
+    ///
+    /// ```ignore
+    /// Avatar::new("bob").ring(Tone::Warning)
+    /// Avatar::new("bob").ring(report.tone())      // a Memo<Option<Tone>> the host keeps
+    /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn ring(self, tone: Tone) -> Self {
-        self.ring.set(Some(tone));
+    pub fn ring(self, tone: impl crate::builders::IntoToneValue) -> Self {
+        tone.into_tone_value().show_in(self.ring);
         self
     }
 
-    /// **Drive the ring from a tone the host keeps** — `None` takes the ring away. The ring changes
-    /// in place as the signal does; nothing is rebuilt.
-    #[heca_grid_ui_macros::host_only("binds a host-owned signal, which static data cannot drive")]
-    pub fn ring_signal(mut self, ring: Signal<Option<Tone>>) -> Self {
-        self.ring = ring;
-        self
-    }
-
-    /// **A picture instead of the letter** — an image file (a logo, a photo), filling the tile as the
-    /// letter does.
-    /// Default: the letter.
+    /// **A picture instead of the letter** — an image file path or source, or `None` for the letter,
+    /// fixed or live (a `Signal`, a `Memo`): a live one changes the tile in place. It fills the tile
+    /// as the letter does. Default: the letter.
+    ///
+    /// ```ignore
+    /// Avatar::new("claude").picture("icons/claude.svg")
+    /// Avatar::new("bob").picture(report.picture())  // a Memo<Option<ImageSource>> the host keeps
+    /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn picture(self, path: impl Into<String>) -> Self {
-        self.picture.set(Some(ImageSource::file(path.into())));
-        self
-    }
-
-    /// **Drive the picture from an image the host keeps** — `None` shows the letter again. The tile
-    /// changes in place as the signal does; nothing is rebuilt.
-    #[heca_grid_ui_macros::host_only("binds a host-owned signal, which static data cannot drive")]
-    pub fn picture_signal(mut self, picture: Signal<Option<ImageSource>>) -> Self {
-        // The parts are made for this signal: the letter and the picture read it directly.
-        self.picture = picture;
-        self.base.children = vec![crate::WidgetModel::new(parts(&self.name, picture))];
+    pub fn picture(self, picture: impl crate::builders::IntoPictureValue) -> Self {
+        picture.into_picture_value().show_in(self.picture);
         self
     }
 }
 
 /// **The two parts**: the letter, shown while there is no picture, and the picture, shown while
-/// there is one. Each is a square as big as a line of text ([`MONO_LINE_RATIO`] em), so the tile is
-/// the same size whichever it shows, and a picture fills it as the letter does.
+/// there is one. They fill the tile's square: the letter centred in it, the picture covering it.
 ///
 /// They sit in a centring `Flex` row, not a `Grid`: one is always hidden and takes no room, so the
 /// row holds exactly what is shown. Two `auto` grid columns side by side let free space leak into
 /// one of them, which widened the tile and pushed the picture to one side. Each part still carries
 /// a name (its area), so it is found by name, never by position.
 fn parts(name: &str, picture: Signal<Option<ImageSource>>) -> Flex {
-    let side = Length::Em(MONO_LINE_RATIO);
     // Nothing to load while there is no picture; the part is hidden then.
     let nothing = || ImageSource::bytes(Vec::new());
     Flex::row()
         .align("center")
         .justify("center")
+        .fill_parent()
         .child(
             Label::new(initial(name))
                 .font_weight(FontWeight::Bold)
-                .align(TextAlign::Center)
-                // At least a square: a label sizes itself to its text, so its width is a floor.
-                .min_width(side)
                 .area(LETTER)
                 .hidden(move || picture.get().is_some()),
         )
+        // The picture fills the tile: a logo is its own tile, as in a pane row.
         .child(
             Image::from_source(nothing())
                 .source_from(move || picture.get().unwrap_or_else(nothing))
-                .width(side)
-                .height(side)
+                .fill_parent()
                 .area(PICTURE)
                 .hidden(move || picture.get().is_none()),
         )
@@ -186,7 +183,11 @@ impl Component for Avatar {
         }
         let (fill, ink, ring, radius) = {
             let theme = cx.theme();
-            let fill = self.tone.resolve(theme);
+            // The fill is the letter's background; a picture is its own tile and covers nothing.
+            let fill = match self.picture.get_untracked() {
+                Some(_) => Color::TRANSPARENT,
+                None => self.tone.resolve(theme),
+            };
             let ring = self.ring.get_untracked().map(|tone| tone.resolve(theme));
             // The letter is written in the colour that reads on this fill — the theme's `on(..)`,
             // as a filled `Button` writes its label — not the page's text colour, which on a
@@ -214,6 +215,7 @@ impl StyleExt for Avatar {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reactive::SignalUpdate;
     use crate::scene::{DrawCommand, Scene};
     use crate::style::WidgetSize;
     use crate::widgets::Flex;
@@ -243,11 +245,11 @@ mod tests {
         assert_eq!(Avatar::new("bob").text_summary().as_deref(), Some("B"));
     }
 
-    /// The ring follows the signal it is bound to, and `ring(..)` writes into that same signal.
+    /// The ring follows the value it was given, and `ring(..)` sets a fixed one.
     #[test]
     fn the_ring_follows_its_signal() {
         let ring = signal(None);
-        let avatar = Avatar::new("bob").ring_signal(ring);
+        let avatar = Avatar::new("bob").ring(ring);
         assert_eq!(avatar.ring.get_untracked(), None);
         ring.set(Some(Tone::Warning));
         assert_eq!(avatar.ring.get_untracked(), Some(Tone::Warning));
@@ -260,7 +262,7 @@ mod tests {
     #[test]
     fn the_picture_follows_its_signal_in_place() {
         let picture = signal(None);
-        let mut root = laid(Avatar::new("bob").picture_signal(picture));
+        let mut root = laid(Avatar::new("bob").picture(picture));
         assert!(
             shown(&root, LETTER) && !shown(&root, PICTURE),
             "the letter first"
@@ -281,7 +283,7 @@ mod tests {
     #[test]
     fn the_tile_is_the_same_square_with_a_letter_or_a_picture() {
         let picture = signal(None);
-        let mut root = laid(Avatar::new("bob").picture_signal(picture));
+        let mut root = laid(Avatar::new("bob").picture(picture));
         let tile = |root: &Flex| area(root, "avatar").expect("the avatar").base().bounds;
         let with_letter = tile(&root);
         picture.set(Some(ImageSource::bytes(b"<svg/>".to_vec())));
@@ -295,16 +297,47 @@ mod tests {
         );
         let shown = area(&root, PICTURE).expect("the picture").base().bounds;
         assert_eq!(shown.size, with_picture.size, "the picture fills the tile");
+        // With a picture the tile paints no fill under it: a logo is its own tile.
+        let theme = crate::theme::Theme::default();
+        let mut scene = Scene::new();
+        paint_child(&root, &mut PaintCx::new(&mut scene, &theme));
+        let accent = Tone::Accent.resolve(&theme);
+        assert!(
+            !scene
+                .iter()
+                .any(|command| matches!(command, DrawCommand::Rect(rect) if rect.fill == accent)),
+            "no fill under the picture"
+        );
     }
 
-    /// The tile is as big as its letter, the letter in its middle.
+    /// In a row too narrow for everything, the tile keeps its size; the text beside it gives way.
     #[test]
-    fn the_tile_is_as_big_as_its_letter() {
+    fn the_tile_never_gives_way() {
+        let mut root = Flex::row()
+            .width(40.0)
+            .height(40.0)
+            .child(Avatar::new("bob").size(WidgetSize::Caption).area("avatar"))
+            .child(Label::new("a-long-name-that-cannot-fit").grow(1.0));
+        LayoutEngine::new().compute(&mut root, Size::new(40.0, 40.0));
+        let tile = area(&root, "avatar").expect("the avatar").base().bounds;
+        let letter = area(&root, LETTER).expect("the letter").base().bounds;
+        assert!(
+            tile.size.w + 0.5 >= letter.size.w,
+            "{tile:?} squeezed under {letter:?}"
+        );
+    }
+
+    /// The letter sits in the middle of the tile.
+    #[test]
+    fn the_letter_sits_in_the_middle_of_the_tile() {
         let root = laid(Avatar::new("bob"));
         let letter = area(&root, LETTER).expect("the letter").base().bounds;
         let tile = area(&root, "avatar").expect("the avatar").base().bounds;
+        let middle =
+            |r: heca_core::layout::Rectangle| (r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0);
+        let ((lx, ly), (tx, ty)) = (middle(letter), middle(tile));
         assert!(
-            (letter.size.w - tile.size.w).abs() < 0.5,
+            (lx - tx).abs() <= 1.0 && (ly - ty).abs() <= 1.0,
             "{letter:?} in {tile:?}"
         );
     }
