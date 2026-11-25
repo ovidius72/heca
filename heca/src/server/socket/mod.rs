@@ -13,6 +13,7 @@
 use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
 
+pub mod client;
 mod connect;
 mod listener;
 pub(crate) mod local;

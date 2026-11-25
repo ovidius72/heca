@@ -13,6 +13,7 @@ use std::io;
 use std::sync::mpsc::channel;
 
 mod frame;
+pub(crate) use frame::write as write_frame;
 mod queue;
 mod rows;
 mod wait;
@@ -21,6 +22,21 @@ pub(crate) mod image;
 pub(crate) mod service;
 pub(crate) mod socket;
 pub(crate) mod terminal;
+
+/// What a reader of the server's messages remembers between them: the screens a terminal's changed
+/// rows are applied to.
+pub(crate) type ServerMemory = rows::Screens;
+
+/// **The server's next message, whole** — a terminal's changed rows applied to the screen they
+/// change. The one reader every client uses, heca's window and `heca::socket::Attached` alike.
+pub(crate) fn read_server_message(
+    memory: &mut ServerMemory,
+    stream: &mut impl std::io::Read,
+    limit: std::num::NonZeroUsize,
+) -> std::io::Result<Option<ServerMsg>> {
+    use frame::Carried;
+    ServerMsg::read_from(memory, stream, limit)
+}
 
 use heca_core::layout::SessionContent;
 

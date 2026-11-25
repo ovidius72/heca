@@ -6,7 +6,7 @@ use std::num::NonZeroUsize;
 
 use serde::{Serialize, de::DeserializeOwned};
 
-pub(super) fn write<T: Serialize>(
+pub(crate) fn write<T: Serialize>(
     stream: &mut impl Write,
     message: &T,
     limit: NonZeroUsize,
@@ -20,7 +20,7 @@ pub(super) fn write<T: Serialize>(
     stream.write_all(&payload)
 }
 
-pub(super) fn read<T: DeserializeOwned>(
+pub(crate) fn read<T: DeserializeOwned>(
     stream: &mut impl Read,
     limit: NonZeroUsize,
 ) -> io::Result<Option<T>> {
