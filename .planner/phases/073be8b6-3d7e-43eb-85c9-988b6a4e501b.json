@@ -28,7 +28,8 @@
     "0c306a56-589d-4782-bde5-ff482dd3013a",
     "6e2b41f2-040c-4f82-bc6a-0287806240e5",
     "0fa72783-7180-460f-a238-33c99a4625d5",
-    "6df15669-5e81-4a09-b131-e651319e4a5b"
+    "6df15669-5e81-4a09-b131-e651319e4a5b",
+    "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76"
   ],
   "tasks": [
     {
@@ -214,10 +215,80 @@
       "updatedAt": "2026-08-21T10:27:57.710Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76",
+      "phaseId": "073be8b6-3d7e-43eb-85c9-988b6a4e501b",
+      "number": 592,
+      "shortId": "KH2US",
+      "priority": 7,
+      "shortName": "rewrite-the-expos-map-three-wo",
+      "title": "Rewrite the exposé map: three workspace rows at a time centred on the cursor, a name over each row, the active pane marked only where you are",
+      "status": "planned",
+      "description": "Agreed with Antonio on 2026-11-25, after testing T581's empty-workspace card.\n\n## Why\nThe exposé map (heca/src/chrome/surfaces/expose/) is hard to follow and draws every workspace at once. With six workspaces the previews are thin strips, the workspaces have no names, and most large cards are blue because each workspace's own active pane is lit (screenshot in the T581 conversation). The cursor walks a generic CardGrid (heca-grid-ui/src/widgets/card_grid.rs) that knows nothing about workspaces. Because of that, an empty workspace's card (added in T581: expose/empty_card.rs) needs its own `ws:<n>` cursor key, which only on_activate understands (expose_grid.rs on_move/on_activate).\n\n## What it becomes\n1. **Three rows at a time, the cursor's row always in the middle, as niri's overview does.** The map is a vertical ScrollRegion holding one row per workspace, with `visible_children(N)`. That is the same builder T581 added for the Select's options (heca-grid-ui ScrollRegion::visible_children / fit_visible_children). Each row is then a third of the map, and the previews shrink by themselves because cards are already shares of their row (workspace_row.rs, column_card.rs). When the cursor moves to another workspace, the rows scroll with an animation so that row sits in the centre. Rows entering and leaving at the top and bottom can fade at the edges. N is a setting: `[expose] visible_rows = 3` in config.default.toml, read through heca-config like the other exposé options (`LayoutOptions`, expose/mod.rs).\n2. **A name over each row.** A thin line above the strip: the workspace number in the accent (as the sidebar shows it, workspace_frame.rs `workspace_number`), then its name, left-aligned. It goes ABOVE the strip, never as a column beside it. A side column is what pushed every strip inwards so rows stopped lining up with their screens (the reason recorded on tests/picture.rs `a_row_carries_no_workspace_label`). That test changes: names are drawn, but only in the row header. The row holding the cursor shows its name highlighted.\n3. **The active pane marked only in the current workspace.** Today every workspace's focused pane wears the active (Filled) colour (pane_card.rs `.active(self.active)`, model.rs `ExposePane::active`). In the map only the workspace you are in shows it; the other rows show their panes plainly.\n4. **The cursor knows workspaces.** It moves over panes and empty-workspace cards through one vocabulary, instead of a pane-only key with a `ws:` side door. Up and down moves by workspace rows. Left and right moves across columns and floats (as today, CardGrid::step / step_vertical). An empty workspace stays selectable (decided: \"a workspace is always selectable, in the map too\").\n\n## Rules to keep\n- Sizes stay shares, never computed pixels (AGENTS.md § 0b, the seven-attempt history in that section). One headless box test per component (`the_whole_map_never_exceeds_the_box_it_is_given`).\n- Components split by what they own (AGENTS.md § 0b-bis): row header, workspace row, map. No &AppState below mod.rs.\n- Everything existing keeps working: picks (`on_hint`), delete letters (pane_card.rs delete_keys), click to choose, the cursor remembered between openings (wiring.rs CURSOR_ACTION / record_expose_cursor), Esc and click outside.\n- Coordinate with T462–T465 in this phase (modes, search, ⊠ buttons). They build on the same map, so this task goes first.",
+      "descriptionUpdatedAt": "2026-11-25T16:28:28.575Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76-check-001-map-rows-in-a-scrollregion-with-visible-children-from-expose-visible-rows-default-3-config-docs",
+          "number": 1,
+          "title": "Map rows in a ScrollRegion with visible_children from `[expose] visible_rows` (default 3), config + docs",
+          "checked": false
+        },
+        {
+          "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76-check-002-cursor-row-always-centred-rows-scroll-with-an-animation-edge-fade",
+          "number": 2,
+          "title": "Cursor row always centred; rows scroll with an animation, edge fade",
+          "checked": false
+        },
+        {
+          "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76-check-003-row-header-accent-number-name-above-the-strip-cursor-row-highlighted-update-a-row-carries-no-workspace-label",
+          "number": 3,
+          "title": "Row header: accent number + name above the strip; cursor row highlighted; update a_row_carries_no_workspace_label",
+          "checked": false
+        },
+        {
+          "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76-check-004-active-pane-marked-only-in-the-current-workspace",
+          "number": 4,
+          "title": "Active pane marked only in the current workspace",
+          "checked": false
+        },
+        {
+          "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76-check-005-cursor-moves-over-panes-and-empty-workspace-cards-with-one-vocabulary-no-ws-side-door",
+          "number": 5,
+          "title": "Cursor moves over panes and empty-workspace cards with one vocabulary (no ws: side door)",
+          "checked": false
+        },
+        {
+          "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76-check-006-box-test-at-several-window-sizes-and-workspace-counts-picks-delete-letters-click-remembered-cursor-still-work",
+          "number": 6,
+          "title": "Box test at several window sizes and workspace counts; picks, delete letters, click, remembered cursor still work",
+          "checked": false
+        },
+        {
+          "id": "80345705-9fcb-4bb9-96ab-d1f3a3b7bb76-check-007-antonio-s-eye-check-in-the-app",
+          "number": 7,
+          "title": "Antonio's eye check in the app",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-25T16:28:28.511Z",
+      "updatedAt": "2026-11-25T16:28:28.511Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-08-21T10:26:33.762Z",
-  "updatedAt": "2026-09-14T09:01:50.609Z",
+  "updatedAt": "2026-11-25T16:28:28.511Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
