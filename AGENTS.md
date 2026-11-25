@@ -34,6 +34,16 @@ need cannot be written in this shape, the library is missing a builder — propo
 ZERO); never work around it. Real examples: [`docs/layout.md` § The one rule](docs/layout.md),
 [`docs/widgets.md` → Grid](docs/widgets.md#grid).
 
+
+**Checked by a machine, on the lines you add.** `scripts/syntax-check.py` reads the lines a branch
+adds (old code never blocks a new change) and fails on what it can see: a child found by position,
+another widget's style written by hand, an effect wiring one value into another, a size written as
+a number (zero excepted), a colour written by hand. It runs first in `./scripts/lint-changed.sh`,
+on every pull request in CI, and when an agent's turn ends (`.claude/hooks/syntax-stop.sh`: the turn
+does not end until the lines are fixed). Tests, the theme and the library's own machinery (builders,
+layout, reactive, scene, style) are not checked. A deliberate exception says why, on the line:
+`// syntax-ok: <reason>`. It does not see everything — a value copied by hand into a signal, say —
+so the rule above still stands; the check only makes sure the visible breaks never reach review.
 ### ⭐ THE EVENTS — one way to listen, everywhere
 
 A state change is heard with one line, the same in heca's own components, in an extension and in a
@@ -1865,6 +1875,7 @@ cargo test -p heca-renderer
 ./scripts/lint-changed.sh              # clippy the changed crates
 ./scripts/lint-changed.sh test         # test the changed crates
 ./scripts/lint-changed.sh clippy main  # diff against a different base
+./scripts/lint-changed.sh syntax       # THE SYNTAX on the lines your branch adds (clippy runs it first)
 DRY_RUN=1 ./scripts/lint-changed.sh    # print the crate list, run nothing
 
 # Docs -- before opening a PR: a broken or private doc link fails the build. Private items too,

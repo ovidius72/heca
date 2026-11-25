@@ -124,6 +124,8 @@ pub struct Row {
     marker: ActiveMarker,
     /// The selection outline's width, when set; `None` draws the theme's glowing ring.
     border_width: Option<f32>,
+    /// The cursor is marked by a fill alone — see [`cursor_fill`](Row::cursor_fill).
+    cursor_fill: bool,
     flash: Flash,
     /// Override for the hover/active highlight color. Otherwise selection follows the theme's
     /// selected background and accent border; hover follows the row's background.
@@ -159,6 +161,7 @@ impl Row {
             // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
             border_width: None,
+            cursor_fill: false,
             flash: Flash::new(),
             highlight: None,
             previous_tint: None,
@@ -299,6 +302,19 @@ impl Row {
     /// The previous-state signal — bind it so the host flips the mark in place, without a rebuild.
     pub fn previous_state(&self) -> Signal<bool> {
         self.previous
+    }
+
+    /// **Mark the cursor with a fill alone** — no outline, no glow: the row under the cursor takes
+    /// the theme's `nav_fill`, strong enough to read on its own. For a short pick list where the
+    /// cursor is the only thing marked (a field's suggestion list).
+    ///
+    /// ```ignore
+    /// Row::new().nav_selected(chosen).cursor_fill(true)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn cursor_fill(mut self, on: bool) -> Self {
+        self.cursor_fill = on;
+        self
     }
 
     /// Set the sidebar-nav **cursor** state — a hollow outline shown distinctly
@@ -478,6 +494,14 @@ impl Component for Row {
         // flash stops asking.
         if self.nav.get_untracked() && crate::flash::attention(&self.base).is_none() {
             match self.border_width {
+                // The fill alone marks the cursor, at the theme's stronger `nav_fill`.
+                _ if self.cursor_fill => cx.rect(
+                    sel,
+                    selected_bg.with_alpha(ia.nav_fill),
+                    None,
+                    sel_radius,
+                    None,
+                ),
                 // The theme's ring, drawn over whatever the row already shows.
                 None => cx.rect(
                     sel,

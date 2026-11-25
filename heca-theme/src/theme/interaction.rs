@@ -50,6 +50,9 @@ pub struct InteractionAlphas {
     pub nav_outline: u8,
     /// Nav-cursor wash fill (dock).
     pub nav_wash: u8,
+    /// Nav-cursor fill of a row that draws **no outline** — the fill alone marks the cursor, so it
+    /// is strong enough to read on its own (a field's suggestion list).
+    pub nav_fill: u8,
 
     // ── Tonal fills (badges / tags / alerts / toasts) ──
     /// Badge fill — unifies badge/badge_button (both `38`).
@@ -117,6 +120,7 @@ impl Default for InteractionAlphas {
             row_hover_tint: 40,
             nav_outline: 225,
             nav_wash: 30,
+            nav_fill: 64,
             badge_fill: 38,
             tag_fill: 22,
             tag_border: 130,

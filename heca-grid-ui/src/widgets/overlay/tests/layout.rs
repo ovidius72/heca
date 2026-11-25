@@ -90,9 +90,9 @@ fn panel_size_is_opt_in() {
 }
 
 /// End-to-end: an anchored overlay bakes the placement into the panel child's
-/// bounds on layout (so paint/hit-testing follow), and it is idempotent.
+/// bounds once layout has finished (so paint/hit-testing follow), and it is idempotent.
 #[test]
-fn anchored_overlay_places_panel_child_on_layout() {
+fn anchored_overlay_places_panel_child_once_layout_finishes() {
     let anchor = Rectangle::new(Point::new(40.0, 100.0), Size::new(120.0, 30.0));
     let mut o = Overlay::new()
         .blocking(false)
@@ -103,15 +103,15 @@ fn anchored_overlay_places_panel_child_on_layout() {
     o.base.children[0].base_mut().bounds =
         Rectangle::new(Point::new(300.0, 300.0), Size::new(120.0, 80.0));
     o.viewport.set(Size::new(800.0, 600.0));
-    o.on_layout();
+    o.on_placed();
     let placed = o.panel_bounds();
     assert_eq!(
         placed.loc,
         Point::new(40.0, 134.0),
         "panel anchored below trigger"
     );
-    // Idempotent: a second on_layout must not compound the offset.
-    o.on_layout();
+    // Idempotent: a second pass must not compound the offset.
+    o.on_placed();
     assert_eq!(o.panel_bounds().loc, placed.loc, "re-placing is idempotent");
 }
 
@@ -278,5 +278,83 @@ fn an_undecorated_overlay_draws_the_scrim_and_no_panel() {
         rects(false),
         (true, false),
         "undecorated: the scrim, no panel"
+    );
+}
+
+/// A light panel beside a control that keeps the keyboard: opening it leaves the keyboard alone,
+/// and Tab is not held inside it.
+#[test]
+fn an_overlay_that_does_not_take_the_keyboard_leaves_it_where_it_is() {
+    let open = crate::reactive::signal(false);
+    let mut o = Overlay::new()
+        .blocking(false)
+        .keyboard(false)
+        .open(open)
+        .panel(Flex::column().child(Label::new("hi")));
+    open.set(true);
+    assert!(!o.base().is_focused(), "it does not take the keyboard");
+    let tab = Event::Key {
+        key: crate::component::GridKey::Tab,
+        pressed: true,
+    };
+    assert_eq!(o.on_event(&tab), Handled::No, "Tab passes on");
+    // The order of the builders does not matter.
+    let open = crate::reactive::signal(false);
+    let o = Overlay::new()
+        .open(open)
+        .keyboard(false)
+        .panel(Flex::column());
+    open.set(true);
+    assert!(!o.base().is_focused());
+}
+
+/// A trigger that moves: the panel follows its rect, and an anchored layer inside a small widget
+/// keeps its panel whole instead of squeezing it into that widget's box.
+#[test]
+fn an_anchored_overlay_follows_a_moving_anchor_and_ignores_its_holders_box() {
+    let caret = crate::reactive::signal(Rectangle::new(
+        Point::new(40.0, 100.0),
+        Size::new(8.0, 20.0),
+    ));
+    let mut root = Flex::column().width(600.0).height(400.0).child(
+        Flex::row().width(60.0).height(20.0).child(
+            Overlay::new()
+                .blocking(false)
+                .keyboard(false)
+                .anchored_to(caret)
+                .default_open(true)
+                .panel(Flex::column().width(200.0).height(120.0)),
+        ),
+    );
+    let lay = |root: &mut Flex| {
+        crate::LayoutEngine::new().compute(root, Size::new(600.0, 400.0));
+    };
+    let panel = |root: &Flex| {
+        let holder = &root.base().children[0];
+        let overlay = &holder.base().children[0];
+        overlay.base().children[0].base().bounds
+    };
+    lay(&mut root);
+    let first = panel(&root);
+    assert_eq!(
+        first.size,
+        Size::new(200.0, 120.0),
+        "whole, not the 60×20 holder"
+    );
+    assert_eq!(
+        first.loc.y,
+        100.0 + 20.0 + DEFAULT_ANCHOR_GAP,
+        "under the anchor"
+    );
+    caret.set(Rectangle::new(
+        Point::new(90.0, 150.0),
+        Size::new(8.0, 20.0),
+    ));
+    lay(&mut root);
+    let moved = panel(&root);
+    assert_eq!(
+        moved.loc,
+        Point::new(90.0, 150.0 + 20.0 + DEFAULT_ANCHOR_GAP),
+        "it followed"
     );
 }

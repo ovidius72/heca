@@ -110,6 +110,38 @@ impl IntoGlyphValue for crate::reactive::Memo<crate::widgets::Glyph> {
     }
 }
 
+/// **What [`Input::suggest`](crate::widgets::Input::suggest) takes as its items** — a fixed list, or one
+/// that changes (a `Signal`, a `Memo`, a function reading signals), followed while the list is
+/// open.
+pub trait IntoSuggestions<T> {
+    /// The items, read again whenever a signal they read changes.
+    fn into_suggestions(self) -> std::rc::Rc<dyn Fn() -> Vec<T>>;
+}
+
+impl<T: Clone + 'static> IntoSuggestions<T> for Vec<T> {
+    fn into_suggestions(self) -> std::rc::Rc<dyn Fn() -> Vec<T>> {
+        std::rc::Rc::new(move || self.clone())
+    }
+}
+
+impl<T: Clone + 'static> IntoSuggestions<T> for Signal<Vec<T>> {
+    fn into_suggestions(self) -> std::rc::Rc<dyn Fn() -> Vec<T>> {
+        std::rc::Rc::new(move || self.get())
+    }
+}
+
+impl<T: Clone + PartialEq + 'static> IntoSuggestions<T> for crate::reactive::Memo<Vec<T>> {
+    fn into_suggestions(self) -> std::rc::Rc<dyn Fn() -> Vec<T>> {
+        std::rc::Rc::new(move || self.get())
+    }
+}
+
+impl<T, F: Fn() -> Vec<T> + 'static> IntoSuggestions<T> for F {
+    fn into_suggestions(self) -> std::rc::Rc<dyn Fn() -> Vec<T>> {
+        std::rc::Rc::new(self)
+    }
+}
+
 /// **What `Avatar::ring(..)` takes** — a tone, fixed (`Tone::Warning`, or `None` for no ring) or
 /// live (a `Signal<Option<Tone>>`, a `Memo`), followed in place.
 pub trait IntoToneValue {
@@ -264,6 +296,8 @@ pub(crate) enum SizeField {
     Height,
     MaxWidth,
     MaxHeight,
+    MinWidth,
+    MinHeight,
 }
 
 impl SizeField {
@@ -273,6 +307,8 @@ impl SizeField {
             Self::Height => layout.height = value,
             Self::MaxWidth => layout.max_width = Some(value),
             Self::MaxHeight => layout.max_height = Some(value),
+            Self::MinWidth => layout.min_width = Some(value),
+            Self::MinHeight => layout.min_height = Some(value),
         }
     }
 }

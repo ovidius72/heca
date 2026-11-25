@@ -35,6 +35,7 @@ mod navigation;
 use navigation::{Granularity, next_word_boundary, prev_word_boundary, word_bounds};
 mod component;
 mod content;
+mod suggest;
 
 /// An editable field. Single-line by default; [`multiline(true)`](Self::multiline) wraps and grows
 /// to [`max_lines`](Self::max_lines), then scrolls. The default limit is [`heca_theme::InputStyle::max_lines`].
@@ -98,6 +99,8 @@ pub struct Input {
     /// Set by a [`clearable`](Input::clearable) field's × when it is clicked; the click then
     /// bubbles to the field, which empties itself — the × owns no text and the field no hit-test.
     clear_requested: std::rc::Rc<std::cell::Cell<bool>>,
+    /// Suggestions under the caret, when the field has them ([`suggest`](Input::suggest)).
+    suggest: Option<suggest::Suggest>,
 }
 
 impl Default for Input {

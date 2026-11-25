@@ -11,7 +11,16 @@ pub(super) fn build(theme: &Theme) -> Grid {
     let editor = Input::new()
         .multiline(true)
         .width("100%")
-        .placeholder("Enter adds a new line…")
+        .placeholder("Enter adds a new line… type @ to mention someone")
+        // Suggestions under the caret: `@` opens these names, narrowed as you type.
+        .suggest(
+            '@',
+            ["ada", "bob", "bobby", "carol", "all"]
+                .map(String::from)
+                .to_vec(),
+            |name: &String| Label::new(name.clone()),
+            |name: &String| format!("@{name} "),
+        )
         .on_submit({
             let feed = feed.clone();
             move |action| {

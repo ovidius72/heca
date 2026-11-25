@@ -503,6 +503,35 @@ pub trait Component {
     /// layout/scroll cycle.
     fn on_layout(&mut self) {}
 
+    /// **Everything is in its final place on screen.** Called once per layout, after the whole
+    /// tree is laid out, parent before children. Default: nothing.
+    ///
+    /// # Why it exists beside `on_layout`
+    ///
+    /// A layout has two steps. First every widget is placed inside its parent, and
+    /// [`on_layout`](Self::on_layout) runs, children before their parent. Then a parent may still
+    /// move all its children at once: a [`ScrollRegion`](crate::widgets::ScrollRegion) shifts its
+    /// content up by how far it is scrolled. So in `on_layout` a widget knows where it is **inside
+    /// its parent**, but not yet where it will be **on screen**.
+    ///
+    /// That is enough for almost every widget. It is not enough for something that must sit at an
+    /// exact point of the screen: a panel hung under a field's caret, flipped above when the window
+    /// has no room below. Placed in `on_layout`, such a panel was moved a second time by the
+    /// scrolled page around it, and ended up away from the caret by exactly the scroll. Here every
+    /// shift has happened, so a rect read now is where it will be drawn.
+    ///
+    /// # Who needs it
+    ///
+    /// Almost nobody. A [`Label`](crate::widgets::Label), a `Button`, a `Flex` never look at it.
+    /// To put a panel next to something, use an anchored [`Overlay`](crate::widgets::Overlay) —
+    /// it uses this itself, so the panel lands right inside any scrolled page with nothing to
+    /// write. Implement it only in a new widget that has to measure itself against the screen.
+    /// Today: `Overlay` places its anchored panel here, and `Input` tells its suggestion list where
+    /// the caret is.
+    ///
+    /// Do not change sizes here: layout is over, and a size changed now waits for the next one.
+    fn on_placed(&mut self) {}
+
     /// Advance time-based animations by `dt` seconds. Returns `true` if a
     /// **continuous** animation is still running (eases, slides, spinners), so the
     /// host schedules another frame at its frame cap. Default: recurse.

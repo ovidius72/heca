@@ -190,6 +190,10 @@ impl Row {
     pub fn nav_selected(self, on: bool) -> Self {
         self.prop("nav_selected", on)
     }
+    /// Mark the cursor with a fill alone, no outline — mirrors grid-ui `Row::cursor_fill`.
+    pub fn cursor_fill(self, on: bool) -> Self {
+        self.prop("cursor_fill", on)
+    }
     /// The hover/active highlight colour: a theme token name or a literal.
     pub fn highlight(self, colour: &str) -> Self {
         self.prop("highlight", PropValue::Color(colour.to_string()))
@@ -397,6 +401,11 @@ impl Overlay {
     /// through to the page — a light-dismiss popover.
     pub fn blocking(self, on: bool) -> Self {
         self.prop("blocking", PropValue::Bool(on))
+    }
+    /// **Whether opening takes the keyboard.** Default `true` (a dialog, a menu); `false` leaves the
+    /// keyboard in the control beside it — mirrors grid-ui `Overlay::keyboard`.
+    pub fn keyboard(self, takes: bool) -> Self {
+        self.prop("keyboard", PropValue::Bool(takes))
     }
     /// Whether it starts up. The starting value only — to follow state you hold, the host binds a
     /// signal with `open`. A surface **born** open is already there and plays no arrival; one
