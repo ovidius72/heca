@@ -1400,3 +1400,37 @@ fn the_notification_history_is_answered_over_the_real_socket() {
         2
     );
 }
+
+/// **`heca::socket` talks to a real server**: it attaches with the version this heca speaks and
+/// receives the attach answer, and it runs an action line — what a probe or a tool outside heca uses
+/// instead of writing the protocol by hand.
+#[test]
+fn the_public_socket_client_attaches_and_runs_an_action_line() {
+    let (_root, _server, path) = start_server();
+    let limits = heca_config::settings::ConnectionConfig::default();
+    let mut window = heca::socket::Attached::open(&path, &limits).unwrap();
+    window.wait_at_most(Some(Duration::from_secs(5))).unwrap();
+    window.send(&json!("Attach")).unwrap();
+    let attached = window
+        .receive()
+        .unwrap()
+        .expect("the server answers the attach");
+    assert!(attached.get("Attached").is_some(), "{attached}");
+    let sessions: Value =
+        serde_json::from_str(&heca::socket::request(&path, "list_sessions", &limits).unwrap())
+            .unwrap();
+    assert!(sessions.is_array() || sessions.is_object(), "{sessions}");
+}
+
+/// **An old client is told its version is refused**, in a line it can read — not left to read the
+/// refusal as a broken frame, which is how a probe that wrote the preface by hand failed.
+#[test]
+fn an_old_clients_attach_is_refused_by_version() {
+    let (_root, _server, path) = start_server();
+    let mut old = UnixStream::connect(&path).unwrap();
+    old.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    old.write_all(b"@heca-attach 1\n").unwrap();
+    let mut answer = String::new();
+    let _ = old.read_to_string(&mut answer);
+    assert!(answer.starts_with("@heca-attach refused"), "{answer}");
+}

@@ -13,6 +13,7 @@
 use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
 
+pub mod client;
 mod connect;
 mod listener;
 pub(crate) mod local;
@@ -70,11 +71,20 @@ pub(crate) fn reload_running() -> bool {
 }
 
 fn request_to(path: &std::path::Path, line: &str) -> std::io::Result<String> {
-    let mut stream = UnixStream::connect(path)?;
     let limits = heca_config::loader::AppConfig::load()
         .config
         .settings
         .connection;
+    request_within(path, line, &limits)
+}
+
+/// One action line within `limits` — the limits the caller holds, never read from a config file.
+fn request_within(
+    path: &std::path::Path,
+    line: &str,
+    limits: &heca_config::settings::ConnectionConfig,
+) -> std::io::Result<String> {
+    let mut stream = UnixStream::connect(path)?;
     let timeout = Some(std::time::Duration::from_millis(
         limits.request_timeout_ms.get(),
     ));

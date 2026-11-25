@@ -53,6 +53,8 @@ pub use heca_view::{Intent, PropMap, PropValue};
 pub use heca_view_realize::WidgetDefinition;
 pub use notification::{Notification, NotificationAction};
 pub use providers::{ChromeCtx, Provider, ProviderCx, ProviderHandles};
+/// Talking to a running heca server from outside it — see [`socket::request`] and [`socket::Attached`].
+pub use server::socket::client as socket;
 
 use app::events::AppEvent;
 use app::events::handle_window_event;
