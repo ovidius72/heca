@@ -65,6 +65,7 @@ pub(super) fn build_chrome(
         "show_layer" => Some(WmAction::ShowLayer {
             name: get_string(args, "name"),
             dock: get_string(args, "dock"),
+            arguments: layer_arguments(args),
         }),
         "hide_layer" => Some(WmAction::HideLayer {
             name: get_string(args, "name"),
@@ -73,6 +74,7 @@ pub(super) fn build_chrome(
         "toggle_layer" => Some(WmAction::ToggleLayer {
             name: get_string(args, "name"),
             dock: get_string(args, "dock"),
+            arguments: layer_arguments(args),
         }),
 
         // Both OPTIONAL, and they compose into one prefilled query — see the variant.
@@ -100,5 +102,53 @@ pub(super) fn build_chrome(
         }),
 
         _ => None,
+    }
+}
+
+/// **The layer's own arguments**: everything a layer action was given besides which layer (`name`)
+/// and which seating (`dock`), sorted by name so the same arguments compare equal however they were
+/// written.
+fn layer_arguments(args: &std::collections::HashMap<String, String>) -> Vec<(String, String)> {
+    let mut own: Vec<(String, String)> = args
+        .iter()
+        .filter(|(key, _)| !matches!(key.as_str(), "name" | "dock"))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    own.sort();
+    own
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::resolve_action;
+    use crate::input::WmAction;
+
+    /// **Everything a layer action is given besides `name` and `dock` is the layer's own**, sorted,
+    /// so the same arguments compare equal however they were written.
+    #[test]
+    fn a_layer_action_carries_the_layers_own_arguments() {
+        let args = [
+            ("name", "demo.chat"),
+            ("room", "auth"),
+            ("dock", "1"),
+            ("from", "x"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let Some(WmAction::ToggleLayer {
+            name, arguments, ..
+        }) = resolve_action("toggle_layer", &args)
+        else {
+            panic!("toggle_layer resolves");
+        };
+        assert_eq!(name.as_deref(), Some("demo.chat"));
+        assert_eq!(
+            arguments,
+            [
+                ("from".to_string(), "x".to_string()),
+                ("room".to_string(), "auth".to_string())
+            ]
+        );
     }
 }

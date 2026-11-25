@@ -380,18 +380,27 @@ pub enum WmAction {
     /// way `owning_mount` does — the focused seating, else the last focused of that kind. Both
     /// arguments optional keeps the action offerable in the palette, which lists only what it can
     /// run with nothing supplied.
+    ///
+    /// `arguments` are the layer's own — every other `name=value` the action was given
+    /// (`show_layer name=heca-pro.chat room=auth`), sorted by name. A layer declares the ones it
+    /// takes and reads them as it builds (`LayerBuilder::arg`, `LayerCx::arg`).
     ShowLayer {
         name: Option<String>,
         dock: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        arguments: Vec<(String, String)>,
     },
     HideLayer {
         name: Option<String>,
         dock: Option<String>,
     },
-    /// Show it if hidden, hide it if shown — one key for a surface you flick in and out of.
+    /// Show it if hidden, hide it if shown — one key for a surface you flick in and out of. Given
+    /// arguments different from the ones it is showing, it shows them instead of hiding.
     ToggleLayer {
         name: Option<String>,
         dock: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        arguments: Vec<(String, String)>,
     },
 
     /// Open the command palette.
