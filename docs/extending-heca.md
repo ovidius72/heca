@@ -141,7 +141,8 @@ its `Notes` provider contributes a dock containing a label and a Terminal to `si
   dot is refused too. Every refusal is *said* (once, to whoever is writing the program), never silent.
 - **What is added is a default.** Where a dock sits and whether an item shows is the user's to decide.
   A dock they move stays where they put it. Pane buttons, chips and lines are listed **by name** in
-  `[appearance.pane] title_actions`, `title_segments` and `[appearance.sidebar] pane_lines`: while a
+  `[appearance.pane] title_actions`, `title_segments` and the sidebar's view lists
+  (`[appearance.sidebar] pane_<view>_view`): while a
   list is still heca's own, what you added shows after it; once the user writes their own list only
   their list counts, and they are told **once** that an unlisted item exists.
 - **Register before `run()`.** Startup registrations (actions, layer builders, decorations,

@@ -59,6 +59,10 @@ impl ScrollRegion {
                 (ex.value(), ey.value())
             }
         };
+        // **Scrolling is an offset on content the engine already laid out, as in CSS** — the
+        // content keeps its size and order, only where it is drawn changes. It stays a shift of the
+        // children rather than a layout input, because a layout pass per wheel tick would re-run
+        // the engine over the whole content to move it by a few pixels.
         let dy = self.applied_offset - target_y;
         let dx = self.applied_offset_x - target_x;
         if dx != 0.0 || dy != 0.0 {

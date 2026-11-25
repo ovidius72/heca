@@ -45,6 +45,8 @@ const CHEVRON_CLOSED: &str = "▸";
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
 const LEADING_GAP: Spacing = Spacing::Sm;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// The frame's rest halo, as a share of the theme's glow radius (`active_glow_radius`).
 const GLOW_SCALE: f32 = 1.2;
 /// Inset of the header + body from the bracket frame, so content (title, the
@@ -423,9 +425,13 @@ impl DockFrame {
 
     /// Set the initial expanded state.
     #[heca_grid_ui_macros::prop]
-    pub fn expanded(self, open: bool) -> Self {
-        self.expanded.set(open);
-        self.chevron.set(chevron_for(open).to_string());
+    pub fn expanded(self, open: impl crate::builders::IntoBoolValue) -> Self {
+        open.into_bool_value().show_in(self.expanded);
+        let expanded = self.expanded;
+        crate::builders::LiveValue::live(move || {
+            chevron_for(crate::reactive::SignalGet::get(&expanded)).to_string()
+        })
+        .show_in(self.chevron);
         self
     }
 
@@ -499,8 +505,8 @@ impl DockFrame {
     /// Mark the frame active (the current one). A state background is painted only when the
     /// theme enables `active_wash_alpha`; it is off by default. Defaults to inactive.
     #[heca_grid_ui_macros::prop]
-    pub fn active(self, active: bool) -> Self {
-        self.active.set(active);
+    pub fn active(self, active: impl crate::builders::IntoBoolValue) -> Self {
+        active.into_bool_value().show_in(self.active);
         self
     }
 
@@ -508,8 +514,8 @@ impl DockFrame {
     /// (`prefix+Shift+l`). The faintest wash of the selection colour, under the active one, so a
     /// frame that is both reads as active — you are there now, which outranks where you were.
     #[heca_grid_ui_macros::prop]
-    pub fn previous(self, on: bool) -> Self {
-        self.previous.set(on);
+    pub fn previous(self, on: impl crate::builders::IntoBoolValue) -> Self {
+        on.into_bool_value().show_in(self.previous);
         self
     }
 
@@ -527,8 +533,8 @@ impl DockFrame {
     /// Mark the frame as the sidebar-nav **cursor** — a hollow accent border,
     /// shown distinctly from the active wash. Defaults to off.
     #[heca_grid_ui_macros::prop]
-    pub fn nav_selected(self, on: bool) -> Self {
-        self.nav.set(on);
+    pub fn nav_selected(self, on: impl crate::builders::IntoBoolValue) -> Self {
+        on.into_bool_value().show_in(self.nav);
         self
     }
 
@@ -754,6 +760,8 @@ impl Component for DockFrame {
                 radius,
                 Some(Glow {
                     color: glow,
+                    // Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+                    // See docs/widgets.md → "Each widget's own glow and border".
                     radius: 8.0,
                     intensity: 0.25,
                 }),

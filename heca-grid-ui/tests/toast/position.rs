@@ -56,7 +56,12 @@ fn the_cards_anchor_to_the_window_corner_not_to_the_slot_a_parent_gave() {
             .base_font(14.0)
             .compute(&mut overlays, vp);
 
-        let card = overlays.base().children[2].base().children[0].base().bounds;
+        let card = heca_grid_ui::area(&overlays, ToastStack::CARDS)
+            .expect("the stack shows its cards")
+            .base()
+            .children[0]
+            .base()
+            .bounds;
         let (right, top) = want;
         if right {
             let gap = vp.w - (card.loc.x + card.size.w);
@@ -106,7 +111,7 @@ fn the_position_vocabulary_places_the_stack_at_each_of_its_members() {
         let items = signal(vec![ToastSpec::new(1, "Saved")]);
         let mut stack = ToastStack::new(items).position(pos);
         settled_stack(&mut stack, vp);
-        let c = stack.base().children[0].base().bounds;
+        let c = stack.cards()[0].base().bounds;
 
         let top = c.loc.y;
         let bottom = vp.h - (c.loc.y + c.size.h);

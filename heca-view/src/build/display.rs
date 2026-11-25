@@ -70,6 +70,11 @@ impl Keycap {
     pub fn variant(self, variant: crate::ViewKeycapVariant) -> Self {
         self.prop("variant", variant)
     }
+    /// The chip's hue: `accent` (the default), `muted` for a key that cannot be used right now,
+    /// `warning`, `success` or `danger`.
+    pub fn tone(self, tone: &str) -> Self {
+        self.prop("tone", PropValue::Text(tone.to_string()))
+    }
 }
 
 builder!(

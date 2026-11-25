@@ -125,10 +125,69 @@ impl NotificationStore {
             (Ok(notification_id), visible_changed)
         });
 
-        result.map(|notification_id| NotificationStorePush {
+        let notification_id = result?;
+        let update = match self.overflow(notification_id, now) {
+            Some(summary) => summary,
+            None => update,
+        };
+        Ok(NotificationStorePush {
             notification_id,
             update,
         })
+    }
+
+    /// **What does not fit becomes a count.** The queue holds one more screenful — as many waiting
+    /// cards as there are slots, shown in turn as before. A notification past that goes straight to
+    /// the history instead, and one card — "N more notifications", with a button that opens the
+    /// history — stands for all of them. Fifty messages in a few seconds were fifty cards shown in
+    /// turn, holding the window drawing for most of a minute.
+    ///
+    /// Only what would vanish by itself anyway is summed up: a card that stays until read
+    /// (sticky) or that asks for an answer (it has buttons) keeps its place in the queue. The
+    /// summary card itself is never summed up. `None` when nothing was summed up.
+    fn overflow(
+        &mut self,
+        notification_id: NotificationId,
+        now: Instant,
+    ) -> Option<NotificationStoreUpdate> {
+        let notification = self.notifications.get(&notification_id)?;
+        let waits = matches!(notification.placement, NotificationPlacement::Queued);
+        let vanishes = matches!(
+            notification.lifecycle.lifetime(),
+            NotificationLifetime::Auto(_)
+        ) && notification.actions.is_empty();
+        let is_summary = notification.dedup_key.as_deref() == Some(OVERFLOW_KEY);
+        let screenful_waiting = self.queued.len() > self.visible.len();
+        if !waits || !vanishes || is_summary || !screenful_waiting {
+            return None;
+        }
+        self.queued.retain(|id| *id != notification_id);
+        self.notifications
+            .get_mut(&notification_id)
+            .expect("known notification must have canonical storage")
+            .placement = NotificationPlacement::History {
+            cause: NotificationArchiveCause::Resolved,
+            archived_at: now,
+        };
+        self.retain_history(notification_id);
+        self.overflowed = self.overflowed.saturating_add(1);
+        let summary = NotificationDraft::info(more_notifications(self.overflowed))
+            .body("They are in the notification history.")
+            .dedup_key(OVERFLOW_KEY)
+            .action(NotificationAction::new(
+                "Show all",
+                Intent::new("notification_history"),
+            ));
+        let update = self.push(summary, now).ok().map(|push| push.update);
+        // **The count goes first**: it stands for everything behind it, so it shows as soon as a
+        // card leaves rather than after the screenful waiting before it.
+        if let Some(&id) = self.dedup_index.get(OVERFLOW_KEY)
+            && self.queued.contains(&id)
+        {
+            self.queued.retain(|queued| *queued != id);
+            self.queued.push_front(id);
+        }
+        update
     }
 
     /// Retain an archived entry, evicting the oldest records and their dedup
@@ -137,6 +196,14 @@ impl NotificationStore {
     /// An archived entry's buttons can no longer be pressed, so their closures
     /// ([`NotificationAction::run`]) are released here rather than kept alive in the history.
     pub(super) fn retain_history(&mut self, notification_id: NotificationId) {
+        // The "more notifications" card leaving starts its count again.
+        if self
+            .notifications
+            .get(&notification_id)
+            .is_some_and(|n| n.dedup_key.as_deref() == Some(OVERFLOW_KEY))
+        {
+            self.overflowed = 0;
+        }
         if let Some(notification) = self.notifications.get_mut(&notification_id) {
             notification
                 .actions
@@ -216,6 +283,11 @@ impl NotificationStore {
     /// existing visible card. Returns whether the visible projection changed.
     pub(super) fn promote_pending(&mut self, now: Instant) -> bool {
         let mut visible_changed = self.close_gaps();
+        // Slots past the number wanted close once their card has gone (they are packed at the
+        // front, so the free ones are the tail).
+        while self.visible.len() > self.target && self.visible.last() == Some(&None) {
+            self.visible.pop();
+        }
         for slot in self.visible.iter_mut().filter(|slot| slot.is_none()) {
             let Some(notification_id) = self.queued.pop_front() else {
                 break;
@@ -347,5 +419,13 @@ impl NotificationStore {
                 );
             }
         }
+    }
+}
+
+/// The words of the "more notifications" card for `n` of them.
+fn more_notifications(n: usize) -> String {
+    match n {
+        1 => "1 more notification".to_owned(),
+        n => format!("{n} more notifications"),
     }
 }

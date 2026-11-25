@@ -47,11 +47,19 @@ pub(super) fn callbacks(keys: ExposeDeleteKeys) -> ExposeCallbacks {
         send(Intent::new("unfocus_dock"));
         send(Intent::new("close_overlay"));
     });
+    // **An empty workspace is chosen the same way**: go to it, hand the keyboard back, put the map
+    // away. `focus_workspace_<n>` counts from one, as its key does.
+    let choose_workspace: std::rc::Rc<dyn Fn(usize)> = std::rc::Rc::new(|ws_idx: usize| {
+        send(Intent::new(format!("focus_workspace_{}", ws_idx + 1)));
+        send(Intent::new("unfocus_dock"));
+        send(Intent::new("close_overlay"));
+    });
     // Dismissal goes through the **action**, not a bespoke hide: `close_overlay` is in the registry,
     // so it is bindable, rebindable in config, listed in the palette and reachable over RPC.
     let dismiss: std::rc::Rc<dyn Fn()> = std::rc::Rc::new(|| send(Intent::new("close_overlay")));
     ExposeCallbacks {
         choose,
+        choose_workspace,
         delete,
         cursor_to,
         dismiss,

@@ -155,6 +155,7 @@ const VALUE_TYPES: &[&str] = &[
     "NfGlyph",
     "ActiveMarker",
     "RowVariant",
+    "CursorLook",
     "DockFrameVariant",
     "Ellipsis",
     "Orientation",

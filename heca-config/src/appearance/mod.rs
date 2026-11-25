@@ -17,7 +17,7 @@ mod terminal;
 mod tests;
 
 pub use pane::{PaneAppearance, default_pane_title_actions, default_pane_title_segments};
-pub use sidebar::{AgentSessionLine, SidebarAppearance, default_sidebar_pane_lines};
+pub use sidebar::{AgentSessionLine, PaneView, SidebarAppearance, default_view_lines};
 pub use styles::{BorderStyle, HyperlinkStyle, ScrollbarVisibility, Vibrancy};
 pub use terminal::{TerminalAppearance, TerminalPadding};
 

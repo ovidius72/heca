@@ -62,7 +62,7 @@ fn select_click_row_commits_and_closes() {
     // Click the third row (HIGH) **where it actually is**: the options are child components, and
     // opening the list placed them in the panel, so their bounds are the rows on screen. No row
     // arithmetic — what is drawn is what is clicked.
-    let row2 = sel.base().children[2].base().bounds;
+    let row2 = common::select_rows(&sel)[2].base().bounds;
     assert!(
         row2.loc.y > b.loc.y + b.size.h,
         "the rows are placed in the panel, below the trigger"
@@ -86,9 +86,9 @@ fn select_sugar_builds_choice_children_and_composed_options_carry_their_content(
 
     // The string constructor is sugar: every option is a `Choice` child whose value is the text.
     let sugar = Select::new(["LOW", "HIGH"]);
-    assert_eq!(sugar.base().children.len(), 2, "one child per option");
+    assert_eq!(common::select_rows(&sugar).len(), 2, "one child per option");
     assert_eq!(
-        sugar.base().children[1].text_summary().as_deref(),
+        common::select_rows(&sugar)[1].text_summary().as_deref(),
         Some("HIGH"),
         "the option's content is a Label the widget can name",
     );
@@ -106,8 +106,8 @@ fn select_sugar_builds_choice_children_and_composed_options_carry_their_content(
         .selected(1);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
 
-    // The closed trigger shows the chosen option **itself** — it stands the child inside the
-    // trigger box, so the icon comes with it. (Its text alone is still available as the option's
+    // The closed trigger shows the chosen option **itself** — an image of its content, so the
+    // icon comes with it. (Its text alone is still available as the option's
     // accessible name, which is what `selected_label` reports.)
     assert_eq!(sel.selected_label(), "HIGH");
     let scene = common::paint(&sel, &theme);
@@ -126,20 +126,6 @@ fn select_sugar_builds_choice_children_and_composed_options_carry_their_content(
         closed.len() > 1,
         "…and its Icon child, painted with it: {closed:?}",
     );
-    let trigger = sel.base().bounds;
-    let chosen = sel.base().children[1].base().bounds;
-    let slack = 0.5; // the trigger hugs the tallest option, so they agree to within rounding
-    assert!(
-        chosen.loc.y >= trigger.loc.y - slack
-            && chosen.loc.y + chosen.size.h <= trigger.loc.y + trigger.size.h + slack,
-        "the chosen option is placed inside the trigger while closed",
-    );
-    assert_eq!(
-        sel.base().children[0].base().bounds.size,
-        Size::new(0.0, 0.0),
-        "the options not chosen are collapsed",
-    );
-
     // Opening draws the options' own content — including the icon, which no `Vec<String>` of
     // options could ever have carried.
     let press = Point::new(sel.base().bounds.loc.x + 5.0, sel.base().bounds.loc.y + 5.0);

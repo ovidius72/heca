@@ -222,7 +222,9 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::NotificationDismissLast
         | WmAction::NotificationPick
         | WmAction::NotificationHistory
-        | WmAction::NotificationActionRelay { .. } => ActionPolicy::Global,
+        | WmAction::NotificationActionRelay { .. }
+        // Which lines the sidebar's cards show touches nothing else.
+        | WmAction::SidebarPaneView { .. } => ActionPolicy::Global,
         // Forgetting a search memory touches no layout and no pane, so there is no domain in which
         // it should be refused.
         WmAction::ClearSearchHistory { .. } | WmAction::ClearSearchRanking { .. } => {

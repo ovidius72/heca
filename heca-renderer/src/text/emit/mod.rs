@@ -260,7 +260,7 @@ impl TextRenderer {
             // geometry at all (the per-draw scissor in `render` would clip it away
             // anyway, but emitting + uploading it is wasted work — the whole point on a
             // small-damage frame like a caret blink). Skip only when *provably* outside.
-            if let Some(c) = combine_clip(self.damage, cmd.clip) {
+            if let Some(c) = combine_clip(crate::clip::frame_damage(), cmd.clip) {
                 let i = intersect(c, emitted.bbox);
                 if i[2] <= 0.0 || i[3] <= 0.0 {
                     continue;

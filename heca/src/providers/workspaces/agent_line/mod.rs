@@ -2,7 +2,7 @@
 
 use heca_grid_ui::image::ImageSource;
 use heca_grid_ui::prop::PropName;
-use heca_grid_ui::reactive::{SignalGet, create_effect, signal};
+use heca_grid_ui::reactive::{SignalGet, create_memo};
 use heca_grid_ui::style::{FontWeight, Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Flex, Glyph, Grid, Icon, Label, Visibility};
 use heca_grid_ui::{
@@ -10,7 +10,7 @@ use heca_grid_ui::{
     builders::{LayoutExt, Parent, PlaceExt, PresenceExt, ToneExt, TooltipExt},
 };
 
-use super::pane_row::{META_INDENT, set_if_changed};
+use super::pane_row::META_INDENT;
 use crate::agent::AgentIcon;
 use crate::chrome::panes::pane_items::LineCx;
 use crate::components::PaneName;
@@ -18,18 +18,26 @@ use heca_config::appearance::AgentSessionLine;
 
 pub(super) fn build(cx: &LineCx) -> Visibility {
     let initial = (cx.facts)();
-    let primary = text(FontWeight::Bold);
-    let primary_text = primary.text_signal();
-    let session = text(FontWeight::Regular);
-    let session_text = session.text_signal();
-    let session = Visibility::new().visible(false).child(session);
-    let session_visible = session.visible_signal();
+    // **Every part follows the pane's facts by itself, through its builders** — what each one shows
+    // is worked out once below, and nothing writes into a part.
+    let facts = cx.facts.clone();
+    let agent = create_memo(move |_| facts().agent);
+    let statuses = cx.agent_statuses;
+    let status = create_memo(move |_| {
+        agent
+            .get()
+            .map(|agent| status_view(&agent, &statuses.get()))
+    });
+    let primary = text(FontWeight::Bold).text(create_memo(move |_| {
+        agent.get().map(|a| identity(&a)).unwrap_or_default()
+    }));
     // The status is its glyph alone; its words are the glyph's tooltip.
-    let status_text = signal(String::new());
-    let task = text(FontWeight::Regular).muted(true);
-    let task_text = task.text_signal();
-    let task = Visibility::new().visible(false).child(task);
-    let task_visible = task.visible_signal();
+    let status_text = create_memo(move |_| status.get().map(|s| s.label).unwrap_or_default());
+    let task_text = create_memo(move |_| agent.get().and_then(|a| a.task).unwrap_or_default());
+    let task = Visibility::new()
+        .visible(move || !task_text.get().is_empty())
+        .child(text(FontWeight::Regular).muted(true).text(task_text));
+    let tooltip = create_memo(move |_| agent.get().and_then(|a| a.detail).unwrap_or_default());
 
     // Image owns decoding, load errors and fitting. The row only supplies driver metadata — and
     // every part follows the pane's facts by itself, through its builders: the logo the agent sends
@@ -52,84 +60,115 @@ pub(super) fn build(cx: &LineCx) -> Visibility {
     let generic = Icon::new(initial.icon)
         .glyph(program_glyph)
         .hidden(move || has_logo().is_some());
-    let indicator = Icon::new(Glyph::Circle);
-    let status_glyph = indicator.glyph_signal();
-    let status_tone = signal(None);
-    let tooltip = signal(String::new());
-    let row = Visibility::new().visible(false).child(
-        Flex::column()
-            .gap(Spacing::Xs)
-            .padding_x(META_INDENT)
-            .child(
-                Grid::new()
-                    .template_column("auto 1fr auto")
-                    .template_area(["logo primary status", ". session session"])
-                    .align("center")
-                    .gap(Spacing::Sm)
-                    .child(Flex::row().child(logo).child(generic).area("logo"))
-                    .child(primary.area("primary"))
-                    .child(session.area("session"))
-                    .child(
-                        Flex::row()
-                            .align("center")
-                            .content_tone_signal(status_tone)
-                            .child(indicator.tooltip_signal(status_text))
-                            .area("status"),
-                    ),
-            )
-            .child(task)
-            .tooltip_signal(tooltip),
-    );
-    let visible = row.visible_signal();
-    let facts = cx.facts.clone();
-    let statuses = cx.agent_statuses;
-    let session_line = cx.agent_session_line;
-    create_effect(move |_| {
-        let facts = facts();
-        set_if_changed(visible, facts.agent.is_some());
-        let Some(agent) = facts.agent else { return };
-        let statuses = statuses.get();
-        let presentation = statuses.get(agent.status.as_str());
-        let label = presentation
-            .and_then(|p| p.label.as_deref())
-            .unwrap_or(agent.status.as_str());
-        let glyph = presentation
+    let indicator =
+        Icon::new(Glyph::Circle).glyph(move || status.get().map_or(Glyph::Circle, |s| s.glyph));
+    Visibility::new()
+        .visible(move || agent.get().is_some())
+        .child(
+            Flex::column()
+                .gap(Spacing::Xs)
+                .padding_x(META_INDENT)
+                .child(
+                    Grid::new()
+                        .template_column("auto 1fr auto")
+                        .template_area(["logo primary status"])
+                        .align("center")
+                        // The logo sits close to the model it names.
+                        .gap(Spacing::Xs)
+                        .child(Flex::row().child(logo).child(generic).area("logo"))
+                        .child(primary.area("primary"))
+                        .child(
+                            Flex::row()
+                                .align("center")
+                                .content_tone(move || status.get().and_then(|s| s.tone))
+                                .child(indicator.tooltip(status_text))
+                                .area("status"),
+                        ),
+                )
+                .child(task)
+                .tooltip(tooltip),
+        )
+}
+
+/// **How the agent's status reads**: the words, the glyph and the tone the user's
+/// `[agents.statuses]` give it, else the status's own name on a plain circle.
+#[derive(Clone, PartialEq)]
+struct StatusView {
+    label: String,
+    glyph: Glyph,
+    tone: Option<Tone>,
+}
+
+fn status_view(
+    agent: &crate::agent::AgentState,
+    statuses: &heca_config::settings::AgentStatuses,
+) -> StatusView {
+    let presentation = statuses.get(agent.status.as_str());
+    StatusView {
+        label: presentation
+            .and_then(|p| p.label.clone())
+            .unwrap_or_else(|| agent.status.as_str().to_owned()),
+        glyph: presentation
             .and_then(|p| p.icon.as_deref())
             .and_then(Glyph::from_prop_name)
-            .unwrap_or(Glyph::Circle);
-        set_if_changed(status_glyph, glyph);
-        set_if_changed(
-            status_tone,
-            presentation
-                .and_then(|p| p.tone.as_deref())
-                .and_then(Tone::from_prop_name),
-        );
-        // **The model the agent answers with, else its name.** Every built-in agent now keeps its
-        // model current: Codex names it on each event, and Claude's is read from its conversation
-        // log at each event (`reporting::command::last_model`). One that names none shows its name.
-        let primary = agent
-            .model
-            .filter(|model| !model.is_empty())
-            .unwrap_or(agent.name);
-        let reported = agent.session_title.filter(|text| !text.is_empty());
-        let session = match session_line.get() {
-            AgentSessionLine::Reported => reported.filter(|title| *title != facts.title),
-            AgentSessionLine::Always => Some(reported.unwrap_or(facts.title)),
-            AgentSessionLine::Never => None,
-        }
-        .unwrap_or_default();
-        set_if_changed(session_visible, !session.is_empty() && session != primary);
-        set_if_changed(primary_text, primary);
-        set_if_changed(session_text, session);
-        set_if_changed(status_text, label.to_owned());
-        set_if_changed(
-            task_visible,
-            agent.task.as_ref().is_some_and(|task| !task.is_empty()),
-        );
-        set_if_changed(task_text, agent.task.unwrap_or_default());
-        set_if_changed(tooltip, agent.detail.unwrap_or_default());
+            .unwrap_or(Glyph::Circle),
+        tone: presentation
+            .and_then(|p| p.tone.as_deref())
+            .and_then(Tone::from_prop_name),
+    }
+}
+
+/// **The line under an agent with its session title** — `agent_session` in a sidebar view's list
+/// (`[appearance.sidebar] pane_<view>_view`). A clock turning back and the title, aligned with the pane's other lines; what it
+/// says follows `agent_session_line`, and it hides when there is nothing to say.
+pub(super) fn session_line(cx: &LineCx) -> Visibility {
+    let facts = cx.facts.clone();
+    let setting = cx.agent_session_line;
+    let title = create_memo(move |_| {
+        let facts = facts();
+        facts
+            .agent
+            .as_ref()
+            .and_then(|agent| session_title(agent, &facts.title, setting.get()))
+            .unwrap_or_default()
     });
-    row
+    Visibility::new()
+        .visible(move || !title.get().is_empty())
+        .child(
+            Flex::row()
+                .align("center")
+                .gap(Spacing::Sm)
+                .padding_x(META_INDENT)
+                .child(Icon::new(Glyph::ClockCounterClockwise).shrink(0.0))
+                .child(text(FontWeight::Regular).text(title)),
+        )
+}
+
+/// **The model the agent answers with, else its name.** Every built-in agent keeps its model
+/// current: Codex names it on each event, and Claude's is read from its conversation log at each
+/// event (`reporting::command::last_model`). One that names none shows its name.
+fn identity(agent: &crate::agent::AgentState) -> String {
+    agent
+        .model
+        .clone()
+        .filter(|model| !model.is_empty())
+        .unwrap_or_else(|| agent.name.clone())
+}
+
+/// What the session line says for `agent` in a pane named `pane_title`, as `setting` asks — never
+/// the pane's name repeated by `reported`, never the line above it said again.
+fn session_title(
+    agent: &crate::agent::AgentState,
+    pane_title: &str,
+    setting: AgentSessionLine,
+) -> Option<String> {
+    let reported = agent.session_title.clone().filter(|text| !text.is_empty());
+    match setting {
+        AgentSessionLine::Reported => reported.filter(|title| title != pane_title),
+        AgentSessionLine::Always => Some(reported.unwrap_or_else(|| pane_title.to_owned())),
+        AgentSessionLine::Never => None,
+    }
+    .filter(|title| *title != identity(agent))
 }
 
 fn text(weight: FontWeight) -> Label {
@@ -137,7 +176,6 @@ fn text(weight: FontWeight) -> Label {
         .weight(weight)
         .font_scale(WidgetSize::Normal.font_scale())
         .build()
-        .widget
 }
 
 #[cfg(test)]

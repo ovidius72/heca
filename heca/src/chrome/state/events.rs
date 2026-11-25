@@ -250,6 +250,11 @@ pub enum ChromeEvent {
         container: String,
         key: Option<String>,
     },
+    /// The sidebar's pane cards switched view — `view` is its name (`compact`, `normal`,
+    /// `extended`).
+    SidebarPaneViewChanged {
+        view: String,
+    },
 }
 
 impl ChromeEvent {
@@ -312,6 +317,7 @@ impl ChromeEvent {
             ChromeEvent::ContainerFocusChanged { .. } => "chrome.container.focus.changed",
             ChromeEvent::ContainerPlacementChanged { .. } => "chrome.container.placement.changed",
             ChromeEvent::ContainerCursorChanged { .. } => "container.cursor.changed",
+            ChromeEvent::SidebarPaneViewChanged { .. } => "sidebar.pane_view.changed",
         }
     }
 }

@@ -47,12 +47,9 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     chrome.left_sidebar_width.to_bits().hash(&mut hsh);
     chrome.right_sidebar_width.to_bits().hash(&mut hsh);
     chrome.sidebar_gap.to_bits().hash(&mut hsh);
-    // Which lines show under a pane's name is baked into each row when it is built.
-    for name in state
-        .pane_lines
-        .shown(&state.appearance.sidebar.pane_lines)
-        .names()
-    {
+    // The view a card shows is followed by the card itself; which lines exist in each view is
+    // not, so a reload that changes the lists rebuilds the rows.
+    for name in state.pane_lines.views(&state.appearance.sidebar).names() {
         name.hash(&mut hsh);
     }
     // The active workspace (which gets the accent wash + count badge) is structural

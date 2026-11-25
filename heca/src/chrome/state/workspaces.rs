@@ -73,10 +73,15 @@ pub struct WorkspacesContainerState {
     /// An `Rc` because a `Signal` read clones, and this is a whole parsed config; mirrored from
     /// `AppState` in `sync_chrome_state`, so a `prefix+Shift+r` reload reaches it.
     pub(crate) programs: Signal<std::rc::Rc<heca_config::programs::ProgramsConfig>>,
-    /// The lines shown under a pane's name, in order — `[appearance.sidebar] pane_lines` resolved by
-    /// name; mirrored in `sync_chrome_state`, read when a row is built. A change rebuilds the rows
-    /// (`chrome_signature` hashes the names), so it is not a per-frame signal.
-    pub(crate) pane_lines: Signal<crate::chrome::panes::pane_items::PaneLineSet>,
+    /// The lines of a pane card in each view and the current pane's — `[appearance.sidebar]
+    /// pane_<view>_view` / `pane_current_view` resolved by name; mirrored in `sync_chrome_state`.
+    pub(crate) pane_views: Signal<crate::chrome::panes::pane_items::PaneViews>,
+    /// **The view the cards show now.** Each card follows it (and whether it is the current pane)
+    /// and rebuilds its own lines; the sidebar is not rebuilt.
+    pub(crate) pane_view: Signal<heca_config::appearance::PaneView>,
+    /// The `[appearance.sidebar] pane_view` last followed — `None` before the first sync. What
+    /// tells a reload that changed it from one that did not.
+    pub(crate) configured_pane_view: Signal<Option<heca_config::appearance::PaneView>>,
     /// `[appearance.sidebar] workspace_numbers`: whether each workspace row shows its number. A
     /// signal the number follows, so a reload shows or hides it with nothing rebuilt.
     pub(crate) workspace_numbers: Signal<bool>,
@@ -104,10 +109,45 @@ impl WorkspacesContainerState {
         }
     }
 
-    /// The lines to build under each pane's name. See [`pane_lines`](Self::pane_lines) field.
-    pub(crate) fn pane_lines(&self) -> crate::chrome::panes::pane_items::PaneLineSet {
+    /// **The lines a pane card shows now** — tracked, so a card reading it inside its own
+    /// subscription follows a view change, a focus change and a reload.
+    pub(crate) fn card_lines(
+        &self,
+        current: bool,
+    ) -> crate::chrome::panes::pane_items::PaneLineSet {
         use heca_grid_ui::reactive::SignalGet as _;
-        self.pane_lines.get_untracked()
+        let view = self.pane_view.get();
+        self.pane_views
+            .with(|views| views.lines(view, current).clone())
+    }
+
+    /// The `pane_view` last followed, `None` before the first sync.
+    pub(crate) fn configured_pane_view(&self) -> Option<heca_config::appearance::PaneView> {
+        use heca_grid_ui::reactive::SignalGet as _;
+        self.configured_pane_view.get_untracked()
+    }
+
+    pub(crate) fn set_configured_pane_view(&self, view: heca_config::appearance::PaneView) {
+        use heca_grid_ui::reactive::SignalUpdate as _;
+        self.configured_pane_view.set(Some(view));
+    }
+
+    /// The view the cards show now.
+    pub(crate) fn pane_view(&self) -> heca_config::appearance::PaneView {
+        use heca_grid_ui::reactive::SignalGet as _;
+        self.pane_view.get_untracked()
+    }
+
+    /// **Switch the cards to `view`** — and say so (`sidebar.pane_view.changed`). Nothing when it
+    /// is the view already.
+    pub(crate) fn set_pane_view(&self, view: heca_config::appearance::PaneView) {
+        use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _};
+        if self.pane_view.get_untracked() != view {
+            self.pane_view.set(view);
+            self.events.emit(ChromeEvent::SidebarPaneViewChanged {
+                view: view.name().to_owned(),
+            });
+        }
     }
 
     /// Mirror `[appearance.sidebar] workspace_numbers`. Written only when it differs.
@@ -118,11 +158,11 @@ impl WorkspacesContainerState {
         }
     }
 
-    /// Mirror the lines that show. Written only when they differ, so an unchanged reload costs nothing.
-    pub(crate) fn set_pane_lines(&self, lines: crate::chrome::panes::pane_items::PaneLineSet) {
+    /// Mirror every view's lines. Written only when they differ, so an unchanged reload costs nothing.
+    pub(crate) fn set_pane_views(&self, views: crate::chrome::panes::pane_items::PaneViews) {
         use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _};
-        if self.pane_lines.get_untracked() != lines {
-            self.pane_lines.set(lines);
+        if self.pane_views.get_untracked() != views {
+            self.pane_views.set(views);
         }
     }
 
@@ -156,11 +196,13 @@ impl WorkspacesContainerState {
             programs: signal(std::rc::Rc::new(
                 heca_config::programs::ProgramsConfig::default(),
             )),
-            // heca's own lines until `sync_chrome_state` mirrors what the user's list resolves to.
-            pane_lines: signal(
+            // heca's own lines until `sync_chrome_state` mirrors what the user's lists resolve to.
+            pane_views: signal(
                 crate::chrome::PaneRowLines::default()
-                    .shown(&heca_config::appearance::default_sidebar_pane_lines()),
+                    .views(&heca_config::appearance::SidebarAppearance::default()),
             ),
+            pane_view: signal(Default::default()),
+            configured_pane_view: signal(None),
             workspace_numbers: signal(true),
             agent_statuses: signal(std::rc::Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,

@@ -24,6 +24,8 @@ const PAD_X: f32 = 12.0;
 const PAD_Y: f32 = 4.0;
 /// Gap between segments (holds the divider).
 const SEG_GAP: f32 = 12.0;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Rest-glow spread radius (px) — the pill's share of the theme rest halo.
 const GLOW_RADIUS: f32 = 8.0;
 /// Gap between a leading slot and its label, within a segment.

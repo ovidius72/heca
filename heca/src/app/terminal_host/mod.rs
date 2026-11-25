@@ -11,6 +11,7 @@ mod search;
 pub(crate) use search::receive_matches;
 pub(crate) mod selection;
 mod typing;
+pub(crate) use typing::typed;
 mod wheel;
 
 pub(crate) use frames::{column_frames, laid_out_pane_ids, layout_origin, pane_outer_frames};

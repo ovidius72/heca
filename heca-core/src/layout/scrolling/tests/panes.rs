@@ -374,6 +374,9 @@ fn drawn_at(space: &Seen, panes: &[PaneId]) -> Vec<(i64, i64)> {
 /// column's heights always fill exactly the room it has.
 #[test]
 fn panes_stay_on_screen_after_a_resize_and_a_swap() {
+    // Time stands still: the test reads where a pane is drawn before and after a swap, and an
+    // animation moving between the two reads on a slow machine looked like a jump.
+    crate::clock::hold();
     let mut space = test_scrolling_space();
     space
         .m()

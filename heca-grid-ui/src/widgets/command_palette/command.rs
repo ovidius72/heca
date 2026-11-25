@@ -12,7 +12,8 @@ pub struct Command {
     /// caller's policy, applied only in the browsing case; once there is a query the match decides
     /// and the blocks dissolve.
     pub(super) group: u16,
-    pub(super) label: String,
+    /// The row's title — fixed, or one that changes, followed in place.
+    pub(super) label: crate::builders::TextValue,
     pub(super) completion: Option<String>,
     pub(super) fallback: bool,
     pub(super) description: Option<String>,
@@ -42,11 +43,18 @@ pub struct Command {
 #[heca_grid_ui_macros::props]
 impl Command {
     /// A command with `label` that runs `on_run` when selected.
-    pub fn new(label: impl Into<String>, on_run: impl Fn() + 'static) -> Self {
+    ///
+    /// **The label may change** — a `Signal<String>`, a `Memo` or a function reading signals is
+    /// followed in place: the row renames itself, is found by its new name, and nothing is rebuilt.
+    ///
+    /// ```ignore
+    /// Command::new(move || pane.get().title, run)
+    /// ```
+    pub fn new(label: impl crate::builders::IntoTextValue, on_run: impl Fn() + 'static) -> Self {
         Self {
             id: None,
             group: 0,
-            label: label.into(),
+            label: label.into_text_value(),
             completion: None,
             fallback: false,
             description: None,

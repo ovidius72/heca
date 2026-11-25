@@ -20,7 +20,8 @@
 //! resolved by the overlay host, so the entry's intent is policy-routed and confirm-gated like any
 //! other dispatch.
 
-use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
+use heca_grid_ui::builders::PresenceExt;
+use heca_grid_ui::reactive::SignalGet;
 use heca_grid_ui::widgets::{Command, CommandPalette, Glyph};
 
 use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_intent};
@@ -137,40 +138,10 @@ pub(crate) fn open_command_palette(
                 heca_config::settings::PaletteSize::Large => heca_grid_ui::WidgetSize::Large,
             });
 
-    // **A pane row follows its pane.** The chrome store already mirrors each pane's `program` and
-    // `custom_name` as signals, and the row's title is a signal too, so this is one effect per pane
-    // row and nothing else: rename a pane or start `nvim` in it and that row's text changes in
-    // place, with no rebuild and no flash. The widget ranks off the same signals, so a row renamed
-    // this way is also *found* by its new name and not the one it was built with.
-    let programs = state.client.programs.clone();
-    let add_process_name = state.settings.pane_renamed_add_process_name;
-    for (i, row) in rows.iter().enumerate() {
-        let Some(pane) = row.pane else { continue };
-        let Some(signals) = state
-            .chrome_state
-            .panes
-            .with(pane, |signals| signals.copied())
-        else {
-            continue;
-        };
-        let label = palette.label_signals()[i];
-        let programs = programs.clone();
-        create_effect(move |_| {
-            let runtime = signals.presentation();
-            let info = pane_info_view(
-                &programs,
-                "",
-                signals.custom_name.get().as_deref(),
-                Some(&runtime),
-                add_process_name,
-            );
-            label.set(info.label());
-        });
-    }
-
     // The widget closes **itself** — on Esc, on a click outside, and after running a command — by
-    // flipping its own open signal. That flip is the one dismissal signal there is, so the layer is
-    // popped from it rather than from three separate callbacks. `resolve` is double-resolve safe, so
+    // flipping its own open signal. That flip is the one dismissal there is, so the layer is popped
+    // when the palette says it closed (`on_close`) rather than from three separate callbacks.
+    // `resolve` is double-resolve safe, so
     // the close that follows a chosen command is a no-op after the `SubmitOverlay` already popped it.
     let open = palette.open_signal();
     state.open_palette = Some(OpenPalette {
@@ -178,12 +149,7 @@ pub(crate) fn open_command_palette(
         query: palette.query_signal(),
         open,
     });
-    let close = id.closer(&emit);
-    create_effect(move |_| {
-        if !open.get() {
-            close();
-        }
-    });
+    let palette = palette.on_close(id.closer(&emit));
 
     // Modal + covering: an open palette captures the keyboard for the whole viewport (that is how
     // typing reaches its query line through the widget-keymap path) and nothing behind it should be
@@ -277,9 +243,15 @@ fn standard_palette(
             .and_then(|ws| state.session.index_of(ws)),
     };
     let enter = entering(emit, answered.is_some());
+    let label_of = live_label(
+        &state.chrome_state.panes,
+        &state.client.programs,
+        state.settings.pane_renamed_add_process_name,
+    );
     let command = |row: &PaletteEntry, list: &str| {
         let command = row_command(
             row,
+            label_of(row),
             group_of(row, &owners),
             id.submitter(row.id.clone(), emit),
         );
@@ -320,10 +292,50 @@ fn with_placeholders(palette: CommandPalette) -> CommandPalette {
 /// What the empty field says outside any list that names its own.
 const DEFAULT_PLACEHOLDER: &str = "Type a command…";
 
+/// **The title a row shows — and a pane row's follows its pane.** The chrome store mirrors each
+/// pane's `program` and `custom_name` as signals, so a pane row's title is worked out from them:
+/// rename a pane or start `nvim` in it and the row renames itself in place, is found by its new
+/// name, and nothing is rebuilt. Every other row shows its label as it is.
+pub(super) fn live_label(
+    panes: &crate::chrome::PaneRuntimeStore,
+    programs: &std::rc::Rc<heca_config::programs::ProgramsConfig>,
+    add_process_name: bool,
+) -> impl Fn(&PaletteEntry) -> heca_grid_ui::builders::TextValue + use<> {
+    use heca_grid_ui::builders::IntoTextValue;
+    let panes = panes.clone();
+    let programs = programs.clone();
+    move |row: &PaletteEntry| {
+        let signals = row
+            .pane
+            .and_then(|pane| panes.with(pane, |signals| signals.copied()));
+        let Some(signals) = signals else {
+            return row.label.clone().into_text_value();
+        };
+        let programs = programs.clone();
+        (move || {
+            let runtime = signals.presentation();
+            pane_info_view(
+                &programs,
+                "",
+                signals.custom_name.get().as_deref(),
+                Some(&runtime),
+                add_process_name,
+            )
+            .label()
+        })
+        .into_text_value()
+    }
+}
+
 /// What the palette shows for one row, whichever mode it is in — the one place a [`PaletteEntry`]
 /// becomes a [`Command`]. `on_run` is what choosing it does.
-fn row_command(row: &PaletteEntry, group: u16, on_run: impl Fn() + 'static) -> Command {
-    let mut command = Command::new(row.label.clone(), on_run)
+fn row_command(
+    row: &PaletteEntry,
+    label: heca_grid_ui::builders::TextValue,
+    group: u16,
+    on_run: impl Fn() + 'static,
+) -> Command {
+    let mut command = Command::new(label, on_run)
         .group(group)
         .current(row.current)
         .preselect(row.preselect)

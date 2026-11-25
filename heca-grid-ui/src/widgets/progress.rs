@@ -16,6 +16,8 @@ const DEFAULT_WIDTH: f32 = 240.0;
 const HEIGHT: f32 = 8.0;
 /// Seconds for the fill to ease a full 0→1 sweep.
 const ANIM_DURATION: f32 = 0.25;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Fill glow radius (px).
 const GLOW_RADIUS: f32 = 12.0;
 /// Fill glow intensity.

@@ -16,7 +16,6 @@ use crate::app_state::AppState;
 
 /// What one flush needs besides the scene.
 pub(super) struct ChromePassOpts {
-    pub(super) damage: Option<heca_grid_ui::Rectangle>,
     pub(super) glow_alpha_scale: f32,
 }
 
@@ -88,17 +87,8 @@ fn flush_base(
     // submitted in one `queue.submit` at end of frame, every encoded pass read the *last* pass's
     // vertex data. One `begin_frame()` per frame makes each `render()` append at a distinct offset
     // so all grid scenes render their own geometry.
-    let damage = opts.damage.map(|r| {
-        [
-            r.loc.x as f32,
-            r.loc.y as f32,
-            r.size.w as f32,
-            r.size.h as f32,
-        ]
-    });
-    grid.set_damage(damage);
+    // The frame's damage is read by the renderers themselves (`heca_renderer::set_frame_damage`).
     grid.set_clip(None);
-    text.set_damage(damage);
     heca_renderer::scene::enqueue_scene(grid, text, scene, opts.glow_alpha_scale);
     grid.render(queue, view, encoder);
     text.render(queue, view, encoder, None);

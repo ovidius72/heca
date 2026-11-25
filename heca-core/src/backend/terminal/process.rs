@@ -108,12 +108,36 @@ fn process_name(pid: libc::pid_t) -> Option<String> {
         .map(|name| name.to_string_lossy().into_owned())
 }
 
-/// Resolve a pid's cwd. TODO(macOS): implement via `proc_pidinfo`
-/// (`PROC_PIDVNODEPATHINFO`) from libproc. Not built — the **preferred** cwd source
-/// is OSC 7 (shell integration), and this fallback needs risky struct-layout FFI.
+/// Resolve a pid's cwd through `proc_pidinfo(PROC_PIDVNODEPATHINFO)` — the structures are `libc`'s,
+/// not written by hand. OSC 7 (shell integration) stays the preferred source; this is what a pane
+/// shows when nothing reported one: a program started without a shell prompt, such as an agent
+/// resumed when the server restarted.
 #[cfg(target_os = "macos")]
-fn cwd_of(_pid: libc::pid_t) -> Option<PathBuf> {
-    None
+fn cwd_of(pid: libc::pid_t) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    // SAFETY: a plain C struct of integers and byte arrays; all-zero is a valid value of it.
+    let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of::<libc::proc_vnodepathinfo>() as libc::c_int;
+    // SAFETY: the buffer is `info`, exactly `size` bytes long, and outlives the call.
+    let written = unsafe {
+        libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDVNODEPATHINFO,
+            0,
+            (&raw mut info).cast::<libc::c_void>(),
+            size,
+        )
+    };
+    if written != size {
+        return None;
+    }
+    let path = &info.pvi_cdir.vip_path;
+    // SAFETY: `vip_path` is `MAXPATHLEN` contiguous `c_char`s, laid out as 32 rows of 32.
+    let bytes = unsafe {
+        std::slice::from_raw_parts(path.as_ptr().cast::<u8>(), std::mem::size_of_val(path))
+    };
+    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
+    (end > 0).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&bytes[..end])))
 }
 
 // ── Linux: /proc filesystem (no FFI) ──
@@ -143,6 +167,21 @@ fn cwd_of(_pid: libc::pid_t) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    /// **A process's folder is read from the system** — the fallback a pane shows when no shell
+    /// reported one. Our own process stands in for the pane's program.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_process_folder_is_read_from_the_system() {
+        let own = std::process::id() as libc::pid_t;
+        let expected = std::env::current_dir().expect("a current folder");
+        let read = super::cwd_of(own).expect("the system knows our folder");
+        assert_eq!(
+            read.canonicalize().ok(),
+            expected.canonicalize().ok(),
+            "read {read:?}, expected {expected:?}"
+        );
+    }
+
     use super::*;
 
     #[test]

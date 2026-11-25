@@ -191,16 +191,20 @@ impl Space {
 }
 
 impl Spacing {
-    /// Multiplier applied to the inherited font size to get the padding in px.
+    /// Multiplier applied to the inherited font size to get the padding in px — **the theme's**:
+    /// its `[spacing]` table says how much air each step is
+    /// ([`SpacingScale`](heca_theme::SpacingScale)), so a denser or airier theme moves every gap
+    /// and padding at once. Read from the theme the window is laid out with.
     pub fn scale(self) -> f32 {
+        let steps = crate::layout::spacing();
         match self {
             Spacing::None => 0.0,
-            Spacing::Hairline => 0.08,
-            Spacing::Xs => 0.25,
-            Spacing::Sm => 0.5,
-            Spacing::Md => 0.85,
-            Spacing::Lg => 1.25,
-            Spacing::Xl => 2.0,
+            Spacing::Hairline => steps.hairline,
+            Spacing::Xs => steps.xs,
+            Spacing::Sm => steps.sm,
+            Spacing::Md => steps.md,
+            Spacing::Lg => steps.lg,
+            Spacing::Xl => steps.xl,
         }
     }
 }
@@ -237,5 +241,41 @@ mod one_spacing_builder {
     fn an_unreadable_space_is_no_space() {
         assert_eq!(Space::from("roomy"), Space::Px(0.0));
         assert_eq!(Space::from(""), Space::Px(0.0));
+    }
+}
+
+#[cfg(test)]
+mod theme_rhythm_tests {
+    use crate::builders::{LayoutExt, Parent};
+    use crate::component::Component;
+    use crate::style::Spacing;
+    use crate::widgets::{Flex, Label};
+
+    /// **A step of space is the theme's**: a theme that doubles `sm` doubles every `Sm` gap,
+    /// with nothing in the widget changed.
+    #[test]
+    fn a_gap_follows_the_themes_rhythm() {
+        let gap_with = |sm: f32| {
+            let mut theme = crate::Theme::default();
+            theme.colors.spacing.sm = sm;
+            let mut row = Flex::row()
+                .gap(Spacing::Sm)
+                .child(Label::new("a"))
+                .child(Label::new("b"));
+            crate::LayoutEngine::new()
+                .theme(&theme)
+                .compute(&mut row, heca_core::layout::Size::new(400.0, 100.0));
+            let (a, b) = (
+                row.base().children[0].base().bounds,
+                row.base().children[1].base().bounds,
+            );
+            b.loc.x - (a.loc.x + a.size.w)
+        };
+        let (normal, double) = (gap_with(0.5), gap_with(1.0));
+        assert!(normal > 0.0, "a gap at all: {normal}");
+        assert!(
+            (double - 2.0 * normal).abs() <= 1.0,
+            "doubled: {normal} → {double}"
+        );
     }
 }

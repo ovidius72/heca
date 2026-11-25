@@ -29,6 +29,9 @@ pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
         terminal_animating: poll.terminal_animating,
         closed_any: !poll.closing_panes.is_empty(),
     };
+    for id in poll.shown_changed {
+        state.repaint.terminal(id);
+    }
     for text in poll.clipboard_writes {
         crate::handlers::set_system_clipboard(&text);
     }
@@ -104,6 +107,14 @@ pub(crate) fn next_wake(now: Instant, req: WakeRequests) -> Wake {
         wake_at,
         widget_frame_due,
     }
+}
+
+/// **What is left of the widgets' deadline once a frame starts at `frame_started`.** The frame paints
+/// every widget, and a widget that keeps time books its next deadline in that paint; a deadline
+/// already reached is served by this frame. Kept, it made the loop see it as due again right after
+/// the frame and draw a second one — every step of a flash cost two frames.
+pub(crate) fn served_by_frame(due: Option<Instant>, frame_started: Instant) -> Option<Instant> {
+    due.filter(|due| *due > frame_started)
 }
 
 pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut AppState) {
@@ -212,6 +223,14 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             .client
             .notify(crate::server::NotificationCommand::Hover(hovered));
     }
+    // And how many cards fit, once the stack has measured one — the server shows that many.
+    let room = state.notification_room.get_untracked();
+    if room > 0 && room != state.notification_room_sent {
+        state.notification_room_sent = room;
+        state
+            .client
+            .notify(crate::server::NotificationCommand::Room(room));
+    }
 
     // The system's window carries the same title the window shows in its top bar and reports to
     // the server — one title, from the session and the window's number.
@@ -280,6 +299,15 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             state.wake_latch.reset();
         }
     } else if reasons.any() && state.client.projection_ready() {
+        // What moved things the scene comparison does not see as a change of its own: the session
+        // animating its columns, a chrome rebuild, a pane closing, an animated image.
+        if reasons.session_animating
+            || reasons.chrome_runtime
+            || reasons.backend_closed
+            || reasons.image_animating
+        {
+            state.repaint.whole();
+        }
         reasons.report();
         state.window.request_redraw();
         state.frame_asked = true;
@@ -342,7 +370,32 @@ pub(crate) const HIDDEN_READ_EVERY: std::time::Duration = std::time::Duration::f
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+
+    /// **A frame serves the deadline it reached**, and only that: one still ahead is kept.
+    #[test]
+    fn a_frame_serves_the_widget_deadline_it_reached() {
+        let start = Instant::now();
+        let reached = start - Duration::from_millis(1);
+        let ahead = start + Duration::from_millis(30);
+        assert_eq!(
+            super::served_by_frame(Some(reached), start),
+            None,
+            "reached: served"
+        );
+        assert_eq!(
+            super::served_by_frame(Some(start), start),
+            None,
+            "due right now: served"
+        );
+        assert_eq!(
+            super::served_by_frame(Some(ahead), start),
+            Some(ahead),
+            "ahead: kept"
+        );
+        assert_eq!(super::served_by_frame(None, start), None);
+    }
 
     fn requests(
         animating: bool,

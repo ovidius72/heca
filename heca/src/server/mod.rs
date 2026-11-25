@@ -119,6 +119,7 @@ impl ServerState {
                 true
             }
             ServerAction::Hover(hovered) => self.notifications.set_hovered(hovered, now),
+            ServerAction::Room(room) => self.notifications.set_room(room, now),
             ServerAction::Run(id, key) => {
                 if !self.notifications.run_action(id, &key) {
                     eprintln!(

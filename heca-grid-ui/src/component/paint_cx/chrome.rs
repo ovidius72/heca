@@ -30,19 +30,21 @@ impl<'a> PaintCx<'a> {
     /// as [`swap_indicator`](Self::swap_indicator) — so the cursor-following chip tells
     /// the user this drag is an **exchange**, not a move (there is no OS "swap" cursor).
     pub fn drag_ghost(&mut self, rect: Rectangle, text: &str, swap: bool) {
-        let (accent, bg, radius) = (
-            self.accent(),
+        let (bg, radius) = (
             self.theme.colors.background,
             self.theme.colors.border_radius,
         );
         let font = (rect.size.h as f32 * 0.55).clamp(10.0, 15.0);
         self.with_overlay(|cx| {
+            let accent = cx.accent();
             cx.rect(rect, accent.with_alpha(217), None, radius, None);
             cx.rect(
                 rect,
                 Color::TRANSPARENT,
                 Some(Border {
                     color: accent,
+                    // Per-widget border width, intended: this mark's own weight.
+                    // See docs/widgets.md → "Each widget's own glow and border".
                     width: 1.5,
                 }),
                 radius,
@@ -62,6 +64,8 @@ impl<'a> PaintCx<'a> {
                     Color::TRANSPARENT,
                     Some(Border {
                         color: bg.with_alpha(180),
+                        // Per-widget border width, intended: this mark's own weight.
+                        // See docs/widgets.md → "Each widget's own glow and border".
                         width: 1.0,
                     }),
                     (radius - inset as f32).max(0.0),
@@ -94,6 +98,8 @@ impl<'a> PaintCx<'a> {
                     Color::TRANSPARENT,
                     Some(Border {
                         color: accent,
+                        // Per-widget border width, intended: this mark's own weight.
+                        // See docs/widgets.md → "Each widget's own glow and border".
                         width: 1.5,
                     }),
                     self.theme.colors.border_radius,
@@ -173,6 +179,8 @@ impl<'a> PaintCx<'a> {
             Color::TRANSPARENT,
             Some(Border {
                 color: accent.with_alpha(120),
+                // Per-widget border width, intended: this mark's own weight.
+                // See docs/widgets.md → "Each widget's own glow and border".
                 width: 1.0,
             }),
             (radius - inset as f32).max(0.0),
@@ -315,6 +323,11 @@ impl<'a> PaintCx<'a> {
     /// presence + halo radius). `intensity` is intentionally *not* applied here —
     /// it controls only the scanline/CRT overlay — so the two settings no longer
     /// overlap. `GlowLevel::None` drops the glow entirely.
+    ///
+    /// **What it scales is each widget's own measure**, and those numbers are intended: one halo
+    /// does not suit every surface (a dialog's would swallow a status dot), so a widget keeps its
+    /// own radius and strength, marked `// Per-widget glow, intended` where it is written — see
+    /// docs/widgets.md → "Each widget's own glow and border".
     pub(super) fn scaled_glow(&self, glow: Option<Glow>) -> Option<Glow> {
         // `GlowLevel` (theme/config `glow_size`) owns BOTH dimensions of glow:
         // `radius_scale` (halo size) and `strength_scale` (alpha). Apply both here —

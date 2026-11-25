@@ -289,12 +289,14 @@ impl Scene {
 }
 
 mod commands;
+mod damage;
 mod runs;
 
 pub use commands::{
     ArrowHeads, Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, LineCmd,
     RectCmd, Rounded, ScanlineCmd, Shadow, TextAlign, TextCmd, TextStyle,
 };
+pub use damage::SceneDamage;
 pub use runs::{BackdropAt, BaseRun, Escape, HostWork, ImageAt, SurfaceAt};
 
 #[cfg(test)]

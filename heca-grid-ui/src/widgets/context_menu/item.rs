@@ -1,7 +1,8 @@
-use super::{ICON_GAP, KEYCAP_FONT_SCALE, KEYCAP_INSET, ROW_PAD_X, ROW_PAD_Y, SHORTCUT_GAP};
-use crate::builders::{LayoutExt, Parent};
-use crate::widgets::key_hint::keycap_size;
-use crate::widgets::{Glyph, Icon, Label};
+use super::{ICON_GAP, ICON_SCALE, KEYCAP_INSET, ROW_PAD_X, ROW_PAD_Y, SHORTCUT_GAP};
+use crate::Tone;
+use crate::builders::{LayoutExt, Parent, ToneExt};
+use crate::style::{Fill, WidgetSize};
+use crate::widgets::{CursorLook, Glyph, Icon, Keycap, KeycapVariant, Label, Row};
 use std::rc::Rc;
 
 /// One row in a [`Menu`](super::Menu): what it shows, and what it does.
@@ -163,26 +164,12 @@ impl MenuItem {
 
     /// Width this row reserves on its right for the shortcut hint and the quick-pick keycap. The
     /// row's content is padded away from it so composed content never has to know they exist.
-    fn trailing_width(&self, font: f32) -> f64 {
-        let adv = (font * crate::font::MONO_ADVANCE_RATIO) as f64;
-        let mut w = 0.0;
-        if let Some(s) = &self.shortcut {
-            w += SHORTCUT_GAP + s.chars().count() as f64 * adv;
-        }
-        if let Some(k) = self.key {
-            w += SHORTCUT_GAP
-                + keycap_size(font * KEYCAP_FONT_SCALE, &k.to_string()).w
-                + KEYCAP_INSET;
-        }
-        w
-    }
-
-    /// Build this row's widget subtree: the composed content if there is any, else the sugar row.
-    ///
-    /// **Children win over sugar** — the same precedence [`Button`](crate::widgets::Button) has. The row box
-    /// itself carries the padding and the trailing reservation, so composed content is laid out in
-    /// the space that is actually free.
-    pub(super) fn build_row(&self, font: f32) -> crate::WidgetModel {
+    /// **The row this item becomes** — a real [`Row`] the panel stacks: the item's content (its
+    /// composed child, else its icon and label), then its shortcut and its quick-pick letter at the
+    /// trailing edge, laid out by the engine. `chosen` says whether the menu's cursor is on it; the
+    /// row wears a menu entry's look ([`CursorLook::Pill`]), reads in the danger colour when the
+    /// item is destructive, and quiet when it is disabled.
+    pub(super) fn build_row(&self, font: f32, chosen: impl Fn() -> bool + 'static) -> Row {
         let inner: crate::WidgetModel = match &self.content {
             Some(build) => build(),
             None => {
@@ -191,7 +178,7 @@ impl MenuItem {
                     .align("center")
                     .gap(ICON_GAP);
                 if let Some(g) = self.icon {
-                    row = row.child(Icon::new(g).size(font * 1.05));
+                    row = row.child(Icon::new(g).size(font * ICON_SCALE));
                 }
                 if let Some(l) = &self.label {
                     row = row.child(Label::new(l));
@@ -199,13 +186,38 @@ impl MenuItem {
                 crate::WidgetModel::new(row)
             }
         };
-        crate::WidgetModel::new(
-            crate::widgets::container()
-                .direction("row")
-                .align("center")
-                .padding_xy(ROW_PAD_X, ROW_PAD_Y)
-                .padding_right(ROW_PAD_X + self.trailing_width(font) as f32)
-                .child(inner),
-        )
+        // The content takes the room; what trails it keeps its own size at the far edge.
+        let mut line = crate::widgets::container()
+            .direction("row")
+            .align("center")
+            .gap(SHORTCUT_GAP as f32)
+            .grow(1.0)
+            .child(crate::widgets::container().grow(1.0).child(inner));
+        if let Some(shortcut) = &self.shortcut {
+            line =
+                line.child(Label::new(shortcut).color(Fill::theme("muted").alpha("menu_shortcut")));
+        }
+        if let Some(key) = self.key {
+            let quiet = (!self.enabled).then_some(Tone::Muted);
+            line = line.child(
+                Keycap::new(key.to_string())
+                    .variant(KeycapVariant::Bordered)
+                    .size(WidgetSize::Caption)
+                    .tone(quiet),
+            );
+        }
+        // What trails the content sits close to the edge; a plain row keeps its own air.
+        let trailing = self.shortcut.is_some() || self.key.is_some();
+        Row::new()
+            .cursor_look(CursorLook::Pill)
+            .nav_selected(chosen)
+            .disabled(!self.enabled)
+            .content_tone(self.danger.then_some(Tone::Danger))
+            .padding_xy(ROW_PAD_X, ROW_PAD_Y)
+            .padding_right(match trailing {
+                true => KEYCAP_INSET as f32,
+                false => ROW_PAD_X,
+            })
+            .child(line)
     }
 }

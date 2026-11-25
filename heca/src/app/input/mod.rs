@@ -38,12 +38,23 @@ pub(crate) struct KeyInputContext<'a> {
     pub offered_to_tree: bool,
 }
 
+/// **Where a key went** — what decides whether it costs a frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyWent {
+    /// To the focused terminal's program. What it changes on screen is the program's answer,
+    /// which arrives as output and asks for its own frame; the key itself has already asked for
+    /// one if it moved the view.
+    ToTerminal,
+    /// Anywhere else: an action, a mode, a picker — any of which may change what is shown.
+    Elsewhere,
+}
+
 pub(crate) fn handle_keyboard_input(
     registry: &ActionRegistry,
     keymaps: &Keymaps,
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
-) {
+) -> KeyWent {
     let (keymap, mode_keymaps, component_keymaps, mode_triggers) = (
         &keymaps.flat,
         &keymaps.modes,
@@ -63,7 +74,7 @@ pub(crate) fn handle_keyboard_input(
     // the picker before the letter arrived. Asked once here rather than inside each mode's handler:
     // there are seven of them, and guarding them one at a time reached three.
     if input_mode.awaits_pick_letter() && crate::app::keyboard::is_modifier_key(ctx.logical_key) {
-        return;
+        return KeyWent::Elsewhere;
     }
     match input_mode {
         InputMode::Normal => {
@@ -75,7 +86,7 @@ pub(crate) fn handle_keyboard_input(
                 state.input_mode = InputMode::Prefix;
                 state.prefix_entered_at = Some(std::time::Instant::now());
                 state.needs_redraw = true;
-                return;
+                return KeyWent::Elsewhere;
             }
 
             // **A key acts on the surface in front of you**, in the DOM's order:
@@ -90,7 +101,7 @@ pub(crate) fn handle_keyboard_input(
             let surface = focused_surface(state);
             if let Some(act) = way_out_action(&surface, mode_keymaps, ctx.event_combo) {
                 let _ = dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
-                return;
+                return KeyWent::Elsewhere;
             }
             // What the surface holds goes to the tree. (A layer was offered the key before the key
             // rules ran, by whoever holds it; the panes never are — their keys belong to the
@@ -105,7 +116,7 @@ pub(crate) fn handle_keyboard_input(
                 ) == Some(heca_grid_ui::Handled::Yes)
             {
                 state.mark_full_redraw();
-                return;
+                return KeyWent::Elsewhere;
             }
             if let Some(act) =
                 surface_action(&surface, mode_keymaps, component_keymaps, ctx.event_combo)
@@ -119,7 +130,7 @@ pub(crate) fn handle_keyboard_input(
                     _ => InteractionSource::Keyboard,
                 };
                 let _ = dispatch_action_ref(state, registry, source, &act);
-                return;
+                return KeyWent::Elsewhere;
             }
 
             let global_action = keymap
@@ -127,7 +138,7 @@ pub(crate) fn handle_keyboard_input(
                 .cloned();
             if let Some(act) = global_action {
                 let _ = dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
-                return;
+                return KeyWent::Elsewhere;
             }
 
             // **Focus is the mode.** A layer or a dock holding the keyboard **swallows** what it did
@@ -140,30 +151,37 @@ pub(crate) fn handle_keyboard_input(
             // `prefix+Enter` still splits the pane you last worked in.
             //
             if !matches!(surface, FocusedSurface::Panes) {
-                return;
+                return KeyWent::Elsewhere;
             }
 
             // The one answer to "which terminal are the keys for", the one paste and search read too.
             let modifiers = state.modifiers;
+            let mut view_moved = false;
             if let Some(backend) = state.keyboard_backend_mut() {
-                // Snap to live bottom when user sends keyboard input (Q5).
-                // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that
-                // e.g. Shift+click mouse selection works after scrolling
-                // with direct bindings.
+                let send = |backend: &mut dyn heca_core::backend::PaneBackend| {
+                    let handled = winit_key_to_backend_event(ctx.logical_key, modifiers)
+                        .is_some_and(|event| backend.process_key_event(&event));
+                    let input_bytes =
+                        winit_key_to_terminal_input(ctx.logical_key, ctx.key_text, ctx.is_ctrl);
+                    if !handled && !input_bytes.is_empty() {
+                        backend.process_input(&input_bytes);
+                    }
+                };
+                // Snap to live bottom when user sends keyboard input (Q5) — the same rule typed
+                // text follows. Skip modifier-only keys (Shift, Ctrl, Alt alone) so that e.g.
+                // Shift+click mouse selection works after scrolling with direct bindings.
                 let is_modifier_only = ctx.key_text.is_empty()
                     && crate::app::keyboard::is_modifier_key(ctx.logical_key);
-                if !is_modifier_only {
-                    backend.scroll_to_bottom();
-                }
-
-                let handled = winit_key_to_backend_event(ctx.logical_key, modifiers)
-                    .is_some_and(|event| backend.process_key_event(&event));
-                let input_bytes =
-                    winit_key_to_terminal_input(ctx.logical_key, ctx.key_text, ctx.is_ctrl);
-                if !handled && !input_bytes.is_empty() {
-                    backend.process_input(&input_bytes);
+                if is_modifier_only {
+                    send(backend);
+                } else {
+                    view_moved = crate::app::terminal_host::typed(backend, send);
                 }
             }
+            if view_moved {
+                state.needs_redraw = true;
+            }
+            return KeyWent::ToTerminal;
         }
         InputMode::Prefix => {
             handle_prefix_mode(
@@ -236,6 +254,7 @@ pub(crate) fn handle_keyboard_input(
         }
         _ => {}
     }
+    KeyWent::Elsewhere
 }
 
 /// **A terminal's search field has the keyboard**, so what is typed goes into the window tree,

@@ -37,22 +37,6 @@ pub(super) struct DrawRange {
     pub(super) index_count: u32,
 }
 
-/// Convert a logical clip rect to a physical scissor rect clamped to the
-/// framebuffer `target`: `(x, y, w, h)`. A zero `w`/`h` means "fully clipped".
-fn scissor_px(c: [f32; 4], scale: f32, target: [u32; 2]) -> (u32, u32, u32, u32) {
-    let (fw, fh) = (target[0] as f32, target[1] as f32);
-    let x0 = (c[0] * scale).clamp(0.0, fw);
-    let y0 = (c[1] * scale).clamp(0.0, fh);
-    let x1 = ((c[0] + c[2]) * scale).clamp(0.0, fw);
-    let y1 = ((c[1] + c[3]) * scale).clamp(0.0, fh);
-    (
-        x0 as u32,
-        y0 as u32,
-        (x1 - x0).max(0.0) as u32,
-        (y1 - y0).max(0.0) as u32,
-    )
-}
-
 /// The vertex buffer's size: per-glyph quads (one per glyph, not one per label) need room, so it
 /// is sized generously.
 const VERTEX_BUFFER_BYTES: u64 = 4 * 1024 * 1024;
@@ -260,7 +244,6 @@ impl TextRenderer {
             scale_factor: 1.0,
             target_size: [1, 1],
             current_clip: None,
-            damage: None,
             frame_vtx: 0,
             passes: 0,
             frame_idx: 0,
@@ -360,10 +343,10 @@ impl TextRenderer {
         let idx_base = self.frame_idx;
         let base_vertex = self.frame_vtx as i32;
         for d in &draws {
-            match combine_clip(self.damage, d.clip) {
+            match combine_clip(crate::clip::frame_damage(), d.clip) {
                 None => rpass.set_scissor_rect(0, 0, self.target_size[0], self.target_size[1]),
                 Some(c) => {
-                    let (x, y, w, h) = scissor_px(c, scale, self.target_size);
+                    let (x, y, w, h) = crate::clip::scissor_px(c, scale, self.target_size);
                     if w == 0 || h == 0 {
                         continue; // fully outside the damage/clip — nothing visible
                     }

@@ -1014,8 +1014,9 @@ names into items are written once, in `pane_items/listing.rs`.
 
 How another crate adds any of this: [`docs/extending-heca.md`](docs/extending-heca.md).
 
-The sidebar's pane row is the third kind: `[appearance.sidebar] pane_lines` (`cwd`, `git`, and any
-`demo.pane_line(..)` adds). A line is a self-contained widget that subscribes to its pane's facts and
+The sidebar's pane row is the third kind: the view lists `[appearance.sidebar] pane_<view>_view` and
+`pane_current_view` (`title`, `cwd`, `git`, `agent`, `agent_session`, and any `demo.pane_line(..)`
+adds). A card follows the view and the focus and rebuilds its own lines. A line is a self-contained widget that subscribes to its pane's facts and
 rewrites itself in place (`heca/src/providers/workspaces/row_lines.rs`); registering one is the same
 `PaneLineDef` heca's own two use.
 
@@ -1320,6 +1321,13 @@ The two effect tokens are **independent**; do not conflate them:
   compositor's z=0.5 CRT scanline overlay pass (Q2-extra in
   `compositor-blur-refactor-plan.md`).
 
+**A widget's own glow and border numbers are intended.** One halo does not suit every surface —
+a dialog's would swallow a status dot or a 2 px bar — so each widget keeps its own measure (a
+radius and a strength, a mark's border weight), tuned by eye, and `glow_size` scales it like any
+other glow. They are marked `// Per-widget glow, intended` at the spot; do not report them as
+hardcoded styling. Colour still comes from the theme, amount still goes through `glow_size`. Full
+note: [`docs/widgets.md` → "Each widget's own glow and border"](docs/widgets.md).
+
 Both are `[appearance]`-overridable (`AppearanceConfig::effective_glow_size` /
 `effective_intensity`; unset → theme wins, set → overrides) and applied at the
 single choke point `chrome_gui_theme(state)` in `heca/src/chrome/window/theme.rs`.
@@ -1562,9 +1570,9 @@ inventing a `MenuPanel` for it was rejected outright.
   twice and an owned subtree can be handed over once; a builder makes the whole chain `Clone`, so one
   menu value serves every row of a list. `.context_menu()` therefore accepts **a value or a closure**
   (`IntoContextMenu`).
-- **Rows are real children** — taffy lays them out. This widget owns no layout beyond shifting the
-  finished panel to its anchor (the `shift_subtree` trick `Overlay`/`Select` use). Row colour is
-  published at paint with `with_content_color`, so composed rows read danger/disabled for free.
+- **Rows are real children** — `Row`s wearing a menu entry's look (`CursorLook::Pill`), laid out by
+  taffy. This widget owns no layout: its light `Overlay` places the panel at the anchor and draws its
+  frame. A destructive entry reads in danger through its row's `content_tone`, a disabled one dims.
 - **The anchor comes out of the event** (`Event::position()` / `Event::target_bounds()`, stamped once
   by the router) — never chosen by an author. His idea, and better than the ambient lookup proposed.
 - **Bubbling stops at the nearest declaration; menus are never merged.** Nothing declared ⇒ nothing

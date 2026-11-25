@@ -15,8 +15,6 @@ pub struct ImageFrame<'a> {
     pub stencil: Option<&'a wgpu::TextureView>,
     pub viewport: (f32, f32),
     pub scale: f32,
-    /// Logical redraw region, shared with the primitive and text passes. None redraws all.
-    pub damage: Option<[f32; 4]>,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -116,7 +114,7 @@ impl UiImages {
         let Some(view) = &cached.view else { return };
         // Keep visible textures alive even when damage excludes them. Repainting them outside
         // damage would blend transparent pixels over the preserved scene again on every frame.
-        let Some((_, dst, uv)) = placement(at, frame.scale, frame.damage) else {
+        let Some((_, dst, uv)) = placement(at, frame.scale, crate::clip::frame_damage()) else {
             return;
         };
         if let (Some(rounded), Some(stencil)) = (at.rounded, frame.stencil) {

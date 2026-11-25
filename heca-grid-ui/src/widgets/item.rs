@@ -37,6 +37,8 @@ const GAP: Spacing = Spacing::Sm;
 const ACTIVE_BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
 const ACTIVE_BAR_FRAC: f64 = 0.65;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// The active bar's halo, as shares of the theme's glow radius and strength.
 const BAR_GLOW_RADIUS_SCALE: f32 = 0.8;
 const BAR_GLOW_STRENGTH_SCALE: f32 = 0.3;
@@ -183,8 +185,8 @@ impl Item {
     /// Set the active state — the clicked-and-stays current item (tinted bg +
     /// accent label + optional indicator).
     #[heca_grid_ui_macros::prop]
-    pub fn active(self, active: bool) -> Self {
-        self.active.set(active);
+    pub fn active(self, active: impl crate::builders::IntoBoolValue) -> Self {
+        active.into_bool_value().show_in(self.active);
         self
     }
 

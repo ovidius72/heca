@@ -5,7 +5,7 @@ use super::*;
 /// draws a bar without the app wiring it per card.
 #[test]
 fn a_spec_with_a_lifetime_draws_a_countdown_bar() {
-    use heca_grid_ui::{Component, DrawCommand, ToastSpec, ToastStack};
+    use heca_grid_ui::{DrawCommand, ToastSpec, ToastStack};
     use std::time::Duration;
     let hovered = signal(false);
     let items = signal(vec![
@@ -13,10 +13,7 @@ fn a_spec_with_a_lifetime_draws_a_countdown_bar() {
     ]);
     let mut stack = ToastStack::new(items).hovered_signal(hovered);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
-    let scene = common::paint(
-        stack.base().children[0].as_ref(),
-        &heca_grid_ui::Theme::default(),
-    );
+    let scene = common::paint(stack.cards()[0].as_ref(), &heca_grid_ui::Theme::default());
     let bar = scene
         .iter()
         .any(|c| matches!(c, DrawCommand::Rect(r) if (r.rect.size.h - 3.0).abs() < 0.6));
@@ -59,7 +56,7 @@ fn toast_stack_dismiss_reports_the_clicked_id() {
 
     // The × is the card's last child. Ask the ENGINE where it landed rather than guessing a
     // gutter: the card composes its content, so only the layout pass knows.
-    let card = stack.base().children[0].base();
+    let card = stack.cards()[0].base();
     let x_bounds = card.children[2].base().bounds;
     let at = Point::new(
         x_bounds.loc.x + x_bounds.size.w / 2.0,
@@ -119,7 +116,7 @@ fn a_stacked_cards_action_is_a_pick_target() {
     );
     // The action and the × are both real controls, so both are offered a letter, and both are
     // inside the card rather than at the stack's own origin.
-    let card = stack.base().children[0].base().bounds;
+    let card = stack.cards()[0].base().bounds;
     assert!(
         targets.iter().all(|(_, r)| card.contains(r.loc)),
         "a pick target landed outside the card that holds it: {targets:?}",
@@ -140,7 +137,7 @@ fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
     settled_stack(&mut stack, Size::new(800.0, 600.0));
 
     // The action lives in the card's text column, in the action row under the body.
-    let action = stack.base().children[0].base().children[1].base().children[2]
+    let action = stack.cards()[0].base().children[1].base().children[2]
         .base()
         .children[0]
         .base()
@@ -156,7 +153,7 @@ fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
         matches!(hit, Handled::Yes),
         "a move over a card is claimed, or the page behind lights up under a toast",
     );
-    let action_widget = &stack.base().children[0].base().children[1].base().children[2]
+    let action_widget = &stack.cards()[0].base().children[1].base().children[2]
         .base()
         .children[0];
     assert!(
@@ -188,7 +185,7 @@ fn a_held_countdown_resumes_when_the_pointer_leaves_the_card() {
     ]);
     let mut stack = ToastStack::new(items).hovered_signal(hovered);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
-    let card = stack.base().children[0].base().bounds;
+    let card = stack.cards()[0].base().bounds;
 
     // Pointer onto the card → the stack reports it is held.
     let on = Point::new(
@@ -242,7 +239,7 @@ fn a_dismissed_card_asks_for_the_relayout_that_moves_the_others_up() {
     // Drop the MIDDLE one — the case where the others must move.
     items.set(vec![ToastSpec::new(1, "one"), ToastSpec::new(3, "three")]);
     stack.tick(0.0);
-    assert_eq!(stack.base().children.len(), 3, "it should still be leaving");
+    assert_eq!(stack.cards().len(), 3, "it should still be leaving");
     assert!(
         !heca_grid_ui::needs_layout(&stack),
         "nothing structural has happened yet — the card is still on screen, playing its exit",
@@ -250,7 +247,7 @@ fn a_dismissed_card_asks_for_the_relayout_that_moves_the_others_up() {
 
     // Play the exit out. The frame the card actually leaves the tree is the frame that must ask.
     while stack.tick(1.0 / 60.0) {}
-    assert_eq!(stack.base().children.len(), 2, "the card should be gone");
+    assert_eq!(stack.cards().len(), 2, "the card should be gone");
     assert!(
         heca_grid_ui::needs_layout(&stack),
         "the card left the tree and nobody asked for a layout — the cards below it stay put",
@@ -283,7 +280,7 @@ fn a_spec_with_two_actions_renders_two_and_reports_the_pressed_key() {
     settled_stack(&mut stack, Size::new(800.0, 600.0));
 
     // The action row is the third child of the card's text column.
-    let row = &stack.base().children[0].base().children[1].base().children[2];
+    let row = &stack.cards()[0].base().children[1].base().children[2];
     assert_eq!(
         row.base().children.len(),
         2,
@@ -315,7 +312,7 @@ fn a_spec_with_no_actions_renders_no_action_row() {
     let mut stack = ToastStack::new(items).position(ToastPosition::TopLeft);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
 
-    let row = &stack.base().children[0].base().children[1].base().children[2];
+    let row = &stack.cards()[0].base().children[1].base().children[2];
     assert!(
         row.base().children.is_empty(),
         "an empty action slot built controls"
@@ -337,18 +334,18 @@ fn a_dropped_card_plays_its_exit_before_it_goes() {
     let items = signal(vec![ToastSpec::new(1, "Saved"), ToastSpec::new(2, "Done")]);
     let mut stack = ToastStack::new(items);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
-    assert_eq!(stack.base().children.len(), 2);
+    assert_eq!(stack.cards().len(), 2);
 
     items.set(vec![ToastSpec::new(2, "Done")]);
     stack.tick(0.0);
     assert_eq!(
-        stack.base().children.len(),
+        stack.cards().len(),
         2,
         "the dropped card went the frame its id did — its exit had nothing to play over",
     );
     while stack.tick(1.0 / 60.0) {}
     assert_eq!(
-        stack.base().children.len(),
+        stack.cards().len(),
         1,
         "…and once it has played, it is gone"
     );
@@ -422,4 +419,27 @@ fn a_dismiss_sends_to_the_surface_that_listens() {
     assert_eq!(heard.len(), 1, "{heard:?}");
     assert_eq!(heard[0].action, "dismiss");
     assert_eq!(heard[0].args.get("id"), Some(&PropValue::Int(9)));
+}
+
+/// **The stack says how many cards fit the window**: more in a taller window, and as many as
+/// there is room for — so the host can show that many instead of a fixed few.
+#[test]
+fn the_stack_reports_how_many_cards_fit() {
+    use heca_grid_ui::{ToastSpec, ToastStack};
+    let measure = |height: f64| {
+        let room = signal(0usize);
+        let items = signal(vec![ToastSpec::new(1, "Saved"), ToastSpec::new(2, "Done")]);
+        let mut stack = ToastStack::new(items).room_signal(room);
+        settled_stack(&mut stack, Size::new(800.0, height));
+        let card = stack.cards()[0].base().bounds.size.h;
+        (room.get_untracked(), card)
+    };
+    let (short, card) = measure(400.0);
+    let (tall, _) = measure(1200.0);
+    assert!(short >= 2, "two cards fit 400 px: {short}");
+    assert!(tall > short, "a taller window fits more: {tall} vs {short}");
+    assert!(
+        tall as f64 * card <= 1200.0,
+        "no more than the window holds: {tall} cards of {card}"
+    );
 }

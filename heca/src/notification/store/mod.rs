@@ -90,7 +90,9 @@ impl NotificationStoreUpdate {
 ///
 /// - An id appears in exactly one placement: `queued`, one entry of `visible`,
 ///   or `history`.
-/// - `visible` has exactly `max_visible` slots, and the occupied
+/// - `visible` has `max_visible` slots — more only while cards that were on screen when the number
+///   fell are still up: **a card on screen is never taken off it to make room**; the extra slots
+///   close as those cards leave. The occupied
 ///   ones are packed at the front: a card leaving closes its gap by sliding the ones after it up,
 ///   and a promoted card joins at the end. The column therefore reads top to bottom in the order
 ///   the notifications were raised, with no blank between them.
@@ -124,17 +126,27 @@ pub struct NotificationStore {
     history: VecDeque<NotificationId>,
     /// Maximum retained history entries; zero disables retention.
     history_limit: usize,
+    /// How many slots the store aims for (`max_visible`). `visible` is longer only while cards that
+    /// were on screen when it fell are still up.
+    target: usize,
+    /// How many notifications went straight to the history since the "more notifications" card
+    /// appeared — the count that card shows. Reset when that card leaves.
+    overflowed: usize,
 }
+
+/// The dedup key of the one card that stands for every notification that did not fit.
+pub(crate) const OVERFLOW_KEY: &str = "heca.notifications.overflow";
+
+/// How many cards a store shows until it is told otherwise — before the window has said how many
+/// fit (see `NotificationRuntime::set_room`).
+pub(crate) const DEFAULT_SLOTS: usize = 5;
 
 impl NotificationStore {
     /// Create an empty store with a bounded runtime history and the default number of slots.
     ///
     /// `history_limit` is a runtime retention policy, not persisted state.
     pub fn new(history_limit: usize) -> Self {
-        Self::with_capacity(
-            history_limit,
-            heca_config::settings::NotificationSystemConfig::default().max_visible,
-        )
+        Self::with_capacity(history_limit, DEFAULT_SLOTS)
     }
 
     /// The same, with an explicit number of simultaneous cards
@@ -150,14 +162,16 @@ impl NotificationStore {
             dedup_index: HashMap::new(),
             queued: VecDeque::new(),
             visible: vec![None; max_visible.max(1)],
+            target: max_visible.max(1),
             history: VecDeque::new(),
             history_limit,
+            overflowed: 0,
         }
     }
 
     /// How many cards this store shows at once.
     pub fn max_visible(&self) -> usize {
-        self.visible.len()
+        self.target
     }
 
     /// The configured maximum number of retained archived notifications.
@@ -192,28 +206,16 @@ impl NotificationStore {
     /// Returns whether the visible set changed, so the caller can refresh its projection.
     pub fn set_max_visible(&mut self, max_visible: usize, now: Instant) -> bool {
         let want = max_visible.max(1);
-        if want == self.visible.len() {
+        if want == self.target {
             return false;
         }
+        self.target = want;
         let (_, update) = self.transition_at(now, |store, now| {
-            if want < store.visible.len() {
-                // Surplus goes back to the head of the queue, newest-last, so the FIFO still reads
-                // in the order the notifications were raised.
-                let surplus: Vec<NotificationId> = store
-                    .visible
-                    .split_off(want)
-                    .into_iter()
-                    .flatten()
-                    .collect();
-                for id in surplus.into_iter().rev() {
-                    if let Some(n) = store.notifications.get_mut(&id) {
-                        n.placement = NotificationPlacement::Queued;
-                    }
-                    store.queued.push_front(id);
-                }
-            } else {
+            if want > store.visible.len() {
                 store.visible.resize(want, None);
             }
+            // Fewer slots: the cards on screen stay — `promote_pending` closes the free slots past
+            // the number now, and the rest close as their cards leave.
             ((), store.promote_pending(now))
         });
         update.visible_projection_changed()

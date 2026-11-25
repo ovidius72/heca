@@ -35,9 +35,58 @@ impl PaneLine {
     }
 }
 
+/// **What the title line shows** — the pane's name, its program's icon, its status and the dimmed
+/// `(program)` suffix of a renamed pane (`None` when there is none to show).
+#[derive(Clone, PartialEq)]
+pub(crate) struct HeadView {
+    pub(crate) title: String,
+    pub(crate) icon: Glyph,
+    pub(crate) status: heca_grid_ui::DotStatus,
+    pub(crate) hint: Option<String>,
+}
+
+impl Default for HeadView {
+    /// No name, a terminal's icon, online, no suffix — what a test of another line passes.
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            icon: Glyph::Terminal,
+            status: heca_grid_ui::DotStatus::default(),
+            hint: None,
+        }
+    }
+}
+
+/// **The title line's parts, worked out from the pane** — one value every part reads through its
+/// own builder, so a `title` line built again (a view change) shows the same thing with nothing
+/// copied and nothing written into it.
+#[derive(Clone, Copy)]
+pub(crate) struct RowHead(heca_grid_ui::reactive::Memo<HeadView>);
+
+impl RowHead {
+    /// The parts `view` works out, followed as the signals it reads change.
+    pub(crate) fn new(view: impl Fn() -> HeadView + 'static) -> Self {
+        Self(heca_grid_ui::reactive::create_memo(move |_| view()))
+    }
+
+    /// What the title line shows now — tracked, so reading it is what makes a part follow it.
+    pub(crate) fn get(&self) -> HeadView {
+        heca_grid_ui::reactive::SignalGet::get(&self.0)
+    }
+}
+
+impl Default for RowHead {
+    /// An empty head ([`HeadView::default`]) — what a test of another line passes.
+    fn default() -> Self {
+        Self::new(HeadView::default)
+    }
+}
+
 /// **What a line is built from**: the theme, and the pane's facts (a function, because it is read
 /// inside the line's own subscription — reading it is what makes the line follow the pane).
 pub(crate) struct LineCx {
+    /// The `title` line's parts.
+    pub(crate) head: RowHead,
     pub(crate) facts: Rc<dyn Fn() -> PaneFacts>,
     pub(crate) agent_statuses:
         heca_grid_ui::reactive::Signal<Rc<heca_config::settings::AgentStatuses>>,
@@ -71,6 +120,43 @@ impl std::fmt::Debug for PaneLineDef {
         f.debug_struct("PaneLineDef")
             .field("name", &self.name)
             .finish()
+    }
+}
+
+/// **The lines of a pane card in each view, and the current pane's** — `[appearance.sidebar]
+/// pane_<view>_view` and `pane_current_view` resolved by name.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PaneViews {
+    /// Compact, normal, extended — in [`PaneView::ALL`](heca_config::appearance::PaneView::ALL) order.
+    pub(crate) views: [PaneLineSet; 3],
+    /// The current pane's lines; `None` follows the view.
+    pub(crate) current: Option<PaneLineSet>,
+}
+
+impl PaneViews {
+    /// **The lines a card shows**: the current pane's list when it is the current pane and one is
+    /// set, else the view's.
+    pub(crate) fn lines(
+        &self,
+        view: heca_config::appearance::PaneView,
+        current: bool,
+    ) -> &PaneLineSet {
+        let at = heca_config::appearance::PaneView::ALL
+            .iter()
+            .position(|v| *v == view)
+            .unwrap_or(0);
+        match (&self.current, current) {
+            (Some(lines), true) => lines,
+            _ => &self.views[at],
+        }
+    }
+
+    /// Every name in every list — what the sidebar's rebuild check hashes.
+    pub(crate) fn names(&self) -> impl Iterator<Item = &str> {
+        self.views
+            .iter()
+            .chain(self.current.iter())
+            .flat_map(PaneLineSet::names)
     }
 }
 
@@ -155,29 +241,46 @@ impl PaneRowLines {
     }
 
     /// **The lines to show, in order** — the user's list by name, with what other crates added after
-    /// it while that list is still the default (see [`listing`](super::listing)).
-    pub(crate) fn shown(&self, config: &[String]) -> PaneLineSet {
+    /// it while that list is still `default` (see [`listing`](super::listing)).
+    fn shown(&self, config: &[String], default: &[String]) -> PaneLineSet {
         PaneLineSet(
-            super::listing::shown(
-                &self.defs,
-                config,
-                &heca_config::appearance::default_sidebar_pane_lines(),
-            )
-            .into_iter()
-            .cloned()
-            .collect(),
+            super::listing::shown(&self.defs, config, default)
+                .into_iter()
+                .cloned()
+                .collect(),
         )
     }
 
-    /// Say what the user's list gets wrong or misses — the shared rules of
-    /// [`listing::report`](super::listing::report).
-    pub(crate) fn report(&self, config: &[String]) {
-        super::listing::report(
-            "pane line",
-            "pane_lines",
-            &self.defs,
-            config,
-            &heca_config::appearance::default_sidebar_pane_lines(),
-        );
+    /// **Every view's lines, and the current pane's**, from `[appearance.sidebar]`.
+    pub(crate) fn views(&self, sidebar: &heca_config::appearance::SidebarAppearance) -> PaneViews {
+        use heca_config::appearance::{PaneView, default_view_lines};
+        PaneViews {
+            views: PaneView::ALL
+                .map(|view| self.shown(sidebar.view_lines(view), &default_view_lines(view))),
+            // The current pane's list has no default of its own: what other crates add is not
+            // added to it — the user who wrote it said exactly what the current pane shows.
+            current: sidebar
+                .pane_current_view
+                .as_deref()
+                .map(|lines| self.shown(lines, &[])),
+        }
+    }
+
+    /// Say what the user's lists get wrong or miss — the shared rules of
+    /// [`listing::report`](super::listing::report), once per list.
+    pub(crate) fn report(&self, sidebar: &heca_config::appearance::SidebarAppearance) {
+        use heca_config::appearance::{PaneView, default_view_lines};
+        for view in PaneView::ALL {
+            super::listing::report(
+                "pane line",
+                &format!("pane_{}_view", view.name()),
+                &self.defs,
+                sidebar.view_lines(view),
+                &default_view_lines(view),
+            );
+        }
+        if let Some(lines) = &sidebar.pane_current_view {
+            super::listing::report("pane line", "pane_current_view", &self.defs, lines, &[]);
+        }
     }
 }

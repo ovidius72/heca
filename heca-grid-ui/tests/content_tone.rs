@@ -54,7 +54,7 @@ fn a_live_tone_restores_inheritance_and_follows_theme_changes() {
     use heca_grid_ui::reactive::{SignalUpdate, signal};
     let tone = signal(Some(Tone::Success));
     let mut row = Flex::row()
-        .content_tone_signal(tone)
+        .content_tone(tone)
         .child(Label::new("state"))
         .child(Label::new("own").color(Theme::default().colors.foreground));
     LayoutEngine::new().compute(&mut row, Size::new(600.0, 100.0));

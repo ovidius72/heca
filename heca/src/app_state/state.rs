@@ -149,6 +149,8 @@ pub struct AppState {
     /// output ([`HIDDEN_READ_EVERY`](crate::app::lifecycle::HIDDEN_READ_EVERY)).
     pub(crate) hidden_read_at: Option<std::time::Instant>,
     pub needs_redraw: bool,
+    /// What the next frame repaints: the whole window, or only what changed.
+    pub(crate) repaint: crate::app::frame::Repaint,
     /// **One line of feedback in the bottom bar**, shown until the next keypress.
     ///
     /// What a key did when it could not do the thing you asked — a pick with nothing to offer is
@@ -370,6 +372,10 @@ pub struct AppState {
     /// The hover state last sent to the server, so the window reports a change once rather than
     /// every frame. See [`crate::app::lifecycle`].
     pub(crate) notification_hover_sent: bool,
+    /// **How many cards fit the window**, as the stack measured it (`0` until it has), and the
+    /// number last sent to the server, which decides how many show.
+    pub(crate) notification_room: heca_grid_ui::reactive::Signal<usize>,
+    pub(crate) notification_room_sent: usize,
     /// **The cards the toast stack draws** — this window's signal, built from the notification
     /// projection the server sent ([`notifications`](Self::notifications)) by
     /// [`rebuild_toasts`](Self::rebuild_toasts) whenever a fresh projection arrives.

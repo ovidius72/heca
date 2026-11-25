@@ -26,18 +26,53 @@ pub(crate) fn builtin_row_lines() -> Vec<PaneLineDef> {
         from_extension: false,
     };
     vec![
+        own(super::TITLE_LINE, |cx| {
+            heca_grid_ui::WidgetModel::new(title_line(cx))
+        }),
         own("cwd", |cx| heca_grid_ui::WidgetModel::new(cwd_line(cx))),
         own("git", |cx| heca_grid_ui::WidgetModel::new(git_line(cx))),
         own("agent", |cx| {
             heca_grid_ui::WidgetModel::new(super::agent_line::build(cx))
         }),
+        own("agent_session", |cx| {
+            heca_grid_ui::WidgetModel::new(super::agent_line::session_line(cx))
+        }),
     ]
+}
+
+/// **The pane's title line**: the status pip, the program's icon, the pane's name — it cuts rather
+/// than spilling (`components::PaneName`) — and the dimmed `(process)` of a renamed pane. Built from
+/// the row's own worked-out parts ([`RowHead`](crate::chrome::panes::pane_items::RowHead)), so building it
+/// again for a view shows the same values. The arrangement is the library's `Tile`.
+fn title_line(cx: &LineCx) -> heca_grid_ui::widgets::Tile {
+    use heca_grid_ui::widgets::{StatusDot, Tile};
+    let head = cx.head;
+    let name = crate::components::PaneName::new("")
+        .build()
+        .text(move || head.get().title);
+    // Smaller than the name and in the foreground colour (`muted` is unreadable on a selected row);
+    // the size and the parentheses make it read as secondary, and `Flex` puts both runs on one
+    // baseline.
+    let hint = Visibility::new()
+        .visible(move || head.get().hint.is_some())
+        .child(
+            Label::new("")
+                .size(WidgetSize::Caption)
+                .text(move || head.get().hint.unwrap_or_default()),
+        );
+    Tile::new()
+        .status(
+            StatusDot::new(heca_grid_ui::DotStatus::default()).status(move || head.get().status),
+        )
+        .icon(Icon::new(Glyph::Terminal).glyph(move || head.get().icon))
+        .title(name)
+        .suffix(hint)
 }
 
 /// **Where the pane is**: a folder glyph and the home-relative path. The one shape the exposé's card
 /// shares (`components::FolderLine`). Shown while the pane has a directory, read inside this line's own
-/// subscription so a `cd` moves it. Whether the line exists at all is `[appearance.sidebar]
-/// pane_lines`, and nothing else.
+/// subscription so a `cd` moves it. Whether the line exists at all is the sidebar view's list, and
+/// nothing else.
 fn cwd_line(cx: &LineCx) -> crate::components::FolderLine {
     let facts = cx.facts.clone();
     // Cut to a home-relative form here, at the binding, so there is one spelling of "where this
@@ -171,6 +206,7 @@ mod tests {
             (f.title == "agent").then(|| PaneLine::new(Glyph::Terminal, format!("is {}", f.title)))
         }));
         let line = build(&LineCx {
+            head: Default::default(),
             facts,
             agent_statuses: signal(Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,
@@ -225,6 +261,7 @@ mod tests {
             )
         });
         let line = git_line(&LineCx {
+            head: Default::default(),
             facts,
             agent_statuses: signal(Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,
@@ -257,23 +294,49 @@ mod tests {
         );
     }
 
-    /// **The user's list decides which lines show and in what order** — `cwd` and `git` are named
-    /// like any other.
+    /// **Each view's list decides which lines show and in what order** — the title is named like
+    /// any other line; an unknown name is skipped; the current pane has its own list or follows.
     #[test]
-    fn the_users_list_decides_which_lines_show_and_in_what_order() {
+    fn each_views_list_decides_which_lines_show_and_in_what_order() {
+        use heca_config::appearance::{PaneView, SidebarAppearance};
         let lines = PaneRowLines::default();
-        let names = |cfg: &[&str]| -> Vec<String> {
-            let cfg: Vec<String> = cfg.iter().map(|s| s.to_string()).collect();
-            lines.shown(&cfg).names().map(str::to_string).collect()
+        let owned = |cfg: &[&str]| -> Vec<String> { cfg.iter().map(|s| s.to_string()).collect() };
+        let sidebar = SidebarAppearance {
+            pane_compact_view: owned(&["title"]),
+            pane_normal_view: owned(&["git", "title", "cwd"]),
+            pane_extended_view: owned(&["nothing.here", "cwd"]),
+            pane_current_view: Some(owned(&["agent", "title"])),
+            ..SidebarAppearance::default()
         };
-        assert_eq!(names(&["cwd", "git"]), ["cwd", "git"], "the default");
-        assert_eq!(names(&["git", "cwd"]), ["git", "cwd"], "in the order given");
-        assert_eq!(names(&["git"]), ["git"]);
-        assert!(names(&[]).is_empty(), "an empty list shows the name alone");
+        let views = lines.views(&sidebar);
+        let names = |view: PaneView, current: bool| -> Vec<String> {
+            views
+                .lines(view, current)
+                .names()
+                .map(str::to_string)
+                .collect()
+        };
+        assert_eq!(names(PaneView::Compact, false), ["title"]);
         assert_eq!(
-            names(&["nothing.here", "cwd"]),
+            names(PaneView::Normal, false),
+            ["git", "title", "cwd"],
+            "in the order given"
+        );
+        assert_eq!(
+            names(PaneView::Extended, false),
             ["cwd"],
             "an unknown name is skipped"
+        );
+        assert_eq!(
+            names(PaneView::Compact, true),
+            ["agent", "title"],
+            "the current pane's own"
+        );
+        let follows = lines.views(&SidebarAppearance::default());
+        assert_eq!(
+            follows.lines(PaneView::Normal, true),
+            follows.lines(PaneView::Normal, false),
+            "with no list of its own, the current pane follows the view"
         );
     }
 
@@ -309,6 +372,7 @@ mod tests {
             )
         });
         let line = git_line(&LineCx {
+            head: Default::default(),
             facts,
             agent_statuses: signal(Rc::new(
                 heca_config::settings::AgentsConfig::default().statuses,

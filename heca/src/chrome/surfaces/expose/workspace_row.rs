@@ -18,6 +18,7 @@ use heca_grid_ui::style::Length;
 use heca_grid_ui::widgets::{Flex, GridCell};
 
 use super::column_card::ColumnCard;
+use super::empty_card::EmptyCard;
 use super::model::ExposeWorkspace;
 use super::pane_card::{ExposeCallbacks, PaneCard};
 
@@ -143,6 +144,17 @@ impl WorkspaceRow<'_> {
         // stop in a row with one.
         if !float_cells.is_empty() {
             columns_of_cells.push(float_cells);
+        }
+        // **An empty workspace still has a card**, filling its strip, so the cursor has somewhere
+        // to stop and the workspace can be chosen (`EmptyCard`).
+        if columns_of_cells.is_empty() {
+            let (card, cell) = EmptyCard {
+                ws_idx: ws.ws_idx,
+                cb: self.cb,
+            }
+            .build();
+            columns_of_cells.push(vec![cell]);
+            strip = strip.child(card.width(Length::FULL).height(Length::FULL));
         }
 
         // The row's whole allotment. The strip is centred in it on both axes: horizontally so a

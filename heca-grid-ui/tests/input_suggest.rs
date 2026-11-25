@@ -366,3 +366,34 @@ fn in_a_scrolled_page_the_list_stays_at_the_caret() {
         "the list is next to the caret: caret {caret:?}, first row {first:?}"
     );
 }
+
+/// **The list follows the theme it is laid out with** — how many items it shows and how narrow it
+/// may be are the theme's (`[input] suggestions`, `suggestions_width`), read by name at layout, so
+/// a theme that asks for two items and a wider list gets exactly that, with nothing copied by the
+/// field.
+#[test]
+fn the_list_follows_the_themes_count_and_width() {
+    let mut theme = Theme::default();
+    theme.colors.input.suggestions = 2;
+    theme.colors.input.suggestions_width = 400.0;
+    let mut input = field();
+    LayoutEngine::new()
+        .theme(&theme)
+        .compute(&mut input, Size::new(600.0, 400.0));
+    type_in(&mut input, "@");
+    assert_eq!(shown(&input).len(), 2, "two items, as the theme says");
+    let mut scene = Scene::new();
+    paint_child(&input, &mut PaintCx::new(&mut scene, &theme));
+    let widest = scene
+        .overlay_layer()
+        .iter()
+        .filter_map(|command| match command {
+            DrawCommand::Rect(rect) => Some(rect.rect.size.w),
+            _ => None,
+        })
+        .fold(0.0, f64::max);
+    assert!(
+        widest >= 400.0,
+        "the panel is {widest} wide, the theme asks 400"
+    );
+}

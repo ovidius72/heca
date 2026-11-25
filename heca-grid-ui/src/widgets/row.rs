@@ -27,12 +27,22 @@ use heca_core::layout::{Point, Rectangle, Size};
 const SEL_INSET: f64 = 3.0;
 /// Number of flashes a `needs attention` pulse plays.
 const ATTENTION_PULSES: u32 = 4;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Peak halo of the attention pulse border, as a share of the theme's glow radius.
 const ATTENTION_GLOW_SCALE: f32 = 1.2;
 /// A filled row's rest halo, as a share of the theme's glow radius.
 const REST_GLOW_SCALE: f32 = 1.0;
 /// Width of the left accent bar shown when active.
 const BAR_W: f64 = 3.0;
+/// The pill cursor's leading bar (`CursorLook::Pill`): its width, where it starts down the row and
+/// how much of the row it spans, and its corners — a menu entry's look, kept as it was drawn.
+const PILL_BAR_W: f64 = 2.5;
+const PILL_BAR_FROM: f64 = 0.2;
+const PILL_BAR_FRAC: f64 = 0.6;
+const PILL_BAR_RADIUS: f32 = 1.0;
+/// How far an idle pill-cursor row's text sits from muted towards its own colour.
+const PILL_IDLE_TEXT: f32 = 0.75;
 /// Active left bar height as a fraction of the row (centered, not full height).
 const BAR_FRAC: f64 = 0.65;
 /// Size of the [`ActiveMarker::Check`] pip (logical px).
@@ -107,6 +117,24 @@ impl RowVariant {
     }
 }
 
+/// **How a row marks the cursor** — where Enter goes. See [`Row::cursor_look`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, heca_grid_ui_macros::PropName)]
+pub enum CursorLook {
+    /// The theme's glowing ring, over whatever the row already shows. The default.
+    #[default]
+    Ring,
+    /// A fill alone, at the theme's stronger `nav_fill` — a short pick list where the cursor is
+    /// the only thing marked (a field's suggestion list).
+    Fill,
+    /// **A menu's chosen entry**: the accent at `panel_row_fill` with its `panel_row_border` edge
+    /// and a short accent bar at the leading edge. The pointer moves this cursor, so a row under it
+    /// draws no hover wash of its own, and the text reads quiet until the row is the chosen one —
+    /// muted towards the row's colour, then the colour itself (the theme's text, or the row's tone:
+    /// `.content_tone(Tone::Danger)` for a destructive entry). A disabled row reads dimmest and is
+    /// not veiled.
+    Pill,
+}
+
 /// A focusable, selectable container holding arbitrary child content.
 pub struct Row {
     base: Base,
@@ -124,8 +152,8 @@ pub struct Row {
     marker: ActiveMarker,
     /// The selection outline's width, when set; `None` draws the theme's glowing ring.
     border_width: Option<f32>,
-    /// The cursor is marked by a fill alone — see [`cursor_fill`](Row::cursor_fill).
-    cursor_fill: bool,
+    /// How the cursor is marked — see [`cursor_look`](Row::cursor_look).
+    cursor_look: CursorLook,
     flash: Flash,
     /// Override for the hover/active highlight color. Otherwise selection follows the theme's
     /// selected background and accent border; hover follows the row's background.
@@ -161,7 +189,7 @@ impl Row {
             // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
             border_width: None,
-            cursor_fill: false,
+            cursor_look: CursorLook::Ring,
             flash: Flash::new(),
             highlight: None,
             previous_tint: None,
@@ -293,9 +321,16 @@ impl Row {
     /// be true at the same time as the cursor and the selection (which it very often is: the pane
     /// you toggle back to is usually the one you just left) without taking anything from either.
     /// You should be able to find it when you look for it and never notice it when you are not.
+    ///
+    /// A `bool`, or a value that changes, followed in place — the same as
+    /// [`active`](Self::active):
+    ///
+    /// ```ignore
+    /// Row::new().previous(move || store.is_previous_pane(id))
+    /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn previous(self, on: bool) -> Self {
-        self.previous.set(on);
+    pub fn previous(self, on: impl crate::builders::IntoBoolValue) -> Self {
+        on.into_bool_value().show_in(self.previous);
         self
     }
 
@@ -313,7 +348,22 @@ impl Row {
     /// ```
     #[heca_grid_ui_macros::prop]
     pub fn cursor_fill(mut self, on: bool) -> Self {
-        self.cursor_fill = on;
+        self.cursor_look = match on {
+            true => CursorLook::Fill,
+            false => CursorLook::Ring,
+        };
+        self
+    }
+
+    /// **How the cursor is marked** — the theme's ring (default), a fill alone, or a menu entry's
+    /// pill. See [`CursorLook`].
+    ///
+    /// ```ignore
+    /// Row::new().cursor_look(CursorLook::Pill).nav_selected(move || chosen.get() == i)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn cursor_look(mut self, look: CursorLook) -> Self {
+        self.cursor_look = look;
         self
     }
 
@@ -470,7 +520,7 @@ impl Component for Row {
                 sel_radius,
                 None,
             );
-        } else if self.base.hovered() {
+        } else if self.base.hovered() && self.cursor_look != CursorLook::Pill {
             let c = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_hover_fill)
             } else {
@@ -494,8 +544,28 @@ impl Component for Row {
         // flash stops asking.
         if self.nav.get_untracked() && crate::flash::attention(&self.base).is_none() {
             match self.border_width {
+                // A menu's chosen entry: the whole row, its edge, and a short bar at the leading edge.
+                // A disabled entry cannot be chosen, so it never wears it.
+                _ if self.cursor_look == CursorLook::Pill && disabled => {}
+                _ if self.cursor_look == CursorLook::Pill => {
+                    let edge = cx.border(accent.with_alpha(ia.panel_row_border));
+                    cx.rect(
+                        b,
+                        accent.with_alpha(ia.panel_row_fill),
+                        edge,
+                        ctrl_radius,
+                        None,
+                    );
+                    // Per-widget border width, intended: this mark's own weight.
+                    // See docs/widgets.md → "Each widget's own glow and border".
+                    let bar = Rectangle::new(
+                        Point::new(b.loc.x, b.loc.y + b.size.h * PILL_BAR_FROM),
+                        Size::new(PILL_BAR_W, b.size.h * PILL_BAR_FRAC),
+                    );
+                    cx.rect(bar, accent, None, PILL_BAR_RADIUS, None);
+                }
                 // The fill alone marks the cursor, at the theme's stronger `nav_fill`.
-                _ if self.cursor_fill => cx.rect(
+                _ if self.cursor_look == CursorLook::Fill => cx.rect(
                     sel,
                     selected_bg.with_alpha(ia.nav_fill),
                     None,
@@ -508,11 +578,15 @@ impl Component for Row {
                     accent.with_alpha(0),
                     Some(Border {
                         color: accent.with_alpha(ia.nav_outline),
+                        // Per-widget border width, intended: this mark's own weight.
+                        // See docs/widgets.md → "Each widget's own glow and border".
                         width: (sel_border_w * 1.5).max(2.0),
                     }),
                     sel_radius,
                     Some(Glow {
                         color: glow_c,
+                        // Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+                        // See docs/widgets.md → "Each widget's own glow and border".
                         radius: 8.0,
                         intensity: 0.28,
                     }),
@@ -548,6 +622,8 @@ impl Component for Row {
                         (BAR_W / 2.0) as f32,
                         Some(Glow {
                             color: bar_glow,
+                            // Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+                            // See docs/widgets.md → "Each widget's own glow and border".
                             radius: 8.0,
                             intensity: 0.16,
                         }),
@@ -570,7 +646,24 @@ impl Component for Row {
 
         // Selection is carried by the frame; content keeps the readable theme foreground.
         // Explicit child colours and the fills inside brand artwork remain their own.
-        cx.with_content_color(foreground, |cx| {
+        //
+        // A menu's entries read quiet until chosen: the row's own colour (its tone, or the theme's
+        // text) muted towards the theme's, full on the chosen one, dimmest when disabled.
+        let content = match self.cursor_look {
+            CursorLook::Pill => {
+                let own = cx.content_color().unwrap_or(foreground);
+                let muted = cx.theme().colors.muted;
+                if disabled {
+                    muted.with_alpha(ia.menu_shortcut_dim)
+                } else if self.nav.get_untracked() {
+                    own
+                } else {
+                    muted.lerp(own, PILL_IDLE_TEXT)
+                }
+            }
+            _ => foreground,
+        };
+        cx.with_content_color(content, |cx| {
             for child in &self.base.children {
                 crate::component::paint_child(child.as_ref(), cx);
             }
@@ -579,7 +672,7 @@ impl Component for Row {
         if self.interactive() && !disabled {
             cx.flash(b, self.flash.amount() * 0.5, 0.0);
         }
-        if disabled {
+        if disabled && self.cursor_look != CursorLook::Pill {
             cx.dim(b, self.base.style.visual.radius);
         }
         if self.interactive()

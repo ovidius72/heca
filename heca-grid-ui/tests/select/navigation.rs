@@ -13,40 +13,33 @@ fn select_rows_outside_the_visible_window_are_not_clickable() {
         Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
         PointerButton::Left,
     ); // open — 6 rows visible of 20
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
 
-    // A row past the window is collapsed: it is not drawn, so it cannot be hit either. (Were its
-    // stale bounds left behind, they would sit under the trigger and swallow clicks.)
-    for i in 6..20 {
-        assert_eq!(
-            sel.base().children[i].base().bounds.size,
-            Size::new(0.0, 0.0),
-            "row {i} is outside the visible window",
-        );
-    }
-    // Closing collapses every row **except the chosen one**, which goes back to standing in the
-    // trigger (that is how the trigger shows the option's own content).
+    // A row past the visible window lies outside the panel: it is clipped, so a press where it
+    // would be is not a press on it.
+    let panel = heca_grid_ui::area(&sel, "list").unwrap().base().bounds;
+    let past = common::select_rows(&sel)[10].base().bounds;
+    assert!(
+        past.loc.y >= panel.loc.y + panel.size.h,
+        "row 10 is below the panel's window"
+    );
+    click_at(
+        &mut sel,
+        Point::new(past.loc.x + 10.0, past.loc.y + past.size.h / 2.0),
+        PointerButton::Left,
+    );
+    assert_ne!(sel.index(), 10, "a clipped row cannot be chosen");
+
+    // Closed, the list is not drawn and takes no press: only the trigger shows.
     heca_grid_ui::dispatch(
         &mut sel,
         &Event::Widget(heca_grid_ui::WidgetIntent::Dismiss),
     );
-    let chosen = sel.index();
-    for i in 0..20 {
-        if i == chosen {
-            continue;
-        }
-        assert_eq!(
-            sel.base().children[i].base().bounds.size,
-            Size::new(0.0, 0.0),
-            "row {i} is collapsed while the list is closed",
-        );
-    }
-    let trigger = sel.base().bounds;
+    assert!(!sel.overlay_active(), "the list is closed");
+    let drawn = common::paint(&sel, &Theme::default());
     assert!(
-        trigger.contains(Point::new(
-            trigger.loc.x + 5.0,
-            sel.base().children[chosen].base().bounds.loc.y + 2.0,
-        )),
-        "the chosen option stands in the trigger",
+        drawn.overlay_layer().is_empty(),
+        "the closed list draws nothing over the page"
     );
 }
 
@@ -72,7 +65,9 @@ fn select_flips_above_the_trigger_when_there_is_no_room_below() {
         ),
     );
 
-    let first_row = ui.base().children[0].base().children[0].base().bounds;
+    let first_row = common::select_rows(ui.base().children[0].as_ref())[0]
+        .base()
+        .bounds;
     assert!(
         first_row.loc.y + first_row.size.h <= trigger.loc.y,
         "no room below → the rows are placed above the trigger",
@@ -104,19 +99,36 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
         PointerButton::Left,
     ); // open
 
-    // Trigger label (1) + at most MAX_VISIBLE (6) rows are painted.
-    let texts = row_texts(&sel);
-    assert_eq!(texts.len(), 1 + 6, "long list caps the visible rows");
-    assert_eq!(texts[1], "OPT0", "starts at the top");
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
 
-    // Wheel-scroll moves the visible window down.
-    let over_list = Point::new(b.loc.x + 5.0, b.loc.y + b.size.h + 5.0);
+    // The panel is as tall as MAX_VISIBLE (6) rows: the seventh starts where the panel ends.
+    let panel = heca_grid_ui::area(&sel, "list").unwrap().base().bounds;
+    let rows = common::select_rows(&sel);
+    let seventh = rows[6].base().bounds;
+    assert!(
+        (seventh.loc.y - (panel.loc.y + panel.size.h)).abs()
+            <= rows[0].base().bounds.loc.y - panel.loc.y + 0.5,
+        "six rows fit the panel: {panel:?} vs the seventh at {seventh:?}"
+    );
+    assert!(
+        row_texts(&sel).contains(&"OPT0".to_string()),
+        "starts at the top"
+    );
+
+    // The wheel over the list scrolls it.
+    let over_list = Point::new(panel.loc.x + 5.0, panel.loc.y + 5.0);
+    let first_before = common::select_rows(&sel)[0].base().bounds.loc.y;
     heca_grid_ui::dispatch(&mut sel, &Event::wheel(over_list, 0.0, 5.0));
-    assert_eq!(row_texts(&sel)[1], "OPT5", "scroll reveals later options");
+    let first_after = common::select_rows(&sel)[0].base().bounds.loc.y;
+    assert!(first_after < first_before, "the wheel scrolls the rows up");
 
-    // Scrolling past the end clamps to the last full window.
+    // Scrolling past the end stops with the last row at the panel's bottom.
     heca_grid_ui::dispatch(&mut sel, &Event::wheel(over_list, 0.0, 999.0));
-    assert_eq!(row_texts(&sel)[1], "OPT14", "scroll clamps at max (20 - 6)");
+    let last = common::select_rows(&sel)[19].base().bounds;
+    assert!(
+        last.loc.y + last.size.h <= panel.loc.y + panel.size.h + 0.5 && last.loc.y >= panel.loc.y,
+        "the last row is in view at the end: {last:?} in {panel:?}"
+    );
 }
 
 #[test]
@@ -177,7 +189,7 @@ fn a_closed_select_hovers_as_one_control() {
         sel.base().hovered(),
         "the trigger is what the pointer found"
     );
-    for (i, option) in sel.base().children.iter().enumerate() {
+    for (i, option) in common::select_rows(&sel).iter().enumerate() {
         assert!(
             !option.base().hovered(),
             "option {i} must not hover while it is standing in the trigger",
@@ -246,4 +258,73 @@ fn an_open_select_leaves_the_row_around_it_alone() {
             "child {i} moved from {before} to {after} when the select opened",
         );
     }
+}
+
+/// **The keyboard cursor stays in view.** Moving it past the panel's last row scrolls the list so
+/// the row under it is shown — the option asks for it and the list's `ScrollRegion` follows, as it
+/// does for any list's cursor.
+#[test]
+fn moving_the_cursor_past_the_panel_scrolls_the_row_into_view() {
+    use heca_grid_ui::WidgetIntent;
+    let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
+    let mut sel = Select::new(opts);
+    give_keyboard(&mut sel);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
+    heca_grid_ui::dispatch(
+        &mut sel,
+        &Event::Key {
+            key: GridKey::Enter,
+            pressed: true,
+        },
+    );
+    for _ in 0..10 {
+        heca_grid_ui::dispatch(&mut sel, &Event::Widget(WidgetIntent::MenuDown));
+        LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
+    }
+    let panel = heca_grid_ui::area(&sel, "list").unwrap().base().bounds;
+    let row = common::select_rows(&sel)[10].base().bounds;
+    assert!(
+        row.loc.y >= panel.loc.y - 0.5
+            && row.loc.y + row.size.h <= panel.loc.y + panel.size.h + 0.5,
+        "the cursor's row is in the panel: {row:?} in {panel:?}"
+    );
+}
+
+/// **The option under the cursor shows it** — a highlight over that row's own box, moving with the
+/// cursor.
+#[test]
+fn the_row_under_the_cursor_is_highlighted() {
+    use heca_grid_ui::WidgetIntent;
+    let theme = Theme::default();
+    let mut sel = Select::new(["A", "B", "C"]);
+    give_keyboard(&mut sel);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 300.0));
+    heca_grid_ui::dispatch(
+        &mut sel,
+        &Event::Key {
+            key: GridKey::Enter,
+            pressed: true,
+        },
+    );
+    heca_grid_ui::dispatch(&mut sel, &Event::Widget(WidgetIntent::MenuDown));
+    let row = common::select_rows(&sel)[1].base().bounds;
+    let painted = common::rects(&common::paint(&sel, &theme));
+    assert!(
+        painted.iter().any(|r| r.rect == row),
+        "a highlight covers the cursor's row {row:?}"
+    );
+}
+
+/// **Every row spans the whole list** — its pill, its hover and the cursor reach the panel's edges,
+/// whatever its text — while the text starts where the trigger's label does.
+#[test]
+fn every_row_spans_the_whole_list() {
+    let mut sel = Select::new(["A", "A MUCH LONGER OPTION"]);
+    LayoutEngine::new().compute(&mut sel, Size::new(400.0, 300.0));
+    let rows = common::select_rows(&sel);
+    let (short, long) = (rows[0].base().bounds, rows[1].base().bounds);
+    assert!(
+        (short.size.w - long.size.w).abs() < 0.5,
+        "a short option's row is as wide as a long one's: {short:?} vs {long:?}"
+    );
 }

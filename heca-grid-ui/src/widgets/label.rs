@@ -82,7 +82,7 @@ pub struct Label {
     text: Signal<String>,
     seen_text: String,
     align: TextAlign,
-    color: Option<Color>,
+    color: Option<crate::style::Fill>,
     /// How heavy the glyphs are. A [`Signal`] because it can be **state-driven by an enclosing
     /// widget** — an [`Item`](super::Item) bolds its label while the row is active — and the
     /// inherited paint context carries only a color, not a weight. The parent sets this in its
@@ -453,12 +453,13 @@ impl Label {
         self
     }
 
-    /// Explicit text color. Unset ⇒ the enclosing control's
+    /// Explicit text color — a colour, or a theme colour by name at a theme opacity, which follows
+    /// the theme (`Fill::theme("muted").alpha("menu_shortcut")`). Unset ⇒ the enclosing control's
     /// [content color](crate::component::PaintCx::with_content_color), else the theme foreground.
     /// Setting it opts the label **out** of that inheritance.
     #[heca_grid_ui_macros::prop]
-    pub fn color(mut self, color: Color) -> Self {
-        self.color = Some(color);
+    pub fn color(mut self, color: impl Into<crate::style::Fill>) -> Self {
+        self.color = Some(color.into());
         self
     }
 
@@ -482,8 +483,8 @@ impl Label {
     /// Render the label with bold weight.
     #[deprecated(note = "use `font_weight(FontWeight::Bold)`")]
     #[heca_grid_ui_macros::prop]
-    pub fn bold(self, bold: bool) -> Self {
-        self.bold.set(bold);
+    pub fn bold(self, bold: impl crate::builders::IntoBoolValue) -> Self {
+        bold.into_bool_value().show_in(self.bold);
         self
     }
 
@@ -530,8 +531,8 @@ impl Label {
     /// Render the label slanted — a **synthesized oblique**, not a separate face (see the module
     /// docs): the glyphs are sheared, so the advances (and the monospace grid) are untouched.
     #[heca_grid_ui_macros::prop]
-    pub fn italic(self, italic: bool) -> Self {
-        self.italic.set(italic);
+    pub fn italic(self, italic: impl crate::builders::IntoBoolValue) -> Self {
+        italic.into_bool_value().show_in(self.italic);
         self
     }
 
@@ -544,8 +545,8 @@ impl Label {
     /// rect in its own resolved color, so it tints with the label (including a parent's inherited
     /// content color).
     #[heca_grid_ui_macros::prop]
-    pub fn underline(self, underline: bool) -> Self {
-        self.underline.set(underline);
+    pub fn underline(self, underline: impl crate::builders::IntoBoolValue) -> Self {
+        underline.into_bool_value().show_in(self.underline);
         self
     }
 
@@ -556,8 +557,8 @@ impl Label {
 
     /// Draw a rule **through** the text (a struck-out / completed item).
     #[heca_grid_ui_macros::prop]
-    pub fn strikethrough(self, strikethrough: bool) -> Self {
-        self.strikethrough.set(strikethrough);
+    pub fn strikethrough(self, strikethrough: impl crate::builders::IntoBoolValue) -> Self {
+        strikethrough.into_bool_value().show_in(self.strikethrough);
         self
     }
 
@@ -729,6 +730,7 @@ impl Component for Label {
         // hover sweep / disabled fade) with no wiring between the two widgets.
         let color = self
             .color
+            .and_then(|fill| fill.resolve(cx.theme()))
             .or_else(|| self.muted.then(|| cx.theme().colors.muted))
             .or_else(|| cx.content_color())
             .unwrap_or_else(|| cx.theme().colors.foreground);

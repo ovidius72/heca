@@ -76,12 +76,13 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_pane_renamed_add_process_name(state.settings.pane_renamed_add_process_name);
-    // Which lines show under a pane's name, by name — the user's list, plus what other crates added
-    // while it is still the default.
+    // The lines of a pane card in each view, by name — the user's lists, plus what other crates
+    // added while one is still the default.
     state
         .chrome_state
         .workspaces
-        .set_pane_lines(state.pane_lines.shown(&state.appearance.sidebar.pane_lines));
+        .set_pane_views(state.pane_lines.views(&state.appearance.sidebar));
+    crate::providers::workspaces::follow_configured_pane_view(state);
     state
         .chrome_state
         .workspaces

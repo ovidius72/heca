@@ -48,6 +48,8 @@ pub(crate) struct ExposeDeleteKeys {
 pub(crate) struct ExposeCallbacks {
     /// Activate a card: focus the pane, hand the keyboard back, put the map away.
     pub(crate) choose: std::rc::Rc<dyn Fn(PaneId)>,
+    /// Choose an empty workspace's card: go to that workspace, the same three-part act.
+    pub(crate) choose_workspace: std::rc::Rc<dyn Fn(usize)>,
     /// Dispatch a registry action by name — how the delete letters act.
     pub(crate) delete: DispatchAction,
     /// Move the map's own highlight, the same intent `CardGrid::on_move` sends.
@@ -170,8 +172,7 @@ impl PaneCard<'_> {
                         // Regular, and the readable foreground the card hands its content.
                         crate::components::PaneName::new(self.name)
                             .weight(heca_grid_ui::style::FontWeight::Regular)
-                            .build()
-                            .widget,
+                            .build(),
                     )
                     .child(folder)
             });

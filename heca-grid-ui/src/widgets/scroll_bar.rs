@@ -20,6 +20,8 @@ const THUMB_W: f64 = 3.0;
 const THUMB_RIGHT_INSET: f64 = 1.5;
 /// Minimum thumb height so long histories stay grabbable.
 const MIN_THUMB: f64 = 24.0;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Glow intensity at rest.
 const GLOW_REST_INTENSITY: f32 = 0.015;
 /// Glow intensity while hovered/dragging.
@@ -171,6 +173,8 @@ impl Component for ScrollBar {
         let accent = cx.accent();
         let glow = Some(Glow {
             color: accent,
+            // Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+            // See docs/widgets.md → "Each widget's own glow and border".
             radius: 10.0,
             intensity: if active {
                 GLOW_ACTIVE_INTENSITY

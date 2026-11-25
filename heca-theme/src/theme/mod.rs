@@ -14,12 +14,14 @@ mod flash;
 mod input;
 mod interaction;
 mod named;
+mod spacing;
 
 pub use dialog::DialogStyle;
 pub use effects::{FrameStyle, GlowLevel, Intensity, Shadow};
 pub use flash::FlashStyle;
 pub use input::InputStyle;
 pub use interaction::InteractionAlphas;
+pub use spacing::SpacingScale;
 
 use defaults::*;
 
@@ -65,6 +67,9 @@ pub struct Theme {
     /// Readable panel width for every dialog; a widget may override it explicitly.
     #[serde(default)]
     pub dialog: DialogStyle,
+    /// The steps of space every widget is laid out with — see [`SpacingScale`].
+    #[serde(default)]
+    pub spacing: SpacingScale,
     /// Shared visual feedback for state changes and plugin actions.
     #[serde(default)]
     pub flash: FlashStyle,

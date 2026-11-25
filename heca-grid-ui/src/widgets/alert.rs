@@ -20,6 +20,8 @@ const BODY_SCALE: f32 = 0.9;
 const GAP: f64 = 6.0;
 /// Default alert width.
 const DEFAULT_WIDTH: f32 = 360.0;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Rest-glow spread radius (px) — the alert's share of the theme rest halo.
 const GLOW_RADIUS: f32 = 10.0;
 

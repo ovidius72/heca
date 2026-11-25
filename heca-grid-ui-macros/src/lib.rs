@@ -197,11 +197,32 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
             quote!(value.as_text().map(::std::string::ToString::to_string))
         }
         t if t.starts_with('&') || t.contains("dyn") || t.contains("implFn") => return None,
+        // Any other fixed-or-live value (`impl IntoBadgeVariantValue`, made by `live_value_of!`):
+        // static data brings the fixed value by name, and the trait says which type that is.
+        t if t.starts_with("impl") && t.ends_with("Value") => {
+            let syn::Type::ImplTrait(bound) = ty else {
+                return None;
+            };
+            let Some(syn::TypeParamBound::Trait(tr)) = bound.bounds.first() else {
+                return None;
+            };
+            let path = &tr.path;
+            quote!(value.as_text().and_then(
+                <<dyn #path as ::heca_grid_ui::builders::LiveOf>::Fixed as ::heca_grid_ui::PropName>::from_prop_name
+            ))
+        }
         // A colour arrives as text and parses through `Color`'s own `FromStr` (`#rgb`, `#rrggbb`,
         // `#rrggbbaa`). A THEME TOKEN NAME never reaches here: the host resolves it to hex first,
         // where it has the theme — the library stays free of any notion of a token.
         // A colour, or a builder that also takes an optional one: static data always brings a
         // colour, which is the `Some` half.
+        // A colour or a theme fill (`impl Into<Fill>`): static data brings a colour — the host
+        // resolves a theme token to hex first, as for every colour.
+        t if t.ends_with("Into<crate::style::Fill>") => quote!(
+            value
+                .as_text()
+                .and_then(|s| s.parse::<::heca_theme::Color>().ok())
+        ),
         "Color" | "implInto<Option<Color>>" => quote!(
             value
                 .as_text()

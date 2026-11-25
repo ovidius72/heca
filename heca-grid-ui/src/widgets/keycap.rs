@@ -29,6 +29,8 @@ pub struct Keycap {
     base: Base,
     cap: KeyCap,
     variant: KeycapVariant,
+    /// The chip's hue — `None` is the accent.
+    tone: crate::reactive::Signal<Option<crate::Tone>>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -42,6 +44,7 @@ impl Keycap {
             base,
             cap: cap.into(),
             variant: KeycapVariant::default(),
+            tone: crate::reactive::signal(None),
         }
     }
 
@@ -51,6 +54,19 @@ impl Keycap {
     #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: KeycapVariant) -> Self {
         self.variant = variant;
+        self
+    }
+
+    /// **The chip's hue, by meaning** — the accent when unset; `Tone::Muted` for a key that cannot
+    /// be used right now (a disabled menu entry's letter). Fixed, or one that changes, followed in
+    /// place:
+    ///
+    /// ```ignore
+    /// Keycap::new("r").variant(KeycapVariant::Bordered).tone(move || (!enabled.get()).then_some(Tone::Muted))
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn tone(self, tone: impl crate::builders::IntoToneValue) -> Self {
+        tone.into_tone_value().show_in(self.tone);
         self
     }
 
@@ -95,8 +111,10 @@ impl Component for Keycap {
     }
 
     fn paint(&self, cx: &mut PaintCx) {
+        let color = crate::reactive::SignalGet::get_untracked(&self.tone)
+            .map(|tone| tone.resolve(cx.theme()));
         self.cap
-            .paint(cx, self.base.bounds, self.base.font, None, self.variant);
+            .paint(cx, self.base.bounds, self.base.font, color, self.variant);
     }
 
     fn text_summary(&self) -> Option<String> {

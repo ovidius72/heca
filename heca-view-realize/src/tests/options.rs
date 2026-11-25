@@ -30,7 +30,10 @@ fn select_node_realizes_its_choice_children_as_options() {
         &mut FormBindings::default(),
     )
     .expect("valid described test widget");
-    let options = &select.base().children;
+    let options = &heca_grid_ui::area(select.as_ref(), "list")
+        .expect("the select's list")
+        .base()
+        .children;
     assert_eq!(options.len(), 2, "one option per Choice child");
     assert_eq!(
         options[1].base().children.len(),
@@ -80,7 +83,12 @@ fn the_change_intent_carries_the_chosen_options_value_not_its_index() {
             heca_grid_ui::PointerButton::Left,
         ),
     );
-    let high = select.base().children[1].base().bounds;
+    let high = heca_grid_ui::area(select.as_ref(), "list")
+        .expect("the select's list")
+        .base()
+        .children[1]
+        .base()
+        .bounds;
     heca_grid_ui::dispatch(
         select.as_mut(),
         &Event::pointer_pressed(
@@ -178,7 +186,10 @@ fn a_non_choice_child_of_a_select_is_reported() {
         &mut FormBindings::default(),
     )
     .expect("valid options survive malformed content");
-    let options = &select.base().children;
+    let options = &heca_grid_ui::area(select.as_ref(), "list")
+        .expect("the select's list")
+        .base()
+        .children;
     assert_eq!(options.len(), 2);
     assert_eq!(options[0].text_summary().as_deref(), Some("LOW"));
     assert_eq!(options[1].text_summary().as_deref(), Some("HIGH"));

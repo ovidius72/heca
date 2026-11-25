@@ -55,7 +55,6 @@ pub(super) fn do_host_work(
                         targets.phys_size.height as f32,
                     ),
                     scale: state.scale_factor as f32,
-                    damage: None,
                 },
                 at,
             );

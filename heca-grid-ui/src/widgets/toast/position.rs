@@ -51,6 +51,31 @@ impl ToastPosition {
         matches!(self, Self::TopCenter | Self::BottomCenter)
     }
 
+    /// **Where a box of `size` sits in `viewport` at this position** — its top-left corner. The
+    /// rule a stack that moves its finished group uses, said once.
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
+    pub fn corner_in(
+        self,
+        size: heca_core::layout::Size,
+        viewport: heca_core::layout::Size,
+    ) -> heca_core::layout::Point {
+        let x = if self.is_centered() {
+            (viewport.w - size.w) / 2.0
+        } else if self.is_right() {
+            viewport.w - size.w
+        } else {
+            0.0
+        };
+        let y = if self.is_top() {
+            0.0
+        } else {
+            viewport.h - size.h
+        };
+        heca_core::layout::Point::new(x, y)
+    }
+
     /// The four margins that put a box here: `(left, right, top, bottom)`, where `Auto` means
     /// "take the slack on this side".
     ///

@@ -883,8 +883,9 @@ own `.color(..)` keeps it, and a control that colours its own content (a `Button
 `Choice`) keeps its own. Applied to the subtree by `paint_child`, beside the accent, so nothing
 opts in. `Dialog::danger(true)` is built on it.
 
-For changing state, `.content_tone_signal(signal)` follows a `Signal<Option<Tone>>`
-without rebuilding the subtree. `None` restores the surrounding colour. The current
+For changing state, `.content_tone(..)` also takes a value that changes — a
+`Signal<Option<Tone>>`, a `Memo` or a function reading signals — and follows it without rebuilding
+the subtree. `None` restores the surrounding colour. The current
 theme resolves the tone on each paint, including after a theme reload.
 
 <a id="what-every-widget-gets"></a>
@@ -1492,6 +1493,22 @@ Helper: **`theme.control_radius()`** → `radius × 0.5` (corners for small cont
 > **Never hard-code font family/size, radius, border width or glow** — read them from the
 > theme so a global change scales every widget proportionally.
 
+- **`[spacing]` — the theme's rhythm** (`SpacingScale`): how much air each step of space is, as a
+  share of the font it is used at — `hairline` 0.08, `xs` 0.25, `sm` 0.5, `md` 0.85, `lg` 1.25,
+  `xl` 2.0 by default. Widgets name a step (`Spacing::Sm`); a theme that wants a denser or an airier
+  look changes these and every gap and padding follows. Read from the theme the window is laid out
+  with (the layout engine's `.theme(..)`).
+
+  ```toml
+  [spacing]
+  xs = 0.2
+  md = 1.0
+  ```
+- **Numbers and counts by name** — `theme.number_named("input.suggestions_width")`,
+  `theme.count_named("input.suggestions")`: every number of the theme answers to its field's name
+  (`group.field` inside a group), as colours do to `color_named` and opacities to `alpha_named`. A
+  builder names one with `Length::theme(..)` / `Count::theme(..)` (see
+  [A theme value, by name](#a-theme-value-by-name--lengththeme-counttheme)).
 - **`GlowLevel{None, Thin, Medium, Large}`** — glow halo size. `.radius_scale()` (0 / 0.5 /
   1.0 / 2.0), `.strength_scale()` (0 / 0.5 / 1.0 / 1.6), `.parse(&str)` (for config.toml),
   `GlowLevel::ALL`, `.label()`. `None` ⇒ no glow.
@@ -1510,6 +1527,29 @@ is, and one token gives every surface a faint halo at rest.**
 | **Amount** | `glow_size` setting (`[appearance] glow_size` override → theme; `none\|thin\|medium\|large`) | presence + halo radius (`radius_scale`) + strength (`strength_scale`) of **every** glow, applied at the single `PaintCx` chokepoint (`scaled_glow`, inside `.rect(..)`) — nothing bypasses it |
 | **Rest presence** | `interaction.control_rest_glow` token (×255 intensity; `0` = flat rest look) via **`PaintCx::rest_glow(radius)`** — the one shared definition; each widget passes only its halo radius | whether surfaces halo **before** any hover/focus/active state |
 | **State glows** | each widget (hover sweep, toggle-on, checked pop, active pill/bar, attention pulse…) | drawn **on top** of the rest glow, same chokepoint |
+
+### Each widget's own glow and border
+
+**The numbers a widget writes for its halo and its edges are intended — they are not a style
+written by hand.** Reviewers flag them often; this is why they are there.
+
+The theme owns the glow's **colour** and the `glow_size` setting owns **how much** glow there is,
+for every glow at once (`PaintCx::scaled_glow`, which nothing bypasses). But one halo does not
+sit well on every surface: a ring the size that suits a dialog swallows a 6 px status dot, a
+bubble a few pixels tall, or a 2 px bar, and a 1 px edge that reads on a card disappears on a
+drag ghost. So each widget carries **its own measure** — a radius and a strength (`GLOW_RADIUS`,
+`GLOW_INTENSITY`, a `*_GLOW_SCALE`), or the weight of a mark's border — tuned by eye on that
+widget, and `glow_size` scales that measure like any other. Each place is marked
+`// Per-widget glow, intended` (or `border width`) and points here.
+
+The rules that still hold:
+
+- **Colour never comes from here** — it is the theme's `glow` (or the widget's tone).
+- **Amount always goes through `glow_size`**: draw with `cx.rect(.., glow)` and the setting
+  reaches it; `none` removes it.
+- **A surface that can say it in the theme's words does**: an [`Overlay`](#overlay) panel's halo is
+  a [`PanelGlow`](#overlay) — multipliers of the theme's glow, `GlowLevel` for the common pairs —
+  so a theme that changes its glow changes the panel's too.
 
 **Carries the rest glow:** Button (every bordered variant — Primary/Secondary/Destructive/
 Outline — at a tight `REST_GLOW_RADIUS`, far smaller than the hover halo), Input, Toggle track,
@@ -1627,12 +1667,12 @@ stay DRY):
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
 | `.outline(\|cx\| …)` | Paint the closure **over this widget's children**. A widget paints first and its children after, so a frame drawn in `paint` sits *under* whatever the widget holds — a border under a terminal. Drawn here, it is recorded in the scene's **outline band**: after every base command, before the overlay band. The clips open around the call are re-opened for it (and closed after), so it is clipped exactly as it would have been in place — a pane scrolled inside a column keeps its border inside the column. **Inside an overlay or another outline it paints in place** (the overlay band is already on top). `Pane` uses it for its border, glow and brackets, so a pane holding a terminal frames it with nothing for the author to do; a custom widget writes `cx.outline(\|cx\| cx.rect(bounds, Color::TRANSPARENT, border, radius, glow))`. `Scene::base_layer()` returns the base commands then the outline. |
-| `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. |
+| `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. **Inside it the accent is the theme's**, not the container's: a tooltip or a menu opened from a pane that is not the active one keeps the theme's edge — so read `cx.accent()` inside the closure. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
 | `.with_control_tone(color, \|cx\| …)` | The **chrome** counterpart of the line above: publish a hue that **controls** inside the closure derive their own chrome from — border, hover sweep, press flash, focus ring. A [`Button`](#button)/[`IconButton`](#iconbutton) resolves own `.tone(..)` → this → `theme.accent`. Separate from content colour on purpose: six widgets publish a content colour already, and widening that one channel to also re-tint every control would have changed all six at once. **Nothing publishes a tone by default**, so it is retro-compatible by construction. See [the two channels](#two-things-a-container-publishes-to-what-it-holds--content-colour-and-control-tone). |
 | `.control_tone() -> Option<Color>` | The inherited control tone, if a parent published one. A control with an intrinsic semantic hue (a `Destructive` button) ignores it. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
-| `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
+| `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — a floating box is moved by `component::place_floating` in `on_layout`, which keeps bounds honest. |
 | `.surface(rect, id)` | Place content **something else rasterised** — a terminal, an image, a video, a plugin's own canvas — in `rect`. The widget says where; the host owns the texture. `id` is opaque here: nothing about textures, formats or devices crosses into this crate. See [`Host`](#host--work-only-the-host-can-do). |
 | `.backdrop_blur(rect, radius, alpha)` | **Blur whatever is already drawn behind this widget**, within `rect`. Recorded in scene order, so it blurs what came before it and nothing after. `alpha` fades the blurred copy, so a surface arriving fades its backdrop in with itself. A zero radius or alpha records nothing — a host asked to do no work still pays for a full-screen pass. |
 
@@ -1644,6 +1684,12 @@ stay DRY):
 Flush `draws`, put the surface `then` names where the scene put it, flush the next run over it — so a
 terminal is covered by exactly what the scene draws after it. Every run is self-contained (clips open at a
 cut are closed at its end and re-opened at the start of the next); a scene with no surface is one run.
+
+
+**Can it be seen? — `cx.out_of_sight(rect)`.** True when `rect` is off the window or cut away
+entirely by what holds it (a dock scrolled past it). Something that moves with time asks it before
+booking its next frame: a card flashing below a dock's edge draws nothing and asks for nothing, and
+the frame that brings it back into sight (the scroll) paints it and it books again.
 
 #### `Host` — work only the host can do
 
@@ -1724,8 +1770,11 @@ nothing else.
 ### `clock` — what time it is, for every widget that moves with time
 
 A flash pulsing, a caret blinking and a double click told from two clicks all ask
-`heca_grid_ui::clock::now()`, never the system's clock directly. In the app it *is* the system's
-clock. A test **holds** it and moves it by hand, so it says "100 ms later" instead of sleeping —
+`heca_grid_ui::clock::now()` — and "how long since" `clock::since(then)`, never `Instant::elapsed` —
+never the system's clock directly. It is `heca_core::clock`, the same clock the layout's
+animations (a column sliding, a pane growing) read, so holding it holds those too; a lint
+(`heca-core/tests/one_clock.rs`) fails on a direct read of the system's clock. In the app it *is*
+the system's clock. A test **holds** it and moves it by hand, so it says "100 ms later" instead of sleeping —
 it sees exactly the frames it asked for on any machine, however slow or busy:
 
 ```rust
@@ -1740,6 +1789,11 @@ heca_grid_ui::clock::release();                                // the system's c
 
 The held time is per thread. **A widget that keeps time reads `clock::now()`** — reading the system
 clock directly makes it untestable without sleeping, and a test that sleeps fails on a slow machine.
+
+**Stepping together — `clock::until_beat(period)`.** Anything that moves in steps (a flash at its
+theme's steps a second) waits for the next beat of `period`, counted from one instant shared by the
+whole program, instead of from when it started. Two things stepping at the same rate then step at
+the same instants and one frame draws both: four cards flashing cost what one does.
 
 ### `Flash`
 
@@ -1793,7 +1847,7 @@ enabled = true
 duration_s = 2.0
 pause_s = 1.0
 pulses = 3
-frames_per_second = 30
+frames_per_second = 15
 border_width_em = 0.12
 border_alpha = 235
 fill_alpha = 18
@@ -2912,6 +2966,14 @@ content shifted past the edge with no scrollbar to bring it back.
 - **Axes**: `.horizontal()`, `.both()`, or `.axes(ScrollAxes::…)` (default
   `Vertical`). Only enabled axes shift/clip/scrollbar.
 - **Builders**: `LayoutExt`, `StyleExt` (surface framing), `Parent`.
+- **`visible_children(n)`** — how many children it shows before it scrolls: its height is that
+  many of its content children, measured, with the same padding below them as above — rows of any
+  height show exactly `n`. A count or a value that changes (`Signal<usize>`, a function). The same
+  capability as [`List::visible_items`](#list), for a region whose children are already built (a
+  [`Select`](#select)'s options).
+  ```rust
+  ScrollRegion::new().visible_children(6).child(row_a).child(row_b) /* … */
+  ```
 - **Scroll position**: `.scroll_offset() -> Signal<f32>` / `.scroll_to(f32)`
   (vertical) and `.scroll_offset_x() -> Signal<f32>` / `.scroll_to_x(f32)`
   (horizontal). Each `scroll_to*` clamps to `[0, max_offset]`, **bakes the shift
@@ -3260,7 +3322,9 @@ milliseconds arrives exact), so it is ready for a described kind, which is not d
 A single text run bound to a `Signal<String>`.
 
 - **Construct**: `Label::new(text)`.
-- **Builders**: `.align(TextAlign)`, `.color(Color)`, `.muted(bool)`, `.font_size(f32)` (pin a
+- **Builders**: `.align(TextAlign)`, `.color(Color or Fill)` (a colour, or a theme colour by name at a
+  theme opacity that follows the theme: `.color(Fill::theme("muted").alpha("menu_shortcut"))`),
+  `.muted(bool)`, `.font_size(f32)` (pin a
   size), `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy), and
   how the text is set (CSS's names, each with its default):
   - `.font_weight(FontWeight)` — `Regular` (default) · `Medium` · `SemiBold` · `Bold` (CSS
@@ -4255,13 +4319,11 @@ whatever content you compose — an icon and a label, a two-line row, a `Badge`.
 *chrome* (trigger, chevron, panel, keyboard cursor, scrollbar); each row draws itself, and tints its
 own content when chosen.
 
-**The trigger shows the chosen option itself — icon and all, open or closed.** Closed, the option
-*is* the trigger's content: it is a real component, stood inside the trigger box, painting there.
-Open, that same component has moved into the list — a component is laid out in exactly one place — so
-the trigger draws a second **image** of its content with
-[`PaintCx::with_translate`](#scene--drawcommand--paintcx-for-building-widgets), translated from the
-panel back into the trigger. Only the content is echoed, never the row's chrome: the trigger's own
-box is its chrome, and a selection pill inside it would be a box in a box.
+**The trigger shows the chosen option itself — icon and all, open or closed.** The option lives in
+the list — a component is laid out in exactly one place — so the trigger draws an **image** of its
+content with [`PaintCx::with_translate`](#scene--drawcommand--paintcx-for-building-widgets),
+translated from the list into the trigger. Only the content is echoed, never the row's chrome: the
+trigger's own box is its chrome, and a selection pill inside it would be a box in a box.
 
 The open panel is **opaque**: it consumes pointer moves over itself, so widgets behind it don't light
 up as hovered.
@@ -4277,8 +4339,8 @@ flip **side is passed in, not re-derived**: opening the list picks the side and 
 than risking a disagreement with the row count. Its **presentation** is the shared
 [`paint_panel_chrome`](#overlay) (drop shadow + surface fill + bracket reticle) with the dropdown's
 own accent border and glow layered on — so an open list reads as the same surface as a `Dialog`
-panel, while still looking like an open control. The rows stay *placed children* of the `Select`
-(that is why it paints the panel itself rather than composing an `Overlay`).
+panel, while still looking like an open control. The keyboard cursor is drawn by the option under
+it, and the list keeps that row in view as it moves.
 
 - **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`,
   **sugar** that builds a `Choice::labeled(text, text)` per option (the value *is* the text) ·
@@ -4347,34 +4409,29 @@ is ignored). A childless `Choice` with a `text` prop desugars to a `Label` child
 does; when it has children, **children win**. See
 [Options are children](#options-are-children-select--tabs--choice).
 
-#### How the rows can be children *and* live in an overlay
+**The open list is a light [`Overlay`](#overlay)** kept in the control's flow (`.in_flow()`, so the
+control is as wide as its widest option), hung from the trigger once layout is final — below, flipped
+above when there is no room — and drawing the accent edge with its 16 px, 0.1 halo. It leaves the
+keyboard with the control, so a press on an option does not blur the select. Inside a scrolled page
+the list hangs from where the trigger is on screen, and below a dock's edge it is still clickable.
 
-Worth understanding before you touch this widget (it is the one genuinely subtle thing in the
-library). The panel is drawn **outside** the control's layout box and may flip above it — the layout
-engine cannot put a taffy node there, because a node sits where its parent's flow puts it.
+#### Where the rows live
 
-So the rows are laid out in the trigger's flow, which is where the engine **measures** them (each
-`Choice` hugs its content), and `Select` then **places** them: it bakes the offset from that flow
-into each visible row's bounds — the same trick [`ScrollRegion`](#scrollregion) uses to bake
-`-scroll_offset` into its children (`component::shift_subtree`). The rows carry the control's
-horizontal insets as **margins**, which is what widens the control around them while keeping their
-content clear of the chevron and the scrollbar lane.
+The options are the children of a [`ScrollRegion`](#scrollregion) — the control's `list` part —
+laid out by the engine as a column **in the control's own flow**. That is where the trigger's width
+comes from: the engine sizes the control to the widest row. The rows carry the control's horizontal
+insets as **margins**, which widen the control around them while keeping their content clear of the
+chevron and the scrollbar lane.
 
-The invariant this buys, and the reason it is done this way:
+The list sits in the control's light [`Overlay`](#overlay) (`.in_flow()`), which hangs it from the
+trigger once layout is final. The list is [`visible_children(n)`](#scrollregion) rows tall and scrolls the rest itself — wheel,
+scrollbar, and the keyboard cursor followed into view. Closed, its overlay is hidden (not drawn, takes
+no press) but keeps its place in the flow, so the control's width never changes.
 
 > **bounds === what is drawn === what is clickable.**
 
-Hit-testing goes through [`choice_at`](#choice), which reads the rows' real bounds — never row
-arithmetic — so a click can only ever land on the row the user sees there, whatever the rows contain
-and however tall they are. Rows outside the visible window (and every row while the list is closed)
-are **collapsed to zero size**, so no stale rect is left behind to swallow a click. Placement is
-re-derived after every layout pass (`Component::on_layout`) and is idempotent.
-
-> **Host wiring**: while `overlay_active()`, route pointer + wheel to
-> `FocusManager::deliver_to_overlay`, and key input through `Keymap::dispatch` (raw key first, then
-> the resolved `WidgetIntent`s). See `route_overlay_key` in
-> [`heca-renderer/examples/showcase/main.rs`](../heca-renderer/examples/showcase/main.rs); in the app this is
-> `build_widget_keymap` → `AppState.widget_keymap` → the overlay branch of `heca/src/app/events.rs`.
+Hit-testing goes through [`choice_at`](#choice) over the rows' real bounds, inside the panel — a
+row scrolled out of the panel is under no point the panel shows.
 
 ### Choice
 
@@ -4397,6 +4454,10 @@ is what lets a declarative author receive `{"value": "high"}` instead of an opaq
 - **Chrome only**: it paints the selected pill / hover tint / press flash / focus ring from the
   `Theme` (the same interaction tokens as `Item`), and **publishes its state color** so unstyled
   `Label`/`Icon` children tint with the selection — a child with its own color keeps it.
+- **A list's cursor**: a container that moves one keyboard cursor over its options (a
+  [`Select`](#select)) shows it on the option under it — a highlight under the option's own pill —
+  and that option asks an enclosing [`ScrollRegion`](#scrollregion) to keep it in view, unless the
+  pointer put the cursor there (what you point at is already visible).
 - **One Tab stop** ([`Base.focus_barrier`](#base)), whatever it contains. It **hugs its content**
   (no char-count arithmetic), and the size variant cascades into the content.
 - **Picking from real bounds**: `widgets::choice_at(&children, point) -> Option<usize>` resolves a
@@ -4546,9 +4607,15 @@ readability. The fill and border use `interaction.row_active_fill` and `row_acti
   command palette's rows are `Row::new().border_width(1.0)`. Native only, like the pane's),
   `.cursor_fill(bool)` (the cursor is marked by a fill alone — no outline, no glow — at the theme's
   `[interaction].nav_fill`, strong enough to read on its own: a short pick list where the cursor
-  is the only thing marked, such as a field's suggestion list),
+  is the only thing marked, such as a field's suggestion list), `.cursor_look(CursorLook)` (how the
+  cursor is marked: `Ring` — the default glowing ring —, `Fill` — what `cursor_fill(true)` sets —
+  or `Pill`, a menu's chosen entry: the accent at `panel_row_fill` over the whole row with its
+  `panel_row_border` edge and a short accent bar at the leading edge; the pointer moves this cursor
+  so the row draws no hover wash, and the text reads muted until the row is the chosen one, in the
+  row's own tone when it has one — `.content_tone(Tone::Danger)` for a destructive entry; a disabled
+  pill row reads dimmest and is not veiled),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
-  `.previous(bool)` (last-focused row, using the theme's `previous_background` at its configured
+  `.previous(bool or a value that changes)` (last-focused row, using the theme's `previous_background` at its configured
   opacity; the current row's `active` style wins), `.previous_tint(Color)` (override that color),
   `.attention(Signal<bool>)` + `.attention_color(Color)`,
   `.reveal_when(Signal<bool>)` (gate this row's request to be scrolled into view — see
@@ -5525,6 +5592,13 @@ let quiet = Keycap::new("Esc").variant(KeycapVariant::Bordered);
 { "kind": "Keycap", "text": "K", "props": { "variant": "bordered" } }
 ```
 
+**Its hue** — `.tone(..)`: the accent when unset, `Tone::Muted` for a key that cannot be used right
+now (a disabled menu entry's letter); fixed or a value that changes.
+
+```rust
+Keycap::new("r").variant(KeycapVariant::Bordered).size(WidgetSize::Caption).tone(quiet)
+```
+
 ### Tag
 
 Every text segment reveals its full value in a tooltip, including after live updates.
@@ -5661,6 +5735,60 @@ Input::new().value(query)                                 // query: Signal<Strin
 A `Signal<String>` given to an `Input` becomes the field's own, so what is typed is written into it;
 given to a label it is followed. A described tree sets them as plain text. The getter that hands
 back a widget's live text is `*_signal()` (`Label::text_signal`, `Input::text_signal`).
+
+#### Every state takes a value that changes — never an effect at the call site
+
+The rule above holds for **every** property a widget follows in place: one builder takes the value
+**or** one that changes (a `Signal`, a `Memo`, a function reading signals), and the widget follows
+it. Nothing at a call site writes into a widget with an effect — a `create_effect` that copies one
+value into another is exactly what THE SYNTAX check rejects.
+
+| builder | value |
+| --- | --- |
+| `Row::active`, `Row::previous`, `Row::nav_selected` | `bool` |
+| `MarkerGroup::active`, `MarkerGroup::nav_selected`, `DockFrame::active` / `previous` / `nav_selected` / `expanded`, `ItemGroup::expanded`, `Item::active`, `RailCell::active`, `Choice::selected` | `bool` |
+| `.disabled(..)` (every widget), `.hidden(..)`, `.visible(..)` | `bool` |
+| `Label::bold` / `italic` / `underline` / `strikethrough` | `bool` |
+| `.content_tone(..)` (every widget), `Keycap::tone`, `Avatar::ring` | `Option<Tone>` |
+| `Icon::glyph` | `Glyph` |
+| `StatusDot::status` | `DotStatus` |
+| `Badge::variant` | `BadgeVariant` |
+| `Label::text`, `Command::new(label, ..)`, `.tooltip(..)` (also a `Memo<String>`) | text |
+| `width` / `height` / `min_*` / `max_*` | `Length`, or a theme measure by name |
+| `List::visible_items`, `ScrollRegion::visible_children` | `usize`, or a theme count by name |
+
+```rust
+Row::new()
+    .active(move || store.active_pane() == Some(id))       // follows the store, nothing written
+    .previous(move || store.is_previous_pane(id))
+Badge::neutral("3").variant(move || if here() { BadgeVariant::Accent } else { BadgeVariant::Neutral })
+Button::new("Save").disabled(move || name.get().trim().is_empty())
+```
+
+A fixed value still works everywhere (`.active(true)`), so nothing written before changes. The old
+`content_tone_signal` is kept and marked deprecated: `.content_tone(signal)` is the form to write.
+
+**Adding a builder of a new type.** A new "fixed or changing" type is one line in
+`heca-grid-ui/src/builders/live_value.rs`: `live_value_of!(IntoMyValue, into_my_value, MyType)`. It
+writes the four doors (the value, a `Signal`, a `Memo`, a function) and tells `#[prop]` which fixed
+type a description brings, so the builder is authorable with nothing added to the macro.
+
+#### A theme value, by name — `Length::theme(..)`, `Count::theme(..)`
+
+A size or a count a widget takes from the theme is **named**, never copied by hand: the layout reads
+it from the theme the window is laid out with, so a theme reload changes it and a plugin writes the
+same line.
+
+```rust
+Flex::column().min_width(Length::theme("input.suggestions_width"))   // a measure of the theme's
+List::new(items).visible_items(Count::theme("input.suggestions"))     // a count of the theme's
+```
+
+The names are the theme's own fields — `"pane_padding"`, `"border_radius"`, or `group.field` inside
+a group (`"input.suggestions_width"`, `"spacing.md"`, `"flash.duration_s"`); the full list is what
+`Theme::number_named` and `Theme::count_named` answer (a test fails if a number of the theme does not
+answer to its name). A name the theme does not have leaves a size automatic and a count at one. A
+colour by name is [`Fill::theme(..)`](#theme-glowlevel--intensity), the same rule for colours.
 
 #### Where the keyboard goes — `.follow_focus(..)`, `.follow_focus_modal(..)`
 
@@ -6656,6 +6784,11 @@ that keeps their line breaks. Nothing in it is measured by hand, so whatever it 
 > over it — no tooltip, no hint letter, no drag feedback. Hosts and tests must go through
 > `paint_child`, exactly as the letter already requires.
 
+**The bubble is an [`Overlay`](#overlay)** placed beside the widget (`.beside(rect, side, gap)`),
+framed with the accent edge at `tooltip_border`, the theme's glow at `GlowLevel::Thin` and a hover
+bubble's shallow shadow (`PanelElevation::Hover`). A long tip wraps inside the window rather than
+running off it.
+
 #### The wrapper — for a region that is not a widget
 
 `Tooltip::new(child, text)` still exists, and is now **implemented in terms of the property**: it is
@@ -6830,6 +6963,16 @@ stays out of reach until it is open. So the surface must stay in the tree while 
 
 A surface opened by a signal writes the signal `false` on each of these, so the state never lies.
 
+**Hearing it close — `.on_close(impl Fn())`.** Every surface (every widget, in fact) takes one: it
+runs on each change from open to closed, whoever closed it. What a host takes down with the surface
+(its layer) goes here, never in an effect watching the surface's flag. It starts listening once the
+builders have all run, so it hears the `open` the surface ended up with — `.on_close(..)` written
+before `.open(signal)` still hears it.
+
+```rust
+CommandPalette::new().open(true).on_close(id.closer(&emit))   // the layer goes when the palette does
+```
+
 **Showing it from code you hold.** A host or a composing widget that holds the widget itself uses
 the commands every `Component` has — `show()`, `close()`, `toggle()` — or a
 [`SurfaceHandle`](#overlay) (`overlay.handle()`) it can keep anywhere. These are **commands**
@@ -6853,11 +6996,14 @@ reticle. **Blocking is a property of this layer, not a per-widget reimplementati
 non-blocking one lets outside input fall through (light-dismiss). **Positioning lives here once**:
 `Center` taffy-centers the panel on the viewport (so every descendant gets true bounds), `Top`
 sets it in the upper part of the window (a command palette), and
-`Anchored` hangs it off a trigger rect for dropdowns/popovers. The placement math and the panel
-chrome are also exposed as **free functions** ([`place_anchored_on`](#overlay),
-[`place_at_point`](#overlay), [`paint_panel_chrome`](#overlay)) so a widget that cannot hand its
-content to an `Overlay` — like [`Select`](#select), whose option rows are *placed children* — still
-shares the one implementation instead of hand-rolling a second one.
+`Anchored` hangs it off a trigger rect for dropdowns/popovers, and the panel can also go beside a
+rect, at a point or in a corner of the window (see *Where the panel goes* below). **Every floating
+panel in the library is an `Overlay`**: the [`Select`](#select)'s option list, the
+[`ContextMenu`](#menus--menuitem-menu-contextmenu), the [`Tooltip`](#tooltip)'s bubble and the
+[`ToastStack`](#toaststack)'s cards. None of them places, frames or layers itself. The placement
+math and the panel chrome are also exposed as free functions ([`place_anchored_on`](#overlay),
+[`place_at_point`](#overlay), [`place_beside`](#overlay), [`paint_panel_chrome`](#overlay)), which is
+what the `Overlay` itself calls.
 
 **Composition, not inheritance.** [`Dialog`](#dialog) *composes* an `Overlay` as its subtree:
 the `Overlay` owns presentation + geometry ([`overlay_occludes`](#component-trait)); the
@@ -6876,7 +7022,63 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   backdrop* below), `.open(signal | "action")` (what opens it — see
   [Opening and closing a surface](#opening-and-closing-a-surface--open)), `.default_open(bool)` (the
   **initial** state — see *Showing and hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
-  policy instead).
+  policy instead), `.keyboard(bool)` (default `true` — see *Leaving the keyboard where it is*),
+  the positions and the frame below, and `.on_close(impl Fn())` (every surface: run on each close —
+  see [Opening and closing a surface](#opening-and-closing-a-surface--open)).
+
+#### Where the panel goes
+
+`Center` (the default) and `Top` fill the window and lay the panel out there. Every other position
+**places the panel itself**, once layout is final (`on_placed`), against the window: the layer hugs
+its panel, and the panel is kept inside the window, narrowed to it when it is too big (a long tip
+wraps instead of running off the screen).
+
+| builder | where | used by |
+| --- | --- | --- |
+| `.position(OverlayPosition::Center \| Top)` | centred / in the upper part of the window | dialogs, the palette |
+| `.anchored(rect)` / `.anchored_to(Signal<Rectangle>)` | under a trigger, flipped above when there is no room, left-aligned | the Select's list, a field's suggestions |
+| `.beside(rect, side, gap)` | on a side of a rect, flipped when there is no room, centred on it | the tooltip's bubble |
+| `.at_point(point, inset, centered)` / `.at_point_to(Signal<Point>, inset, centered)` | its corner at a point (or centred on it) | the context menu |
+| `.corner(ToastPosition)` | in a corner or at an edge of the window | the notification stack |
+| `.in_flow()` | any of the above, but the layer keeps its holder's room: the holder is sized by the panel | the Select, as wide as its widest option |
+
+`.set_position(OverlayPosition)` moves an open panel in place (a host following a widget that
+moved). A `*_to` signal is read each time the panel is placed, so the panel follows a moving trigger
+with nothing written by hand.
+
+```rust
+Overlay::new().blocking(false).keyboard(false).anchored_to(caret).panel(list)        // suggestions
+Overlay::new().blocking(false).at_point_to(anchor, inset, false).panel(rows)         // a menu
+Overlay::new().blocking(false).keyboard(false).anchored_to(trigger).in_flow().panel(options)
+```
+
+An overlay drawn over the page stays **clickable where it is drawn**, even outside a holder that cuts
+its children at its edge — a select's list hanging below a scrolling dock still takes the press.
+
+#### The panel's frame — `.panel_edge`, `.panel_glow`, `.panel_elevation`
+
+The frame is said in the theme's own words and resolved when it is drawn, so a theme reload or the
+user's `glow_size` reaches it:
+
+```rust
+Overlay::new()
+    .panel_edge(Fill::theme("accent").alpha("tooltip_border"))   // the edge's colour (unset: the theme's border)
+    .panel_glow(GlowLevel::Thin)                                  // a halo: the theme's glow, scaled
+    .panel_elevation(PanelElevation::Hover)                       // a bubble's shallower shadow
+```
+
+`.panel_glow` takes a [`GlowLevel`](#theme-glowlevel--intensity) or a `PanelGlow::new(radius,
+strength)` — multipliers of the theme's glow a surface measured for itself (the menu and the Select
+keep the halo they always had this way; see *Each widget's own glow and border*). The user's frame
+setting still decides whether an edge is drawn. The whole look is a `PanelLook`.
+
+#### Leaving the keyboard where it is — `.keyboard(false)`
+
+A dialog, a menu, a palette take the keyboard when they open and give it back on close. A panel
+shown beside a control that keeps it does not: a field's suggestion list while you type, a select's
+options. `.keyboard(false)` leaves the keyboard where it is, and **a press on the panel does not
+take it either** — the layer is not something the keyboard can land on, so the control that opened
+it keeps focus and its list stays open under the press.
 
 #### A panel, or content on the backdrop — `.decorated(bool)`
 
@@ -7147,101 +7349,35 @@ let popover = Overlay::new()
 // popover.set_anchor(trigger.base().bounds);
 ```
 
-**B. Paint the panel yourself, but reuse the authorities** — when the content *cannot* be one
-child. [`Select`](#select) is the case: its option rows are **placed children of the `Select`**
-(laid out in the trigger's flow, then moved into the panel by baking offsets into their bounds), so
-they cannot be handed to an `Overlay` without breaking the `bounds === drawn === clickable`
-invariant. Such a widget still must not hand-roll placement or chrome:
+**B. Paint the panel yourself** — no widget in the library does this any more: the
+[`Select`](#select)'s list, the [`ContextMenu`](#menus--menuitem-menu-contextmenu), the
+[`Tooltip`](#tooltip)'s bubble and the [`ToastStack`](#toaststack) are all case A, through the
+positions an `Overlay` has (*Where the panel goes*, above) and `.in_flow()` for a panel whose
+holder is sized by it. If you think you need B, the `Overlay` is missing a position or a builder —
+add it there rather than placing and framing a panel by hand.
 
-> `MySelect` below is a **cut-down sketch of the real [`Select`](#select)** — a trigger with a
-> dropdown of rows — reduced to the parts that matter here. The shipped version is
-> `heca-grid-ui/src/widgets/select.rs`; read it alongside this.
+The placement rules themselves are free functions, and they are what the `Overlay`'s positions call:
 
-```rust
-use heca_grid_ui::widgets::{paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome};
-
-impl MySelect {
-    /// The panel rect. MUST be a pure function of bounds + side + content size —
-    /// see the invariant below.
-    fn panel_rect(&self) -> Rectangle {
-        let b = self.base.bounds;
-        let side = if self.open_up { AnchorSide::Above } else { AnchorSide::Below };
-        place_anchored_on(
-            b,                                            // anchor = the trigger rect
-            Size::new(b.size.w, self.panel_h()),          // panel size you computed
-            Size::new(f64::INFINITY, f64::INFINITY),      // see the invariant below
-            DEFAULT_ANCHOR_GAP,
-            side,
-        )
-    }
-}
-
-impl Component for MySelect {
-    fn paint(&self, cx: &mut PaintCx) {
-        // …trigger chrome here…
-        if self.open {
-            cx.with_overlay(|cx| {                        // the overlay LAYER is yours to open
-                let panel = self.panel_rect();
-                // Your identity only — whether an edge is drawn at all is the
-                // user's `overlay_frame` setting, applied by the painter.
-                paint_panel_chrome(cx, panel, PanelChrome {
-                    border: Some(cx.theme().colors.accent.into()), // preferred edge COLOUR
-                    glow: None,
-                });
-                for child in self.visible_rows() { child.paint(cx); }
-            });
-        }
-    }
-}
-```
-
-> ##### ⚠️ The invariant: a rect used to *place* children must be **pure**
->
-> If the same rect both positions child components (during layout / an `on_layout` placement
-> pass) **and** is drawn during paint, it must be a pure function of already-settled inputs —
-> bounds, a decided side, measured child sizes. Layout and paint run at **different moments**, so
-> anything time-varying (most temptingly: clamping against a viewport that `paint` caches) makes
-> the two calls disagree, and the rows visibly **detach from their panel**.
->
-> This is a real regression that shipped and was reverted: clamping `Select`'s panel to the
-> viewport put the rows outside the panel when the list flipped above (a negative `y` snapped to
-> `0`), and pushed row content onto the border for a trigger near the right edge. Keep such a
-> panel on-screen by **capping how much content you show** (`Select` caps the visible row count
-> when it opens), not by moving the panel after the fact. Pass an infinite viewport to
-> `place_anchored_on` to opt out of clamping, and add a test that mutates the cached viewport and
-> asserts the rect does not move (`open_panel_rect_is_independent_of_the_cached_viewport`).
->
-> An `Overlay` you *compose* (path A) is not exposed to this: it places its panel child in
-> `on_layout` and paints from the child's real bounds, so there is only one source of truth.
-
-**Which authority to call**
-
-| You have | Call | Used by |
+| You have | Rule | Overlay position |
 |---|---|---|
-| A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | [`Select`](#select), `Overlay`'s `Anchored` mode |
-| A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#menus--menuitem-menu-contextmenu) |
-| A target rect, **centered on any of 4 sides** (hover bubble) | `place_beside(anchor, panel, vp, gap, side)` with `BesideSide::{Top,Bottom,Left,Right}` | [`Tooltip`](#tooltip) |
-| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), [`CommandPalette`](#commandpalette), [`Tooltip`](#tooltip) |
+| A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | `.anchored(..)` / `.anchored_to(..)` |
+| A **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | `.at_point(..)` / `.at_point_to(..)` |
+| A target rect, **centered on any of 4 sides** (hover bubble) | `place_beside(anchor, panel, vp, gap, side)` with `BesideSide::{Top,Bottom,Left,Right}` | `.beside(..)` |
+| A **corner** of the window | `ToastPosition::corner_in(panel, vp)` | `.corner(..)` |
+| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow, elevation })` | `.panel_edge` / `.panel_glow` / `.panel_elevation` |
 
-The three placement authorities differ in **alignment**, which is why they are three functions and
-not one with flags:
+The three anchored rules differ in **alignment**, which is why they are three functions and not one
+with flags:
 
-| Authority | Anchor | Cross-axis alignment | Flips between |
+| Rule | Anchor | Cross-axis alignment | Flips between |
 |---|---|---|---|
 | `place_anchored_on` | a rect | leading-edge aligned | below ↔ above |
 | `place_at_point` | a point | corner-offset from the point | down-right ↔ up-left |
 | `place_beside` | a rect | **centered** | all four sides |
 
-> ⚠️ **`place_beside` results may depend on the viewport** (both the flip and the clamp read it),
-> which the [purity invariant](#-the-invariant-a-rect-used-to-place-children-must-be-pure) forbids
-> for a rect that positions children. It is safe for `Tooltip` only because that bubble is
-> **drawn**, never laid out into — its text is a `cx.text` call, not a child component. If you use
-> `place_beside` to place real children, you inherit the detach bug. Draw-only, or don't use it.
-
-Use `AnchorSide::Auto` unless you already decided the side. Force `Below`/`Above` when the
-decision and the panel's **size** are computed together (`Select` picks the side and its visible
-row count in one pass, because the height depends on the side) — otherwise the placement could
-flip to a side the size was not computed for.
+An `Overlay` places its panel **once layout is final** (`on_placed`, after every ancestor has moved
+its children — a scrolled page), so the rect it is placed at and the rect it is drawn at are the same
+one, whatever the viewport did.
 
 ### Dialog
 
@@ -7643,6 +7779,15 @@ menu bar proves is real: a `MenuBar` will show the **same `Menu` value** as a st
 trigger and keyboard convention. The trigger, the anchor and the shortcut belong to whatever
 *contains* the menu; the menu is content, and stays reusable across every surface that shows one.
 
+**The panel is a light [`Overlay`](#overlay) with real rows.** The menu realizes its entries as
+[`Row`](#row)s wearing a menu entry's look ([`CursorLook::Pill`](#row)) — content, then the shortcut
+and the quick-pick [`Keycap`](#keycap) at the trailing edge, laid out by the engine, never measured
+by hand. The overlay places the panel at the anchor (`at_point_to`, kept inside the window) and draws
+its frame: the accent edge at `panel_border` and its 12 px, 0.3 halo. The entry under the pointer is
+the chosen one, asked of the framework's hover rather than hit-tested. `ContextMenu::rows()` and
+`ContextMenu::panel_bounds()` read back the built panel; `ContextMenu::PANEL` is the name it carries
+in a tree.
+
 #### What you write
 
 ```rust
@@ -7687,8 +7832,7 @@ the state you are opening it in rather than the state it was written in.
 
 The rows are **real children**, laid out by the same engine as everything else — `gap`, `grow`,
 padding and font inheritance all work inside a row, and this widget contains no layout code of its
-own beyond placing the finished panel at its anchor (the same `shift_subtree` trick `Overlay` and
-`Select` use).
+own: its light `Overlay` places the panel at the anchor.
 
 A row's colour is decided at **paint**, from the theme and the row's state, and published to the
 subtree with `PaintCx::with_content_color` — which is what lets a composed row (an `Icon` and a
@@ -7837,6 +7981,9 @@ entirely the engine's; only which corner meets which corner is left.
 - **`.max_lines_signal(Signal<usize>)`** — the most lines each card's title and body may take,
   read from a host-owned signal (a config value) when a card is built; a card already up keeps the
   cap it was built with. The stack holds no number of its own.
+- **`.room_signal(Signal<usize>)`** — the stack writes how many cards of the tallest one's height
+  fit the window's height (with its margin and gap). The host decides what to show with it: heca's
+  notifications show that many, up to `max_visible`.
 - **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id, key| …)` (an action clicked —
   `key` is that action's own name, because a card may offer several and "which card" alone would
   not say what to do).
@@ -7894,6 +8041,11 @@ This section documents the **Heca host API** (`heca`), separate from the GPU-fre
 A **widget** builds a piece of UI. A **`Provider`** contributes a dock to the window chrome; the
 host builds and mounts its content. You do not construct or access the workspace's internal
 `DockView` to add your own dock. Compose its content from the public widgets instead.
+
+**The cards are shown in an [`Overlay`](#overlay)** placed in the window's corner
+(`.corner(ToastPosition)`): light, leaving the keyboard and the page alone, drawing no frame of its
+own (each card is its own surface), open while any card is on screen. `ToastStack::cards()` reads
+the cards in the order they are shown; `ToastStack::CARDS` is the name the column carries in a tree.
 
 ### Why a region and a provider are not components
 

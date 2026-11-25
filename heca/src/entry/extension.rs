@@ -177,9 +177,9 @@ impl Extension {
     /// `produce` says about a pane, or nothing (`None`). *Client side.*
     ///
     /// Like a chip, `produce` is handed [`PaneFacts`](crate::PaneFacts) and runs again when a pane's
-    /// facts change. Shown by default while the user's `[appearance.sidebar] pane_lines` is still
-    /// heca's own list; once they write their own list it shows only if they list it by that name,
-    /// and they are told once that it exists.
+    /// facts change. Shown by default in each sidebar view whose list (`[appearance.sidebar]
+    /// pane_<view>_view`) is still heca's own; once they write their own list it shows only if they
+    /// list it by that name, and they are told once that it exists.
     pub fn pane_line(
         &self,
         short: &str,

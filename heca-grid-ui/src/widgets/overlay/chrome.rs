@@ -87,6 +87,83 @@ impl PanelElevation {
     }
 }
 
+/// **How a panel's frame looks, in the theme's own words** — its edge, its halo and its depth,
+/// each named rather than measured, and turned into colours and sizes only when it is drawn, so a
+/// theme reload or the user's glow setting reaches it. What an [`Overlay`](crate::widgets::Overlay)
+/// paints around its panel; the default is the plain panel.
+///
+/// ```ignore
+/// Overlay::new()
+///     .panel_edge(Fill::theme("accent").alpha("tooltip_border"))
+///     .panel_glow(GlowLevel::Thin)
+///     .panel_elevation(PanelElevation::Hover)
+/// ```
+///
+/// The halo is a [`PanelGlow`]: each surface scales the theme's glow by its own multipliers.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PanelLook {
+    /// The edge's colour; `None` takes the theme's neutral border.
+    pub edge: Option<crate::style::Fill>,
+    /// The halo — the theme's glow, scaled by this panel's own multipliers; `None` for none.
+    pub glow: Option<PanelGlow>,
+    /// How far it is lifted off the page.
+    pub elevation: PanelElevation,
+}
+
+/// **A panel's halo, as multipliers of the theme's glow** (`active_glow_radius`,
+/// `active_glow_strength`). The same theme glow does not sit well on every surface — a hover bubble
+/// a few pixels tall, a menu, a dropdown hanging off a control — so each one scales it by its own
+/// pair, written down beside it. The user's `glow_size` still scales the result, as it does every
+/// glow ([`PaintCx::rect`]).
+///
+/// A [`GlowLevel`](crate::theme::GlowLevel) is the common pair: `GlowLevel::Thin.into()`.
+///
+/// ```ignore
+/// Overlay::new().panel_glow(GlowLevel::Thin)                 // a hover bubble
+/// Overlay::new().panel_glow(PanelGlow::new(1.2, 0.3 / 0.55)) // a menu's own measure
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PanelGlow {
+    /// How much of the theme's glow radius the halo takes.
+    pub radius: f32,
+    /// How much of the theme's glow strength the halo takes.
+    pub strength: f32,
+}
+
+impl PanelGlow {
+    /// A halo `radius` times the theme's glow radius, at `strength` times its strength.
+    pub const fn new(radius: f32, strength: f32) -> Self {
+        Self { radius, strength }
+    }
+}
+
+impl From<crate::theme::GlowLevel> for PanelGlow {
+    fn from(level: crate::theme::GlowLevel) -> Self {
+        Self::new(level.radius_scale(), level.strength_scale())
+    }
+}
+
+impl PanelLook {
+    /// The frame to draw, from the theme `cx` paints with now.
+    pub fn chrome(&self, cx: &PaintCx) -> PanelChrome {
+        let t = cx.theme();
+        let border = self
+            .edge
+            .and_then(|edge| edge.resolve(t))
+            .and_then(|colour| cx.border(colour));
+        let glow = self.glow.map(|glow| Glow {
+            color: t.colors.glow,
+            radius: t.colors.active_glow_radius * glow.radius,
+            intensity: t.colors.active_glow_strength * glow.strength,
+        });
+        PanelChrome {
+            border,
+            glow,
+            elevation: self.elevation,
+        }
+    }
+}
+
 /// Paint the **shared overlay panel chrome** into `rect`: drop shadow (lifting the
 /// panel off the page), the theme surface fill, the per-widget `chrome` accents, and
 /// the panel's **edge** as the user configured it.
