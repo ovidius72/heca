@@ -3234,6 +3234,7 @@ then (each second for the first minute, then each minute, hour, day). Time comes
 | `Elapsed::since(at: SystemTime, label)` | How long ago `at` was, written into `label`; a future moment reads as no time |
 | `.at_millis(epoch_ms)` | The moment as milliseconds since the Unix epoch, as a stored record carries it |
 | `.format(fn(Duration) -> String)` | Own words (a language, a longer form); default `Elapsed::compact` |
+| `.minutes(bool)` | Whole minutes only: under a minute reads "<1m", and the time is checked once a minute instead of once a second — for a list with many times on screen. Default `false` |
 | `Elapsed::compact(duration)` | The default words: the largest whole unit as a unit symbol |
 
 ```rust
@@ -4702,10 +4703,8 @@ doing, the **picture** what it is (a program's logo, a person's photo).
 |---|---|---|
 | `Avatar::new(name)` | the tile for `name`: its first letter, upper-cased. An empty name shows an empty tile | — |
 | `.tone(Tone)` | the fill, a theme tone (`Accent`, `Muted`, `Warning`, `Success`, `Danger`) | `Accent` |
-| `.ring(Tone)` | an edge round the tile in that tone, as wide as the theme's border | no ring |
-| `.ring_signal(Signal<Option<Tone>>)` | drive the ring from a tone the host keeps; `None` takes it away. Changes in place, nothing rebuilt | — |
-| `.picture(path)` | a picture instead of the letter: an image file, filling the tile as the letter does | the letter |
-| `.picture_signal(Signal<Option<ImageSource>>)` | drive the picture from an image the host keeps; `None` shows the letter again. Changes in place, nothing rebuilt | — |
+| `.ring(..)` | an edge round the tile in a tone, as wide as the theme's border. Takes `Tone`, `Option<Tone>` (`None`: no ring), or a `Signal` / `Memo` of one — a live value changes the ring in place (`IntoToneValue`) | no ring |
+| `.picture(..)` | a picture instead of the letter: as tall as the text, centred in the tile with the room a letter has round it. Takes a file path, `Option<ImageSource>` (`None`: the letter), or a `Signal` / `Memo` of one — a live value changes the tile in place (`IntoPictureValue`) | the letter |
 | `.size(WidgetSize)` | the shared size variant; the letter and picture follow it | `Normal` |
 
 **How it is built** (THE SYNTAX): two named parts, `letter` and `picture`, in a centring `Flex` row, one
@@ -4717,17 +4716,16 @@ position. (A `Grid` with two `auto` columns is avoided on purpose: free space ca
 ring width are the theme's, all read at paint, so a theme reload restyles it — the letter, written in
 the theme's colour for the fill (`theme.colors.on(fill)`, as a filled `Button` writes its label) so it
 reads on any fill, and its size. **What you own:** the tones you pick and the signals you
-hand in. Its accessible name is the letter.
+hand in: one builder per property, taking a fixed value or a live one, as `.hidden(..)` takes a
+`bool` or a `Signal<bool>`. Its accessible name is the letter.
 
 **Native:**
 
 ```rust
-let doing = signal(Some(Tone::Warning));     // keep it; `doing.set(Some(Tone::Success))` later
-let logo = signal(None);                     // keep it; `logo.set(Some(ImageSource::file(path)))` later
 Avatar::new("bob")
     .tone(Tone::Muted)
-    .ring_signal(doing)
-    .picture_signal(logo)
+    .ring(doing)                             // a Memo<Option<Tone>> the host keeps
+    .picture(logo)                           // a Memo<Option<ImageSource>>: the picture, else the letter
     .size(WidgetSize::Caption)
 ```
 

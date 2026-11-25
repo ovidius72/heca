@@ -167,6 +167,18 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
         "bool" => quote!(value.as_bool()),
         // A fixed or live flag (`IntoBoolValue`): static data always brings a bool, the fixed half.
         t if t.contains("IntoBoolValue") => quote!(value.as_bool()),
+        // A fixed or live tone (`IntoToneValue`): static data always brings a tone's name.
+        t if t.contains("IntoToneValue") => {
+            quote!(
+                value
+                    .as_text()
+                    .and_then(<::heca_grid_ui::Tone as ::heca_grid_ui::PropName>::from_prop_name)
+            )
+        }
+        // A fixed or live picture (`IntoPictureValue`): static data always brings a file path.
+        t if t.contains("IntoPictureValue") => {
+            quote!(value.as_text().map(::std::string::ToString::to_string))
+        }
         "f32" => quote!(value.as_f32()),
         // Every number is read at full precision and narrowed by `PropInput` itself, once.
         "f64" => quote!(value.as_f64()),

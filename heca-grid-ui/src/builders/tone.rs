@@ -57,9 +57,12 @@ pub trait ToneExt: Component + Sized {
     ///
     /// Every text or glyph inside without a colour of its own follows it; a control that colours
     /// its own content keeps it. See [`Visual::content_tone`](crate::style::Visual::content_tone).
-    fn content_tone(mut self, tone: crate::Tone) -> Self {
+    ///
+    /// Takes a tone or an `Option` of one: `None` keeps the surrounding content colour, so a part
+    /// whose tone may be missing (a status with none configured) is written in one line.
+    fn content_tone(mut self, tone: impl Into<Option<crate::Tone>>) -> Self {
         self.base_mut().content_tone = None;
-        self.base_mut().style.visual.content_tone = Some(tone);
+        self.base_mut().style.visual.content_tone = tone.into();
         self
     }
 

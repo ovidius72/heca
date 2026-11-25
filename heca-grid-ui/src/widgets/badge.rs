@@ -120,9 +120,13 @@ impl Component for Badge {
         let chars = label.chars().count() as f32;
         let fs = self.base.font;
         let s = self.base.size_scale();
-        self.base.style.layout.width =
-            Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
-        self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
+        let width = chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s;
+        let height = fs * MONO_LINE_RATIO + 2.0 * PAD_V * s;
+        // **Never narrower than tall**: a short label (a count, an initial) is a circle, the rest a
+        // pill. Text grows taller than it grows wide, so at a larger font a one-letter badge used to
+        // turn into an upright oval.
+        self.base.style.layout.width = Length::Px(width.max(height));
+        self.base.style.layout.height = Length::Px(height);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -186,3 +190,25 @@ impl Component for Badge {
 }
 
 impl LayoutExt for Badge {}
+
+#[cfg(test)]
+mod round_tests {
+    use super::*;
+
+    /// A one-letter badge is a circle at any font size — never an upright oval.
+    #[test]
+    fn a_one_letter_badge_is_round_at_any_font_size() {
+        for font in [12.0, 15.0, 30.0, 48.0] {
+            let mut badge = Badge::neutral("R");
+            badge.base_mut().font = font;
+            badge.remeasure();
+            let layout = &badge.base().style.layout;
+            assert!(
+                matches!((layout.width, layout.height), (Length::Px(w), Length::Px(h)) if w >= h),
+                "at {font}px: {:?} x {:?}",
+                layout.width,
+                layout.height
+            );
+        }
+    }
+}

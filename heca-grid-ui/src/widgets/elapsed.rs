@@ -3,7 +3,8 @@
 //! "2m", "3h": a [`Label`] the caller styles, whose words this widget writes as time passes. It
 //! never redraws on a timer of its own: it tells the host, through
 //! [`next_redraw`](Component::next_redraw), when its words next change, and the host sleeps until
-//! then — once a second for the first minute, then once a minute, an hour, a day.
+//! then — once a second for the first minute, then once a minute, an hour, a day. With
+//! [`minutes`](Elapsed::minutes) the first minute reads "<1m" and is not counted.
 
 use std::time::{Duration, SystemTime};
 
@@ -56,6 +57,8 @@ pub struct Elapsed {
     at: std::time::Instant,
     text: Signal<String>,
     format: ElapsedFormat,
+    /// Whole minutes only: under a minute reads "<1m", and the time is checked once a minute.
+    minutes: bool,
 }
 
 /// `at` on the library's clock: a moment in the future is now.
@@ -81,6 +84,7 @@ impl Elapsed {
             at,
             text,
             format: compact,
+            minutes: false,
         };
         elapsed.write();
         elapsed
@@ -110,13 +114,32 @@ impl Elapsed {
         self
     }
 
+    /// **Whole minutes only** — under a minute reads "<1m", and the words are checked once a minute
+    /// instead of once a second. For a list with many times on screen (fifty agents' statuses),
+    /// where counting seconds would rewrite every one of them each second for nothing.
+    #[heca_grid_ui_macros::prop]
+    pub fn minutes(mut self, on: bool) -> Self {
+        self.minutes = on;
+        self.write();
+        self
+    }
+
+    /// Whether the time is under the first minute shown as "<1m".
+    fn in_first_minute(&self) -> bool {
+        self.minutes && self.elapsed().as_secs() < MINUTE
+    }
+
     fn elapsed(&self) -> Duration {
         crate::clock::now().saturating_duration_since(self.at)
     }
 
     /// Write the words for now, only when they differ.
     fn write(&self) {
-        let words = (self.format)(self.elapsed());
+        let words = if self.in_first_minute() {
+            "<1m".to_owned()
+        } else {
+            (self.format)(self.elapsed())
+        };
         if self.text.get_untracked() != words {
             self.text.set(words);
         }
@@ -149,7 +172,14 @@ impl Component for Elapsed {
         if self.base.style.layout.hidden {
             return None;
         }
-        let own = until_next_change(self.elapsed()).as_secs_f32();
+        let elapsed = self.elapsed();
+        let own = if self.in_first_minute() {
+            // Nothing changes until the first minute is up.
+            Duration::from_secs(MINUTE).saturating_sub(elapsed)
+        } else {
+            until_next_change(elapsed)
+        }
+        .as_secs_f32();
         let label = self
             .base
             .children
@@ -228,5 +258,22 @@ mod tests {
         let mut elapsed = Elapsed::since(SystemTime::now(), Label::new(""));
         elapsed.base_mut().set_hidden(true);
         assert_eq!(elapsed.next_redraw(), None);
+    }
+
+    /// With whole minutes, the first minute reads "<1m" and the next check is when it is up — not
+    /// in a second.
+    #[test]
+    fn whole_minutes_read_under_a_minute_and_wake_once_a_minute() {
+        let at = SystemTime::now() - Duration::from_secs(20);
+        let elapsed = Elapsed::since(at, Label::new("")).minutes(true);
+        assert_eq!(elapsed.text.get_untracked(), "<1m");
+        let wake = elapsed.next_redraw().expect("a timed wake while shown");
+        assert!(
+            (35.0..=41.0).contains(&wake),
+            "about 40s until the minute: {wake}"
+        );
+        let later = Elapsed::since(SystemTime::now() - Duration::from_secs(150), Label::new(""))
+            .minutes(true);
+        assert_eq!(later.text.get_untracked(), "2m");
     }
 }

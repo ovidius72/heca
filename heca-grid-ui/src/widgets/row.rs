@@ -472,8 +472,11 @@ impl Component for Row {
         // A stronger glowing ring, without another fill: navigation remains distinct from the
         // quiet selected outline, including when both point at this row.
         //
-        // Drawn ALWAYS when nav — even on the active row — for the same reason.
-        if self.nav.get_untracked() {
+        // Drawn ALWAYS when nav — even on the active row — for the same reason. **Except while the
+        // row asks for attention**: the flash's border is then the row's border, and a cursor ring
+        // inside it drew a second, blue outline under the warning one. It comes back as soon as the
+        // flash stops asking.
+        if self.nav.get_untracked() && crate::flash::attention(&self.base).is_none() {
             match self.border_width {
                 // The theme's ring, drawn over whatever the row already shows.
                 None => cx.rect(
@@ -631,3 +634,46 @@ impl Default for Row {
 impl LayoutExt for Row {}
 impl StyleExt for Row {}
 impl Parent for Row {}
+
+#[cfg(test)]
+mod attention_tests {
+    use super::*;
+    use crate::component::{PaintCx, paint_child};
+    use crate::scene::{DrawCommand, Scene};
+    use crate::widgets::Label;
+    use crate::{FlashExt, FlashHandle, LayoutEngine, Parent, Size, Tone};
+
+    /// How many borders in the theme's accent a row draws — the cursor ring is one.
+    fn accent_rings(row: &Row) -> usize {
+        let theme = crate::theme::Theme::default();
+        let mut scene = Scene::new();
+        paint_child(row, &mut PaintCx::new(&mut scene, &theme));
+        let accent = theme.colors.accent;
+        scene
+            .iter()
+            .filter(|command| {
+                matches!(command, DrawCommand::Rect(rect)
+                    if rect.border.is_some_and(|b| b.color.r == accent.r && b.color.g == accent.g && b.color.b == accent.b && b.color.a > 0))
+            })
+            .count()
+    }
+
+    /// While a row asks for attention, its flash is its border: the cursor ring is not drawn under
+    /// it. When the flash stops asking, the ring is back.
+    #[test]
+    fn the_cursor_ring_yields_to_a_flash_asking_for_attention() {
+        let flash = FlashHandle::new();
+        let mut row = Row::new().flash(flash).child(Label::new("bob"));
+        row.nav.set(true);
+        LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
+        assert!(accent_rings(&row) > 0, "the cursor ring shows");
+        flash.repeat(Tone::Warning);
+        assert_eq!(
+            accent_rings(&row),
+            0,
+            "the flash asking for attention is the only border"
+        );
+        flash.clear();
+        assert!(accent_rings(&row) > 0, "the ring is back");
+    }
+}
