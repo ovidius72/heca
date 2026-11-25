@@ -15,11 +15,12 @@ use super::{
     row_hint, workspace_key, workspace_row_items,
 };
 use heca_grid_ui::Tone;
-use heca_grid_ui::builders::PresenceExt;
 use heca_grid_ui::builders::{DragExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent};
+use heca_grid_ui::builders::{PresenceExt, ToneExt};
 use heca_grid_ui::style::Spacing;
 use heca_grid_ui::style::WidgetSize;
-use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, Label};
+use heca_grid_ui::widgets::{Badge, BadgeVariant, DockFrame, Flex, HintPlacement, Label};
+use std::rc::Rc;
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
 /// whose body is the workspace's columns followed by its floating panes.
@@ -42,19 +43,26 @@ impl WorkspaceFrame<'_> {
         let ws_id = ws.ws_id;
         let pane_count =
             ws.columns.iter().map(|c| c.panes.len()).sum::<usize>() + ws.floating_panes.len();
-        // A workspace is "active" iff it hosts the active pane.
-        let active_ws = seams.active_pane.is_some_and(|pid| {
-            ws.columns
-                .iter()
-                .flat_map(|c| &c.panes)
-                .chain(&ws.floating_panes)
-                .any(|p| p.pane_id == pid)
-        });
-        let badge = if active_ws {
-            Badge::accent(pane_count.to_string())
-        } else {
-            Badge::neutral(pane_count.to_string())
+        // **A workspace is "active" while it hosts the active pane** — read from the store, so the
+        // count badge and the frame follow focus with nothing rebuilt.
+        let ws_pane_ids: Rc<[heca_core::layout::PaneId]> = ws
+            .columns
+            .iter()
+            .flat_map(|c| &c.panes)
+            .chain(&ws.floating_panes)
+            .map(|p| p.pane_id)
+            .collect();
+        let holds_focus = {
+            let (store, ids) = (seams.ws_state.clone(), ws_pane_ids.clone());
+            move || store.active_pane().is_some_and(|a| ids.contains(&a))
         };
+        let badge = Badge::neutral(pane_count.to_string()).variant({
+            let holds_focus = holds_focus.clone();
+            move || match holds_focus() {
+                true => BadgeVariant::Accent,
+                false => BadgeVariant::Neutral,
+            }
+        });
         // The header toggle records the workspace in the toggle sink; the app flips
         // its collapsed state (canonical, in `chrome_state.workspaces`) and the tree
         // rebuilds (F4.3). Collapse is read back from that same shared state.
@@ -82,15 +90,22 @@ impl WorkspaceFrame<'_> {
             // Its number, as a key would name it — shown while `workspace_numbers` is on.
             .leading({
                 let numbers = seams.ws_state.workspace_numbers;
-                // Quiet and small: an index beside the name, never read as part of it.
+                // Small and in the theme accent: an index beside the name, never read as part of
+                // it, and still easy to find (muted, it all but disappeared on a dark theme).
                 Label::new(workspace_number(ws_idx))
                     .size(WidgetSize::Caption)
-                    .muted(true)
+                    .content_tone(Tone::Accent)
                     .hidden(move || !heca_grid_ui::reactive::SignalGet::get(&numbers))
             });
-        // Keep the active identity live. The theme may enable a workspace-wide wash through
-        // `active_wash_alpha` (off by default); the count badge also identifies this workspace.
-        dock = dock.active(active_ws);
+        // **The frame follows focus itself**: active while it holds the active pane, "previous" while
+        // it is the workspace back-and-forth would return to — both read from the store's signals
+        // through the frame's own builders, so nothing is written into it. The theme may enable a
+        // workspace-wide wash through `active_wash_alpha` (off by default); the count badge also
+        // identifies this workspace.
+        dock = dock.active(holds_focus).previous({
+            let store = seams.ws_state.clone();
+            move || store.previous_ws() == Some(ws_id)
+        });
         dock = dock.nav_selected(false);
         // **The row's one identity, declared like every other row's.** A pane card and a column
         // both call `key`, and `key_at` — which is how a right-click finds out what it
@@ -112,28 +127,6 @@ impl WorkspaceFrame<'_> {
             );
             heca_grid_ui::widgets::ContextMenu::new(MENU_WORKSPACE).child(menu)
         });
-        let ws_pane_ids = ws
-            .columns
-            .iter()
-            .flat_map(|c| &c.panes)
-            .chain(&ws.floating_panes)
-            .map(|p| p.pane_id)
-            .collect::<Vec<_>>();
-        // **The frame follows focus itself**: active while it holds the active pane, "previous" while
-        // it is the workspace back-and-forth would return to — both read from the store's
-        // signals, so nothing is handed to the host to write every frame.
-        {
-            let store = seams.ws_state.clone();
-            let (active_sig, previous_sig) = (dock.active_state(), dock.previous_state());
-            heca_grid_ui::reactive::create_effect(move |_| {
-                let active = store.active_pane();
-                super::pane_row::set_if_changed(
-                    active_sig,
-                    active.is_some_and(|a| ws_pane_ids.contains(&a)),
-                );
-                super::pane_row::set_if_changed(previous_sig, store.previous_ws() == Some(ws_id));
-            });
-        }
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
@@ -213,10 +206,11 @@ mod tests {
         }
     }
 
-    /// **The position number is quiet, the name is not** — the number is drawn in the theme's
-    /// muted tone so it reads as an index beside the name ("1  Workspace 1"), never as part of it.
+    /// **The position number is drawn in the theme accent, the name is not** — an index beside the
+    /// name ("1  Workspace 1"), never part of it, and easy to find (muted, it all but disappeared on
+    /// a dark theme).
     #[test]
-    fn the_position_number_is_drawn_quieter_than_the_name() {
+    fn the_position_number_is_drawn_in_the_accent() {
         let mut fx = Fixture::default();
         let tree = testing::tree();
         let frame = {
@@ -227,7 +221,7 @@ mod tests {
             .build(&seams, &mut reg)
         };
         let mut theme = heca_grid_ui::theme::Theme::default();
-        theme.colors.muted = heca_grid_ui::Color::rgb(0x55, 0x66, 0x77);
+        theme.colors.accent = heca_grid_ui::Color::rgb(0xff, 0x88, 0x22);
         let mut root = Flex::column().child(frame);
         let scene = crate::chrome::paint_chrome_root(&mut root, 300.0, 200.0, &theme);
         let colour_of = |text: &str| {
@@ -238,13 +232,13 @@ mod tests {
         };
         assert_eq!(
             colour_of("1"),
-            Some(theme.colors.muted),
-            "the number is muted"
+            Some(theme.colors.accent),
+            "the number is in the accent"
         );
         let name = tree.workspaces[0].name.clone();
         assert_ne!(
             colour_of(&name),
-            Some(theme.colors.muted),
+            Some(theme.colors.accent),
             "the name is not"
         );
     }
@@ -279,6 +273,39 @@ mod tests {
             frame.previous_state().get_untracked(),
             "and the one prefix+Shift+i would return to",
         );
+    }
+
+    /// **The count badge follows focus too** — the accent while you are in the workspace, quiet
+    /// once focus leaves it, with the tree never rebuilt.
+    #[test]
+    fn the_count_badge_follows_focus() {
+        use heca_grid_ui::builders::Parent;
+        use heca_grid_ui::{DrawCommand, Flex};
+        let mut fx = Fixture::default();
+        let tree = testing::tree();
+        let frame = {
+            let (seams, mut reg) = fx.split("left");
+            WorkspaceFrame {
+                workspace: &tree.workspaces[0],
+            }
+            .build(&seams, &mut reg)
+        };
+        let mut root = Flex::column().child(frame);
+        let accent = fx.theme.colors.accent;
+        let accented = |root: &mut Flex| {
+            crate::chrome::paint_chrome_root(root, 340.0, 800.0, &fx.theme)
+                .iter()
+                .any(|command| {
+                    matches!(command, DrawCommand::Rect(r)
+                        if r.glow.is_some_and(|g| g.color == accent)
+                            && r.border.is_some_and(|b| b.color == accent))
+                })
+        };
+        let store = fx.store.workspaces.clone();
+        store.set_active_pane(Some(PaneId(1)));
+        assert!(accented(&mut root), "the accent while you are in it");
+        store.set_active_pane(Some(PaneId(99)));
+        assert!(!accented(&mut root), "quiet once focus leaves it");
     }
 }
 

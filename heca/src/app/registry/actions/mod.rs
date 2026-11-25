@@ -90,6 +90,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::SidebarLeft, handle_sidebar_left);
     registry.register(WmActionKind::SidebarRight, handle_sidebar_right);
     registry.register(WmActionKind::FocusDock, handle_focus_dock);
+    registry.register(
+        WmActionKind::SidebarPaneView,
+        crate::providers::workspaces::handle_sidebar_pane_view,
+    );
     registry.register(WmActionKind::CursorTo, handle_cursor_to);
     registry.register(WmActionKind::ToggleDock, handle_toggle_dock);
     registry.register(

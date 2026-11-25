@@ -86,7 +86,10 @@ fn invalid_children_are_diagnosed_while_valid_options_remain_in_order() {
             &mut FormBindings::default(),
         )
         .expect("valid options must render");
-    let options = &widget.base().children[0].base().children;
+    let options = &heca_grid_ui::area(widget.as_ref(), "list")
+        .expect("the select's list")
+        .base()
+        .children;
     assert_eq!(options.len(), 2);
     assert_eq!(options[0].text_summary().as_deref(), Some("First"));
     assert_eq!(options[1].text_summary().as_deref(), Some("Last"));

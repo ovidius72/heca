@@ -22,6 +22,8 @@ use crate::widgets::Icon;
 const DEFAULT_PAD: f32 = 8.0;
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Hover glow spread + peak intensity (scaled by the theme `glow_size` + hover).
 const GLOW_RADIUS: f32 = 10.0;
 const GLOW_INTENSITY: f32 = 0.18;

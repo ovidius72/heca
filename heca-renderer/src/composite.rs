@@ -22,6 +22,8 @@ pub struct Compositor {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
+    /// Writes the clear colour into a part of the scene — see [`clear_region`](Self::clear_region).
+    clear_pipeline: wgpu::RenderPipeline,
     size: (u32, u32),
     format: wgpu::TextureFormat,
 }
@@ -136,6 +138,50 @@ impl Compositor {
             cache: None,
         });
 
+        // **Clear a part of the scene**: the clear colour comes in as the blend constant and
+        // replaces what is there (`dst × 0`), exactly what a full clear leaves.
+        let empty_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("composite_clear_layout"),
+            bind_group_layouts: &[],
+            immediate_size: 0,
+        });
+        let replace = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::Constant,
+            dst_factor: wgpu::BlendFactor::Zero,
+            operation: wgpu::BlendOperation::Add,
+        };
+        let clear_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("composite_clear_pipeline"),
+            layout: Some(&empty_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_one"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState {
+                        color: replace,
+                        alpha: replace,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
         let (scene_tex, scene_view, bind_group) =
             Self::make_target(device, &bind_group_layout, &sampler, format, width, height);
         let (stencil_tex, stencil_view) = Self::make_stencil(device, width, height);
@@ -149,6 +195,7 @@ impl Compositor {
             bind_group_layout,
             bind_group,
             pipeline,
+            clear_pipeline,
             size: (width.max(1), height.max(1)),
             format,
         }
@@ -174,7 +221,10 @@ impl Compositor {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            // `COPY_SRC` so a test can read the scene back.
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
@@ -254,6 +304,42 @@ impl Compositor {
         &self.stencil_view
     }
 
+    /// **Clear `rect` (logical px, `scale` to physical) of the scene to `color`** and keep the rest
+    /// — the first pass of a frame that repaints only what changed. What it leaves is exactly what
+    /// a full clear leaves there, so the frame drawn over it is the frame a full repaint draws.
+    pub fn clear_region(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        rect: [f32; 4],
+        scale: f32,
+        color: wgpu::Color,
+    ) {
+        let (x, y, w, h) = crate::clip::scissor_px(rect, scale, [self.size.0, self.size.1]);
+        if w == 0 || h == 0 {
+            return;
+        }
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            multiview_mask: None,
+            label: Some("scene_clear_region"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &self.scene_view,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+        rpass.set_pipeline(&self.clear_pipeline);
+        rpass.set_blend_constant(color);
+        rpass.set_scissor_rect(x, y, w, h);
+        rpass.draw(0..3, 0..1);
+    }
+
     /// Blit the persistent scene texture onto `target` (the swapchain view).
     pub fn blit(&self, target: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -275,5 +361,77 @@ impl Compositor {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.draw(0..3, 0..1);
+    }
+}
+
+#[cfg(test)]
+mod clear_region_tests {
+    use super::Compositor;
+
+    /// **Clearing a part of the scene changes that part and nothing else**, to exactly the colour
+    /// asked — what a frame that repaints only what changed starts from.
+    #[test]
+    fn clearing_a_region_changes_only_that_region() {
+        let (device, queue) = crate::gpu::headless_device_or_skip!();
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let compositor = Compositor::new(&device, format, 8, 8);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            multiview_mask: None,
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: compositor.scene_view(),
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::RED),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        }));
+        compositor.clear_region(
+            &mut encoder,
+            [2.0, 2.0, 2.0, 2.0],
+            1.0,
+            wgpu::Color::TRANSPARENT,
+        );
+        let row = 256u32;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: u64::from(row * 8),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        encoder.copy_texture_to_buffer(
+            compositor.scene_tex.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(8),
+                },
+            },
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        let _ = device.poll(wgpu::PollType::wait_indefinitely());
+        let bytes = slice.get_mapped_range().expect("the read-back is mapped");
+        let pixel = |x: u32, y: u32| {
+            let at = (y * row + x * 4) as usize;
+            [bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]
+        };
+        assert_eq!(pixel(3, 3), [0, 0, 0, 0], "inside: cleared");
+        assert_eq!(pixel(0, 0), [255, 0, 0, 255], "outside: kept");
+        assert_eq!(pixel(5, 5), [255, 0, 0, 255], "outside, past it: kept");
     }
 }

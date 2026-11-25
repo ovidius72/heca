@@ -15,6 +15,11 @@ pub struct Base {
     pub flash: Option<crate::FlashHandle>,
     /// Optional live inherited text/icon tone, resolved against the current theme at paint.
     pub content_tone: Option<Signal<Option<crate::Tone>>>,
+    /// What runs when this widget closes — see [`PresenceExt::on_close`](crate::builders::PresenceExt::on_close).
+    /// Wired to [`open`](Self::open) on the first tick, once every builder has run.
+    pub(crate) on_close: Option<std::rc::Rc<dyn Fn()>>,
+    /// Whether [`on_close`](Self::on_close) is listening yet.
+    pub(crate) on_close_wired: bool,
     /// This component's node in the layout tree (set during layout).
     pub node: Option<taffy::NodeId>,
     /// Which retained layout tree [`node`](Self::node) belongs to, so a component moved in from

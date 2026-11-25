@@ -12,6 +12,25 @@ pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
     }
 }
 
+/// **The timed redraws a widget's own feedback and its children ask for** — its tooltip, its press
+/// flash, and each child's [`next_redraw`](crate::Component::next_redraw). What
+/// [`Component::next_redraw`](crate::Component::next_redraw) does by default; a widget that has a
+/// timed redraw of its own adds it to this instead of walking the children again.
+pub fn subtree_next_redraw(base: &crate::Base) -> Option<f32> {
+    let mut soonest = soonest_redraw(
+        crate::widgets::tooltip::wake(base),
+        crate::flash::wake(base),
+    );
+    for child in base.children.iter() {
+        // Framework feedback also applies to a child that overrides its own deadline hook.
+        soonest = soonest_redraw(
+            soonest,
+            soonest_redraw(child.next_redraw(), crate::flash::wake(child.base())),
+        );
+    }
+    soonest
+}
+
 /// Deliver `ev` to `node` and its subtree. **The only child walk in this library.**
 ///
 /// Three steps, and a widget takes part by implementing at most two of them:

@@ -110,6 +110,21 @@ pub trait PresenceExt: Component + Sized {
         self
     }
 
+    /// **Run `f` when this widget closes** — by its dismiss key, a choice, a click outside, or its
+    /// holder writing `open` false: the change from open to closed, once each time. What a host
+    /// takes down with the surface (its layer) goes here, rather than in an effect watching the
+    /// surface's flag.
+    ///
+    /// ```ignore
+    /// CommandPalette::new().open(true).on_close(move || layer.remove())
+    /// ```
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
+    fn on_close(mut self, f: impl Fn() + 'static) -> Self {
+        self.base_mut().on_close = Some(std::rc::Rc::new(f));
+        self.base_mut().on_close_wired = false;
+        self
+    }
+
     /// **Take this widget out of the layout entirely** — CSS `display: none`. Its neighbours close
     /// up, and it is neither painted nor Tab-focused.
     ///

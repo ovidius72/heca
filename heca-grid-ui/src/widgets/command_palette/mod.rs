@@ -202,7 +202,8 @@ impl CommandPalette {
     }
 
     fn push_command(&mut self, c: Command) {
-        let title = signal(c.label.clone());
+        let title = signal(String::new());
+        c.label.clone().show_in(title);
         let title_marks = signal(Vec::new());
         let description_marks = signal(Vec::new());
         self.title_text.push(title);

@@ -9,9 +9,14 @@ impl<'a> PaintCx<'a> {
     pub fn with_overlay(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
         // The overlay band starts unclipped, so no corner from below reaches into it.
         let rounded = self.rounded.take();
+        // **And in the theme's accent, not its container's.** An overlay is a surface of the
+        // window, drawn above everything: a tooltip or a menu opened from a pane that is not the
+        // active one must not take that pane's dimmed frame colour. Read the accent inside `f`.
+        let accent = self.published_accent.take();
         self.scene.begin_overlay();
         f(self);
         self.scene.end_overlay();
+        self.published_accent = accent;
         self.rounded = rounded;
     }
 
@@ -204,5 +209,35 @@ impl<'a> PaintCx<'a> {
     /// [`with_content_glow`](Self::with_content_glow).
     pub fn content_glow(&self) -> Option<Glow> {
         self.content_glow
+    }
+}
+
+#[cfg(test)]
+mod overlay_accent_tests {
+    use crate::Theme;
+    use crate::color::Color;
+    use crate::component::PaintCx;
+    use crate::scene::Scene;
+
+    /// **An overlay is drawn in the theme's accent, not its container's** — a tooltip opened from a
+    /// pane that is not the active one keeps the theme's edge — and the container's comes back
+    /// after it.
+    #[test]
+    fn an_overlay_is_painted_in_the_themes_accent() {
+        let theme = Theme::default();
+        let mut scene = Scene::default();
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        let pane = Color::rgb(10, 20, 30);
+        cx.with_accent(pane, |cx| {
+            assert_eq!(cx.accent(), pane, "inside the pane: the pane's colour");
+            cx.with_overlay(|cx| {
+                assert_eq!(
+                    cx.accent(),
+                    theme.colors.accent,
+                    "inside an overlay: the theme's"
+                );
+            });
+            assert_eq!(cx.accent(), pane, "and the pane's again after it");
+        });
     }
 }

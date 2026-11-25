@@ -11,21 +11,20 @@
 //! the trigger box, the chevron, the panel, the keyboard cursor, the scrollbar. Each row draws
 //! itself.
 //!
-//! The trigger shows the chosen option **itself**, icon and all. Closed, that option *is* the
-//! trigger's content (it is placed there). Open, it has moved into the list — a component is laid
-//! out in exactly one place — so the trigger draws a second *image* of its content with
-//! [`PaintCx::with_translate`](crate::component::PaintCx::with_translate), translated from the panel back into the trigger. The row's chrome is
-//! not echoed: the trigger's own box is its chrome.
+//! The trigger shows the chosen option **itself**, icon and all. The option lives in the list — a
+//! component is laid out in exactly one place — so the trigger draws an *image* of its content with
+//! [`PaintCx::with_translate`](crate::component::PaintCx::with_translate), translated from the list
+//! into the trigger. The row's chrome is not echoed: the trigger's own box is its chrome.
 //!
-//! # Where the rows live (the one subtle thing in this widget)
-//! The dropdown panel is an **overlay**: it is drawn outside the control's layout box, and it may
-//! flip above the trigger. The layout engine cannot place it there — a taffy node sits where its
-//! parent's flow puts it. So the rows are laid out in the trigger's flow (where taffy *measures*
-//! them: each `Choice` hugs its content) and `Select` then **places** them, baking the offset from
-//! that flow into their bounds — the same trick [`ScrollRegion`](super::ScrollRegion) uses to bake
-//! `-scroll_offset` into its children.
-//!
-//! The invariant that falls out of it, and the reason it is done this way:
+//! # Where the rows live
+//! The options are the children of a [`ScrollRegion`](super::ScrollRegion) — the control's `list`
+//! part — inside a light [`Overlay`](super::Overlay) that stays in the control's own flow
+//! ([`in_flow`](super::Overlay::in_flow)). That is where the control's width comes from: it is as
+//! wide as its widest option. The overlay hangs the list from the trigger once layout is final
+//! ([`anchored_to`](super::Overlay::anchored_to)) — below, flipped above when there is no room —
+//! draws its frame on the overlay layer, and leaves the keyboard with the control. The list shows
+//! [`visible_children`](super::ScrollRegion::visible_children) rows and scrolls the rest itself;
+//! closed, the overlay keeps its box in the flow.
 //!
 //! > **bounds === what is drawn === what is clickable.**
 //!
@@ -49,7 +48,6 @@ use crate::builders::LayoutExt;
 use crate::component::Base;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_core::layout::Size;
-use std::cell::Cell;
 
 mod builders;
 mod component;
@@ -66,13 +64,19 @@ const ROW_H_RATIO: f64 = 2.0;
 const PANEL_PAD: f64 = 4.0;
 /// Gap between the trigger and the panel.
 const PANEL_GAP: f64 = 4.0;
-/// Panel glow.
+/// The trigger's resting halo radius.
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 const GLOW_RADIUS: f32 = 16.0;
-const GLOW_INTENSITY: f32 = 0.1;
+/// **The open list's halo, as multipliers of the theme's glow** — at the default theme the 16 px,
+/// 0.1 halo it has always had (the theme's glow is 10 px at 0.55). Per-widget glow, intended.
+const LIST_GLOW: crate::widgets::PanelGlow = crate::widgets::PanelGlow::new(1.6, 0.1 / 0.55);
 /// Max option rows shown at once; longer lists scroll with a scrollbar.
 const MAX_VISIBLE: usize = 6;
-/// Scrollbar track width (logical px).
+/// Scrollbar track width (logical px) — the lane the rows leave clear on their right.
 const SCROLLBAR_W: f64 = 4.0;
+/// The open list's name among the control's parts.
+const LIST_AREA: &str = "list";
 /// Horizontal room reserved for the down-chevron (+ gap).
 const CHEVRON_W: f64 = 22.0;
 /// Trigger width when there are no options to hug (a select is sized by its widest option, and an
@@ -103,33 +107,55 @@ pub struct Select {
     option_states: Vec<Signal<bool>>,
     /// Selected index, exposed reactively via [`state`](Select::state).
     selected: Signal<usize>,
-    /// Whether the dropdown is open.
-    open: bool,
-    /// The cursor row while open (keyboard/hover). This is the *container's* state, not the
-    /// option's: it is drawn as chrome over the row's bounds, so an option never has to know it is
-    /// being pointed at.
+    /// Whether the dropdown is open — what the list's layer follows.
+    open: Signal<bool>,
+    /// Cursor-state signal of each option row, captured like `option_states`: the control moves one
+    /// cursor over its options, and the option under it draws it.
+    option_cursors: Vec<Signal<bool>>,
+    /// The cursor row while open (keyboard/hover).
     highlight: usize,
-    /// Index of the first visible row when the list scrolls.
-    scroll: usize,
-    /// Rows shown at once while open — capped to what fits in the viewport.
-    vis_rows: usize,
-    /// Whether the open list flips *above* the trigger (no room below).
-    open_up: bool,
+    /// Whether the keyboard moved the cursor last — only then does the list scroll to it (what the
+    /// pointer is on is already in view).
+    by_keyboard: Signal<bool>,
+    /// Rows shown at once while open — capped to what fits in the viewport. The list's
+    /// [`visible_children`](crate::widgets::ScrollRegion::visible_children).
+    vis_rows: Signal<usize>,
+    /// **Where the trigger is on screen**, handed to the list's layer once layout is final, so
+    /// the list hangs from it — below, flipped above when there is no room — wherever the control
+    /// was scrolled to.
+    trigger: Signal<heca_core::layout::Rectangle>,
     /// Each row's **measured** height, captured post-layout (`on_layout`) while the bounds are
     /// still at their natural, engine-computed values. The panel's geometry is derived from these,
     /// so rows of different heights (a two-line option) stack correctly instead of being forced
     /// onto an arithmetic grid.
     natural_h: Vec<f64>,
-    /// Last-seen viewport (set during paint), used to flip/cap the list and to
-    /// clamp the panel on-screen via the shared placement authority.
-    viewport: Cell<Size>,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
 impl Select {
+    /// The open list — a [`ScrollRegion`](crate::widgets::ScrollRegion) holding the options as a
+    /// column the engine lays out — found by name.
+    fn list(&self) -> Option<&Base> {
+        crate::component::area(self, LIST_AREA).map(|c| c.base())
+    }
+
+    fn list_mut(&mut self) -> Option<&mut crate::WidgetModel> {
+        crate::component::area_slot(&mut self.base, LIST_AREA)
+    }
+
+    /// Whether the list is open.
+    fn is_open(&self) -> bool {
+        self.open.get_untracked()
+    }
+
+    /// The option rows, in order.
+    fn rows(&self) -> &[crate::WidgetModel] {
+        self.list().map_or(&[], |list| list.children.as_slice())
+    }
+
     /// Number of options.
     fn count(&self) -> usize {
-        self.base.children.len()
+        self.rows().len()
     }
 
     /// Push the selection down into the options: while the list is **open**, exactly one row carries
@@ -144,11 +170,17 @@ impl Select {
     /// the selection (or opened/closed the list) can just call it.
     fn sync_option_states(&self) {
         let selected = self.selected.get_untracked();
-        for (i, state) in self.option_states.iter().enumerate() {
-            let want = self.open && i == selected;
-            if state.get_untracked() != want {
-                state.set(want);
+        let set = |signal: &Signal<bool>, want: bool| {
+            if signal.get_untracked() != want {
+                signal.set(want);
             }
+        };
+        let open = self.is_open();
+        for (i, state) in self.option_states.iter().enumerate() {
+            set(state, open && i == selected);
+        }
+        for (i, cursor) in self.option_cursors.iter().enumerate() {
+            set(cursor, open && i == self.highlight);
         }
     }
 }

@@ -614,6 +614,12 @@ pub enum WmAction {
         dock: Option<crate::chrome::ContainerId>,
     },
 
+    /// **Show the sidebar's pane cards in `view`**, or in the next view when `None` — the lines of
+    /// each are `[appearance.sidebar] pane_<view>_view`. The choice is remembered.
+    SidebarPaneView {
+        view: Option<heca_config::appearance::PaneView>,
+    },
+
     /// Focus a dock, or **give the keyboard back** if it already has it — the `global_focus`
     /// gesture: `prefix+e` in, `prefix+e` out.
     ///

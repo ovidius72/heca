@@ -6,9 +6,7 @@ impl Input {
     }
 
     pub(super) fn caret_visible(&self) -> bool {
-        let phase = self
-            .blink_origin
-            .elapsed()
+        let phase = crate::clock::since(self.blink_origin)
             .as_secs_f32()
             .rem_euclid(self.base.input_style.blink_period.max(f32::MIN_POSITIVE));
         self.base.input_style.blink_period <= 0.0

@@ -34,6 +34,96 @@ pub enum OverlayPosition {
         /// Gap between the anchor edge and the panel.
         gap: f64,
     },
+    /// **Beside a rect, on a side** — a tooltip's bubble: on `side` of `anchor`, `gap` away,
+    /// flipped to the opposite side when there is no room, clamped into the window
+    /// ([`place_beside`]).
+    Beside {
+        anchor: Rectangle,
+        gap: f64,
+        side: BesideSide,
+    },
+    /// **At a point** — a context menu where it was asked for: its top-left at `point` (or centred
+    /// on it when `centered`), `inset` in from the window's edges, clamped into the window
+    /// ([`place_at_point`]).
+    AtPoint {
+        point: Point,
+        inset: f64,
+        centered: bool,
+    },
+    /// **In a corner or at an edge of the window** — a stack of notifications
+    /// ([`ToastPosition`](crate::widgets::ToastPosition)).
+    Corner(crate::widgets::ToastPosition),
+}
+
+impl OverlayPosition {
+    /// **Whether the panel places itself** against the window — every position but a centred or a
+    /// top layer, which fill the window and are laid out there. Such a panel hugs its content and
+    /// is placed once everything has its final place on screen.
+    pub fn places_itself(self) -> bool {
+        !matches!(self, OverlayPosition::Center | OverlayPosition::Top)
+    }
+
+    /// **Where a panel of `panel` size goes** for this position, in `viewport` — `None` for a
+    /// centred layer (the layout centres it) and a top one (placed against its own box).
+    pub fn place(self, panel: Size, viewport: Size) -> Option<Rectangle> {
+        match self {
+            OverlayPosition::Center | OverlayPosition::Top => None,
+            OverlayPosition::Anchored { anchor, gap } => {
+                Some(place_anchored(anchor, panel, viewport, gap))
+            }
+            OverlayPosition::Beside { anchor, gap, side } => {
+                Some(place_beside(anchor, panel, viewport, gap, side))
+            }
+            OverlayPosition::AtPoint {
+                point,
+                inset,
+                centered,
+            } => Some(place_at_point(point, panel, viewport, inset, centered)),
+            OverlayPosition::Corner(corner) => {
+                Some(Rectangle::new(corner.corner_in(panel, viewport), panel))
+            }
+        }
+    }
+
+    /// **The air a panel keeps from the window's edge** at this position — what its placement
+    /// clamps to: a bubble keeps its gap, a menu its inset, the rest sit against the edge.
+    pub fn edge_air(self) -> f64 {
+        match self {
+            OverlayPosition::Beside { gap, .. } => gap,
+            OverlayPosition::AtPoint { inset, .. } => inset,
+            _ => 0.0,
+        }
+    }
+
+    /// The same position at `to` instead — for a point that moves. Only a point position has one.
+    pub(crate) fn with_point(self, to: Point) -> Self {
+        match self {
+            OverlayPosition::AtPoint {
+                inset, centered, ..
+            } => OverlayPosition::AtPoint {
+                point: to,
+                inset,
+                centered,
+            },
+            other => other,
+        }
+    }
+
+    /// The same position hung from `anchor` instead — for a rect that moves. A point, a corner
+    /// and a centred layer have no anchor and stay as they are.
+    pub(crate) fn with_anchor(self, rect: Rectangle) -> Self {
+        match self {
+            OverlayPosition::Anchored { gap, .. } => {
+                OverlayPosition::Anchored { anchor: rect, gap }
+            }
+            OverlayPosition::Beside { gap, side, .. } => OverlayPosition::Beside {
+                anchor: rect,
+                gap,
+                side,
+            },
+            other => other,
+        }
+    }
 }
 
 /// Where a [`Top`](OverlayPosition::Top) panel's top edge sits, as a share of the window's height.

@@ -84,10 +84,13 @@ impl ExposeGrid<'_> {
                 }
             })
             .on_activate({
-                let choose = self.cb.choose.clone();
+                let (choose, choose_workspace) =
+                    (self.cb.choose.clone(), self.cb.choose_workspace.clone());
                 move |key| {
                     if let Ok(id) = key.parse::<u64>() {
                         choose(PaneId(id));
+                    } else if let Some(ws_idx) = super::empty_card::workspace_of(key) {
+                        choose_workspace(ws_idx);
                     }
                 }
             })
@@ -402,4 +405,49 @@ mod tests {
             "one step past the last tiled pane lands on the float, and choosing it focuses it",
         );
     }
+
+    /// **An empty workspace has a card the cursor stops on.** Its row used to be a gap: stepping
+    /// down walked into it, found nothing to light, and the map had no selection from then on.
+    /// Down lands on the empty workspace's card, down again goes on to the workspace below, and
+    /// choosing the empty card takes you to that workspace.
+    #[test]
+    fn the_cursor_stops_on_an_empty_workspace_and_choosing_it_goes_there() {
+        use heca_grid_ui::{Event, WidgetIntent};
+        let screen = (800.0, 600.0);
+        let mut empty = ws(1, 0, screen);
+        empty.strip_width = screen.0;
+        let rows = vec![ws(0, 1, screen), empty, ws(2, 1, screen)];
+        let map = |steps: &[WidgetIntent]| {
+            let (cb, sink) = callbacks();
+            let g = ExposeGrid {
+                rows: &rows,
+                gap_frac: 0.1,
+                start: Some(PaneId(1)),
+                previous: None,
+                cb: &cb,
+            }
+            .build();
+            let mut root = lay_out(g, 1200.0, 900.0);
+            for step in steps {
+                heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(*step));
+            }
+            actions(&sink)
+        };
+        let chosen = map(&[WidgetIntent::MenuDown, WidgetIntent::Activate]);
+        assert!(
+            chosen.iter().any(|(name, _)| name == "focus_workspace_2"),
+            "down stops on the empty card, and choosing it goes to that workspace: {chosen:?}",
+        );
+        let moved = map(&[WidgetIntent::MenuDown, WidgetIntent::MenuDown]);
+        assert_eq!(
+            moved
+                .iter()
+                .rfind(|(name, _)| name == CURSOR_TEST_ACTION)
+                .map(|(_, args)| args.clone()),
+            Some(vec![("pane_id".to_string(), 201)]),
+            "and down again goes on to the workspace below: {moved:?}",
+        );
+    }
+
+    const CURSOR_TEST_ACTION: &str = super::super::wiring::CURSOR_ACTION;
 }

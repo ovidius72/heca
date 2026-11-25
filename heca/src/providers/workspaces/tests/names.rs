@@ -58,3 +58,39 @@ fn a_retained_sidebar_filters_short_names_and_publishes_a_quiet_program_without_
     fx.store.panes.set_runtime(pane, &runtime, None);
     assert!(words(&mut root).iter().any(|text| text == "zsh"));
 }
+
+/// **The card's pip follows the pane's process** — a command that fails turns it to the theme's
+/// danger colour, and the next one that succeeds turns it back, with the tree never rebuilt.
+#[test]
+fn a_cards_pip_follows_the_panes_process_without_rebuilding() {
+    let tree = testing::tree();
+    let mut fx = testing::Fixture::default();
+    let pane = PaneId(1);
+    let mut runtime = PaneRuntime {
+        program: Some("zsh".into()),
+        ..Default::default()
+    };
+    fx.store.panes.set_runtime(pane, &runtime, None);
+    let root = {
+        let (seams, mut reg) = fx.split("left");
+        DockView {
+            tree: &tree,
+            scroll: heca_grid_ui::reactive::signal(0.0),
+        }
+        .build(&seams, &mut reg)
+    };
+    let mut root = Flex::column().child(root);
+    let danger = fx.theme.colors.danger;
+    let lit = |root: &mut Flex| {
+        crate::chrome::paint_chrome_root(root, 340.0, 800.0, &fx.theme)
+            .iter()
+            .any(|command| matches!(command, DrawCommand::Rect(r) if r.fill == danger))
+    };
+    assert!(!lit(&mut root), "a quiet pane has no danger pip");
+    runtime.status = ProcessStatus::Error;
+    fx.store.panes.set_runtime(pane, &runtime, None);
+    assert!(lit(&mut root), "a failed command turns the pip to danger");
+    runtime.status = ProcessStatus::Success;
+    fx.store.panes.set_runtime(pane, &runtime, None);
+    assert!(!lit(&mut root), "the next success turns it back");
+}

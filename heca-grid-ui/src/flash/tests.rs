@@ -505,3 +505,64 @@ fn a_flash_that_stops_being_painted_stops_waking_the_host() {
         "overdue for a whole cycle: nothing is painting it"
     );
 }
+
+/// **Two cards flashing step together**, whenever each is painted: the instant each asks for
+/// its next frame is the same, so one frame draws both. Counted from each one's own paint (or the
+/// end of its own pause), cards painted in different frames stepped between each other's — four
+/// cards at 15 steps a second asked for 60 frames a second and the window never rested.
+#[test]
+fn flashes_painted_apart_step_on_the_same_beat() {
+    crate::clock::hold();
+    let theme = Theme::default();
+    let (first, second) = (FlashHandle::new(), FlashHandle::new());
+    let (a, b) = (widget(first), widget(second));
+    first.repeat(Tone::Warning);
+    second.repeat(Tone::Warning);
+    scene(&a, &theme);
+    let a_at = crate::clock::now() + Duration::from_secs_f32(wake(a.base()).unwrap());
+    // The other card is painted by a later frame, 23 ms on.
+    crate::clock::advance(Duration::from_millis(23));
+    scene(&b, &theme);
+    let b_at = crate::clock::now() + Duration::from_secs_f32(wake(b.base()).unwrap());
+    crate::clock::release();
+    // On the same beats: whatever lies between them is a whole number of steps.
+    let apart = if a_at > b_at {
+        a_at - b_at
+    } else {
+        b_at - a_at
+    };
+    let step = 1.0 / f64::from(theme.colors.flash.frames_per_second);
+    let off = apart.as_secs_f64() % step;
+    assert!(
+        off.min(step - off) < 0.001,
+        "both step on the same beats: {apart:?} apart, {off:.4}s off the beat"
+    );
+}
+
+/// **A card flashing out of sight asks for no frames** — scrolled past a dock's edge it draws
+/// nothing, so a step there would be a frame for nothing. Back in sight, it books again.
+#[test]
+fn a_flash_out_of_sight_asks_for_no_frames_until_it_is_back() {
+    use heca_core::layout::{Point, Rectangle};
+    let theme = Theme::default();
+    let handle = FlashHandle::new();
+    let card = widget(handle);
+    handle.repeat(Tone::Warning);
+    let paint_in = |clip: Rectangle| {
+        let mut scene = Scene::new();
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.with_clip(clip, |cx| crate::paint_child(&card, cx));
+    };
+    // The dock shows only what is below the card: the card is cut away entirely.
+    paint_in(Rectangle::new(
+        Point::new(0.0, 200.0),
+        Size::new(120.0, 100.0),
+    ));
+    assert_eq!(wake(card.base()), None, "out of sight: no frame asked");
+    // Scrolled back: the dock shows it again.
+    paint_in(Rectangle::new(
+        Point::new(0.0, 0.0),
+        Size::new(120.0, 100.0),
+    ));
+    assert!(wake(card.base()).is_some(), "back in sight: it steps again");
+}

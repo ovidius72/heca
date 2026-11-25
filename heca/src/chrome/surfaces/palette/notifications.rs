@@ -302,7 +302,12 @@ mod tests {
             &|row: &PaletteEntry, _: &str| {
                 let chosen = chosen.clone();
                 let id = row.id.clone();
-                row_command(row, 0, move || chosen.borrow_mut().push(id.clone()))
+                row_command(
+                    row,
+                    heca_grid_ui::builders::IntoTextValue::into_text_value(row.label.clone()),
+                    0,
+                    move || chosen.borrow_mut().push(id.clone()),
+                )
             },
             |_| Box::new(|| {}),
         );

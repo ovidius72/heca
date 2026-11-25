@@ -1,7 +1,8 @@
 //! Opening a dialog, or a panel from a description, as a layer.
 
-use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, EventExt as _};
+use heca_grid_ui::builders::LayoutExt as _;
+use heca_grid_ui::reactive::SignalGet;
+use heca_grid_ui::{Button, ButtonVariant, Dialog, EventExt as _};
 use heca_view::ViewNode;
 
 use super::spec::{ModalResult, ModalSpec, OverlayId};
@@ -144,18 +145,19 @@ pub(super) fn build_modal_root(
         // **The button names its answer**: `submit_overlay` with its id, for a click and its
         // `prefix+/` letter alike. The dialog's layer listens, so the call is stamped with this
         // dialog and answers it, whichever modal is in front.
-        let button = Button::new(action.label.clone()).variant(variant).on_press(
-            crate::chrome::Intent::new("submit_overlay")
-                .arg("action", crate::chrome::PropValue::Text(action.id.clone())),
-        );
-        // Reactive validation: disable this button while a required form field is empty (blocks
-        // blank submission). Binds the button's `disabled` signal to the field's live value.
-        if let Some(field) = &action.disable_when_empty
-            && let Some(sig) = forms.text_signal(field)
-        {
-            let disabled = button.base().disabled;
-            create_effect(move |_| disabled.set(sig.get().trim().is_empty()));
-        }
+        // Reactive validation: off while a required form field is empty (blocks blank
+        // submission), following the field's live value.
+        let required = action
+            .disable_when_empty
+            .as_ref()
+            .and_then(|field| forms.text_signal(field));
+        let button = Button::new(action.label.clone())
+            .variant(variant)
+            .disabled(move || required.is_some_and(|text| text.get().trim().is_empty()))
+            .on_press(
+                crate::chrome::Intent::new("submit_overlay")
+                    .arg("action", crate::chrome::PropValue::Text(action.id.clone())),
+            );
         // Tooltip + live shortcut from the action id — the one centralized path. The pick
         // declaration goes on the button itself, which is what `on_hint` is for (AGENTS §
         // 5a): a `KeyHint` wrapper used to carry it, costing the button a second pick target.

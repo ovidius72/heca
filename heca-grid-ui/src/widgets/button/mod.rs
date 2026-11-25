@@ -37,6 +37,8 @@ mod component;
 
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
 /// Matches the other controls' hover halos (Select/Toggle 16, Checkbox 14);
 /// the previous 30 made a hovered button visibly out of family (user-reported).

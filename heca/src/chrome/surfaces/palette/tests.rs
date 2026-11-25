@@ -488,3 +488,37 @@ fn a_column_row_is_named_by_its_panes_and_the_focused_one_is_current() {
         "no such workspace"
     );
 }
+
+/// **A pane row follows its pane while the palette is open** — start another program in it and
+/// the row renames itself, with the palette never rebuilt.
+#[test]
+fn a_pane_row_renames_itself_when_its_pane_changes() {
+    let session = session_with_panes();
+    let programs = std::rc::Rc::new(heca_config::programs::ProgramsConfig::default());
+    let panes = mirrored_panes(&session.session);
+    let rows = pane_entries(session.l(), &programs, &panes, false, None);
+    let label_of = super::live_label(&panes, &programs, false);
+    let at = rows
+        .iter()
+        .position(|row| row.id == "pane:1")
+        .expect("the zsh pane has a row");
+    let palette = rows.iter().fold(CommandPalette::new(), |palette, row| {
+        palette.command(Command::new(label_of(row), || {}))
+    });
+    let title = palette.label_signals()[at];
+    assert_eq!(title.get_untracked(), "zsh");
+    let mut runtime = session.session.workspaces[0]
+        .panes()
+        .find(|pane| pane.id == heca_core::layout::PaneId(1))
+        .expect("pane 1")
+        .runtime
+        .clone();
+    runtime.program = Some("nvim".to_string());
+    runtime.status = heca_core::runtime::ProcessStatus::Running;
+    panes.set_runtime(heca_core::layout::PaneId(1), &runtime, None);
+    // A new program's name settles after a moment, as in the sidebar.
+    if let Some(due) = panes.next_name_update() {
+        panes.advance_names(due);
+    }
+    assert_eq!(title.get_untracked(), "Neovim", "the row follows the pane");
+}

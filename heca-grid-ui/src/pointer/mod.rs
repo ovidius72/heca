@@ -167,7 +167,7 @@ impl PointerState {
     pub fn hovered_for(&self) -> Option<f32> {
         self.hovered_since
             .get()
-            .map(|since| since.elapsed().as_secs_f32())
+            .map(|since| crate::clock::since(since).as_secs_f32())
     }
 
     /// Start or clear the hover clock. Called by the hover walk on the same transition that sets
@@ -555,7 +555,9 @@ pub fn edge_scroll(root: &mut dyn Component, dt: f32, setting: EdgeScroll) -> bo
 ///   after it in the child list still takes the click, because
 ///   [`overlay_occludes`](Component::overlay_occludes) says the panel owns that point;
 /// - **a clipping widget's children are unreachable outside it** — content scrolled out of sight
-///   stops being clickable, which is what [`clips_children`](Component::clips_children) means.
+///   stops being clickable, which is what [`clips_children`](Component::clips_children) means —
+///   **except an overlay**, which is drawn over the page out of the cut and stays clickable where it
+///   is drawn.
 ///
 /// A widget's own bounds are tested **after** its children, and descent does not require the
 /// parent to contain the point: a [`Select`](crate::widgets::Select)'s option list is a child
@@ -569,11 +571,11 @@ pub fn hit_test(root: &dyn Component, pos: Point) -> Option<Path> {
         // laid out and would hit-test perfectly well, which is exactly the problem.
         return None;
     };
-    if root.clips_children() && !rect.contains(pos) {
-        return None;
-    }
     let children = &root.base().children;
-    // Pass 1: a subtree whose overlay covers this point, whatever its place in the child order.
+    // Pass 1: a subtree whose overlay covers this point, whatever its place in the child order —
+    // **and wherever the point is**. An overlay is drawn over the page, out of its holder's cut, so
+    // a select's list hanging below a scrolling dock's edge is still what is under the pointer
+    // there. Asked before the cut below, which would otherwise make it unreachable.
     for (i, child) in children.iter().enumerate().rev() {
         if crate::component::overlay_occluded_at(child.as_ref(), pos)
             && let Some(mut sub) = hit_test(child.as_ref(), pos)
@@ -581,6 +583,10 @@ pub fn hit_test(root: &dyn Component, pos: Point) -> Option<Path> {
             sub.insert(0, i);
             return Some(sub);
         }
+    }
+    // Everything else inside a clipping widget is cut at its edge.
+    if root.clips_children() && !rect.contains(pos) {
+        return None;
     }
     for (i, child) in children.iter().enumerate().rev() {
         if let Some(mut sub) = hit_test(child.as_ref(), pos) {
@@ -634,7 +640,7 @@ fn hover_walk(node: &mut dyn Component, target: Option<&[usize]>, e: &PointerEve
         // enter/leave to keep its own copy in step.
         node.base()
             .pointer
-            .set_hovered_since(on_path.then(Instant::now));
+            .set_hovered_since(on_path.then(crate::clock::now));
         node.base().mark_needs_paint();
         let ev = if on_path {
             Event::PointerEnter(*e)

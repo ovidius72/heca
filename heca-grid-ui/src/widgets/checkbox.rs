@@ -32,6 +32,8 @@ const LABEL_GAP: f64 = 8.0;
 const LABEL_FS: f32 = 14.0;
 /// Seconds for a full check/uncheck pop.
 const ANIM_DURATION: f32 = 0.10;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Checked-state glow spread radius (px).
 const GLOW_RADIUS: f32 = 14.0;
 /// Checked-state glow peak intensity.

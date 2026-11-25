@@ -34,6 +34,7 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_right" => Some(WmAction::SidebarRight),
         // Bare: no dock named ⇒ pick one by letter. `dock = "…"` goes through `build_action`.
         "focus_dock" => Some(WmAction::FocusDock { dock: None }),
+        "sidebar_pane_view" => Some(WmAction::SidebarPaneView { view: None }),
         // The same, and back out again if it already has the keyboard — what `global_focus` binds.
         // Separate from `focus_dock` so a click, an RPC call and the palette cannot release a dock
         // by asking to focus it.

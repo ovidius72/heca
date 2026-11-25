@@ -61,6 +61,7 @@ fn status_icons_and_tones_change_together_without_rebuilding_the_row() {
     let mut root = Flex::column()
         .width(Length::FULL)
         .child(super::build(&LineCx {
+            head: Default::default(),
             facts,
             agent_statuses: statuses,
             agent_session_line: signal(Default::default()),
@@ -144,6 +145,7 @@ fn the_line_follows_reports_and_config_without_a_rebuild() {
         )
     });
     let line = super::build(&LineCx {
+        head: Default::default(),
         facts,
         agent_statuses: statuses,
         agent_session_line: signal(Default::default()),
@@ -220,6 +222,7 @@ fn long_reported_text_stays_inside_a_narrow_sidebar() {
         )
     });
     let line = super::build(&LineCx {
+        head: Default::default(),
         facts,
         agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
         agent_session_line: signal(Default::default()),
@@ -268,13 +271,16 @@ fn the_identity_is_the_model_else_the_name_and_the_session_line_follows_its_sett
             })),
         )
     });
+    let cx = LineCx {
+        head: Default::default(),
+        facts,
+        agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
+        agent_session_line: line,
+    };
     let mut root = Flex::column()
         .width(Length::FULL)
-        .child(super::build(&LineCx {
-            facts,
-            agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
-            agent_session_line: line,
-        }));
+        .child(super::build(&cx))
+        .child(super::session_line(&cx));
     let words = |root: &mut Flex| {
         crate::chrome::paint_chrome_root(root, 480.0, 240.0, &theme)
             .iter()
@@ -353,13 +359,16 @@ fn arbitrary_driver_artwork_uses_the_shared_image_widget_and_clears_in_place() {
             })),
         )
     });
+    let cx = LineCx {
+        head: Default::default(),
+        facts,
+        agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
+        agent_session_line: signal(Default::default()),
+    };
     let mut root = Flex::column()
         .width(Length::FULL)
-        .child(super::build(&LineCx {
-            facts,
-            agent_statuses: signal(Rc::new(AgentsConfig::default().statuses)),
-            agent_session_line: signal(Default::default()),
-        }));
+        .child(super::build(&cx))
+        .child(super::session_line(&cx));
     let images = |scene: &Scene| {
         scene.iter().filter(|cmd| matches!(cmd, DrawCommand::Host(host) if matches!(host.draw, HostDraw::Image { .. }))).count()
     };
@@ -404,8 +413,21 @@ fn arbitrary_driver_artwork_uses_the_shared_image_widget_and_clears_in_place() {
                 let center_y = |rect: heca_core::layout::Rectangle| rect.loc.y + rect.size.h / 2.0;
                 assert!((center_y(logo) - center_y(primary)).abs() <= 1.0);
                 assert!((center_y(status) - center_y(primary)).abs() <= 1.0);
-                assert!(session.loc.y > primary.loc.y);
-                assert_eq!(session.loc.x, primary.loc.x);
+                assert!(
+                    session.loc.y > primary.loc.y,
+                    "the session is the line below"
+                );
+                // Its own line, aligned like the folder line: the clock, then the title.
+                let clock = heca_grid_ui::widgets::Glyph::ClockCounterClockwise
+                    .primary_char()
+                    .unwrap()
+                    .to_string();
+                let clock = text(&clock);
+                assert!(clock.loc.x < session.loc.x, "the clock is before the title");
+                assert!(
+                    (center_y(clock) - center_y(session)).abs() <= 1.0,
+                    "on one line"
+                );
             }
             break;
         }

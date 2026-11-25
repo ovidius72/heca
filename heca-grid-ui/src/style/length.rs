@@ -386,3 +386,50 @@ mod length_spellings {
         }
     }
 }
+
+impl Length {
+    /// **A measure of the theme's, by name** — one of its numbers in logical pixels
+    /// (`"input.suggestions_width"`, `"pane_padding"`; see
+    /// [`Theme::number_named`](heca_theme::Theme::number_named)), read when the widget is laid out,
+    /// so a theme reload resizes it. Any size builder takes it:
+    ///
+    /// ```ignore
+    /// Flex::column().min_width(Length::theme("input.suggestions_width"))
+    /// ```
+    ///
+    /// A name the theme does not have leaves the size automatic.
+    pub const fn theme(name: &'static str) -> ThemeLength {
+        ThemeLength(name)
+    }
+}
+
+/// **A theme measure named by a builder** — made with [`Length::theme`], resolved at layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeLength(pub(crate) &'static str);
+
+/// **A count of the theme's, by name** — made with [`Count::theme`], resolved when it is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeCount(pub(crate) &'static str);
+
+/// **How many, said by the theme** — the counterpart of [`Length::theme`] for a builder that takes
+/// a count (`List::visible_items`, `ScrollRegion::visible_children`).
+///
+/// ```ignore
+/// List::new(items).visible_items(Count::theme("input.suggestions"))
+/// ```
+pub struct Count;
+
+impl Count {
+    /// One of the theme's counts (`"input.suggestions"`, `"input.max_lines"`; see
+    /// [`Theme::count_named`](heca_theme::Theme::count_named)).
+    pub const fn theme(name: &'static str) -> ThemeCount {
+        ThemeCount(name)
+    }
+}
+
+impl ThemeCount {
+    /// The count the theme the window is laid out with gives this name — `None` when it has none.
+    pub fn get(self) -> Option<usize> {
+        crate::layout::theme_count(self.0)
+    }
+}

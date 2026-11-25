@@ -16,7 +16,7 @@
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Icon;
@@ -26,6 +26,8 @@ const DEFAULT_CELL: f32 = 40.0;
 /// Halo falloff for the resting bare glyph, in logical px. Matches [`Icon`]'s own so
 /// a rail cell and a standalone glowing icon read the same.
 const ICON_HALO_RADIUS: f32 = 6.0;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Glow radius/intensity of the active cell (scaled by the theme's `glow_size`).
 const ACTIVE_GLOW_RADIUS: f32 = 9.0;
 const ACTIVE_GLOW_INTENSITY: f32 = 0.22;
@@ -78,8 +80,8 @@ impl RailCell {
 
     /// Set the active (selected/current) state.
     #[heca_grid_ui_macros::prop]
-    pub fn active(self, active: bool) -> Self {
-        self.active.set(active);
+    pub fn active(self, active: impl crate::builders::IntoBoolValue) -> Self {
+        active.into_bool_value().show_in(self.active);
         self
     }
 

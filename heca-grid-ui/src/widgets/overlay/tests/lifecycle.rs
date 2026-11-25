@@ -287,3 +287,28 @@ fn closing_cuts_or_plays_out_without_the_caller_knowing_which() {
         "a declared gesture is still playing, so it is still on screen and still inert",
     );
 }
+
+/// **`.on_close` hears every close, once each** — written before `.open(signal)`, which replaces
+/// the flag it listens to, and still heard: it starts listening on the first tick.
+#[test]
+fn on_close_hears_each_close_whatever_order_the_builders_were_written_in() {
+    use crate::builders::PresenceExt;
+    let closed = std::rc::Rc::new(std::cell::Cell::new(0));
+    let open = crate::reactive::signal(true);
+    let mut o = Overlay::new()
+        .on_close({
+            let closed = closed.clone();
+            move || closed.set(closed.get() + 1)
+        })
+        .open(open)
+        .panel(Label::new("hi"));
+    o.tick(0.0);
+    assert_eq!(closed.get(), 0, "open: nothing heard yet");
+    open.set(false);
+    assert_eq!(closed.get(), 1, "the close is heard");
+    open.set(false);
+    assert_eq!(closed.get(), 1, "staying closed is not another close");
+    open.set(true);
+    open.set(false);
+    assert_eq!(closed.get(), 2, "the next close is heard too");
+}

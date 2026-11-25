@@ -277,6 +277,15 @@ impl<'a> PaintCx<'a> {
     /// paint / shape / upload what isn't visible. The default viewport is
     /// "infinite" (headless), where nothing is ever culled; overlays draw
     /// on-screen, so they're never culled either.
+    /// **Whether `r` cannot be seen right now** — off the window, or cut away entirely by what holds
+    /// it (a dock scrolled past it). Something that moves with time asks this before it books its
+    /// next frame: a card flashing below a dock's edge drew nothing and still asked for a frame at
+    /// every step. When it comes back into sight, the frame that brings it (a scroll) paints it,
+    /// and it books again.
+    pub fn out_of_sight(&self, r: Rectangle) -> bool {
+        self.culled(r) || self.clip.is_some_and(|clip| r.intersection(clip).is_none())
+    }
+
     pub(super) fn culled(&self, r: Rectangle) -> bool {
         let vp = self.viewport;
         let r = self.placed(r);

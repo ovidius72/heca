@@ -61,9 +61,13 @@ impl ItemGroup {
 
     /// Set the initial expanded state.
     #[heca_grid_ui_macros::prop]
-    pub fn expanded(self, open: bool) -> Self {
-        self.expanded.set(open);
-        self.chevron.set(chevron_for(open).to_string());
+    pub fn expanded(self, open: impl crate::builders::IntoBoolValue) -> Self {
+        open.into_bool_value().show_in(self.expanded);
+        let expanded = self.expanded;
+        crate::builders::LiveValue::live(move || {
+            chevron_for(crate::reactive::SignalGet::get(&expanded)).to_string()
+        })
+        .show_in(self.chevron);
         self
     }
 

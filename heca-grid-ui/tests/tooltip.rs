@@ -478,3 +478,44 @@ fn a_bubble_by_the_right_edge_is_kept_inside_the_window() {
         );
     }
 }
+
+/// **The bubble is a light layer of its own**: a long tip wraps inside the window rather than
+/// running off it, and its frame is the accent edge and halo of a hover bubble.
+#[test]
+fn a_long_tip_wraps_inside_the_window_in_a_framed_bubble() {
+    let window = Size::new(300.0, 200.0);
+    let long = "a tip much too long to sit on one line in a window this narrow, so it wraps";
+    let mut row = Flex::row().child(Item::new("X").tooltip(long).tooltip_delay(0.0));
+    LayoutEngine::new().compute(&mut row, window);
+    let b = row.base().children[0].base().bounds;
+    heca_grid_ui::dispatch(
+        &mut row,
+        &Event::pointer_moved(Point::new(b.loc.x + 2.0, b.loc.y + 2.0)),
+    );
+    let theme = Theme::default();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(window);
+        heca_grid_ui::paint_child(&row, &mut cx);
+    }
+    let overlay = scene.overlay_layer();
+    let lines: Vec<_> = overlay
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.rect),
+            _ => None,
+        })
+        .collect();
+    assert!(lines.len() > 1, "the long tip wraps: {lines:?}");
+    assert!(
+        lines
+            .iter()
+            .all(|r| r.loc.x >= 0.0 && r.loc.x + r.size.w <= window.w),
+        "every line stays inside the window: {lines:?}"
+    );
+    assert!(
+        overlay.iter().any(|c| matches!(c,
+            DrawCommand::Rect(r) if r.border.is_some() && r.glow.is_some())),
+        "the bubble has its edge and its halo"
+    );
+}

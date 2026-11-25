@@ -64,6 +64,12 @@ impl Component for Flex {
     /// drop the shallower ones until they all meet the deepest. Nothing is added to the row's
     /// height — a child is only ever moved down into space its taller sibling already claimed.
     ///
+    /// **Why not the layout engine's own `align-items: baseline`.** taffy 0.7 aligns a flex line on
+    /// each child's first baseline, but a measured leaf — every text run here — never reports one
+    /// (`compute_leaf_layout` returns `first_baselines: NONE`), so the engine falls back to the
+    /// box's bottom edge: the `End` alignment above, not a baseline. It would only become the
+    /// engine's job once a leaf can hand taffy its ascent.
+    ///
     /// It lives here rather than at a call site because every row of text wants it and none of them
     /// should have to know it: a name beside a dimmed `(program)` suffix, a heading beside a count,
     /// a label beside a unit. The alternative is each caller forcing one font size on both runs,

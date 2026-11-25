@@ -350,3 +350,64 @@ fn the_close_gesture_targets_its_own_overlay() {
         fired[1],
     );
 }
+
+/// **A required field's button follows the field** — off while it is blank (spaces too), on as
+/// soon as something is typed, with nothing rebuilt.
+#[test]
+fn a_required_fields_button_is_off_while_the_field_is_blank() {
+    use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+    // Every widget that reads "OK" — the button, and what it holds.
+    fn disabled_flags(
+        c: &dyn Component,
+        words: &str,
+        out: &mut Vec<heca_grid_ui::reactive::Signal<bool>>,
+    ) {
+        if c.text_summary().as_deref() == Some(words) {
+            out.push(c.base().disabled);
+        }
+        for child in &c.base().children {
+            disabled_flags(child.as_ref(), words, out);
+        }
+    }
+    let spec = ModalSpec {
+        title: "Rename".into(),
+        body: heca_view::build::Input::new()
+            .value("logs")
+            .name("name")
+            .into(),
+        actions: vec![ModalAction::new("ok", "OK").disabled_when_empty("name")],
+        danger: false,
+        dismissible: true,
+    };
+    let mut forms = FormBindings::default();
+    let root = build_modal_root(
+        &spec,
+        OverlayId(crate::chrome::LayerRegistry::default().reserve_id()),
+        &heca_grid_ui::Theme::default(),
+        &noop_emit(),
+        &crate::chrome::ActionShortcuts::default(),
+        &mut forms,
+    )
+    .unwrap();
+    let field = forms.text_signal("name").expect("the field is bound");
+    // The dialog builds its parts on its first layout, as on screen.
+    let theme = heca_grid_ui::Theme::default();
+    let mut root = {
+        use heca_grid_ui::builders::{LayoutExt, Parent};
+        heca_grid_ui::Flex::column()
+            .width(heca_grid_ui::Length::FULL)
+            .height(heca_grid_ui::Length::FULL)
+            .child(root)
+    };
+    root.tick(1.0);
+    crate::chrome::paint_chrome_root(&mut root, 640.0, 480.0, &theme);
+    let mut flags = Vec::new();
+    disabled_flags(&root, "OK", &mut flags);
+    assert!(!flags.is_empty(), "the OK button is in the dialog");
+    let off = || flags.iter().any(|flag| flag.get_untracked());
+    assert!(!off(), "a filled field leaves OK on");
+    field.set("   ".into());
+    assert!(off(), "a blank one turns it off");
+    field.set("notes".into());
+    assert!(!off(), "typing turns it back on");
+}

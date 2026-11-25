@@ -173,8 +173,7 @@ impl GpuState {
                 None => Some([0.0, 0.0, 0.0, 0.0]),
             }
         };
-        self.grid.set_damage(damage);
-        self.text.set_damage(damage);
+        heca_renderer::set_frame_damage(damage, scale, [phys.width, phys.height]);
 
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(f)
@@ -228,7 +227,6 @@ impl GpuState {
                             stencil: at.rounded.map(|_| self.compositor.stencil_view()),
                             viewport: (self.config.width as f32, self.config.height as f32),
                             scale,
-                            damage,
                         },
                         &at,
                     );

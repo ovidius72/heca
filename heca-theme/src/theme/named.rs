@@ -66,6 +66,68 @@ impl Theme {
 }
 
 impl Theme {
+    /// **The number this theme gives `name`** — a measure or a share it holds (`"border_radius"`,
+    /// `"pane_padding"`), or one of its groups' (`"input.suggestions_width"`, `"spacing.md"`,
+    /// `"flash.duration_s"`), the name being the field's own. What a builder given a theme value by
+    /// name (`Length::theme("input.suggestions_width")`) reads when it is laid out. `None` for a
+    /// name that is not a number of the theme.
+    ///
+    /// Read at layout, so it is a plain match; the test `every_number_answers_to_its_own_name` fails
+    /// the day a number is added to the theme and not here.
+    pub fn number_named(&self, name: &str) -> Option<f32> {
+        Some(match name {
+            "border_radius" => self.border_radius,
+            "border_width" => self.border_width,
+            "pane_padding" => self.pane_padding,
+            "icon_secondary_alpha" => self.icon_secondary_alpha,
+            "active_wash_alpha" => self.active_wash_alpha,
+            "active_glow_radius" => self.active_glow_radius,
+            "drag_image_alpha" => self.drag_image_alpha,
+            "drag_edge_width" => self.drag_edge_width,
+            "drag_image_scale" => self.drag_image_scale,
+            "active_glow_strength" => self.active_glow_strength,
+            "card_background_alpha" => self.card_background_alpha,
+            "overlay_frost_radius" => self.overlay_frost_radius,
+            "sidebar_label_font_size" => self.sidebar_label_font_size,
+            "sidebar_button_font_size" => self.sidebar_button_font_size,
+            "shadow.alpha" => self.shadow.alpha,
+            "shadow.blur" => self.shadow.blur,
+            "dialog.max_width_em" => self.dialog.max_width_em,
+            "flash.duration_s" => self.flash.duration_s,
+            "flash.pause_s" => self.flash.pause_s,
+            "flash.border_width_em" => self.flash.border_width_em,
+            "flash.glow_radius_em" => self.flash.glow_radius_em,
+            "flash.glow_strength" => self.flash.glow_strength,
+            "input.width" => self.input.width,
+            "input.padding" => self.input.padding,
+            "input.caret_width" => self.input.caret_width,
+            "input.blink_period" => self.input.blink_period,
+            "input.glow_radius" => self.input.glow_radius,
+            "input.suggestions_width" => self.input.suggestions_width,
+            "spacing.hairline" => self.spacing.hairline,
+            "spacing.xs" => self.spacing.xs,
+            "spacing.sm" => self.spacing.sm,
+            "spacing.md" => self.spacing.md,
+            "spacing.lg" => self.spacing.lg,
+            "spacing.xl" => self.spacing.xl,
+            _ => return None,
+        })
+    }
+
+    /// **The count this theme gives `name`** — how many of something it allows
+    /// (`"input.suggestions"`, `"input.max_lines"`, `"flash.pulses"`). What a builder given a count
+    /// by name (`Count::theme("input.suggestions")`) reads when it is laid out. `None` for a name
+    /// that is not a count of the theme.
+    pub fn count_named(&self, name: &str) -> Option<usize> {
+        Some(match name {
+            "input.max_lines" => self.input.max_lines,
+            "input.suggestions" => self.input.suggestions,
+            "flash.pulses" => self.flash.pulses as usize,
+            "flash.frames_per_second" => usize::from(self.flash.frames_per_second),
+            _ => return None,
+        })
+    }
+
     /// **The opacity this theme gives `name`** — one of its interaction alphas (`"scrim"`,
     /// `"row_hover_fill"`, …), what `Fill::theme(..).alpha(..)` reads when it draws. `None` for a
     /// name that is not one.
@@ -105,6 +167,8 @@ impl Theme {
             "thumb_rest" => Some(self.interaction.thumb_rest),
             "thumb_hover" => Some(self.interaction.thumb_hover),
             "unlit" => Some(self.interaction.unlit),
+            "flash.border_alpha" => Some(self.flash.border_alpha),
+            "flash.fill_alpha" => Some(self.flash.fill_alpha),
             _ => None,
         }
     }
@@ -117,6 +181,48 @@ mod tests {
     /// **Every colour of the theme answers to its own field name**, with the colour the theme
     /// holds — found by walking the serialized theme, so a colour added to the theme and not to
     /// [`Theme::color_named`] fails here.
+    /// **Every number and count of the theme answers to its own name** — its field's name, or
+    /// `group.field` inside one of its groups — found by walking the serialized theme, so a number
+    /// added to the theme and not to [`Theme::number_named`] / [`Theme::count_named`] fails here.
+    /// The interaction alphas answer to [`Theme::alpha_named`] instead.
+    #[test]
+    fn every_number_answers_to_its_own_name() {
+        let theme = Theme::default();
+        let toml::Value::Table(fields) = toml::Value::try_from(&theme).expect("a theme serializes")
+        else {
+            panic!("a theme is a table");
+        };
+        let mut checked = 0;
+        let mut check = |name: String, value: &toml::Value| match value {
+            toml::Value::Float(f) => {
+                assert_eq!(theme.number_named(&name), Some(*f as f32), "{name}");
+                checked += 1;
+            }
+            // An integer is a count, or one of the opacities a group holds.
+            toml::Value::Integer(i) => {
+                let as_count = theme.count_named(&name) == Some(*i as usize);
+                let as_alpha = theme.alpha_named(&name).map(i64::from) == Some(*i);
+                assert!(as_count || as_alpha, "{name} answers to neither");
+                checked += 1;
+            }
+            _ => {}
+        };
+        for (key, value) in &fields {
+            match value {
+                toml::Value::Table(group) if key != "interaction" => {
+                    for (field, value) in group {
+                        check(format!("{key}.{field}"), value);
+                    }
+                }
+                other => check(key.clone(), other),
+            }
+        }
+        assert!(
+            checked > 30,
+            "the walk reached the theme's numbers: {checked}"
+        );
+    }
+
     #[test]
     fn every_colour_field_answers_to_its_own_name() {
         let theme = Theme {

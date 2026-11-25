@@ -32,11 +32,12 @@ declare_settings! {
         /// milliseconds, when its producer omits an explicit duration. A per-notification
         /// duration takes precedence; sticky notifications never expire. Default: 4000.
         pub auto_dismiss_ms: u64,
-        /// How many notification cards are on screen at once. Further notifications queue in the order
-        /// they were raised — nothing is dropped.
+        /// The most notification cards on screen at once; `0` (the default) shows as many as fit the
+        /// window's height. Further notifications queue in the order they were raised — nothing is
+        /// dropped.
         ///
         /// Closing one slides the cards after it up so the column never shows a blank slot, and the
-        /// next in line joins at the **end**. Default: 5. Clamped to at least 1.
+        /// next in line joins at the **end**.
         pub max_visible: usize,
         /// The most lines a card's title and its body may each take. Text longer than a card is wide
         /// **wraps** onto further lines (a path folds after a `/`) instead of being cut; text that needs

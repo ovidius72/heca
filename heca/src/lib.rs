@@ -612,8 +612,9 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             // frame starts (or at the end of a turn that asks for none), so a terminal writing
             // without pause wakes the loop at most once per frame.
             AppEvent::BackendWake => {}
+            // **A widget asked for a frame** (`request_frame`): what it painted differently is found by
+            // comparing scenes, so it is not a mark that repaints the whole window.
             AppEvent::RequestRedraw => {
-                state.needs_redraw = true;
                 crate::app::frame_reasons::report("event RequestRedraw");
                 state.window.request_redraw();
             }
@@ -625,15 +626,24 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             }
             AppEvent::TerminalInput { terminal, input } => {
                 let _slow = crate::slow_steps::step("client.terminal_input");
+                // **A frame only when the input changed something on screen** — each handler marks
+                // that itself (a selection grew, the history scrolled, the view snapped down). A
+                // key's echo and a program's answer to the mouse arrive as output, which asks for
+                // its own frame; redrawing the whole window on every key and every pointer move
+                // over a terminal was most of the frames drawn while typing.
+                let marked_before = std::mem::replace(&mut state.needs_redraw, false);
                 crate::app::terminal_host::on_terminal_input(
                     state,
                     &self.registry,
                     terminal,
                     input,
                 );
-                state.mark_full_redraw();
-                crate::app::frame_reasons::report("event TerminalInput");
-                state.window.request_redraw();
+                let changed = state.needs_redraw;
+                state.needs_redraw |= marked_before;
+                if changed {
+                    crate::app::frame_reasons::report("event TerminalInput");
+                    state.window.request_redraw();
+                }
             }
             AppEvent::RaiseNotification { draft } => {
                 // `notification::raise` is the host's clock, on the event loop's own turn, never

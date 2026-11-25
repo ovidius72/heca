@@ -33,10 +33,10 @@
 //! move, because a card occludes the points it covers — and passes everything else through
 //! (`Handled::No`), so cards block only the strip of UI they actually cover.
 
-use crate::builders::{EventExt, LayoutExt};
-use crate::component::{Base, Component, Event, Handled, PaintCx};
+use crate::builders::{EventExt, LayoutExt, Parent, PlaceExt};
+use crate::component::{Base, Component, Event, Handled};
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
-use crate::style::{Align, Direction, Justify, Length};
+use crate::style::{Align, Justify, Length};
 use crate::widgets::{Button, Toast, ToastPosition, ToastSpec};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::rc::Rc;
@@ -88,9 +88,17 @@ pub struct ToastStack {
     hovered: Option<Signal<bool>>,
     /// The line cap every card is built with — see [`max_lines_signal`](Self::max_lines_signal).
     max_lines: Option<Signal<usize>>,
-    /// One per child, same index — see [`Slot`].
+    /// **How many cards fit** — see [`room_signal`](Self::room_signal).
+    room: Option<Signal<usize>>,
+    /// One per card, same index — see [`Slot`].
     slots: Vec<Slot>,
+    /// **Whether there is a card on screen**, arriving, shown or leaving — what keeps the layer
+    /// open. An empty stack is a closed layer, so it stands between the pointer and nothing.
+    showing: Signal<bool>,
 }
+
+/// The layer's name among the stack's parts.
+const LAYER_AREA: &str = "layer";
 
 #[heca_grid_ui_macros::props]
 impl ToastStack {
@@ -108,16 +116,11 @@ impl ToastStack {
         // `KeyHintGroup` wrapped around it hugs the child and inherited the same window-sized box;
         // the only fix that ends the family is for the box to be honest.
         //
-        // Anchoring does not need the box: `on_layout` reads the viewport the layout pass stamps
-        // on every node and moves the finished group to its corner, and it computes that shift
-        // from the group's own size — so it works the same whether the box is the window or the
-        // cards. `justify`/`align` are set from the corner in `sync_anchor`.
+        // Anchoring does not need the box: the cards are shown in a light layer
+        // (`ensure_layer`) that places its column in the window's corner itself.
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
-        base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = (DEFAULT_MARGIN).into();
-        base.style.layout.gap = (DEFAULT_GAP).into();
-        let mut stack = Self {
+        Self {
             base,
             items,
             position: ToastPosition::default(),
@@ -127,10 +130,10 @@ impl ToastStack {
             on_action: None,
             hovered: None,
             max_lines: None,
+            room: None,
             slots: Vec::new(),
-        };
-        stack.sync_anchor();
-        stack
+            showing: crate::reactive::signal(false),
+        }
     }
 
     /// Where in the window the stack sits (default [`ToastPosition::TopRight`]).
@@ -142,7 +145,6 @@ impl ToastStack {
     #[heca_grid_ui_macros::prop]
     pub fn position(mut self, position: ToastPosition) -> Self {
         self.position = position;
-        self.sync_anchor();
         self
     }
 
@@ -150,7 +152,6 @@ impl ToastStack {
     #[heca_grid_ui_macros::prop]
     pub fn gap(mut self, gap: f32) -> Self {
         self.gap = gap;
-        self.base.style.layout.gap = (gap).into();
         self
     }
 
@@ -158,7 +159,6 @@ impl ToastStack {
     #[heca_grid_ui_macros::prop]
     pub fn margin(mut self, margin: f32) -> Self {
         self.margin = margin;
-        self.base.style.layout.padding = (margin).into();
         self
     }
 
@@ -202,6 +202,15 @@ impl ToastStack {
         self
     }
 
+    /// **Report how many cards fit the window's height** into a signal the host owns: the cards
+    /// laid out tell how tall one is, and the window how tall the column may be. The host decides
+    /// what to show with it — the stack only shows what it is given.
+    #[heca_grid_ui_macros::host_only("reports native layout state to a host signal")]
+    pub fn room_signal(mut self, room: Signal<usize>) -> Self {
+        self.room = Some(room);
+        self
+    }
+
     /// **The most lines a card's title and body may each take**, read from a signal the host owns
     /// (a config value) at the moment each card is built. Without one, a card takes as many lines
     /// as its text needs.
@@ -215,21 +224,63 @@ impl ToastStack {
         self
     }
 
-    /// Point the engine at the corner: which end of the column the cards pile against, and which
-    /// side they hug. **This is the whole of the placement** — there is no arithmetic left.
-    fn sync_anchor(&mut self) {
-        let s = &mut self.base.style.layout;
-        s.justify = match self.position.is_top() {
-            true => Justify::Start,
-            false => Justify::End,
-        };
-        s.align = if self.position.is_centered() {
-            Align::Center
-        } else if self.position.is_right() {
-            Align::End
-        } else {
-            Align::Start
-        };
+    /// **The layer the cards are shown in** — an [`Overlay`](crate::widgets::Overlay) in the
+    /// window's corner, built once, when the builders have all run. It does not take the keyboard
+    /// or block the page, and draws no frame of its own: each card is its own surface. Its panel
+    /// is the column of cards — which end they pile against and which side they hug follow the
+    /// corner, so the engine arranges them and there is no arithmetic here.
+    fn ensure_layer(&mut self) {
+        if self.base.child_area(LAYER_AREA).is_some() {
+            return;
+        }
+        let column = crate::widgets::Flex::column()
+            .gap(self.gap)
+            .padding(self.margin)
+            .justify(match self.position.is_top() {
+                true => Justify::Start,
+                false => Justify::End,
+            })
+            .align(if self.position.is_centered() {
+                Align::Center
+            } else if self.position.is_right() {
+                Align::End
+            } else {
+                Align::Start
+            });
+        let showing = self.showing;
+        let layer = crate::widgets::Overlay::new()
+            .blocking(false)
+            .keyboard(false)
+            .decorated(false)
+            .corner(self.position)
+            .open(move || showing.get())
+            // The panel is named by the layer, so the column it holds carries the stack's own name.
+            .panel(crate::widgets::Flex::column().child(column.area(Self::CARDS)))
+            .area(LAYER_AREA);
+        self.base.children.push(crate::WidgetModel::new(layer));
+    }
+
+    /// The name the column of cards carries — what finds it inside a tree.
+    pub const CARDS: &'static str = "cards";
+
+    /// **The cards, in the order they are shown** — empty before the first layout.
+    pub fn cards(&self) -> &[crate::WidgetModel] {
+        crate::component::area(self, Self::CARDS)
+            .map_or(&[], |column| column.base().children.as_slice())
+    }
+
+    fn cards_mut(&mut self) -> Option<&mut Vec<crate::WidgetModel>> {
+        self.ensure_layer();
+        crate::component::area_slot(&mut self.base, Self::CARDS)
+            .map(|column| &mut column.base_mut().children)
+    }
+
+    /// Keep the layer open while any card is on screen.
+    fn sync_showing(&self) {
+        let any = !self.cards().is_empty();
+        if self.showing.get_untracked() != any {
+            self.showing.set(any);
+        }
     }
 
     /// Build a [`Toast`] from a spec, wiring its action/dismiss to the stack's
@@ -294,9 +345,14 @@ impl ToastStack {
     /// out.
     fn reconcile(&mut self) {
         let specs = self.items.get_untracked();
+        let Some(_) = self.cards_mut() else {
+            return;
+        };
 
         // 1. A card the host has dropped is asked to leave. Once, on the frame its id goes.
-        for (slot, card) in self.slots.iter_mut().zip(self.base.children.iter_mut()) {
+        let slots = &mut self.slots;
+        let cards = cards_of(&mut self.base);
+        for (slot, card) in slots.iter_mut().zip(cards.iter_mut()) {
             if !slot.leaving && !specs.iter().any(|s| s.id == slot.id) {
                 card.close();
                 slot.leaving = true;
@@ -314,7 +370,7 @@ impl ToastStack {
                     id: spec.id,
                     leaving: false,
                 });
-                self.base.children.push(crate::WidgetModel::new(card));
+                cards_of(&mut self.base).push(crate::WidgetModel::new(card));
                 // A new card has to be measured and placed before it can arrive.
                 self.base.mark_needs_layout();
             }
@@ -340,23 +396,23 @@ impl ToastStack {
         if order.iter().enumerate().any(|(at, from)| at != *from) {
             let mut slots: Vec<Option<Slot>> = self.slots.drain(..).map(Some).collect();
             let mut cards: Vec<Option<crate::WidgetModel>> =
-                self.base.children.drain(..).map(Some).collect();
+                cards_of(&mut self.base).drain(..).map(Some).collect();
             for from in order {
                 self.slots
                     .push(slots[from].take().expect("each index is used once"));
-                self.base
-                    .children
-                    .push(cards[from].take().expect("each index is used once"));
+                cards_of(&mut self.base).push(cards[from].take().expect("each index is used once"));
             }
         }
 
         // 5. Everything in the list is on screen. A card built closed opens on its first
         //    reconcile, which is what plays its arrival rather than cutting it in.
-        for (slot, card) in self.slots.iter_mut().zip(self.base.children.iter_mut()) {
+        let slots = &mut self.slots;
+        for (slot, card) in slots.iter_mut().zip(cards_of(&mut self.base).iter_mut()) {
             if !slot.leaving && !showing(card.as_ref()) {
                 card.show();
             }
         }
+        self.sync_showing();
     }
 
     /// Drop the cards whose exit has played out.
@@ -367,9 +423,9 @@ impl ToastStack {
     fn drop_finished(&mut self) {
         let mut i = 0;
         while i < self.slots.len() {
-            if self.slots[i].leaving && !showing(self.base.children[i].as_ref()) {
+            if self.slots[i].leaving && !showing(self.cards()[i].as_ref()) {
                 self.slots.remove(i);
-                self.base.children.remove(i);
+                cards_of(&mut self.base).remove(i);
                 // **The tree just changed shape, so the cards below must move up.** A repaint
                 // cannot do it — they are still laid out around the card that has gone.
                 self.base.mark_needs_layout();
@@ -377,6 +433,7 @@ impl ToastStack {
                 i += 1;
             }
         }
+        self.sync_showing();
     }
 
     /// Did the pointer land on one of the cards?
@@ -386,7 +443,7 @@ impl ToastStack {
     /// pointer is on — including which one is on top and what is clipped away, neither of which a
     /// private `bounds.contains(pos)` could know.
     fn on_a_card(&self) -> bool {
-        self.base.children.iter().any(|c| c.base().hovered())
+        self.cards().iter().any(|c| c.base().hovered())
     }
 
     /// **The area the cards actually occupy** — the one definition of where this stack is, read by
@@ -397,8 +454,7 @@ impl ToastStack {
     /// between the pointer and the page — its box still spans the window, because that is what
     /// anchors a card to a corner.
     fn cards_rect(&self) -> Option<Rectangle> {
-        self.base
-            .children
+        self.cards()
             .iter()
             .filter(|c| showing(c.as_ref()))
             .map(|c| c.base().bounds)
@@ -423,6 +479,31 @@ impl ToastStack {
     }
 }
 
+impl ToastStack {
+    /// Tell the [`room_signal`](Self::room_signal) how many cards of the tallest one's height fit
+    /// in `height`, with the margin around the column and the gap between cards.
+    fn report_room(&self, height: f64) {
+        let Some(room) = self.room else {
+            return;
+        };
+        let tallest = self
+            .cards()
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .fold(0.0_f64, f64::max);
+        if tallest <= 0.0 {
+            return;
+        }
+        let (gap, margin) = (f64::from(self.gap), f64::from(self.margin));
+        let fits = ((height - 2.0 * margin + gap) / (tallest + gap))
+            .floor()
+            .max(1.0) as usize;
+        if room.get_untracked() != fits {
+            room.set(fits);
+        }
+    }
+}
+
 impl Component for ToastStack {
     fn base(&self) -> &Base {
         &self.base
@@ -432,47 +513,22 @@ impl Component for ToastStack {
     }
 
     fn remeasure(&mut self) {
+        self.ensure_layer();
         self.reconcile();
     }
 
     /// Overlay-active while it has cards, so a host gives it input first — and passes everything
     /// through that misses them.
     fn overlay_active(&self) -> bool {
-        !self.base.children.is_empty()
+        !self.cards().is_empty()
     }
 
-    /// **Anchor to the window, not to the slot a parent happened to give.**
-    ///
-    /// A notification corner means the *screen's* corner. A host mounts its layers however it
-    /// likes — the showcase stacks them in a column, where five viewport-sized siblings each get a
-    /// fifth of the height — so a stack that trusted its own box put "top right" two thirds of the
-    /// way down the window. It reads the viewport the layout pass stamped on every node
-    /// ([`Base::viewport`]) and moves the finished group to the corner it belongs to.
-    ///
-    /// **The arrangement is still entirely the engine's**: the column, the gap, the margin and
-    /// which end the cards pile against are all resolved before this runs. All that is left is
-    /// which corner of the finished group meets which corner of the window — and bounds stay
-    /// honest, because the cards move with it (`shift_subtree`), exactly as an `Overlay` places
-    /// its panel.
+    /// The layer places the column in the window's corner; the stack only says how many cards
+    /// fit the window.
     fn on_layout(&mut self) {
         let vp = self.base.viewport;
-        if !vp.w.is_finite() || !vp.h.is_finite() || self.base.children.is_empty() {
-            return;
-        }
-        let b = self.base.bounds;
-        let dx = if self.position.is_centered() {
-            (vp.w - b.size.w) / 2.0 - b.loc.x
-        } else if self.position.is_right() {
-            vp.w - (b.loc.x + b.size.w)
-        } else {
-            -b.loc.x
-        };
-        let dy = match self.position.is_top() {
-            true => -b.loc.y,
-            false => vp.h - (b.loc.y + b.size.h),
-        };
-        if dx != 0.0 || dy != 0.0 {
-            crate::component::shift_subtree(self, dx, dy);
+        if vp.h.is_finite() && !self.cards().is_empty() {
+            self.report_room(vp.h);
         }
     }
 
@@ -487,8 +543,7 @@ impl Component for ToastStack {
         self.cards_rect().is_some_and(|r| {
             r.contains(pos)
                 && self
-                    .base
-                    .children
+                    .cards()
                     .iter()
                     .any(|c| showing(c.as_ref()) && c.base().bounds.contains(pos))
         })
@@ -538,18 +593,6 @@ impl Component for ToastStack {
         }
     }
 
-    /// The cards paint on the scene's **overlay layer**, above the page, in tree order.
-    fn paint(&self, cx: &mut PaintCx) {
-        if !self.base.visible.get_untracked() || self.base.children.is_empty() {
-            return;
-        }
-        cx.with_overlay(|cx| {
-            for card in self.base.children.iter() {
-                crate::component::paint_child(card.as_ref(), cx);
-            }
-        });
-    }
-
     fn tick(&mut self, dt: f32) -> bool {
         self.reconcile();
         // **Publish hover from the framework's own state, every frame — not only on a move the
@@ -561,8 +604,10 @@ impl Component for ToastStack {
         // tick so a card reads the fresh hover this same frame.
         self.report_hover(self.on_a_card());
         let mut animating = false;
-        for card in self.base.children.iter_mut() {
-            animating |= card.tick(dt);
+        if let Some(cards) = self.cards_mut() {
+            for card in cards.iter_mut() {
+                animating |= card.tick(dt);
+            }
         }
         self.drop_finished();
         animating
@@ -570,3 +615,11 @@ impl Component for ToastStack {
 }
 
 impl LayoutExt for ToastStack {}
+
+/// The cards inside `base`'s layer — a free function, so a caller can hold the stack's other fields
+/// while it walks them.
+fn cards_of(base: &mut Base) -> &mut Vec<crate::WidgetModel> {
+    let column = crate::component::area_slot(base, ToastStack::CARDS)
+        .expect("the layer is built before any card");
+    &mut column.base_mut().children
+}

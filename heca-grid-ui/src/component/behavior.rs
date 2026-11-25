@@ -557,18 +557,7 @@ pub trait Component {
     /// the soonest such time across the tree instead of redrawing continuously.
     /// `None` = no timed redraw pending. Default: the soonest across children.
     fn next_redraw(&self) -> Option<f32> {
-        let mut soonest = soonest_redraw(
-            crate::widgets::tooltip::wake(self.base()),
-            crate::flash::wake(self.base()),
-        );
-        for child in self.base().children.iter() {
-            // Framework feedback also applies to a child that overrides its own deadline hook.
-            soonest = soonest_redraw(
-                soonest,
-                soonest_redraw(child.next_redraw(), crate::flash::wake(child.base())),
-            );
-        }
-        soonest
+        subtree_next_redraw(self.base())
     }
 
     /// **Can this widget be dragged?** Default reads [`draggable`](Base::draggable); a widget whose

@@ -59,19 +59,31 @@ pub trait ToneExt: Component + Sized {
     /// its own content keeps it. See [`Visual::content_tone`](crate::style::Visual::content_tone).
     ///
     /// Takes a tone or an `Option` of one: `None` keeps the surrounding content colour, so a part
-    /// whose tone may be missing (a status with none configured) is written in one line.
-    fn content_tone(mut self, tone: impl Into<Option<crate::Tone>>) -> Self {
-        self.base_mut().content_tone = None;
-        self.base_mut().style.visual.content_tone = tone.into();
+    /// whose tone may be missing (a status with none configured) is written in one line. **The tone
+    /// may change** — a `Signal<Option<Tone>>`, a `Memo` or a function reading signals is followed
+    /// in place, nothing rebuilt:
+    ///
+    /// ```ignore
+    /// Flex::row().content_tone(move || status.get().tone)
+    /// ```
+    fn content_tone(mut self, tone: impl super::IntoToneValue) -> Self {
+        let tone = tone.into_tone_value();
+        if tone.changes() {
+            let followed = crate::reactive::signal(tone.now_untracked());
+            tone.show_in(followed);
+            self.base_mut().style.visual.content_tone = None;
+            self.base_mut().content_tone = Some(followed);
+        } else {
+            self.base_mut().content_tone = None;
+            self.base_mut().style.visual.content_tone = tone.now_untracked();
+        }
         self
     }
 
     /// Follow a live semantic tone without rebuilding the widget or its children.
-    /// `None` restores the surrounding content colour. Explicit child colours still win.
-    fn content_tone_signal(mut self, tone: crate::reactive::Signal<Option<crate::Tone>>) -> Self {
-        self.base_mut().style.visual.content_tone = None;
-        self.base_mut().content_tone = Some(tone);
-        self
+    #[deprecated(note = "`content_tone` takes a value that changes: `.content_tone(signal)`")]
+    fn content_tone_signal(self, tone: crate::reactive::Signal<Option<crate::Tone>>) -> Self {
+        self.content_tone(tone)
     }
 }
 

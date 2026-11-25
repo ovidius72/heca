@@ -15,7 +15,7 @@ use heca_core::layout::Rectangle;
 
 use crate::builders::{EventExt, LayoutExt, Parent, PlaceExt};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::style::Spacing;
+use crate::style::{Count, Length, Spacing};
 use crate::widgets::{Flex, Overlay, Row};
 
 /// The list's name among the field's parts.
@@ -49,10 +49,6 @@ pub(super) struct Suggest {
     start: usize,
     /// A word the user closed with Escape: it stays closed until a different word is typed.
     dismissed: Option<usize>,
-    /// How many items the list shows at most — the theme's, handed down by the field.
-    pub limit: Signal<usize>,
-    /// The narrowest the list may be — the theme's, handed down by the field.
-    pub width: Signal<crate::style::Length>,
     /// Where the caret is on screen — what the list hangs from.
     pub caret: Signal<Rectangle>,
     /// The item a click chose, by the text it inserts, waiting for the field to put it in.
@@ -68,9 +64,6 @@ impl Suggest {
             selected: signal(0),
             start: 0,
             dismissed: None,
-            // The field hands down the theme's count at layout, before the list can open.
-            limit: signal(0),
-            width: signal(crate::style::Length::Auto),
             caret: signal(Rectangle::from_size(heca_core::layout::Size::new(0.0, 0.0))),
             picked: signal(None),
         }
@@ -78,24 +71,19 @@ impl Suggest {
 
     /// **The items shown for `query`**: those whose text matches it, best first, at most `limit`.
     pub fn shown(&self, query: &str) -> Vec<Candidate> {
-        matching(&(self.source)(), self.trigger, query, self.limit.get())
+        matching(&(self.source)(), self.trigger, query, shown_at_most())
     }
 
     /// **The list part**: a light panel hung from the caret — it leaves the keyboard in the field —
     /// up while something matches the open word, holding the shown items as rows, the chosen one
     /// lit. A click on a row picks it.
     pub fn list(&self) -> Overlay {
-        let (source, trigger, query, limit, selected) = (
-            self.source.clone(),
-            self.trigger,
-            self.query,
-            self.limit,
-            self.selected,
-        );
+        let (source, trigger, query, selected) =
+            (self.source.clone(), self.trigger, self.query, self.selected);
         let shown: Rc<dyn Fn() -> Vec<Candidate>> = Rc::new(move || {
             query
                 .get()
-                .map(|query| matching(&source(), trigger, &query, limit.get()))
+                .map(|query| matching(&source(), trigger, &query, shown_at_most()))
                 .unwrap_or_default()
         });
         let picked = self.picked;
@@ -132,7 +120,8 @@ impl Suggest {
             .panel(
                 Flex::column()
                     .padding(Spacing::Xs)
-                    .min_width(self.width)
+                    // The narrowest it is, said by the theme (`[input] suggestions_width`).
+                    .min_width(Length::theme("input.suggestions_width"))
                     .child(rows),
             )
             .area(LIST_AREA)
@@ -228,6 +217,11 @@ pub(super) fn word_at(chars: &[char], caret: usize, trigger: char) -> Option<(us
     // The trigger must be before the caret: a caret just ahead of it has no word yet.
     (start < caret && chars.get(start) == Some(&trigger))
         .then(|| (start, chars[start + 1..caret].iter().collect()))
+}
+
+/// **How many items the list shows at most** — the theme's (`[input] suggestions`), at least one.
+fn shown_at_most() -> usize {
+    Count::theme("input.suggestions").get().unwrap_or(1).max(1)
 }
 
 /// **The items matching `query`**, best first, at most `limit`: an item matches when the query is

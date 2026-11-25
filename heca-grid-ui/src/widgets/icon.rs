@@ -92,6 +92,8 @@ pub enum Glyph {
     Trash,
     /// A clipboard with lines of text — "paste".
     ClipboardText,
+    /// A clock with an arrow turning back — a session, something to come back to.
+    ClockCounterClockwise,
     XCircle,
     PlusCircle,
     FolderSimpleMinus,
@@ -170,6 +172,7 @@ impl Glyph {
             Glyph::Backspace => "backspace",
             Glyph::Trash => "trash",
             Glyph::ClipboardText => "clipboard_text",
+            Glyph::ClockCounterClockwise => "clock_counter_clockwise",
             Glyph::XCircle => "x_circle",
             Glyph::PlusCircle => "plus_circle",
             Glyph::FolderSimpleMinus => "folder_simple_minus",
@@ -237,6 +240,7 @@ impl Glyph {
         Glyph::Backspace,
         Glyph::Trash,
         Glyph::ClipboardText,
+        Glyph::ClockCounterClockwise,
         Glyph::XCircle,
         Glyph::PlusCircle,
         Glyph::FolderSimpleMinus,
@@ -304,6 +308,7 @@ impl Glyph {
             Glyph::Backspace => 0xe0ae,             // backspace
             Glyph::Trash => 0xe4a6,                 // trash
             Glyph::ClipboardText => 0xe198,         // clipboard-text
+            Glyph::ClockCounterClockwise => 0xe1a0, // clock-counter-clockwise (checked by eye)
             Glyph::XCircle => 0xe4f8,               // x-circle
             Glyph::PlusCircle => 0xe3d6,            // plus-circle
             Glyph::FolderSimpleMinus => 0xe25c,     // folder-simple-minus

@@ -68,6 +68,9 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
         // **A card must not retire under the pointer reaching for its button.** The stack reports
         // the hover and nothing more; the runtime owns what it costs and hands the time back.
         .hovered_signal(state.notification_hovered)
+        // **As many cards show as fit the window** (up to the configured most): the stack measures
+        // it, the server decides with it.
+        .room_signal(state.notification_room)
         // **How much of a message a card shows is the user's to say** — a path must show whole, so
         // the card wraps and this only stops a runaway message from covering the window.
         .max_lines_signal(state.notification_max_lines)

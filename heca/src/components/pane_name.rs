@@ -2,7 +2,6 @@
 
 use heca_grid_ui::Color;
 use heca_grid_ui::builders::LayoutExt;
-use heca_grid_ui::reactive::Signal;
 use heca_grid_ui::style::{FontWeight, Length};
 use heca_grid_ui::widgets::{Ellipsis, Label};
 
@@ -30,13 +29,6 @@ pub(crate) struct PaneName {
     color: Option<Color>,
     weight: FontWeight,
     font_scale: f32,
-}
-
-/// What [`PaneName::build`] hands back: the label, plus the signal a host binds when the name can
-/// change without the tree being rebuilt — which it can, every time a shell's title changes.
-pub(crate) struct BuiltPaneName {
-    pub(crate) widget: Label,
-    pub(crate) text: Signal<String>,
 }
 
 impl PaneName {
@@ -75,7 +67,8 @@ impl PaneName {
         self
     }
 
-    pub(crate) fn build(self) -> BuiltPaneName {
+    /// The name as a `Label` — give it `.text(..)` to follow a value.
+    pub(crate) fn build(self) -> Label {
         // **Cut at the end**: a name's beginning is what tells two panes apart (`server`/`serverb`),
         // so the tail is the half to lose. A path would want the other end — that is `FolderLine`'s
         // decision to make, not this one's.
@@ -95,8 +88,7 @@ impl PaneName {
         if (self.font_scale - 1.0).abs() > f32::EPSILON {
             widget = widget.font_scale(self.font_scale);
         }
-        let text = widget.text_signal();
-        BuiltPaneName { widget, text }
+        widget
     }
 }
 
@@ -109,7 +101,7 @@ mod tests {
     use heca_grid_ui::widgets::Flex;
     use heca_grid_ui::{Component, DrawCommand, LayoutEngine, PaintCx, Scene};
 
-    fn built(text: &str) -> BuiltPaneName {
+    fn built(text: &str) -> Label {
         PaneName::new(text).build()
     }
 
@@ -118,7 +110,7 @@ mod tests {
     fn it_shows_the_name() {
         let name = built("editor");
         assert_eq!(
-            heca_grid_ui::reactive::SignalGet::get_untracked(&name.text),
+            heca_grid_ui::reactive::SignalGet::get_untracked(&name.text_signal()),
             "editor",
         );
     }
@@ -136,7 +128,7 @@ mod tests {
             // asked to — the cut is unreachable and the name paints straight out of the card.
             let mut root = Flex::column()
                 .align(heca_grid_ui::style::Align::Center)
-                .child(built("a-very-long-pane-name").widget);
+                .child(built("a-very-long-pane-name"));
             LayoutEngine::new().compute(&mut root, Size::new(box_w, 40.0));
 
             let mut scene = Scene::new();

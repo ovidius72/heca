@@ -298,9 +298,9 @@ auto_dismiss_ms = 4000        # How long an in-app toast stays before dismissing
                               # A notification a producer marks sticky, or one with its own
                               # lifetime, ignores this. Applies on prefix+Shift+r.
                               # The countdown pauses while the pointer rests on a card.
-max_visible = 5               # How many toasts are on screen at once. The rest queue in the
-                              # order they were raised — nothing is dropped — and each takes
-                              # the slot that frees. Minimum 1.
+max_visible = 0               # The most toasts on screen at once; 0 = as many as fit the
+                              # window. The rest queue in the order they were raised — nothing
+                              # is dropped — and each takes the slot that frees.
 history_limit = 100           # How many dismissed or expired notifications the server keeps for
                               # the notification history. Oldest forgotten first; 0 keeps none.
                               # Applies on prefix+Shift+r.
@@ -424,7 +424,7 @@ mode = "app"          # "app" (in-app toast stack) | "system" (OS notifications 
                       # reserved, falls back to "app" until that backend exists) |
                       # "none" (no notifications at all — stderr logs are unaffected)
 auto_dismiss_ms = 4000 # how long a toast stays before dismissing itself
-max_visible = 5        # how many are on screen at once; the rest queue
+max_visible = 0        # the most on screen at once (0 = as many as fit); the rest queue
 history_limit = 100    # how many dismissed/expired ones the server remembers; 0 = none
 ```
 
@@ -438,10 +438,16 @@ history_limit = 100    # how many dismissed/expired ones the server remembers; 0
   **Resting the pointer on a card holds the whole stack still**, so nothing retires
   from under the click you are aiming at — the time that costs is given back when
   you move away, and each card resumes with what it had left.
-- **More than fits:** only `max_visible` cards show at once. The rest wait in the
+- **More than fits:** as many cards show as fit the window's height (`max_visible = 0`, the
+  default), or at most `max_visible`. The rest wait in the
   order they were raised — nothing is dropped. Closing one slides the cards after it
   up so the column never has a blank in it, and the next in line appears at the
   bottom, where a card that has just arrived belongs.
+- **Many at once:** the queue holds one more screenful. Past that, notifications
+  that would close by themselves go straight to the history and one card counts
+  them — "12 more notifications", with a **Show all** button that opens the
+  history; it goes to the front of the queue, so it shows as soon as a card leaves.
+  A card that stays until read, or that has buttons, always waits its turn.
 - **Raising one** — from a keybinding, a script, or a plugin — is the `notify`
   action: `notify title="Build finished" body="3 warnings" severity=success`.
   Native Rust extensions use `heca::Notification::info("…").body("…").send()`.
@@ -705,17 +711,39 @@ each workspace row shows its number before its name — 1 to 9, then `0` for the
 keyboard. A key bound to `focus_workspace` takes `ws_idx`, which counts from 0: the workspace shown
 as 1 is `ws_idx = "0"`. `false` hides the numbers; a reload shows or hides them at once.
 
-**Lines under a pane's name in the sidebar** (`[appearance.sidebar] pane_lines`, default
-`["cwd", "git", "agent"]`): `cwd` is the working directory and `git` is the branch with change counts, shown
-only inside a repository. **A fresh install shows the folder line under each pane's name in the
-sidebar.** Which lines show is decided by this list alone. A program built
-on heca can add its own, named `<extension>.<short>`; the same rules apply as for buttons and chips.
+**The sidebar's views** — the lines of a pane card, in three lists the sidebar switches between,
+and one for the current pane:
 
-`agent` shows the reporting program's icon, name, status and optional task — the name, never the
-model. It hides itself in other panes. The line under it is the program's session title,
-**`[appearance.sidebar] agent_session_line`**: `"reported"` (default) shows only a title the program
-sent, and only when it is not the pane's name already; `"always"` shows the title, or the pane's name
-when the program sent none; `"never"` hides it.
+```toml
+[appearance.sidebar]
+pane_view          = "extended"                                       # the view it starts in
+pane_compact_view  = ["title", "cwd"]
+pane_normal_view   = ["title", "cwd", "git"]
+pane_extended_view = ["title", "cwd", "git", "agent", "agent_session"]
+pane_current_view  = ["title", "cwd", "git", "agent", "agent_session"] # unset: follows the view
+```
+
+Each list names lines in the order they show: `title` is the status dot, the program's icon and the
+pane's name — a line like the others, so a view can leave it out, and then the dot goes in front of
+the first line; `cwd` is the working directory; `git` is the branch with change counts, only inside a
+repository. A program built on heca can add its own, named `<extension>.<short>`; the same rules
+apply as for buttons and chips. `pane_current_view` sets the **current** pane apart: its card shows
+that list whatever the view.
+
+**Switching**: the `sidebar_pane_view` action — `view=compact|normal|extended` picks one, no argument
+goes to the next — bound to `prefix+Shift+b`, in the command palette ("Sidebar Pane View") and from
+`heca rpc sidebar_pane_view`. The bottom bar says which view you are in after a switch. The view you pick
+is remembered and wins at the next start; changing `pane_view` in the file and reloading switches to
+it. A switch is the event `sidebar.pane_view.changed`. The old single list, `pane_lines`, is no
+longer read; heca says so at load and names `pane_extended_view`.
+
+`agent` shows the reporting program's icon, the model it answers with (its name when it names
+none), its status and optional task. It hides itself in other panes. `agent_session` is the
+program's session title on a line of its own, with a clock icon, aligned like the folder line; what
+it says is **`[appearance.sidebar] agent_session_line`**: `"reported"` (default) shows only a title
+the program sent, and only when it is not the pane's name already; `"always"` shows the title, or the
+pane's name when the program sent none; `"never"` hides it. Leave `agent_session` out of a view's
+list to drop the line there, or move it to change its place.
 The status is its glyph alone, in its tone; its label is the glyph's tooltip. Both come from
 `[settings.agents.statuses]`; an unlisted status id is its own tooltip.
 

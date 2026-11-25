@@ -58,6 +58,7 @@ impl ScrollRegion {
             last_revealed: Vec::new(),
             last_reveal_viewport: None,
             reveal_paused: false,
+            visible_children: None,
             last_reveal_rect: None,
             wheel_idle: None,
         }
@@ -155,6 +156,20 @@ impl ScrollRegion {
         self.axes = axes;
         self
     }
+    /// **How many of its children it shows before it scrolls**: its height is that many of its
+    /// content children, measured — rows of any height show exactly `count` — with its padding
+    /// around them. A count or a value that changes (`Signal<usize>`, a function). The same
+    /// capability as [`List::visible_items`](crate::widgets::List::visible_items), for a region
+    /// whose children are already built.
+    ///
+    /// The height follows the children measured by the previous layout, so content that changes
+    /// size settles on the next pass.
+    #[heca_grid_ui_macros::host_only("a live count, which static data cannot drive")]
+    pub fn visible_children(mut self, count: impl crate::builders::IntoCountValue) -> Self {
+        self.visible_children = Some(count.into_count_value());
+        self
+    }
+
     /// Where the followed descendant is put (default [`RevealAlign::Minimal`]).
     #[heca_grid_ui_macros::prop]
     pub fn reveal_align(mut self, align: RevealAlign) -> Self {

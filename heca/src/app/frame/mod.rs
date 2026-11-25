@@ -13,9 +13,12 @@ use crate::app::terminal_render::TerminalRenderState;
 use crate::app_state::AppState;
 use crate::chrome::ChromeConfig;
 
+mod damage;
 mod draw;
 mod host_work;
 mod panes;
+
+pub(crate) use damage::Repaint;
 
 use host_work::{HostTargets, do_host_work};
 pub(crate) use panes::OnScreen;
@@ -64,6 +67,8 @@ pub(super) struct Frame {
     /// surface — panes, floats, chrome — flushed once at the very end, above all bases (the
     /// surface-compositor top band), and where each terminal was drawn.
     flushed: Flushed,
+    /// The part of the scene this frame repaints (logical px), `None` for all of it.
+    damage: Option<heca_grid_ui::Rectangle>,
 }
 
 /// **Before anything is drawn**: mount what widgets asked to open, bring the retained trees up to
@@ -98,7 +103,6 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     let scale = state.scale_factor as f32;
     let chrome = ChromeConfig::of(state);
     state.text_renderer.begin_frame();
-    state.text_renderer.set_damage(None);
     state.text_renderer.set_clip(None);
     // Reset the grid renderer's persistent vertex/index buffer offsets once per frame so each flush
     // appends at a distinct region (see `scene_flush::flush_base`).
@@ -153,20 +157,35 @@ impl Frame {
             scene: state.compositor.scene_view().clone(),
             stencil: state.compositor.stencil_view().clone(),
             flushed: Flushed::default(),
+            damage: None,
         })
     }
 
-    /// What one flush needs: no damage region, because the scene texture is cleared every frame
-    /// (the clear pass) and panes redraw in full. A partial (damage-scissored) repaint would leave
-    /// the rest as bare background for that frame — the dark "re-render" flash seen mid-animation
-    /// (e.g. the split button's press flash). Partial chrome is only sound with a *preserved*
-    /// scene, which this render path does not keep. See PLAN.md "Damage-region render" for the
-    /// deferred optimization that would make it sound.
+    /// What one flush needs. The part of the scene it repaints is the frame's damage, which every
+    /// renderer reads for itself ([`heca_renderer::set_frame_damage`]).
     fn pass(&self) -> ChromePassOpts {
         ChromePassOpts {
-            damage: None,
             glow_alpha_scale: self.v.glow_alpha_scale,
         }
+    }
+
+    /// **Limit every pass into the scene to `damage`** (logical px; `None` repaints it all) —
+    /// until [`finish`](Self::finish) lifts it.
+    pub(super) fn limit_to(&mut self, damage: Option<heca_grid_ui::Rectangle>) {
+        self.damage = damage;
+        let rect = damage.map(|r| {
+            [
+                r.loc.x as f32,
+                r.loc.y as f32,
+                r.size.w as f32,
+                r.size.h as f32,
+            ]
+        });
+        heca_renderer::set_frame_damage(
+            rect,
+            self.v.scale,
+            [self.v.phys_size.width, self.v.phys_size.height],
+        );
     }
 
     /// **The top band, then present**: every surface's overlay content (tooltips, popovers), above
@@ -188,6 +207,13 @@ impl Frame {
             );
         }
         std::mem::take(&mut self.flushed.drawn).settle(state);
+        // The scene is complete: what is drawn next (a terminal's layer, the next frame's
+        // preparation) is not limited to this frame's damage.
+        heca_renderer::set_frame_damage(
+            None,
+            1.0,
+            [self.v.phys_size.width, self.v.phys_size.height],
+        );
         state.compositor.blit(&self.view, &mut self.encoder);
         state.queue.submit(std::iter::once(self.encoder.finish()));
         state.queue.present(self.surface_texture);

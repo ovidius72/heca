@@ -1,7 +1,6 @@
 //! **Arrangement**: how a container lays out itself and its children.
 
 use crate::component::Component;
-use crate::reactive::SignalUpdate;
 use crate::style::{Align, Direction, Justify, WidgetSize};
 
 /// Arrangement builders: how a container lays out itself and its children.
@@ -106,6 +105,12 @@ pub trait LayoutExt: Component + Sized {
     /// a leftover size beside it would draw a different rect than the one asked for. **Except
     /// where it says `Auto`** — an axis left auto has said *where*, not *how big*, so the widget's
     /// own size stands there. That is what lets a caller place something without also resizing it.
+    ///
+    /// **When it is the right tool, and not a hand position.** It is for a place only the data
+    /// knows — a link's cell in a terminal grid, a pane's slot in a column the user resized, a card
+    /// in an exposé strip — said once, declaratively, and laid out by the engine like CSS
+    /// `position: absolute`. A place that follows from the boxes around it (beside, below, in a
+    /// corner) is a container's job, never this.
     fn at_rect(
         mut self,
         left: impl Into<crate::style::Length>,
@@ -390,8 +395,15 @@ pub trait LayoutExt: Component + Sized {
         self
     }
     /// Disable the widget: dimmed, non-interactive, skipped by focus traversal.
-    fn disabled(mut self, disabled: bool) -> Self {
-        self.base_mut().disabled.set(disabled);
+    ///
+    /// A `bool`, or a value that changes (a `Signal<bool>`, a `Memo`, a function reading signals),
+    /// followed in place — a submit button off while its field is empty:
+    ///
+    /// ```ignore
+    /// Button::new("Save").disabled(move || name.get().trim().is_empty())
+    /// ```
+    fn disabled(self, disabled: impl super::IntoBoolValue) -> Self {
+        disabled.into_bool_value().show_in(self.base().disabled);
         self
     }
     /// Explicit Tab-order index (like HTML `tabindex`): indexed widgets are

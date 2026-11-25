@@ -48,15 +48,33 @@ pub(super) fn key_event(key: GridKey, modifiers: Modifiers) -> BackendKeyEvent {
     }
 }
 
-/// **What typing does, whatever was typed**: the terminal's process hears it through `send`, the
-/// view snaps to the live bottom — typing is how you say you want to see where you are — and the
-/// frame is redrawn. Nothing happens for a terminal that no longer exists.
+/// **What typing does, whatever was typed**: the terminal's process hears it through `send` and the
+/// view snaps to the live bottom — typing is how you say you want to see where you are. Nothing
+/// happens for a terminal that no longer exists.
+///
+/// **A frame only when the view moved.** What a key changes on screen is the program's answer, and
+/// that arrives as output, which asks for its own frame. Drawing on the key itself painted the same
+/// picture again before the echo existed — and that frame took one of the two places queued to the
+/// screen, so the frame with the character waited behind it.
 fn type_into(state: &mut AppState, terminal: TerminalId, send: impl FnOnce(&mut dyn PaneBackend)) {
-    if let Some(backend) = state.client.backends.get_mut_by_id(terminal) {
-        backend.scroll_to_bottom();
-        send(backend);
+    if let Some(backend) = state.client.backends.get_mut_by_id(terminal)
+        && typed(backend, send)
+    {
         state.needs_redraw = true;
     }
+}
+
+/// [`type_into`] on the terminal itself: the view snaps to the bottom and the process hears `send`.
+/// Says whether the view moved — the only thing typing changes on screen by itself. A key sent to
+/// the focused terminal goes through here too, so typed text and a pressed key follow one rule.
+pub(crate) fn typed(
+    backend: &mut dyn PaneBackend,
+    send: impl FnOnce(&mut dyn PaneBackend),
+) -> bool {
+    let was_back_in_history = !backend.at_bottom();
+    backend.scroll_to_bottom();
+    send(backend);
+    was_back_in_history
 }
 
 /// Typed text reaches the process.

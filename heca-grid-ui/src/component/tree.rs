@@ -181,6 +181,25 @@ pub fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
     }
 }
 
+/// **Put a floating box where it belongs** — the one way an overlay panel, a menu, a tooltip
+/// bubble or a group of notifications is moved after layout. The layout engine sized and arranged
+/// the box and everything in it; this moves the finished box, children and all, so its top-left
+/// corner lands on `to` (CSS `transform: translate`). Where `to` is comes from the shared placement
+/// rules ([`place_anchored`](crate::widgets::place_anchored), [`place_beside`](crate::widgets::place_beside), …).
+///
+/// Returns whether it moved. A box laid out once and kept (an overlay's panel, a menu) must be
+/// repainted when it moved; a bubble laid out again every paint must not ask, or it would ask
+/// forever — which is why the caller, who knows which it is, decides.
+pub fn place_floating(c: &mut dyn Component, to: Point) -> bool {
+    let at = c.base().bounds.loc;
+    let (dx, dy) = (to.x - at.x, to.y - at.y);
+    if dx == 0.0 && dy == 0.0 {
+        return false;
+    }
+    shift_subtree(c, dx, dy);
+    true
+}
+
 /// **Make a wrapper transparent to layout** — the sizing half of "transparent".
 ///
 /// A wrapper that decorates without changing the picture ([`KeyHint`](crate::widgets::KeyHint),

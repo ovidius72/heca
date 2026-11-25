@@ -51,7 +51,7 @@ pub struct TextRenderer {
     current_clip: Option<[f32; 4]>,
     /// Frame-level damage region (logical px); each label is also scissored to it
     /// for damage-region redraw. `None` = full frame.
-    damage: Option<[f32; 4]>,
+
     /// Vertices/indices already written to the persistent buffers this frame. Each
     /// pass appends at its own offset (via `queue.write_buffer`) rather than
     /// allocating a staging buffer per frame. Reset by `begin_frame`.
@@ -111,12 +111,6 @@ impl TextRenderer {
     /// Physical framebuffer size in pixels; scissor rects are clamped to it.
     pub fn set_target_size(&mut self, width: u32, height: u32) {
         self.target_size = [width.max(1), height.max(1)];
-    }
-
-    /// Set the frame-level damage region (logical px) every label is scissored to,
-    /// or `None` for a full-frame render. Set once per frame before `render`.
-    pub fn set_damage(&mut self, damage: Option<[f32; 4]>) {
-        self.damage = damage;
     }
 
     /// How many render passes this renderer has begun since [`begin_frame`](Self::begin_frame).

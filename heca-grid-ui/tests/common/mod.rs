@@ -120,3 +120,9 @@ pub fn press_key(root: &mut dyn Component, key: heca_grid_ui::GridKey) -> Handle
         |event| heca_grid_ui::dispatch(&mut *root, event),
     )
 }
+
+/// The option rows of a `Select`, found by name — the open list is the control's `list` part.
+#[allow(dead_code)]
+pub fn select_rows(select: &dyn Component) -> &[heca_grid_ui::WidgetModel] {
+    heca_grid_ui::area(select, "list").map_or(&[], |list| list.base().children.as_slice())
+}
