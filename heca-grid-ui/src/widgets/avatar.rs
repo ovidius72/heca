@@ -135,8 +135,7 @@ fn parts(name: &str, picture: Signal<Option<ImageSource>>) -> Flex {
     Flex::row()
         .align("center")
         .justify("center")
-        .width("100%")
-        .height("100%")
+        .fill_parent()
         .child(
             Label::new(initial(name))
                 .font_weight(FontWeight::Bold)
@@ -147,8 +146,7 @@ fn parts(name: &str, picture: Signal<Option<ImageSource>>) -> Flex {
         .child(
             Image::from_source(nothing())
                 .source_from(move || picture.get().unwrap_or_else(nothing))
-                .width("100%")
-                .height("100%")
+                .fill_parent()
                 .area(PICTURE)
                 .hidden(move || picture.get().is_none()),
         )
