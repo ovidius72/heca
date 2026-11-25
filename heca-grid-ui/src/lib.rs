@@ -79,7 +79,7 @@ pub use component::{
     Base, Component, Event, FrameWake, GridKey, Handled, Modifiers, PaintCx, WidgetIntent,
     WidgetModel, area, area_slot, click, collect_damage, deliver, dispatch, frame_served,
     frame_waker, holds_keyboard, install_frame_request, needs_layout, overlay_occluded_at,
-    paint_child, request_frame, shift_subtree, unmount_child,
+    paint_child, place_floating, request_frame, shift_subtree, unmount_child,
 };
 pub use cursor::{Cursor, cursor_at};
 pub use drag::{DropAction, DropHit, DropSide, Flow, resolve_at, source_at};
@@ -111,8 +111,8 @@ pub use pointer::{
     pointer_held,
 };
 pub use scene::{
-    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, ImageAt, Scene, SurfaceAt,
-    TextStyle,
+    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, ImageAt, Scene, SceneDamage,
+    SurfaceAt, TextStyle,
 };
 pub mod prop;
 pub mod props;
@@ -127,15 +127,16 @@ pub use tone::Tone;
 pub use widgets::{
     ActiveMarker, Alert, AlertVariant, Avatar, Badge, BadgeButton, BadgeVariant, Button,
     ButtonVariant, Caption, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette,
-    Container, Dialog, DockFrame, DockFrameVariant, DotStatus, Elapsed, ElapsedFormat, Ellipsis,
-    Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton, Image, ImageFit,
-    ImageState, Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, Keycap, KeycapVariant,
-    Label, LabelSide, LandingSlot, Line, MarkerGroup, MessageFeed, MessageList, NfGlyph, NfIcon,
-    Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar, RailCell, RegionMode,
-    Resizable, RevealAlign, Row, RowVariant, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion,
-    Select, Separator, Spinner, Splitter, StatusDot, Surface, Svg, Tabs, Tag, Tile, Toast,
-    ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
-    TreeLayout, Visibility, container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
+    Container, CursorLook, Dialog, DockFrame, DockFrameVariant, DotStatus, Elapsed, ElapsedFormat,
+    Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton, Image,
+    ImageFit, ImageState, Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, Keycap,
+    KeycapVariant, Label, LabelSide, LandingSlot, Line, MarkerGroup, MessageFeed, MessageList,
+    NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar, RailCell,
+    RegionMode, Resizable, RevealAlign, Row, RowVariant, ScrollAxes, ScrollBar, ScrollInfo,
+    ScrollRegion, Select, Separator, Spinner, Splitter, StatusDot, Surface, Svg, Tabs, Tag, Tile,
+    Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,
+    TooltipSide, TreeLayout, Visibility, container, keycap_size, keycap_size_nf, paint_keycap,
+    paint_keycap_nf,
 };
 
 /// Common imports for building UIs.

@@ -61,7 +61,6 @@ impl Component for Input {
         region.style.layout.flex_grow = 1.0;
         region.style.layout.width = Length::Percent(1.0);
         drop(view);
-        self.hand_down_suggestion_style();
     }
 
     fn on_placed(&mut self) {
@@ -264,9 +263,7 @@ impl Component for Input {
             return tip;
         }
         // Time until the caret flips: the next half-`self.base.input_style.blink_period.max(f32::MIN_POSITIVE)` boundary.
-        let phase = self
-            .blink_origin
-            .elapsed()
+        let phase = crate::clock::since(self.blink_origin)
             .as_secs_f32()
             .rem_euclid(self.base.input_style.blink_period.max(f32::MIN_POSITIVE));
         let half = self.base.input_style.blink_period.max(f32::MIN_POSITIVE) / 2.0;
@@ -280,23 +277,6 @@ impl Component for Input {
 }
 
 impl Input {
-    /// **Hand the suggestion list the field's theme values** before layout — how many items, how
-    /// narrow — since they change its size.
-    fn hand_down_suggestion_style(&mut self) {
-        let Some(suggest) = &self.suggest else {
-            return;
-        };
-        let style = self.base.input_style;
-        let limit = style.suggestions.max(1);
-        if suggest.limit.get_untracked() != limit {
-            suggest.limit.set(limit);
-        }
-        let width = Length::Px(style.suggestions_width.max(0.0));
-        if suggest.width.get_untracked() != width {
-            suggest.width.set(width);
-        }
-    }
-
     /// **Tell the suggestion list where the caret is on screen**, once layout has finished and the
     /// field is where it will be drawn: the text's start, plus the caret's row and column, less how
     /// far the text has scrolled. Whether the list is up, and where it goes — below, or above when

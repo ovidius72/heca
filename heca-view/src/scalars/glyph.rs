@@ -60,6 +60,7 @@ named_set! {
         Backspace => "backspace",
         Trash => "trash",
         ClipboardText => "clipboard_text",
+        ClockCounterClockwise => "clock_counter_clockwise",
         XCircle => "x_circle",
         PlusCircle => "plus_circle",
         FolderSimpleMinus => "folder_simple_minus",

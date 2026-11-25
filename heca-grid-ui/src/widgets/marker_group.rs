@@ -40,6 +40,8 @@ const BAR_W_HOVER: f64 = 5.0;
 /// Vertical inset of the bar from the group's top/bottom (logical px), so the
 /// rounded bar caps don't touch the edges.
 const BAR_INSET: f64 = 2.0;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Base glow falloff radius (logical px) of the active bar. **Config-driven:**
 /// `cx.rect` scales this by `theme.colors.glow_size` and drops the glow entirely at
 /// `GlowLevel::None` (see [`PaintCx::rect`](crate::component::PaintCx::rect)).
@@ -83,8 +85,8 @@ impl MarkerGroup {
 
     /// Set the active state (brightens the bar).
     #[heca_grid_ui_macros::prop]
-    pub fn active(self, active: bool) -> Self {
-        self.active.set(active);
+    pub fn active(self, active: impl crate::builders::IntoBoolValue) -> Self {
+        active.into_bool_value().show_in(self.active);
         self
     }
 
@@ -111,8 +113,8 @@ impl MarkerGroup {
 
     /// Set the sidebar-nav **cursor** state (full-opacity bar, no active glow).
     #[heca_grid_ui_macros::prop]
-    pub fn nav_selected(self, on: bool) -> Self {
-        self.nav.set(on);
+    pub fn nav_selected(self, on: impl crate::builders::IntoBoolValue) -> Self {
+        on.into_bool_value().show_in(self.nav);
         self
     }
 

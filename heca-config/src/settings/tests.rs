@@ -102,13 +102,12 @@ fn test_terminal_foreground_override_parses() {
 
 /// **The stack's size is config, not a compiled-in number**, and it clamps.
 ///
-/// A zero would queue every notification for ever and show none — that is what `mode = "none"`
-/// is for, so a zero here is a typo rather than a way to silence the app. The clamp itself
-/// lives in the store; this pins that the value travels.
+/// `0` — the default — shows as many cards as fit the window; a number is the most shown. The
+/// fitting lives in the notification runtime; this pins that the value travels.
 #[test]
-fn notification_max_visible_defaults_to_five_and_is_overridable() {
+fn notification_max_visible_defaults_to_as_many_as_fit_and_is_overridable() {
     let s = SettingsConfig::default();
-    assert_eq!(s.notification_system.max_visible, 5);
+    assert_eq!(s.notification_system.max_visible, 0);
 
     let s: SettingsConfig =
         toml::from_str("[notification_system]\nmax_visible = 3\n").expect("parses");
@@ -117,7 +116,7 @@ fn notification_max_visible_defaults_to_five_and_is_overridable() {
     // Absent from a present subtable → still the default.
     let s: SettingsConfig =
         toml::from_str("[notification_system]\nmode = \"app\"\n").expect("parses");
-    assert_eq!(s.notification_system.max_visible, 5);
+    assert_eq!(s.notification_system.max_visible, 0);
 }
 
 #[test]

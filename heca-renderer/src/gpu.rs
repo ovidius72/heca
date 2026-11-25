@@ -63,6 +63,9 @@ impl WindowGpu {
             width: size.width.max(1),
             height: size.height.max(1),
             present_mode: wgpu::PresentMode::AutoVsync,
+            // **Two frames queued to the screen.** One was tried: a frame asked right after another
+            // then waited for the screen to show the first, and typing in a program that redraws on
+            // every key (Claude Code) measured 27 ms from key to character instead of 16.
             desired_maximum_frame_latency: 2,
             alpha_mode: alpha_mode(&caps.alpha_modes, transparent),
             view_formats: vec![],

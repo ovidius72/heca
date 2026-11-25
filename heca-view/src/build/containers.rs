@@ -194,6 +194,11 @@ impl Row {
     pub fn cursor_fill(self, on: bool) -> Self {
         self.prop("cursor_fill", on)
     }
+    /// How the cursor is marked — mirrors grid-ui `Row::cursor_look`: `Ring` (the default),
+    /// `Fill`, or `Pill`, a menu entry's look.
+    pub fn cursor_look(self, look: crate::ViewCursorLook) -> Self {
+        self.prop("cursor_look", look)
+    }
     /// The hover/active highlight colour: a theme token name or a literal.
     pub fn highlight(self, colour: &str) -> Self {
         self.prop("highlight", PropValue::Color(colour.to_string()))
@@ -391,6 +396,17 @@ impl Overlay {
     /// ```
     pub fn position(self, position: &str) -> Self {
         self.prop("position", PropValue::Text(position.to_string()))
+    }
+    /// **Put the panel in a corner or at an edge of the window** — a stack of notifications:
+    /// `"top_right"`, `"top_left"`, `"top_center"`, `"bottom_right"`, `"bottom_left"`,
+    /// `"bottom_center"`. Mirrors grid-ui `Overlay::corner`.
+    pub fn corner(self, corner: &str) -> Self {
+        self.prop("corner", PropValue::Text(corner.to_string()))
+    }
+    /// **How far the panel is lifted off the page** — a full panel, or a bubble just above its
+    /// target. Mirrors grid-ui `Overlay::panel_elevation`.
+    pub fn panel_elevation(self, elevation: crate::ViewElevation) -> Self {
+        self.prop("panel_elevation", elevation)
     }
     /// **The arrows across the panel move the keyboard, as Tab does** — for a panel whose controls
     /// are a row of buttons. Off by default.

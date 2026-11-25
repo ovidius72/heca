@@ -102,8 +102,20 @@ pub(crate) fn handle_window_event(
             // The frame reads what the terminals hold now: output from here on wakes the next one.
             state.frame_asked = false;
             state.wake_latch.reset();
+            // Something marked the window (a resize, a theme, a key): it may have changed anything,
+            // so the whole window is repainted. A frame asked only by terminal output, an animation
+            // or a widget repaints what changed.
+            if state.needs_redraw {
+                state.repaint.whole();
+            }
             state.needs_redraw = true;
             state.frame_times.start();
+            // This frame paints every widget, which books its next deadline: the one it reached is
+            // served.
+            state.widget_frame_due = crate::app::lifecycle::served_by_frame(
+                state.widget_frame_due,
+                std::time::Instant::now(),
+            );
             render_frame(state);
             let passes = state.grid_renderer.passes() + state.text_renderer.passes();
             state.frame_times.finish(passes);
@@ -178,7 +190,9 @@ pub(crate) fn handle_window_event(
                 }
                 return;
             }
-            state.mark_full_redraw();
+            // **No frame for the key itself yet** — where it goes decides. Every branch below that
+            // acts on the window asks for one; a key that only goes to the terminal's program asks
+            // for none, because the program's answer arrives as output with a frame of its own.
 
             let is_ctrl = state.modifiers.control_key();
             let is_shift = state.modifiers.shift_key();
@@ -245,7 +259,7 @@ pub(crate) fn handle_window_event(
                 }
             }
 
-            handle_keyboard_input(
+            let went = handle_keyboard_input(
                 registry,
                 keymaps,
                 state,
@@ -260,6 +274,9 @@ pub(crate) fn handle_window_event(
                     offered_to_tree,
                 },
             );
+            if went == crate::app::input::KeyWent::Elsewhere {
+                state.mark_full_redraw();
+            }
         }
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();

@@ -188,6 +188,12 @@ impl WheelRemainders {
     /// **The whole lines `(x, y)` this turn completes**, keeping the rest for the next. A notch is
     /// `per_notch` lines; a trackpad's pixels are counted in cells (`cell` = width, height), a cell
     /// being a notch.
+    ///
+    /// **The size of a wheel's turn is the system's, and it is kept.** macOS already reports a
+    /// wheel turned slowly as a tenth of a notch and one turned fast as five to fifteen, so the
+    /// lines follow the speed of the hand. A click too small to make a line still scrolls **one
+    /// line** — never a whole notch, which made the gentlest click jump `per_notch` lines and left
+    /// no way to move by one.
     fn lines(
         &mut self,
         terminal: TerminalId,
@@ -195,30 +201,34 @@ impl WheelRemainders {
         cell: (f64, f64),
         per_notch: f64,
     ) -> (i32, i32) {
-        let (nx, ny) = match delta {
-            // **A wheel's click is at least one notch**, however slowly it was turned: macOS reports a
-            // slow click as a tenth of a notch, and summed as tenths it took ten clicks to scroll one
-            // line. Only a trackpad, which counts pixels, moves by less than a notch.
-            MouseScrollDelta::LineDelta(x, y) => (at_least_a_notch(x), at_least_a_notch(y)),
-            MouseScrollDelta::PixelDelta(p) => (per_cell(p.x, cell.0), per_cell(p.y, cell.1)),
+        let (wheel, (nx, ny)) = match delta {
+            MouseScrollDelta::LineDelta(x, y) => (true, (f64::from(x), f64::from(y))),
+            MouseScrollDelta::PixelDelta(p) => {
+                (false, (per_cell(p.x, cell.0), per_cell(p.y, cell.1)))
+            }
         };
         let (dx, dy) = (nx * per_notch, ny * per_notch);
         let left = self.0.entry(terminal).or_default();
-        let (x, y) = (left.0 + dx, left.1 + dy);
-        let whole = (x.trunc(), y.trunc());
-        *left = (x - whole.0, y - whole.1);
-        (whole.0 as i32, whole.1 as i32)
+        let (x, y) = (
+            whole_lines(&mut left.0, dx, wheel),
+            whole_lines(&mut left.1, dy, wheel),
+        );
+        (x, y)
     }
 }
 
-/// A wheel's turn on one axis, in notches — a click that moved at all is at least a whole one.
-fn at_least_a_notch(notches: f32) -> f64 {
-    let notches = f64::from(notches);
-    match notches.abs() {
-        0.0 => 0.0,
-        size if size < 1.0 => notches.signum(),
-        _ => notches,
+/// The whole lines `lines` more makes on one axis, with what is `left` from before; the rest is
+/// kept in `left`. A wheel's click (`wheel`) that makes no line by itself still makes one, and
+/// starts the count again — a slow click scrolls every time, a trackpad adds up.
+fn whole_lines(left: &mut f64, lines: f64, wheel: bool) -> i32 {
+    let sum = *left + lines;
+    let whole = sum.trunc();
+    if whole == 0.0 && wheel && lines != 0.0 {
+        *left = 0.0;
+        return lines.signum() as i32;
     }
+    *left = sum - whole;
+    whole as i32
 }
 
 /// Pixels counted in cells — none when the cell size is not known yet.
@@ -385,11 +395,12 @@ mod tests {
         );
     }
 
-    /// **Every click of a wheel scrolls, however slowly it is turned** — macOS reports a slow click
-    /// as a tenth of a notch; each is still a whole notch (`per_notch` lines), as in every terminal.
-    /// A trackpad, which counts pixels, still moves by the part of a cell it travelled.
+    /// **Every click of a wheel scrolls, and by as much as it was turned** — macOS reports a slow
+    /// click as a tenth of a notch: it scrolls one line, never a whole notch, so a line at a time
+    /// is possible. A fast turn keeps its size × `per_notch`. A trackpad, which counts pixels,
+    /// still moves by the part of a cell it travelled.
     #[test]
-    fn every_slow_click_of_a_wheel_scrolls_a_whole_notch() {
+    fn every_slow_click_of_a_wheel_scrolls_one_line() {
         let mut left = WheelRemainders::default();
         let slow_click = || device_delta((0.0, 0.1), None);
         assert_eq!(
@@ -401,9 +412,19 @@ mod tests {
             (0, -1)
         );
         assert_eq!(
-            left.lines(TerminalId(1), slow_click(), (8.0, 14.0), 3.0),
-            (0, -3),
-            "a notch is `terminal_wheel_scroll_lines` lines"
+            left.lines(TerminalId(1), slow_click(), (8.0, 14.0), 6.0),
+            (0, -1),
+            "a slow click is one line, not a notch of `terminal_wheel_scroll_lines`"
+        );
+        assert_eq!(
+            left.lines(
+                TerminalId(4),
+                device_delta((0.0, 5.0), None),
+                (8.0, 14.0),
+                6.0
+            ),
+            (0, -30),
+            "a fast turn of five is five notches"
         );
         let fast = device_delta((0.0, 2.5), None);
         assert_eq!(

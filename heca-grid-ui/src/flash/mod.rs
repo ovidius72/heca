@@ -132,7 +132,7 @@ pub(crate) fn attention(base: &Base) -> Option<Tone> {
         Playback::Repeat { duration: None } => true,
         Playback::Repeat {
             duration: Some(limit),
-        } => request.started.elapsed() < limit,
+        } => crate::clock::since(request.started) < limit,
         _ => false,
     };
     asking.then_some(request.tone)
@@ -209,7 +209,10 @@ pub(crate) fn paint(base: &Base, cx: &mut PaintCx) {
     };
     let style = cx.theme().colors.flash;
     let now = crate::clock::now();
-    let Some(strength) = amount(request, style, now) else {
+    // Out of sight it draws nothing and asks for nothing: the frame that brings it back into
+    // sight paints it, and it books again from there.
+    let Some(strength) = amount(request, style, now).filter(|_| !cx.out_of_sight(base.bounds))
+    else {
         if let Some(handle) = base.flash {
             handle.next_frame.set(None);
         }
@@ -245,8 +248,13 @@ pub(crate) fn paint(base: &Base, cx: &mut PaintCx) {
     // for an immediate frame from paint would create a busy redraw loop.
     let cycle = f64::from(style.duration_s) + f64::from(style.pause_s);
     let phase = now.saturating_duration_since(request.started).as_secs_f64() % cycle;
+    // **On the shared beat**, not counted from this flash's own start: every flash on screen then
+    // steps at the same instants and one frame draws them all (`clock::until_beat`).
     let delay = if phase < f64::from(style.duration_s) {
-        (1.0 / f64::from(style.frames_per_second.max(1))).min(f64::from(style.duration_s) - phase)
+        let step = Duration::from_secs_f64(1.0 / f64::from(style.frames_per_second.max(1)));
+        crate::clock::until_beat(step)
+            .as_secs_f64()
+            .min(f64::from(style.duration_s) - phase)
     } else {
         cycle - phase
     };

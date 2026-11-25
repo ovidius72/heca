@@ -688,8 +688,12 @@ impl ClientState {
         let mut result = BackendPoll::default();
         for (id, view) in self.backends.iter_mut() {
             let changed = view.update();
+            let animating = view.tick_animation();
             result.has_data |= changed && on_screen.contains(&id);
-            result.terminal_animating |= view.tick_animation();
+            result.terminal_animating |= animating;
+            if (changed || animating) && on_screen.contains(&id) {
+                result.shown_changed.push(id);
+            }
         }
         result
     }

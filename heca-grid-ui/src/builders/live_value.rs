@@ -167,11 +167,85 @@ impl IntoToneValue for Signal<Option<crate::Tone>> {
     }
 }
 
+impl<F: Fn() -> Option<crate::Tone> + 'static> IntoToneValue for F {
+    fn into_tone_value(self) -> LiveValue<Option<crate::Tone>> {
+        LiveValue::live(self)
+    }
+}
+
 impl IntoToneValue for crate::reactive::Memo<Option<crate::Tone>> {
     fn into_tone_value(self) -> LiveValue<Option<crate::Tone>> {
         LiveValue::live(move || self.get())
     }
 }
+
+/// **The value a "fixed or live" trait stands for** — what a description, which can only bring a
+/// fixed value, brings for a builder taking one. `#[prop]` reads it, so a new trait made with
+/// `live_value_of!` is authorable with nothing added to the macro.
+pub trait LiveOf {
+    /// The fixed value.
+    type Fixed;
+}
+
+/// **Declare what a builder of `$ty` takes** — the value, or one that changes: a `Signal`, a
+/// `Memo` or a function reading signals, followed in place. One trait per type, because Rust cannot
+/// tell "a function returning `T`" from "a `T`" in one blanket; written once here, so every such
+/// trait has the same four doors.
+macro_rules! live_value_of {
+    ($(#[$doc:meta])* $trait:ident, $method:ident, $ty:ty) => {
+        $(#[$doc])*
+        pub trait $trait {
+            /// The value, and follow it when it can change.
+            fn $method(self) -> LiveValue<$ty>
+            where
+                Self: Sized;
+        }
+
+        // What a description brings for it: the fixed value, by name (`#[prop]` reads this).
+        impl LiveOf for dyn $trait {
+            type Fixed = $ty;
+        }
+
+        impl $trait for $ty {
+            fn $method(self) -> LiveValue<$ty> {
+                LiveValue::fixed(self)
+            }
+        }
+
+        impl $trait for Signal<$ty> {
+            fn $method(self) -> LiveValue<$ty> {
+                LiveValue::live(move || self.get())
+            }
+        }
+
+        impl $trait for crate::reactive::Memo<$ty> {
+            fn $method(self) -> LiveValue<$ty> {
+                LiveValue::live(move || self.get())
+            }
+        }
+
+        impl<F: Fn() -> $ty + 'static> $trait for F {
+            fn $method(self) -> LiveValue<$ty> {
+                LiveValue::live(self)
+            }
+        }
+    };
+}
+
+live_value_of!(
+    /// **What `StatusDot::status(..)` takes** — a [`DotStatus`](crate::DotStatus), fixed or live.
+    IntoStatusValue,
+    into_status_value,
+    crate::DotStatus
+);
+
+live_value_of!(
+    /// **What `Badge::variant(..)` takes** — a [`BadgeVariant`](crate::widgets::BadgeVariant), fixed
+    /// or live.
+    IntoBadgeVariantValue,
+    into_badge_variant_value,
+    crate::widgets::BadgeVariant
+);
 
 /// **What `Avatar::picture(..)` takes** — an image, fixed (a file path, an `ImageSource`, or `None`
 /// for none) or live (a `Signal<Option<ImageSource>>`, a `Memo`), followed in place.
@@ -283,6 +357,16 @@ impl IntoLengthValue for crate::reactive::Memo<crate::style::Length> {
     }
 }
 
+/// A theme measure by name, read again at every layout — see [`Length::theme`](crate::style::Length::theme).
+impl IntoLengthValue for crate::style::ThemeLength {
+    fn into_length_value(self) -> LiveValue<crate::style::Length> {
+        LiveValue::live(move || {
+            crate::layout::theme_number(self.0)
+                .map_or(crate::style::Length::Auto, crate::style::Length::Px)
+        })
+    }
+}
+
 impl<F: Fn() -> crate::style::Length + 'static> IntoLengthValue for F {
     fn into_length_value(self) -> LiveValue<crate::style::Length> {
         LiveValue::live(self)
@@ -375,6 +459,14 @@ impl IntoCountValue for Signal<usize> {
 impl IntoCountValue for crate::reactive::Memo<usize> {
     fn into_count_value(self) -> LiveValue<usize> {
         LiveValue::live(move || self.get())
+    }
+}
+
+/// A theme count by name — see [`Count::theme`](crate::style::Count::theme). One when the theme
+/// has none of that name.
+impl IntoCountValue for crate::style::ThemeCount {
+    fn into_count_value(self) -> LiveValue<usize> {
+        LiveValue::live(move || self.get().unwrap_or(1))
     }
 }
 

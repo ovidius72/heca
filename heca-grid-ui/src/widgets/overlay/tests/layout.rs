@@ -358,3 +358,78 @@ fn an_anchored_overlay_follows_a_moving_anchor_and_ignores_its_holders_box() {
         "it followed"
     );
 }
+
+/// **Every floating placement is the overlay's** — beside a rect (a tooltip), at a point (a menu) and
+/// in a corner (notifications) — each placed once layout finishes, from its own rule.
+#[test]
+fn an_overlay_places_beside_at_a_point_and_in_a_corner() {
+    use crate::widgets::{BesideSide, ToastPosition};
+    let place = |o: Overlay| {
+        let mut o = o
+            .blocking(false)
+            .panel(Flex::column().child(Label::new("hi")))
+            .default_open(true);
+        o.base.children[0].base_mut().bounds =
+            Rectangle::new(Point::new(300.0, 300.0), Size::new(100.0, 40.0));
+        o.viewport.set(Size::new(800.0, 600.0));
+        o.on_placed();
+        o.panel_bounds().loc
+    };
+    let anchor = Rectangle::new(Point::new(200.0, 200.0), Size::new(50.0, 20.0));
+    let below = place(Overlay::new().beside(anchor, BesideSide::Bottom, 4.0));
+    assert_eq!(
+        below.y, 224.0,
+        "beside, below the rect, 4 px away: {below:?}"
+    );
+    let at = place(Overlay::new().at_point(Point::new(500.0, 100.0), 0.0, false));
+    assert_eq!(at, Point::new(500.0, 100.0), "at the point");
+    let corner = place(Overlay::new().corner(ToastPosition::BottomRight));
+    assert_eq!(
+        corner,
+        Point::new(700.0, 560.0),
+        "in the bottom-right corner"
+    );
+}
+
+/// **Placing the panel where it already was asks for nothing.** Every layout puts the panel back
+/// where the layout engine would have it, and the overlay moves it to its place again — the same
+/// place. Asking for a frame each time kept the window drawing without pause whenever anything was
+/// laid out every frame (the exposé open), for a notification layer with nothing in it.
+#[test]
+fn placing_the_panel_where_it_already_was_asks_for_no_frame() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let asked = Arc::new(AtomicUsize::new(0));
+    let seen = asked.clone();
+    crate::install_frame_request(move || {
+        seen.fetch_add(1, Ordering::Relaxed);
+    });
+    let mut o = Overlay::new()
+        .blocking(false)
+        .corner(crate::widgets::ToastPosition::BottomRight)
+        .panel(Flex::column().child(Label::new("hi")))
+        .default_open(true);
+    o.viewport.set(Size::new(800.0, 600.0));
+    let layout = |o: &mut Overlay| {
+        // Each pass is a new frame: the last one was served.
+        crate::component::frame_served();
+        // What a layout pass does to the panel: back where the engine lays it out.
+        o.base.children[0].base_mut().bounds =
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
+        o.on_placed();
+    };
+    layout(&mut o);
+    let after_first = asked.load(Ordering::Relaxed);
+    layout(&mut o);
+    layout(&mut o);
+    assert_eq!(
+        asked.load(Ordering::Relaxed),
+        after_first,
+        "the panel went back to the same place: no frame asked"
+    );
+    assert_eq!(
+        o.panel_bounds().loc,
+        Point::new(700.0, 560.0),
+        "and it is in its corner"
+    );
+}

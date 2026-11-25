@@ -23,3 +23,10 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     return textureSample(scene_tex, scene_samp, in.uv);
 }
+
+// The clear pipeline's fragment: a constant 1, which its blend turns into the blend constant —
+// so the part of the scene it covers takes exactly the clear colour, whatever was there.
+@fragment
+fn fs_one() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+}

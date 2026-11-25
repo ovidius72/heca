@@ -198,7 +198,9 @@ fn render_terminal_layer_update(
         .text_renderer
         .set_target_size(physical_size.width, physical_size.height);
     state.text_renderer.set_clip(None);
-    state.text_renderer.set_damage(None);
+    // A terminal's layer is its own texture, not the window's scene: nothing of it is limited to
+    // the window's damage.
+    heca_renderer::set_frame_damage(None, 1.0, [physical_size.width, physical_size.height]);
 
     // Inline images draw in the same logical space as the primitive/text passes.
     // Textures were already uploaded/advanced in `sync_retained_terminal_layers`

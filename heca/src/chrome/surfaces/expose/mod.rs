@@ -47,6 +47,7 @@
 //! in the layout, the navigation or the layer changes when that lands: only what fills the box.
 
 pub(crate) mod column_card;
+pub(crate) mod empty_card;
 pub(crate) mod expose_grid;
 pub(crate) mod model;
 pub(crate) mod pane_card;

@@ -99,6 +99,8 @@ impl Component for Gauge {
             if i < lit {
                 let glow = Some(Glow {
                     color: glow_c,
+                    // Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+                    // See docs/widgets.md → "Each widget's own glow and border".
                     radius: 8.0,
                     intensity: 0.12,
                 });

@@ -33,7 +33,9 @@ impl Default for FlashStyle {
             duration_s: 2.0,
             pause_s: 1.0,
             pulses: 3,
-            frames_per_second: 30,
+            // A pulse reads smoothly at 15 steps a second; every step is a frame of the whole
+            // window, and a row asking for attention can pulse for as long as nobody looks.
+            frames_per_second: 15,
             border_width_em: 0.12,
             border_alpha: 235,
             fill_alpha: 18,

@@ -14,7 +14,7 @@ fn keyboard_menus_are_centered_on_the_component_that_declares_them() {
         let mut panels = opened.borrow_mut();
         let menu = &mut panels[0];
         LayoutEngine::new().compute(menu, Size::new(1000.0, 800.0));
-        let bounds = menu.base().bounds;
+        let bounds = menu.panel_bounds();
         assert!((bounds.loc.x + bounds.size.w / 2.0 - (300.0 + width / 2.0)).abs() < 0.5);
         assert!((bounds.loc.y + bounds.size.h / 2.0 - (140.0 + height / 2.0)).abs() < 0.5);
     }
@@ -36,7 +36,7 @@ fn keyboard_menu_uses_its_declaring_ancestor_not_the_small_focused_child() {
     let mut panels = opened.borrow_mut();
     let menu = &mut panels[0];
     LayoutEngine::new().compute(menu, Size::new(1000.0, 800.0));
-    let bounds = menu.base().bounds;
+    let bounds = menu.panel_bounds();
     assert!((bounds.loc.x + bounds.size.w / 2.0 - 500.0).abs() < 0.5);
     assert!((bounds.loc.y + bounds.size.h / 2.0 - 365.0).abs() < 0.5);
 }
@@ -89,7 +89,7 @@ fn a_keyboard_menu_near_the_viewport_edge_stays_visible_after_resizing() {
     let mut panels = opened.borrow_mut();
     for viewport in [Size::new(1000.0, 800.0), Size::new(600.0, 400.0)] {
         LayoutEngine::new().compute(&mut panels[0], viewport);
-        let bounds = panels[0].base().bounds;
+        let bounds = panels[0].panel_bounds();
         assert!(bounds.loc.x >= 0.0 && bounds.loc.y >= 0.0);
         assert!(bounds.loc.x + bounds.size.w <= viewport.w);
         assert!(bounds.loc.y + bounds.size.h <= viewport.h);
@@ -106,7 +106,7 @@ fn a_pointer_reopening_a_keyboard_menu_uses_the_pointer_anchor() {
     let at = Point::new(40.0, 60.0);
     let mut reopened = MenuAnchor::At(at).open(menu.clone());
     LayoutEngine::new().compute(&mut reopened, Size::new(1000.0, 800.0));
-    let bounds = reopened.base().bounds;
+    let bounds = reopened.panel_bounds();
     assert!((bounds.loc.x - at.x).abs() < 5.0);
     assert!((bounds.loc.y - at.y).abs() < 5.0);
 }
@@ -172,12 +172,7 @@ fn rows_stack_vertically() {
     let mut panels = opened.borrow_mut();
     let panel = &mut panels[0];
     LayoutEngine::new().compute(panel, Size::new(600.0, 600.0));
-    let rows: Vec<_> = panel
-        .base()
-        .children
-        .iter()
-        .map(|c| c.base().bounds)
-        .collect();
+    let rows: Vec<_> = panel.rows().iter().map(|c| c.base().bounds).collect();
 
     assert_eq!(rows.len(), 2, "one child per row");
     assert!(
@@ -210,9 +205,44 @@ fn a_menu_near_the_edge_is_clamped_on_the_first_layout_pass() {
 
     LayoutEngine::new().compute(&mut menu, viewport);
 
-    let b = menu.base().bounds;
+    let b = menu.panel_bounds();
     assert!(
         b.loc.x + b.size.w <= viewport.w + 0.5 && b.loc.y + b.size.h <= viewport.h + 0.5,
         "the panel is inside the viewport on the first pass, with no second frame to correct it: {b:?}",
+    );
+}
+
+/// **A menu inside a holder still lands at its anchor.** A host mounts the menu in a layer that
+/// arranges its children (centres them, here); the menu must be placed once that holder is done
+/// moving it, or it is drawn wherever the holder put it — the middle of the window.
+#[test]
+fn a_menu_mounted_in_a_holder_lands_at_its_anchor() {
+    let viewport = Size::new(800.0, 600.0);
+    let menu = ContextMenu::new("m")
+        .child(
+            Menu::new("Pane", "what you can do")
+                .child(MenuItem::new().label("Rename").on_click(|| {}))
+                .child(MenuItem::new().label("Close").on_click(|| {})),
+        )
+        .default_open(true);
+    let anchor = heca_core::layout::Point::new(120.0, 90.0);
+    menu.anchor_signal().set(anchor);
+    let mut holder = Flex::column()
+        .width(Length::Px(800.0))
+        .height(Length::Px(600.0))
+        .justify("center")
+        .align("center")
+        .child(menu);
+    LayoutEngine::new().compute(&mut holder, viewport);
+    // Its top-left at the anchor, the inset the menu keeps from the point (`ANCHOR_INSET`) away.
+    let at = heca_grid_ui::area(&holder, ContextMenu::PANEL)
+        .expect("the menu's panel")
+        .base()
+        .bounds
+        .loc;
+    let anchor = heca_core::layout::Point::new(anchor.x + 2.0, anchor.y + 2.0);
+    assert!(
+        (at.x - anchor.x).abs() < 0.5 && (at.y - anchor.y).abs() < 0.5,
+        "the menu opens where it was asked for, not where its holder put it: {at:?}",
     );
 }

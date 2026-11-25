@@ -215,7 +215,10 @@ terminal_mouse = true
 
 # Lines per wheel notch in a terminal: the rows its history scrolls, and the
 # wheel steps a program that takes the mouse (Claude Code, vim, less) receives.
-# A trackpad counts one notch per cell height it travels.
+# A trackpad counts one notch per cell height it travels. The system tells how
+# fast the wheel turned (macOS: a slow click is a tenth of a notch, a fast turn
+# several), and that size is kept: a slow click scrolls one line, a fast turn
+# many.
 terminal_wheel_scroll_lines = 3
 
 # Points added/removed per font-zoom step. Drives the whole-app zoom
@@ -324,10 +327,15 @@ mode = "app"
 # overrides this value; a sticky notification never expires automatically.
 auto_dismiss_ms = 4000
 
-# How many notification cards are on screen at once. Further notifications queue in
-# the order they were raised — nothing is dropped. Closing one slides the cards
-# after it up so there is never a blank slot, and the next in line joins at the end.
-max_visible = 5
+# The most notification cards on screen at once. 0 (the default): as many as fit
+# the window's height. Further notifications queue in the order they were raised —
+# nothing is dropped. Closing one slides the cards after it up so there is never a
+# blank slot, and the next in line joins at the end.
+# The queue holds one more screenful; past that, notifications that would close by
+# themselves go straight to the history and one card counts them ("12 more
+# notifications", with a button to open the history), which shows as soon as a
+# card leaves. Cards that stay until read or that have buttons always wait their turn.
+max_visible = 0
 
 # The most lines a notification's title and its body may each take. Text longer than a
 # card is wide wraps onto more lines (a path folds after a "/") instead of being cut; text
@@ -736,13 +744,21 @@ search_current_match_alpha = 150
 #                   applies on top.
 # gap             : gap between the sidebar and the content area, px (default 12.0).
 # width           : sidebar width, px. Clamped [160, 560] (default 300).
-# pane_lines      : the lines under a pane's name in the sidebar, by name, in order.
-#                   "cwd" (working directory) | "git" (branch and change counts, only
-#                   inside a repository), or a line added by a program built on heca,
-#                   e.g. "demo.status" (shown by default while this list is the default;
-#                   once you write your own list, only what you list shows). [] shows
-#                   the name alone. "agent" shows a reporting program's status and task.
-# agent_session_line: the line under an agent, with its session title.
+# pane_view       : the view the sidebar starts in — which list its pane cards show:
+#                   "compact" | "normal" | "extended". The view you pick with the
+#                   `sidebar_pane_view` action is remembered and wins at the next start;
+#                   changing this line and reloading switches to it.
+# pane_compact_view / pane_normal_view / pane_extended_view: the lines of a pane card in
+#                   each view, by name, in order: "title" (the status dot, the program's
+#                   icon and the pane's name), "cwd" (working directory), "git" (branch and
+#                   change counts, only inside a repository), "agent" (a reporting program's
+#                   model, status and task), "agent_session" (its session title), or a line
+#                   added by a program built on heca, e.g. "demo.status" (shown by default
+#                   while a list is the default; once you write your own, only what you list
+#                   shows). In a view without "title" the status dot goes on the first line.
+# pane_current_view: the lines of the CURRENT pane's card, whatever the view — what sets
+#                   it apart. Unset: the current pane follows the view like the others.
+# agent_session_line: what the "agent_session" line says.
 #                   "reported" = only a title the agent sent, when it is not the pane's
 #                   name already | "always" = the title, or the pane's name when the agent
 #                   sent none | "never".
@@ -753,7 +769,11 @@ search_current_match_alpha = 150
 # background_color = "#0b0f14"
 # gap              = 12.0
 # width            = 300
-pane_lines = ["cwd", "git", "agent"]
+pane_view          = "extended"
+pane_compact_view  = ["title", "cwd"]
+pane_normal_view   = ["title", "cwd", "git"]
+pane_extended_view = ["title", "cwd", "git", "agent", "agent_session"]
+# pane_current_view  = ["title", "cwd", "git", "agent", "agent_session"]
 agent_session_line = "reported"
 # workspace_numbers: show each workspace's number before its name — 1 to 9, then 0 for the
 #                   tenth, as on the keyboard (a key bound to `focus_workspace` takes

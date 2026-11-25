@@ -26,6 +26,19 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         ],
     },
     ActionDescriptor {
+        name: "sidebar_pane_view",
+        side: Side::Client,
+        label: "Sidebar Pane View",
+        description: "Show the sidebar's pane cards in another view — `view=compact`, `normal` or `extended` picks one; with no view, the next. Each view's lines are `[appearance.sidebar] pane_<view>_view`. The choice is remembered.",
+        icon: None,
+        // OPTIONAL, so the bare key cycles and a caller that knows the view it wants names it.
+        args: &[ArgDescriptor::optional(
+            "view",
+            ArgKind::Text,
+            "compact | normal | extended; omit for the next view.",
+        )],
+    },
+    ActionDescriptor {
         name: "focus_dock",
         side: Side::Client,
         label: "Focus Dock",

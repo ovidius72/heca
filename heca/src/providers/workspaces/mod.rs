@@ -14,6 +14,7 @@ mod keys;
 mod menus;
 mod model;
 mod pane_row;
+mod pane_view;
 mod row_lines;
 mod seams;
 mod verbs;
@@ -26,6 +27,7 @@ pub(crate) use menus::*;
 use verbs::{Activate, Fold, RowVerb, Step};
 
 pub(crate) use model::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceRow, WorkspaceTree};
+pub(crate) use pane_view::{TITLE_LINE, follow_configured_pane_view, handle_sidebar_pane_view};
 pub(crate) use row_lines::{builtin_row_lines, text_line};
 
 #[cfg(test)]

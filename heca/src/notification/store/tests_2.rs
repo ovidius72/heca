@@ -282,3 +282,112 @@ fn store_transition_receives_caller_time_and_reports_projection_change() {
     let (_, changed) = store.transition_at(now, |_, _| ((), true));
     assert!(changed.visible_projection_changed());
 }
+
+/// **What does not fit becomes a count.** With every slot taken, a notification that would only
+/// vanish by itself goes straight to the history, and one card counts them — while one that stays
+/// until read (sticky) or asks for an answer (it has buttons) still waits its turn.
+#[test]
+fn what_does_not_fit_becomes_one_card_that_counts_it() {
+    let now = Instant::now();
+    let mut store = NotificationStore::with_capacity(100, 2);
+    let timed = |title: &str| {
+        NotificationDraft::new(title).lifecycle(NotificationLifecycle::auto(
+            std::time::Duration::from_secs(4),
+        ))
+    };
+    store.push(timed("one"), now).unwrap();
+    store.push(timed("two"), now).unwrap();
+    // Two slots: two more wait in turn (one more screenful), the five after them are counted.
+    store.push(timed("waits 1"), now).unwrap();
+    store.push(timed("waits 2"), now).unwrap();
+    for i in 0..5 {
+        store.push(timed(&format!("message {i}")), now).unwrap();
+    }
+    let titles = |store: &NotificationStore| -> Vec<String> {
+        store.visible().map(|n| n.title.clone()).collect()
+    };
+    assert_eq!(
+        titles(&store),
+        ["one", "two"],
+        "the slots keep what was there"
+    );
+    let summary = store
+        .notification_id_for_dedup_key(OVERFLOW_KEY)
+        .expect("one card for the rest");
+    assert_eq!(store.notifications[&summary].title, "5 more notifications");
+    assert_eq!(
+        store.queued.len(),
+        3,
+        "a screenful waits, and the summary — not the five"
+    );
+    assert_eq!(
+        store.queued.front(),
+        Some(&summary),
+        "the count is first in line, ahead of the screenful waiting"
+    );
+    let in_history = store
+        .history()
+        .filter(|n| n.title.starts_with("message"))
+        .count();
+    assert_eq!(in_history, 5, "every message is kept in the history");
+
+    store
+        .push(NotificationDraft::new("read me").sticky(), now)
+        .unwrap();
+    assert!(
+        store
+            .queued
+            .iter()
+            .any(|id| store.notifications[id].title == "read me"),
+        "a sticky card waits its turn"
+    );
+    assert_eq!(
+        store.notifications[&summary].title, "5 more notifications",
+        "and is not counted"
+    );
+
+    store
+        .push(
+            timed("answer me").action(NotificationAction::new(
+                "Allow",
+                heca_view::Intent::new("noop"),
+            )),
+            now,
+        )
+        .unwrap();
+    assert!(
+        store
+            .queued
+            .iter()
+            .any(|id| store.notifications[id].title == "answer me"),
+        "a card that asks for an answer waits its turn too"
+    );
+}
+
+/// The count starts again once the card that showed it has gone.
+#[test]
+fn the_count_starts_again_after_its_card_leaves() {
+    let now = Instant::now();
+    let mut store = NotificationStore::with_capacity(100, 1);
+    let timed = |title: &str| {
+        NotificationDraft::new(title).lifecycle(NotificationLifecycle::auto(
+            std::time::Duration::from_secs(4),
+        ))
+    };
+    store.push(timed("first"), now).unwrap();
+    store.push(timed("waits"), now).unwrap();
+    store.push(timed("a"), now).unwrap();
+    store.push(timed("b"), now).unwrap();
+    let summary = store.notification_id_for_dedup_key(OVERFLOW_KEY).unwrap();
+    assert_eq!(store.notifications[&summary].title, "2 more notifications");
+    // Every card expires in turn: the first, the one waiting, the summary.
+    for t in [5, 10, 15, 20] {
+        store.expire_due(now + std::time::Duration::from_secs(t));
+    }
+    let later = now + std::time::Duration::from_secs(21);
+    store.push(timed("next"), later).unwrap();
+    store.push(timed("waits again"), later).unwrap();
+    store.push(timed("c"), later).unwrap();
+    let summary = store.notification_id_for_dedup_key(OVERFLOW_KEY).unwrap();
+    assert_eq!(store.notifications[&summary].title, "1 more notification");
+}

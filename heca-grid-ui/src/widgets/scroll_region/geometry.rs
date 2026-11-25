@@ -454,4 +454,29 @@ impl ScrollRegion {
             }
         }
     }
+
+    /// Cap the height at the first [`visible_children`](Self::visible_children) content children,
+    /// measured where this layout put them (no shift is baked in yet), with the same padding
+    /// below them as above. Asks for another layout when the cap moved.
+    pub(super) fn fit_visible_children(&mut self) {
+        let Some(count) = self.visible_children.as_ref().map(|n| n.now_untracked()) else {
+            return;
+        };
+        let content = self.content();
+        let (Some(first), Some(last)) = (
+            content.first(),
+            content.get(count.min(content.len()).saturating_sub(1)),
+        ) else {
+            return;
+        };
+        let (first, last, own) = (first.base().bounds, last.base().bounds, self.base.bounds);
+        // The space above the first child is the top padding; the same is kept below the last.
+        let pad = first.loc.y - own.loc.y;
+        let height = (last.loc.y + last.size.h - first.loc.y + 2.0 * pad) as f32;
+        let want = Some(Length::Px(height));
+        if count > 0 && self.base.style.layout.max_height != want {
+            self.base.style.layout.max_height = want;
+            self.base.mark_needs_layout();
+        }
+    }
 }

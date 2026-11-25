@@ -36,7 +36,7 @@ pub use spec::{ToastAction, ToastSpec};
 pub use stack::ToastStack;
 
 use crate::animation::Animation;
-use crate::builders::{EventExt, LayoutExt, Parent};
+use crate::builders::{EventExt, LayoutExt, Parent, PlaceExt};
 use crate::component::{Base, Component, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
@@ -49,6 +49,8 @@ use std::time::Duration;
 
 /// Leading-icon size as a multiple of the resolved font (sits on the title line).
 const ICON_SCALE: f32 = 1.1;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Rest-glow spread radius (px) — the card's share of the theme rest halo. A
 /// touch wider than the small controls (12): the toast is a card-sized surface
 /// and a tight halo read visibly weaker beside them (user-reported).
@@ -59,25 +61,36 @@ const DEFAULT_WIDTH: f32 = 320.0;
 /// enough to read as a timer rather than a second control.
 const PROGRESS_HEIGHT: f32 = 3.0;
 
-/// Index of the leading icon / the text column / the × within `base.children`, and of the title /
-/// body / action within that column. The card builds both levels, so it addresses them the way
-/// [`Item`](super::Item) addresses its slots — by position, not by searching.
-const ICON: usize = 0;
-const COLUMN: usize = 1;
-const DISMISS: usize = 2;
+/// The card's parts, found by name: the leading icon, the text column and the × — and, within the
+/// column, the title, the body and the actions.
+const ICON_AREA: &str = "icon";
+const COLUMN_AREA: &str = "column";
+const DISMISS_AREA: &str = "dismiss";
 /// **An unfilled slot is removed from layout, not merely empty.** A zero-sized placeholder still
 /// costs the row's gap, which is how a card with no leading icon started its text a gap further in
 /// than a card with one. `hidden` is the engine's `display: none`.
-fn empty_slot() -> crate::WidgetModel {
+fn empty_slot(area: &str) -> crate::WidgetModel {
     let mut slot = Flex::empty();
     slot.base_mut().set_hidden(true);
-    crate::WidgetModel::new(slot)
+    crate::WidgetModel::new(slot.area(area))
+}
+
+/// Put `part` in the slot named `area` of `base`, keeping the name.
+fn set_part(base: &mut Base, area: &str, part: crate::WidgetModel) {
+    if let Some(slot) = base.child_in_area(area) {
+        *slot = part.area(area);
+    }
 }
 
 /// Within the column: the title, then the two slots a builder fills in later.
-const TITLE: usize = 0;
-const BODY: usize = 1;
-const ACTION: usize = 2;
+const TITLE_AREA: &str = "title";
+const BODY_AREA: &str = "body";
+const ACTION_AREA: &str = "action";
+
+/// **How many visible steps the countdown bar empties in.** Each step is one timed wake, so a toast
+/// costs this many frames over its whole life instead of one every refresh; at a hairline's width
+/// the steps read as a steady drain.
+const COUNTDOWN_STEPS: f32 = 24.0;
 
 /// A compact notification card. Presentation only — the host owns lifecycle.
 pub struct Toast {
@@ -152,13 +165,14 @@ impl Toast {
         let column = Flex::column()
             .grow(1.0)
             .gap(Spacing::Sm)
-            .child(title)
-            .child(empty_slot()) // BODY
-            .child(empty_slot()); // ACTION
+            .child(title.area(TITLE_AREA))
+            .child(empty_slot(BODY_AREA))
+            .child(empty_slot(ACTION_AREA))
+            .area(COLUMN_AREA);
 
-        base.children.push(empty_slot()); // ICON
+        base.children.push(empty_slot(ICON_AREA));
         base.children.push(crate::WidgetModel::new(column));
-        base.children.push(empty_slot()); // DISMISS
+        base.children.push(empty_slot(DISMISS_AREA));
 
         let mut toast = Self {
             base,
@@ -245,7 +259,9 @@ impl Toast {
     pub fn body(mut self, body: impl crate::builders::IntoComponent) -> Self {
         let body = body.into_component();
         self.has_body = true;
-        self.column_mut()[BODY] = body;
+        if let Some(column) = self.column_mut() {
+            set_part(column, BODY_AREA, body);
+        }
         self
     }
 
@@ -276,7 +292,7 @@ impl Toast {
         let action = action.into_component();
         if !self.has_actions {
             self.has_actions = true;
-            self.column_mut()[ACTION] = crate::WidgetModel::new(
+            let row = crate::WidgetModel::new(
                 Flex::row()
                     .gap(Spacing::Sm)
                     // The row hugs its buttons — a column would otherwise stretch it edge to edge
@@ -294,8 +310,16 @@ impl Toast {
                     // button still wins, which is what keeps the choice theirs.
                     .size(WidgetSize::Small),
             );
+            if let Some(column) = self.column_mut() {
+                set_part(column, ACTION_AREA, row);
+            }
         }
-        self.column_mut()[ACTION].base_mut().children.push(action);
+        if let Some(row) = self
+            .column_mut()
+            .and_then(|column| column.child_in_area(ACTION_AREA))
+        {
+            row.base_mut().children.push(action);
+        }
         self
     }
 
@@ -366,6 +390,13 @@ impl Toast {
     }
 
     /// Whether the countdown is held still — the pointer is resting on the stack.
+    /// Is the countdown bar draining now — shown, timed, with time left, not held under the pointer?
+    fn countdown_running(&self) -> bool {
+        self.countdown_secs.is_some_and(|total| {
+            self.progress && total > 0.0 && !self.countdown_held() && self.countdown_elapsed < total
+        })
+    }
+
     fn countdown_held(&self) -> bool {
         self.countdown_paused
             .map(|p| p.get_untracked())
@@ -464,49 +495,51 @@ impl Toast {
         tone: crate::color::Color,
         muted: crate::color::Color,
     ) {
-        let column = self.column();
-        let paint = |cx: &mut PaintCx, i: usize, colour: crate::color::Color| {
-            if let Some(child) = column.children.get(i) {
+        let Some(column) = self.column() else {
+            return;
+        };
+        let paint = |cx: &mut PaintCx, area: &str, colour: crate::color::Color| {
+            if let Some(child) = column.child_area(area) {
                 cx.with_content_color(colour, |cx| {
                     crate::component::paint_child(child.as_ref(), cx);
                 });
             }
         };
-        paint(cx, TITLE, tone);
-        paint(cx, BODY, muted);
-        paint(cx, ACTION, tone);
+        paint(cx, TITLE_AREA, tone);
+        paint(cx, BODY_AREA, muted);
+        paint(cx, ACTION_AREA, tone);
     }
 
-    /// The text column's own children — the card built both levels, so it addresses them
-    /// directly rather than searching for them.
-    fn column_mut(&mut self) -> &mut Vec<crate::WidgetModel> {
-        &mut self.base.children[COLUMN].base_mut().children
+    /// The text column, by name.
+    fn column_mut(&mut self) -> Option<&mut Base> {
+        self.base.child_in_area(COLUMN_AREA).map(|c| c.base_mut())
     }
 
-    fn column(&self) -> &Base {
-        self.base.children[COLUMN].base()
+    fn column(&self) -> Option<&Base> {
+        self.base.child_area(COLUMN_AREA).map(|c| c.base())
     }
 
     /// Rebuild the leading icon slot. The glyph is the card's own or the severity's; hiding it
     /// leaves an empty slot, which takes no width and no gap.
     fn sync_icon(&mut self) {
         let glyph = self.icon.unwrap_or_else(|| self.severity.default_glyph());
-        self.base.children[ICON] = if self.show_icon {
+        let icon = if self.show_icon {
             // A share of the card's font, not a px: the icon then tracks a font or size-variant
             // change with nothing to keep in step by hand.
             let mut icon = Icon::new(glyph);
             icon.base_mut().style.visual.font_scale = ICON_SCALE;
             crate::WidgetModel::new(icon)
         } else {
-            empty_slot()
+            empty_slot(ICON_AREA)
         };
+        set_part(&mut self.base, ICON_AREA, icon);
     }
 
     /// Rebuild the × slot — **a real [`IconButton`]**, so its hover frame, its
     /// press flash and its focus ring are its own. The card used to paint that face and read the
     /// child's hover state to decide how bright it was; a control already knows.
     fn sync_dismiss(&mut self) {
-        self.base.children[DISMISS] = if self.dismissible {
+        let dismiss_part = if self.dismissible {
             let dismiss = self.on_dismiss.clone();
             crate::WidgetModel::new(IconButton::new(Icon::new(Glyph::Close)).on_click(move |_| {
                 if let Some(f) = &dismiss {
@@ -514,8 +547,9 @@ impl Toast {
                 }
             }))
         } else {
-            empty_slot()
+            empty_slot(DISMISS_AREA)
         };
+        set_part(&mut self.base, DISMISS_AREA, dismiss_part);
     }
 }
 
@@ -592,12 +626,16 @@ impl Component for Toast {
             // control's hover, press and focus ring are its own, which is what they are for.
             cx.with_accent(tone, |cx| {
                 cx.with_content_color(tone, |cx| {
-                    crate::component::paint_child(self.base.children[ICON].as_ref(), cx);
+                    if let Some(icon) = self.base.child_area(ICON_AREA) {
+                        crate::component::paint_child(icon.as_ref(), cx);
+                    }
                 });
                 self.paint_column(cx, tone, muted);
                 // The × rests quiet in the muted token and lights up on its own.
                 cx.with_content_color(muted, |cx| {
-                    crate::component::paint_child(self.base.children[DISMISS].as_ref(), cx);
+                    if let Some(dismiss) = self.base.child_area(DISMISS_AREA) {
+                        crate::component::paint_child(dismiss.as_ref(), cx);
+                    }
                 });
             });
 
@@ -662,6 +700,16 @@ impl Component for Toast {
         self.flash.trigger();
     }
 
+    /// The bar's next step, as a timed wake, beside what the card's own feedback and children ask.
+    fn next_redraw(&self) -> Option<f32> {
+        let own = self.countdown_running().then(|| {
+            let total = self.countdown_secs.unwrap_or_default();
+            let left = (total - self.countdown_elapsed).max(0.0);
+            (total / COUNTDOWN_STEPS).min(left).max(f32::EPSILON)
+        });
+        crate::component::soonest_redraw(crate::component::subtree_next_redraw(&self.base), own)
+    }
+
     fn tick(&mut self, dt: f32) -> bool {
         // A bound signal is as good as a call: one flip of it is an arrival or a dismissal, and
         // neither may be the only way the animation starts.
@@ -671,16 +719,14 @@ impl Component for Toast {
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
-        // Drain the countdown bar, unless it is held still under the pointer. It keeps the frame
-        // loop alive while it has time left, so the bar empties smoothly rather than in steps.
-        if let Some(total) = self.countdown_secs
-            && self.progress
-            && total > 0.0
-            && !self.countdown_held()
-            && self.countdown_elapsed < total
-        {
+        // Drain the countdown bar, unless it is held still under the pointer. **It does not keep
+        // the frame loop going**: the bar moves in [`COUNTDOWN_STEPS`] steps, each on a timed wake
+        // (`next_redraw`) — a few frames a second instead of every frame. Fifty toasts used to
+        // hold the whole window at 60 frames a second until the last bar emptied.
+        if self.countdown_running() {
+            let total = self.countdown_secs.unwrap_or_default();
             self.countdown_elapsed = (self.countdown_elapsed + dt).min(total);
-            animating = true;
+            self.base.mark_needs_paint();
         }
         // When used inline (in-tree), damage just our own rect on a press flash. In a
         // `ToastStack` the toast paints on the overlay layer and the stack owns the
@@ -723,6 +769,29 @@ mod countdown_tests {
         // Progress on but no lifetime (a sticky card): no bar.
         let sticky = Toast::info("x").progress(true);
         assert_eq!(sticky.countdown_fraction(), None, "no span, no bar");
+    }
+
+    /// **The bar does not keep the window drawing**: a draining bar asks for no continuous frames
+    /// (`tick` says nothing is animating) — it asks for a timed wake a step away instead, a small
+    /// part of its life. Held under the pointer or empty, it asks for nothing.
+    #[test]
+    fn the_bar_drains_on_timed_wakes_not_every_frame() {
+        let paused = signal(false);
+        let mut t = Toast::info("x")
+            .progress(true)
+            .countdown(Duration::from_secs(4))
+            .countdown_paused(paused);
+        assert!(!t.tick(0.016), "draining is not a continuous animation");
+        let step = t.next_redraw().expect("a timed wake while it drains");
+        assert!(
+            step > 0.05 && step <= 4.0 / COUNTDOWN_STEPS + 1e-3,
+            "a step away: {step}"
+        );
+        paused.set(true);
+        assert_eq!(t.next_redraw(), None, "held: no wake");
+        paused.set(false);
+        t.tick(4.0);
+        assert_eq!(t.next_redraw(), None, "empty: no wake");
     }
 
     #[test]

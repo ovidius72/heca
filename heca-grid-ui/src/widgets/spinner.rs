@@ -75,6 +75,8 @@ impl Component for Spinner {
             );
             let glow = Some(Glow {
                 color: accent,
+                // Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+                // See docs/widgets.md → "Each widget's own glow and border".
                 radius: 6.0,
                 intensity: 0.12 * brightness,
             });

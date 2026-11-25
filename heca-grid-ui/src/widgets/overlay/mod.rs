@@ -37,7 +37,7 @@ mod component;
 mod lifecycle;
 mod place;
 
-pub use chrome::{PanelChrome, PanelElevation, paint_panel_chrome};
+pub use chrome::{PanelChrome, PanelElevation, PanelGlow, PanelLook, paint_panel_chrome};
 pub use place::{
     AnchorSide, BesideSide, DEFAULT_ANCHOR_GAP, OverlayPosition, TOP_POSITION_FRAC, place_anchored,
     place_anchored_on, place_at_point, place_beside, place_top,
@@ -45,7 +45,7 @@ pub use place::{
 
 use crate::animation::Animation;
 use crate::builders::{LayoutExt, PlaceExt};
-use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, shift_subtree};
+use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, place_floating};
 use crate::event::WidgetIntent;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Justify, Length};
@@ -182,6 +182,13 @@ pub struct Overlay {
     keyboard: bool,
     /// A trigger that moves, followed in place — see [`anchored_to`](Overlay::anchored_to).
     anchor_source: Option<Signal<Rectangle>>,
+    /// The point a panel placed [`at_point_to`](Overlay::at_point_to) follows.
+    point_source: Option<Signal<Point>>,
+    /// Where the panel was last placed — so putting it back in the same place after a layout asks
+    /// for no frame (see `place_panel`).
+    placed_at: Cell<Option<Rectangle>>,
+    /// How the panel's frame looks — see [`PanelLook`].
+    look: PanelLook,
 }
 
 impl Overlay {
@@ -239,6 +246,9 @@ impl Overlay {
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
             keyboard: true,
             anchor_source: None,
+            point_source: None,
+            placed_at: Cell::new(None),
+            look: PanelLook::default(),
             // No animation until one is declared: a surface that never asked for one is a cut,
             // costs nothing, and needs no special case anywhere.
         }
@@ -393,6 +403,99 @@ impl Overlay {
         self
     }
 
+    /// **The colour of the panel's edge**, a theme colour by name at a theme opacity
+    /// (`Fill::theme("accent").alpha("panel_border")`) or a plain colour. Unset, the edge is the
+    /// theme's neutral border. The user's frame setting still decides whether an edge is drawn.
+    #[heca_grid_ui_macros::host_only("a theme fill, resolved at paint")]
+    pub fn panel_edge(mut self, edge: impl Into<crate::style::Fill>) -> Self {
+        self.look.edge = Some(edge.into());
+        self
+    }
+
+    /// **A halo round the panel**: the theme's glow scaled by this panel's own multipliers — a
+    /// [`GlowLevel`](crate::theme::GlowLevel) for the common pairs, or a [`PanelGlow`] a surface
+    /// measured for itself. The user's glow size scales the result.
+    #[heca_grid_ui_macros::host_only("a theme glow scale, resolved at paint")]
+    pub fn panel_glow(mut self, glow: impl Into<PanelGlow>) -> Self {
+        self.look.glow = Some(glow.into());
+        self
+    }
+
+    /// **How far the panel is lifted off the page** — a full panel, or a bubble just above its
+    /// target (a smaller shadow).
+    #[heca_grid_ui_macros::prop]
+    pub fn panel_elevation(mut self, elevation: PanelElevation) -> Self {
+        self.look.elevation = elevation;
+        self
+    }
+
+    /// **Put the panel beside `rect`, on `side`** — a tooltip's bubble: flipped to the opposite side
+    /// when there is no room, clamped into the window. `gap` is the air between them.
+    #[heca_grid_ui_macros::host_only("a host-computed anchor rect, not authorable data")]
+    pub fn beside(mut self, rect: Rectangle, side: BesideSide, gap: f64) -> Self {
+        self.position = OverlayPosition::Beside {
+            anchor: rect,
+            gap,
+            side,
+        };
+        self.hug_panel();
+        self
+    }
+
+    /// **Put the panel at `point`** — a menu where it was asked for: its top-left there (centred on
+    /// it when `centered`), `inset` in from the window's edges.
+    #[heca_grid_ui_macros::host_only("a host-computed point, not authorable data")]
+    pub fn at_point(mut self, point: Point, inset: f64, centered: bool) -> Self {
+        self.position = OverlayPosition::AtPoint {
+            point,
+            inset,
+            centered,
+        };
+        self.hug_panel();
+        self
+    }
+
+    /// **Keep the layer in its holder's flow** — it takes the room its panel takes, so the holder
+    /// is sized by what the panel holds, while the panel is still drawn over the page and placed
+    /// where its position says. What a dropdown uses: a select is as wide as its widest option, and
+    /// its options live in the list it opens.
+    ///
+    /// ```ignore
+    /// Overlay::new().blocking(false).keyboard(false).anchored_to(trigger).in_flow().panel(options)
+    /// ```
+    #[heca_grid_ui_macros::host_only(
+        "a seam for a widget that composes an overlay into its own box (a select); a description \
+         places a panel by its position"
+    )]
+    pub fn in_flow(mut self) -> Self {
+        self.base.style.layout.placement = None;
+        // It takes the room its panel takes, never what the holder stretches it to: a select's
+        // trigger is one line tall, and a layer stretched to it held its list to one row.
+        self.base.style.layout.align_self = Some(crate::style::Align::Start);
+        self
+    }
+
+    /// **Put the panel at a point that moves** — given as a signal of it (viewport coordinates),
+    /// read each time the panel is placed. What a menu opened where it was asked for uses: the
+    /// point is set before it opens.
+    ///
+    /// ```ignore
+    /// Overlay::new().blocking(false).at_point_to(anchor, inset, false).panel(rows)
+    /// ```
+    #[heca_grid_ui_macros::host_only("a host-computed point, not authorable data")]
+    pub fn at_point_to(mut self, point: Signal<Point>, inset: f64, centered: bool) -> Self {
+        self.point_source = Some(point);
+        self.at_point(point.get_untracked(), inset, centered)
+    }
+
+    /// **Put the panel in a corner or at an edge of the window** — a stack of notifications.
+    #[heca_grid_ui_macros::prop]
+    pub fn corner(mut self, corner: crate::widgets::ToastPosition) -> Self {
+        self.position = OverlayPosition::Corner(corner);
+        self.hug_panel();
+        self
+    }
+
     /// **Anchor the panel to a trigger that moves** — a field's caret, a row that scrolls — given
     /// as a signal of its rect (viewport coordinates). The panel follows it in place, with the same
     /// placement as [`anchored`](Overlay::anchored): below, flipped above when there is no room,
@@ -436,10 +539,14 @@ impl Overlay {
     /// overlay in place (a host re-anchoring to a moved trigger). No-op in
     /// [`Center`](OverlayPosition::Center) mode.
     pub fn set_anchor(&mut self, rect: Rectangle) {
-        if let OverlayPosition::Anchored { anchor, .. } = &mut self.position
-            && *anchor != rect
-        {
-            *anchor = rect;
+        self.set_position(self.position.with_anchor(rect));
+    }
+
+    /// **Move the panel to `position`** in place — a host following a widget that moved, or a
+    /// gap that follows the font. A no-op when nothing changed.
+    pub fn set_position(&mut self, position: OverlayPosition) {
+        if self.position != position {
+            self.position = position;
             self.place_panel();
         }
     }
@@ -458,10 +565,11 @@ impl Overlay {
             known if known.w.is_finite() && known.h.is_finite() => known,
             _ => self.viewport.get(),
         };
-        if let (Some(source), OverlayPosition::Anchored { anchor, .. }) =
-            (self.anchor_source, &mut self.position)
-        {
-            *anchor = source.get_untracked();
+        if let Some(source) = self.anchor_source {
+            self.position = self.position.with_anchor(source.get_untracked());
+        }
+        if let Some(source) = self.point_source {
+            self.position = self.position.with_point(source.get_untracked());
         }
         let position = self.position;
         let area = self.base.bounds;
@@ -473,9 +581,6 @@ impl Overlay {
             return; // Not laid out yet — nothing to place.
         }
         let target = match position {
-            OverlayPosition::Anchored { anchor, gap } => {
-                place_anchored(anchor, current.size, viewport, gap)
-            }
             // The layer fills the window, so its own box is the window — known at layout, the
             // frame the panel is born in, rather than after a first paint (which drew a newly built
             // panel centred for one frame and then jumped it up).
@@ -484,12 +589,17 @@ impl Overlay {
                 placed.loc.y += area.loc.y;
                 placed
             }
-            OverlayPosition::Center => return,
+            placed => match placed.place(current.size, viewport) {
+                Some(target) => target,
+                None => return,
+            },
         };
-        let dx = target.loc.x - current.loc.x;
-        let dy = target.loc.y - current.loc.y;
-        if dx != 0.0 || dy != 0.0 {
-            shift_subtree(child.as_mut(), dx, dy);
+        place_floating(child.as_mut(), target.loc);
+        // **A frame only when the place changed.** Every layout puts the panel back where the engine
+        // lays it out, and this moves it to its place again — usually the same place. Asking for a
+        // frame on every such move kept the window drawing without pause whenever anything was laid
+        // out each frame (the exposé open), for a notification layer with nothing in it.
+        if self.placed_at.replace(Some(target)) != Some(target) {
             self.base.mark_needs_paint();
         }
     }
@@ -645,7 +755,7 @@ impl Overlay {
     fn scale_origin(&self) -> Point {
         let r = match self.position {
             OverlayPosition::Center => self.base.bounds,
-            OverlayPosition::Anchored { .. } | OverlayPosition::Top => self.panel_bounds(),
+            _ => self.panel_bounds(),
         };
         Point::new(r.loc.x + r.size.w / 2.0, r.loc.y + r.size.h / 2.0)
     }
@@ -672,6 +782,37 @@ struct PanelLimits {
 }
 
 impl Overlay {
+    /// **The room the panel has.** A centred or top layer fills the window, so it is the layer's box
+    /// inside its margin. A panel that places itself has the window, less the air its placement
+    /// keeps from the window's edge on both sides — so a long tip or a wide menu wraps inside the
+    /// window instead of running off it. `None` before the window is known.
+    ///
+    /// Returned with what a percentage of the panel's is a share of: the room itself for a layer
+    /// that fills the window; the window for a panel that places itself — its layer hugs the panel,
+    /// so a share of the layer would be a share of the panel's own size.
+    fn panel_room(&self) -> Option<(Size, Size)> {
+        if !self.position.places_itself() {
+            let layout = &self.base.style.layout;
+            let font = self.base.font;
+            let room = Size::new(
+                (self.base.bounds.size.w
+                    - f64::from(layout.pad_left(font) + layout.pad_right(font)))
+                .max(0.0),
+                (self.base.bounds.size.h
+                    - f64::from(layout.pad_top(font) + layout.pad_bottom(font)))
+                .max(0.0),
+            );
+            return Some((room, room));
+        }
+        let window = crate::layout::viewport();
+        if !window.w.is_finite() || !window.h.is_finite() {
+            return None;
+        }
+        let air = 2.0 * self.position.edge_air();
+        let room = Size::new((window.w - air).max(0.0), (window.h - air).max(0.0));
+        Some((room, window))
+    }
+
     /// **The panel never needs more room than the overlay has** — its minimum and maximum width and
     /// height, in any unit, are narrowed to the room inside the overlay's margin; a panel that asks
     /// for less keeps what it asked for. CSS would write `min(22em, 100%)`; taffy cannot, so the
@@ -680,14 +821,11 @@ impl Overlay {
     /// The author's limits are kept aside and narrowed from each time, so a window growing again
     /// gives the panel back what it asked for. Returns whether the panel changed.
     fn fit_panel_to_room(&mut self) -> bool {
-        let room_w = (self.base.bounds.size.w as f32
-            - self.base.style.layout.pad_left(self.base.font)
-            - self.base.style.layout.pad_right(self.base.font))
-        .max(0.0);
-        let room_h = (self.base.bounds.size.h as f32
-            - self.base.style.layout.pad_top(self.base.font)
-            - self.base.style.layout.pad_bottom(self.base.font))
-        .max(0.0);
+        let Some((room, share)) = self.panel_room() else {
+            return false;
+        };
+        let (room_w, room_h) = (room.w as f32, room.h as f32);
+        let (share_w, share_h) = (share.w as f32, share.h as f32);
         if room_w <= 0.0 || room_h <= 0.0 {
             return false;
         }
@@ -708,23 +846,23 @@ impl Overlay {
             Some((authored, fitted)) if fitted == now => authored,
             _ => now,
         };
-        let px = |length: Length, room: f32| match length {
+        let px = |length: Length, share: f32| match length {
             Length::Em(em) => Some(em * font),
             Length::Px(px) => Some(px),
-            Length::Percent(fraction) => Some(room * fraction),
+            Length::Percent(fraction) => Some(share * fraction),
             Length::Auto => None,
         };
-        let narrow = |length: Option<Length>, room: f32| {
-            length.map(|length| match px(length, room) {
+        let narrow = |length: Option<Length>, room: f32, share: f32| {
+            length.map(|length| match px(length, share) {
                 Some(value) if value > room => Length::Px(room),
                 _ => length,
             })
         };
         let fitted = PanelLimits {
-            min_width: narrow(authored.min_width, room_w),
-            max_width: narrow(authored.max_width, room_w),
-            min_height: narrow(authored.min_height, room_h),
-            max_height: narrow(authored.max_height, room_h),
+            min_width: narrow(authored.min_width, room_w, share_w),
+            max_width: narrow(authored.max_width, room_w, share_w),
+            min_height: narrow(authored.min_height, room_h, share_h),
+            max_height: narrow(authored.max_height, room_h, share_h),
         };
         self.panel_limits = Some((authored, fitted));
         if now == fitted {

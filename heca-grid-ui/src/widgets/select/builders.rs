@@ -2,10 +2,14 @@
 //! accessors a host reads (the selected index and its label).
 
 use super::*;
+use crate::builders::Parent;
+use crate::builders::{LayoutExt, PlaceExt};
 use crate::component::Component;
 use crate::reactive::signal;
-use crate::style::{Align, Direction};
+use crate::style::Fill;
+use crate::style::{Align, Direction, Spacing};
 use crate::widgets::choice::Choice;
+use crate::widgets::{Flex, Overlay, ScrollRegion};
 
 #[heca_grid_ui_macros::props]
 impl Select {
@@ -15,23 +19,48 @@ impl Select {
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         // One control = one Tab stop: focus never descends into the options.
         base.focus_barrier = true;
-        // The options stack vertically. This is the flow taffy *measures* them in; `place_options`
-        // then moves them into the overlay panel.
-        base.style.layout.direction = Direction::Column;
+        // The open list sits in the control's own flow, as a row: it takes the control's width
+        // (the control is as wide as its widest option, which the engine measures there), and the
+        // trigger's fixed height does not squeeze it. `on_layout` then moves the finished list to
+        // its panel place, as every floating box is moved.
+        base.style.layout.direction = Direction::Row;
         // Hug the widest option instead of stretching to fill a column parent (the width is
         // `Auto`, and the default cross-axis alignment is `Stretch`).
         base.style.layout.align_self = Some(Align::Start);
+        let vis_rows = signal(MAX_VISIBLE);
+        let list = ScrollRegion::new()
+            .visible_children(vis_rows)
+            .padding_y(PANEL_PAD as f32)
+            .gap(Spacing::None)
+            .grow(1.0)
+            .align_self(Align::Start)
+            .area(LIST_AREA);
+        // The list's layer: light, the keyboard left with the control, kept in the control's flow
+        // so the control is as wide as the list, hung from the trigger, in the accent edge and
+        // halo of an open control. The layer names its panel; the list inside keeps its own name.
+        let open = signal(false);
+        let trigger = signal(heca_core::layout::Rectangle::from_size(Size::new(0.0, 0.0)));
+        let layer = Overlay::new()
+            .blocking(false)
+            .keyboard(false)
+            .anchored_to(trigger)
+            .in_flow()
+            .panel_edge(Fill::theme("accent"))
+            .panel_glow(LIST_GLOW)
+            .open(open)
+            .panel(Flex::column().child(list));
+        base.children.push(crate::WidgetModel::new(layer));
         let mut select = Self {
             base,
             option_states: Vec::new(),
+            option_cursors: Vec::new(),
             selected: signal(0),
-            open: false,
+            open,
             highlight: 0,
-            scroll: 0,
-            vis_rows: MAX_VISIBLE,
-            open_up: false,
+            by_keyboard: signal(true),
+            vis_rows,
+            trigger,
             natural_h: Vec::new(),
-            viewport: Cell::new(Size::new(f64::INFINITY, f64::MAX)),
             on_change: None,
         };
         select.remeasure();
@@ -59,9 +88,16 @@ impl Select {
     /// would have thrown that away. It is also the contract — the rows of a select **are** options.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn option(mut self, choice: Choice) -> Self {
+        let choice = choice.reveal_when(self.by_keyboard);
         self.option_states.push(choice.state());
-        self.base.children.push(crate::WidgetModel::new(choice));
+        self.option_cursors.push(choice.cursor_state());
+        if let Some(list) = self.list_mut() {
+            list.base_mut()
+                .children
+                .push(crate::WidgetModel::new(choice));
+        }
         self.sync_option_states();
+        self.remeasure();
         self
     }
 
@@ -107,8 +143,7 @@ impl Select {
     /// icon-only option). Use it to report the current value; the trigger itself renders the option,
     /// not this.
     pub fn selected_label(&self) -> String {
-        self.base
-            .children
+        self.rows()
             .get(self.selected.get_untracked())
             .and_then(|c| c.text_summary())
             .unwrap_or_default()

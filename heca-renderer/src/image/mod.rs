@@ -399,6 +399,9 @@ impl ImageRenderer {
             occlusion_query_set: None,
             timestamp_writes: None,
         });
+        if !crate::clip::limit_pass(&mut rpass, None) {
+            return;
+        }
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.uniform_bind_group, &[]);
 

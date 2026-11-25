@@ -33,14 +33,14 @@ impl Animation {
         Self {
             start,
             end,
-            start_time: Instant::now(),
+            start_time: crate::clock::now(),
             config,
         }
     }
 
     /// Current eased progress in the range [0.0, 1.0].
     pub fn progress(&self) -> f64 {
-        let elapsed = self.start_time.elapsed().as_millis() as f64;
+        let elapsed = crate::clock::since(self.start_time).as_millis() as f64;
         let duration = self.config.duration_ms as f64;
         if elapsed >= duration {
             return 1.0;
@@ -51,7 +51,7 @@ impl Animation {
 
     /// Current interpolated value.
     pub fn value(&self) -> f64 {
-        let elapsed = self.start_time.elapsed().as_millis() as f64;
+        let elapsed = crate::clock::since(self.start_time).as_millis() as f64;
         let duration = self.config.duration_ms as f64;
 
         if elapsed >= duration {
@@ -70,7 +70,7 @@ impl Animation {
 
     /// Whether the animation is complete.
     pub fn is_done(&self) -> bool {
-        self.start_time.elapsed().as_millis() as u64 >= self.config.duration_ms
+        crate::clock::since(self.start_time).as_millis() as u64 >= self.config.duration_ms
     }
 
     /// Shift both start and end by a delta.
@@ -206,7 +206,7 @@ impl SwipeTracker {
 
     pub fn push(&mut self, delta: f64, _timestamp: Instant) {
         self.pos += delta;
-        self.samples.push((delta, Instant::now()));
+        self.samples.push((delta, crate::clock::now()));
         // Keep only last 8 samples for velocity calculation.
         if self.samples.len() > 8 {
             self.samples.remove(0);
@@ -235,5 +235,29 @@ impl SwipeTracker {
     pub fn projected_end_pos(&self) -> f64 {
         let velocity = self.velocity();
         self.pos + velocity * 0.3 // rough deceleration projection
+    }
+}
+
+#[cfg(test)]
+mod held_clock_tests {
+    use super::{Animation, AnimationConfig};
+    use std::time::Duration;
+
+    /// **A layout animation stands still while a test holds the clock**, and moves exactly as far
+    /// as the test advances it — on any machine, however slow.
+    #[test]
+    fn a_layout_animation_follows_the_held_clock() {
+        crate::clock::hold();
+        let slide = Animation::new(0.0, 100.0, AnimationConfig::default());
+        std::thread::sleep(Duration::from_millis(30));
+        assert_eq!(
+            slide.value(),
+            0.0,
+            "held: real time passing does not move it"
+        );
+        crate::clock::advance(Duration::from_millis(250));
+        assert!(slide.is_done(), "advanced past its duration: done");
+        assert_eq!(slide.value(), 100.0);
+        crate::clock::release();
     }
 }

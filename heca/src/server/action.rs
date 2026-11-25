@@ -55,6 +55,8 @@ pub(crate) enum ServerAction {
     /// Whether the pointer rests on a notification card. A held stack keeps its deadlines still, and
     /// the time that cost is handed back when the pointer leaves.
     Hover(bool),
+    /// How many cards fit the window that asked: as many show, up to the configured most.
+    Room(usize),
     /// Run the closure behind button `key` of notification `id` — a button made with
     /// [`NotificationAction::run`](crate::notification::NotificationAction::run).
     Run(NotificationId, String),
@@ -83,6 +85,8 @@ pub(crate) enum NotificationCommand {
     DismissAll,
     /// Whether the pointer rests on a notification card.
     Hover(bool),
+    /// How many cards fit the window that sent it.
+    Room(usize),
     /// Run the closure behind button `key` of notification `id`.
     Run(NotificationId, String),
 }
@@ -101,6 +105,7 @@ impl NotificationCommand {
             Self::DismissLast => ServerAction::DismissLast,
             Self::DismissAll => ServerAction::DismissAll,
             Self::Hover(hovered) => ServerAction::Hover(hovered),
+            Self::Room(room) => ServerAction::Room(room),
             Self::Run(id, key) => ServerAction::Run(id, key),
         }
     }

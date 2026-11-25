@@ -281,36 +281,45 @@ fn resizing_the_stack_returns_surplus_cards_to_the_front_of_the_queue() {
     assert_eq!(store.visible.len(), 4);
     assert_eq!(store.queued.len(), 1);
 
-    assert!(store.set_max_visible(2, now));
-    assert_eq!(store.visible, vec![Some(ids[0]), Some(ids[1])]);
+    // **Fewer slots never take a card off the screen**: the four stay, and nothing new comes in.
+    assert!(
+        !store.set_max_visible(2, now),
+        "the cards on screen do not change"
+    );
     assert_eq!(
-        store.queued.iter().copied().collect::<Vec<_>>(),
-        vec![ids[2], ids[3], ids[4]],
-        "the two that came off keep their place ahead of the one already waiting",
+        store.visible,
+        vec![Some(ids[0]), Some(ids[1]), Some(ids[2]), Some(ids[3])]
     );
     assert!(
         ids.iter().all(|id| !store.notifications[id].is_history()),
         "a config edit must not dismiss anything",
     );
-
-    // And growing lets the queue back in, in order.
-    assert!(store.set_max_visible(4, now));
+    // As cards leave, their slots close down to the number wanted.
+    store.dismiss(ids[0], now);
     assert_eq!(
         store.visible,
-        vec![Some(ids[0]), Some(ids[1]), Some(ids[2]), Some(ids[3])]
+        vec![Some(ids[1]), Some(ids[2]), Some(ids[3])]
     );
-    assert_eq!(store.queued.len(), 1);
+    store.dismiss(ids[1], now);
+    store.dismiss(ids[2], now);
+    assert_eq!(
+        store.visible,
+        vec![Some(ids[3]), Some(ids[4])],
+        "two slots now: the one waiting comes in beside the last card"
+    );
 
-    assert!(!store.set_max_visible(4, now), "no change, no churn");
-    assert!(store.set_max_visible(0, now), "zero clamps to one");
-    assert_eq!(store.visible.len(), 1);
+    assert!(!store.set_max_visible(2, now), "no change, no churn");
+    store.set_max_visible(0, now);
+    assert_eq!(store.max_visible(), 1, "zero clamps to one");
+    assert_eq!(store.visible.len(), 2, "and the two cards up stay up");
 }
 
 #[test]
 fn the_number_of_slots_is_configured_and_never_zero() {
     assert_eq!(
         NotificationStore::new(100).max_visible(),
-        heca_config::settings::NotificationSystemConfig::default().max_visible
+        DEFAULT_SLOTS,
+        "until told how many fit, a store shows its default"
     );
     assert_eq!(NotificationStore::with_capacity(100, 2).max_visible(), 2);
     assert_eq!(

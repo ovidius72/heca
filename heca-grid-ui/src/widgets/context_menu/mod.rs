@@ -119,13 +119,17 @@ const MIN_W: f32 = 160.0;
 const MAX_W: f32 = 380.0;
 /// Inset of the anchor from the cursor so the menu doesn't sit directly under it.
 const ANCHOR_INSET: f64 = 2.0;
-/// Inset of the quick-pick keycap from the row's right edge. The keycap chip itself
-/// is drawn by the shared [`paint_keycap`](crate::widgets::key_hint::paint_keycap) primitive (sized via [`keycap_size`](crate::widgets::key_hint::keycap_size)) — the
-/// menu never re-derives the chip metrics.
+/// Inset of the quick-pick keycap from the row's right edge. The chip is a [`Keycap`](crate::widgets::Keycap)
+/// at the caption size, so the menu never re-derives the chip metrics.
 const KEYCAP_INSET: f64 = 8.0;
-/// Quick-pick keycap font as a fraction of the menu font — a compact chip, smaller than the
-/// row label (mirrors the sub-font scale the `Tag` chip uses).
-const KEYCAP_FONT_SCALE: f32 = 0.72;
+/// A sugar row's icon, as a share of the menu font — a touch larger than the words beside it.
+const ICON_SCALE: f32 = 1.05;
+/// **The menu's halo, as multipliers of the theme's glow** — at the default theme the 12 px, 0.3
+/// halo it has always had (the theme's glow is 10 px at 0.55). Per-widget glow, intended: see
+/// docs/widgets.md → "Each widget's own glow and border".
+const MENU_GLOW: crate::widgets::PanelGlow = crate::widgets::PanelGlow::new(1.2, 0.3 / 0.55);
+/// The name the column of rows carries inside the menu's layer.
+const ROWS: &str = "menu.rows";
 
 /// Where a menu appears — chosen by **what triggered it**, never by an author.
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -14,7 +14,7 @@
 //! |---|---|---|
 //! | header button | `demo.pane_button("show_notes")` | `[appearance.pane] title_actions` |
 //! | header chip | `demo.pane_chip("status", \|facts\| ..)` | `[appearance.pane] title_segments` |
-//! | sidebar row line | `demo.pane_line("status", \|facts\| ..)` | `[appearance.sidebar] pane_lines` |
+//! | sidebar row line | `demo.pane_line("status", \|facts\| ..)` | `[appearance.sidebar] pane_<view>_view` |
 //!
 //! **What an extension adds is a default.** It is shown while the user's list is still the built-in
 //! one; once they write their own list only their list counts, and an item they do not show is said
@@ -35,7 +35,8 @@ pub use chips::{PaneChip, PaneFacts};
 pub(crate) use lines::{
     BuildLine, LineCx, PaneLineDef, PaneRowLines, ProduceLine, add_extension_line,
 };
-pub use lines::{PaneLine, PaneLineSet};
+pub(crate) use lines::{HeadView, RowHead};
+pub use lines::{PaneLine, PaneLineSet, PaneViews};
 
 /// **Say what the user's lists leave out or get wrong**, for every kind of pane item — at startup,
 /// once every action a button names exists, and again on each reload. Nothing is silent.
@@ -45,7 +46,5 @@ pub(crate) fn report_pane_items(state: &crate::app_state::AppState) {
         .pane_buttons
         .report(&pane.title_actions, &state.action_catalog);
     state.pane_chips.report(&pane.title_segments);
-    state
-        .pane_lines
-        .report(&state.appearance.sidebar.pane_lines);
+    state.pane_lines.report(&state.appearance.sidebar);
 }

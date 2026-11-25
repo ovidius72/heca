@@ -30,6 +30,8 @@ const TRACK_H: f64 = 24.0;
 const KNOB_PAD: f64 = 3.0;
 /// Seconds for a full off↔on slide.
 const ANIM_DURATION: f32 = 0.12;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// On-state glow spread radius (px).
 const GLOW_RADIUS: f32 = 16.0;
 /// On-state glow peak intensity.

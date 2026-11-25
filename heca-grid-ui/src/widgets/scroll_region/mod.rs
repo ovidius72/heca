@@ -94,6 +94,8 @@ const WHEEL_STEP_FRAC: f64 = 0.1;
 /// Not a whole viewport: a sliver of overlap means the line you were reading is still on screen
 /// after the jump, which is what every pager does and what makes paging through a list readable.
 const PAGE_STEP_FRAC: f64 = 0.9;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Rest-glow spread radius (px) for a STYLED region (a scrollable panel) — its
 /// share of the theme rest halo; a frameless region has no surface and no glow.
 const SURFACE_GLOW_RADIUS: f32 = 12.0;
@@ -324,6 +326,8 @@ pub struct ScrollRegion {
     /// waiting. A wheel has no release, so its end is a **silence**, not an event — see
     /// [`WHEEL_IDLE_END`].
     wheel_idle: Option<f32>,
+    /// Show this many content children before scrolling ([`visible_children`](Self::visible_children)).
+    visible_children: Option<crate::builders::LiveValue<usize>>,
 }
 
 /// A position listener. The higher-ranked bound is what lets [`ScrollInfo`] borrow the event that

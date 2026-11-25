@@ -9,11 +9,15 @@ use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Scene, Size
 
 const LONG: &str = "feature/a-branch-name-much-too-long-for-its-row";
 
-/// Lay `root` out at `width`, rest the pointer on its first child, and return the overlay's words.
+/// The window the rows sit in — wide enough for any bubble, which wraps against the window.
+const WINDOW: Size = Size::new(800.0, 200.0);
+
+/// Lay `root` out at `width` inside the window, rest the pointer on its first child, and return the
+/// overlay's words.
 fn hover_words(root: Flex, width: f64) -> Vec<String> {
     set_default_delay(0.0);
     let mut root = root.width(width as f32);
-    let viewport = Size::new(width, 200.0);
+    let viewport = WINDOW;
     LayoutEngine::new().compute(&mut root, viewport);
     let rect = root.base().children[0].base().bounds;
     let point = Point::new(

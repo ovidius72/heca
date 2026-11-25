@@ -153,6 +153,8 @@ impl Base {
             picker_scope: None,
             tooltip: None,
             content_tone: None,
+            on_close: None,
+            on_close_wired: false,
             hintable: true,
             activatable: false,
             transparent: false,
@@ -316,6 +318,27 @@ impl Base {
         self.focused.get_untracked() && self.focus_visible.get_untracked()
     }
 
+    /// **Start hearing this widget close** — on the first tick, when every builder has run, so it
+    /// listens to the `open` the widget ended up with (`.open(signal)` may have replaced it after
+    /// `.on_close(..)` was written). It runs on the change from open to closed, whoever closed it.
+    fn wire_on_close(&mut self) {
+        if self.on_close_wired {
+            return;
+        }
+        let Some(on_close) = self.on_close.clone() else {
+            return;
+        };
+        self.on_close_wired = true;
+        let open = self.open;
+        crate::reactive::create_effect(move |was: Option<bool>| {
+            let now = crate::reactive::SignalGet::get(&open);
+            if was == Some(true) && !now {
+                on_close();
+            }
+            now
+        });
+    }
+
     /// The rect an **inset state highlight** should cover — a hover tint, an active pill:
     /// [`bounds`](Self::bounds) pulled in by `inset` on each side, but **never further than this
     /// widget's own padding** on that side.
@@ -347,6 +370,7 @@ impl Base {
         // A widget that follows a host signal for focus catches up here, once a frame, for every
         // widget — see [`Base::follow_focus`].
         self.sync_focus_follow();
+        self.wire_on_close();
         let tone_changed = self.content_tone.is_some_and(|tone| {
             let next = tone.get_untracked();
             if self.style.visual.content_tone == next {

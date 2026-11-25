@@ -30,6 +30,22 @@ pub struct NotificationRuntime {
     /// The stack reports the *fact* through a signal (it has no clock and no idea what a card's
     /// lifetime is); this is where that fact becomes time. See [`set_hovered`](Self::set_hovered).
     hovered_since: Option<Instant>,
+    /// The most cards shown (`[settings.notification_system] max_visible`); `0` = as many as fit.
+    cap: usize,
+    /// How many cards fit the window, as the window last said; `None` until it says.
+    room: Option<usize>,
+}
+
+/// How many cards show while the window has not yet said how many fit.
+const UNTIL_ROOM_IS_KNOWN: usize = crate::notification::store::DEFAULT_SLOTS;
+
+/// **How many cards show**: as many as fit, never more than the cap (`0` = no cap).
+fn slots(cap: usize, room: Option<usize>) -> usize {
+    match (cap, room) {
+        (0, room) => room.unwrap_or(UNTIL_ROOM_IS_KNOWN),
+        (cap, room) => room.map_or(cap, |room| room.min(cap)),
+    }
+    .max(1)
 }
 
 impl NotificationRuntime {
@@ -55,12 +71,14 @@ impl NotificationRuntime {
         max_visible: usize,
     ) -> Self {
         Self {
-            store: NotificationStore::with_capacity(history_limit, max_visible),
+            store: NotificationStore::with_capacity(history_limit, slots(max_visible, None)),
             shown: Vec::new(),
             auto_dismiss,
             mode,
             system_fallback_announced: false,
             hovered_since: None,
+            cap: max_visible,
+            room: None,
         }
     }
 
@@ -223,7 +241,19 @@ impl NotificationRuntime {
 
     /// Apply a new `max_visible` (`prefix+Shift+r`). Returns whether the projection changed.
     pub fn set_max_visible(&mut self, max_visible: usize, now: Instant) -> bool {
-        let changed = self.store.set_max_visible(max_visible, now);
+        self.cap = max_visible;
+        self.apply_slots(now)
+    }
+
+    /// **The window says how many cards fit** its height. Returns whether the projection changed.
+    /// With several windows, the last one to say decides.
+    pub fn set_room(&mut self, room: usize, now: Instant) -> bool {
+        self.room = Some(room);
+        self.apply_slots(now)
+    }
+
+    fn apply_slots(&mut self, now: Instant) -> bool {
+        let changed = self.store.set_max_visible(slots(self.cap, self.room), now);
         if changed {
             self.sync_visible_toasts();
         }
@@ -288,3 +318,24 @@ impl NotificationRuntime {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod slot_tests {
+    use super::slots;
+
+    /// **As many as fit, never more than the cap**; `0` means no cap, and before the window has
+    /// said how many fit a few show.
+    #[test]
+    fn the_cards_shown_are_as_many_as_fit_up_to_the_cap() {
+        assert_eq!(slots(0, Some(9)), 9, "no cap: as many as fit");
+        assert_eq!(slots(5, Some(9)), 5, "a cap stops it");
+        assert_eq!(slots(5, Some(3)), 3, "and so does the window");
+        assert_eq!(
+            slots(0, None),
+            super::UNTIL_ROOM_IS_KNOWN,
+            "before the window says"
+        );
+        assert_eq!(slots(4, None), 4);
+        assert_eq!(slots(0, Some(0)), 1, "always at least one");
+    }
+}

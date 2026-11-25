@@ -390,10 +390,9 @@ impl PrimitiveRenderer {
         if stencil.is_some() {
             rpass.set_stencil_reference(1);
         }
-        if let Some((x, y, w, h)) = clip_rect {
-            rpass.set_scissor_rect(x, y, w, h);
+        if crate::clip::limit_pass(&mut rpass, clip_rect) {
+            rpass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
         }
-        rpass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
 
         self.vertices.clear();
         self.indices.clear();

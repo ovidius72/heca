@@ -27,6 +27,31 @@ thread_local! {
     /// The room the last layout was given — the window, for a host that lays out its window.
     static VIEWPORT: std::cell::Cell<Size> =
         const { std::cell::Cell::new(Size::new(f64::INFINITY, f64::INFINITY)) };
+    /// The theme the last layout given one was laid out with — what a step of space and a theme
+    /// value named by a builder resolve against. A layout given no theme (a widget laying out a
+    /// small tree of its own) leaves it as it was.
+    static THEME: std::cell::RefCell<std::rc::Rc<heca_theme::Theme>> =
+        std::cell::RefCell::new(std::rc::Rc::new(heca_theme::Theme::default()));
+}
+
+/// **The theme's number of this name**, from the theme the window is laid out with —
+/// [`Theme::number_named`](heca_theme::Theme::number_named). What [`Length::theme`](crate::style::Length::theme)
+/// resolves through.
+pub fn theme_number(name: &str) -> Option<f32> {
+    THEME.with(|theme| theme.borrow().number_named(name))
+}
+
+/// **The theme's count of this name** — [`Theme::count_named`](heca_theme::Theme::count_named),
+/// from the theme the window is laid out with. What [`Count::theme`](crate::style::Count::theme)
+/// resolves through.
+pub fn theme_count(name: &str) -> Option<usize> {
+    THEME.with(|theme| theme.borrow().count_named(name))
+}
+
+/// **The theme's rhythm** — how much air each step of space is, from the theme the window is laid
+/// out with. What [`Spacing`](crate::style::Spacing) resolves through.
+pub(crate) fn spacing() -> heca_theme::SpacingScale {
+    THEME.with(|theme| theme.borrow().spacing)
 }
 
 /// **Tell every widget its place is final** — [`Component::on_placed`], parent before children,
@@ -138,6 +163,8 @@ pub struct LayoutEngine {
     base_font: f32,
     input_style: heca_theme::InputStyle,
     dialog_style: heca_theme::DialogStyle,
+    /// The theme this engine lays out with, when it was given one — see [`theme`](Self::theme).
+    theme: Option<std::rc::Rc<heca_theme::Theme>>,
 }
 
 impl LayoutEngine {
@@ -152,6 +179,7 @@ impl LayoutEngine {
             base_font: DEFAULT_BASE_FONT,
             input_style: heca_theme::InputStyle::default(),
             dialog_style: heca_theme::DialogStyle::default(),
+            theme: None,
         }
     }
 
@@ -160,6 +188,7 @@ impl LayoutEngine {
         self.base_font = theme.font_size;
         self.input_style = theme.colors.input;
         self.dialog_style = theme.colors.dialog;
+        self.theme = Some(std::rc::Rc::new(theme.colors.clone()));
         self
     }
 
@@ -180,6 +209,9 @@ impl LayoutEngine {
     /// absolute bounds into every component's `Base.bounds`.
     pub fn compute(&mut self, root: &mut dyn Component, available: Size) {
         VIEWPORT.with(|viewport| viewport.set(available));
+        if let Some(theme) = &self.theme {
+            THEME.with(|laid| *laid.borrow_mut() = theme.clone());
+        }
         let retained = root
             .base()
             .layout_cache

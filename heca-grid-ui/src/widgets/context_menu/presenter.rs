@@ -1,24 +1,19 @@
-use super::{ANCHOR_INSET, KEYCAP_FONT_SCALE, KEYCAP_INSET, MAX_W, MIN_W, PAD, SHORTCUT_GAP};
+use super::{ANCHOR_INSET, MAX_W, MENU_GLOW, MIN_W, PAD, ROWS};
 use super::{Menu, MenuAnchor};
-use crate::builders::LayoutExt;
-use crate::color::Color;
-use crate::component::{
-    Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent, paint_child, shift_subtree,
-};
+use crate::builders::{LayoutExt, Parent, PlaceExt};
+use crate::component::{Base, Component, Event, GridKey, Handled, WidgetIntent};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::style::{Direction, Length};
-use crate::widgets::key_hint::{KeycapVariant, keycap_size, paint_keycap};
-use crate::widgets::{PanelChrome, PanelElevation, paint_panel_chrome, place_at_point};
-use heca_core::layout::{Point, Rectangle, Size};
-use std::cell::Cell;
+use crate::style::Fill;
+use crate::widgets::{Flex, Overlay};
+use heca_core::layout::{Point, Rectangle};
 use std::rc::Rc;
 
 /// **A named presenter for one [`Menu`], shown on right-click or the host's `open_context_menu`.**
 ///
-/// It is also the panel: it realizes the menu's rows into its own children, lets the layout engine
-/// size them, places itself at the anchor the trigger chose, and paints and hit-tests the result.
-/// There is no separate panel type.
+/// It is also the panel: it realizes the menu's rows as real [`Row`](crate::widgets::Row)s in a
+/// light [`Overlay`] at the anchor the trigger chose — the overlay places the panel, draws its frame
+/// on the overlay layer and keeps it inside the window; the rows are sized by the layout engine and
+/// mark the chosen entry themselves. There is no separate panel type.
 ///
 /// ```
 /// use heca_grid_ui::prelude::*;
@@ -39,15 +34,13 @@ pub struct ContextMenu {
     base: Base,
     name: String,
     menu: Menu,
-    selected: usize,
+    /// The entry the cursor is on — what Enter runs, and what its row lights.
+    selected: Signal<usize>,
     open: Signal<bool>,
     /// Anchor (top-left preferred position; clamped to the viewport).
     anchor: Signal<Point>,
     /// When true the panel is **centered on the anchor** instead of placed down-right of it.
     centered: bool,
-    viewport: Cell<Size>,
-    /// Panel rect cached at layout/paint, so overlay damage targets just the menu.
-    panel: Cell<Rectangle>,
     /// Fired when the menu is **dismissed** (Esc / outside-click) — not when an entry is selected.
     on_dismiss: Option<Rc<dyn Fn()>>,
     /// Fired after an entry ran, whatever it was — the host's hook for taking the layer down.
@@ -62,20 +55,13 @@ impl Clone for ContextMenu {
     fn clone(&self) -> Self {
         let open = signal(false);
         Self {
-            // `Base::new()` here — not `panel_base()` — cost a released-looking bug: a cloned menu
-            // lost `Direction::Column` and fell back to the `Row` default, so **every declared
-            // menu laid out horizontally** while `open_dropdown`, which never clones, stayed
-            // vertical. Two menus, same widget, different shape. A `Clone` that rebuilds a `Base`
-            // must rebuild the widget's box with it.
-            base: Self::panel_base(open),
+            base: Self::menu_base(open),
             name: self.name.clone(),
             menu: self.menu.clone(),
-            selected: 0,
+            selected: signal(0),
             open,
             anchor: signal(self.anchor.get_untracked()),
             centered: self.centered,
-            viewport: Cell::new(self.viewport.get()),
-            panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             on_dismiss: self.on_dismiss.clone(),
             after_select: self.after_select.clone(),
         }
@@ -90,38 +76,27 @@ impl ContextMenu {
     pub fn new(name: impl Into<String>) -> Self {
         let open = signal(false);
         Self {
-            base: Self::panel_base(open),
+            base: Self::menu_base(open),
             name: name.into(),
             menu: Menu::default(),
-            selected: 0,
+            selected: signal(0),
             open,
             anchor: signal(Point::new(0.0, 0.0)),
             centered: false,
-            viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
-            panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             on_dismiss: None,
             after_select: None,
         }
     }
 
-    /// **The panel's own box** — a padded column with a width floor and ceiling.
-    ///
-    /// One definition, used by [`new`](ContextMenu::new) **and** by `Clone`: the rows are children,
-    /// so everything else about the panel's size is the layout engine's answer, but the box those
-    /// children stack in is this widget's and must survive being cloned.
+    /// **The menu's own box** — one definition, used by [`new`](ContextMenu::new) **and** by
+    /// `Clone`, so a cloned declaration is the same widget.
     ///
     /// **Open is focused.** The menu follows `open` into [`Base::focused`]
     /// ([`Base::follow_focus_modal`]), which is the whole of how it hears the keyboard: keys and
     /// the intents they resolve to go to the focus owner and bubble, so an open menu is on the
-    /// path and a closed one is not. It replaces a declaration that it took raw keys plus a
-    /// catch-all that swallowed everything else while open — the pair that ate every quick-pick
-    /// letter.
-    fn panel_base(open: Signal<bool>) -> Base {
+    /// path and a closed one is not. Its layer leaves the keyboard here (`keyboard(false)`).
+    fn menu_base(open: Signal<bool>) -> Base {
         let mut base = Base::new();
-        base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = (PAD).into();
-        base.style.layout.min_width = Some(Length::Px(MIN_W));
-        base.style.layout.max_width = Some(Length::Px(MAX_W));
         base.follow_focus_modal(open);
         // **A menu locks because it is a menu.** It demands a choice, so nothing behind it is
         // reachable while it is up — even though its panel is small. Without that, a prefix
@@ -200,15 +175,60 @@ impl ContextMenu {
         self
     }
 
-    /// Build the rows into real children. Runs each composed row's builder, so it happens **at
-    /// open**, not when the menu was written.
+    /// **Build the panel**: the rows, as real children, in a light layer at the anchor. Runs each
+    /// composed row's builder, so it happens **at open**, not when the menu was written.
+    ///
+    /// The layer is an [`Overlay`]: it places the panel at the anchor (`at_point_to`, clamped into
+    /// the window), draws the menu's frame — the accent edge and its halo — on the overlay layer,
+    /// and leaves the keyboard with the menu. The rows mark the chosen entry themselves
+    /// ([`CursorLook::Pill`](crate::widgets::CursorLook::Pill)).
     fn realize(&mut self) {
         self.assign_quick_picks();
         let font = self.base.font;
-        let rows: Vec<crate::WidgetModel> =
-            self.menu.items.iter().map(|i| i.build_row(font)).collect();
-        self.base.children = rows;
-        self.selected = self.enabled_from(0, true).unwrap_or(0);
+        let selected = self.selected;
+        let rows: Vec<crate::WidgetModel> = self
+            .menu
+            .items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let chosen = move || selected.get() == i;
+                crate::WidgetModel::new(item.build_row(font, chosen))
+            })
+            .collect();
+        let column = Flex::column()
+            .padding(PAD)
+            .min_width(MIN_W)
+            .max_width(MAX_W)
+            .area(ROWS)
+            .child(rows);
+        let layer = Overlay::new()
+            .blocking(false)
+            .keyboard(false)
+            .at_point_to(self.anchor, ANCHOR_INSET, self.centered)
+            .panel_edge(Fill::theme("accent").alpha("panel_border"))
+            .panel_glow(MENU_GLOW)
+            .open(self.open)
+            // The layer names its panel; the column inside keeps the menu's own name.
+            .panel(Flex::column().child(column));
+        self.base.children = vec![crate::WidgetModel::new(layer)];
+        self.selected.set(self.enabled_from(0, true).unwrap_or(0));
+    }
+
+    /// The name the column of rows carries — what finds the panel inside a tree.
+    pub const PANEL: &'static str = ROWS;
+
+    /// **The rows, in order** — real children, laid out by the engine. Empty until the menu opens.
+    pub fn rows(&self) -> &[crate::WidgetModel] {
+        crate::component::area(self, ROWS).map_or(&[], |column| column.base().children.as_slice())
+    }
+
+    /// **Where the panel is on screen** — the box the rows stack in. Empty before the menu opens.
+    pub fn panel_bounds(&self) -> Rectangle {
+        crate::component::area(self, ROWS).map_or_else(
+            || Rectangle::from_size(heca_core::layout::Size::new(0.0, 0.0)),
+            |column| column.base().bounds,
+        )
     }
 
     /// **Give every enabled row a quick-pick letter it does not already have.**
@@ -260,10 +280,8 @@ impl ContextMenu {
         self.open.get_untracked()
     }
 
-    /// Compact keycap font (a fraction of the menu font) — shared by sizing + glyph so the chip
-    /// and its letter stay in proportion.
-    fn keycap_font(&self) -> f32 {
-        self.base.font * KEYCAP_FONT_SCALE
+    fn selected(&self) -> usize {
+        self.selected.get_untracked()
     }
 
     /// Index of the first enabled entry at or after `from`, wrapping search forward
@@ -293,26 +311,27 @@ impl ContextMenu {
         if n == 0 {
             return;
         }
-        if let Some(i) = self.enabled_from((self.selected + 1).min(n - 1), true) {
-            self.selected = if i == self.selected {
-                self.enabled_from(self.selected, true).unwrap_or(i)
+        let at = self.selected();
+        if let Some(i) = self.enabled_from((at + 1).min(n - 1), true) {
+            self.selected.set(if i == at {
+                self.enabled_from(at, true).unwrap_or(i)
             } else {
                 i
-            };
+            });
         }
     }
 
     /// Move the selection to the previous enabled entry (↑).
     pub fn select_prev(&mut self) {
-        let prev = self.selected.saturating_sub(1);
+        let prev = self.selected().saturating_sub(1);
         if let Some(i) = self.enabled_from(prev, false) {
-            self.selected = i;
+            self.selected.set(i);
         }
     }
 
     /// Run the selected entry (if enabled) and close.
     pub fn run_selected(&mut self) {
-        if let Some(e) = self.menu.items.get(self.selected)
+        if let Some(e) = self.menu.items.get(self.selected())
             && e.enabled
         {
             // **The menu comes down first, then the entry runs.** Not cosmetic: while the panel is
@@ -357,46 +376,17 @@ impl ContextMenu {
 
     fn close(&mut self) {
         self.open.set(false);
-        self.selected = self.enabled_from(0, true).unwrap_or(0);
+        self.selected.set(self.enabled_from(0, true).unwrap_or(0));
     }
 
-    /// The laid-out rect of row `idx` — its child's bounds, because the rows are real children.
-    fn row_rect(&self, idx: usize) -> Rectangle {
-        self.base
-            .children
-            .get(idx)
-            .map(|c| c.base().bounds)
-            .unwrap_or_else(|| Rectangle::from_size(Size::new(0.0, 0.0)))
-    }
-
-    /// Place the finished panel at its anchor by baking the offset into its bounds — the same
-    /// subtree-shift `Overlay` / `Select` / `ScrollRegion` use. Idempotent: the target is absolute,
-    /// so re-running never compounds.
-    ///
-    /// This is the **only** geometry this widget owns. Row sizes, the panel's width and its height
-    /// all come from the layout engine, because the rows are real children.
-    fn place_panel(&mut self) {
-        let current = self.base.bounds;
-        if current.size == Size::new(0.0, 0.0) {
-            return; // Not laid out yet — nothing to place.
-        }
-        // The viewport the layout pass was given, not the one the last paint cached: placement
-        // happens here, and reading it a pass later is what made the menu appear at the raw anchor
-        // and then jump once it had been clamped.
-        let target = place_at_point(
-            self.anchor.get_untracked(),
-            current.size,
-            self.base.viewport,
-            ANCHOR_INSET,
-            self.centered,
-        );
-        self.panel.set(target);
-        let dx = target.loc.x - current.loc.x;
-        let dy = target.loc.y - current.loc.y;
-        if dx != 0.0 || dy != 0.0 {
-            shift_subtree(self, dx, dy);
-            self.base.mark_needs_paint();
-        }
+    /// **The enabled entry under the pointer**, asked of the framework rather than hit-tested here:
+    /// hover is marked along the target's ancestor chain before an event is delivered, so the row
+    /// answering `hovered` is the row the pointer is on.
+    fn pointed_entry(&self) -> Option<usize> {
+        self.rows()
+            .iter()
+            .position(|row| row.base().hovered())
+            .filter(|&i| self.menu.items.get(i).is_some_and(|item| item.enabled))
     }
 }
 
@@ -421,138 +411,6 @@ impl Component for ContextMenu {
         self.base.visible.get_untracked() && !self.base.style.layout.hidden && self.is_open()
     }
 
-    /// Layout just placed the panel wherever its parent put it; move it to the anchor the trigger
-    /// chose (idempotent — see `place_panel`).
-    fn on_layout(&mut self) {
-        self.place_panel();
-    }
-
-    fn paint(&self, cx: &mut PaintCx) {
-        if !self.base.visible.get_untracked() || !self.is_open() {
-            return;
-        }
-        self.viewport.set(cx.viewport());
-        // NB: the panel's own surface fill + corner radius are read by the shared
-        // `paint_panel_chrome`, so they are deliberately not pulled out here.
-        let (accent, glow_c, foreground, muted, danger, ctrl_radius) = {
-            let t = cx.theme();
-            (
-                cx.accent(),
-                t.colors.glow,
-                t.colors.foreground,
-                t.colors.muted,
-                t.colors.danger,
-                t.colors.control_radius(),
-            )
-        };
-        let font = self.base.font;
-        let panel = self.base.bounds;
-        self.panel.set(panel);
-
-        cx.with_overlay(|cx| {
-            // Panel — the SHARED overlay panel chrome (drop shadow + theme surface
-            // fill + bracket reticle), so a menu reads as the same surface as every
-            // other overlay panel. On top of it the menu keeps its own identity: an
-            // accent edge and the glow it shares with the CommandPalette. No scrim —
-            // context menus dismiss on outside-click rather than darkening the view.
-            let panel_border =
-                cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
-            paint_panel_chrome(
-                cx,
-                panel,
-                PanelChrome {
-                    border: panel_border,
-                    glow: Some(Glow {
-                        color: glow_c,
-                        radius: 12.0,
-                        intensity: 0.3,
-                    }),
-                    elevation: PanelElevation::Panel,
-                },
-            );
-
-            for (i, e) in self.menu.items.iter().enumerate() {
-                let row = self.row_rect(i);
-                let is_sel = i == self.selected && e.enabled;
-                if is_sel {
-                    let row_border = cx
-                        .border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
-                    cx.rect(
-                        row,
-                        accent.with_alpha(cx.theme().colors.interaction.panel_row_fill),
-                        row_border,
-                        ctrl_radius,
-                        None,
-                    );
-                    cx.rect(
-                        Rectangle::new(
-                            Point::new(row.loc.x, row.loc.y + row.size.h * 0.2),
-                            Size::new(2.5, row.size.h * 0.6),
-                        ),
-                        accent,
-                        None,
-                        1.0,
-                        None,
-                    );
-                }
-
-                // The row's colour is decided **here**, at paint, from the theme and the row's
-                // state, and published to the subtree as the inherited content colour. That is
-                // what lets a composed row — an `Icon` and a `Label` an author wrote — read as
-                // danger, or dim when disabled, without knowing anything about menus.
-                let base_color: Color = if e.danger { danger } else { foreground };
-                let text_color = if !e.enabled {
-                    muted.with_alpha(cx.theme().colors.interaction.menu_shortcut_dim)
-                } else if is_sel {
-                    base_color
-                } else {
-                    muted.lerp(base_color, 0.75)
-                };
-
-                if let Some(child) = self.base.children.get(i) {
-                    cx.with_content_color(text_color, |cx| paint_child(child.as_ref(), cx));
-                }
-
-                // Quick-pick keycap (rightmost) and the shortcut hint left of it. These are the
-                // menu's own affordances rather than the row's content, so they are painted into
-                // the space the row reserved for them (`MenuItem::trailing_width`) and a composed
-                // row never has to lay them out.
-                let mut right_edge = row.loc.x + row.size.w - KEYCAP_INSET;
-                if let Some(k) = e.key {
-                    let ks = keycap_size(self.keycap_font(), &k.to_string());
-                    let cap = Rectangle::new(
-                        Point::new(right_edge - ks.w, row.loc.y + (row.size.h - ks.h) / 2.0),
-                        ks,
-                    );
-                    let cap_color = if e.enabled { accent } else { muted };
-                    paint_keycap(
-                        cx,
-                        cap,
-                        &k.to_string(),
-                        self.keycap_font(),
-                        Some(cap_color),
-                        KeycapVariant::Bordered,
-                    );
-                    right_edge = cap.loc.x - SHORTCUT_GAP;
-                }
-                if let Some(s) = &e.shortcut {
-                    let srect = Rectangle::new(
-                        Point::new(row.loc.x, row.loc.y),
-                        Size::new((right_edge - row.loc.x).max(0.0), row.size.h),
-                    );
-                    cx.text(
-                        srect,
-                        s,
-                        muted.with_alpha(cx.theme().colors.interaction.menu_shortcut),
-                        font,
-                        TextAlign::End,
-                        TextStyle::REGULAR,
-                    );
-                }
-            }
-        });
-    }
-
     /// **A layer is not scrolled into view.** `Base::focused` says this widget holds the keyboard
     /// while it is open, and `wants_visible` defaults to exactly that — so an enclosing
     /// `ScrollRegion` would scroll the page to wherever this widget's layout node happens to sit,
@@ -561,19 +419,9 @@ impl Component for ContextMenu {
         false
     }
 
-    /// The menu's **input** surface is the panel — its own laid-out bounds, since the rows are
-    /// children. Closed, it takes nothing.
+    /// The menu's **input** surface is the panel. Closed, it takes nothing.
     fn hit_bounds(&self) -> Option<Rectangle> {
-        if self.is_open() {
-            Some(self.base.bounds)
-        } else {
-            None
-        }
-    }
-
-    /// The menu paints on the overlay layer, so overlay damage targets the panel rect.
-    fn damage_bounds(&self) -> Rectangle {
-        crate::widgets::tooltip::damage(&self.base)
+        self.is_open().then(|| self.panel_bounds())
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
@@ -615,7 +463,7 @@ impl Component for ContextMenu {
                     .iter()
                     .position(|e| e.enabled && e.key.is_some_and(|k| k.eq_ignore_ascii_case(c)))
                 {
-                    self.selected = i;
+                    self.selected.set(i);
                     self.run_selected();
                     Handled::Yes
                 } else {
@@ -628,25 +476,17 @@ impl Component for ContextMenu {
             // Other raw keys (arrows, Enter, Tab) are NOT swallowed: report unhandled so the host
             // offers the resolved `WidgetIntent`. The host owns modal capture.
             Event::Key { pressed: true, .. } => Handled::No,
-            // Rows are children now, so their rects come from the layout engine — but the menu
-            // still resolves the pointer itself, because a row is a *choice* rather than a widget
-            // that answers its own clicks.
-            Event::PointerMove(p) => {
-                for i in 0..self.menu.items.len() {
-                    if self.menu.items[i].enabled && self.row_rect(i).contains(p.pos) {
-                        self.selected = i;
-                        break;
-                    }
+            // **The pointer moves the cursor**: the entry under it becomes the chosen one.
+            Event::PointerMove(_) => {
+                if let Some(i) = self.pointed_entry() {
+                    self.selected.set(i);
                 }
                 Handled::Yes
             }
-            Event::PointerDown(p) => {
-                for i in 0..self.menu.items.len() {
-                    if self.menu.items[i].enabled && self.row_rect(i).contains(p.pos) {
-                        self.selected = i;
-                        self.run_selected();
-                        break;
-                    }
+            Event::PointerDown(_) => {
+                if let Some(i) = self.pointed_entry() {
+                    self.selected.set(i);
+                    self.run_selected();
                 }
                 // A press inside the panel that matched no entry — a disabled row, the padding
                 // between rows — does nothing at all. Dismissal is what a press *outside* means,
@@ -659,11 +499,9 @@ impl Component for ContextMenu {
                 self.fire_dismiss();
                 Handled::No
             }
-            // **Claim what you act on, and nothing else.** This arm used to be
-            // `_ => Handled::Yes` — "swallow all other input while open" — three arms below the
-            // comment saying modal capture is the host's job. It ate `Event::TextInput`, and
-            // because a host offers text before it resolves the key, every quick-pick letter did
-            // nothing at all while 1230 tests passed.
+            // **Claim what you act on, and nothing else.** A catch-all `Handled::Yes` here once ate
+            // `Event::TextInput`, and because a host offers text before it resolves the key, every
+            // quick-pick letter did nothing at all while 1230 tests passed.
             _ => Handled::No,
         }
     }

@@ -88,12 +88,24 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let _s = step("frame.sync_terminal_layers");
         frame::sync_terminal_layers(state, &v, &terminals)
     };
+    // What this frame repaints: the whole window, or only what changed since the last.
+    let damage = state.repaint.take(&scene);
+    crate::app::frame_reasons::report(&match damage {
+        None => format!("repaint whole ({})", state.repaint.why_whole()),
+        Some(r) => format!(
+            "repaint {:.0}x{:.0} at {:.0},{:.0}",
+            r.size.w, r.size.h, r.loc.x, r.loc.y
+        ),
+    });
     let Some(mut frame) = ({
         let _s = step("frame.open");
         frame::Frame::open(state, v)
     }) else {
+        // Nothing was drawn: the next frame cannot build on this one.
+        state.repaint.whole();
         return;
     };
+    frame.limit_to(damage);
     {
         let _s = step("frame.clear_and_background");
         frame.clear_and_background(state)
@@ -106,6 +118,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let _s = step("frame.finish");
         frame.finish(state, &terminals)
     };
+    state.repaint.remember(scene);
 }
 
 /// **The search field's prompt, in the user's own keys** — each step names what `[keys.widgets]`

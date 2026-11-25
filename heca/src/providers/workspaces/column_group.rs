@@ -31,10 +31,6 @@ impl ColumnGroup<'_> {
     /// Build the column, returning the concrete widget so the parent still sizes it.
     pub(crate) fn build(self, seams: &DockSeams<'_>, reg: &mut DockRegistries<'_>) -> MarkerGroup {
         let ColumnGroup { column, ws_idx } = self;
-        let active = column
-            .panes
-            .iter()
-            .any(|p| seams.active_pane == Some(p.pane_id));
         // The MarkerGroup is a column drag source + drop target, and what it drags is the name it
         // declares below — the same one its cursor and its right-click read.
         reg.drag.register(
@@ -44,8 +40,14 @@ impl ColumnGroup<'_> {
                 col: column.col_idx,
             },
         );
+        // **The column bar follows focus itself**: lit while it holds the active pane, read from the
+        // store's signal through the group's own builder, so nothing is written into it.
+        let pane_ids = column.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
         let mut col = MarkerGroup::new()
-            .active(active)
+            .active({
+                let store = seams.ws_state.clone();
+                move || store.active_pane().is_some_and(|a| pane_ids.contains(&a))
+            })
             .gap(Spacing::Xs)
             .key(column_key(column.col_id))
             .context_menu({
@@ -68,17 +70,6 @@ impl ColumnGroup<'_> {
                     .column(Some((ws_idx, column.col_idx)))
                     .build(seams, reg),
             );
-        }
-        // **The column bar follows focus itself**: lit while it holds the active pane, read from the
-        // store's signal, so nothing is handed to the host to write every frame.
-        {
-            let pane_ids = column.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
-            let store = seams.ws_state.clone();
-            let lit = col.state();
-            heca_grid_ui::reactive::create_effect(move |_| {
-                let active = store.active_pane();
-                super::pane_row::set_if_changed(lit, active.is_some_and(|a| pane_ids.contains(&a)));
-            });
         }
         // **The group says all of this about itself** — no `KeyHint` wrapper. That is for a
         // region which is not a widget you can put a builder on; a `MarkerGroup` is one, and the

@@ -26,9 +26,9 @@ use heca_grid_ui::RowVariant;
 use heca_grid_ui::builders::{
     DragExt, EventExt, FlashExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent,
 };
-use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect};
+use heca_grid_ui::reactive::SignalGet;
 use heca_grid_ui::style::Spacing;
-use heca_grid_ui::widgets::{Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tile, Visibility};
+use heca_grid_ui::widgets::{Flex, HintPlacement, Row, StatusDot, Tile};
 use std::rc::Rc;
 
 /// **How far a metadata line sits in from the name above it.** One token, read by every line under
@@ -73,21 +73,10 @@ impl<'a> PaneRow<'a> {
             column_of_pane,
         } = self;
         let ws_state = seams.ws_state;
-        let active = seams.active_pane == Some(pane.pane_id);
         let pane_id = pane.pane_id;
         // Read off this row's own projection rather than back through the store: the projection
         // was built from it, and the menu is about the row being drawn.
         let has_custom_name = pane.custom_name.is_some();
-        let runtime = seams.panes.presentation(pane_id);
-        let info = pane_info_view(
-            seams.programs,
-            &pane.name,
-            pane.custom_name.as_deref(),
-            runtime.as_ref(),
-            // A renamed pane shows a dimmed `(process)` suffix here when the setting is on,
-            // so the sidebar keeps surfacing what's actually running under a custom name.
-            ws_state.pane_renamed_add_process_name(),
-        );
         // A constant theme-driven card; the selected outline and light wash
         // is drawn by `Row` from its `active` signal, not baked into the background. This
         // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
@@ -102,47 +91,32 @@ impl<'a> PaneRow<'a> {
         // different gesture and this row answers it differently.
         // No colour of its own: it inherits the readable foreground the row hands its content at
         // paint, so a theme change reaches it.
-        let icon_widget = Icon::new(info.icon);
-        let icon_signal = icon_widget.glyph_signal();
-        // The pane's name — one label. Its colour follows the readable content colour
-        // the `Row` publishes each paint, which unstyled labels
-        // inherit; a caller that wants its own says so with `.color(..)`.
-        //
-        // It used to be built twice, once accent and once foreground, stacked in a column with one
-        // hidden — so the visible name sat at the top of that stack when selected and the bottom
-        // when not, and never shared a line with the `(program)` suffix beside it.
-        // And it cuts rather than spilling when the sidebar is narrow (`components::PaneName`).
-        let name = crate::components::PaneName::new(&info.title).build();
-        let title_label = name.widget;
-        let title_signal = name.text;
-        // **One pip that changes what it says**, not one pip per state hidden behind the others.
-        // The row is retained, so the host rewrites the status signal when a process changes.
-        let status_dot = StatusDot::new(dot_status(info.status.clone()));
-        let status_signal = status_dot.status_signal();
-        // A renamed pane surfaces its running program as a dimmed `(process)` suffix after
-        // the name (config-gated). Appended to the shared title area so it renders the same
-        // in both the git and no-git card layouts. Like the title, it is **signal-driven**
-        // (text + visibility updated in `sync_chrome_signals`) so renaming toggles it live —
-        // a rename updates signals, it does not rebuild the sidebar card tree.
-        let process_hint_text = info.process_hint_text();
-        // `foreground` (not `muted`) so it's readable on every theme; it still reads as
-        // secondary next to the accent + bold name (regular weight, smaller scale).
-        // Smaller than the name it follows, and `foreground` — NOT `muted`, which is unreadable
-        // against the row's selected fill on this theme. The size difference and the parentheses
-        // are what make it read as secondary. The two runs sit on one shared baseline because
-        // `Flex` puts them there; a row of text at two sizes is the framework's problem, not this
-        // call site's.
-        let process_hint_label =
-            Label::new(process_hint_text).size(heca_grid_ui::style::WidgetSize::Caption);
-        let process_hint_signal = process_hint_label.text_signal();
-        let process_hint = Visibility::new()
-            .visible(info.process_hint.is_some())
-            .child(process_hint_label);
-        let process_hint_visible = process_hint.visible_signal();
+        // **The title line's parts, worked out from the pane** — the pip, the icon, the name (it cuts
+        // rather than spilling, `components::PaneName`) and the dimmed `(process)` suffix of a
+        // renamed pane (config-gated, `[settings] pane_renamed_add_process_name`). Every part reads
+        // them through its own builder; `snapshot()` reads this pane's fields, so a neighbour's `cd`
+        // does not wake this row.
+        let head = {
+            let runtime_signals = seams.panes.signals(pane_id);
+            let programs = seams.programs.clone();
+            let fallback_name = pane.name.clone();
+            let add_process_name = ws_state.pane_renamed_add_process_name_signal();
+            crate::chrome::panes::pane_items::RowHead::new(move || {
+                let runtime = runtime_signals.presentation();
+                let custom = runtime_signals.custom_name.get();
+                head_view(&pane_info_view(
+                    &programs,
+                    &fallback_name,
+                    custom.as_deref(),
+                    Some(&runtime),
+                    add_process_name.get(),
+                ))
+            })
+        };
         // **What is true of this pane, as a function** — read inside each line's own subscription, so
-        // reading it is what makes a line follow the pane. The lines under the name (`cwd`, `git`, and
-        // any a program built on heca adds) are named items built from it; the user's
-        // `[appearance.sidebar] pane_lines` decides which show and in what order.
+        // reading it is what makes a line follow the pane. The card's lines (`title`, `cwd`, `git`, and
+        // any a program built on heca adds) are named items built from it; the view's list decides
+        // which show and in what order.
         let facts: Rc<dyn Fn() -> PaneFacts> = {
             let runtime_signals = seams.panes.signals(pane_id);
             let programs = seams.programs.clone();
@@ -160,34 +134,72 @@ impl<'a> PaneRow<'a> {
             })
         };
         let line_cx = LineCx {
+            head,
             facts,
             agent_statuses: ws_state.agent_statuses,
             agent_session_line: ws_state.agent_session_line,
         };
         let runtime_signals = seams.panes.signals(pane_id);
         let flash = runtime_signals.flash;
-        // **The card's arrangement is the library's `Tile`** — pip, icon, the name with its dimmed
-        // `(program)` suffix, then the folder and git lines under it. This file keeps only what a
-        // pane row *means*: its signals, its click, its menu, its drag, its pick. The showcase
-        // mounts the same `Tile`, so the two can no longer drift apart.
+        // **The card's lines are the view's** — `[appearance.sidebar] pane_<view>_view`, or
+        // `pane_current_view` while this is the current pane — each line by name, in order, the
+        // title among them. The card follows the view and the focus and rebuilds its own lines;
+        // nothing else is rebuilt. **Every line is attached while the list names it** — each is a
+        // `Visibility` that decides for itself, so a directory the shell reports later still appears.
         //
-        // **Every line is attached, always** — each is a `Visibility` that decides for itself, so a
-        // directory the shell reports after the row is on screen can still appear: the sidebar tree
-        // is not rebuilt when it does.
-        let mut content = Tile::new()
-            .status(status_dot)
-            .icon(icon_widget)
-            .title(title_label)
-            .suffix(process_hint);
-        for def in ws_state.pane_lines().iter() {
-            content = content.line((def.build)(&line_cx));
-        }
+        // **The pip sits on the title line**; in a view without one it goes in front of the first
+        // line, so a card always says whether its program is alive.
+        let lines = {
+            let store = ws_state.clone();
+            let line_cx = Rc::new(line_cx);
+            heca_grid_ui::builders::BoundChildren::new(
+                move || {
+                    let current = store.active_pane() == Some(pane_id);
+                    let lines = store.card_lines(current);
+                    let titled = lines.names().any(|name| name == super::TITLE_LINE);
+                    lines
+                        .iter()
+                        .enumerate()
+                        .map(|(at, def)| CardLine {
+                            def: def.clone(),
+                            pip: at == 0 && !titled,
+                        })
+                        .collect::<Vec<_>>()
+                },
+                move |line: &CardLine| {
+                    let built = (line.def.build)(&line_cx);
+                    match line.pip {
+                        true => heca_grid_ui::WidgetModel::new(
+                            Tile::new()
+                                .status(
+                                    StatusDot::new(heca_grid_ui::DotStatus::default())
+                                        .status(move || head.get().status),
+                                )
+                                .title(built),
+                        ),
+                        false => built,
+                    }
+                },
+            )
+        };
+        let content = Flex::column().gap(Spacing::Xs).child(lines);
         let content = content.grow(1.0);
         let card = Row::new()
             .flash(flash)
             .variant(RowVariant::Tinted)
             // The selected panel identifies the current row; an extra marker would repeat it.
-            .active(active)
+            // **The row follows focus itself.** Selected and last-visited are the store's signals
+            // (`active_pane`, `previous_panes`): the row reads them through its own builders, so
+            // nothing hands it a signal to write, the tree does not rebuild on a focus change, and
+            // nobody else has to know this row exists to keep it right.
+            .active({
+                let store = ws_state.clone();
+                move || store.active_pane() == Some(pane_id)
+            })
+            .previous({
+                let store = ws_state.clone();
+                move || store.is_previous_pane(pane_id) && store.active_pane() != Some(pane_id)
+            })
             .nav_selected(false)
             // The row's ONE identity: the cursor and (later) drag read this single declaration.
             // **The right-click no longer does** — the menu is declared below, on
@@ -245,58 +257,9 @@ impl<'a> PaneRow<'a> {
             // `on_press`: the row's pick is its own declaration (`on_hint` below).
             .on_click(move |ev| ev.dispatch(pane_row_press(pane_id)))
             .child(content);
-        // **The row follows focus itself.** Selected and last-visited are the store's signals
-        // (`active_pane`, `previous_panes`), so the row subscribes here instead of handing its own
-        // signals to the host to write every frame — the tree does not rebuild on a focus change,
-        // and nobody else has to know this row exists to keep it right.
-        {
-            let store = ws_state.clone();
-            let (selected, previous) = (card.state(), card.previous_state());
-            create_effect(move |_| {
-                let active = store.active_pane();
-                set_if_changed(selected, active == Some(pane_id));
-                set_if_changed(
-                    previous,
-                    store.is_previous_pane(pane_id) && active != Some(pane_id),
-                );
-            });
-        }
         // A move/swap/take pick stamps this pane's letter over the card. **The letter is offered
         // by key** (`chrome::hint`) and drawn by `paint_child` on the card itself — which is why
         // there is no wrapper: the card is a widget, so it can simply say so.
-        // **The row follows its pane. Nothing writes to it.**
-        //
-        // These sixteen signals used to be handed to the host, which walked every pane every frame,
-        // recomputed this same view and wrote them back — a scan pretending to be reactivity. That
-        // cost every new piece of pane state four edits in four files, two of which fail silently
-        // when forgotten, and left a plugin's row with nowhere to join in: the write was a
-        // host-private arm, so there was no line a plugin author could write.
-        //
-        // Now the row subscribes, here, where it knows what it draws. `snapshot()` reads this
-        // pane's fields, so the subscription depends on this pane and not on the map holding every
-        // pane's — a neighbour's `cd` does not wake this row.
-        let face = PaneFace {
-            icon: icon_signal,
-            title: title_signal,
-            process_hint: process_hint_signal,
-            process_hint_visible,
-            status: status_signal,
-        };
-        let runtime_signals = seams.panes.signals(pane_id);
-        let programs = seams.programs.clone();
-        let fallback_name = pane.name.clone();
-        let add_process_name = ws_state.pane_renamed_add_process_name_signal();
-        create_effect(move |_| {
-            let runtime = runtime_signals.presentation();
-            let custom = runtime_signals.custom_name.get();
-            face.show(&pane_info_view(
-                &programs,
-                &fallback_name,
-                custom.as_deref(),
-                Some(&runtime),
-                add_process_name.get(),
-            ));
-        });
         // **The card says it about itself** — no `KeyHint` wrapper, which is for a region that is
         // not a widget you can put a builder on.
         //
@@ -309,48 +272,33 @@ impl<'a> PaneRow<'a> {
     }
 }
 
-/// **Everything a pane row shows that changes without the tree being rebuilt.**
-///
-/// One signal per thing on the card, held together so the row's subscription writes them in one
-/// place — and so adding a seventeenth is one field and one line in [`show`](PaneFace::show),
-/// beside the widget it belongs to, instead of an edit in a host file the author never opens.
-#[derive(Clone, Copy)]
-pub(crate) struct PaneFace {
-    pub(crate) icon: Signal<Glyph>,
-    /// The pane's name. **One signal, because there is one name** — its colour follows the row's
-    /// selected state through the inherited content colour, so no second copy exists to keep in
-    /// step.
-    pub(crate) title: Signal<String>,
-    /// The dimmed `(process)` suffix beside a renamed pane's name, or empty when hidden.
-    pub(crate) process_hint: Signal<String>,
-    pub(crate) process_hint_visible: Signal<bool>,
-    /// What the status pip shows. **One pip that changes what it says**, not one pip per state
-    /// with four booleans revealing one.
-    pub(crate) status: Signal<heca_grid_ui::DotStatus>,
+/// **One line of a pane card**: which line, and whether the pip goes in front of it (the first line
+/// of a view without a title). Equal when it is the same line in the same place — what lets a card
+/// keep a line it already built.
+#[derive(Clone)]
+struct CardLine {
+    def: Rc<crate::chrome::panes::pane_items::PaneLineDef>,
+    pip: bool,
 }
 
-impl PaneFace {
-    /// Write what the pane currently is onto the card.
-    ///
-    /// Every write is change-guarded: a signal set to what it already holds would mark the tree
-    /// dirty and cost a repaint for nothing, every time anything about any pane moved.
-    fn show(&self, view: &crate::chrome::panes::pane_header::PaneInfoView) {
-        set_if_changed(self.icon, view.icon);
-        set_if_changed(self.title, view.title.clone());
-        set_if_changed(self.process_hint, view.process_hint_text());
-        set_if_changed(self.process_hint_visible, view.process_hint.is_some());
-        set_if_changed(self.status, dot_status(view.status.clone()));
+impl PartialEq for CardLine {
+    fn eq(&self, other: &Self) -> bool {
+        self.def.name == other.def.name && self.pip == other.pip
     }
 }
 
-/// Write a signal only when the value actually differs.
-///
-/// Stated once rather than at each of the sixteen writes above: setting a signal to what it already
-/// holds marks the tree dirty, and a card that rewrote itself unchanged would cost a repaint every
-/// time anything about any pane moved.
-pub(super) fn set_if_changed<T: Clone + PartialEq + 'static>(signal: Signal<T>, value: T) {
-    if signal.get_untracked() != value {
-        signal.set(value);
+/// **What the title line shows, from what the pane is.**
+fn head_view(
+    view: &crate::chrome::panes::pane_header::PaneInfoView,
+) -> crate::chrome::panes::pane_items::HeadView {
+    crate::chrome::panes::pane_items::HeadView {
+        title: view.title.clone(),
+        icon: view.icon,
+        status: dot_status(view.status.clone()),
+        hint: view
+            .process_hint
+            .is_some()
+            .then(|| view.process_hint_text()),
     }
 }
 
@@ -494,11 +442,126 @@ mod tests {
             .collect()
     }
 
-    /// The card's inner column — the name row plus every metadata line stacked under it.
+    /// A sidebar whose views are `compact = cwd`, `normal = title, cwd` and, when given, a current
+    /// pane's list — a pane in a folder, its row built and held in a column for painting.
+    fn viewed(current: Option<&[&str]>) -> (Fixture, Flex) {
+        use heca_config::appearance::SidebarAppearance;
+        let owned = |lines: &[&str]| lines.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let mut fx = Fixture::default();
+        fx.store
+            .workspaces
+            .set_pane_views(
+                crate::chrome::PaneRowLines::default().views(&SidebarAppearance {
+                    pane_compact_view: owned(&["cwd"]),
+                    pane_normal_view: owned(&["title", "cwd"]),
+                    pane_current_view: current.map(owned),
+                    ..SidebarAppearance::default()
+                }),
+            );
+        fx.store
+            .workspaces
+            .set_pane_view(heca_config::appearance::PaneView::Normal);
+        pane_reports(
+            &fx,
+            PaneId(7),
+            heca_core::runtime::PaneRuntime {
+                cwd: Some(dirs::home_dir().expect("a home folder").join("work")),
+                ..Default::default()
+            },
+        );
+        let pane = testing::pane(PaneId(7), "seven");
+        let row = {
+            let (seams, mut reg) = fx.split("left");
+            PaneRow::new(&pane)
+                .column(Some((0, 0)))
+                .build(&seams, &mut reg)
+        };
+        (fx, Flex::column().child(row))
+    }
+
+    /// Lay `root` out and paint it.
+    fn paint(root: &mut Flex) -> heca_grid_ui::Scene {
+        use heca_grid_ui::Component as _;
+        heca_grid_ui::LayoutEngine::new().compute(root, heca_core::layout::Size::new(300.0, 200.0));
+        let mut scene = heca_grid_ui::Scene::new();
+        let theme = heca_grid_ui::theme::Theme::default();
+        root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+        scene
+    }
+
+    fn says(scene: &heca_grid_ui::Scene, text: &str) -> bool {
+        scene
+            .iter()
+            .any(|cmd| matches!(cmd, heca_grid_ui::DrawCommand::Text(t) if t.text == text))
+    }
+
+    /// **A card shows its view's lines, and follows a switch** — with no rebuild of the sidebar:
+    /// the title is a line like the others, there in `normal` and gone in `compact`.
+    #[test]
+    fn a_card_shows_its_views_lines_and_follows_a_switch() {
+        let (fx, mut root) = viewed(None);
+        let scene = paint(&mut root);
+        assert!(
+            says(&scene, "seven") && says(&scene, "~/work"),
+            "normal: title and folder"
+        );
+        fx.store
+            .workspaces
+            .set_pane_view(heca_config::appearance::PaneView::Compact);
+        let scene = paint(&mut root);
+        assert!(!says(&scene, "seven"), "compact: no title line");
+        assert!(says(&scene, "~/work"), "compact: the folder");
+    }
+
+    /// **In a view without a title the pip goes in front of the first line**, so a card always says
+    /// whether its program is alive.
+    #[test]
+    fn without_a_title_the_pip_leads_the_first_line() {
+        let (fx, mut root) = viewed(None);
+        fx.store
+            .workspaces
+            .set_pane_view(heca_config::appearance::PaneView::Compact);
+        let scene = paint(&mut root);
+        let path = scene
+            .iter()
+            .find_map(|cmd| match cmd {
+                heca_grid_ui::DrawCommand::Text(t) if t.text == "~/work" => Some(t.rect),
+                _ => None,
+            })
+            .expect("the folder line");
+        let mid = |r: heca_core::layout::Rectangle| r.loc.y + r.size.h / 2.0;
+        let pip = scene.iter().any(|cmd| {
+            matches!(cmd, heca_grid_ui::DrawCommand::Rect(r)
+                if r.rect.size.w < path.size.h
+                    && r.rect.loc.x < path.loc.x
+                    && (mid(r.rect) - mid(path)).abs() < 2.0)
+        });
+        assert!(pip, "a pip on the folder's line, before it");
+    }
+
+    /// **The current pane's card shows `pane_current_view`** — it moves with focus, and the other
+    /// cards keep the view's lines.
+    #[test]
+    fn the_current_panes_card_shows_its_own_list() {
+        let (fx, mut root) = viewed(Some(&["cwd"]));
+        fx.store.workspaces.set_active_pane(Some(PaneId(7)));
+        let scene = paint(&mut root);
+        assert!(
+            !says(&scene, "seven"),
+            "current: its own list, without the title"
+        );
+        fx.store.workspaces.set_active_pane(Some(PaneId(8)));
+        let scene = paint(&mut root);
+        assert!(
+            says(&scene, "seven"),
+            "not current any more: the view's list again"
+        );
+    }
+
+    /// The card's column — every line of the starting view, the title among them, stacked.
     fn metadata_column(node: &dyn heca_grid_ui::Component) -> Option<&dyn heca_grid_ui::Component> {
-        if node.base().children.len()
-            == 1 + heca_config::appearance::default_sidebar_pane_lines().len()
-        {
+        use heca_config::appearance::{PaneView, default_view_lines};
+        if node.base().children.len() == default_view_lines(PaneView::default()).len() {
             return Some(node);
         }
         node.base()

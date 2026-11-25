@@ -142,6 +142,16 @@ impl ThemeFill {
     }
 }
 
+impl Fill {
+    /// The colour it paints with `theme` now — `None` for a theme name the theme does not have.
+    pub fn resolve(&self, theme: &crate::theme::Theme) -> Option<Color> {
+        match self {
+            Fill::Color(colour) => Some(*colour),
+            Fill::Theme(fill) => fill.resolve(theme),
+        }
+    }
+}
+
 impl From<ThemeFill> for Fill {
     fn from(fill: ThemeFill) -> Self {
         Self::Theme(fill)

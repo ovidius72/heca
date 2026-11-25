@@ -282,6 +282,8 @@ impl Backdrop {
         if stencil.is_some() {
             rpass.set_stencil_reference(1);
         }
-        rpass.draw(0..6, 0..1);
+        if crate::clip::limit_pass(&mut rpass, None) {
+            rpass.draw(0..6, 0..1);
+        }
     }
 }

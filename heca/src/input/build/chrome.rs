@@ -55,6 +55,13 @@ pub(super) fn build_chrome(
         // name a container, so a bare binding picks one by letter; a caller that knows which dock it
         // wants says so and skips the pick. An action with a *required* argument could not be bound
         // bare at all.
+        // `view` is optional: a bare key goes to the next view.
+        "sidebar_pane_view" => Some(WmAction::SidebarPaneView {
+            view: match args.get("view") {
+                Some(name) => Some(name.parse().ok()?),
+                None => None,
+            },
+        }),
         "focus_dock" => Some(WmAction::FocusDock {
             dock: get_string(args, "dock"),
         }),

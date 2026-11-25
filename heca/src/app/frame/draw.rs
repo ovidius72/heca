@@ -18,6 +18,29 @@ impl Frame {
         } else {
             (bg[0] as f64, bg[1] as f64, bg[2] as f64, bg[3] as f64)
         };
+        // **Only part repainted: the rest of the picture is kept**, and only the damaged part is
+        // cleared — to the same colour, so what is drawn over it is what a full repaint draws.
+        let colour = wgpu::Color {
+            r: clear_r,
+            g: clear_g,
+            b: clear_b,
+            a: clear_a,
+        };
+        let load = match self.damage {
+            Some(r) => {
+                let rect = [
+                    r.loc.x as f32,
+                    r.loc.y as f32,
+                    r.size.w as f32,
+                    r.size.h as f32,
+                ];
+                state
+                    .compositor
+                    .clear_region(&mut self.encoder, rect, self.v.scale, colour);
+                wgpu::LoadOp::Load
+            }
+            None => wgpu::LoadOp::Clear(colour),
+        };
         self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             multiview_mask: None,
             label: Some("clear"),
@@ -26,12 +49,7 @@ impl Frame {
                 resolve_target: None,
                 depth_slice: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: clear_r,
-                        g: clear_g,
-                        b: clear_b,
-                        a: clear_a,
-                    }),
+                    load,
                     store: wgpu::StoreOp::Store,
                 },
             })],

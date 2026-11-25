@@ -126,11 +126,11 @@ fn composed_content_wins_over_the_label_and_both_become_real_children() {
     LayoutEngine::new().compute(&mut panel, Size::new(400.0, 400.0));
 
     assert_eq!(
-        panel.base().children.len(),
+        panel.rows().len(),
         2,
         "one real child per row, laid out by the engine",
     );
-    for (i, row) in panel.base().children.iter().enumerate() {
+    for (i, row) in panel.rows().iter().enumerate() {
         let b = row.base().bounds;
         assert!(
             b.size.w > 0.0 && b.size.h > 0.0,

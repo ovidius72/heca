@@ -160,6 +160,7 @@ fn partial_and_idle_redraws_do_not_accumulate_image_alpha() {
                 ..Default::default()
             });
         }
+        crate::clip::set_frame_damage(damage, 1.0, [64, 64]);
         renderer.draw(
             ImageFrame {
                 device: &device,
@@ -169,10 +170,10 @@ fn partial_and_idle_redraws_do_not_accumulate_image_alpha() {
                 stencil: None,
                 viewport: (64.0, 64.0),
                 scale: 1.0,
-                damage,
             },
             &at,
         );
+        crate::clip::set_frame_damage(None, 1.0, [64, 64]);
         queue.submit([encoder.finish()]);
         ready
     };

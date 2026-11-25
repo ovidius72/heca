@@ -17,6 +17,8 @@ const PAD_H: f32 = 9.0;
 const PAD_V: f32 = 4.0;
 /// Badge font multiplier — small chip text relative to the base font (≈11px @15).
 const BADGE_FONT_SCALE: f32 = 0.73;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Glow spread radius (px).
 const GLOW_RADIUS: f32 = 10.0;
 /// Glow intensity.
@@ -45,7 +47,7 @@ pub struct Badge {
     base: Base,
     label: Signal<String>,
     seen_label: String,
-    variant: BadgeVariant,
+    variant: Signal<BadgeVariant>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -58,7 +60,7 @@ impl Badge {
             base,
             label: signal(label.into()),
             seen_label: String::new(),
-            variant: BadgeVariant::Accent,
+            variant: signal(BadgeVariant::Accent),
         };
         badge.seen_label = badge.label.get_untracked();
         badge.remeasure();
@@ -85,10 +87,15 @@ impl Badge {
         Self::new(label).variant(BadgeVariant::Outline)
     }
 
-    /// Set the variant.
+    /// **Set the variant** — fixed, or one that changes (a `Signal`, a `Memo`, a function reading
+    /// signals), followed in place:
+    ///
+    /// ```ignore
+    /// Badge::neutral("3").variant(move || if active.get() { BadgeVariant::Accent } else { BadgeVariant::Neutral })
+    /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn variant(mut self, variant: BadgeVariant) -> Self {
-        self.variant = variant;
+    pub fn variant(self, variant: impl crate::builders::IntoBadgeVariantValue) -> Self {
+        variant.into_badge_variant_value().show_in(self.variant);
         self
     }
 
@@ -142,10 +149,11 @@ impl Component for Badge {
         // radius:0 → square, a moderate radius → full pill.
         let radius = (cx.theme().colors.border_radius * 2.0).min((pill.size.h / 2.0) as f32);
 
-        let (fill, border_c, text_c, glow) = if self.variant == BadgeVariant::Outline {
+        let variant = self.variant.get_untracked();
+        let (fill, border_c, text_c, glow) = if variant == BadgeVariant::Outline {
             (Color::TRANSPARENT, muted, foreground, None)
         } else {
-            let c = match self.variant {
+            let c = match variant {
                 BadgeVariant::Accent => cx.theme().colors.accent,
                 BadgeVariant::Neutral => muted,
                 BadgeVariant::Success => cx.theme().colors.success,

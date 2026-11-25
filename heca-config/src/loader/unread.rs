@@ -32,6 +32,11 @@ pub const RETIRED: &[(&str, &str)] = &[
     ),
     ("confirm.delete_pane", "confirm.close"),
     ("settings.pane_show_cwd", "appearance.expose.show_cwd"),
+    // One list of pane lines became one per view, and a list for the current pane.
+    (
+        "appearance.sidebar.pane_lines",
+        "appearance.sidebar.pane_extended_view",
+    ),
     ("settings.pane-show-cwd", "appearance.expose.show_cwd"),
     // Kebab-case spellings of settings: the snake_case one is the name.
     (

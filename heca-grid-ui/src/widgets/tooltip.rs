@@ -19,24 +19,21 @@
 //! Placement is **viewport-aware on all four sides**: the bubble centers on the chosen
 //! [`TooltipSide`] of the target, but flips to the opposite side when there isn't room
 //! (`Top`↔`Bottom`, `Left`↔`Right`), and its cross-axis is clamped to the viewport so it never
-//! spills off-screen. That rule is not implemented here — it is the shared [`place_beside`]
-//! authority, so the tooltip and any future four-sided popover cannot drift apart. The bubble's
-//! surface likewise comes from [`paint_panel_chrome`], the one definition of what an overlay panel
-//! looks like, so the user's `overlay_border_style` governs the tooltip exactly as it governs a
-//! dialog or a dropdown.
+//! spills off-screen. None of that is implemented here: the bubble is an [`Overlay`] placed
+//! [`beside`](Overlay::beside) the widget — the shared four-sided rule
+//! ([`place_beside`](crate::widgets::place_beside)) — and framed by the overlay's panel chrome, so
+//! the user's `overlay_border_style` governs the tooltip exactly as it governs a dialog or a
+//! dropdown, and a long tip wraps inside the window instead of running off it.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::builders::{IntoComponent, LayoutExt, Parent, PlaceExt, StyleExt};
+use crate::builders::{IntoComponent, LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::Glow;
-use crate::style::{Length, Space, Spacing};
-use crate::widgets::overlay::{
-    BesideSide, PanelChrome, PanelElevation, paint_panel_chrome, place_beside,
-};
-use crate::widgets::{Flex, Label};
+use crate::style::{Fill, Length, Space, Spacing};
+use crate::widgets::overlay::{BesideSide, OverlayPosition, PanelElevation};
+use crate::widgets::{Flex, Label, Overlay};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Smallest rect containing both `a` and `b` (widget bounds ∪ bubble rect).
@@ -52,7 +49,8 @@ fn union(a: Rectangle, b: Rectangle) -> Rectangle {
 ///
 /// This is [`BesideSide`] — the shared four-sided placement vocabulary — re-exported under the name
 /// that reads better at a call site (`.tooltip_side(TooltipSide::Bottom)`). One type, so the
-/// tooltip and [`place_beside`] can never disagree about what `Top` means.
+/// tooltip and [`place_beside`](crate::widgets::place_beside) can never disagree about what `Top`
+/// means.
 pub type TooltipSide = BesideSide;
 
 /// Seconds the pointer must rest before the bubble shows, until the host says otherwise with
@@ -102,8 +100,6 @@ const PAD_Y: Spacing = Spacing::Sm;
 /// surface, not a panel demanding attention. The user's `glow_size` still scales it on top, as it
 /// does every glow.
 const BUBBLE_GLOW: crate::theme::GlowLevel = crate::theme::GlowLevel::Thin;
-/// The name the bubble's own panel answers to inside the tree that lays it out.
-const BUBBLE: &str = "tooltip.bubble";
 
 /// **What a widget says on hover** — the declaration held in [`Base::tooltip`].
 ///
@@ -128,8 +124,9 @@ pub struct Tip {
     automatic: bool,
     /// Whether the content is a widget rather than the words.
     widget: bool,
-    /// The bubble's tree, kept across reveals: laid out and painted only while it shows.
-    bubble: Rc<RefCell<Flex>>,
+    /// The bubble — a light layer beside the widget, kept across reveals: laid out and painted only
+    /// while it shows.
+    bubble: Rc<RefCell<Overlay>>,
     /// Where the bubble was last **painted** (`None`: not painted) — what is on screen once that
     /// frame is shown.
     drawn: Rc<std::cell::Cell<Option<Rectangle>>>,
@@ -160,21 +157,32 @@ impl Tip {
     }
 
     fn holding(text: Signal<String>, widget: bool, content: crate::WidgetModel) -> Self {
-        // The bubble hugs what it holds: placed at the start of a row that spans the room it may
-        // use, so the panel is its content's size and not the room's.
+        // A light layer that leaves the keyboard and the page alone; it hugs what it holds, and its
+        // frame is the accent edge and halo of a hover bubble, lifted just off its target.
         let panel = Flex::column()
             .padding_x(PAD_X)
             .padding_y(PAD_Y)
-            .area(BUBBLE)
             .child(content);
-        let room = Flex::row().align("start").child(panel);
+        let layer = Overlay::new()
+            .blocking(false)
+            .keyboard(false)
+            .beside(
+                Rectangle::from_size(Size::new(0.0, 0.0)),
+                BesideSide::default(),
+                0.0,
+            )
+            .panel_edge(Fill::theme("accent").alpha("tooltip_border"))
+            .panel_glow(BUBBLE_GLOW)
+            .panel_elevation(PanelElevation::Hover)
+            .panel(panel)
+            .default_open(true);
         Self {
             text,
             side: TooltipSide::default(),
             delay: Delay::Default,
             automatic: false,
             widget,
-            bubble: Rc::new(RefCell::new(room)),
+            bubble: Rc::new(RefCell::new(layer)),
             drawn: Rc::default(),
             announced: Rc::default(),
         }
@@ -289,6 +297,15 @@ impl IntoTip for Signal<String> {
     }
 }
 
+/// Words worked out from other values — followed in place, like a signal.
+impl IntoTip for crate::reactive::Memo<String> {
+    fn into_tip(self) -> Tip {
+        let words = signal(crate::reactive::SignalGet::get_untracked(&self));
+        crate::builders::LiveValue::live(move || self.get()).show_in(words);
+        Tip::from_signal(words)
+    }
+}
+
 impl<C: IntoComponent> IntoTip for C {
     fn into_tip(self) -> Tip {
         Tip::of(self)
@@ -321,15 +338,22 @@ fn shown(base: &Base) -> Option<&Tip> {
 /// up where it is drawn; its rect is returned.
 fn place_bubble(base: &Base, tip: &Tip, viewport: Size) -> Option<Rectangle> {
     let font = surface_font(base);
-    let mut room = tip.bubble.borrow_mut();
-    crate::LayoutEngine::new()
-        .base_font(font)
-        .compute(&mut *room, viewport);
-    let laid = crate::component::area(&*room, BUBBLE)?.base().bounds;
-    let gap = Space::Step(GAP).resolve(font) as f64;
-    let rect = place_beside(base.bounds, laid.size, viewport, gap, tip.side);
-    crate::component::shift_subtree(&mut *room, rect.loc.x - laid.loc.x, rect.loc.y - laid.loc.y);
-    Some(rect)
+    let mut layer = tip.bubble.borrow_mut();
+    layer.set_position(OverlayPosition::Beside {
+        anchor: base.bounds,
+        gap: Space::Step(GAP).resolve(font) as f64,
+        side: tip.side,
+    });
+    // The layer places its panel once layout finishes. It is laid out again every paint, so it
+    // follows the widget every paint and never asks for one.
+    let mut engine = crate::LayoutEngine::new().base_font(font);
+    engine.compute(&mut *layer, viewport);
+    // A bubble too wide for the window was narrowed to it, and lays out again at its new width.
+    if crate::component::needs_layout(&*layer) {
+        engine.compute(&mut *layer, viewport);
+    }
+    let rect = layer.panel_bounds();
+    (rect.size.w > 0.0).then_some(rect)
 }
 
 /// **Draw the widget's tooltip, if it has one and the pointer has rested on it.**
@@ -353,40 +377,12 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
     .flatten();
     let rect = tip.and_then(|tip| place_bubble(base, tip, cx.viewport()));
     declared.drawn.set(rect);
-    let (Some(tip), Some(rect)) = (tip, rect) else {
+    let (Some(tip), Some(_)) = (tip, rect) else {
         return;
     };
-    let (accent, glow, tip_border) = {
-        let t = cx.theme();
-        let glow = Glow {
-            color: t.colors.glow,
-            radius: t.colors.active_glow_radius * BUBBLE_GLOW.radius_scale(),
-            intensity: t.colors.active_glow_strength * BUBBLE_GLOW.strength_scale(),
-        };
-        (cx.accent(), glow, t.colors.interaction.tooltip_border)
-    };
-    // Drawn on the overlay layer so it sits above later siblings and is never clipped.
-    cx.with_overlay(|cx| {
-        // The shared panel painter owns the surface: fill, drop shadow, and the edge the user
-        // configured via `overlay_border_style`. The tooltip supplies only its own identity — its
-        // accent edge colour and halo.
-        let border = cx.border(accent.with_alpha(tip_border));
-        paint_panel_chrome(
-            cx,
-            rect,
-            PanelChrome {
-                border,
-                glow: Some(glow),
-                // A hover bubble is not at dialog depth: the panel shadow was tuned for surfaces
-                // hundreds of px across and, unscaled, is bigger than this ~30px bubble.
-                elevation: PanelElevation::Hover,
-            },
-        );
-        let room = tip.bubble.borrow();
-        if let Some(panel) = crate::component::area(&*room, BUBBLE) {
-            paint_child(panel, cx);
-        }
-    });
+    // The layer draws itself — on the overlay layer, above later siblings, never clipped — with its
+    // frame and the content.
+    paint_child(&*tip.bubble.borrow(), cx);
 }
 
 /// A descendant's specific explanation takes priority over its ancestor's general help,

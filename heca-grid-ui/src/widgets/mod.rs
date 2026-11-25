@@ -111,15 +111,15 @@ pub use message_list::{MessageFeed, MessageList};
 pub use nf_icon::{NfGlyph, NfIcon};
 pub use overlay::{
     AnchorSide, BesideSide, DEFAULT_ANCHOR_GAP, Overlay, OverlayPosition, PanelChrome,
-    PanelElevation, SurfaceHandle, paint_panel_chrome, place_anchored, place_anchored_on,
-    place_at_point, place_beside,
+    PanelElevation, PanelGlow, PanelLook, SurfaceHandle, paint_panel_chrome, place_anchored,
+    place_anchored_on, place_at_point, place_beside,
 };
 pub use pane::Pane;
 pub use panel::Panel;
 pub use progress::ProgressBar;
 pub use rail_cell::RailCell;
 pub use resizable::Resizable;
-pub use row::{Row, RowVariant};
+pub use row::{CursorLook, Row, RowVariant};
 pub use scroll_bar::ScrollBar;
 pub use scroll_region::{RevealAlign, ScrollAxes, ScrollInfo, ScrollRegion};
 mod edge_hint;

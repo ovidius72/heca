@@ -39,6 +39,8 @@ const UNDERLINE_H: f64 = 2.0;
 const UNDERLINE_GAP: f32 = 2.0;
 /// Seconds for the underline to slide between tabs.
 const ANIM_DURATION: f32 = 0.12;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Underline glow radius (px).
 const GLOW_RADIUS: f32 = 12.0;
 /// Underline glow intensity.

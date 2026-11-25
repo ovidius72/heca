@@ -443,3 +443,38 @@ command = "htop"
     assert_eq!(cwd_of("F7"), Some("git".to_string()));
     assert_eq!(cwd_of("F8"), None);
 }
+
+/// **`sidebar_pane_view` has a key and a name**, like every action: `prefix+Shift+b` goes to the next
+/// view, and `heca rpc sidebar_pane_view view=compact` picks one by name.
+#[test]
+fn the_sidebar_view_has_a_default_key_and_an_rpc_door() {
+    use heca_config::appearance::PaneView;
+    let config = heca_config::theme::Config::default();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+    assert_eq!(
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Shift+b")),
+        Some(&WmAction::SidebarPaneView { view: None }),
+        "the bare key goes to the next view"
+    );
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let resolved = |line: &str| {
+        let (intent, _) = crate::rpc::parse_rpc(line)
+            .unwrap()
+            .into_intent(&catalog)
+            .unwrap();
+        crate::input::resolve_action(
+            &intent.action,
+            &crate::app::interaction::intent_args_as_strings(&intent),
+        )
+    };
+    assert_eq!(
+        resolved("sidebar_pane_view view=compact"),
+        Some(WmAction::SidebarPaneView {
+            view: Some(PaneView::Compact)
+        })
+    );
+    assert_eq!(
+        resolved("sidebar_pane_view"),
+        Some(WmAction::SidebarPaneView { view: None })
+    );
+}

@@ -1,10 +1,12 @@
-//! What is drawn: only panes have a surface, the map fits the window, and every card is a pick target.
+//! What is drawn: only panes and empty workspaces have a surface, the map fits the window, and
+//! every card is a pick target.
 
 use super::*;
 
-/// **Every card in the map is a pane, and nothing else has a surface.** The workspace name was
-/// a fixed gutter column that pushed every strip inwards, so a row stopped lining up with the
-/// screen it is a picture of; niri's overview labels nothing either.
+/// **Every card in the map is a pane or an empty workspace, and nothing else has a surface.** The
+/// workspace name was a fixed gutter column that pushed every strip inwards, so a row stopped lining
+/// up with the screen it is a picture of; niri's overview labels nothing either. An empty
+/// workspace is an empty card, with no words: a workspace is always selectable, in the map too.
 #[test]
 fn a_row_carries_no_workspace_label() {
     let s = session();
@@ -126,8 +128,8 @@ fn the_map_owns_its_picker_and_every_card_is_a_target() {
     );
     assert_eq!(
         heca_grid_ui::collect_hints(root.as_ref()).len(),
-        2,
-        "one pick target per card in the fixture's session",
+        3,
+        "one pick target per card in the fixture's session — two panes and the empty workspace",
     );
 }
 

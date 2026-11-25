@@ -173,7 +173,9 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
     // is grabbed by the overlay first — it commits the selection and closes — rather
     // than being treated as a fresh focus/click on the tree behind it. The row is
     // found by its **bounds**: the options are real children, placed in the panel.
-    let row2 = ui.base().children[1].base().children[2].base().bounds;
+    let row2 = common::select_rows(ui.base().children[1].as_ref())[2]
+        .base()
+        .bounds;
     let handled = focus.dispatch(
         &mut ui,
         &Event::pointer_pressed(

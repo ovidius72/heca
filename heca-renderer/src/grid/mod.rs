@@ -88,7 +88,7 @@ pub struct GridRenderer {
     /// Frame-level damage region (logical px): when set, the whole pass is also
     /// scissored to this, so a damage-region redraw only touches changed pixels.
     /// `None` = no damage limit (full frame).
-    damage: Option<[f32; 4]>,
+
     /// Vertices/indices already written to the persistent buffers this frame. Each
     /// render pass appends at its own offset (via `queue.write_buffer`) instead of
     /// allocating a fresh staging buffer — the per-frame allocation that caused
@@ -275,7 +275,6 @@ impl GridRenderer {
             target_size: [1, 1],
             clip_marks: Vec::new(),
             current_clip: None,
-            damage: None,
             frame_vtx: 0,
             passes: 0,
             frame_idx: 0,
@@ -296,12 +295,6 @@ impl GridRenderer {
         self.frame_idx = 0;
     }
 
-    /// Set the frame-level damage region (logical px) the whole pass is scissored
-    /// to, or `None` for a full-frame render. Set once per frame before `render`.
-    pub fn set_damage(&mut self, damage: Option<[f32; 4]>) {
-        self.damage = damage;
-    }
-
     /// Logical→physical scale factor (HiDPI). Used to map clip rects to scissor px.
     pub fn set_scale_factor(&mut self, scale: f64) {
         self.scale_factor = scale as f32;
@@ -319,23 +312,6 @@ impl GridRenderer {
             self.clip_marks.push((self.indices.len() as u32, clip));
             self.current_clip = clip;
         }
-    }
-
-    /// Convert a logical clip rect to a physical scissor rect clamped to the
-    /// framebuffer: `(x, y, w, h)`. A zero `w`/`h` means "fully clipped".
-    fn scissor_px(&self, c: [f32; 4]) -> (u32, u32, u32, u32) {
-        let s = self.scale_factor;
-        let (fw, fh) = (self.target_size[0] as f32, self.target_size[1] as f32);
-        let x0 = (c[0] * s).clamp(0.0, fw);
-        let y0 = (c[1] * s).clamp(0.0, fh);
-        let x1 = ((c[0] + c[2]) * s).clamp(0.0, fw);
-        let y1 = ((c[1] + c[3]) * s).clamp(0.0, fh);
-        (
-            x0 as u32,
-            y0 as u32,
-            (x1 - x0).max(0.0) as u32,
-            (y1 - y0).max(0.0) as u32,
-        )
     }
 
     pub fn set_screen_size(&mut self, queue: &wgpu::Queue, width: f32, height: f32) {
@@ -444,13 +420,14 @@ impl GridRenderer {
         let mut clip: Option<[f32; 4]> = None;
         for &(at, next_clip) in self.clip_marks.iter().chain(std::iter::once(&tail)) {
             if at > start {
-                let draw = match combine_clip(self.damage, clip) {
+                let draw = match combine_clip(crate::clip::frame_damage(), clip) {
                     None => {
                         rpass.set_scissor_rect(0, 0, self.target_size[0], self.target_size[1]);
                         true
                     }
                     Some(c) => {
-                        let (x, y, w, h) = self.scissor_px(c);
+                        let (x, y, w, h) =
+                            crate::clip::scissor_px(c, self.scale_factor, self.target_size);
                         if w == 0 || h == 0 {
                             false // span fully outside the damage/clip — skip it
                         } else {

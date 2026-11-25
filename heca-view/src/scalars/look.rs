@@ -143,6 +143,17 @@ value_set! {
 }
 
 value_set! {
+    /// How a row marks the cursor — mirrors grid-ui `CursorLook`: the theme's glowing ring, a fill
+    /// alone, or a menu entry's pill (the accent over the whole row, a short bar at its edge, the
+    /// text quiet until chosen).
+    pub enum ViewCursorLook {
+        Ring => "ring",
+        Fill => "fill",
+        Pill => "pill",
+    }
+}
+
+value_set! {
     /// A dock frame's header shape — mirrors grid-ui `DockFrameVariant`: a dock's (grip and fold
     /// chevron before the title) or a section's (title, then the chevron at the right; an optional
     /// `leading` column beside the whole frame).

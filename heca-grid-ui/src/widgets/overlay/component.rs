@@ -14,8 +14,12 @@ impl Component for Overlay {
     /// Focusable only while open, so a host's overlay scan can route input here
     /// when the `Overlay` is mounted directly (a composing widget like `Dialog`
     /// is found first in pre-order and intercepts instead).
+    /// Open, it takes the keyboard — unless it was told to leave it where it is
+    /// ([`keyboard(false)`](Overlay::keyboard)): a press on a select's list or a field's
+    /// suggestions must not take the keyboard from the control that opened them, or the control
+    /// loses focus and closes the list under the press.
     fn focusable(&self) -> bool {
-        self.is_open()
+        self.keyboard && self.is_open()
     }
 
     fn overlay_active(&self) -> bool {
@@ -31,9 +35,8 @@ impl Component for Overlay {
     /// Layout just reset the panel to its taffy-computed position. A panel narrowed to the room it
     /// has asks for another pass; a top panel is placed against its own box.
     fn on_layout(&mut self) {
-        // A panel narrowed to the room lays out again at its new limits, the next pass. An anchored
-        // panel has no room of its own to fit — it is placed against the window.
-        if !matches!(self.position, OverlayPosition::Anchored { .. }) && self.fit_panel_to_room() {
+        // A panel narrowed to the room lays out again at its new limits, the next pass.
+        if self.fit_panel_to_room() {
             self.base.mark_needs_layout();
             crate::component::request_frame();
         }
@@ -46,7 +49,7 @@ impl Component for Overlay {
     /// scrolled page around it has moved its content — so it lands at its trigger, flipped above
     /// when the window has no room below (idempotent — see `place_panel`).
     fn on_placed(&mut self) {
-        if matches!(self.position, OverlayPosition::Anchored { .. }) {
+        if self.position.places_itself() {
             self.place_panel();
         }
     }
@@ -206,7 +209,8 @@ impl Component for Overlay {
                 // visual language as Pane / DockFrame) — the base layer takes the
                 // chrome plain; specializations pass their own accents.
                 if self.decorated {
-                    paint_panel_chrome(cx, panel, PanelChrome::default());
+                    let chrome = self.look.chrome(cx);
+                    paint_panel_chrome(cx, panel, chrome);
                 }
 
                 // The panel's real children on top of the fill. A nested overlay

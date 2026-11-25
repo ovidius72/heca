@@ -105,3 +105,24 @@ fn the_shown_workspace_is_followed_and_heard_once_per_change() {
     s.workspaces.set_active_workspace(Some(key(4)));
     assert_eq!(heard.borrow().len(), 2);
 }
+
+/// **A view switch is announced once, with the view's name** — `sidebar.pane_view.changed`, the
+/// event a plugin and the scripts' stream hear; setting the view it already shows says nothing.
+#[test]
+fn a_pane_view_switch_is_announced_once_with_its_name() {
+    use heca_config::appearance::PaneView;
+    let s = state();
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let seen_events = seen.clone();
+    let _sub = s
+        .events()
+        .subscribe("sidebar.pane_view.changed", move |event| {
+            if let ChromeEvent::SidebarPaneViewChanged { view } = event {
+                seen_events.borrow_mut().push(view.clone());
+            }
+        });
+    s.workspaces.set_pane_view(PaneView::Compact);
+    s.workspaces.set_pane_view(PaneView::Compact);
+    s.workspaces.set_pane_view(PaneView::Extended);
+    assert_eq!(seen.borrow().as_slice(), ["compact", "extended"]);
+}

@@ -22,6 +22,7 @@ impl Component for ScrollRegion {
     fn on_layout(&mut self) {
         self.applied_offset = 0.0;
         self.applied_offset_x = 0.0;
+        self.fit_visible_children();
         let mut y = self.scroll_offset.get_untracked();
         let bottom = self.max_offset() as f32;
         if self.follow_bottom && y >= self.previous_bottom {

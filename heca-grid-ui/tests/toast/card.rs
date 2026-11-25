@@ -351,3 +351,26 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
         flash.rect.size.w,
     );
 }
+
+/// **A card draws its icon and its ×** — the severity's glyph before the text and the close glyph
+/// after it, each found by name among the card's parts.
+#[test]
+fn a_card_draws_its_icon_and_its_dismiss() {
+    use heca_grid_ui::{Glyph, Toast};
+    let mut card = Toast::info("Saved").dismissible(true);
+    layout_toast(&mut card);
+    let drawn: Vec<String> = common::paint(&card, &Theme::default())
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    let glyph = |g: Glyph| g.primary_char().expect("a glyph character").to_string();
+    let icon = glyph(heca_grid_ui::widgets::ToastSeverity::Info.default_glyph());
+    assert!(drawn.contains(&icon), "the icon is drawn: {drawn:?}");
+    assert!(
+        drawn.contains(&glyph(Glyph::Close)),
+        "the × is drawn: {drawn:?}"
+    );
+}

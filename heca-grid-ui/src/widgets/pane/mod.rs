@@ -27,6 +27,8 @@ use crate::reactive::SignalGet;
 use crate::style::Direction;
 use crate::theme::FrameStyle;
 
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Rest-glow spread radius (px) — the pane's share of the theme rest halo
 /// (`PaintCx::rest_glow` carries color + intensity).
 const GLOW_RADIUS: f32 = 12.0;

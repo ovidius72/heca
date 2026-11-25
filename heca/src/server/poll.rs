@@ -10,6 +10,10 @@ pub(crate) struct BackendPoll {
     pub(crate) terminal_animating: bool,
     pub(crate) clipboard_writes: Vec<String>,
     pub(crate) closing_panes: Vec<PaneId>,
+    /// The terminals on screen whose text changed or that are animating — a window's own reading,
+    /// never sent.
+    #[serde(skip)]
+    pub(crate) shown_changed: Vec<crate::chrome::panes::terminal::TerminalId>,
 }
 
 impl BackendPoll {

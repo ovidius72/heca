@@ -13,6 +13,8 @@ use crate::style::Length;
 /// caption-sized row (or an [`Avatar`](super::Avatar) badge) gets a smaller dot instead of one that
 /// covers what it marks.
 const DOT_EM: f32 = 0.6;
+// Per-widget glow, intended: this widget's own measure, still scaled by `glow_size`.
+// See docs/widgets.md → "Each widget's own glow and border".
 /// Glow spread radius (px).
 const GLOW_RADIUS: f32 = 8.0;
 /// Glow intensity for active states.
@@ -89,10 +91,15 @@ impl StatusDot {
         self.status
     }
 
-    /// Drive the dot from a status the host already keeps.
-    #[heca_grid_ui_macros::host_only("binds a host-owned signal, which static data cannot drive")]
-    pub fn status(mut self, status: Signal<DotStatus>) -> Self {
-        self.status = status;
+    /// **What the dot shows** — a status, or one that changes (a `Signal`, a `Memo`, a function
+    /// reading signals), followed in place:
+    ///
+    /// ```ignore
+    /// StatusDot::online().status(move || pane.get().status)
+    /// ```
+    #[heca_grid_ui_macros::host_only("a value that changes, which static data cannot drive")]
+    pub fn status(self, status: impl crate::builders::IntoStatusValue) -> Self {
+        status.into_status_value().show_in(self.status);
         self
     }
 

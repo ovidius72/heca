@@ -196,8 +196,13 @@ fn queue_updates_preserve_native_card_identity_and_report_the_original_action_ar
         )
         .unwrap();
     layout(widget.as_mut(), Size::new(800.0, 600.0));
-    assert_eq!(widget.base().children.len(), 1);
-    let first = widget.base().children[0].base().visible;
+    // The cards, by the name their column carries in the stack.
+    fn cards(widget: &dyn Component) -> &[heca_grid_ui::WidgetModel] {
+        heca_grid_ui::area(widget, heca_grid_ui::ToastStack::CARDS)
+            .map_or(&[], |column| column.base().children.as_slice())
+    }
+    assert_eq!(cards(widget.as_ref()).len(), 1);
+    let first = cards(widget.as_ref())[0].base().visible;
     let update: ViewNode = queue().item(view::ToastSpec::new(2, "Done")).into();
     assert!(
         registry
@@ -205,8 +210,8 @@ fn queue_updates_preserve_native_card_identity_and_report_the_original_action_ar
             .unwrap()
     );
     layout(widget.as_mut(), Size::new(800.0, 600.0));
-    assert_eq!(widget.base().children.len(), 2);
-    assert_eq!(widget.base().children[0].base().visible, first);
+    assert_eq!(cards(widget.as_ref()).len(), 2);
+    assert_eq!(cards(widget.as_ref())[0].base().visible, first);
     fn activate(widget: &mut dyn Component) -> bool {
         if widget.focusable() && widget.text_summary().as_deref() == Some("Retry") {
             widget.base().focus(true);

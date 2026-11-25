@@ -29,7 +29,7 @@
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Label;
 use heca_core::layout::Point;
@@ -72,6 +72,14 @@ pub struct Choice {
     value: String,
     /// Selected (chosen) — a tinted pill + accent content.
     selected: Signal<bool>,
+    /// **The list's keyboard cursor is on this option** — set by the list that holds it (a
+    /// `Select`), which moves one cursor over many options. The option draws it, so it is clipped
+    /// and scrolled with the option, and asks an enclosing scroll region to keep it in view.
+    cursor: Signal<bool>,
+    /// Whether the cursor here should be brought into view: `true` while the keyboard moved it,
+    /// `false` while the pointer did — what you point at is already visible, and scrolling it would
+    /// move it out from under the mouse (the same rule as [`Row::reveal_when`](super::Row)).
+    reveal: Signal<bool>,
     flash: Flash,
 }
 
@@ -92,6 +100,8 @@ impl Choice {
             base,
             value: value.into(),
             selected: signal(false),
+            cursor: signal(false),
+            reveal: signal(true),
             flash: Flash::new(),
         };
         choice.remeasure();
@@ -113,8 +123,8 @@ impl Choice {
 
     /// Set the selected (chosen) state.
     #[heca_grid_ui_macros::prop]
-    pub fn selected(self, selected: bool) -> Self {
-        self.selected.set(selected);
+    pub fn selected(self, selected: impl crate::builders::IntoBoolValue) -> Self {
+        selected.into_bool_value().show_in(self.selected);
         self
     }
 
@@ -131,6 +141,21 @@ impl Choice {
 
     fn interactive(&self) -> bool {
         self.base.activatable
+    }
+}
+
+/// What the list holding an option drives: its keyboard cursor.
+impl Choice {
+    /// The cursor-state signal — the list holding this option sets it to show its keyboard cursor
+    /// here.
+    pub(crate) fn cursor_state(&self) -> Signal<bool> {
+        self.cursor
+    }
+
+    /// Bring the cursor into view only while `allowed` is `true` (see the field).
+    pub(crate) fn reveal_when(mut self, allowed: Signal<bool>) -> Self {
+        self.reveal = allowed;
+        self
     }
 }
 
@@ -170,6 +195,11 @@ impl Component for Choice {
         };
         let b = self.base.bounds;
 
+        // The list's cursor, under the option's own state: the container's chrome, drawn by the
+        // option so it is clipped and scrolled with it.
+        if self.cursor.get_untracked() {
+            cx.rect(b, accent.with_alpha(ia.hilite), None, radius, None);
+        }
         // Chrome: a tinted pill when chosen, a faint one on hover. Same interaction tokens as
         // `Item`, so an option and a list row read as the same family.
         if selected {
@@ -217,6 +247,13 @@ impl Component for Choice {
 
     fn is_control(&self) -> bool {
         true
+    }
+
+    /// The list's cursor is here: an enclosing scroll region keeps it in view — unless the pointer
+    /// put it here.
+    fn wants_visible(&self) -> bool {
+        let cursor = self.cursor.get_untracked() || self.base.focused_by_keyboard();
+        cursor && self.reveal.get_untracked()
     }
 
     fn tick(&mut self, dt: f32) -> bool {

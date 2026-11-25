@@ -3,6 +3,7 @@ pub mod backdrop;
 pub mod background;
 pub mod blur;
 pub(crate) mod clip;
+pub use clip::set_frame_damage;
 pub mod composite;
 pub mod font;
 pub mod gpu;

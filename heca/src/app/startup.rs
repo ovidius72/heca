@@ -433,6 +433,7 @@ pub(crate) async fn init_state(
         terminal_zoom: Default::default(),
         scale_factor,
         needs_redraw: true,
+        repaint: Default::default(),
         status_note: None,
         focused_pane,
         input_mode: InputMode::Normal,
@@ -483,6 +484,8 @@ pub(crate) async fn init_state(
         notifications: Vec::new(),
         open_palette: None,
         notification_hover_sent: false,
+        notification_room: heca_grid_ui::reactive::signal(0),
+        notification_room_sent: 0,
         toasts: heca_grid_ui::reactive::signal(Vec::new()),
         notification_max_lines: heca_grid_ui::reactive::signal(
             app_config
