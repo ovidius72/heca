@@ -85,6 +85,7 @@ impl Theme {
             "row_hover_tint" => Some(self.interaction.row_hover_tint),
             "nav_outline" => Some(self.interaction.nav_outline),
             "nav_wash" => Some(self.interaction.nav_wash),
+            "nav_fill" => Some(self.interaction.nav_fill),
             "badge_fill" => Some(self.interaction.badge_fill),
             "tag_fill" => Some(self.interaction.tag_fill),
             "tag_border" => Some(self.interaction.tag_border),

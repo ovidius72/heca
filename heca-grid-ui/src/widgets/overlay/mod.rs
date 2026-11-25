@@ -178,13 +178,19 @@ pub struct Overlay {
     panel_size: Option<(Length, Length)>,
     /// Last-seen viewport, cached during paint (scrim rect + anchored placement).
     viewport: Cell<Size>,
+    /// Whether opening takes the keyboard — see [`keyboard`](Overlay::keyboard).
+    keyboard: bool,
+    /// A trigger that moves, followed in place — see [`anchored_to`](Overlay::anchored_to).
+    anchor_source: Option<Signal<Rectangle>>,
 }
 
 impl Overlay {
     /// Follow `open`: up exactly while it is true, its keyboard following it.
     fn follow_open(mut self, open: Signal<bool>) -> Self {
         self.base.open = open;
-        self.base.follow_focus_modal(open);
+        if self.keyboard {
+            self.base.follow_focus_modal(open);
+        }
         self.base
             .presence
             .assume_open(crate::reactive::SignalGet::get_untracked(&open));
@@ -231,6 +237,8 @@ impl Overlay {
             position: OverlayPosition::Center,
             panel_size: None,
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
+            keyboard: true,
+            anchor_source: None,
             // No animation until one is declared: a surface that never asked for one is a cut,
             // costs nothing, and needs no special case anywhere.
         }
@@ -381,6 +389,46 @@ impl Overlay {
             anchor: rect,
             gap: DEFAULT_ANCHOR_GAP,
         };
+        self.hug_panel();
+        self
+    }
+
+    /// **Anchor the panel to a trigger that moves** — a field's caret, a row that scrolls — given
+    /// as a signal of its rect (viewport coordinates). The panel follows it in place, with the same
+    /// placement as [`anchored`](Overlay::anchored): below, flipped above when there is no room,
+    /// clamped into the window.
+    ///
+    /// ```ignore
+    /// Overlay::new().blocking(false).keyboard(false).anchored_to(caret).panel(list)
+    /// ```
+    #[heca_grid_ui_macros::host_only("a host-computed anchor rect, not authorable data")]
+    pub fn anchored_to(mut self, rect: Signal<Rectangle>) -> Self {
+        self.anchor_source = Some(rect);
+        self.anchored(rect.get_untracked())
+    }
+
+    /// **An anchored layer wraps its panel** instead of filling what holds it. A centred surface is
+    /// mounted over the window and fills it to centre its panel; an anchored one places its panel
+    /// itself, against the window, so it can sit inside any widget — a field's suggestion list, a
+    /// select's options — without taking that widget's box as its room.
+    fn hug_panel(&mut self) {
+        let layout = &mut self.base.style.layout;
+        layout.width = Length::Auto;
+        layout.height = Length::Auto;
+        layout.padding = crate::style::Space::default();
+    }
+
+    /// **Whether opening takes the keyboard** (default `true`).
+    ///
+    /// A dialog, a menu, a palette take it, and give it back on close. A panel shown beside a
+    /// control that keeps the keyboard does not — a field's suggestion list, while you go on typing
+    /// in the field: `false` leaves the keyboard where it is and Tab is not held inside the panel.
+    #[heca_grid_ui_macros::prop]
+    pub fn keyboard(mut self, takes: bool) -> Self {
+        self.keyboard = takes;
+        if !takes {
+            self.base.stop_focus_follow();
+        }
         self
     }
 
@@ -404,7 +452,17 @@ impl Overlay {
         if self.position == OverlayPosition::Center {
             return;
         }
-        let viewport = self.viewport.get();
+        // The window as layout knows it — right on the first layout after opening; the size the last
+        // paint saw only before any layout has run.
+        let viewport = match crate::layout::viewport() {
+            known if known.w.is_finite() && known.h.is_finite() => known,
+            _ => self.viewport.get(),
+        };
+        if let (Some(source), OverlayPosition::Anchored { anchor, .. }) =
+            (self.anchor_source, &mut self.position)
+        {
+            *anchor = source.get_untracked();
+        }
         let position = self.position;
         let area = self.base.bounds;
         let Some(child) = self.base.child_in_area(PANEL_AREA) else {

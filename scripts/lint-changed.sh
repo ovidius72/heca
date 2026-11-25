@@ -5,6 +5,10 @@
 #   scripts/lint-changed.sh test         # test the changed crates
 #   scripts/lint-changed.sh fmt          # check formatting of the changed crates
 #   scripts/lint-changed.sh clippy main  # diff against a different base
+#   scripts/lint-changed.sh syntax       # THE SYNTAX on the added lines only
+#
+# `clippy` (the default) runs THE SYNTAX check first: a line that breaks it fails the gate before
+# clippy is even asked — see scripts/syntax-check.py.
 #
 # Falls back to the whole workspace only if it cannot work out the base.
 set -euo pipefail
@@ -12,6 +16,18 @@ cd "$(dirname "$0")/.."
 
 CMD="${1:-clippy}"
 BASE="${2:-main}"
+
+# **THE SYNTAX, before anything else.** AGENTS.md § 0 was a rule a reader had to remember, and the
+# same breaks kept coming back in review — a style written by hand, a child found by position, an
+# effect wiring one value into another. A rule a reader has to remember is the bug; this makes the
+# gate say it. Only the lines a branch adds are checked, so old code never blocks a new change.
+if [ "$CMD" = "syntax" ] || [ "$CMD" = "clippy" ]; then
+  echo "==> scripts/syntax-check.py --base $BASE"
+  if [ -z "${DRY_RUN:-}" ]; then
+    python3 scripts/syntax-check.py --base "$BASE" || exit 1
+  fi
+  [ "$CMD" = "syntax" ] && exit 0
+fi
 
 # Every path git reports as touched: committed since the merge-base, staged,
 # and unstaged. A crate counts as changed if any of them lands inside it.

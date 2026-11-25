@@ -22,6 +22,9 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # THE SYNTAX check reads the lines a pull request adds, so it needs the base branch.
+          fetch-depth: 0
 
       # rust-toolchain.toml is the one place the version is pinned; rustup reads it here.
       - name: Install the pinned Rust toolchain
@@ -43,6 +46,11 @@ jobs:
       # other way fails here, so no session's own habits reach main.
       - name: Format
         run: cargo fmt --all -- --check
+
+      # AGENTS.md § 0 on the lines this pull request adds — see scripts/syntax-check.py.
+      - name: THE SYNTAX
+        if: github.event_name == 'pull_request' && runner.os == 'Linux'
+        run: python3 scripts/syntax-check.py --base origin/${{ github.base_ref }}
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

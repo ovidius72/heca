@@ -2,7 +2,7 @@
 
 use crate::component::Component;
 use crate::reactive::SignalUpdate;
-use crate::style::{Align, Direction, Justify, Length, WidgetSize};
+use crate::style::{Align, Direction, Justify, WidgetSize};
 
 /// Arrangement builders: how a container lays out itself and its children.
 pub trait LayoutExt: Component + Sized {
@@ -246,7 +246,7 @@ pub trait LayoutExt: Component + Sized {
     /// Width along the main/cross axis, in any of the spellings a size is written in:
     /// `.width(200)` / `.width("200px")` px, `.width("50%")` a fraction of the parent,
     /// `.width("auto")` content-sized, `.width(Length::HALF)` the same fraction without a number
-    /// to mistype. See [`Length`] for the whole vocabulary.
+    /// to mistype. See [`Length`](crate::style::Length) for the whole vocabulary.
     ///
     /// **Setting neither width nor height already fills the parent** across the cross axis, exactly
     /// as CSS `align-items: stretch` does — so `.width(Length::FULL)` on a child that fills says
@@ -283,15 +283,16 @@ pub trait LayoutExt: Component + Sized {
     }
 
     /// Floor for the height — a row that must stay legible however many share the space.
-    /// Same spellings as [`width`](LayoutExt::width).
-    fn min_height(mut self, h: impl Into<Length>) -> Self {
-        self.authored_style_mut().layout.min_height = Some(h.into());
+    /// Same spellings as [`width`](LayoutExt::width), fixed or following a value.
+    fn min_height(mut self, value: impl crate::builders::IntoLengthValue) -> Self {
+        crate::builders::set_size(&mut self, crate::builders::SizeField::MinHeight, value);
         self
     }
 
-    /// Floor for the width. Same spellings as [`width`](LayoutExt::width).
-    fn min_width(mut self, w: impl Into<Length>) -> Self {
-        self.authored_style_mut().layout.min_width = Some(w.into());
+    /// Floor for the width. Same spellings as [`width`](LayoutExt::width), fixed or following a
+    /// value — a list whose narrowest width is the theme's.
+    fn min_width(mut self, value: impl crate::builders::IntoLengthValue) -> Self {
+        crate::builders::set_size(&mut self, crate::builders::SizeField::MinWidth, value);
         self
     }
 
